@@ -54,7 +54,7 @@ describe('NotificationManager TikTok monetisation behavior', () => {
         await notificationManager.handleNotification('paypiggy', 'tiktok', {
             username: 'SuperFan',
             userId: 'tk-user-1',
-            isSuperfan: true,
+            tier: 'superfan',
             level: 'S2',
             months: 2
         });

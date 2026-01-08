@@ -39,7 +39,6 @@ describe('Twitch event factory', () => {
             username: 'SubUser',
             months: '2',
             tier: '2000',
-            isGift: true,
             message: 'Great stream',
             timestamp: fixedNow
         });
@@ -50,7 +49,6 @@ describe('Twitch event factory', () => {
             username: 'SubUser',
             userId: 'u2',
             tier: '2000',
-            isGift: true,
             message: 'Great stream',
             months: 2,
             isRenewal: true,
@@ -62,7 +60,7 @@ describe('Twitch event factory', () => {
         }));
     });
 
-    test('creates paypiggy message event and keeps isGift false', () => {
+    test('creates paypiggy message event with renewal detection', () => {
         const factory = createFactory();
 
         const event = factory.createPaypiggyMessageEvent({
@@ -71,7 +69,6 @@ describe('Twitch event factory', () => {
             tier: '1000',
             months: 2,
             message: 'Back again',
-            isGift: false,
             timestamp: fixedNow
         });
 
@@ -79,7 +76,6 @@ describe('Twitch event factory', () => {
             type: PlatformEvents.PAYPIGGY,
             platform: 'twitch',
             tier: '1000',
-            isGift: false,
             months: 2,
             isRenewal: true,
             message: 'Back again',
@@ -103,7 +99,6 @@ describe('Twitch event factory', () => {
             platform: 'twitch',
             giftCount: 10,
             tier: '1000',
-            isGift: true,
             timestamp: fixedNow
         }));
     });
@@ -122,7 +117,6 @@ describe('Twitch event factory', () => {
             id: 'cheer-id-1',
             repeatCount: 1,
             cheermoteInfo: { name: 'Cheer250' },
-            isBits: true,
             timestamp: fixedNow
         });
 
@@ -138,7 +132,6 @@ describe('Twitch event factory', () => {
             repeatCount: 1,
             timestamp: fixedNow,
             cheermoteInfo: { name: 'Cheer250' },
-            isBits: true,
             metadata: expect.objectContaining({
                 platform: 'twitch',
                 correlationId: 'cid-fixed'

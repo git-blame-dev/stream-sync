@@ -157,7 +157,6 @@ const EVENT_SCHEMAS = {
             tier: { type: 'string' },
             months: { type: 'number' },
             message: { type: 'string' },
-            isSuperfan: { type: 'boolean' },
             timestamp: { type: 'string' }
         }
     },
@@ -171,7 +170,6 @@ const EVENT_SCHEMAS = {
             giftCount: { type: 'number' },
             tier: { type: 'string' },
             isAnonymous: { type: 'boolean' },
-            isGift: { type: 'boolean' },
             cumulativeTotal: { type: 'number' },
             timestamp: { type: 'string' },
             metadata: { type: 'object' }

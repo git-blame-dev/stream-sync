@@ -22,7 +22,7 @@ describe('PlatformEventRouter paypiggy months handling', () => {
         };
     });
 
-    it('passes through superfan metadata and months to paypiggy handler', async () => {
+    it('passes through superfan tier and months to paypiggy handler', async () => {
         const router = buildRouter();
 
         await router.routeEvent({
@@ -33,7 +33,7 @@ describe('PlatformEventRouter paypiggy months handling', () => {
                 userId: 'sf-1',
                 timestamp: new Date().toISOString(),
                 metadata: {},
-                isSuperfan: true,
+                tier: 'superfan',
                 months: 3,
                 membershipLevel: 'Ultra'
             }
@@ -43,7 +43,7 @@ describe('PlatformEventRouter paypiggy months handling', () => {
         const [_platform, username, payload] = runtime.handlePaypiggyNotification.mock.calls[0];
         expect(_platform).toBe('tiktok');
         expect(username).toBe('SuperFanUser');
-        expect(payload.isSuperfan).toBe(true);
+        expect(payload.tier).toBe('superfan');
         expect(payload.months).toBe(3);
         expect(payload.membershipLevel).toBe('Ultra');
         expect(payload.sourceType).toBe('paypiggy');

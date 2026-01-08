@@ -83,14 +83,12 @@ describe('extractTwitchSubscriptionData', () => {
         const result = require('../../../src/utils/twitch-data-extraction').extractTwitchSubscriptionData({
             user: { id: 'u1', display_name: 'Subber' },
             tier: '1000',
-            months: 1,
-            isGift: false
+            months: 1
         });
 
         expect(result.months).toBe(1);
         expect(result.isRenewal).toBe(false);
         expect(result.tier).toBe('1000');
-        expect(result.isGift).toBe(false);
         expect(result.username).toBe('Subber');
     });
 
@@ -107,15 +105,15 @@ describe('extractTwitchSubscriptionData', () => {
         expect(result.message).toBe('Back again!');
     });
 
-    test('detects gift subscription data', () => {
+    test('does not promote gift flags from subscription payloads', () => {
         const result = require('../../../src/utils/twitch-data-extraction').extractTwitchSubscriptionData({
             user: { id: 'gifter', display_name: 'Gifter' },
             isGift: true,
             tier: '2000'
         });
 
-        expect(result.isGift).toBe(true);
         expect(result.tier).toBe('2000');
+        expect(result.isGift).toBeUndefined();
     });
 
     test('ignores legacy isResub alias when determining renewal', () => {

@@ -150,12 +150,12 @@ describe('DisplayQueue monetization VFX context', () => {
         { type: 'gift', giftType: 'Super Chat', giftCount: 1, amount: 5, currency: 'USD', commandKey: 'gifts', platform: 'youtube' },
         { type: 'gift', giftType: 'Super Sticker', giftCount: 1, amount: 3, currency: 'USD', commandKey: 'gifts', platform: 'youtube' },
         { type: 'giftpaypiggy', commandKey: 'gifts', platform: 'twitch' },
-        { type: 'gift', giftType: 'bits', giftCount: 1, amount: 100, currency: 'bits', commandKey: 'gifts', platform: 'twitch', isBits: true },
+        { type: 'gift', giftType: 'bits', giftCount: 1, amount: 100, currency: 'bits', commandKey: 'gifts', platform: 'twitch' },
         { type: 'envelope', commandKey: 'gifts', platform: 'tiktok' },
         { type: 'paypiggy', commandKey: 'paypiggies', platform: 'tiktok' }
     ];
 
-    test.each(standardFlows)('emits VFX with userId for %s', async ({ type, commandKey, platform, giftType, giftCount, amount, currency, isBits }) => {
+    test.each(standardFlows)('emits VFX with userId for %s', async ({ type, commandKey, platform, giftType, giftCount, amount, currency }) => {
         const queue = createQueue(eventBus);
         const item = {
             type,
@@ -175,8 +175,7 @@ describe('DisplayQueue monetization VFX context', () => {
                 ...(giftType ? { giftType } : {}),
                 ...(giftCount ? { giftCount } : {}),
                 ...(amount !== undefined ? { amount } : {}),
-                ...(currency ? { currency } : {}),
-                ...(isBits ? { isBits: true } : {})
+                ...(currency ? { currency } : {})
             }
         };
 

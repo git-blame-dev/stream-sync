@@ -101,7 +101,6 @@ describe('Bits Goal Counter Fix', () => {
             giftCount: 1,
             amount: bits,
             currency: 'bits',
-            isBits: true,
             cheermoteInfo: { prefix: 'Cheer', isMixed: false }
         };
 
@@ -138,7 +137,6 @@ describe('Bits Goal Counter Fix', () => {
                 expect(notificationData.giftCount).toBe(1);
                 expect(notificationData.amount).toBe(100);
                 expect(notificationData.currency).toBe('bits');
-                expect(notificationData.isBits).toBe(true);
             }, TEST_TIMEOUTS.FAST);
 
             it('should result in correct goal calculation (100 bits total, not 10000)', async () => {
@@ -190,7 +188,6 @@ describe('Bits Goal Counter Fix', () => {
                 expect(notificationData.giftCount).toBe(1);
                 expect(notificationData.amount).toBe(50);
                 expect(notificationData.currency).toBe('bits');
-                expect(notificationData.isBits).toBe(true);
 
                 const simulatedGoalValue = notificationData.amount * notificationData.giftCount;
                 expect(simulatedGoalValue).toBe(50); // Should be 50, not 2,500
@@ -215,7 +212,6 @@ describe('Bits Goal Counter Fix', () => {
                 expect(notificationData.giftCount).toBe(1);
                 expect(notificationData.amount).toBe(1000);
                 expect(notificationData.currency).toBe('bits');
-                expect(notificationData.isBits).toBe(true);
 
                 const simulatedGoalValue = notificationData.amount * notificationData.giftCount;
                 expect(simulatedGoalValue).toBe(1000); // Should be 1000, not 1,000,000

@@ -60,7 +60,6 @@ describe('TwitchPlatform monetisation mapping', () => {
                     userId: data.userId,
                     giftCount: data.giftCount ?? data.total ?? 0,
                     tier: data.tier,
-                    isGift: true,
                     timestamp: data.timestamp
                 }),
                 createGiftEvent: (data = {}) => ({
@@ -119,7 +118,6 @@ describe('TwitchPlatform monetisation mapping', () => {
         const giftEvent = emitted.find(e => e.evt === 'platform:event')?.payload;
         expect(giftEvent.type).toBe(PlatformEvents.GIFTPAYPIGGY);
         expect(giftEvent.giftCount).toBe(10);
-        expect(giftEvent.isGift).toBe(true);
         expect(giftEvent.tier).toBe('1000');
         expect(giftEvent.username).toBe('GiftUser');
     });

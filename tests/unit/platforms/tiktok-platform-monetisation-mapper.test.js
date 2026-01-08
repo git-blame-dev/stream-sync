@@ -44,8 +44,7 @@ describe('TikTokPlatform monetisation mapping', () => {
                 createSuperfan: (data = {}) => ({
                     platform: 'tiktok',
                     type: PlatformEvents.PAYPIGGY,
-                    isSuperfan: true,
-                    tier: data.tier,
+                    tier: 'superfan',
                     username: data.user?.uniqueId,
                     userId: data.user?.userId
                 }),
@@ -84,7 +83,7 @@ describe('TikTokPlatform monetisation mapping', () => {
         expect(paypiggyEvent.message).toBe('Thanks for the support!');
     });
 
-    it('emits superfan paypiggy with isSuperfan flag', () => {
+    it('emits superfan paypiggy with superfan tier', () => {
         const handler = platform.eventFactory.createSuperfan({
             user: { userId: 'sf1', uniqueId: 'superfanuser' }
         });
@@ -93,8 +92,7 @@ describe('TikTokPlatform monetisation mapping', () => {
 
         const paypiggyEvent = emitted.find(e => e.evt === 'platform:event')?.payload;
         expect(paypiggyEvent.type).toBe(PlatformEvents.PAYPIGGY);
-        expect(paypiggyEvent.isSuperfan).toBe(true);
-        expect(paypiggyEvent.tier).toBeUndefined();
+        expect(paypiggyEvent.tier).toBe('superfan');
     });
 
     it('does not default tier, months, or message when missing', () => {

@@ -115,10 +115,11 @@ describe('MessageTTSHandler', () => {
         test('should create single-stage TTS for Twitch bits with message', () => {
             const notification = {
                 type: 'gift',
-                isBits: true,
                 username: 'BitUser',
                 ttsMessage: 'BitUser sent 100 bits. Keep up the great work!',
-                message: 'Keep up the great work!'
+                message: 'Keep up the great work!',
+                giftType: 'bits',
+                currency: 'bits'
             };
             
             const stages = MessageTTSHandler.createTTSStages(notification);
@@ -255,7 +256,7 @@ describe('MessageTTSHandler', () => {
         });
 
         test('should return false for Twitch bits notifications', () => {
-            const notification = { type: 'gift', isBits: true };
+            const notification = { type: 'gift', giftType: 'bits', currency: 'bits' };
             expect(MessageTTSHandler.supportsMessages(notification)).toBe(false);
         });
 
@@ -346,7 +347,7 @@ describe('MessageTTSHandler', () => {
         });
 
         test('should return 3000ms delay for Twitch bits', () => {
-            const notification = { type: 'gift', isBits: true };
+            const notification = { type: 'gift', giftType: 'bits', currency: 'bits' };
             expect(MessageTTSHandler.getMessageDelay(notification)).toBe(3000);
         });
 

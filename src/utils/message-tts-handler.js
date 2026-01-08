@@ -99,7 +99,8 @@ class MessageTTSHandler {
         if (this._isPaypiggyWithMessage(notification)) return this.MESSAGE_DELAYS.paypiggy;
         
         // Twitch Bits
-        if (notification.isBits) return this.MESSAGE_DELAYS.bits;
+        const currency = typeof notification.currency === 'string' ? notification.currency.trim().toLowerCase() : '';
+        if (currency === 'bits') return this.MESSAGE_DELAYS.bits;
         
         // TikTok Comments (immediate)
         if (notification.isComment) return this.MESSAGE_DELAYS.comment;

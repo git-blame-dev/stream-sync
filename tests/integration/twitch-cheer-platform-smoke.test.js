@@ -99,7 +99,6 @@ describe('Twitch bits gift platform flow (smoke)', () => {
                     giftCount: 1,
                     amount: 234,
                     currency: 'bits',
-                    isBits: true,
                     message: '',
                     id: 'cheer-event-234',
                     repeatCount: 1,
@@ -133,7 +132,6 @@ describe('Twitch bits gift platform flow (smoke)', () => {
             expect(queued.type).toBe('gift');
             expect(queued.platform).toBe('twitch');
             expect(queued.data.username).toBe('test_user');
-            expect(queued.data.isBits).toBe(true);
             expect(queued.data.amount).toBe(234);
             expect(queued.data.currency).toBe('bits');
             expect(queued.data.displayMessage).toBe('test_user sent 234 mixed bits');

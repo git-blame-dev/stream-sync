@@ -170,7 +170,6 @@ describe('MessageTTS Integration', () => {
                 { username: 'BitUser' },
                 {
                     message: 'Great stream!',
-                    isBits: true,
                     bits: 100,
                     giftType: 'bits',
                     giftCount: 1,
@@ -182,7 +181,7 @@ describe('MessageTTS Integration', () => {
             // Test user-visible behavior
             expect(notificationData.message).toBe('Great stream!');
             expect(notificationData.type).toBe('gift');
-            expect(notificationData.isBits).toBe(true);
+            expect(notificationData.currency).toBe('bits');
         });
 
         test('should generate single-stage TTS for bits with message included', () => {
@@ -192,7 +191,6 @@ describe('MessageTTS Integration', () => {
                 { username: 'BitUser' },
                 {
                     message: 'Great stream!',
-                    isBits: true,
                     bits: 100,
                     giftType: 'bits',
                     giftCount: 1,

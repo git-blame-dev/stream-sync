@@ -92,7 +92,6 @@ describe('DisplayQueue - Twitch Bits Goal Calculation', () => {
                     giftCount: 1,
                     amount: 200,
                     currency: 'bits',
-                    isBits: true,
                     platform: 'twitch'
                 },
                 platform: 'twitch',
@@ -132,7 +131,6 @@ describe('DisplayQueue - Twitch Bits Goal Calculation', () => {
                         giftCount: 1,
                         amount: cheer.bits,
                         currency: 'bits',
-                        isBits: true,
                         platform: 'twitch'
                     },
                     platform: 'twitch',
@@ -173,7 +171,6 @@ describe('DisplayQueue - Twitch Bits Goal Calculation', () => {
                         giftCount: 1,
                         amount: 1,
                         currency: 'bits',
-                        isBits: true,
                         platform: 'twitch'
                     },
                     platform: 'twitch',
@@ -209,7 +206,6 @@ describe('DisplayQueue - Twitch Bits Goal Calculation', () => {
                         giftCount: 1,
                         amount: bitsAmount,
                         currency: 'bits',
-                        isBits: true,
                         platform: 'twitch'
                     },
                     platform: 'twitch',
@@ -244,7 +240,6 @@ describe('DisplayQueue - Twitch Bits Goal Calculation', () => {
                     giftCount: 1,
                     amount: 200,
                     currency: 'bits',
-                    isBits: true,
                     platform: 'twitch'
                 },
                 platform: 'twitch',
@@ -281,7 +276,6 @@ describe('DisplayQueue - Twitch Bits Goal Calculation', () => {
                     giftCount: 1,
                     amount: 200,
                     currency: 'bits',
-                    isBits: true,
                     cheermoteInfo: {
                         type: 'Corgo',
                         count: 2,  // 2 Corgo100 cheermotes

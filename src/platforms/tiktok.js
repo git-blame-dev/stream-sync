@@ -268,16 +268,12 @@ class TikTokPlatform extends EventEmitter {
                     type: PlatformEvents.PAYPIGGY,
                     platform: 'tiktok',
                     ...identity,
-                    isSuperfan: true,
+                    tier: 'superfan',
                     metadata: this._buildEventMetadata({
-                        originalData: data,
-                        isSuperfan: true
+                        originalData: data
                     }),
                     timestamp: this._getTimestamp(data)
                 };
-                if (tier) {
-                    payload.tier = tier;
-                }
                 if (Number.isFinite(months) && months > 0) {
                     payload.months = months;
                 }

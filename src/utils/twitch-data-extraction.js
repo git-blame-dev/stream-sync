@@ -76,9 +76,6 @@ function extractTwitchSubscriptionData(data) {
     if (months !== undefined) {
         result.months = months;
     }
-    if (typeof data.isGift === 'boolean') {
-        result.isGift = data.isGift;
-    }
     if (typeof data.message === 'string') {
         result.message = data.message;
     }

@@ -3,7 +3,7 @@ const { getCodeToSymbolMap } = require('./currency-utils');
 
 function resolvePaypiggyCopy(data = {}) {
     const platform = (data.platform || '').toLowerCase();
-    const isSuperfan = data.isSuperfan || data.tier === 'superfan';
+    const isSuperfan = data.tier === 'superfan';
 
     if (isSuperfan) {
         return {

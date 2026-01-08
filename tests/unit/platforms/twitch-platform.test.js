@@ -383,7 +383,6 @@ describe('Twitch Platform', () => {
                 username: 'subscriber',
                 userId: 'sub-user-1',
                 tier: '1000',
-                isGift: false,
                 timestamp: '2024-01-01T00:00:00Z'
             };
 
@@ -397,7 +396,6 @@ describe('Twitch Platform', () => {
             expect(payload.username).toBe('subscriber');
             expectNoTechnicalArtifacts(payload.username);
             expect(payload.tier).toBe('1000');
-            expect(payload.isGift).toBe(false);
         });
 
         it('should display gift subscription events with gifter name', async () => {
@@ -406,7 +404,6 @@ describe('Twitch Platform', () => {
                 username: 'gifter',
                 userId: 'gifter-user-1',
                 tier: '2000',
-                isGift: true,
                 timestamp: '2024-01-01T00:00:00Z'
             };
 
@@ -419,7 +416,6 @@ describe('Twitch Platform', () => {
             expect(payload.username).toBe('gifter');
             expectNoTechnicalArtifacts(payload.username);
             expect(payload.tier).toBe('2000');
-            expect(payload.isGift).toBe(true);
         });
 
         it('should route resubscription events through the subscription handler', async () => {

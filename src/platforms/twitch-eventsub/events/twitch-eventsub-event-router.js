@@ -126,8 +126,7 @@ function createTwitchEventSubEventRouter(options = {}) {
             username: event.user_name,
             userId: event.user_id,
             tier: event.tier,
-            timestamp: event.timestamp,
-            isGift: event.is_gift
+            timestamp: event.timestamp
         };
         if (months !== undefined) {
             payload.months = months;
@@ -197,7 +196,6 @@ function createTwitchEventSubEventRouter(options = {}) {
             giftCount: 1,
             amount: event.bits,
             currency: 'bits',
-            isBits: true,
             message: messageData.textContent,
             cheermoteInfo: messageData.cheermoteInfo,
             id: event.id,

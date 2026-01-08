@@ -54,7 +54,6 @@ describe('TikTok paypiggy routing', () => {
         expect(paypiggyEvents).toHaveLength(1);
         expect(paypiggyEvents[0].userId).toBe('tt-super-1');
         expect(paypiggyEvents[0].username).toBe('superfan_one');
-        expect(paypiggyEvents[0].tier).toBeUndefined();
-        expect(paypiggyEvents[0].isSuperfan).toBe(true);
+        expect(paypiggyEvents[0].tier).toBe('superfan');
     });
 });
