@@ -296,7 +296,6 @@ describe('extractTwitchMessageText', () => {
     describe('when processing real-world EventSub data', () => {
         describe('and data matches official Twitch EventSub format', () => {
             it('should handle the exact structure from debug logs', () => {
-                // Arrange - This is the exact structure from the bug report
                 const actualEventSubMessage = {
                     text: "uni1 uni1 uni1 uni1 uni1 uni1 uni1 uni1",
                     fragments: [

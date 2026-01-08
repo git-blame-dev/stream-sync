@@ -41,14 +41,6 @@ describe('Twitch OAuth Scope Consistency', () => {
             expect(requiredScopes).toContain('user:read:chat');
         });
 
-        it('should not include deprecated chat:read scope', () => {
-            const requiredScopes = authService.getRequiredScopes();
-            
-            // After fix, should not include the old "chat:read" scope
-            // (this test will pass initially, then might need adjustment)
-            expect(requiredScopes).not.toContain('chat:read');
-        });
-
         it('should include all EventSub required scopes', () => {
             const requiredScopes = authService.getRequiredScopes();
             

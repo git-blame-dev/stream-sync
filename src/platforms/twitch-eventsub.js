@@ -686,7 +686,7 @@ class TwitchEventSub extends EventEmitter {
             this.welcomeTimer = null;
         }
         
-        // CRITICAL FIX: Clear the memory cleanup interval to prevent memory leak
+        // Clear the memory cleanup interval to prevent memory leaks
         if (this.cleanupInterval) {
             clearInterval(this.cleanupInterval);
             this.cleanupInterval = null;
@@ -698,7 +698,7 @@ class TwitchEventSub extends EventEmitter {
         // Step 2: Close WebSocket connection properly
         if (this.ws) {
             try {
-                // CRITICAL FIX: Remove all event listeners to prevent memory leaks
+                // Remove all event listeners to prevent memory leaks
                 this.ws.removeAllListeners();
                 // Close with normal closure code as per WebSocket spec
                 this.ws.close(1000, 'Normal cleanup');

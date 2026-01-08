@@ -282,9 +282,7 @@ describe('Viewer Count Polling System Fix', () => {
             expect(viewerCountSystem.counts.youtube).toBe(0);
         });
         
-        test('SOLUTION TEST: YouTube platforms must call updateStreamStatus on connection', async () => {
-            // This test shows the correct fix for the reported issue
-            
+        test('should start polling after YouTube marks stream live', async () => {
             // Arrange: Reset system to initial state (no polling)
             viewerCountSystem.stopPolling();
             await viewerCountSystem.updateStreamStatus('youtube', false);
@@ -296,16 +294,12 @@ describe('Viewer Count Polling System Fix', () => {
             viewerCountSystem.startPolling();
             expect(viewerCountSystem.pollingHandles['youtube']).toBeUndefined();
             
-            // SOLUTION: YouTube platform should call updateStreamStatus when it connects
-            // This simulates what should happen when YouTube platform establishes a connection
+            // Act: Mark YouTube as live
             await viewerCountSystem.updateStreamStatus('youtube', true);
             
             // Assert: Now YouTube polling should start immediately
             expect(viewerCountSystem.pollingHandles['youtube']).toBeDefined();
             expect(mockYoutubePlatform.getViewerCount).toHaveBeenCalled();
-            
-            // This test shows the solution: YouTube platform implementations need to 
-            // call viewerCountSystem.updateStreamStatus(true) when they establish connections
         });
     });
 });

@@ -16,7 +16,6 @@ module.exports = {
                     getStreamingData: jest.fn().mockResolvedValue({})
                 }
             },
-            // Fix: Add missing getInfo method for viewer count provider
             getInfo: jest.fn().mockResolvedValue({
                 basic_info: {
                     title: 'Mock Video Title',

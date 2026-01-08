@@ -23,7 +23,7 @@ describe('User-Facing Content Validation', () => {
     beforeEach(() => {
         jest.resetModules();
         
-        // Re-initialize logging after module reset (ALPHA shared fix pattern)
+        // Re-initialize logging after module reset (shared reset pattern)
         const { initializeTestLogging } = require('../../helpers/test-setup');
         initializeTestLogging();
         

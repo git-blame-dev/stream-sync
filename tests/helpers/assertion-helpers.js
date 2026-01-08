@@ -1060,7 +1060,7 @@ const validateUserFacingString = (userVisibleString, requirements = {}) => {
         );
     }
     
-    // Check for empty parentheses/brackets (common templating bug)
+    // Check for empty parentheses/brackets (common templating issue)
     if (/\(\s*\)|\[\s*\]/.test(userVisibleString)) {
         throw new Error(
             `User-visible content has empty parentheses/brackets: "${userVisibleString}"`
