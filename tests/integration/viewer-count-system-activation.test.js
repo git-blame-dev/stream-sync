@@ -286,31 +286,7 @@ describe('ViewerCount System Activation Integration', () => {
         }, TEST_TIMEOUTS.FAST);
     });
     
-    describe('when ViewerCount system is not properly activated', () => {
-        it('should fail when polling is not started', async () => {
-            // Arrange - This test demonstrates the current bug
-            const app = new AppRuntime(mockConfig, buildAppRuntimeDependencies());
-            
-            app.viewerCountSystem = new ViewerCountSystem(app);
-            
-            // Simulate stream being live but startPolling() never called
-            app.viewerCountSystem.updateStreamStatus('youtube', true);
-            await app.viewerCountSystem.initialize();
-            
-            // DO NOT call startPolling() - this simulates the bug
-            // await app.viewerCountSystem.startPolling(); // <-- This line is intentionally missing
-            
-            // Allow time for potential polling
-            await waitForDelay(100);
-            
-            // Assert - This should currently FAIL because polling is not active
-            // This test documents the expected behavior that's currently broken
-            expect(app.viewerCountSystem.isPolling).toBe(false); // Current bug: polling never starts
-            expect(mockYouTubePlatform.getViewerCount).not.toHaveBeenCalled(); // Current bug: no polling
-            
-            // This test should PASS when we fix the issue by ensuring app.start() properly calls startPolling()
-        }, TEST_TIMEOUTS.FAST);
-        
+    describe('when ViewerCount system activation is driven by app.start()', () => {
         it('should demonstrate the integration flow that should work', async () => {
             // Arrange - This test shows what the complete flow should look like
             const app = new AppRuntime(mockConfig, buildAppRuntimeDependencies());

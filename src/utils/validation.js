@@ -183,10 +183,6 @@ function sanitizeDisplayName(displayName, maxLength = 12) {
     return formatUsername12(displayName, false);
 }
 
-function sanitizeForTTSWithLimit(username) {
-    return formatUsername12(username, true);
-}
-
 function sanitizeForTTSGreeting(username) {
     return formatUsernameForTTSGreeting(username);
 }
@@ -393,7 +389,6 @@ module.exports = {
     getFirstWord,
     sanitizeDisplayName,
     formatUsername12,
-    sanitizeForTTSWithLimit,
     sanitizeForTTSGreeting,
     formatUsernameForTTSGreeting,
     isValidCommand,

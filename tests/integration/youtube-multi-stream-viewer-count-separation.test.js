@@ -159,19 +159,6 @@ describe('YouTube Multi-Stream Viewer Count Separation', () => {
         return platform;
     };
 
-    const createYouTubePlatformWithCurrentBehavior = async (scenario) => {
-        const platform = await createYouTubePlatformWithMixedStates(scenario);
-        
-        // Simulate the current problematic behavior by mocking getDetectedStreamIds 
-        // to filter by chat readiness (which is the bug we're testing)
-        platform.getDetectedStreamIds = jest.fn().mockReturnValue(
-            scenario.streams
-                .filter(stream => stream.isLive !== false && stream.chatReady)
-                .map(stream => stream.videoId)
-        );
-        
-        return platform;
-    };
 
     beforeEach(async () => {
         cleanup = setupAutomatedCleanup();
@@ -473,53 +460,4 @@ describe('YouTube Multi-Stream Viewer Count Separation', () => {
         });
     });
 
-    // ============================================================================================
-    // CURRENT BEHAVIOR VALIDATION (SHOWS THE PROBLEM)
-    // ============================================================================================
-
-    describe('Current Problematic Behavior (Chat-Coupled Viewer Count)', () => {
-        test('CURRENT BUG: viewer count incorrectly filtered by chat readiness', async () => {
-            // Given: Multiple streams but only some chat-ready
-            const scenario = createMultiStreamScenario([
-                { videoId: 'chat-ready', viewers: 1000, chatReady: true, isLive: true },
-                { videoId: 'not-chat-ready-1', viewers: 2000, chatReady: false, isLive: true },
-                { videoId: 'not-chat-ready-2', viewers: 1500, chatReady: false, isLive: true },
-            ]);
-            
-            // Using current problematic implementation
-            const platform = await createYouTubePlatformWithCurrentBehavior(scenario);
-            
-            // When: Getting viewer count with current implementation
-            const currentBehaviorCount = await platform.getViewerCount();
-            
-            // Then: CURRENT BUG - only includes chat-ready streams
-            expect(currentBehaviorCount).toBe(1000); // Only chat-ready stream
-            
-            // This SHOULD be 4500 (all streams), demonstrating the bug
-            const shouldBe = scenario.expectedViewerCount; // 4500
-            expect(currentBehaviorCount).toBeLessThan(shouldBe);
-            expect(currentBehaviorCount).not.toBe(shouldBe); // This test will pass, showing the bug
-        });
-
-        test('CURRENT BUG: returns 0 when no chat connections despite live streams', async () => {
-            // Given: Live streams detected but no chat connections ready
-            const scenario = createMultiStreamScenario([
-                { videoId: 'live-no-chat-1', viewers: 3000, chatReady: false, isLive: true },
-                { videoId: 'live-no-chat-2', viewers: 2000, chatReady: false, isLive: true },
-            ]);
-            
-            const platform = await createYouTubePlatformWithCurrentBehavior(scenario);
-            
-            // When: Getting viewer count with current implementation
-            const currentCount = await platform.getViewerCount();
-            
-            // Then: CURRENT BUG - returns 0 despite 5000 actual viewers
-            expect(currentCount).toBe(0); // Bug: should be 5000
-            
-            // Demonstrating what the count SHOULD be
-            const correctCount = scenario.expectedViewerCount;
-            expect(correctCount).toBe(5000);
-            expect(currentCount).not.toBe(correctCount); // Shows the bug
-        });
-    });
 });

@@ -90,7 +90,7 @@ class NotificationManager extends EventEmitter {
         this.PRIORITY_LEVELS = PRIORITY_LEVELS;
         
         // Use consolidated NOTIFICATION_CONFIGS from constants.js
-        // This ensures single source of truth and fixes envelope notification hiding bug
+        // This ensures a single source of truth and prevents envelope notifications from being hidden
         this.NOTIFICATION_CONFIGS = NOTIFICATION_CONFIGS;
         
         // Use NotificationBuilder for modern notification creation
@@ -1175,11 +1175,4 @@ class NotificationManager extends EventEmitter {
     }
 }
 
-// Factory function for creating NotificationManager with dependencies
-function createNotificationManager(dependencies = {}) {
-    return new NotificationManager(dependencies);
-}
-
-// Export the class and factory function
-module.exports = NotificationManager; 
-module.exports.createNotificationManager = createNotificationManager; 
+module.exports = NotificationManager;

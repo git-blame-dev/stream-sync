@@ -232,7 +232,6 @@ class RetrySystem {
             // Schedule reconnection attempt after cleanup completes
             const validatedDelay = validateTimeout(adaptiveDelay, ADAPTIVE_RETRY_CONFIG.BASE_DELAY, 'retry delay');
             this.retryTimers[platform] = safeSetTimeout(async () => {
-                // CRITICAL FIX: Check if platform is already connected before retrying
                 if (this.isConnected && this.isConnected(platform)) {
                     this.logger.debug(`Cancelling scheduled retry - ${platform} already connected`, 'retry-system');
                     return;

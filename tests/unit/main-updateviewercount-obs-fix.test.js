@@ -222,7 +222,7 @@ describe('Main App updateViewerCount OBS Integration', () => {
 
   describe('regression prevention', () => {
     it('should prevent TikTok viewer count from being ignored in observers', () => {
-      // Arrange - This test specifically addresses the original bug
+      // Arrange - This test covers the original failure scenario
       const platform = 'tiktok';
       const viewerCount = 4; // Same count as seen in logs
       
@@ -232,7 +232,7 @@ describe('Main App updateViewerCount OBS Integration', () => {
       // Act - Simulate the exact scenario where viewer count was being lost
       updateViewerCountMethod(platform, viewerCount);
 
-      // Assert - Verify the fix prevents the original issue
+      // Assert - Verify the update path prevents the original issue
       expect(mockViewerCountSystem.counts.tiktok).toBe(viewerCount);
       expect(mockViewerCountSystem.notifyObservers).toHaveBeenCalledWith(platform, viewerCount, 0);
       expect(debugLogSpy).toHaveBeenCalledWith(

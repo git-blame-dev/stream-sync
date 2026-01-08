@@ -52,7 +52,7 @@ describe('YouTube Turkish Lira (TRY) Currency Parsing', () => {
         });
 
         describe('Turkish Lira Code+Space Format (TRY XXX.XX)', () => {
-            it('should parse "TRY 219.99" correctly - PRODUCTION BUG', () => {
+            it('should parse "TRY 219.99" correctly', () => {
                 // This is the EXACT format from production logs
                 const result = parser.parse('TRY 219.99');
                 
@@ -251,7 +251,7 @@ describe('YouTube Turkish Lira (TRY) Currency Parsing', () => {
             it('should NOT parse as zero when format is unrecognized', () => {
                 const result = parser.parse('TRY 219.99');
                 
-                // The bug is that it returns amount: 0
+                // Should not return 0 for a valid TRY amount
                 expect(result.amount).not.toBe(0);
             });
         });

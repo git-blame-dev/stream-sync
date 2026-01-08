@@ -31,7 +31,6 @@ describe('Greeting Display Username Fix', () => {
     let mockNotificationManager;
     let createNotificationData;
     let formatUsername12;
-    let sanitizeForTTSWithLimit;
     
     beforeEach(() => {
         // Create fresh mocks for each test
@@ -50,7 +49,6 @@ describe('Greeting Display Username Fix', () => {
 
         createNotificationData = testUtils.createNotificationData;
         formatUsername12 = validation.formatUsername12;
-        sanitizeForTTSWithLimit = validation.sanitizeForTTSWithLimit;
     });
 
     describe('when greeting notification is generated', () => {
@@ -199,7 +197,7 @@ describe('Greeting Display Username Fix', () => {
             });
         });
 
-        describe('sanitizeForTTSWithLimit function', () => {
+        describe('formatUsername12 function (TTS mode)', () => {
             it('should not over-truncate reasonable multi-word usernames', () => {
                 // Arrange - Test cases that are currently being over-truncated
                 const testCases = [
@@ -210,7 +208,7 @@ describe('Greeting Display Username Fix', () => {
                 
                 testCases.forEach(username => {
                     // Act
-                    const result = sanitizeForTTSWithLimit(username);
+                    const result = formatUsername12(username, true);
                     
                     // Assert - Implementation preserves multiple words when they fit within 12 chars
                     if (username === 'Sample Person') {

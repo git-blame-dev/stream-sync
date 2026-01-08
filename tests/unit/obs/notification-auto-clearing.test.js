@@ -1,8 +1,8 @@
 
-const { initializeTestLogging } = require('./helpers/test-setup');
-const { createMockOBSManager } = require('./helpers/mock-factories');
-const { setupAutomatedCleanup } = require('./helpers/mock-lifecycle');
-const { createRuntimeConstantsFixture } = require('./helpers/runtime-constants-fixture');
+const { initializeTestLogging } = require('../../helpers/test-setup');
+const { createMockOBSManager } = require('../../helpers/mock-factories');
+const { setupAutomatedCleanup } = require('../../helpers/mock-lifecycle');
+const { createRuntimeConstantsFixture } = require('../../helpers/runtime-constants-fixture');
 
 // Initialize test infrastructure
 initializeTestLogging();
@@ -12,7 +12,7 @@ setupAutomatedCleanup({
     logPerformanceMetrics: true
 });
 
-const { DisplayQueue } = require('../src/obs/display-queue');
+const { DisplayQueue } = require('../../../src/obs/display-queue');
 
 describe('Notification Auto-Clearing Behavior', () => {
     let displayQueue;

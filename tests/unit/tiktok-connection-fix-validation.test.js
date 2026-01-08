@@ -107,7 +107,7 @@ describe('TikTok Connection Fix Validation - Solution C', () => {
                 reason: 'All prerequisites met'
             });
 
-            // FORCE: Set connection to null (simulating the bug condition)
+            // FORCE: Set connection to null (simulating a null connection state)
             platform.connection = null;
             
             // EXECUTE: Ensure connection - this should NOT crash

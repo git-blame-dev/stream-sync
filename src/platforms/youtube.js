@@ -307,7 +307,7 @@ class YouTubePlatform extends EventEmitter {
         applyNumericFix('maxStreams', 0, DEFAULT_YOUTUBE_CONFIG.maxStreams);
         applyNumericFix('fullCheckInterval', 1, DEFAULT_YOUTUBE_CONFIG.fullCheckInterval);
         
-        // Log comprehensive fix summary if any fixes were applied
+        // Log a summary when adjustments were applied
         if (fixes.length > 0 && this.logger && this.logger.info) {
             this.logger.info(
                 `Applied configuration fixes: ${fixes.join(', ')}`,

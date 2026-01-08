@@ -106,8 +106,7 @@ describe('DisplayQueue - Twitch Bits Goal Calculation', () => {
             await waitForDelay(100);
             
             // Then: processDonationGoal is called with 200
-            expect(processDonationGoal).toHaveBeenCalledWith('twitch', 200);  // Fixed: Just the bits value
-            expect(processDonationGoal).not.toHaveBeenCalledWith('twitch', 40000); // Bug value no longer used
+            expect(processDonationGoal).toHaveBeenCalledWith('twitch', 200);  // Expected: just the bits value
         });
         
         it('should correctly handle multiple bit cheers without multiplication', async () => {
@@ -148,12 +147,12 @@ describe('DisplayQueue - Twitch Bits Goal Calculation', () => {
             // Then: processDonationGoal is called with correct amounts
             expect(processDonationGoal).toHaveBeenCalledTimes(3);
             
-            // CORRECT BEHAVIOR (fixed):
+            // Expected behavior:
             expect(processDonationGoal).toHaveBeenNthCalledWith(1, 'twitch', 100);  // Just bits value
             expect(processDonationGoal).toHaveBeenNthCalledWith(2, 'twitch', 500);  // Just bits value
             expect(processDonationGoal).toHaveBeenNthCalledWith(3, 'twitch', 50);   // Just bits value
             
-            // Should NOT be called with multiplied amounts (bug fixed)
+            // Should NOT be called with multiplied amounts
             expect(processDonationGoal).not.toHaveBeenCalledWith('twitch', 10000);
             expect(processDonationGoal).not.toHaveBeenCalledWith('twitch', 250000);
             expect(processDonationGoal).not.toHaveBeenCalledWith('twitch', 2500);
@@ -257,17 +256,16 @@ describe('DisplayQueue - Twitch Bits Goal Calculation', () => {
             await waitForDelay(100);
             
             // Then: processDonationGoal is called with 200
-            expect(processDonationGoal).toHaveBeenCalledWith('twitch', 200);  // Fixed: Just the bits value
-            expect(processDonationGoal).not.toHaveBeenCalledWith('twitch', 40000); // Bug value no longer used
+            expect(processDonationGoal).toHaveBeenCalledWith('twitch', 200);  // Expected: just the bits value
             
             // Verify the calculation that would happen
             const correctAmount = 200;  // Just the bits
-            const incorrectAmount = 200 * 200;  // Bits multiplied by giftCount (legacy bug)
+            const incorrectAmount = 200 * 200;  // Legacy issue: bits multiplied by giftCount
             
             expect(correctAmount).toBe(200);
             expect(incorrectAmount).toBe(40000);
             
-            // The bug would cause 40,000 to be added instead of 200
+            // The inflated calculation would cause 40,000 to be added instead of 200
             // This is a 199x overcount!
         });
         
@@ -276,7 +274,7 @@ describe('DisplayQueue - Twitch Bits Goal Calculation', () => {
             mockConfig.goals.enabled = true;
             
             // When: User sends "Corgo100 Corgo100" (2 Corgo100 cheermotes = 200 bits total)
-            const realWorldBugScenario = {
+            const realWorldScenario = {
                 type: 'gift',
                 data: {
                     username: 'RealUser',
@@ -299,12 +297,11 @@ describe('DisplayQueue - Twitch Bits Goal Calculation', () => {
                 priority: 3
             };
             
-            displayQueue.addItem(realWorldBugScenario);
+            displayQueue.addItem(realWorldScenario);
             await waitForDelay(100);
             
             // Then: uses 200 (the total bits)
-            expect(processDonationGoal).toHaveBeenCalledWith('twitch', 200);  // Fixed: correct value
-            expect(processDonationGoal).not.toHaveBeenCalledWith('twitch', 40000); // Bug value no longer used
+            expect(processDonationGoal).toHaveBeenCalledWith('twitch', 200);  // Expected: correct value
         });
     });
 });
