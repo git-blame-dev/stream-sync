@@ -181,7 +181,7 @@ describe('NotificationManager paypiggy normalization', () => {
         expect(displayQueue.items).toHaveLength(0);
     });
 
-    it('rejects superfan alias inputs and requires canonical paypiggy with isSuperfan flag instead', async () => {
+    it('rejects superfan alias inputs and requires canonical paypiggy with tier instead', async () => {
         const displayQueue = createDisplayQueueStub();
         const manager = new NotificationManager({
             displayQueue,
@@ -205,12 +205,12 @@ describe('NotificationManager paypiggy normalization', () => {
         await manager.handleNotification('paypiggy', 'tiktok', {
             username: 'SuperFanUser',
             userId: 'sf_123',
-            isSuperfan: true
+            tier: 'superfan'
         });
 
         expect(displayQueue.items).toHaveLength(1);
         expect(displayQueue.items[0].data.type).toBe('paypiggy');
-        expect(displayQueue.items[0].data.isSuperfan).toBe(true);
+        expect(displayQueue.items[0].data.tier).toBe('superfan');
     });
 
     it('fails when ConfigService is missing (fail-fast)', async () => {

@@ -75,7 +75,6 @@ describe('TwitchEventSub notification routing', () => {
         expect(payload).toMatchObject({
             username: 'LongTenure',
             months: 7,
-            isGift: false,
             timestamp: subscriptionEvent.timestamp
         });
     });

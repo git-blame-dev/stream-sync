@@ -177,7 +177,6 @@ describe('Cross-Platform Goal Calculation', () => {
                     amount: 100,
                     currency: 'bits',
                     displayMessage: 'TwitchUser sent 100 bits',
-                    isBits: true,   // Identifies this as bits
                     platform: 'twitch'
                 },
                 platform: 'twitch',

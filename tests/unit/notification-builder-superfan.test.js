@@ -7,7 +7,7 @@ describe('NotificationBuilder SuperFan notifications', () => {
             platform: 'tiktok',
             username: 'SuperFanUser',
             userId: 'superfan_1',
-            isSuperfan: true
+            tier: 'superfan'
         });
 
         expect(notification.displayMessage).toMatch(/SuperFan/);

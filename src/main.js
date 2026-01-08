@@ -1085,11 +1085,7 @@ class AppRuntime {
         if (!options || typeof options !== 'object') {
             throw new Error('handlePaypiggyNotification requires options');
         }
-        const canonicalOptions = {
-            ...options,
-            isSuperfan: options.isSuperfan === true
-        };
-        return this.handleUnifiedNotification('paypiggy', platform, username, canonicalOptions);
+        return this.handleUnifiedNotification('paypiggy', platform, username, options);
     }
 
     async handleNotificationEvent(platform, type, data) {
@@ -1249,7 +1245,6 @@ class AppRuntime {
         const isError = options.isError === true;
         const payload = {
             giftCount,
-            isGift: true,
             userId: options.userId,
             timestamp: options.timestamp,
             ...(isError ? { isError: true } : {})

@@ -81,7 +81,6 @@ function createTwitchEventFactory(options = {}) {
                 username: identity.username,
                 userId: identity.userId,
                 tier: data.tier,
-                isGift: data.isGift,
                 isRenewal,
                 timestamp: getTimestamp(data),
                 metadata: buildEventMetadata()
@@ -107,7 +106,6 @@ function createTwitchEventFactory(options = {}) {
                 username: identity.username,
                 userId: identity.userId,
                 tier: data.tier,
-                isGift: data.isGift,
                 isRenewal,
                 timestamp: getTimestamp(data),
                 metadata: buildEventMetadata()
@@ -136,7 +134,6 @@ function createTwitchEventFactory(options = {}) {
                 userId: identity.userId,
                 giftCount,
                 tier: data.tier,
-                isGift: true,
                 isAnonymous: data.isAnonymous,
                 timestamp: getTimestamp(data),
                 metadata: buildEventMetadata()
@@ -211,9 +208,6 @@ function createTwitchEventFactory(options = {}) {
             }
             if (data.cheermoteInfo && typeof data.cheermoteInfo === 'object') {
                 result.cheermoteInfo = data.cheermoteInfo;
-            }
-            if (typeof data.isBits === 'boolean') {
-                result.isBits = data.isBits;
             }
             if (isError) {
                 result.isError = true;

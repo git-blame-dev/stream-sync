@@ -133,7 +133,7 @@ class NotificationBuilder {
             return null;
         }
 
-        if (input.isSuperfan || input.tier === 'superfan') {
+        if (input.tier === 'superfan') {
             return 'superfan';
         }
 

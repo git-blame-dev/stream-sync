@@ -113,7 +113,6 @@ describe('Twitch Handler Integration', () => {
                 displayName: 'TestSubscriber',
                 userId: '67890',
                 tier: '1000',
-                isGift: false,
                 timestamp: new Date()
             };
 

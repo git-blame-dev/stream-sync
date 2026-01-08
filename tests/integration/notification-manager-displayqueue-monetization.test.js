@@ -160,12 +160,12 @@ describe('Monetisation pipeline integration', () => {
         { platform: 'youtube', type: 'gift', giftType: 'Super Chat', giftCount: 1, amount: 5, currency: 'USD', expectedCommandKey: 'gifts', username: 'ChatPilot', userId: 'yt-superchat-2' },
         { platform: 'youtube', type: 'gift', giftType: 'Super Sticker', giftCount: 1, amount: 10, currency: 'USD', expectedCommandKey: 'gifts', username: 'StickerPilot', userId: 'yt-sticker-3' },
         { platform: 'twitch', type: 'giftpaypiggy', expectedCommandKey: 'gifts', username: 'SubPilot', userId: 'tw-giftpaypiggy-4' },
-        { platform: 'twitch', type: 'gift', giftType: 'bits', giftCount: 1, amount: 100, currency: 'bits', expectedCommandKey: 'gifts', username: 'BitsPilot', userId: 'tw-bits-5', isBits: true },
+        { platform: 'twitch', type: 'gift', giftType: 'bits', giftCount: 1, amount: 100, currency: 'bits', expectedCommandKey: 'gifts', username: 'BitsPilot', userId: 'tw-bits-5' },
         { platform: 'tiktok', type: 'paypiggy', expectedCommandKey: 'paypiggies', username: 'MemberPilot', userId: 'tt-paypiggy-7' },
         { platform: 'tiktok', type: 'envelope', giftType: 'Treasure Chest', giftCount: 1, amount: 100, currency: 'coins', expectedCommandKey: 'gifts', username: 'ChestPilot', userId: 'tt-envelope-1' }
     ];
 
-    test.each(flows)('routes %s %s with canonical command key', async ({ platform, type, expectedCommandKey, username, userId, giftType, giftCount, amount, currency, isBits }) => {
+    test.each(flows)('routes %s %s with canonical command key', async ({ platform, type, expectedCommandKey, username, userId, giftType, giftCount, amount, currency }) => {
         recordedEvents.length = 0;
 
         const baseData = {
@@ -178,18 +178,13 @@ describe('Monetisation pipeline integration', () => {
             giftpaypiggy: { giftCount: 5, tier: '1000' },
             paypiggy: { membershipLevel: 'Member', months: 2 }
         };
-        const bitsData = isBits
-            ? { isBits: true, bits: 100, giftType: 'bits', giftCount: 1, amount: 100, currency: 'bits' }
-            : {};
-
         const payload = {
             ...baseData,
             ...(typeData[type] ?? {}),
             ...(giftType ? { giftType } : {}),
             ...(giftCount ? { giftCount } : {}),
             ...(amount !== undefined ? { amount } : {}),
-            ...(currency ? { currency } : {}),
-            ...bitsData
+            ...(currency ? { currency } : {})
         };
 
         if (type === 'envelope') {
@@ -251,7 +246,6 @@ describe('Monetisation pipeline integration', () => {
                 userId: 'gifter-1',
                 id: 'gift-1',
                 timestamp: fixedTimestamp,
-                isBits: true,
                 bits: 100,
                 giftType: 'bits',
                 giftCount: 1,

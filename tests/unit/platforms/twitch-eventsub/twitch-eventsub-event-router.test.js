@@ -84,7 +84,6 @@ describe('Twitch EventSub event router', () => {
         expect(giftEvent.payload.currency).toBe('bits');
         expect(giftEvent.payload.giftCount).toBe(1);
         expect(giftEvent.payload.giftType).toBe('bits');
-        expect(giftEvent.payload.isBits).toBe(true);
         expect(giftEvent.payload.message).toBe('hello world');
         expect(giftEvent.payload.repeatCount).toBe(1);
         expect(giftEvent.payload.id).toEqual(expect.any(String));

@@ -87,7 +87,6 @@ describe('NotificationManager Twitch monetisation behavior', () => {
         await notificationManager.handleNotification('gift', 'twitch', {
             username: 'BitsHero',
             userId: 'user-3',
-            isBits: true,
             bits: 500,
             giftType: 'bits',
             giftCount: 1,

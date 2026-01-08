@@ -195,8 +195,6 @@ class NotificationManager extends EventEmitter {
             return { success: false, error: 'Unsupported paid alias', notificationType: resolvedType, platform };
         }
 
-        const isSuperfan = data?.isSuperfan === true;
-
         const canonicalType = resolvedType;
         const config = this.NOTIFICATION_CONFIGS[canonicalType];
         if (!config) {
@@ -214,6 +212,9 @@ class NotificationManager extends EventEmitter {
         if (normalizedData.platform) delete normalizedData.platform;
         if (normalizedData.user) delete normalizedData.user;
         if (normalizedData.displayName) delete normalizedData.displayName;
+        if (normalizedData.isSuperfan !== undefined) delete normalizedData.isSuperfan;
+        if (normalizedData.isGift !== undefined) delete normalizedData.isGift;
+        if (normalizedData.isBits !== undefined) delete normalizedData.isBits;
         data = normalizedData;
 
         const platformName = platform.toLowerCase();
@@ -317,7 +318,6 @@ class NotificationManager extends EventEmitter {
                 platform: platform,
                 username: data.username,
                 userId: data.userId,
-                isSuperfan,
                 // Gift/donation fields
                 amount: data.amount,
                 currency: data.currency,

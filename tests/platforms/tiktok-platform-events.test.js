@@ -191,7 +191,7 @@ describe('TikTokPlatform event emissions', () => {
         expect(event.userId).toBe('sub123');
     });
 
-    it('emits superfan subscription events with SuperFan metadata', async () => {
+    it('emits superfan subscription events with SuperFan tier', async () => {
         const { eventHandlers, paypiggies, webcastEvent } = createPlatformUnderTest();
         const superfanPayload = {
             user: {
@@ -209,8 +209,7 @@ describe('TikTokPlatform event emissions', () => {
         expect(event.platform).toBe('tiktok');
         expect(event.userId).toBe('sf123');
         expect(event.username).toBe('sf123');
-        expect(event.tier).toBeUndefined();
-        expect(event.metadata.isSuperfan).toBe(true);
+        expect(event.tier).toBe('superfan');
         expect(event.metadata.correlationId).toBeDefined();
     });
 

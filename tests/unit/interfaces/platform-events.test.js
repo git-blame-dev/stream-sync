@@ -64,7 +64,7 @@ describe('Platform Events Interface', () => {
                 {
                     platform: 'tiktok',
                     type: 'paypiggy',
-                    data: { tier: 'superfan', isSuperfan: true, username: 'SuperFanUser' }
+                    data: { tier: 'superfan', username: 'SuperFanUser' }
                 }
             ];
 

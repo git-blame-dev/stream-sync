@@ -134,7 +134,6 @@ describe('TwitchEventSub Resubscription Notification Fix', () => {
         userId: 'sub123',
         tier: '2000',
         months: 6,
-        isGift: false,
         timestamp: subEvent.timestamp
       });
     });
