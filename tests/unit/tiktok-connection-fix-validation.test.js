@@ -99,7 +99,6 @@ describe('TikTok Connection Fix Validation - Solution C', () => {
 
     describe('Solution C Implementation Validation', () => {
         it('should prevent null pointer exceptions when connection is null', async () => {
-            // SETUP: Platform instance
             const platform = new TikTokPlatform(mockConfig, mockDependencies);
             
             platform.checkConnectionPrerequisites = jest.fn().mockReturnValue({
@@ -107,21 +106,17 @@ describe('TikTok Connection Fix Validation - Solution C', () => {
                 reason: 'All prerequisites met'
             });
 
-            // FORCE: Set connection to null (simulating a null connection state)
+            // Set a null connection to exercise ensureConnection
             platform.connection = null;
             
-            // EXECUTE: Ensure connection - this should NOT crash
-            // Solution C should recreate the connection automatically
             expect(() => platform.connectionStateManager.ensureConnection()).not.toThrow();
             
-            // VERIFY: Connection should be recreated
             const connection = platform.connectionStateManager.ensureConnection();
             expect(connection).not.toBeNull();
             expect(typeof connection.connect).toBe('function');
         });
 
         it('should handle connection cleanup and recreation gracefully', async () => {
-            // SETUP: Platform with working connection
             const platform = new TikTokPlatform(mockConfig, mockDependencies);
             
             platform.checkConnectionPrerequisites = jest.fn().mockReturnValue({
@@ -129,32 +124,25 @@ describe('TikTok Connection Fix Validation - Solution C', () => {
                 reason: 'All prerequisites met'
             });
 
-            // STEP 1: Create initial connection
             await platform.initialize({});
             expect(platform.connection).not.toBeNull();
             
-            // STEP 2: Cleanup (this nullifies connection)
             await platform.cleanup();
             expect(platform.connection).toBeNull();
 
-            // STEP 3: Reconnect should work without issues
             await expect(platform.initialize({})).resolves.not.toThrow();
             expect(platform.connection).not.toBeNull();
         });
 
         it('should maintain connection state through the state manager', async () => {
-            // SETUP: Platform instance
             const platform = new TikTokPlatform(mockConfig, mockDependencies);
             
-            // VERIFY: State manager is properly initialized
             expect(platform.connectionStateManager).toBeDefined();
             expect(platform.connectionFactory).toBeDefined();
             
-            // VERIFY: Initial state is disconnected
             expect(platform.connectionStateManager.getState()).toBe('disconnected');
             expect(platform.connectionStateManager.isConnected()).toBe(false);
             
-            // VERIFY: Connection info is properly tracked
             const connectionInfo = platform.connectionStateManager.getConnectionInfo();
             expect(connectionInfo.platform).toBe('tiktok');
             expect(connectionInfo.state).toBe('disconnected');
@@ -162,15 +150,12 @@ describe('TikTok Connection Fix Validation - Solution C', () => {
         });
 
         it('should create connections using the factory pattern', async () => {
-            // SETUP: Platform instance
             const platform = new TikTokPlatform(mockConfig, mockDependencies);
             
-            // VERIFY: Factory can create connections
             const connection = platform.connectionFactory.createConnection('tiktok', mockConfig, mockDependencies);
             expect(connection).not.toBeNull();
             expect(typeof connection.connect).toBe('function');
             
-            // VERIFY: Factory adds missing methods for compatibility
             expect(typeof connection.disconnect).toBe('function');
             expect(typeof connection.fetchIsLive).toBe('function');
             expect(typeof connection.on).toBe('function');

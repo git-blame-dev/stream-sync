@@ -104,7 +104,7 @@ describe('Greeting Display Username Fix', () => {
         describe('and username contains special characters', () => {
             it('should preserve Unicode characters in display message', () => {
                 // Arrange - Username with emoji and Unicode
-                const username = '💋DemoStar💋';
+                const username = '💋EmojiTest💋';
                 const userData = { username };
                 const eventData = {};
                 
@@ -112,14 +112,14 @@ describe('Greeting Display Username Fix', () => {
                 const result = createNotificationData('greeting', 'youtube', userData, eventData);
                 
                 // Assert - Display should preserve emojis
-                expect(result.displayMessage).toBe('Welcome, 💋DemoStar💋! 👋');
-                expect(result.displayMessage).toContain('💋DemoStar💋');
+                expect(result.displayMessage).toBe('Welcome, 💋EmojiTest💋! 👋');
+                expect(result.displayMessage).toContain('💋EmojiTest💋');
                 expectNoTechnicalArtifacts(result.displayMessage);
             });
             
             it('should clean Unicode characters for TTS but keep readable name', () => {
                 // Arrange
-                const username = '💋DemoStar💋';
+                const username = '💋EmojiTest💋';
                 const userData = { username };
                 const eventData = {};
                 
@@ -128,7 +128,7 @@ describe('Greeting Display Username Fix', () => {
             
             // Assert - TTS should clean emojis but keep readable name
             expect(result.ttsMessage).toContain('Hi');
-            expect(result.ttsMessage).toContain('DemoStar');
+            expect(result.ttsMessage).toContain('EmojiTest');
             expect(result.ttsMessage).not.toContain('💋'); // Emojis should be removed for TTS
             expectNoTechnicalArtifacts(result.ttsMessage);
         });
@@ -157,9 +157,7 @@ describe('Greeting Display Username Fix', () => {
     describe('username processing functions', () => {
         describe('formatUsername12 function', () => {
             it('should NOT truncate multi-word usernames under reasonable length', () => {
-                // This is the root cause of the issue - testing the underlying function
-                
-                // Arrange - Test the exact case from the logs
+                // Arrange - Multi-word username case
                 const username = 'Sample Person'; // 13 characters
                 
                 // Act - Test both display and TTS formatting
@@ -233,8 +231,8 @@ describe('Greeting Display Username Fix', () => {
     describe('integration with notification system', () => {
         describe('when greeting is processed end-to-end', () => {
             it('should create proper greeting notification with full username details', () => {
-                // Arrange - Realistic scenario from logs
-                const userData = { username: 'shecrywolf', displayName: '💋DemoStar💋' };
+                // Arrange - Multi-word display name case
+                const userData = { username: 'fake_user_example', displayName: 'Example Display Name' };
                 const eventData = {};
                 
                 // Act
@@ -242,9 +240,9 @@ describe('Greeting Display Username Fix', () => {
                 
                 // Assert - End-to-end greeting should work properly
                 expect(result.type).toBe('greeting');
-                expect(result.displayMessage).toContain('shecrywolf'); // Implementation uses username, not displayName
+                expect(result.displayMessage).toContain('fake_user_example'); // Implementation uses username, not displayName
                 expect(result.ttsMessage).toContain('Hi');
-                expect(result.ttsMessage).toContain('shecrywolf'); // Should have username for TTS
+                expect(result.ttsMessage).toContain('fake_user_example'); // Should have username for TTS
                 
                 // Ensure no template placeholders remain
                 expectNoTechnicalArtifacts(result.displayMessage);

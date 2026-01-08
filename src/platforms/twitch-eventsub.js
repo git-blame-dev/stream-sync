@@ -376,7 +376,7 @@ class TwitchEventSub extends EventEmitter {
             this.logger.debug('[EVENTSUB-DEBUG] Token validation complete', 'twitch');
             
             // PHASE 2: Clean up any existing WebSocket subscriptions before connecting
-            // This prevents connection limit issues from previous app terminations
+            // This avoids hitting subscription connection limits on restart
             this.logger.debug('[EVENTSUB-DEBUG] PHASE 2: Cleaning up existing subscriptions...', 'twitch');
             await this._cleanupAllWebSocketSubscriptions();
             this.logger.debug('[EVENTSUB-DEBUG] Cleanup complete', 'twitch');
@@ -686,7 +686,7 @@ class TwitchEventSub extends EventEmitter {
             this.welcomeTimer = null;
         }
         
-        // Clear the memory cleanup interval to prevent memory leaks
+        // Clear the periodic cleanup interval
         if (this.cleanupInterval) {
             clearInterval(this.cleanupInterval);
             this.cleanupInterval = null;
@@ -698,7 +698,7 @@ class TwitchEventSub extends EventEmitter {
         // Step 2: Close WebSocket connection properly
         if (this.ws) {
             try {
-                // Remove all event listeners to prevent memory leaks
+                // Remove WebSocket listeners before closing
                 this.ws.removeAllListeners();
                 // Close with normal closure code as per WebSocket spec
                 this.ws.close(1000, 'Normal cleanup');

@@ -89,8 +89,6 @@ class NotificationManager extends EventEmitter {
         const { PRIORITY_LEVELS, NOTIFICATION_CONFIGS } = this.constants;
         this.PRIORITY_LEVELS = PRIORITY_LEVELS;
         
-        // Use consolidated NOTIFICATION_CONFIGS from constants.js
-        // This ensures a single source of truth and prevents envelope notifications from being hidden
         this.NOTIFICATION_CONFIGS = NOTIFICATION_CONFIGS;
         
         // Use NotificationBuilder for modern notification creation

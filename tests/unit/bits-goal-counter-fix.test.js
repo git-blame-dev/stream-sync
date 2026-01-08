@@ -243,11 +243,6 @@ describe('Bits Goal Counter Fix', () => {
 
     describe('regression validation', () => {
         it('should prevent inflated goal increments for 100-bit cheers', async () => {
-            // This test simulates the previously reported scenario:
-            // Input: 100 bits
-            // Expected: 100 added to goal 
-            // Prior outcome: 40010 (suggests multiple 10,000 calculations)
-            
             const testUser = createTestUser({ username: 'BugReporter' });
             const bitsAmount = 100;
             
@@ -260,19 +255,11 @@ describe('Bits Goal Counter Fix', () => {
 
             const notificationData = mockAppRuntime.handleGiftNotification.mock.calls[0][2];
             
-            // Verify the expected data structure
-            expect(notificationData.giftCount).toBe(1);     // Expected 1 instead of 100
-            expect(notificationData.amount).toBe(100);      // Correct bit amount
-            
-            // This would have been the legacy calculation:
-            // const brokenGoalValue = notificationData.amount * 100; // Using bits as giftCount
-            // expect(brokenGoalValue).toBe(10000); // Incorrect result
-            
-            // This is the expected calculation:
+            expect(notificationData.giftCount).toBe(1);
+            expect(notificationData.amount).toBe(100);
+
             const goalValue = notificationData.amount * notificationData.giftCount;
-            expect(goalValue).toBe(100); // Correct result
-            
-            // Ensure we're not getting the inflated numbers
+            expect(goalValue).toBe(100);
             expect(goalValue).not.toBe(10000);
             expect(goalValue).not.toBe(40010);
         }, TEST_TIMEOUTS.FAST);

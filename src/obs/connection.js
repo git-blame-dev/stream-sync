@@ -453,7 +453,7 @@ async function initializeOBSConnection(config = {}, dependencies = {}) {
             }
             logger.debug('[OBS] OBS connection successful', 'OBS');
             
-            // Initialize handcam glow to 0 if enabled to avoid duplicate startup reset logic
+            // Initialize handcam glow to 0 when enabled
             const handcamConfig = dependencies.handcam;
             if (handcamConfig?.enabled) {
                 try {

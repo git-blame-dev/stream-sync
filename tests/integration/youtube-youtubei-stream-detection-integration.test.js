@@ -153,8 +153,6 @@ describe('YouTube YouTubei Stream Detection Integration - Regression', () => {
             expect(mockResult.success).toBe(true);
             expect(mockResult.videoIds).toEqual(['test123video']);
             
-            // If the mock works, we assume the stream detection would work
-            // Keep this test focused on the mocked service behavior
             const result = mockResult.success && mockResult.videoIds.length > 0;
             expect(result).toBe(true);
         });

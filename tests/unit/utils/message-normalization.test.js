@@ -699,7 +699,7 @@ describe('Message Normalization', () => {
             });
 
             it('should not replace original timestamps with current time when available', () => {
-                // Given: TikTok message with old timestamp (edge-case scenario)
+                // Given: TikTok message with earlier timestamp
                 const oldTime = Date.now() - (10 * 60 * 1000); // 10 minutes ago
                 const tikTokData = {
                     user: {
@@ -828,7 +828,7 @@ describe('Message Normalization', () => {
             });
 
             it('should not replace Twitch timestamps with current time when available', () => {
-                // Given: Twitch message with old timestamp (edge-case scenario)
+                // Given: Twitch message with earlier timestamp
                 const oldTime = Date.now() - (15 * 60 * 1000); // 15 minutes ago
                 const user = {
                     userId: '123456789',

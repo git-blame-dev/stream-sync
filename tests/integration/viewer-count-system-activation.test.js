@@ -288,7 +288,6 @@ describe('ViewerCount System Activation Integration', () => {
     
     describe('when ViewerCount system activation is driven by app.start()', () => {
         it('should demonstrate the integration flow that should work', async () => {
-            // Arrange - This test shows what the complete flow should look like
             const app = new AppRuntime(mockConfig, buildAppRuntimeDependencies());
             
             app.viewerCountSystem = new ViewerCountSystem(app);
@@ -296,23 +295,17 @@ describe('ViewerCount System Activation Integration', () => {
             // Skip heavy platform initialization for this integration-style test
             app.initializePlatforms = jest.fn().mockResolvedValue();
             
-            // Act - Complete system startup sequence
-            // 1. Initialize platforms (would set stream status)
             app.viewerCountSystem.updateStreamStatus('youtube', true);
             
-            // 2. Initialize viewer count system
             await app.viewerCountSystem.initialize();
             
-            // 3. Start the application (should trigger startPolling)
-            await app.start(); // This should call viewerCountSystem.startPolling()
+            await app.start();
             
             // Allow polling to execute
             await waitForDelay(100);
             
-            // Assert - After complete startup, polling should be active
             expect(app.viewerCountSystem.isPolling).toBe(true);
             expect(mockYouTubePlatform.getViewerCount).toHaveBeenCalled();
-            // Ensures the refactored AppRuntime.start wiring keeps viewer count polling alive
         }, TEST_TIMEOUTS.SLOW);
     });
     

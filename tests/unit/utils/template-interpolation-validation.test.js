@@ -23,7 +23,7 @@ describe('Template Interpolation Validation', () => {
     beforeEach(() => {
         jest.resetModules();
         
-        // Re-initialize logging after module reset (shared reset pattern)
+        // Re-initialize logging after module reset
         const { initializeTestLogging } = require('../../helpers/test-setup');
         initializeTestLogging();
         
