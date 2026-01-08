@@ -15,7 +15,7 @@ describe('Twitch Handler Integration', () => {
                 follow: 'onFollow',
                 paypiggy: 'onPaypiggy',
                 raid: 'onRaid',
-                cheer: 'onCheer'
+                gift: 'onGift'
             };
 
             const handlerName = handlerMap[type];
@@ -75,7 +75,7 @@ describe('Twitch Handler Integration', () => {
             onFollow: jest.fn().mockResolvedValue(),
             onPaypiggy: jest.fn().mockResolvedValue(),
             onRaid: jest.fn().mockResolvedValue(),
-            onCheer: jest.fn().mockResolvedValue()
+            onGift: jest.fn().mockResolvedValue()
         };
 
         // Store handlers directly in platform - simulating completed initialization
@@ -152,28 +152,31 @@ describe('Twitch Handler Integration', () => {
         });
     });
 
-    describe('Cheer Notification Handler Mismatch', () => {
-        it('should successfully call Gift handler for cheer events', async () => {
-            // Given: Cheer event data from Twitch
-            const cheerData = {
+    describe('Gift Notification Handler Mismatch', () => {
+        it('should successfully call Gift handler for gift events', async () => {
+            // Given: Gift event data from Twitch
+            const giftData = {
                 username: 'TestCheerer',
                 displayName: 'TestCheerer',
-                userId: '22222', 
-                bits: 100,
+                userId: '22222',
+                giftType: 'bits',
+                giftCount: 1,
+                amount: 100,
+                currency: 'bits',
                 message: 'Great stream!',
                 cheermoteInfo: { prefix: 'Cheer', bits: 100 },
                 timestamp: new Date()
             };
 
-            // When: Platform routes cheer event
-            twitchPlatform._emitPlatformEvent('cheer', cheerData);
+            // When: Platform routes gift event
+            twitchPlatform._emitPlatformEvent('gift', giftData);
 
             // Then: Verify the handler was called successfully
-            expect(handlers.onCheer).toBeDefined();
-            expect(handlers.onCheer).toHaveBeenCalledTimes(1);
-            expect(handlers.onCheer).toHaveBeenCalledWith(cheerData);
+            expect(handlers.onGift).toBeDefined();
+            expect(handlers.onGift).toHaveBeenCalledTimes(1);
+            expect(handlers.onGift).toHaveBeenCalledWith(giftData);
             
-            // This proves cheer notifications now work for users
+            // This proves gift notifications now work for users
         });
     });
 
@@ -185,8 +188,8 @@ describe('Twitch Handler Integration', () => {
             const workingHandlerNames = [
                 'onFollow',
                 'onPaypiggy',
-                'onRaid', 
-                'onCheer'
+                'onRaid',
+                'onGift'
             ];
             
             // Verify all handlers are properly defined and accessible
@@ -201,7 +204,7 @@ describe('Twitch Handler Integration', () => {
                 'onFollow',
                 'onPaypiggy', 
                 'onRaid',
-                'onCheer'
+                'onGift'
             ]);
         });
     });

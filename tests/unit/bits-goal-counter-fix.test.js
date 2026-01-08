@@ -89,7 +89,7 @@ describe('Bits Goal Counter Fix', () => {
         router?.dispose();
     });
 
-    const emitCheer = async ({ bits, username, userId, message = '', id = 'cheer-evt-1' } = {}) => {
+    const emitGift = async ({ bits, username, userId, message = '', id = 'cheer-evt-1' } = {}) => {
         const data = {
             username,
             userId,
@@ -97,6 +97,11 @@ describe('Bits Goal Counter Fix', () => {
             id,
             repeatCount: 1,
             timestamp: '2024-01-01T00:00:00.000Z',
+            giftType: 'bits',
+            giftCount: 1,
+            amount: bits,
+            currency: 'bits',
+            isBits: true,
             cheermoteInfo: { prefix: 'Cheer', isMixed: false }
         };
 
@@ -107,18 +112,18 @@ describe('Bits Goal Counter Fix', () => {
 
         await mockEventBus.emit('platform:event', {
             platform: 'twitch',
-            type: 'cheer',
+            type: 'gift',
             data
         });
     };
 
-    describe('when Twitch bits cheer event occurs', () => {
-        describe('and 100 bits are cheered', () => {
+    describe('when Twitch bits gift event occurs', () => {
+        describe('and 100 bits are sent', () => {
             it('should create gift notification with giftCount=1 and amount=100', async () => {
                 const testUser = createTestUser({ username: 'BitsCheerer' });
                 const bitsAmount = 100;
 
-                await emitCheer({
+                await emitGift({
                     bits: bitsAmount,
                     message: 'Great stream!',
                     username: testUser.username,
@@ -140,7 +145,7 @@ describe('Bits Goal Counter Fix', () => {
                 const testUser = createTestUser({ username: 'BitsCheerer' });
                 const bitsAmount = 100;
                 
-                await emitCheer({
+                await emitGift({
                     bits: bitsAmount,
                     username: testUser.username,
                     userId: testUser.userId,
@@ -167,12 +172,12 @@ describe('Bits Goal Counter Fix', () => {
             }, TEST_TIMEOUTS.FAST);
         });
 
-        describe('and 50 bits are cheered', () => {
+        describe('and 50 bits are sent', () => {
             it('should create gift notification with giftCount=1 and amount=50', async () => {
                 const testUser = createTestUser({ username: 'SmallBitsCheerer' });
                 const bitsAmount = 50;
                 
-                await emitCheer({
+                await emitGift({
                     bits: bitsAmount,
                     username: testUser.username,
                     userId: testUser.userId,
@@ -192,12 +197,12 @@ describe('Bits Goal Counter Fix', () => {
             }, TEST_TIMEOUTS.FAST);
         });
 
-        describe('and 1000 bits are cheered', () => {
+        describe('and 1000 bits are sent', () => {
             it('should create gift notification with giftCount=1 and amount=1000', async () => {
                 const testUser = createTestUser({ username: 'BigBitsCheerer' });
                 const bitsAmount = 1000;
                 
-                await emitCheer({
+                await emitGift({
                     bits: bitsAmount,
                     username: testUser.username,
                     userId: testUser.userId,
@@ -223,7 +228,7 @@ describe('Bits Goal Counter Fix', () => {
             const testUser = createTestUser({ username: 'MassiveBits' });
             const largeBitsAmount = 10000;
             
-            await emitCheer({
+            await emitGift({
                 bits: largeBitsAmount,
                 username: testUser.username,
                 userId: testUser.userId,
@@ -246,7 +251,7 @@ describe('Bits Goal Counter Fix', () => {
             const testUser = createTestUser({ username: 'BugReporter' });
             const bitsAmount = 100;
             
-            await emitCheer({
+            await emitGift({
                 bits: bitsAmount,
                 username: testUser.username,
                 userId: testUser.userId,

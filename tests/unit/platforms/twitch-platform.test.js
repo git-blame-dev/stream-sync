@@ -108,7 +108,6 @@ describe('Twitch Platform', () => {
             onPaypiggy: jest.fn(),
             onGift: jest.fn(),
             onGiftPaypiggy: jest.fn(),
-            onCheer: jest.fn(),
             onRaid: jest.fn(),
             onStreamStatus: jest.fn()
         };

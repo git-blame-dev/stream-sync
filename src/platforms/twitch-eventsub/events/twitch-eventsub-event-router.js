@@ -157,25 +157,47 @@ function createTwitchEventSubEventRouter(options = {}) {
         });
     };
 
+    const resolveBitsGiftType = (cheermoteInfo = {}) => {
+        if (cheermoteInfo.isMixed) {
+            return 'mixed bits';
+        }
+        return 'bits';
+    };
+
     const handleBitsUseEvent = (event) => {
         logRawIfEnabled('bits_use', event, 'bits-data-log', 'Error logging raw bits use data');
 
         if (!event?.id || !event?.user_name || !event?.user_id || typeof event?.bits !== 'number' || !event?.timestamp) {
             errorHandler.handleEventProcessingError(
                 new Error('Bits use event requires id, user_name, user_id, bits, and timestamp'),
-                'cheer',
+                'gift',
                 event
             );
             return;
         }
 
         const messageData = extractTwitchMessageData(event.message);
+        if (!messageData.cheermoteInfo) {
+            errorHandler.handleEventProcessingError(
+                new Error('Bits use event requires cheermoteInfo'),
+                'gift',
+                event
+            );
+            return;
+        }
 
-        safeEmit('cheer', {
+        const giftType = resolveBitsGiftType(messageData.cheermoteInfo);
+
+        safeEmit('gift', {
             platform: 'twitch',
             username: event.user_name,
             userId: event.user_id,
             bits: event.bits,
+            giftType,
+            giftCount: 1,
+            amount: event.bits,
+            currency: 'bits',
+            isBits: true,
             message: messageData.textContent,
             cheermoteInfo: messageData.cheermoteInfo,
             id: event.id,

@@ -143,10 +143,6 @@ class PlatformLifecycleService {
             onStreamDetected: (data) => this.emitPlatformEvent(platformName, 'stream-detected', data)
         };
 
-        if (platformName === 'twitch') {
-            handlers.onCheer = (data) => this.emitPlatformEvent(platformName, 'cheer', data);
-        }
-
         return handlers;
     }
 

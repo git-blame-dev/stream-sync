@@ -5,7 +5,7 @@ const { createTestAppRuntime } = require('../helpers/runtime-test-harness');
 const { createMockDisplayQueue, createMockLogger } = require('../helpers/mock-factories');
 const { createTextProcessingManager } = require('../../src/utils/text-processing');
 
-describe('Twitch cheer platform flow (smoke)', () => {
+describe('Twitch bits gift platform flow (smoke)', () => {
     const createEventBus = () => {
         const emitter = new EventEmitter();
         return {
@@ -33,7 +33,7 @@ describe('Twitch cheer platform flow (smoke)', () => {
         isEnabled: jest.fn().mockReturnValue(true)
     });
 
-    it('routes cheer through lifecycle, router, and runtime as gift', async () => {
+    it('routes bits gift through lifecycle, router, and runtime as gift', async () => {
         const eventBus = createEventBus();
         const logger = createMockLogger('debug', { captureConsole: true });
         const displayQueue = createMockDisplayQueue();
@@ -92,10 +92,14 @@ describe('Twitch cheer platform flow (smoke)', () => {
 
         class MockTwitchPlatform {
             async initialize(handlers) {
-                handlers.onCheer({
-                    username: 'Naibug',
+                handlers.onGift({
+                    username: 'test_user',
                     userId: 'tw-cheer-1',
-                    bits: 234,
+                    giftType: 'mixed bits',
+                    giftCount: 1,
+                    amount: 234,
+                    currency: 'bits',
+                    isBits: true,
                     message: '',
                     id: 'cheer-event-234',
                     repeatCount: 1,
@@ -128,11 +132,11 @@ describe('Twitch cheer platform flow (smoke)', () => {
             const queued = displayQueue.addItem.mock.calls[0][0];
             expect(queued.type).toBe('gift');
             expect(queued.platform).toBe('twitch');
-            expect(queued.data.username).toBe('Naibug');
+            expect(queued.data.username).toBe('test_user');
             expect(queued.data.isBits).toBe(true);
             expect(queued.data.amount).toBe(234);
             expect(queued.data.currency).toBe('bits');
-            expect(queued.data.displayMessage).toBe('Naibug sent 234 mixed bits');
+            expect(queued.data.displayMessage).toBe('test_user sent 234 mixed bits');
         } finally {
             runtime.platformEventRouter?.dispose();
             platformLifecycleService.dispose();

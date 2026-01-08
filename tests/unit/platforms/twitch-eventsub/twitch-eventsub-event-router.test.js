@@ -52,7 +52,7 @@ describe('Twitch EventSub event router', () => {
         expect(emitted).toEqual([]);
     });
 
-    test('extracts text content from bits.use fragments and emits a cheer payload', () => {
+    test('extracts text content from bits.use fragments and emits a gift payload', () => {
         const emitted = [];
         const router = createTwitchEventSubEventRouter({
             config: { dataLoggingEnabled: false },
@@ -77,13 +77,17 @@ describe('Twitch EventSub event router', () => {
             timestamp: '2024-01-01T00:00:00Z'
         });
 
-        const cheerEvent = emitted.find((evt) => evt.type === 'cheer');
-        expect(cheerEvent).toBeDefined();
-        expect(cheerEvent.payload.username).toBe('Cheerer');
-        expect(cheerEvent.payload.bits).toBe(50);
-        expect(cheerEvent.payload.message).toBe('hello world');
-        expect(cheerEvent.payload.repeatCount).toBe(1);
-        expect(cheerEvent.payload.id).toEqual(expect.any(String));
+        const giftEvent = emitted.find((evt) => evt.type === 'gift');
+        expect(giftEvent).toBeDefined();
+        expect(giftEvent.payload.username).toBe('Cheerer');
+        expect(giftEvent.payload.amount).toBe(50);
+        expect(giftEvent.payload.currency).toBe('bits');
+        expect(giftEvent.payload.giftCount).toBe(1);
+        expect(giftEvent.payload.giftType).toBe('bits');
+        expect(giftEvent.payload.isBits).toBe(true);
+        expect(giftEvent.payload.message).toBe('hello world');
+        expect(giftEvent.payload.repeatCount).toBe(1);
+        expect(giftEvent.payload.id).toEqual(expect.any(String));
     });
 
     test('emits paypiggyGift payloads with gift count and cumulative total', () => {

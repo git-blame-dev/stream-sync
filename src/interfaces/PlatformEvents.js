@@ -12,7 +12,6 @@ const PlatformEvents = {
     GIFTPAYPIGGY: 'platform:giftpaypiggy',
     GIFT: 'platform:gift',
     RAID: 'platform:raid',
-    CHEER: 'platform:cheer',
     CONNECTION_STATUS: 'platform:connection-status',
     AUTHENTICATION_REQUIRED: 'platform:authentication-required',
     RATE_LIMIT_HIT: 'platform:rate-limit-hit',
