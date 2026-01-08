@@ -171,8 +171,7 @@ const EVENT_SCHEMAS = {
             tier: { type: 'string' },
             isAnonymous: { type: 'boolean' },
             cumulativeTotal: { type: 'number' },
-            timestamp: { type: 'string' },
-            metadata: { type: 'object' }
+            timestamp: { type: 'string' }
         }
     },
     'platform:gift': {
@@ -598,6 +597,10 @@ class PlatformEventValidator {
         // Check required fields
         if (schema.required) {
             for (const field of schema.required) {
+                if (field === 'id' && event.isError === true &&
+                    (event.type === 'platform:gift' || event.type === 'platform:envelope')) {
+                    continue;
+                }
                 if (!(field in event)) {
                     errors.push(`Missing required field: ${field}`);
                 }

@@ -52,12 +52,9 @@ describe('Twitch event factory', () => {
             message: 'Great stream',
             months: 2,
             isRenewal: true,
-            timestamp: fixedNow,
-            metadata: {
-                platform: 'twitch',
-                correlationId: 'cid-fixed'
-            }
+            timestamp: fixedNow
         }));
+        expect(event.metadata).toBeUndefined();
     });
 
     test('creates paypiggy message event with renewal detection', () => {
@@ -81,6 +78,7 @@ describe('Twitch event factory', () => {
             message: 'Back again',
             timestamp: fixedNow
         }));
+        expect(event.metadata).toBeUndefined();
     });
 
     test('creates gift paypiggy event with normalized giftCount', () => {
@@ -101,6 +99,7 @@ describe('Twitch event factory', () => {
             tier: '1000',
             timestamp: fixedNow
         }));
+        expect(event.metadata).toBeUndefined();
     });
 
     test('creates gift event and preserves cheermote info', () => {
@@ -131,12 +130,9 @@ describe('Twitch event factory', () => {
             id: 'cheer-id-1',
             repeatCount: 1,
             timestamp: fixedNow,
-            cheermoteInfo: { name: 'Cheer250' },
-            metadata: expect.objectContaining({
-                platform: 'twitch',
-                correlationId: 'cid-fixed'
-            })
+            cheermoteInfo: { name: 'Cheer250' }
         }));
+        expect(event.metadata).toBeUndefined();
     });
 
     test('creates stream status events with deterministic timestamps', () => {

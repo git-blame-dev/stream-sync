@@ -13,5 +13,6 @@ describe('monetization error payload fallback username behavior', () => {
         });
 
         expect(payload.username).toBe('Unknown');
+        expect(payload).not.toHaveProperty('id');
     });
 });

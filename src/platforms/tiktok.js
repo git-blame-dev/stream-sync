@@ -89,12 +89,7 @@ class TikTokPlatform extends EventEmitter {
             },
             createGift: (data = {}) => {
                 const { username, userId } = extractTikTokUserData(data);
-                const metadataExtras = {};
-                if (data.enhancedGiftData) {
-                    metadataExtras.isAggregated = data.enhancedGiftData.isAggregated;
-                    metadataExtras.aggregatedCount = data.aggregatedCount ?? data.enhancedGiftData.giftCount;
-                    metadataExtras.enhancedGiftData = data.enhancedGiftData;
-                }
+                const hasEnhancedGiftData = data.enhancedGiftData && typeof data.enhancedGiftData === 'object';
 
                 if (typeof data.giftType !== 'string' || !data.giftType.trim()) {
                     throw new Error('TikTok gift requires giftType');
@@ -116,12 +111,10 @@ class TikTokPlatform extends EventEmitter {
                 const repeatCount = Number.isFinite(Number(data.repeatCount))
                     ? Number(data.repeatCount)
                     : undefined;
-                const resolvedGiftDetails = data.giftDetails || {};
                 const unitAmountRaw = data.unitAmount;
                 if (typeof unitAmountRaw !== 'number' || !Number.isFinite(unitAmountRaw)) {
                     throw new Error('TikTok gift requires unitAmount');
                 }
-                const unitAmount = unitAmountRaw;
                 const resolvedAmount = data.amount;
                 const currency = data.currency.trim();
                 const identity = this._normalizeUserData({
@@ -132,17 +125,21 @@ class TikTokPlatform extends EventEmitter {
                 if (!platformMessageId) {
                     throw new Error('TikTok gift requires msgId');
                 }
-                const isAggregated = (metadataExtras.isAggregated !== undefined)
-                    ? metadataExtras.isAggregated
-                    : (data.metadata?.isAggregated !== undefined
-                        ? data.metadata.isAggregated
-                        : Boolean(data.aggregatedCount || this.config.giftAggregationEnabled));
-                const aggregatedCountValue = metadataExtras.aggregatedCount
-                    || data.metadata?.aggregatedCount
-                    || data.aggregatedCount
-                    || giftCount;
+                let isAggregated = false;
+                if (typeof data.isAggregated === 'boolean') {
+                    isAggregated = data.isAggregated;
+                } else if (hasEnhancedGiftData && typeof data.enhancedGiftData.isAggregated === 'boolean') {
+                    isAggregated = data.enhancedGiftData.isAggregated;
+                } else if (Number.isFinite(Number(data.aggregatedCount))) {
+                    isAggregated = Number(data.aggregatedCount) > 0;
+                }
+                const aggregatedCountValue = Number.isFinite(Number(data.aggregatedCount))
+                    ? Number(data.aggregatedCount)
+                    : (hasEnhancedGiftData && Number.isFinite(Number(data.enhancedGiftData.giftCount))
+                        ? Number(data.enhancedGiftData.giftCount)
+                        : (isAggregated ? giftCount : undefined));
 
-                return {
+                const result = {
                     type: 'platform:gift',
                     platform: 'tiktok',
                     username: identity.username,
@@ -154,14 +151,18 @@ class TikTokPlatform extends EventEmitter {
                     ...(repeatCount !== undefined ? { repeatCount } : {}),
                     id: platformMessageId,
                     timestamp: data.timestamp,
-                    metadata: this._buildEventMetadata({
-                        giftId: resolvedGiftDetails.giftId,
-                        isAggregated,
-                        aggregatedCount: aggregatedCountValue,
-                        ...metadataExtras,
-                        ...(data.metadata || {})
-                    })
+                    isAggregated
                 };
+                if (isAggregated && Number.isFinite(Number(aggregatedCountValue))) {
+                    result.aggregatedCount = Number(aggregatedCountValue);
+                }
+                if (hasEnhancedGiftData) {
+                    result.enhancedGiftData = data.enhancedGiftData;
+                }
+                if (typeof data.sourceType === 'string') {
+                    result.sourceType = data.sourceType;
+                }
+                return result;
             },
             createFollow: (params) => {
                 const identity = this._normalizeUserData({
@@ -224,10 +225,7 @@ class TikTokPlatform extends EventEmitter {
                     amount,
                     currency,
                     id: messageId,
-                    timestamp: this._getTimestamp(data),
-                    metadata: this._buildEventMetadata({
-                        originalData: data
-                    })
+                    timestamp: this._getTimestamp(data)
                 };
             },
             createSubscription: (data = {}) => {
@@ -241,9 +239,6 @@ class TikTokPlatform extends EventEmitter {
                     type: PlatformEvents.PAYPIGGY,
                     platform: 'tiktok',
                     ...identity,
-                    metadata: this._buildEventMetadata({
-                        originalData: data
-                    }),
                     timestamp: this._getTimestamp(data)
                 };
                 if (tier) {
@@ -269,9 +264,6 @@ class TikTokPlatform extends EventEmitter {
                     platform: 'tiktok',
                     ...identity,
                     tier: 'superfan',
-                    metadata: this._buildEventMetadata({
-                        originalData: data
-                    }),
                     timestamp: this._getTimestamp(data)
                 };
                 if (Number.isFinite(months) && months > 0) {

@@ -1197,7 +1197,7 @@ class AppRuntime {
         if (!notificationType) {
             throw new Error('Gift notification requires type');
         }
-        if (!options.id) {
+        if (!isError && !options.id) {
             throw new Error('Gift notification requires id');
         }
         const notificationPayload = {
@@ -1208,7 +1208,7 @@ class AppRuntime {
             currency,
             repeatCount,
             vfxConfig: giftVFXConfig,
-            id: options.id
+            ...(options.id ? { id: options.id } : {})
         };
 
         // Delegate to handleUnifiedNotification with preprocessed gift data
@@ -1293,10 +1293,10 @@ class AppRuntime {
             const amount = Number(data.amount);
             const currency = typeof data.currency === 'string' ? data.currency.trim() : '';
             const repeatCount = data.repeatCount;
-            if (!giftType || !Number.isFinite(giftCount) || giftCount < 0 || !Number.isFinite(amount) || amount < 0 || !currency || !data.timestamp || !data.id) {
+            if (!giftType || !Number.isFinite(giftCount) || giftCount < 0 || !Number.isFinite(amount) || amount < 0 || !currency || !data.timestamp) {
                 throw new Error('Envelope notification requires giftType, giftCount, amount, currency, timestamp, and id');
             }
-            if (!isError && (giftCount <= 0 || amount <= 0)) {
+            if (!isError && (giftCount <= 0 || amount <= 0 || !data.id)) {
                 throw new Error('Envelope notification requires giftType, giftCount, amount, currency, timestamp, and id');
             }
             
@@ -1311,7 +1311,7 @@ class AppRuntime {
                 isError,
                 userId: data.userId,
                 timestamp: data.timestamp,
-                id: data.id,
+                ...(data.id ? { id: data.id } : {}),
                 // Include original data for any platform-specific processing
                 originalEnvelopeData: data
             });
@@ -1430,22 +1430,25 @@ class AppRuntime {
                 }
 
                 case 'gift':
-                    if (normalizedData.giftCount === undefined || !normalizedData.giftType || normalizedData.amount === undefined || !normalizedData.currency || !normalizedData.id || !normalizedData.userId || !normalizedData.timestamp) {
-                        throw new Error('Gift notification requires giftCount, giftType, amount, currency, id, userId, and timestamp');
+                    {
+                        const isError = normalizedData.isError === true;
+                        if (normalizedData.giftCount === undefined || !normalizedData.giftType || normalizedData.amount === undefined || !normalizedData.currency || !normalizedData.userId || !normalizedData.timestamp || (!isError && !normalizedData.id)) {
+                            throw new Error('Gift notification requires giftCount, giftType, amount, currency, id, userId, and timestamp');
+                        }
+                        await this.handleGiftNotification(platform, username, {
+                            amount: normalizedData.amount,
+                            giftCount: normalizedData.giftCount,
+                            tier: normalizedData.tier,
+                            giftType: normalizedData.giftType,
+                            currency: normalizedData.currency,
+                            repeatCount: normalizedData.repeatCount,
+                            ...(normalizedData.id ? { id: normalizedData.id } : {}),
+                            type: 'gift',
+                            userId: normalizedData.userId,
+                            timestamp: normalizedData.timestamp,
+                            ...options
+                        });
                     }
-                    await this.handleGiftNotification(platform, username, {
-                        amount: normalizedData.amount,
-                        giftCount: normalizedData.giftCount,
-                        tier: normalizedData.tier,
-                        giftType: normalizedData.giftType,
-                        currency: normalizedData.currency,
-                        repeatCount: normalizedData.repeatCount,
-                        id: normalizedData.id,
-                        type: 'gift',
-                        userId: normalizedData.userId,
-                        timestamp: normalizedData.timestamp,
-                        ...options
-                    });
                     break;
                 
                 default:

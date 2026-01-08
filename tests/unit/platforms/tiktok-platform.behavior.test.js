@@ -215,9 +215,9 @@ describe('TikTokPlatform behavior alignment', () => {
             expect(payload.giftType).toBe('Rose');
             expect(payload.amount).toBe(3);
             expect(payload.currency).toBe('coins');
-            expect(payload.metadata.aggregatedCount).toBe(3);
-            expect(payload.metadata.isAggregated).toBe(true);
-            expect(typeof payload.metadata.correlationId).toBe('string');
+            expect(payload.aggregatedCount).toBe(3);
+            expect(payload.isAggregated).toBe(true);
+            expect(payload.metadata).toBeUndefined();
         });
 
     });

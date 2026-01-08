@@ -219,9 +219,9 @@ describe('YouTube Notification Dispatcher - Modern (Production Data)', () => {
                 giftCount: 1,
                 amount: 0,
                 currency: 'unknown',
-                isError: true,
-                id: 'unknown'
+                isError: true
             });
+            expect(notification).not.toHaveProperty('id');
             expect(notification.timestamp).toEqual(expect.any(String));
         });
 
