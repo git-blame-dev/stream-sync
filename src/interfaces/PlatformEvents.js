@@ -180,6 +180,7 @@ const EVENT_SCHEMAS = {
     },
     'platform:gift': {
         required: ['type', 'platform', 'username', 'userId', 'id', 'giftType', 'giftCount', 'amount', 'currency', 'timestamp'],
+        optional: ['repeatCount', 'message', 'cheermoteInfo', 'isError', 'isAggregated', 'aggregatedCount', 'enhancedGiftData', 'sourceType'],
         properties: {
             type: { type: 'string', enum: ['platform:gift'] },
             platform: { type: 'string', enum: VALID_PLATFORMS },
@@ -191,7 +192,34 @@ const EVENT_SCHEMAS = {
             repeatCount: { type: 'number' },
             amount: { type: 'number' },
             currency: { type: 'string' },
-            timestamp: { type: 'string' }
+            timestamp: { type: 'string' },
+            message: { type: 'string' },
+            cheermoteInfo: { type: 'object' },
+            isError: { type: 'boolean' },
+            isAggregated: { type: 'boolean' },
+            aggregatedCount: { type: 'number' },
+            enhancedGiftData: { type: 'object' },
+            sourceType: { type: 'string' }
+        }
+    },
+    'platform:envelope': {
+        required: ['type', 'platform', 'username', 'userId', 'id', 'giftType', 'giftCount', 'amount', 'currency', 'timestamp'],
+        optional: ['repeatCount', 'message', 'isError', 'sourceType'],
+        properties: {
+            type: { type: 'string', enum: ['platform:envelope'] },
+            platform: { type: 'string', enum: VALID_PLATFORMS },
+            username: { type: 'string' },
+            userId: { type: 'string' },
+            id: { type: 'string' },
+            giftType: { type: 'string' },
+            giftCount: { type: 'number' },
+            repeatCount: { type: 'number' },
+            amount: { type: 'number' },
+            currency: { type: 'string' },
+            timestamp: { type: 'string' },
+            message: { type: 'string' },
+            isError: { type: 'boolean' },
+            sourceType: { type: 'string' }
         }
     },
     'platform:raid': {
@@ -203,22 +231,6 @@ const EVENT_SCHEMAS = {
             username: { type: 'string' },
             userId: { type: 'string' },
             viewerCount: { type: 'number' },
-            timestamp: { type: 'string' },
-            metadata: { type: 'object' }
-        }
-    },
-    'platform:cheer': {
-        required: ['type', 'platform', 'username', 'userId', 'bits', 'message', 'id', 'repeatCount', 'timestamp'],
-        optional: ['metadata'],
-        properties: {
-            type: { type: 'string', enum: ['platform:cheer'] },
-            platform: { type: 'string', enum: VALID_PLATFORMS },
-            username: { type: 'string' },
-            userId: { type: 'string' },
-            bits: { type: 'number' },
-            message: { type: 'string' },
-            id: { type: 'string' },
-            repeatCount: { type: 'number' },
             timestamp: { type: 'string' },
             metadata: { type: 'object' }
         }
