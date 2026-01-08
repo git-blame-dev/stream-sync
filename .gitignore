@@ -1,0 +1,11 @@
+node_modules/
+logs/
+data/
+
+.env
+.env.local
+.env.*.local
+config.ini
+gui/dist/
+gui/public/assets/platform-icons/Thumbs.db
+*.tsbuildinfo

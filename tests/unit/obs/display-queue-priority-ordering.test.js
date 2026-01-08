@@ -1,0 +1,85 @@
+
+jest.mock('../../../src/core/logging', () => ({
+    logger: {
+        debug: jest.fn(),
+        info: jest.fn(),
+        warn: jest.fn(),
+        error: jest.fn()
+    }
+}));
+
+const { DisplayQueue } = require('../../../src/obs/display-queue');
+const { createMockOBSManager } = require('../../helpers/mock-factories');
+
+describe('DisplayQueue priority ordering', () => {
+    const constants = {
+        PRIORITY_LEVELS: {
+            CHAT: 1,
+            FOLLOW: 2,
+            GIFT: 4,
+            RAID: 6
+        },
+        CHAT_MESSAGE_DURATION: 4500,
+        CHAT_TRANSITION_DELAY: 200
+    };
+
+    const config = {
+        autoProcess: false,
+        chat: { sourceName: 'chat', sceneName: 'scene', groupName: 'group', platformLogos: {} },
+        notification: { sourceName: 'notification', sceneName: 'scene', groupName: 'group', platformLogos: {} }
+    };
+
+    const createQueue = () => {
+        const queue = new DisplayQueue(createMockOBSManager('connected'), config, constants);
+        queue.getDuration = jest.fn().mockReturnValue(0);
+        return queue;
+    };
+
+    it('front-loads higher priority items even when added later', () => {
+        const queue = createQueue();
+        const processed = [];
+        queue.displayItem = jest.fn(async (item) => {
+            processed.push(item.type);
+        });
+
+        queue.addItem({
+            type: 'chat',
+            platform: 'twitch',
+            data: { username: 'Viewer', message: 'first chat' }
+        });
+
+        queue.addItem({
+            type: 'raid',
+            platform: 'twitch',
+            data: { username: 'Raider', viewerCount: 5 }
+        });
+
+        return queue.processQueue().then(() => {
+            expect(processed).toEqual(['raid', 'chat']);
+        });
+    });
+
+    it('preserves FIFO ordering for same-priority items', () => {
+        const queue = createQueue();
+        const processedUsers = [];
+        queue.displayItem = jest.fn(async (item) => {
+            processedUsers.push(item.data.username);
+        });
+
+        queue.addItem({
+            type: 'gift',
+            platform: 'twitch',
+            data: { username: 'Gifter1', giftType: 'bits', giftCount: 1, amount: 100, currency: 'bits' }
+        });
+
+        queue.addItem({
+            type: 'gift',
+            platform: 'twitch',
+            data: { username: 'Gifter2', giftType: 'bits', giftCount: 1, amount: 250, currency: 'bits' }
+        });
+
+        return queue.processQueue().then(() => {
+            expect(processedUsers).toEqual(['Gifter1', 'Gifter2']);
+        });
+    });
+});

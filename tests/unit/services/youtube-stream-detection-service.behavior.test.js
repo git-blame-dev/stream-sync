@@ -1,0 +1,59 @@
+const { YouTubeStreamDetectionService } = require('../../../src/services/youtube-stream-detection-service');
+
+const logger = { debug: jest.fn(), info: jest.fn(), warn: jest.fn(), error: jest.fn() };
+
+describe('YouTubeStreamDetectionService behavior', () => {
+    beforeEach(() => {
+        jest.clearAllMocks();
+    });
+
+    it('returns error response for invalid channel handle', async () => {
+        const service = new YouTubeStreamDetectionService({}, { logger });
+        const result = await service.detectLiveStreams(null);
+
+        expect(result.success).toBe(false);
+        expect(result.retryable).toBe(false);
+        expect(result.message).toContain('Unable to detect streams');
+    });
+
+    it('short-circuits when circuit breaker is open', async () => {
+        const service = new YouTubeStreamDetectionService({}, { logger });
+        service._circuitBreaker.isOpen = true;
+        service._circuitBreaker.lastFailureTime = Date.now();
+        service._circuitBreaker.cooldownPeriod = 10_000;
+
+        const result = await service.detectLiveStreams('channel');
+
+        expect(result.success).toBe(false);
+        expect(result.retryable).toBe(true);
+        expect(service._metrics.totalRequests).toBe(1);
+    });
+
+    it('formats successful detection with validated video IDs', async () => {
+        const service = new YouTubeStreamDetectionService({}, { logger });
+        service._performDetection = jest.fn().mockResolvedValue({
+            streams: [{ videoId: 'ABCDEFGHIJK' }, { videoId: 'invalid' }],
+            hasContent: true,
+            detectionMethod: 'youtubei'
+        });
+
+        const result = await service.detectLiveStreams('@test');
+
+        expect(result.success).toBe(true);
+        expect(result.videoIds).toEqual(['ABCDEFGHIJK', 'invalid']);
+        expect(result.message).toContain('Found 2 live streams');
+        expect(result.detectionMethod).toBe('youtubei');
+    });
+
+    it('opens circuit breaker after repeated failures', async () => {
+        const service = new YouTubeStreamDetectionService({}, { logger });
+        service._performDetection = jest.fn().mockRejectedValue(new Error('timeout error'));
+
+        await service.detectLiveStreams('channel');
+        await service.detectLiveStreams('channel');
+        await service.detectLiveStreams('channel');
+
+        expect(service._circuitBreaker.isOpen).toBe(true);
+        expect(service._metrics.failedRequests).toBe(3);
+    });
+});
