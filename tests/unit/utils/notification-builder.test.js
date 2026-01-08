@@ -1,0 +1,155 @@
+const NotificationBuilder = require('../../../src/utils/notification-builder');
+
+describe('NotificationBuilder', () => {
+    it('should build a basic notification object from minimal input', () => {
+        const input = {
+            platform: 'youtube',
+            type: 'gift',
+            username: 'TestUser',
+            userId: 'U123',
+            message: 'Hello world!',
+            giftType: 'Super Chat',
+            giftCount: 1,
+            amount: 5,
+            currency: 'USD'
+        };
+        const notification = NotificationBuilder.build(input);
+        expect(notification.platform).toBe('youtube');
+        expect(notification.type).toBe('gift');
+        expect(notification.userId).toBe('U123');
+        expect(notification.username).toBe('TestUser');
+        expect(notification.message).toBe('Hello world!');
+    });
+
+    it('should include optional fields if provided', () => {
+        const input = {
+            platform: 'twitch',
+            type: 'gift',
+            username: 'TwitchUser',
+            userId: 'T456',
+            message: 'Cheer!',
+            giftType: 'bits',
+            giftCount: 1,
+            amount: 5,
+            currency: 'bits',
+            vfxConfig: { command: '!money' }
+        };
+        const notification = NotificationBuilder.build(input);
+        expect(notification.amount).toBe(5);
+        expect(notification.currency).toBe('bits');
+        expect(notification.vfxConfig.command).toBe('!money');
+    });
+
+    it('should handle missing/invalid input gracefully', () => {
+        const result1 = NotificationBuilder.build(null);
+        const result2 = NotificationBuilder.build({});
+        
+        expect(result1).toBeNull();
+        expect(result2).toBeNull();
+    });
+
+    it('should support YouTube, Twitch, and TikTok platforms', () => {
+        const platforms = ['youtube', 'twitch', 'tiktok'];
+        for (const platform of platforms) {
+            const input = {
+                platform,
+                type: 'test',
+                username: 'name',
+                userId: 'id',
+                message: 'msg'
+            };
+            const notification = NotificationBuilder.build(input);
+            expect(notification.platform).toBe(platform);
+        }
+    });
+
+    it('should allow custom notification templates', () => {
+        const input = {
+            platform: 'youtube',
+            type: 'gift',
+            username: 'TestUser',
+            userId: 'U123',
+            message: 'Hello world!',
+            giftType: 'Super Chat',
+            giftCount: 1,
+            amount: 5,
+            currency: 'USD',
+            template: (data) => `Custom: ${data.username} - ${data.message}`
+        };
+        const notification = NotificationBuilder.build(input);
+        expect(notification.rendered).toBe('Custom: TestUser - Hello world!');
+    });
+
+    it('renders paypiggy with membership wording for YouTube', () => {
+        const input = {
+            platform: 'youtube',
+            type: 'paypiggy',
+            username: 'MemberUser',
+            userId: 'yt1',
+            months: 3,
+            membershipLevel: 'Test Member Plus'
+        };
+
+        const notification = NotificationBuilder.build(input);
+        expect(notification.type).toBe('paypiggy');
+        expect(notification.displayMessage).toContain('membership');
+        expect(notification.displayMessage).toContain('3');
+        expect(notification.displayMessage).toContain('Test Member Plus');
+        expect(notification.logMessage).toContain('Member');
+        expect(notification.logMessage).toContain('Test Member Plus');
+    });
+
+    it('renders explicit error copy for monetization error payloads', () => {
+        const errorInputs = [
+            {
+                platform: 'twitch',
+                type: 'gift',
+                username: 'Unknown User',
+                userId: 'unknown',
+                giftType: 'Unknown gift',
+                giftCount: 0,
+                amount: 0,
+                currency: 'unknown',
+                isError: true
+            },
+            {
+                platform: 'twitch',
+                type: 'giftpaypiggy',
+                username: 'Unknown User',
+                userId: 'unknown',
+                giftCount: 0,
+                tier: 'unknown',
+                isError: true
+            },
+            {
+                platform: 'twitch',
+                type: 'paypiggy',
+                username: 'Unknown User',
+                userId: 'unknown',
+                months: 0,
+                isError: true
+            },
+            {
+                platform: 'tiktok',
+                type: 'envelope',
+                username: 'Unknown User',
+                userId: 'unknown',
+                giftType: 'Treasure Chest',
+                giftCount: 0,
+                amount: 0,
+                currency: 'unknown',
+                isError: true
+            }
+        ];
+
+        errorInputs.forEach((input) => {
+            const notification = NotificationBuilder.build(input);
+            expect(notification.displayMessage).toMatch(/error/i);
+            expect(notification.ttsMessage).toMatch(/error/i);
+            expect(notification.logMessage).toMatch(/error/i);
+            expect(notification.isError).toBe(true);
+        });
+    });
+
+    // Edge cases are handled by graceful degradation in implementation
+}); 

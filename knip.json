@@ -1,0 +1,12 @@
+{
+  "$schema": "https://unpkg.com/knip@5/schema.json",
+  "entry": [
+    "src/main.js",
+    "tests/**/*.js"
+  ],
+  "project": [
+    "src/**/*.js",
+    "tests/**/*.js"
+  ],
+  "eslint": false
+} 
