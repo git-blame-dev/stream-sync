@@ -108,32 +108,40 @@ describe('Twitch event factory', () => {
         }));
     });
 
-    test('creates cheer event and preserves cheermote metadata', () => {
+    test('creates gift event and preserves cheermote info', () => {
         const factory = createFactory();
 
-        const event = factory.createCheerEvent({
+        const event = factory.createGiftEvent({
             userId: 'u5',
             username: 'CheerUser',
-            bits: 250,
+            giftType: 'bits',
+            giftCount: 1,
+            amount: 250,
+            currency: 'bits',
             message: 'Nice!',
             id: 'cheer-id-1',
             repeatCount: 1,
             cheermoteInfo: { name: 'Cheer250' },
+            isBits: true,
             timestamp: fixedNow
         });
 
         expect(event).toEqual(expect.objectContaining({
-            type: PlatformEvents.CHEER,
+            type: PlatformEvents.GIFT,
             platform: 'twitch',
-            bits: 250,
+            giftType: 'bits',
+            giftCount: 1,
+            amount: 250,
+            currency: 'bits',
             message: 'Nice!',
             id: 'cheer-id-1',
             repeatCount: 1,
             timestamp: fixedNow,
+            cheermoteInfo: { name: 'Cheer250' },
+            isBits: true,
             metadata: expect.objectContaining({
                 platform: 'twitch',
-                correlationId: 'cid-fixed',
-                cheermoteInfo: { name: 'Cheer250' }
+                correlationId: 'cid-fixed'
             })
         }));
     });

@@ -52,9 +52,8 @@ class PlatformEventRouter {
         }
 
         // Config gating only applies to notification types with explicit settings
-        const gatingType = type === 'cheer' ? 'gift' : type;
-        if (NOTIFICATION_CONFIGS[gatingType]?.settingKey) {
-            if (this._isNotificationEnabled(gatingType, platform) === false) {
+        if (NOTIFICATION_CONFIGS[type]?.settingKey) {
+            if (this._isNotificationEnabled(type, platform) === false) {
                 this.logger.debug(`[${platform}] ${type} notifications disabled at router`, 'PlatformEventRouter');
                 return;
             }
@@ -87,52 +86,6 @@ class PlatformEventRouter {
                     await this.runtime.handleGiftNotification(platform, sanitized.username, {
                         ...sanitized,
                         type
-                    });
-                }
-                return;
-            }
-            case 'cheer': {
-                if (this.runtime?.handleGiftNotification) {
-                    const sanitized = this._sanitizeNotificationPayload(data, type, platform);
-                    if (!sanitized) {
-                        return;
-                    }
-                    if (sanitized.isError) {
-                        await this.runtime.handleGiftNotification(platform, sanitized.username, {
-                            ...sanitized,
-                            type: 'gift'
-                        });
-                        return;
-                    }
-                    const cheermoteInfo = sanitized.cheermoteInfo || sanitized.metadata?.cheermoteInfo;
-                    if (!cheermoteInfo) {
-                        throw new Error('Cheer event requires cheermoteInfo');
-                    }
-                    if (typeof sanitized.bits !== 'number') {
-                        throw new Error('Cheer event requires bits');
-                    }
-                    if (!sanitized.id) {
-                        throw new Error('Cheer event requires id');
-                    }
-                    if (!sanitized.timestamp) {
-                        throw new Error('Cheer event requires timestamp');
-                    }
-                    const giftType = this._resolveBitsGiftType(cheermoteInfo);
-                    const payload = {
-                        username: sanitized.username,
-                        userId: sanitized.userId,
-                        id: sanitized.id,
-                        timestamp: sanitized.timestamp,
-                        message: sanitized.message || '',
-                        giftType,
-                        giftCount: 1,
-                        amount: sanitized.bits,
-                        currency: 'bits',
-                        isBits: true
-                    };
-                    await this.runtime.handleGiftNotification(platform, sanitized.username, {
-                        ...payload,
-                        type: 'gift'
                     });
                 }
                 return;
@@ -324,12 +277,6 @@ class PlatformEventRouter {
         };
     }
 
-    _resolveBitsGiftType(cheermoteInfo = {}) {
-        if (cheermoteInfo.isMixed) {
-            return 'mixed bits';
-        }
-        return 'bits';
-    }
 }
 
 module.exports = PlatformEventRouter;

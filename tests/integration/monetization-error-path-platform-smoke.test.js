@@ -130,7 +130,7 @@ describe('Monetization error-path platform flows (smoke)', () => {
 
         class MockTwitchPlatform {
             async initialize(handlers) {
-                const cheerError = createMonetizationErrorPayload({
+                const giftError = createMonetizationErrorPayload({
                     notificationType: 'gift',
                     platform: 'twitch',
                     giftType: 'bits',
@@ -155,7 +155,7 @@ describe('Monetization error-path platform flows (smoke)', () => {
                     months: 0
                 });
 
-                handlers.onCheer(cheerError);
+                handlers.onGift(giftError);
                 handlers.onGiftPaypiggy(giftpaypiggyError);
                 handlers.onPaypiggy(paypiggyError);
             }

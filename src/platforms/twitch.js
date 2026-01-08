@@ -174,7 +174,7 @@ class TwitchPlatform extends EventEmitter {
                     paypiggyMessage: (data) => this.handlePaypiggyMessageEvent(data),
                     paypiggyGift: (data) => this.handlePaypiggyGiftEvent(data),
                     raid: (data) => this.handleRaidEvent(data),
-                    cheer: (data) => this.handleCheerEvent(data),
+                    gift: (data) => this.handleGiftEvent(data),
                     streamOnline: (data) => this.handleStreamOnlineEvent(data),
                     streamOffline: (data) => this.handleStreamOfflineEvent(data),
                     eventSubConnected: (details = {}) => this._handleEventSubConnectionChange(true, details),
@@ -281,7 +281,7 @@ class TwitchPlatform extends EventEmitter {
             // User validation (for events that require it)
             if (options.validateUser && !data.username) {
                 this.logger.warn(`Incomplete ${eventType} data received`, 'twitch', data);
-                const errorNotificationType = eventType === 'cheer'
+                const errorNotificationType = eventType === 'gift'
                     ? 'gift'
                     : (eventType === 'paypiggy' || eventType === 'giftpaypiggy' ? eventType : null);
                 if (errorNotificationType) {
@@ -289,11 +289,19 @@ class TwitchPlatform extends EventEmitter {
                         username: data?.username,
                         userId: data?.userId
                     };
-                    if (errorNotificationType === 'gift' && Number.isFinite(data?.bits)) {
-                        baseOverrides.giftType = 'bits';
-                        baseOverrides.giftCount = 1;
-                        baseOverrides.amount = data.bits;
-                        baseOverrides.currency = 'bits';
+                    if (errorNotificationType === 'gift') {
+                        if (typeof data?.giftType === 'string' && data.giftType.trim()) {
+                            baseOverrides.giftType = data.giftType;
+                        }
+                        if (Number.isFinite(Number(data?.giftCount))) {
+                            baseOverrides.giftCount = Number(data.giftCount);
+                        }
+                        if (Number.isFinite(Number(data?.amount))) {
+                            baseOverrides.amount = Number(data.amount);
+                        }
+                        if (typeof data?.currency === 'string' && data.currency.trim()) {
+                            baseOverrides.currency = data.currency;
+                        }
                     }
                     if (errorNotificationType === 'giftpaypiggy') {
                         baseOverrides.giftCount = data?.giftCount;
@@ -327,7 +335,7 @@ class TwitchPlatform extends EventEmitter {
             this._emitPlatformEvent(emitEventType, eventData);
         } catch (error) {
             this.errorHandler.handleEventProcessingError(error, eventType, data);
-            const errorNotificationType = eventType === 'cheer'
+            const errorNotificationType = eventType === 'gift'
                 ? 'gift'
                 : (eventType === 'paypiggy' || eventType === 'giftpaypiggy' ? eventType : null);
             if (errorNotificationType) {
@@ -335,11 +343,19 @@ class TwitchPlatform extends EventEmitter {
                     username: data?.username,
                     userId: data?.userId
                 };
-                if (errorNotificationType === 'gift' && Number.isFinite(data?.bits)) {
-                    baseOverrides.giftType = 'bits';
-                    baseOverrides.giftCount = 1;
-                    baseOverrides.amount = data.bits;
-                    baseOverrides.currency = 'bits';
+                if (errorNotificationType === 'gift') {
+                    if (typeof data?.giftType === 'string' && data.giftType.trim()) {
+                        baseOverrides.giftType = data.giftType;
+                    }
+                    if (Number.isFinite(Number(data?.giftCount))) {
+                        baseOverrides.giftCount = Number(data.giftCount);
+                    }
+                    if (Number.isFinite(Number(data?.amount))) {
+                        baseOverrides.amount = Number(data.amount);
+                    }
+                    if (typeof data?.currency === 'string' && data.currency.trim()) {
+                        baseOverrides.currency = data.currency;
+                    }
                 }
                 if (errorNotificationType === 'giftpaypiggy') {
                     baseOverrides.giftCount = data?.giftCount;
@@ -392,8 +408,8 @@ class TwitchPlatform extends EventEmitter {
         return this._handleStandardEvent('raid', raidData, { validateUser: true });
     }
 
-    async handleCheerEvent(cheerData) {
-        return this._handleStandardEvent('cheer', cheerData, { validateUser: true });
+    async handleGiftEvent(giftData) {
+        return this._handleStandardEvent('gift', giftData, { validateUser: true });
     }
 
     handleStreamOnlineEvent(data) {
@@ -591,7 +607,6 @@ class TwitchPlatform extends EventEmitter {
             'paypiggy': 'onPaypiggy',
             'gift': 'onGift',
             'giftpaypiggy': 'onGiftPaypiggy',
-            'cheer': 'onCheer',
             'raid': 'onRaid',
             'stream-status': 'onStreamStatus'
         };

@@ -82,7 +82,7 @@ describe('DisplayQueue - Twitch Bits Goal Calculation', () => {
             // When: User sends 200 bits total (e.g., "Corgo100 Corgo100")
             // This mimics how the NotificationManager sends gift items to DisplayQueue
             const bitsEvent = {
-                type: 'gift',  // NotificationManager converts 'cheer' to 'gift'
+                type: 'gift',  // Bits are emitted as gifts at the Twitch boundary
                 data: {
                     username: 'TestUser',
                     displayName: 'TestUser',
