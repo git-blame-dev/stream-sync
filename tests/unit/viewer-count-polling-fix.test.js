@@ -66,7 +66,7 @@ describe('Viewer Count Polling System Fix', () => {
         logger = createSilentLogger();
         // Create behavior-focused platform mocks with active connections
         mockYoutubePlatform = createMockPlatform('youtube', {
-            // Mock YouTube platform with active stream connections (like in logs)
+            // Mock YouTube platform with active stream connections
             streamConnections: ['stream1', 'stream2'], // 2 active streams
             hasActiveConnections: true,
             connectionState: 'connected'
@@ -103,8 +103,7 @@ describe('Viewer Count Polling System Fix', () => {
         const obsObserver = new OBSViewerCountObserver(mockObsManager, logger);
         viewerCountSystem.addObserver(obsObserver);
         
-        // Set initial stream status to match real scenario from logs
-        // YouTube has active streams, TikTok is disabled
+        // Set initial stream status for active platforms
         await viewerCountSystem.updateStreamStatus('youtube', true);
         await viewerCountSystem.updateStreamStatus('twitch', true);
         await viewerCountSystem.updateStreamStatus('tiktok', false);
@@ -122,13 +121,12 @@ describe('Viewer Count Polling System Fix', () => {
         }
     });
 
-    describe('Platform Detection for Active Streams - CORE ISSUE', () => {
+    describe('Platform Detection for Active Streams', () => {
         test('should start polling for platforms with active connections', async () => {
             // Arrange: Verify initial state and stream status
             expect(viewerCountSystem.isPolling).toBe(false);
             expect(Object.keys(viewerCountSystem.pollingHandles)).toHaveLength(0);
             
-            // Log the stream status to understand the issue
             console.log('YouTube stream live:', viewerCountSystem.isStreamLive('youtube'));
             console.log('Twitch stream live:', viewerCountSystem.isStreamLive('twitch'));
             console.log('TikTok stream live:', viewerCountSystem.isStreamLive('tiktok'));
@@ -139,7 +137,6 @@ describe('Viewer Count Polling System Fix', () => {
             // Assert: System should be in polling state
             expect(viewerCountSystem.isPolling).toBe(true);
             
-            // Log polling handles to see what was created
             console.log('Polling handles:', Object.keys(viewerCountSystem.pollingHandles));
             
             // Assert: Should have polling handles for live platforms
@@ -147,32 +144,16 @@ describe('Viewer Count Polling System Fix', () => {
             expect(liveHandles.length).toBeGreaterThan(0);
         });
 
-        test('REAL ISSUE: YouTube stream detection in real scenarios', () => {
-            // This test simulates the actual user scenario:
-            // - User reports "YouTube platform has 2 active streams (like in the logs)"
-            // - But polling doesn't start for YouTube
-            
-            // Arrange: Simulate YouTube platform with REAL connection status but NO live stream
-            // This may be the actual issue - platform has connections but isStreamLive returns false
-            viewerCountSystem.updateStreamStatus('youtube', false); // Reset YouTube to false
-            
-            // Verify the test scenario that matches user's reported issue
-            expect(mockYoutubePlatform.getViewerCount).toBeDefined(); // Platform exists
-            expect(viewerCountSystem.isStreamLive('youtube')).toBe(false); // But not detected as live
-            
-            // Act: Start polling
+        test('should skip polling when YouTube stream status is offline', () => {
+            viewerCountSystem.updateStreamStatus('youtube', false);
+
+            expect(mockYoutubePlatform.getViewerCount).toBeDefined();
+            expect(viewerCountSystem.isStreamLive('youtube')).toBe(false);
+
             viewerCountSystem.startPolling();
-            
-            // Assert: THIS SHOWS THE REAL ISSUE
-            // YouTube has platform instance and getViewerCount method
-            // But because isStreamLive('youtube') = false, no polling starts
+
             expect(viewerCountSystem.pollingHandles['youtube']).toBeUndefined();
             expect(mockYoutubePlatform.getViewerCount).not.toHaveBeenCalled();
-            
-            // This test reveals the actual issue: 
-            // The problem isn't in startPolling() - it works correctly
-            // The problem is that YouTube streams aren't being detected as "live"
-            // by updateStreamStatus() or the initial stream detection
         });
 
         test('should start polling for Twitch platform (always active)', async () => {
@@ -216,7 +197,6 @@ describe('Viewer Count Polling System Fix', () => {
             expect(viewerCountSystem.isPolling).toBe(true);
             
             // Assert: Should have polling handles for active platforms
-            // (This test will FAIL because current implementation doesn't create handles)
             const activeHandles = Object.keys(viewerCountSystem.pollingHandles);
             expect(activeHandles.length).toBeGreaterThan(0);
             expect(activeHandles).toContain('youtube');
@@ -237,8 +217,6 @@ describe('Viewer Count Polling System Fix', () => {
         });
 
         test('should handle polling interval configuration correctly', () => {
-            // Note: This test checks configuration but isn't related to the core issue
-            
             // Act: Start polling
             viewerCountSystem.startPolling();
 
@@ -294,7 +272,6 @@ describe('Viewer Count Polling System Fix', () => {
             viewerCountSystem.startPolling();
             expect(viewerCountSystem.pollingHandles['youtube']).toBeUndefined();
             
-            // Act: Mark YouTube as live
             await viewerCountSystem.updateStreamStatus('youtube', true);
             
             // Assert: Now YouTube polling should start immediately

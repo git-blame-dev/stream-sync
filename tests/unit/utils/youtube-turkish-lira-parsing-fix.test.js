@@ -53,10 +53,8 @@ describe('YouTube Turkish Lira (TRY) Currency Parsing', () => {
 
         describe('Turkish Lira Code+Space Format (TRY XXX.XX)', () => {
             it('should parse "TRY 219.99" correctly', () => {
-                // This is the EXACT format from production logs
                 const result = parser.parse('TRY 219.99');
                 
-                // EXPECTED: Should parse correctly
                 expect(result.success).toBe(true);
                 expect(result.amount).toBe(219.99);
                 expect(result.currency).toBe('TRY');
@@ -113,7 +111,6 @@ describe('YouTube Turkish Lira (TRY) Currency Parsing', () => {
         });
 
         describe('Other International Currency Code+Space Formats', () => {
-            // These formats might also be failing
             it('should parse "EUR 50.00" European format', () => {
                 const result = parser.parse('EUR 50.00');
                 

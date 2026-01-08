@@ -43,7 +43,6 @@ describe('User-Facing Content Validation', () => {
 
                     const result = createNotificationData(type, platform, userData, eventData);
 
-                    // CRITICAL: Zero tolerance for template placeholders in user-facing content
                     expect(result.displayMessage).not.toMatch(/\{[^}]*\}/);
                     expect(result.ttsMessage).not.toMatch(/\{[^}]*\}/);
                     

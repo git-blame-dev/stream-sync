@@ -12,7 +12,6 @@ const {
   createMockLogger
 } = require('../helpers/mock-factories');
 
-// Mock debug function using enterprise factory patterns
 const mockLogger = createMockLogger('debug');
 const mockGetDebugLog = jest.fn(() => jest.fn());
 jest.doMock('../../src/core/logging', () => ({
@@ -222,17 +221,14 @@ describe('Main App updateViewerCount OBS Integration', () => {
 
   describe('regression prevention', () => {
     it('should prevent TikTok viewer count from being ignored in observers', () => {
-      // Arrange - This test covers the original failure scenario
       const platform = 'tiktok';
-      const viewerCount = 4; // Same count as seen in logs
+      const viewerCount = 4;
       
       // Reset internal count to verify it gets updated
       mockViewerCountSystem.counts.tiktok = 0;
 
-      // Act - Simulate the exact scenario where viewer count was being lost
       updateViewerCountMethod(platform, viewerCount);
 
-      // Assert - Verify the update path prevents the original issue
       expect(mockViewerCountSystem.counts.tiktok).toBe(viewerCount);
       expect(mockViewerCountSystem.notifyObservers).toHaveBeenCalledWith(platform, viewerCount, 0);
       expect(debugLogSpy).toHaveBeenCalledWith(
