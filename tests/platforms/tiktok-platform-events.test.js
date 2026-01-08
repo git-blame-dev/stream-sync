@@ -76,7 +76,7 @@ describe('TikTokPlatform event emissions', () => {
         expect(envelopes[0].giftCount).toBe(1);
         expect(envelopes[0].amount).toBe(42);
         expect(envelopes[0].currency).toBe('coins');
-        expect(envelopes[0].metadata.originalData).toBe(envelopePayload);
+        expect(envelopes[0].metadata).toBeUndefined();
     });
 
     it('emits social (share) events through the share channel', async () => {
@@ -210,7 +210,7 @@ describe('TikTokPlatform event emissions', () => {
         expect(event.userId).toBe('sf123');
         expect(event.username).toBe('sf123');
         expect(event.tier).toBe('superfan');
-        expect(event.metadata.correlationId).toBeDefined();
+        expect(event.metadata).toBeUndefined();
     });
 
     it('emits viewer count updates via PlatformEvents.VIEWER_COUNT', () => {

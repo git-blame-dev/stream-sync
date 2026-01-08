@@ -25,13 +25,18 @@ const createEnvelopeNotificationHandler = (mockLogger, mockGiftHandler) => {
                 return;
             }
 
+            const isError = data?.isError === true;
             const giftType = typeof data?.giftType === 'string' ? data.giftType.trim() : '';
             const giftCount = Number(data?.giftCount);
             const amount = Number(data?.amount);
             const currency = typeof data?.currency === 'string' ? data.currency.trim() : '';
             const repeatCount = data?.repeatCount === undefined ? 1 : data.repeatCount;
 
-            if (!giftType || !Number.isFinite(giftCount) || giftCount <= 0 || !Number.isFinite(amount) || !currency || !data?.timestamp || !data?.id) {
+            if (!giftType || !Number.isFinite(giftCount) || giftCount < 0 || !Number.isFinite(amount) || amount < 0 || !currency || !data?.timestamp) {
+                throw new Error('Envelope notification requires giftType, giftCount, amount, currency, timestamp, and id');
+            }
+
+            if (!isError && (giftCount <= 0 || amount <= 0 || !data?.id)) {
                 throw new Error('Envelope notification requires giftType, giftCount, amount, currency, timestamp, and id');
             }
             
@@ -45,7 +50,8 @@ const createEnvelopeNotificationHandler = (mockLogger, mockGiftHandler) => {
                 type: 'envelope',
                 userId: identity.userId,
                 timestamp: data.timestamp,
-                id: data.id,
+                ...(data?.id ? { id: data.id } : {}),
+                ...(isError ? { isError: true } : {}),
                 // Include original data for any platform-specific processing
                 originalEnvelopeData: data
             };
@@ -571,6 +577,25 @@ describe('TikTok Envelope Notification - Behavior Testing', () => {
     // ================================================================================================
 
     describe('Error Handling and Edge Cases', () => {
+        test('allows error envelopes without ids to reach gift handler', async () => {
+            const errorEnvelope = createEnvelopeData({
+                id: undefined,
+                giftCount: 0,
+                amount: 0,
+                isError: true
+            });
+
+            await handleEnvelopeNotification('tiktok', errorEnvelope);
+
+            expect(mockGiftHandler).toHaveBeenCalledTimes(1);
+            const latestCall = getLatestGiftCall();
+            const giftData = latestCall.giftData;
+            expect(giftData.isError).toBe(true);
+            expect(giftData.giftCount).toBe(0);
+            expect(giftData.amount).toBe(0);
+            expect(giftData).not.toHaveProperty('id');
+        }, TEST_TIMEOUTS.UNIT);
+
         test('should handle null envelope data gracefully', async () => {
             // Given: Null envelope data
             const nullData = null;

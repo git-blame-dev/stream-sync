@@ -206,6 +206,8 @@ class NotificationManager extends EventEmitter {
             return { success: false, error: 'Unknown notification type', notificationType: canonicalType, platform };
         }
         notificationType = canonicalType;
+        const monetizationTypes = new Set(['gift', 'paypiggy', 'giftpaypiggy', 'envelope']);
+        const isMonetizationType = monetizationTypes.has(notificationType);
 
         const normalizedData = { ...data };
         if (normalizedData.type) delete normalizedData.type;
@@ -215,7 +217,11 @@ class NotificationManager extends EventEmitter {
         if (normalizedData.isSuperfan !== undefined) delete normalizedData.isSuperfan;
         if (normalizedData.isGift !== undefined) delete normalizedData.isGift;
         if (normalizedData.isBits !== undefined) delete normalizedData.isBits;
+        if (isMonetizationType && normalizedData.metadata !== undefined) delete normalizedData.metadata;
         data = normalizedData;
+        const resolvedSourceType = data.sourceType !== undefined
+            ? data.sourceType
+            : (originalType !== canonicalType ? originalType : undefined);
 
         const platformName = platform.toLowerCase();
         const isErrorPayload = data.isError === true;
@@ -334,7 +340,7 @@ class NotificationManager extends EventEmitter {
                 stickerEmoji: data.stickerEmoji,
                 // Pass through any additional data
                 ...data,
-                sourceType: data.sourceType
+                sourceType: resolvedSourceType
             });
             
             // Validate that notificationData has required structure
@@ -350,13 +356,14 @@ class NotificationManager extends EventEmitter {
             const sanitizedUsername = formatUsername12(data.username, false);
             const sanitizedTtsUsername = formatUsername12(data.username, true);
 
-            // Add sourceType metadata for diagnostics
-            if (data.sourceType || originalType !== canonicalType) {
-                const sourceType = data.sourceType !== undefined ? data.sourceType : originalType;
-                if (notificationData.metadata && typeof notificationData.metadata === 'object') {
-                    notificationData.metadata = { ...notificationData.metadata, sourceType };
+            // Add sourceType metadata for non-monetization notifications only
+            if (resolvedSourceType !== undefined) {
+                if (isMonetizationType) {
+                    notificationData.sourceType = resolvedSourceType;
+                } else if (notificationData.metadata && typeof notificationData.metadata === 'object') {
+                    notificationData.metadata = { ...notificationData.metadata, sourceType: resolvedSourceType };
                 } else {
-                    notificationData.metadata = { sourceType };
+                    notificationData.metadata = { sourceType: resolvedSourceType };
                 }
             }
 

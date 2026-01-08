@@ -82,8 +82,7 @@ function createTwitchEventFactory(options = {}) {
                 userId: identity.userId,
                 tier: data.tier,
                 isRenewal,
-                timestamp: getTimestamp(data),
-                metadata: buildEventMetadata()
+                timestamp: getTimestamp(data)
             };
             if (typeof data.message === 'string') {
                 result.message = data.message;
@@ -107,8 +106,7 @@ function createTwitchEventFactory(options = {}) {
                 userId: identity.userId,
                 tier: data.tier,
                 isRenewal,
-                timestamp: getTimestamp(data),
-                metadata: buildEventMetadata()
+                timestamp: getTimestamp(data)
             };
             if (typeof data.message === 'string') {
                 result.message = data.message;
@@ -135,8 +133,7 @@ function createTwitchEventFactory(options = {}) {
                 giftCount,
                 tier: data.tier,
                 isAnonymous: data.isAnonymous,
-                timestamp: getTimestamp(data),
-                metadata: buildEventMetadata()
+                timestamp: getTimestamp(data)
             };
             if (cumulativeTotal !== undefined) {
                 result.cumulativeTotal = cumulativeTotal;
@@ -197,8 +194,7 @@ function createTwitchEventFactory(options = {}) {
                 giftCount,
                 amount,
                 currency,
-                timestamp: getTimestamp(data),
-                metadata: buildEventMetadata()
+                timestamp: getTimestamp(data)
             };
             if (typeof data.message === 'string') {
                 result.message = data.message;

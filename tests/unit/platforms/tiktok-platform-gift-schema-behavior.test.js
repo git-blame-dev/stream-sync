@@ -69,7 +69,7 @@ describe('TikTokPlatform gift aggregation and schema behavior', () => {
         expect(giftEvent.username).toBe('gifter123');
         expect(giftEvent.amount).toBe(3);
         expect(giftEvent.giftType).toBe('Rose');
-        expect(giftEvent.metadata.isAggregated).toBe(true);
+        expect(giftEvent.isAggregated).toBe(true);
     });
 
     it('emits chat messages with normalized user schema', async () => {
@@ -120,7 +120,7 @@ describe('TikTokPlatform gift aggregation and schema behavior', () => {
         expect(giftEvent.repeatCount).toBe(3);
         expect(giftEvent.amount).toBe(75);
         expect(giftEvent.currency).toBe('coins');
-        expect(giftEvent.metadata.isAggregated).toBe(false);
+        expect(giftEvent.isAggregated).toBe(false);
     });
 
     it('emits aggregated TikTok gifts with normalized amount and metadata', async () => {
@@ -151,8 +151,8 @@ describe('TikTokPlatform gift aggregation and schema behavior', () => {
         expect(giftEvent.giftCount).toBe(2);
         expect(giftEvent.repeatCount).toBe(2);
         expect(giftEvent.amount).toBe(10);
-        expect(giftEvent.metadata.aggregatedCount).toBe(2);
-        expect(giftEvent.metadata.isAggregated).toBe(true);
+        expect(giftEvent.aggregatedCount).toBe(2);
+        expect(giftEvent.isAggregated).toBe(true);
         expect(giftEvent.currency).toBe('coins');
     });
 });

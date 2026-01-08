@@ -159,6 +159,23 @@ describe('Platform Event Interface Design', () => {
                 expect(result.valid).toBe(false);
                 expect(result.errors).toContain('Missing required field: id');
             });
+
+            it('should allow platform:gift error events without id', () => {
+                const event = {
+                    type: 'platform:gift',
+                    platform: 'tiktok',
+                    username: 'gifter',
+                    userId: '22222',
+                    giftType: 'rose',
+                    giftCount: 0,
+                    amount: 0,
+                    currency: 'coins',
+                    timestamp: new Date().toISOString(),
+                    isError: true
+                };
+                const result = validator.validate(event);
+                expect(result.valid).toBe(true);
+            });
             
             it('should validate platform:raid event with user information', () => {
             const event = {

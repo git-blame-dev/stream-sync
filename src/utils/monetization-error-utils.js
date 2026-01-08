@@ -2,7 +2,6 @@ const DEFAULT_PLACEHOLDER_USERNAME = 'Unknown';
 const DEFAULT_USER_ID = 'unknown';
 const DEFAULT_GIFT_TYPE = 'Unknown gift';
 const DEFAULT_CURRENCY = 'unknown';
-const DEFAULT_ID = 'unknown';
 
 function resolveNonEmptyString(value) {
     if (typeof value !== 'string') {
@@ -69,21 +68,23 @@ function createMonetizationErrorPayload(options = {}) {
     }
 
     const resolvedTimestamp = resolveTimestampValue(timestamp) || new Date().toISOString();
-    const resolvedId = resolveIdValue(id) || DEFAULT_ID;
     const resolvedUsername = resolveNonEmptyString(username);
     const resolvedUserId = resolveIdValue(userId);
+    const resolvedId = resolveIdValue(id);
 
     const payload = {
         platform,
         username: resolvedUsername || DEFAULT_PLACEHOLDER_USERNAME,
         userId: resolvedUserId || DEFAULT_USER_ID,
         timestamp: resolvedTimestamp,
-        id: resolvedId,
         isError: true
     };
 
     if (eventType) {
         payload.type = eventType;
+    }
+    if (resolvedId) {
+        payload.id = resolvedId;
     }
 
     switch (notificationType) {
