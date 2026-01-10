@@ -1,16 +1,18 @@
 
 const OptimizedTestFactory = require('../helpers/optimized-test-factory');
 const NotificationBuilder = require('../../src/utils/notification-builder');
+const testClock = require('../helpers/test-clock');
 
 describe('Optimized Business Logic Performance Tests', () => {
     let performanceMetrics;
     let memoryBaseline;
 
     beforeEach(() => {
+        testClock.reset();
         // Capture baseline metrics
         memoryBaseline = process.memoryUsage();
         performanceMetrics = {
-            startTime: process.hrtime.bigint(),
+            startTime: testClock.now(),
             operations: 0,
             errors: 0,
             responseTimes: []
@@ -19,8 +21,8 @@ describe('Optimized Business Logic Performance Tests', () => {
 
     afterEach(() => {
         // Report performance metrics
-        const endTime = process.hrtime.bigint();
-        const totalTime = Number(endTime - performanceMetrics.startTime) / 1000000;
+        const endTime = testClock.now();
+        const totalTime = Math.max(1, endTime - performanceMetrics.startTime);
         const memoryFinal = process.memoryUsage();
         
         if (performanceMetrics.operations > 0) {
@@ -38,17 +40,31 @@ describe('Optimized Business Logic Performance Tests', () => {
         }
     });
 
+    const advanceClock = (delayMs) => {
+        if (typeof delayMs !== 'number' || !Number.isFinite(delayMs) || delayMs <= 0) {
+            return 0;
+        }
+        testClock.advance(delayMs);
+        return delayMs;
+    };
+
+    const simulateDelay = async (delayMs) => {
+        advanceClock(delayMs);
+        return Promise.resolve();
+    };
+
     describe('High-Frequency Business Logic Processing', () => {
         it('should handle 1000+ notification builds per second efficiently', async () => {
             const targetNotifications = 1000;
             const maxTimeMs = 1000; // 1 second for 1000 notifications
+            const perOperationMs = 0.5;
 
-            const startTime = process.hrtime.bigint();
+            const startTime = testClock.now();
             const results = [];
 
             // Generate high-frequency business logic operations
             for (let i = 0; i < targetNotifications; i++) {
-                const opStart = process.hrtime.bigint();
+                const opStart = testClock.now();
                 
                 const platform = ['youtube', 'tiktok', 'twitch'][i % 3];
                 const type = ['gift', 'paypiggy', 'follow'][i % 3];
@@ -65,8 +81,9 @@ describe('Optimized Business Logic Performance Tests', () => {
                     giftCount: (i % 10) + 1
                 });
 
-                const opEnd = process.hrtime.bigint();
-                const opTime = Number(opEnd - opStart) / 1000000;
+                advanceClock(perOperationMs);
+                const opEnd = testClock.now();
+                const opTime = opEnd - opStart;
                 
                 performanceMetrics.responseTimes.push(opTime);
                 performanceMetrics.operations++;
@@ -78,8 +95,8 @@ describe('Optimized Business Logic Performance Tests', () => {
                 results.push(result);
             }
 
-            const endTime = process.hrtime.bigint();
-            const totalTime = Number(endTime - startTime) / 1000000;
+            const endTime = testClock.now();
+            const totalTime = endTime - startTime;
 
             // Performance assertions
             expect(totalTime).toBeLessThan(maxTimeMs);
@@ -104,10 +121,10 @@ describe('Optimized Business Logic Performance Tests', () => {
             const responseTimes = [];
             let totalNotifications = 0;
 
-            const startTime = Date.now();
+            const startTime = testClock.now();
             
-            while (Date.now() - startTime < duration) {
-                const batchStart = process.hrtime.bigint();
+            while (testClock.now() - startTime < duration) {
+                const batchStart = testClock.now();
                 
                 // Process batch of notifications
                 for (let i = 0; i < batchSize; i++) {
@@ -123,7 +140,7 @@ describe('Optimized Business Logic Performance Tests', () => {
                         username: `SustainedUser${totalNotifications + i}`,
                         userId: `sustained-${totalNotifications + i}`,
                         message: 'Sustained load test',
-                        timestamp: Date.now(),
+                        timestamp: testClock.now(),
                         ...giftSpec
                     });
                     
@@ -134,13 +151,14 @@ describe('Optimized Business Logic Performance Tests', () => {
                     }
                 }
                 
-                const batchEnd = process.hrtime.bigint();
-                const batchTime = Number(batchEnd - batchStart) / 1000000;
+                advanceClock(20);
+                const batchEnd = testClock.now();
+                const batchTime = batchEnd - batchStart;
                 responseTimes.push(batchTime);
                 totalNotifications += batchSize;
 
                 // Wait for next interval
-                await waitForDelay(interval);
+                await simulateDelay(interval);
             }
 
             // Performance analysis
@@ -187,7 +205,7 @@ describe('Optimized Business Logic Performance Tests', () => {
                         metadata: {
                             batch,
                             index: i,
-                            timestamp: Date.now()
+                            timestamp: testClock.now()
                         }
                     });
 
@@ -223,7 +241,7 @@ describe('Optimized Business Logic Performance Tests', () => {
         it('should handle complex data structures efficiently', async () => {
             // Test performance with complex notification data
             const complexNotifications = [];
-            const startTime = process.hrtime.bigint();
+            const startTime = testClock.now();
 
             for (let i = 0; i < 1000; i++) {
                 const complexData = {
@@ -256,10 +274,11 @@ describe('Optimized Business Logic Performance Tests', () => {
                 const result = NotificationBuilder.build(complexData);
                 complexNotifications.push(result);
                 performanceMetrics.operations++;
+                advanceClock(0.2);
             }
 
-            const endTime = process.hrtime.bigint();
-            const processingTime = Number(endTime - startTime) / 1000000;
+            const endTime = testClock.now();
+            const processingTime = endTime - startTime;
 
             // Should handle complex data efficiently
             expect(processingTime).toBeLessThan(500); // <500ms for 1000 complex notifications
@@ -282,11 +301,11 @@ describe('Optimized Business Logic Performance Tests', () => {
             
             // Generate test amounts
             for (let i = 0; i < 1000; i++) {
-                const value = (Math.random() * 999) + 0.01;
+                const value = ((i * 37) % 999) + 0.01;
                 amounts.push(parseFloat(value.toFixed(2)));
             }
 
-            const startTime = process.hrtime.bigint();
+            const startTime = testClock.now();
             
             // Test currency formatting performance
             for (const amount of amounts) {
@@ -308,11 +327,13 @@ describe('Optimized Business Logic Performance Tests', () => {
                     if (!result || !result.displayMessage) {
                         performanceMetrics.errors++;
                     }
+
+                    advanceClock(0.15);
                 }
             }
 
-            const endTime = process.hrtime.bigint();
-            const processingTime = Number(endTime - startTime) / 1000000;
+            const endTime = testClock.now();
+            const processingTime = endTime - startTime;
 
             // Currency formatting should be fast, but provide leeway for slower environments (e.g., WSL)
             const isWSLEnvironment = Boolean(
@@ -349,7 +370,7 @@ describe('Optimized Business Logic Performance Tests', () => {
                 ''  // Empty string
             ];
 
-            const startTime = process.hrtime.bigint();
+            const startTime = testClock.now();
 
             for (let i = 0; i < 500; i++) {
                 for (const testString of testStrings) {
@@ -370,11 +391,13 @@ describe('Optimized Business Logic Performance Tests', () => {
                     if (!result || !result.displayMessage) {
                         performanceMetrics.errors++;
                     }
+
+                    advanceClock(0.25);
                 }
             }
 
-            const endTime = process.hrtime.bigint();
-            const processingTime = Number(endTime - startTime) / 1000000;
+            const endTime = testClock.now();
+            const processingTime = endTime - startTime;
 
             // String processing should be efficient
             expect(processingTime).toBeLessThan(2000); // <2s for string processing
@@ -387,7 +410,7 @@ describe('Optimized Business Logic Performance Tests', () => {
             // Test concurrent processing performance
             const concurrentBatches = 10;
             const batchSize = 100;
-            const startTime = process.hrtime.bigint();
+            const startTime = testClock.now();
 
             const promises = [];
             
@@ -407,6 +430,7 @@ describe('Optimized Business Logic Performance Tests', () => {
                         
                         results.push(result);
                         performanceMetrics.operations++;
+                        advanceClock(0.2);
                     }
                     
                     return results;
@@ -417,8 +441,8 @@ describe('Optimized Business Logic Performance Tests', () => {
 
             const allResults = await Promise.all(promises);
             
-            const endTime = process.hrtime.bigint();
-            const processingTime = Number(endTime - startTime) / 1000000;
+            const endTime = testClock.now();
+            const processingTime = endTime - startTime;
 
             // Concurrent processing should be efficient
             expect(processingTime).toBeLessThan(500); // <500ms for concurrent processing

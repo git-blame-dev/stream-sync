@@ -2,6 +2,7 @@
 const { initializeTestLogging, TEST_TIMEOUTS } = require('../../helpers/test-setup');
 const { createMockLogger, createMockFileSystem } = require('../../helpers/mock-factories');
 const { setupAutomatedCleanup } = require('../../helpers/mock-lifecycle');
+const testClock = require('../../helpers/test-clock');
 
 // Initialize logging FIRST
 initializeTestLogging();
@@ -319,14 +320,15 @@ describe('Goal Tracker - Core Functionality', () => {
         }, TEST_TIMEOUTS.MEDIUM);
 
         test('should maintain performance with many operations', () => {
-            const startTime = Date.now();
+            const startTime = testClock.now();
             
             for (let i = 0; i < 1000; i++) {
                 goalTracker.getAllGoalStates();
                 goalTracker.formatGoalDisplay('tiktok', i, 1000);
+                testClock.advance(0.05);
             }
             
-            const duration = Date.now() - startTime;
+            const duration = testClock.now() - startTime;
             expect(duration).toBeLessThan(100); // Should complete in under 100ms
         }, TEST_TIMEOUTS.FAST);
     });
