@@ -1,4 +1,5 @@
 const { safeSetTimeout, safeSetInterval } = require('../../src/utils/timeout-validator');
+const testClock = require('./test-clock');
 
 function waitForDelay(delay = 0) {
   if (!delay || delay <= 0) {
@@ -18,6 +19,7 @@ function scheduleInterval(callback, delay, ...args) {
 }
 
 module.exports = {
+  now: () => testClock.now(),
   waitForDelay,
   scheduleTimeout,
   scheduleInterval

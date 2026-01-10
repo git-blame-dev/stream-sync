@@ -1,4 +1,5 @@
 const { waitForDelay, scheduleTimeout, scheduleInterval } = require('../helpers/time-utils');
+const testClock = require('../helpers/test-clock');
 const {
     __setTimerImplementations,
     __resetTimerImplementations
@@ -127,6 +128,7 @@ const applyLoggingMocks = () => {
 };
 
 beforeEach(() => {
+    testClock.reset();
     applyLoggingMocks();
 });
 

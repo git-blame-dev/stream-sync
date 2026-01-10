@@ -1,6 +1,7 @@
 
 const fs = require('fs');
 const path = require('path');
+const testClock = require('./test-clock');
 
 const auditTestFile = (filePath) => {
     const content = fs.readFileSync(filePath, 'utf8');
@@ -96,6 +97,7 @@ const generateAuditReport = (auditResults) => {
     };
     
     return {
+        runTimestamp: testClock.now(),
         summary: {
             totalFiles: totals.files,
             totalTimingIssues: totals.timingIssues,
