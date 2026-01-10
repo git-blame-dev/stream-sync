@@ -938,10 +938,6 @@ class NotificationManager extends EventEmitter {
                 timestamp: new Date().toISOString()
             };
 
-            if (this.eventBus) {
-                this.eventBus.emit('notification:processed', notificationData);
-            }
-
         } catch (error) {
             this._handleNotificationError(
                 `[NotificationManager] Error processing chat message: ${error.message}`,
@@ -949,9 +945,6 @@ class NotificationManager extends EventEmitter {
                 { chatMessage },
                 { eventType: 'chat-processing' }
             );
-            if (this.eventBus) {
-                this.eventBus.emit('notification:error', { error: error.message, context: 'chat-message' });
-            }
         }
     }
 
@@ -969,15 +962,6 @@ class NotificationManager extends EventEmitter {
                 try {
                     await this.vfxCommandService.executeCommand(vfxNotification.vfxCommand, context);
                     
-                    // Emit notification processed event on success
-                    if (this.eventBus) {
-                        this.eventBus.emit('notification:processed', {
-                            type: vfxNotification.type,
-                            platform: vfxNotification.platform,
-                            username: vfxNotification.username,
-                            vfxCommand: vfxNotification.vfxCommand
-                        });
-                    }
                 } catch (vfxError) {
                     // Re-throw to be caught by outer catch block
                     throw vfxError;
@@ -993,26 +977,6 @@ class NotificationManager extends EventEmitter {
                 { vfxNotification },
                 { eventType: 'vfx-processing' }
             );
-            if (this.eventBus) {
-                this.eventBus.emit(PlatformEvents.VFX_COMMAND_FAILED, { 
-                    command: vfxNotification.vfxCommand,
-                    error: error.message,
-                    username: vfxNotification.username,
-                    userId: vfxNotification.userId,
-                    platform: vfxNotification.platform
-                });
-                
-                // Still emit notification processed event to indicate graceful degradation
-                this.eventBus.emit('notification:processed', {
-                    type: vfxNotification.type,
-                    platform: vfxNotification.platform,
-                    username: vfxNotification.username,
-                    userId: vfxNotification.userId,
-                    vfxCommand: vfxNotification.vfxCommand,
-                    status: 'partial_failure',
-                    error: error.message
-                });
-            }
         }
     }
 
@@ -1061,15 +1025,6 @@ class NotificationManager extends EventEmitter {
                 { ttsNotification },
                 { eventType: 'tts-notification' }
             );
-            if (this.eventBus) {
-                this.eventBus.emit(PlatformEvents.TTS_SPEECH_FAILED, { 
-                    text: ttsNotification.ttsMessage,
-                    error: error.message,
-                    username: ttsNotification.username,
-                    userId: ttsNotification.userId,
-                    platform: ttsNotification.platform
-                });
-            }
         }
     }
 
@@ -1097,11 +1052,6 @@ class NotificationManager extends EventEmitter {
                 this.logger.warn(`[NotificationManager] handleNotification failed: ${handleError.message} - continuing with minimal processing`);
             }
 
-            // Always emit notification processed event even with degraded functionality
-            if (this.eventBus) {
-                this.eventBus.emit('notification:processed', notification);
-            }
-
         } catch (error) {
             this._handleNotificationError(
                 `[NotificationManager] Error processing notification: ${error.message}`,
@@ -1109,9 +1059,6 @@ class NotificationManager extends EventEmitter {
                 { notification },
                 { eventType: 'notification-processing' }
             );
-            if (this.eventBus) {
-                this.eventBus.emit('notification:error', { error: error.message, notification });
-            }
         }
     }
 
@@ -1142,11 +1089,6 @@ class NotificationManager extends EventEmitter {
                 message: `Welcome ${chatMessage.username}!`,
                 isFirstMessage: true
             };
-
-            // Emit greeting as notification:processed but DON'T return early - continue to process original message
-            if (this.eventBus) {
-                this.eventBus.emit('notification:processed', greetingData);
-            }
 
             // Process through existing greeting handler if available
             if (typeof this.handleGreeting === 'function') {

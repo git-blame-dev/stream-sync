@@ -1,5 +1,5 @@
 const crypto = require('crypto');
-const { safeDelay, safeSetInterval } = require('../utils/timeout-validator');
+const { safeDelay } = require('../utils/timeout-validator');
 const { validateLoggerInterface } = require('../utils/dependency-validator');
 const { createPlatformErrorHandler } = require('../utils/platform-error-handler');
 const { PlatformEvents } = require('../interfaces/PlatformEvents');
@@ -35,11 +35,6 @@ class TTSService {
         // Health monitoring
         this.healthCheckInterval = options.healthCheckInterval || null;
         this.healthTimer = null;
-
-        // Start health monitoring if configured
-        if (this.healthCheckInterval) {
-            this._startHealthMonitoring();
-        }
 
         if (this.eventBus && typeof this.eventBus.on === 'function') {
             this._setupPlatformEventListeners();
@@ -94,20 +89,6 @@ class TTSService {
                 retries: 0
             };
 
-            // Emit speech-requested event
-            if (this.eventBus) {
-                this.eventBus.emit(PlatformEvents.TTS_SPEECH_REQUESTED, {
-                    id: ttsRequest.id,
-                    text: cleanText,
-                    voice,
-                    priority: ttsRequest.options.priority,
-                    platform: ttsRequest.options.platform,
-                    notificationType: ttsRequest.options.notificationType,
-                    timestamp: Date.now(),
-                    source: 'tts-service'
-                });
-            }
-
             // Add to queue or process immediately
             if (ttsRequest.options.interrupt && this.currentTTS) {
                 // Interrupt current TTS and process immediately
@@ -115,14 +96,6 @@ class TTSService {
             } else {
                 // Add to queue with priority handling
                 this._addToQueue(ttsRequest);
-
-                // Emit queue update event
-                if (this.eventBus) {
-                    this.eventBus.emit(PlatformEvents.TTS_SPEECH_QUEUED, {
-                        queueLength: this.ttsQueue.length,
-                        newItem: { id: ttsRequest.id, priority: ttsRequest.options.priority }
-                    });
-                }
 
                 // Start processing if not already processing
                 if (!this.isProcessing) {
@@ -140,10 +113,6 @@ class TTSService {
             this.stats.failedSpeech++;
             this._handleError(`[TTSService] TTS error: ${error.message}`, error, 'speak');
 
-            if (this.eventBus) {
-                this.eventBus.emit(PlatformEvents.TTS_SPEECH_FAILED, { text, error: error.message });
-            }
-
             return false;
         }
     }
@@ -157,10 +126,6 @@ class TTSService {
                 // Stop current TTS if possible (would need actual TTS engine integration)
                 this.logger.debug('[TTSService] Stopping current TTS', 'tts-service');
                 this.currentTTS = null;
-            }
-
-            if (this.eventBus) {
-                this.eventBus.emit(PlatformEvents.TTS_QUEUE_CLEARED);
             }
 
             this.logger.debug('[TTSService] TTS stopped and queue cleared', 'tts-service');
@@ -204,10 +169,6 @@ class TTSService {
             // Update TTS configuration through ConfigService
             const updated = this.configService.set('tts', newConfig);
             
-            if (updated && this.eventBus) {
-                this.eventBus.emit('tts:config-updated', newConfig);
-            }
-
             this.logger.debug('[TTSService] Configuration updated', 'tts-service', newConfig);
             return updated;
 
@@ -263,12 +224,6 @@ class TTSService {
             if (removed) {
                 this.logger.debug(`[TTSService] Removed request ${requestId} from queue`, 'tts-service');
 
-                if (this.eventBus) {
-                    this.eventBus.emit(PlatformEvents.TTS_SPEECH_QUEUED, {
-                        queueLength: this.ttsQueue.length,
-                        removedItem: requestId
-                    });
-                }
             }
 
             return removed;
@@ -476,15 +431,6 @@ class TTSService {
         this.currentTTS = { ...ttsRequest, startTime };
 
         try {
-            if (this.eventBus) {
-                this.eventBus.emit(PlatformEvents.TTS_SPEECH_STARTED, {
-                    id: ttsRequest.id,
-                    text: ttsRequest.text,
-                    voice: ttsRequest.options.voice,
-                    timestamp: Date.now()
-                });
-            }
-
             // Try primary provider first
             let result;
             let usedProvider = 'primary';
@@ -498,14 +444,6 @@ class TTSService {
                     // Try fallback provider
                     if (this.fallbackProvider && this.fallbackProvider.isAvailable && this.fallbackProvider.isAvailable()) {
                         this.logger.debug('[TTSService] Attempting fallback provider', 'tts-service');
-
-                        if (this.eventBus) {
-                            this.eventBus.emit('tts:provider-switched', {
-                                from: this.provider.name,
-                                to: this.fallbackProvider.name,
-                                reason: error.message
-                            });
-                        }
 
                         this.stats.providerSwitches++;
                         usedProvider = 'fallback';
@@ -527,27 +465,10 @@ class TTSService {
 
             const completionDuration = Math.max(1, Date.now() - startTime);
 
-            if (this.eventBus) {
-                this.eventBus.emit(PlatformEvents.TTS_SPEECH_COMPLETED, {
-                    id: ttsRequest.id,
-                    text: ttsRequest.text,
-                    duration: completionDuration,
-                    provider: usedProvider
-                });
-            }
-
             this.logger.debug(`[TTSService] TTS completed: ${ttsRequest.text.substring(0, 50)} (${completionDuration}ms)`, 'tts-service');
 
         } catch (error) {
             this._handleError(`[TTSService] TTS processing error: ${error.message}`, error, 'tts-process');
-
-            if (this.eventBus) {
-                this.eventBus.emit(PlatformEvents.TTS_SPEECH_FAILED, {
-                    id: ttsRequest.id,
-                    text: ttsRequest.text,
-                    error: error.message
-                });
-            }
 
             // Retry logic (simple implementation)
             if (ttsRequest.retries < 2) {
@@ -584,17 +505,6 @@ class TTSService {
             stop: async () => true,
             dispose: async () => true
         };
-    }
-
-    _startHealthMonitoring() {
-        this.healthTimer = safeSetInterval(() => {
-            if (this.eventBus) {
-                const health = this.getHealth();
-                this.eventBus.emit('tts:health-check', health);
-            }
-        }, this.healthCheckInterval);
-
-        this.logger.debug(`[TTSService] Health monitoring started (interval: ${this.healthCheckInterval}ms)`, 'tts-service');
     }
 
     _handleError(message, error, context, payload = null) {

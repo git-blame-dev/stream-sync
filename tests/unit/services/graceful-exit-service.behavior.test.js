@@ -1,5 +1,3 @@
-const { EventEmitter } = require('events');
-
 // Shared mocks configured per test to allow module reloading
 const createHandler = () => ({
     handleEventProcessingError: jest.fn(),
@@ -35,7 +33,6 @@ describe('GracefulExitService additional behavior', () => {
     let GracefulExitService;
     let logger;
     let runtime;
-    let eventBus;
 
     beforeEach(() => {
         jest.resetModules();
@@ -60,8 +57,6 @@ describe('GracefulExitService additional behavior', () => {
             shutdown: jest.fn().mockResolvedValue(undefined),
             getPlatforms: jest.fn()
         };
-        eventBus = new EventEmitter();
-        eventBus.emit = jest.fn(eventBus.emit.bind(eventBus));
 
         jest.spyOn(process, 'exit').mockImplementation(() => {});
     });
@@ -71,7 +66,7 @@ describe('GracefulExitService additional behavior', () => {
     });
 
     test('disables tracking when target is non-positive', () => {
-        const service = new GracefulExitService(eventBus, runtime, 0);
+        const service = new GracefulExitService(runtime, 0);
 
         expect(service.isEnabled()).toBe(false);
         expect(service.incrementMessageCount()).toBe(false);
@@ -79,7 +74,7 @@ describe('GracefulExitService additional behavior', () => {
     });
 
     test('guards against duplicate shutdown attempts', async () => {
-        const service = new GracefulExitService(eventBus, runtime, 1);
+        const service = new GracefulExitService(runtime, 1);
         service.isShuttingDown = true;
 
         await service.triggerExit();
@@ -91,7 +86,7 @@ describe('GracefulExitService additional behavior', () => {
     test('routes shutdown errors through platform error handlers and schedules forced exit', async () => {
         runtime.shutdown.mockRejectedValue(new Error('shutdown failed'));
 
-        const service = new GracefulExitService(eventBus, runtime, 1);
+        const service = new GracefulExitService(runtime, 1);
         service.incrementMessageCount();
 
         await service.triggerExit();
@@ -107,7 +102,7 @@ describe('GracefulExitService additional behavior', () => {
     });
 
     test('builds exit summary without memory stats', () => {
-        const service = new GracefulExitService(eventBus, runtime, 1);
+        const service = new GracefulExitService(runtime, 1);
 
         const summary = service._buildExitSummary();
 

@@ -23,31 +23,10 @@ const PlatformEvents = {
     ERROR: 'platform:error',
     HEALTH_CHECK: 'platform:health-check',
     
-    // VFX Events (10 types)
+    // VFX Events
     VFX_COMMAND_RECEIVED: 'vfx:command-received',
-    VFX_COMMAND_VALIDATED: 'vfx:command-validated',
-    VFX_COOLDOWN_CHECKED: 'vfx:cooldown-checked',
     VFX_COMMAND_EXECUTED: 'vfx:command-executed',
-    VFX_COMMAND_FAILED: 'vfx:command-failed',
-    VFX_COOLDOWN_UPDATED: 'vfx:cooldown-updated',
-    VFX_EFFECT_STARTED: 'vfx:effect-started',
     VFX_EFFECT_COMPLETED: 'vfx:effect-completed',
-    VFX_QUEUE_UPDATED: 'vfx:queue-updated',
-    VFX_HEALTH_CHECK: 'vfx:health-check',
-    
-    // Notification Events (12 types)
-    NOTIFICATION_CREATED: 'notification:created',
-    NOTIFICATION_VALIDATED: 'notification:validated',
-    NOTIFICATION_QUEUED: 'notification:queued',
-    NOTIFICATION_DISPLAYED: 'notification:displayed',
-    NOTIFICATION_SUPPRESSED: 'notification:suppressed',
-    NOTIFICATION_EXPIRED: 'notification:expired',
-    NOTIFICATION_ERROR: 'notification:error',
-    NOTIFICATION_BATCH_PROCESSED: 'notification:batch-processed',
-    NOTIFICATION_PRIORITY_CHANGED: 'notification:priority-changed',
-    NOTIFICATION_TEMPLATE_RENDERED: 'notification:template-rendered',
-    NOTIFICATION_CONTENT_VALIDATED: 'notification:content-validated',
-    NOTIFICATION_METRICS_UPDATED: 'notification:metrics-updated',
     
     // System Events (8 types)
     SYSTEM_STARTUP: 'system:startup',
@@ -339,7 +318,7 @@ const EVENT_SCHEMAS = {
             metrics: { type: 'object' }
         }
     },
-    // VFX Events (10 types)
+    // VFX Events
     'vfx:command-received': {
         required: ['type', 'command', 'username', 'platform', 'args', 'timestamp'],
         optional: ['userId'],
@@ -353,30 +332,6 @@ const EVENT_SCHEMAS = {
             timestamp: { type: 'string' }
         }
     },
-    'vfx:command-validated': {
-        required: ['type', 'command', 'username', 'valid', 'reason'],
-        optional: ['userId'],
-        properties: {
-            type: { type: 'string', enum: ['vfx:command-validated'] },
-            command: { type: 'string' },
-            username: { type: 'string' },
-            userId: { type: 'string' },
-            valid: { type: 'boolean' },
-            reason: { type: 'string' }
-        }
-    },
-    'vfx:cooldown-checked': {
-        required: ['type', 'command', 'username', 'allowed', 'remaining'],
-        optional: ['userId'],
-        properties: {
-            type: { type: 'string', enum: ['vfx:cooldown-checked'] },
-            command: { type: 'string' },
-            username: { type: 'string' },
-            userId: { type: 'string' },
-            allowed: { type: 'boolean' },
-            remaining: { type: 'number' }
-        }
-    },
     'vfx:command-executed': {
         required: ['type', 'command', 'result', 'duration', 'effects'],
         properties: {
@@ -387,40 +342,6 @@ const EVENT_SCHEMAS = {
             effects: { type: 'array' }
         }
     },
-    'vfx:command-failed': {
-        required: ['type', 'command', 'error', 'username', 'platform'],
-        optional: ['userId'],
-        properties: {
-            type: { type: 'string', enum: ['vfx:command-failed'] },
-            command: { type: 'string' },
-            error: { type: 'object' },
-            username: { type: 'string' },
-            userId: { type: 'string' },
-            platform: { type: 'string', enum: VALID_PLATFORMS }
-        }
-    },
-    'vfx:cooldown-updated': {
-        required: ['type', 'command', 'username', 'newCooldown', 'expiry'],
-        optional: ['userId'],
-        properties: {
-            type: { type: 'string', enum: ['vfx:cooldown-updated'] },
-            command: { type: 'string' },
-            username: { type: 'string' },
-            userId: { type: 'string' },
-            newCooldown: { type: 'number' },
-            expiry: { type: 'string' }
-        }
-    },
-    'vfx:effect-started': {
-        required: ['type', 'effectId', 'effectType', 'duration', 'parameters'],
-        properties: {
-            type: { type: 'string', enum: ['vfx:effect-started'] },
-            effectId: { type: 'string' },
-            effectType: { type: 'string' },
-            duration: { type: 'number' },
-            parameters: { type: 'object' }
-        }
-    },
     'vfx:effect-completed': {
         required: ['type', 'effectId', 'success', 'duration'],
         properties: {
@@ -428,135 +349,6 @@ const EVENT_SCHEMAS = {
             effectId: { type: 'string' },
             success: { type: 'boolean' },
             duration: { type: 'number' }
-        }
-    },
-    'vfx:queue-updated': {
-        required: ['type', 'queueLength', 'nextEffect', 'priority'],
-        properties: {
-            type: { type: 'string', enum: ['vfx:queue-updated'] },
-            queueLength: { type: 'number' },
-            nextEffect: { type: ['object', 'null'] },
-            priority: { type: 'number' }
-        }
-    },
-    'vfx:health-check': {
-        required: ['type', 'service', 'healthy', 'activeEffects'],
-        properties: {
-            type: { type: 'string', enum: ['vfx:health-check'] },
-            service: { type: 'string' },
-            healthy: { type: 'boolean' },
-            activeEffects: { type: 'number' }
-        }
-    },
-    
-    // Notification Events (12 types)
-    'notification:created': {
-        required: ['type', 'notificationType', 'data', 'platform', 'priority', 'id'],
-        properties: {
-            type: { type: 'string', enum: ['notification:created'] },
-            notificationType: { type: 'string' },
-            data: { type: 'object' },
-            platform: { type: 'string', enum: VALID_PLATFORMS },
-            priority: { type: 'number' },
-            id: { type: 'string' }
-        }
-    },
-    'notification:validated': {
-        required: ['type', 'notificationId', 'valid', 'errors'],
-        properties: {
-            type: { type: 'string', enum: ['notification:validated'] },
-            notificationId: { type: 'string' },
-            valid: { type: 'boolean' },
-            errors: { type: 'array' }
-        }
-    },
-    'notification:queued': {
-        required: ['type', 'notificationId', 'position', 'estimatedDelay'],
-        properties: {
-            type: { type: 'string', enum: ['notification:queued'] },
-            notificationId: { type: 'string' },
-            position: { type: 'number' },
-            estimatedDelay: { type: 'number' }
-        }
-    },
-    'notification:displayed': {
-        required: ['type', 'notificationId', 'displayMethod', 'duration'],
-        properties: {
-            type: { type: 'string', enum: ['notification:displayed'] },
-            notificationId: { type: 'string' },
-            displayMethod: { type: 'string' },
-            duration: { type: 'number' }
-        }
-    },
-    'notification:suppressed': {
-        required: ['type', 'notificationId', 'reason', 'suppressionRule'],
-        properties: {
-            type: { type: 'string', enum: ['notification:suppressed'] },
-            notificationId: { type: 'string' },
-            reason: { type: 'string' },
-            suppressionRule: { type: 'string' }
-        }
-    },
-    'notification:expired': {
-        required: ['type', 'notificationId', 'reason', 'displayTime'],
-        properties: {
-            type: { type: 'string', enum: ['notification:expired'] },
-            notificationId: { type: 'string' },
-            reason: { type: 'string' },
-            displayTime: { type: 'number' }
-        }
-    },
-    'notification:error': {
-        required: ['type', 'notificationId', 'error', 'recoveryAction'],
-        properties: {
-            type: { type: 'string', enum: ['notification:error'] },
-            notificationId: { type: 'string' },
-            error: { type: 'object' },
-            recoveryAction: { type: 'string' }
-        }
-    },
-    'notification:batch-processed': {
-        required: ['type', 'count', 'duration', 'errors'],
-        properties: {
-            type: { type: 'string', enum: ['notification:batch-processed'] },
-            count: { type: 'number' },
-            duration: { type: 'number' },
-            errors: { type: 'array' }
-        }
-    },
-    'notification:priority-changed': {
-        required: ['type', 'notificationId', 'oldPriority', 'newPriority'],
-        properties: {
-            type: { type: 'string', enum: ['notification:priority-changed'] },
-            notificationId: { type: 'string' },
-            oldPriority: { type: 'number' },
-            newPriority: { type: 'number' }
-        }
-    },
-    'notification:template-rendered': {
-        required: ['type', 'template', 'data', 'result'],
-        properties: {
-            type: { type: 'string', enum: ['notification:template-rendered'] },
-            template: { type: 'string' },
-            data: { type: 'object' },
-            result: { type: 'string' }
-        }
-    },
-    'notification:content-validated': {
-        required: ['type', 'content', 'valid', 'artifacts'],
-        properties: {
-            type: { type: 'string', enum: ['notification:content-validated'] },
-            content: { type: 'string' },
-            valid: { type: 'boolean' },
-            artifacts: { type: 'array' }
-        }
-    },
-    'notification:metrics-updated': {
-        required: ['type', 'totalProcessed', 'averageLatency'],
-        properties: {
-            type: { type: 'string', enum: ['notification:metrics-updated'] },
-            totalProcessed: { type: 'number' },
-            averageLatency: { type: 'number' }
         }
     }
 };

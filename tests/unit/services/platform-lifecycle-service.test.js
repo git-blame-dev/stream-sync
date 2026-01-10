@@ -91,13 +91,6 @@ describe('PlatformLifecycleService', () => {
                 message: 'Stream detected'
             });
             expect(status.connectionTimes.twitch).toEqual(expect.any(Number));
-            expect(mockEventBus.emit).toHaveBeenCalledWith(
-                'platform:status',
-                expect.objectContaining({
-                    platform: 'twitch',
-                    state: expect.stringMatching(/(initializing|ready)/)
-                })
-            );
         });
 
         it('reports failed platforms with error context', async () => {
@@ -119,13 +112,6 @@ describe('PlatformLifecycleService', () => {
                         lastError: 'connect failed'
                     })
                 ])
-            );
-            expect(mockEventBus.emit).toHaveBeenCalledWith(
-                'platform:status',
-                expect.objectContaining({
-                    platform: 'youtube',
-                    state: 'failed'
-                })
             );
         });
     });
@@ -222,21 +208,27 @@ describe('PlatformLifecycleService', () => {
 
             await service.initializeAllPlatforms(platformModules);
 
-            expect(mockEventBus.emit).toHaveBeenCalledWith('platform:event', expect.objectContaining({
-                platform: 'twitch',
-                type: 'chat',
-                data: { message: { text: 'hello' } }
-            }));
-            expect(mockEventBus.emit).toHaveBeenCalledWith('platform:event', expect.objectContaining({
-                platform: 'twitch',
-                type: 'viewer-count',
-                data: { count: 42 }
-            }));
-            expect(mockEventBus.emit).toHaveBeenCalledWith('platform:event', expect.objectContaining({
-                platform: 'twitch',
-                type: 'gift',
-                data: { username: 'donor' }
-            }));
+            const platformEvents = mockEventBus.emit.mock.calls
+                .filter(([name]) => name === 'platform:event')
+                .map(([, payload]) => payload);
+
+            expect(platformEvents).toEqual(expect.arrayContaining([
+                expect.objectContaining({
+                    platform: 'twitch',
+                    type: 'chat',
+                    data: { message: { text: 'hello' } }
+                }),
+                expect.objectContaining({
+                    platform: 'twitch',
+                    type: 'viewer-count',
+                    data: { count: 42 }
+                }),
+                expect.objectContaining({
+                    platform: 'twitch',
+                    type: 'gift',
+                    data: { username: 'donor' }
+                })
+            ]));
         });
 
         it('should validate PlatformClass is a constructor', async () => {
@@ -536,13 +528,6 @@ describe('PlatformLifecycleService', () => {
             await service.disconnectAll();
 
             expect(cleanupSpy).toHaveBeenCalled();
-            expect(mockEventBus.emit).toHaveBeenCalledWith(
-                'platform:disconnected',
-                expect.objectContaining({
-                    platform: 'twitch',
-                    timestamp: expect.any(String)
-                })
-            );
             expect(service.isPlatformAvailable('twitch')).toBe(false);
         });
 
@@ -563,13 +548,6 @@ describe('PlatformLifecycleService', () => {
 
             expect(cleanupSpy).toHaveBeenCalled();
             expect(disconnectSpy).not.toHaveBeenCalled();
-            expect(mockEventBus.emit).toHaveBeenCalledWith(
-                'platform:disconnected',
-                expect.objectContaining({
-                    platform: 'twitch',
-                    timestamp: expect.any(String)
-                })
-            );
             expect(service.isPlatformAvailable('twitch')).toBe(false);
         });
     });

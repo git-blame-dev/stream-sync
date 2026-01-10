@@ -16,8 +16,7 @@ function handleGracefulExitError(message, error, eventType = 'graceful-exit', ta
 }
 
 class GracefulExitService {
-    constructor(eventBus, runtime, targetMessageCount, config = {}) {
-        this.eventBus = eventBus;
+    constructor(runtime, targetMessageCount, config = {}) {
         this.runtime = runtime;
         this.targetMessageCount = targetMessageCount;
         this.processedMessageCount = 0;
@@ -41,16 +40,6 @@ class GracefulExitService {
             logger.debug(`[GracefulExitService] Initialized with target: ${targetMessageCount} messages`, 'graceful-exit');
         }
 
-        // Emit initialization event
-        if (this.eventBus) {
-            this.eventBus.emit('service:initialized', {
-                serviceName: 'GracefulExitService',
-                timestamp: new Date(),
-                status: 'ready',
-                enabled: this.isEnabled(),
-                targetCount: targetMessageCount
-            });
-        }
     }
 
     isEnabled() {
@@ -78,26 +67,12 @@ class GracefulExitService {
             'graceful-exit'
         );
 
-        // Emit progress event at intervals
-        if (this.processedMessageCount % this.config.progressEventInterval === 0) {
-            this._emitProgressEvent();
-        }
-
         // Check if target reached
         if (this.processedMessageCount >= this.targetMessageCount) {
             logger.debug(
                 `[Message Counter] Target message count reached (${this.targetMessageCount}). Triggering graceful exit...`,
                 'graceful-exit'
             );
-
-            // Emit exit triggered event
-            if (this.eventBus) {
-                this.eventBus.emit('graceful-exit:triggered', {
-                    processed: this.processedMessageCount,
-                    target: this.targetMessageCount,
-                    timestamp: Date.now()
-                });
-            }
 
             return true;
         }
@@ -126,7 +101,6 @@ class GracefulExitService {
             logger.info('Exit summary:', 'system', summary);
             logger.console(`[GRACEFUL EXIT] Summary: Processed ${this.processedMessageCount}/${this.targetMessageCount} messages`, 'graceful-exit');
             logger.console(`[GRACEFUL EXIT] Platforms: ${summary.platforms.join(', ')}`, 'graceful-exit');
-            logger.console(`[GRACEFUL EXIT] Memory usage: ${summary.memoryStats.currentUsage}%`, 'graceful-exit');
             logger.console(`[GRACEFUL EXIT] Starting graceful shutdown...`, 'graceful-exit');
 
             // Set force exit timeout
@@ -182,27 +156,6 @@ class GracefulExitService {
         this.isShuttingDown = true;
     }
 
-    _emitProgressEvent() {
-        if (!this.eventBus) {
-            return;
-        }
-
-        const stats = this.getStats();
-
-        this.eventBus.emit('graceful-exit:progress', {
-            processed: stats.processed,
-            target: stats.target,
-            remaining: stats.remaining,
-            percentage: stats.percentage,
-            timestamp: Date.now()
-        });
-
-        logger.debug(
-            `[GracefulExitService] Progress: ${stats.processed}/${stats.target} (${stats.percentage}%)`,
-            'graceful-exit'
-        );
-    }
-
     _buildExitSummary() {
         const platformSnapshot = this.runtime.getPlatforms ?
             this.runtime.getPlatforms() :
@@ -220,8 +173,8 @@ class GracefulExitService {
     }
 }
 
-function createGracefulExitService(eventBus, runtime, targetMessageCount, config = {}) {
-    return new GracefulExitService(eventBus, runtime, targetMessageCount, config);
+function createGracefulExitService(runtime, targetMessageCount, config = {}) {
+    return new GracefulExitService(runtime, targetMessageCount, config);
 }
 
 module.exports = {

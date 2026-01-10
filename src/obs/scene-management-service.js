@@ -1,4 +1,4 @@
-const { safeDelay, safeSetTimeout } = require('../utils/timeout-validator');
+const { safeDelay } = require('../utils/timeout-validator');
 const { createPlatformErrorHandler } = require('../utils/platform-error-handler');
 
 class SceneManagementService {
@@ -46,15 +46,6 @@ class SceneManagementService {
     async _handleSceneSwitch(data) {
         const { sceneName, transition, retry = true } = data;
 
-        // Emit transition started if transition is specified
-        if (transition) {
-            this.eventBus.emit('scene:transition-started', {
-                sceneName,
-                transition,
-                timestamp: Date.now()
-            });
-        }
-
         let attempt = 0;
         let lastError = null;
 
@@ -81,24 +72,6 @@ class SceneManagementService {
                 });
 
                 // Emit success events
-                this.eventBus.emit('scene:switched', {
-                    sceneName,
-                    previousScene: this.state.previousScene,
-                    success: true,
-                    timestamp: Date.now()
-                });
-
-                // Handle transition completion
-                if (transition) {
-                    safeSetTimeout(() => {
-                        this.eventBus.emit('scene:transition-completed', {
-                            sceneName,
-                            success: true,
-                            timestamp: Date.now()
-                        });
-                    }, transition.duration || 0);
-                }
-
                 return; // Success, exit retry loop
             } catch (error) {
                 lastError = error;
@@ -111,12 +84,6 @@ class SceneManagementService {
                         attempts: attempt
                     });
 
-                    this.eventBus.emit('scene:switch-failed', {
-                        sceneName,
-                        error,
-                        attempts: attempt,
-                        timestamp: Date.now()
-                    });
                 }
             }
         }

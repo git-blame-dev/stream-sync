@@ -195,20 +195,16 @@ describe('Platform Initialization Delegation', () => {
             expect(runtime.platformLifecycleService.backgroundPlatformInits).toBeDefined();
         });
 
-        it('should emit platform:status events during background initialization', async () => {
+        it('tracks platform health during background initialization', async () => {
             mockConfig.tiktok = {
                 enabled: true,
                 username: '@test_user'
             };
             mockConfig.twitch.enabled = false;
 
-            const eventEmitter = new (require('events'))();
-            const statusEvents = [];
-            eventEmitter.on('platform:status', (event) => statusEvents.push(event));
-
             const platformLifecycleService = new PlatformLifecycleService({
                 config: mockConfig,
-                eventBus: eventEmitter,
+                eventBus: null,
                 streamDetector: null,
                 dependencyFactory: null,
                 logger: mockDependencies.logging
@@ -222,10 +218,9 @@ describe('Platform Initialization Delegation', () => {
             runtime = new AppRuntime(mockConfig, deps);
             await runtime.initializePlatforms();
 
-            expect(statusEvents.length).toBeGreaterThan(0);
-            const emitted = statusEvents.find(event => event.platform === 'tiktok');
-            expect(emitted).toBeDefined();
-            expect(emitted).toHaveProperty('state');
+            const status = platformLifecycleService.getStatus();
+            expect(status.platformHealth.tiktok).toBeDefined();
+            expect(status.platformHealth.tiktok.state).toBeDefined();
         });
     });
 });

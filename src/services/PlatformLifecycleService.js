@@ -87,16 +87,6 @@ class PlatformLifecycleService {
             } catch (error) {
                 this._handleLifecycleError(`Failed to initialize platform ${platformName}: ${error.message}`, error, 'initialize');
                 this.markPlatformFailure(platformName, error);
-
-                // Emit platform error event
-                if (this.eventBus) {
-                    this.eventBus.emit('platform:error', {
-                        platform: platformName,
-                        error: error.message,
-                        recoverable: true,
-                        timestamp: new Date().toISOString()
-                    });
-                }
             }
         }
 
@@ -215,14 +205,6 @@ class PlatformLifecycleService {
             this.logger.info(`Connecting to ${platformName}...`, 'PlatformLifecycleService');
 
             await platformInstance.initialize(handlers);
-
-            // Emit connection event
-            if (this.eventBus) {
-                this.eventBus.emit('platform:connected', {
-                    platform: platformName,
-                    timestamp: new Date().toISOString()
-                });
-            }
 
             this.markPlatformReady(platformName);
 
@@ -434,7 +416,6 @@ class PlatformLifecycleService {
         next.lastUpdated = patch.lastUpdated || new Date().toISOString();
 
         this.platformHealth[platformName] = next;
-        this.emitPlatformStatus(platformName);
         return next;
     }
 
@@ -453,12 +434,6 @@ class PlatformLifecycleService {
             lastUpdated: timestamp
         });
 
-        if (this.eventBus) {
-            this.eventBus.emit('platform:initialized', {
-                platform: platformName,
-                timestamp
-            });
-        }
     }
 
     markPlatformFailure(platformName, error) {
@@ -473,24 +448,6 @@ class PlatformLifecycleService {
             state: 'failed',
             lastError: error?.message || String(error),
             lastUpdated: timestamp
-        });
-    }
-
-    emitPlatformStatus(platformName) {
-        if (!this.eventBus || typeof this.eventBus.emit !== 'function') {
-            return;
-        }
-
-        const snapshot = this.platformHealth[platformName];
-        if (!snapshot) {
-            return;
-        }
-
-        this.eventBus.emit('platform:status', {
-            platform: platformName,
-            state: snapshot.state,
-            status: snapshot,
-            timestamp: new Date().toISOString()
         });
     }
 
@@ -510,14 +467,6 @@ class PlatformLifecycleService {
                 } else {
                     const error = new Error(`Platform ${platformName} is missing cleanup()`);
                     this._handleLifecycleError(`Unable to cleanup ${platformName}: cleanup() missing`, error, 'cleanup');
-                }
-
-                // Emit disconnection event
-                if (platform && typeof platform.cleanup === 'function' && this.eventBus) {
-                    this.eventBus.emit('platform:disconnected', {
-                        platform: platformName,
-                        timestamp: new Date().toISOString()
-                    });
                 }
 
                 delete this.platforms[platformName];

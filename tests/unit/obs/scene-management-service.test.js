@@ -43,38 +43,27 @@ describe('SceneManagementService', () => {
 
     describe('Scene Switching', () => {
         test('switches to specified scene when scene:switch event is emitted', async () => {
-            const sceneSwitchedHandler = jest.fn();
-            eventBus.subscribe('scene:switched', sceneSwitchedHandler);
-
             eventBus.emit('scene:switch', { sceneName: 'GameplayScene' });
 
             await waitForDelay(10);
 
-            // Verify user-visible outcome: event emitted with correct data
-            expect(sceneSwitchedHandler).toHaveBeenCalledWith(
-                expect.objectContaining({
-                    sceneName: 'GameplayScene',
-                    success: true
-                })
-            );
+            expect(mockOBSConnection.call).toHaveBeenCalled();
+            const [method, payload] = mockOBSConnection.call.mock.calls[0];
+            expect(method).toBe('SetCurrentProgramScene');
+            expect(payload).toEqual({ sceneName: 'GameplayScene' });
         });
 
-        test('emits scene:switch-failed when scene switch fails', async () => {
+        test('does not update state when scene switch fails', async () => {
             mockOBSConnection.call.mockRejectedValue(new Error('Scene not found'));
-            const failedHandler = jest.fn();
-            eventBus.subscribe('scene:switch-failed', failedHandler);
 
             eventBus.emit('scene:switch', { sceneName: 'InvalidScene' });
 
             // Wait for retries to complete (3 retries * 100ms delay + buffer)
             await waitForDelay(400);
 
-            expect(failedHandler).toHaveBeenCalledWith(
-                expect.objectContaining({
-                    sceneName: 'InvalidScene',
-                    error: expect.any(Error)
-                })
-            );
+            const state = sceneService.getSceneState();
+            expect(state.currentScene).not.toBe('InvalidScene');
+            expect(state.switchCount).toBe(0);
         });
 
         test('tracks current scene after successful switch', async () => {
@@ -189,9 +178,6 @@ describe('SceneManagementService', () => {
 
     describe('Scene Transitions', () => {
         test('applies transition when switching scenes', async () => {
-            const transitionHandler = jest.fn();
-            eventBus.subscribe('scene:transition-started', transitionHandler);
-
             eventBus.emit('scene:switch', {
                 sceneName: 'GameplayScene',
                 transition: {
@@ -202,37 +188,14 @@ describe('SceneManagementService', () => {
 
             await waitForDelay(10);
 
-            expect(transitionHandler).toHaveBeenCalledWith(
-                expect.objectContaining({
-                    sceneName: 'GameplayScene',
-                    transition: expect.objectContaining({
-                        type: 'fade',
-                        duration: 300
-                    })
-                })
-            );
-        });
-
-        test('emits scene:transition-completed after transition finishes', async () => {
-            const completedHandler = jest.fn();
-            eventBus.subscribe('scene:transition-completed', completedHandler);
-
-            eventBus.emit('scene:switch', {
+            const history = sceneService.getSceneHistory();
+            expect(history[0]).toEqual(expect.objectContaining({
                 sceneName: 'GameplayScene',
-                transition: {
+                transition: expect.objectContaining({
                     type: 'fade',
-                    duration: 50
-                }
-            });
-
-            await waitForDelay(100);
-
-            expect(completedHandler).toHaveBeenCalledWith(
-                expect.objectContaining({
-                    sceneName: 'GameplayScene',
-                    success: true
+                    duration: 300
                 })
-            );
+            }));
         });
     });
 
@@ -247,9 +210,7 @@ describe('SceneManagementService', () => {
                 return Promise.resolve({});
             });
 
-            const successHandler = jest.fn();
             const startTime = performance.now();
-            eventBus.subscribe('scene:switched', successHandler);
 
             eventBus.emit('scene:switch', { sceneName: 'GameplayScene', retry: true });
 
@@ -258,9 +219,8 @@ describe('SceneManagementService', () => {
 
             const duration = performance.now() - startTime;
 
-            // Verify user-visible outcomes:
-            // 1. Eventually succeeded (event emitted)
-            expect(successHandler).toHaveBeenCalled();
+            const state = sceneService.getSceneState();
+            expect(state.currentScene).toBe('GameplayScene');
             // 2. Took extra time because retry occurred (> 100ms delay for retry)
             expect(duration).toBeGreaterThan(100);
         });
@@ -268,9 +228,7 @@ describe('SceneManagementService', () => {
         test('fails immediately when retry is disabled', async () => {
             mockOBSConnection.call.mockRejectedValue(new Error('Failure'));
 
-            const failedHandler = jest.fn();
             const startTime = performance.now();
-            eventBus.subscribe('scene:switch-failed', failedHandler);
 
             eventBus.emit('scene:switch', { sceneName: 'GameplayScene', retry: false });
 
@@ -278,10 +236,9 @@ describe('SceneManagementService', () => {
 
             const duration = performance.now() - startTime;
 
-            // Verify user-visible outcomes:
-            // 1. Error event was emitted
-            expect(failedHandler).toHaveBeenCalled();
-            // 2. Failed quickly (< 150ms) because no retries occurred
+            const state = sceneService.getSceneState();
+            expect(state.currentScene).not.toBe('GameplayScene');
+            // Failed quickly (< 150ms) because no retries occurred
             expect(duration).toBeLessThan(150);
         });
     });

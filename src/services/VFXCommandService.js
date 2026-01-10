@@ -98,24 +98,10 @@ class VFXCommandService {
                 if (!cooldownCheck.allowed) {
                     this.stats.cooldownBlocked++;
                     
-                    if (this.eventBus) {
-                        try {
-                            this.eventBus.emit('vfx:cooldown-blocked', {
-                                command,
-                                username: commandUser,
-                                platform,
-                                cooldownInfo: cooldownCheck
-                            });
-                        } catch (eventError) {
-                            handleVFXCommandError(`[VFXCommandService] EventBus error: ${eventError.message}`, eventError, 'event-bus');
-                            // Don't re-throw here since we still want to return cooldown error
-                        }
-                    }
-                    
-                    return {
-                        success: false,
-                        error: 'Command on cooldown',
-                        cooldownInfo: cooldownCheck,
+                return {
+                    success: false,
+                    error: 'Command on cooldown',
+                    cooldownInfo: cooldownCheck,
                         command,
                         username: commandUser,
                         platform
@@ -163,21 +149,6 @@ class VFXCommandService {
                 }
             } else {
                 this.stats.failedCommands++;
-                
-                if (this.eventBus) {
-                    try {
-                        this.eventBus.emit(PlatformEvents.VFX_COMMAND_FAILED, {
-                            command,
-                            username: commandUser,
-                            platform,
-                            vfxConfig,
-                            error: executionResult.error
-                        });
-                    } catch (eventError) {
-                        handleVFXCommandError(`[VFXCommandService] EventBus error: ${eventError.message}`, eventError, 'event-bus');
-                        throw eventError; // Re-throw to be caught by outer catch
-                    }
-                }
             }
             
             // Update average execution time with weighted calculation

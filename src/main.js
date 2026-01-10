@@ -877,22 +877,9 @@ class AppRuntime {
     }
 
     emitSystemShutdown({ reason, restartRequested = false } = {}) {
-        if (this.eventBus) {
-            this.eventBus.emit('system:shutdown', {
-                reason,
-                restartRequested,
-                timestamp: new Date().toISOString()
-            });
-        }
-
-        if (restartRequested) {
-            this.eventBus?.emit('service:restart-requested', {
-                reason,
-                timestamp: new Date().toISOString()
-            });
-        }
-
-        this.logger.info('Shutdown complete. Exiting.', 'system');
+        const shutdownReason = typeof reason === 'string' && reason.trim() ? reason : 'unknown';
+        const shutdownMode = restartRequested ? 'restart' : 'exit';
+        this.logger.info(`Shutdown complete (${shutdownReason}); ${shutdownMode} requested.`, 'system');
         logger.debug('[Shutdown] Calling process.exit(0)', 'system');
         // Force exit fallback in case something keeps the process alive
         safeSetTimeout(() => {
@@ -1018,9 +1005,6 @@ class AppRuntime {
             throw new Error('emitSystemReady requires options');
         }
         const { correlationId } = options;
-        if (!this.eventBus || typeof this.eventBus.emit !== 'function') {
-            throw new Error('EventBus emit unavailable for system:ready');
-        }
 
         const readyPayload = {
             services: this.getReadyServices(),
@@ -1039,8 +1023,8 @@ class AppRuntime {
             readyPayload.cooldowns = this.commandCooldownService.getStatus();
         }
 
-        this.eventBus.emit('system:ready', readyPayload);
-        logger.debug('system:ready event emitted', 'AppRuntime', readyPayload);
+        logger.debug('system:ready payload built', 'AppRuntime', readyPayload);
+        return readyPayload;
     }
 
     getReadyServices() {
@@ -1562,7 +1546,6 @@ async function main() {
         app = createAppRuntime(config, dependencies);
 
         const gracefulExitService = createGracefulExitService(
-            eventBus,
             app,
             cliArgs.chat,
             config.general?.gracefulExit

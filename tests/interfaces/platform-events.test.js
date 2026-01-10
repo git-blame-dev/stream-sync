@@ -564,18 +564,10 @@ describe('Platform Event Interface Design', () => {
                 'platform:follow', 'platform:paypiggy', 'platform:giftpaypiggy', 'platform:gift', 'platform:raid', 'platform:envelope',
                 'platform:connection-status', 'platform:authentication-required', 'platform:rate-limit-hit',
                 'platform:connection', 'platform:notification', 'platform:viewer-count', 'platform:stream-status',
-                'platform:error', 'platform:health-check',
+                'platform:stream-detected', 'platform:error', 'platform:health-check',
                 
-                // VFX Events (10 types)
-                'vfx:command-received', 'vfx:command-validated', 'vfx:cooldown-checked', 'vfx:command-executed',
-                'vfx:command-failed', 'vfx:cooldown-updated', 'vfx:effect-started', 'vfx:effect-completed',
-                'vfx:queue-updated', 'vfx:health-check',
-                
-                // Notification Events (12 types)
-                'notification:created', 'notification:validated', 'notification:queued', 'notification:displayed',
-                'notification:suppressed', 'notification:expired', 'notification:error', 'notification:batch-processed',
-                'notification:priority-changed', 'notification:template-rendered', 'notification:content-validated',
-                'notification:metrics-updated'
+                // VFX Events
+                'vfx:command-received', 'vfx:command-executed', 'vfx:effect-completed'
             ];
             const schemaEventTypes = validator.getSupportedEventTypes();
             for (const eventType of expectedEventTypes) {

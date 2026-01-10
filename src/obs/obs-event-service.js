@@ -101,22 +101,8 @@ class OBSEventService {
 
         try {
             await this.obsSources.updateTextSource(sourceName, text);
-
-            this.eventBus.emit('obs:source:text-updated', {
-                sourceName,
-                text,
-                success: true,
-                timestamp: Date.now()
-            });
         } catch (error) {
             this._handleObsEventError(`Failed to update text source ${sourceName}`, error, { sourceName, operation: 'text-update' });
-
-            this.eventBus.emit('obs:source:error', {
-                sourceName,
-                error,
-                operation: 'text-update',
-                timestamp: Date.now()
-            });
         }
     }
 
@@ -125,21 +111,8 @@ class OBSEventService {
 
         try {
             await this.obsSources.clearTextSource(sourceName);
-
-            this.eventBus.emit('obs:source:text-cleared', {
-                sourceName,
-                success: true,
-                timestamp: Date.now()
-            });
         } catch (error) {
             this._handleObsEventError(`Failed to clear text source ${sourceName}`, error, { sourceName, operation: 'text-clear' });
-
-            this.eventBus.emit('obs:source:error', {
-                sourceName,
-                error,
-                operation: 'text-clear',
-                timestamp: Date.now()
-            });
         }
     }
 
@@ -148,28 +121,12 @@ class OBSEventService {
 
         try {
             await this.obsSources.setSourceVisibility(sceneName, sourceName, visible);
-
-            this.eventBus.emit('obs:source:visibility-changed', {
-                sceneName,
-                sourceName,
-                visible,
-                success: true,
-                timestamp: Date.now()
-            });
         } catch (error) {
             this._handleObsEventError(`Failed to set visibility for ${sourceName}`, error, {
                 sceneName,
                 sourceName,
                 visible,
                 operation: 'set-visibility'
-            });
-
-            this.eventBus.emit('obs:source:error', {
-                sceneName,
-                sourceName,
-                error,
-                operation: 'visibility-change',
-                timestamp: Date.now()
             });
         }
     }
@@ -181,21 +138,8 @@ class OBSEventService {
             await this.obsConnection.call('SetCurrentProgramScene', {
                 sceneName
             });
-
-            this.eventBus.emit('obs:scene:switched', {
-                sceneName,
-                success: true,
-                timestamp: Date.now()
-            });
         } catch (error) {
             this._handleObsEventError(`Failed to switch to scene ${sceneName}`, error, { sceneName, operation: 'scene-switch' });
-
-            this.eventBus.emit('obs:scene:error', {
-                sceneName,
-                error,
-                operation: 'scene-switch',
-                timestamp: Date.now()
-            });
         }
     }
 
@@ -210,19 +154,8 @@ class OBSEventService {
         while (this.state.reconnectAttempts < this.reconnectConfig.maxAttempts) {
             this.state.reconnectAttempts++;
 
-            this.eventBus.emit('obs:reconnecting', {
-                attempt: this.state.reconnectAttempts,
-                maxAttempts: this.reconnectConfig.maxAttempts,
-                timestamp: Date.now()
-            });
-
             try {
                 await this.connect();
-
-                this.eventBus.emit('obs:reconnected', {
-                    attempts: this.state.reconnectAttempts,
-                    timestamp: Date.now()
-                });
 
                 this.state.reconnecting = false;
                 this.state.reconnectAttempts = 0;
@@ -238,33 +171,15 @@ class OBSEventService {
         }
 
         this.state.reconnecting = false;
-
-        this.eventBus.emit('obs:reconnect-failed', {
-            attempts: this.state.reconnectAttempts,
-            timestamp: Date.now()
-        });
     }
 
     async connect() {
-        const previousState = this.state.connected ? 'connected' : 'disconnected';
-
         try {
             await this.obsConnection.connect();
 
             this.state.connected = true;
             this.state.ready = true;
             this.state.lastError = null;
-
-            this.eventBus.emit('obs:connected', {
-                timestamp: Date.now(),
-                success: true
-            });
-
-            this.eventBus.emit('obs:connection:state-changed', {
-                state: 'connected',
-                previousState,
-                timestamp: Date.now()
-            });
         } catch (error) {
             this.state.connected = false;
             this.state.ready = false;
@@ -272,33 +187,16 @@ class OBSEventService {
 
             this._handleObsEventError('Failed to connect to OBS', error, { operation: 'connect' });
 
-            this.eventBus.emit('obs:connection:error', {
-                error,
-                timestamp: Date.now()
-            });
-
             throw error;
         }
     }
 
     async disconnect() {
-        const previousState = this.state.connected ? 'connected' : 'disconnected';
-
         try {
             await this.obsConnection.disconnect();
 
             this.state.connected = false;
             this.state.ready = false;
-
-            this.eventBus.emit('obs:disconnected', {
-                timestamp: Date.now()
-            });
-
-            this.eventBus.emit('obs:connection:state-changed', {
-                state: 'disconnected',
-                previousState,
-                timestamp: Date.now()
-            });
         } catch (error) {
             this._handleObsEventError('Failed to disconnect from OBS', error, { operation: 'disconnect' });
             throw error;

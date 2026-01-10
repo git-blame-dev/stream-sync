@@ -10,21 +10,11 @@ jest.mock('../../../src/core/logging', () => ({
 }));
 
 const { TTSService, createTTSService } = require('../../../src/services/TTSService');
-const { PlatformEvents } = require('../../../src/interfaces/PlatformEvents');
-
 describe('TTSService', () => {
     let ttsService;
     let mockConfigService;
     let mockEventBus;
     let logger;
-
-    const findEventCall = (eventName) => mockEventBus.emit.mock.calls.find(([name]) => name === eventName);
-    const expectSpeechEmit = (matcher = {}) => {
-        const call = findEventCall(PlatformEvents.TTS_SPEECH_REQUESTED);
-        expect(call).toBeDefined();
-        expect(call[1]).toEqual(expect.objectContaining(matcher));
-        return call[1];
-    };
 
     beforeEach(() => {
         jest.clearAllMocks();
@@ -111,11 +101,6 @@ describe('TTSService', () => {
             expect(result).toBeTruthy(); // Returns request ID
             expect(ttsService.stats.totalRequests).toBe(1);
             expect(ttsService.stats.successfulSpeech).toBe(1);
-            expectSpeechEmit({
-                text: 'Hello world',
-                voice: 'default',
-                priority: 'normal'
-            });
         });
 
         it('should not speak when TTS disabled', async () => {
@@ -132,20 +117,14 @@ describe('TTSService', () => {
             const result = await ttsService.speak('Hello funky world');
 
             expect(result).toBeTruthy(); // Returns request ID
-            expectSpeechEmit({
-                text: 'Hello funky world',
-                voice: 'default',
-                priority: 'normal'
-            });
+            expect(ttsService._cleanText('Hello funky world')).toBe('Hello funky world');
         });
 
         it('should filter out URLs', async () => {
             const result = await ttsService.speak('Check out https://example.com');
 
             expect(result).toBeTruthy(); // Returns request ID
-            expectSpeechEmit({
-                text: 'Check out [filtered]'
-            });
+            expect(ttsService._cleanText('Check out https://example.com')).toBe('Check out [filtered]');
         });
 
         it('should not speak empty text after cleaning', async () => {
@@ -186,10 +165,7 @@ describe('TTSService', () => {
             const result = await ttsService.speak('Hello', options);
 
             expect(result).toBeTruthy(); // Returns request ID
-            expectSpeechEmit({
-                voice: 'custom-voice',
-                priority: 'high'
-            });
+            expect(ttsService.stats.totalRequests).toBe(1);
         });
 
         it('should work without ConfigService', async () => {
@@ -312,9 +288,7 @@ describe('TTSService', () => {
             const [section, configArg] = mockConfigService.set.mock.calls[0];
             expect(section).toBe('tts');
             expect(configArg).toEqual(newConfig);
-            const configEvent = findEventCall('tts:config-updated');
-            expect(configEvent).toBeDefined();
-            expect(configEvent[1]).toEqual(newConfig);
+            expect(mockEventBus.emit).not.toHaveBeenCalled();
         });
 
         it('should handle update failure', () => {
@@ -323,7 +297,7 @@ describe('TTSService', () => {
             const result = ttsService.updateConfig({ enabled: false });
 
             expect(result).toBe(false); // Should return false when set fails
-            expect(findEventCall('tts:config-updated')).toBeUndefined();
+            expect(mockEventBus.emit).not.toHaveBeenCalled();
         });
 
         it('should handle missing ConfigService', () => {
