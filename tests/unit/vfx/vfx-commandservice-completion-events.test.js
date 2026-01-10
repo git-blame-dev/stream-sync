@@ -1,4 +1,5 @@
 const { initializeTestLogging } = require('../../helpers/test-setup');
+const { PlatformEvents } = require('../../../src/interfaces/PlatformEvents');
 
 initializeTestLogging();
 
@@ -57,8 +58,8 @@ describe('VFXCommandService completion events', () => {
             correlationId: 'corr-1'
         });
 
-        const executedEvent = recordedEvents.find(e => e.name === 'vfx:executed');
-        const completedEvent = recordedEvents.find(e => e.name === 'vfx:effect-completed');
+        const executedEvent = recordedEvents.find(e => e.name === PlatformEvents.VFX_COMMAND_EXECUTED);
+        const completedEvent = recordedEvents.find(e => e.name === PlatformEvents.VFX_EFFECT_COMPLETED);
 
         expect(executedEvent).toBeDefined();
         expect(completedEvent).toBeDefined();

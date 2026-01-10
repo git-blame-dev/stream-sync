@@ -1,4 +1,5 @@
 describe('VFXCommandService event emission error handling', () => {
+    const { PlatformEvents } = require('../../../src/interfaces/PlatformEvents');
     const originalEnv = process.env.NODE_ENV;
 
     afterEach(() => {
@@ -89,7 +90,7 @@ describe('VFXCommandService event emission error handling', () => {
         expect(eventType).toBe('event-bus');
     });
 
-    it('emits vfx:failed when runCommand rejects', async () => {
+    it('emits vfx:command-failed when runCommand rejects', async () => {
         process.env.NODE_ENV = 'test';
 
         const errorHandler = {
@@ -160,7 +161,7 @@ describe('VFXCommandService event emission error handling', () => {
 
         expect(result.success).toBe(false);
         expect(result.error).toBe('run fail');
-        expect(eventBus.emit).toHaveBeenCalledWith('vfx:failed', expect.objectContaining({
+        expect(eventBus.emit).toHaveBeenCalledWith(PlatformEvents.VFX_COMMAND_FAILED, expect.objectContaining({
             command: '!clip',
             username: 'User',
             platform: 'twitch',

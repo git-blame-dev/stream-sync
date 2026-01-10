@@ -1,4 +1,5 @@
 const { createRuntimeConstantsFixture } = require('../../helpers/runtime-constants-fixture');
+const { PlatformEvents } = require('../../../src/interfaces/PlatformEvents');
 
 describe('DisplayQueue notification TTS staging', () => {
     const originalEnv = process.env.NODE_ENV;
@@ -105,7 +106,7 @@ describe('DisplayQueue notification TTS staging', () => {
             recordedDelays
         });
 
-        eventBus.on('vfx:command', (payload) => capturedVfx.push(payload));
+        eventBus.on(PlatformEvents.VFX_COMMAND_RECEIVED, (payload) => capturedVfx.push(payload));
 
         const processing = queue.handleNotificationEffects({
             type: 'follow',
@@ -128,7 +129,7 @@ describe('DisplayQueue notification TTS staging', () => {
         await Promise.resolve();
         expect(recordedTexts).toEqual([]);
 
-        eventBus.emit('vfx:effect-completed', {
+        eventBus.emit(PlatformEvents.VFX_EFFECT_COMPLETED, {
             commandKey: 'follows',
             filename: 'follow.mp4',
             command: '!follow',
@@ -163,7 +164,7 @@ describe('DisplayQueue notification TTS staging', () => {
             recordedDelays
         });
 
-        eventBus.on('vfx:command', (payload) => capturedVfx.push(payload));
+        eventBus.on(PlatformEvents.VFX_COMMAND_RECEIVED, (payload) => capturedVfx.push(payload));
 
         await queue.handleNotificationEffects({
             type: 'gift',
@@ -246,7 +247,7 @@ describe('DisplayQueue notification TTS staging', () => {
             recordedDelays
         });
 
-        eventBus.on('vfx:command', (payload) => capturedVfx.push(payload));
+        eventBus.on(PlatformEvents.VFX_COMMAND_RECEIVED, (payload) => capturedVfx.push(payload));
 
         await queue.handleNotificationEffects({
             type: 'greeting',
@@ -276,7 +277,7 @@ describe('DisplayQueue notification TTS staging', () => {
             recordedDelays
         });
 
-        eventBus.on('vfx:command', (payload) => capturedVfx.push(payload));
+        eventBus.on(PlatformEvents.VFX_COMMAND_RECEIVED, (payload) => capturedVfx.push(payload));
 
         await queue.handleNotificationEffects({
             type: 'gift',

@@ -30,7 +30,7 @@ class EventBus extends EventEmitter {
         this.unsubscribe = this.unsubscribe.bind(this);
         
         if (this.debugEnabled) {
-            logger.debug('[EventBus] Initialized with debug logging enabled', 'event-bus');
+            logger?.debug?.('[EventBus] Initialized with debug logging enabled', 'event-bus');
         }
     }
 
@@ -47,7 +47,7 @@ class EventBus extends EventEmitter {
 
             try {
                 if (this.debugEnabled) {
-                    logger.debug(`[EventBus] Executing handler for '${eventName}'`, 'event-bus', {
+                    logger?.debug?.(`[EventBus] Executing handler for '${eventName}'`, 'event-bus', {
                         argsCount: args.length,
                         context: context?.constructor?.name || 'unknown'
                     });
@@ -66,7 +66,7 @@ class EventBus extends EventEmitter {
                 this._updateEventStats(eventName, 'success', executionTime);
 
                 if (this.debugEnabled) {
-                    logger.debug(`[EventBus] Handler completed for '${eventName}' in ${executionTime}ms`, 'event-bus');
+                    logger?.debug?.(`[EventBus] Handler completed for '${eventName}' in ${executionTime}ms`, 'event-bus');
                 }
 
             } catch (error) {
@@ -77,22 +77,24 @@ class EventBus extends EventEmitter {
                     eventName
                 });
 
-                // Emit error event but don't throw to prevent cascading failures
-                this.emit('handler-error', {
-                    eventName,
-                    error,
-                    context: context?.constructor?.name || 'unknown',
-                    args: args.map(arg => {
-                        if (typeof arg === 'object' && arg !== null) {
-                            try {
-                                return JSON.stringify(arg).substring(0, 100);
-                            } catch (circularError) {
-                                return '[Circular Object]';
+                if (eventName !== 'handler-error') {
+                    // Emit error event but don't throw to prevent cascading failures
+                    this.emit('handler-error', {
+                        eventName,
+                        error,
+                        context: context?.constructor?.name || 'unknown',
+                        args: args.map(arg => {
+                            if (typeof arg === 'object' && arg !== null) {
+                                try {
+                                    return JSON.stringify(arg).substring(0, 100);
+                                } catch (circularError) {
+                                    return '[Circular Object]';
+                                }
                             }
-                        }
-                        return arg;
-                    })
-                });
+                            return arg;
+                        })
+                    });
+                }
             }
         };
 
@@ -107,7 +109,7 @@ class EventBus extends EventEmitter {
         }
 
         if (this.debugEnabled) {
-            logger.debug(`[EventBus] Subscribed to '${eventName}'`, 'event-bus', {
+            logger?.debug?.(`[EventBus] Subscribed to '${eventName}'`, 'event-bus', {
                 once,
                 context: context?.constructor?.name || 'unknown',
                 totalListeners: this.listenerCount(eventName)
@@ -126,7 +128,7 @@ class EventBus extends EventEmitter {
                 this.removeListener(eventName, wrappedHandler);
                 
                 if (this.debugEnabled) {
-                    logger.debug(`[EventBus] Unsubscribed from '${eventName}'`, 'event-bus', {
+                    logger?.debug?.(`[EventBus] Unsubscribed from '${eventName}'`, 'event-bus', {
                         context: context?.constructor?.name || 'unknown',
                         remainingListeners: this.listenerCount(eventName)
                     });
@@ -136,7 +138,7 @@ class EventBus extends EventEmitter {
             }
         }
         
-        logger.warn(`[EventBus] Handler not found for unsubscription from '${eventName}'`, 'event-bus');
+        logger?.warn?.(`[EventBus] Handler not found for unsubscription from '${eventName}'`, 'event-bus');
         return false;
     }
 
@@ -144,7 +146,7 @@ class EventBus extends EventEmitter {
         const startTime = Date.now();
 
         if (this.debugEnabled) {
-            logger.debug(`[EventBus] Emitting '${eventName}'`, 'event-bus', {
+            logger?.debug?.(`[EventBus] Emitting '${eventName}'`, 'event-bus', {
                 argsCount: args.length,
                 listenerCount: this.listenerCount(eventName)
             });
@@ -156,7 +158,7 @@ class EventBus extends EventEmitter {
         this._updateEventStats(eventName, 'emitted', emissionTime);
 
         if (!hadListeners && this.debugEnabled) {
-            logger.debug(`[EventBus] No listeners for '${eventName}'`, 'event-bus');
+            logger?.debug?.(`[EventBus] No listeners for '${eventName}'`, 'event-bus');
         }
 
         return hadListeners;
@@ -183,13 +185,13 @@ class EventBus extends EventEmitter {
         this.eventStats.clear();
 
         if (this.debugEnabled) {
-            logger.debug('[EventBus] Reset - all listeners and stats cleared', 'event-bus');
+            logger?.debug?.('[EventBus] Reset - all listeners and stats cleared', 'event-bus');
         }
     }
 
     setDebugEnabled(enabled) {
         this.debugEnabled = !!enabled;
-        logger.debug(`[EventBus] Debug logging ${enabled ? 'enabled' : 'disabled'}`, 'event-bus');
+        logger?.debug?.(`[EventBus] Debug logging ${enabled ? 'enabled' : 'disabled'}`, 'event-bus');
     }
 
     _updateEventStats(eventName, type, duration) {
@@ -213,26 +215,6 @@ class EventBus extends EventEmitter {
     }
 }
 
-const EventTypes = {
-    // VFX Command Events
-    VFX_COMMAND: 'vfx:command',
-    VFX_EXECUTED: 'vfx:executed', 
-    VFX_FAILED: 'vfx:failed',
-    
-    // TTS Events
-    TTS_SPEAK: 'tts:speak',
-    TTS_STARTED: 'tts:started',
-    TTS_COMPLETED: 'tts:completed',
-    
-    // Notification Events
-    NOTIFICATION_RECEIVED: 'notification:received',
-    NOTIFICATION_PROCESSED: 'notification:processed',
-    NOTIFICATION_SUPPRESSED: 'notification:suppressed',
-    
-    // System Events
-    HANDLER_ERROR: 'handler-error'
-};
-
 function createEventBus(options = {}) {
     return new EventBus(options);
 }
@@ -240,6 +222,5 @@ function createEventBus(options = {}) {
 // Export the class and utilities
 module.exports = {
     EventBus,
-    EventTypes,
     createEventBus
 };

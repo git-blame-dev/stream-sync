@@ -11,6 +11,7 @@ jest.mock('../../../src/core/logging', () => ({
 const { EventEmitter } = require('events');
 const { DisplayQueue } = require('../../../src/obs/display-queue');
 const constants = require('../../../src/core/constants');
+const { PlatformEvents } = require('../../../src/interfaces/PlatformEvents');
 
 const baseConfig = {
     autoProcess: false,
@@ -61,7 +62,7 @@ describe('DisplayQueue monetization VFX context', () => {
 
         expect(emitSpy).toHaveBeenCalledTimes(1);
         const [eventName, payload] = emitSpy.mock.calls[0];
-        expect(eventName).toBe('vfx:command');
+        expect(eventName).toBe(PlatformEvents.VFX_COMMAND_RECEIVED);
         expect(payload).toEqual(expect.objectContaining({
             commandKey: 'gifts',
             username: 'GiftHero',
@@ -91,7 +92,7 @@ describe('DisplayQueue monetization VFX context', () => {
 
         expect(emitSpy).toHaveBeenCalledTimes(1);
         const [eventName, payload] = emitSpy.mock.calls[0];
-        expect(eventName).toBe('vfx:command');
+        expect(eventName).toBe(PlatformEvents.VFX_COMMAND_RECEIVED);
         expect(payload).toEqual(expect.objectContaining({
             commandKey: 'follows',
             username: 'FollowHero',
@@ -135,7 +136,7 @@ describe('DisplayQueue monetization VFX context', () => {
 
             expect(emitSpy).toHaveBeenCalledTimes(1);
             const [eventName, payload] = emitSpy.mock.calls[0];
-            expect(eventName).toBe('vfx:command');
+            expect(eventName).toBe(PlatformEvents.VFX_COMMAND_RECEIVED);
             expect(payload.context).toEqual(expect.objectContaining({
                 notificationType: 'gift',
                 delayApplied: 2000
@@ -183,7 +184,7 @@ describe('DisplayQueue monetization VFX context', () => {
 
         expect(emitSpy).toHaveBeenCalledTimes(1);
         const [eventName, payload] = emitSpy.mock.calls[0];
-        expect(eventName).toBe('vfx:command');
+        expect(eventName).toBe(PlatformEvents.VFX_COMMAND_RECEIVED);
         expect(payload).toEqual(expect.objectContaining({
             commandKey,
             username: 'MonoUser',

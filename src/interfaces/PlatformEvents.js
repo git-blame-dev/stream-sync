@@ -84,7 +84,6 @@ const PlatformEvents = {
     OBS_HEALTH_CHECK: 'obs:health-check',
     
     // TTS Events (8 types)
-    TTS_SPEAK_REQUESTED: 'tts:speak-requested',
     TTS_SPEECH_REQUESTED: 'tts:speech-requested',
     TTS_SPEECH_QUEUED: 'tts:speech-queued',
     TTS_SPEECH_STARTED: 'tts:speech-started',

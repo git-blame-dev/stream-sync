@@ -3,6 +3,7 @@ const crypto = require('crypto');
 const { logger } = require('../core/logging');
 const { CommandParser, runCommand } = require('../chat/commands');
 const { createPlatformErrorHandler } = require('../utils/platform-error-handler');
+const { PlatformEvents } = require('../interfaces/PlatformEvents');
 
 const vfxCommandErrorHandler = createPlatformErrorHandler(logger, 'vfx-service');
 
@@ -153,8 +154,8 @@ class VFXCommandService {
                             context: { ...context, correlationId }
                         };
 
-                        this.eventBus.emit('vfx:executed', eventPayload);
-                        this.eventBus.emit('vfx:effect-completed', eventPayload);
+                        this.eventBus.emit(PlatformEvents.VFX_COMMAND_EXECUTED, eventPayload);
+                        this.eventBus.emit(PlatformEvents.VFX_EFFECT_COMPLETED, eventPayload);
                     } catch (eventError) {
                         handleVFXCommandError(`[VFXCommandService] EventBus error: ${eventError.message}`, eventError, 'event-bus');
                         throw eventError; // Re-throw to be caught by outer catch
@@ -165,7 +166,7 @@ class VFXCommandService {
                 
                 if (this.eventBus) {
                     try {
-                        this.eventBus.emit('vfx:failed', {
+                        this.eventBus.emit(PlatformEvents.VFX_COMMAND_FAILED, {
                             command,
                             username: commandUser,
                             platform,

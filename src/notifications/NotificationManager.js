@@ -994,7 +994,7 @@ class NotificationManager extends EventEmitter {
                 { eventType: 'vfx-processing' }
             );
             if (this.eventBus) {
-                this.eventBus.emit('vfx:command-failed', { 
+                this.eventBus.emit(PlatformEvents.VFX_COMMAND_FAILED, { 
                     command: vfxNotification.vfxCommand,
                     error: error.message,
                     username: vfxNotification.username,

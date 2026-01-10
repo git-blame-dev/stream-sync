@@ -7,6 +7,7 @@ const constants = require('../../src/core/constants');
 const { createMockOBSConnection } = require('../helpers/mock-factories');
 const { createRuntimeConstantsFixture } = require('../helpers/runtime-constants-fixture');
 const { createTextProcessingManager } = require('../../src/utils/text-processing');
+const { PlatformEvents } = require('../../src/interfaces/PlatformEvents');
 
 describe('Monetisation pipeline integration', () => {
     let eventBus;
@@ -33,7 +34,7 @@ describe('Monetisation pipeline integration', () => {
     beforeEach(() => {
         eventBus = createEventBus();
         recordedEvents = [];
-        eventBus.on('vfx:command', (data) => recordedEvents.push(data));
+        eventBus.on(PlatformEvents.VFX_COMMAND_RECEIVED, (data) => recordedEvents.push(data));
 
         configFlags = {
             paypiggiesEnabled: true,

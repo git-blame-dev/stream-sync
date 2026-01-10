@@ -590,7 +590,7 @@ class AppRuntime {
         });
 
         // VFX command events - execute VFX commands
-        this.eventBus.subscribe('vfx:command', async (event) => {
+        this.eventBus.subscribe(PlatformEvents.VFX_COMMAND_RECEIVED, async (event) => {
             try {
                 const { command, commandKey, username, platform, userId, context, source } = event;
                 if (!context || typeof context !== 'object') {
