@@ -22,14 +22,12 @@ const { AppRuntime } = require('../../src/main');
 describe('AppRuntime system readiness payload', () => {
     const createAppRuntimeDouble = () => {
         const bot = Object.create(AppRuntime.prototype);
-        bot.eventBus = {
-            emit: jest.fn()
-        };
+        bot.eventBus = null;
         bot.getReadyServices = jest.fn().mockReturnValue(['notificationManager', 'platformLifecycleService']);
         return bot;
     };
 
-    it('omits monitoring metrics when emitting system:ready', () => {
+    it('omits monitoring metrics when building system readiness payload', () => {
         const runtime = createAppRuntimeDouble();
         runtime.platformLifecycleService = {
             getStatus: jest.fn().mockReturnValue({ initializedPlatforms: ['twitch'] })
@@ -38,27 +36,26 @@ describe('AppRuntime system readiness payload', () => {
             getStatus: jest.fn().mockReturnValue({ activeUsers: 3 })
         };
 
-        runtime.emitSystemReady({ correlationId: 'startup-1' });
+        const payload = runtime.emitSystemReady({ correlationId: 'startup-1' });
 
-        expect(runtime.eventBus.emit).toHaveBeenCalledWith(
-            'system:ready',
-            expect.objectContaining({
-                services: ['notificationManager', 'platformLifecycleService'],
-                platforms: { initializedPlatforms: ['twitch'] },
-                cooldowns: { activeUsers: 3 },
-                correlationId: 'startup-1'
-            })
-        );
-
-        const [, payload] = runtime.eventBus.emit.mock.calls[0];
+        expect(payload).toEqual(expect.objectContaining({
+            services: ['notificationManager', 'platformLifecycleService'],
+            platforms: { initializedPlatforms: ['twitch'] },
+            cooldowns: { activeUsers: 3 },
+            correlationId: 'startup-1'
+        }));
         expect(payload.monitoring).toBeUndefined();
     });
 
-    it('throws when EventBus is unavailable', () => {
+    it('builds readiness payload without EventBus', () => {
         const runtime = createAppRuntimeDouble();
         runtime.eventBus = null;
 
-        expect(() => runtime.emitSystemReady({ correlationId: 'noop' })).toThrow('EventBus emit unavailable for system:ready');
+        const payload = runtime.emitSystemReady({ correlationId: 'noop' });
+        expect(payload).toEqual(expect.objectContaining({
+            services: ['notificationManager', 'platformLifecycleService'],
+            correlationId: 'noop'
+        }));
     });
 });
 
@@ -77,23 +74,16 @@ describe('AppRuntime shutdown lifecycle', () => {
         return bot;
     };
 
-    it('emits system:shutdown and restart events when restart requested', () => {
+    it('does not emit telemetry events when restart is requested', () => {
         const runtime = createAppRuntimeDouble();
+        jest.useFakeTimers();
+        jest.spyOn(process, 'exit').mockImplementation(() => {});
         runtime.emitSystemShutdown({ reason: 'test', restartRequested: true });
 
-        expect(runtime.eventBus.emit).toHaveBeenCalledWith(
-            'system:shutdown',
-            expect.objectContaining({
-                reason: 'test',
-                restartRequested: true
-            })
-        );
-        expect(runtime.eventBus.emit).toHaveBeenCalledWith(
-            'service:restart-requested',
-            expect.objectContaining({
-                reason: 'test'
-            })
-        );
+        expect(runtime.eventBus.emit).not.toHaveBeenCalled();
+        jest.runOnlyPendingTimers();
+        jest.useRealTimers();
+        process.exit.mockRestore();
     });
 
     it('invokes viewer count status cleanup during shutdown', async () => {

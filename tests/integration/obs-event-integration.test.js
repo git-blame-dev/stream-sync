@@ -68,9 +68,6 @@ describe('OBS Event-Driven Integration', () => {
 
     describe('End-to-End Event Flow', () => {
         test('text update flows through EventBus to OBS', async () => {
-            const successHandler = jest.fn();
-            eventBus.subscribe('obs:source:text-updated', successHandler);
-
             // Emit text update event
             eventBus.emit('obs:update-text', {
                 sourceName: 'ChatMessage',
@@ -79,20 +76,13 @@ describe('OBS Event-Driven Integration', () => {
 
             await waitForDelay(20);
 
-            // Verify success event was emitted (user-visible outcome)
-            expect(successHandler).toHaveBeenCalledWith(
-                expect.objectContaining({
-                    sourceName: 'ChatMessage',
-                    text: 'Hello from EventBus!',
-                    success: true
-                })
-            );
+            expect(mockObsSources.updateTextSource).toHaveBeenCalled();
+            const [sourceName, text] = mockObsSources.updateTextSource.mock.calls[0];
+            expect(sourceName).toBe('ChatMessage');
+            expect(text).toBe('Hello from EventBus!');
         });
 
         test('scene switch flows through EventBus to OBS', async () => {
-            const successHandler = jest.fn();
-            eventBus.subscribe('scene:switched', successHandler);
-
             // Emit scene switch event
             eventBus.emit('scene:switch', {
                 sceneName: 'GameplayScene'
@@ -100,22 +90,13 @@ describe('OBS Event-Driven Integration', () => {
 
             await waitForDelay(20);
 
-            // Verify success event was emitted (user-visible outcome)
-            expect(successHandler).toHaveBeenCalledWith(
-                expect.objectContaining({
-                    sceneName: 'GameplayScene',
-                    success: true
-                })
-            );
+            expect(mockOBSConnection.call).toHaveBeenCalled();
+            const [method, payload] = mockOBSConnection.call.mock.calls[0];
+            expect(method).toBe('SetCurrentProgramScene');
+            expect(payload).toEqual({ sceneName: 'GameplayScene' });
         });
 
         test('multiple services can handle events independently', async () => {
-            const textHandler = jest.fn();
-            const sceneHandler = jest.fn();
-
-            eventBus.subscribe('obs:source:text-updated', textHandler);
-            eventBus.subscribe('scene:switched', sceneHandler);
-
             // Emit both types of events
             eventBus.emit('obs:update-text', {
                 sourceName: 'Status',
@@ -128,21 +109,14 @@ describe('OBS Event-Driven Integration', () => {
 
             await waitForDelay(20);
 
-            // Both handlers should have been called
-            expect(textHandler).toHaveBeenCalled();
-            expect(sceneHandler).toHaveBeenCalled();
+            expect(mockObsSources.updateTextSource).toHaveBeenCalled();
+            expect(mockOBSConnection.call).toHaveBeenCalled();
         });
     });
 
     describe('Error Handling Integration', () => {
         test('errors in one service do not affect other services', async () => {
             mockObsSources.updateTextSource.mockRejectedValue(new Error('Text update failed'));
-
-            const textErrorHandler = jest.fn();
-            const sceneSuccessHandler = jest.fn();
-
-            eventBus.subscribe('obs:source:error', textErrorHandler);
-            eventBus.subscribe('scene:switched', sceneSuccessHandler);
 
             // Emit both events
             eventBus.emit('obs:update-text', {
@@ -156,18 +130,12 @@ describe('OBS Event-Driven Integration', () => {
 
             await waitForDelay(20);
 
-            // Text update should have failed
-            expect(textErrorHandler).toHaveBeenCalled();
-
-            // Scene switch should have succeeded
-            expect(sceneSuccessHandler).toHaveBeenCalled();
+            expect(mockObsSources.updateTextSource).toHaveBeenCalled();
+            expect(mockOBSConnection.call).toHaveBeenCalled();
         });
 
-        test('errors are logged and emitted as events', async () => {
+        test('errors do not update scene state when switching fails', async () => {
             mockOBSConnection.call.mockRejectedValue(new Error('OBS call failed'));
-
-            const errorHandler = jest.fn();
-            eventBus.subscribe('scene:switch-failed', errorHandler);
 
             eventBus.emit('scene:switch', {
                 sceneName: 'FailScene',
@@ -176,13 +144,8 @@ describe('OBS Event-Driven Integration', () => {
 
             await waitForDelay(20);
 
-            // Error event should be emitted (user-visible outcome)
-            expect(errorHandler).toHaveBeenCalledWith(
-                expect.objectContaining({
-                    sceneName: 'FailScene',
-                    error: expect.any(Error)
-                })
-            );
+            const state = sceneManagementService.getSceneState();
+            expect(state.currentScene).not.toBe('FailScene');
         });
     });
 

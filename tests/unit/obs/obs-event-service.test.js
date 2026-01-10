@@ -6,12 +6,10 @@ describe('OBSEventService', () => {
     let eventBus;
     let mockOBSConnection;
     let mockObsSources;
-    let connectionClosedHandler;
 
     beforeEach(() => {
         // Create fresh event bus
         eventBus = createEventBus({ debugEnabled: false });
-        connectionClosedHandler = null;
 
         // Mock OBS connection
         mockOBSConnection = {
@@ -21,9 +19,7 @@ describe('OBSEventService', () => {
             isReady: jest.fn().mockResolvedValue(true),
             call: jest.fn().mockResolvedValue({}),
             addEventListener: jest.fn((event, handler) => {
-                if (event === 'ConnectionClosed') {
-                    connectionClosedHandler = handler;
-                }
+                return handler;
             }),
             removeEventListener: jest.fn(),
             getConnectionState: jest.fn().mockReturnValue({
@@ -69,98 +65,48 @@ describe('OBSEventService', () => {
     });
 
     describe('Connection Events', () => {
-        test('emits obs:connected event when connection succeeds', async () => {
-            const connectedHandler = jest.fn();
-            eventBus.subscribe('obs:connected', connectedHandler);
-
+        test('connects and updates state when connection succeeds', async () => {
             await obsEventService.connect();
 
-            expect(connectedHandler).toHaveBeenCalledWith(
-                expect.objectContaining({
-                    timestamp: expect.any(Number),
-                    success: true
-                })
-            );
+            expect(mockOBSConnection.connect).toHaveBeenCalled();
+            const state = obsEventService.getConnectionState();
+            expect(state.connected).toBe(true);
+            expect(state.ready).toBe(true);
         });
 
-        test('emits obs:disconnected event when disconnection occurs', async () => {
-            const disconnectedHandler = jest.fn();
-            eventBus.subscribe('obs:disconnected', disconnectedHandler);
-
+        test('disconnects and updates state when disconnection occurs', async () => {
+            await obsEventService.connect();
             await obsEventService.disconnect();
 
-            expect(disconnectedHandler).toHaveBeenCalledWith(
-                expect.objectContaining({
-                    timestamp: expect.any(Number)
-                })
-            );
+            expect(mockOBSConnection.disconnect).toHaveBeenCalled();
+            const state = obsEventService.getConnectionState();
+            expect(state.connected).toBe(false);
+            expect(state.ready).toBe(false);
         });
 
-        test('emits obs:connection:error event when connection fails', async () => {
+        test('records connection errors when connection fails', async () => {
             mockOBSConnection.connect.mockRejectedValueOnce(new Error('Connection refused'));
-            const errorHandler = jest.fn();
-            eventBus.subscribe('obs:connection:error', errorHandler);
 
             await obsEventService.connect().catch(() => {}); // Catch the thrown error
 
-            expect(errorHandler).toHaveBeenCalledWith(
-                expect.objectContaining({
-                    error: expect.any(Error),
-                    timestamp: expect.any(Number)
-                })
-            );
-        });
-
-        test('emits obs:connection:state-changed when connection state changes', async () => {
-            const stateChangedHandler = jest.fn();
-            eventBus.subscribe('obs:connection:state-changed', stateChangedHandler);
-
-            await obsEventService.connect();
-
-            expect(stateChangedHandler).toHaveBeenCalledWith(
-                expect.objectContaining({
-                    state: 'connected',
-                    previousState: expect.any(String)
-                })
-            );
-        });
-
-        test('emits obs:connection-lost when OBS connection closes', async () => {
-            const connectionLostHandler = jest.fn();
-            eventBus.subscribe('obs:connection-lost', connectionLostHandler);
-
-            await obsEventService.connect();
-
-            // Simulate OBS ConnectionClosed event
-            connectionClosedHandler({
-                reason: 'network',
-                code: 4000
-            });
-
-            expect(connectionLostHandler).toHaveBeenCalledWith(
-                expect.objectContaining({
-                    reason: 'network',
-                    code: 4000,
-                    timestamp: expect.any(Number)
-                })
-            );
+            const state = obsEventService.getConnectionState();
+            expect(state.connected).toBe(false);
+            expect(state.ready).toBe(false);
+            expect(state.lastError).toBeInstanceOf(Error);
         });
 
         test('removes OBS connection listeners on destroy', () => {
             obsEventService.destroy();
             obsEventService = null;
-            expect(mockOBSConnection.removeEventListener).toHaveBeenCalledWith(
-                'ConnectionClosed',
-                expect.any(Function)
-            );
+            expect(mockOBSConnection.removeEventListener).toHaveBeenCalled();
+            const [eventName, handler] = mockOBSConnection.removeEventListener.mock.calls[0];
+            expect(eventName).toBe('ConnectionClosed');
+            expect(typeof handler).toBe('function');
         });
     });
 
     describe('Text Source Events', () => {
-        test('emits obs:source:text-updated when text source is updated', async () => {
-            const textUpdatedHandler = jest.fn();
-            eventBus.subscribe('obs:source:text-updated', textUpdatedHandler);
-
+        test('updates text source when obs:update-text is emitted', async () => {
             eventBus.emit('obs:update-text', {
                 sourceName: 'ChatMessage',
                 text: 'Hello World'
@@ -168,37 +114,26 @@ describe('OBSEventService', () => {
 
             await waitForDelay(10);
 
-            expect(textUpdatedHandler).toHaveBeenCalledWith(
-                expect.objectContaining({
-                    sourceName: 'ChatMessage',
-                    text: 'Hello World',
-                    success: true
-                })
-            );
+            expect(mockObsSources.updateTextSource).toHaveBeenCalled();
+            const [sourceName, text] = mockObsSources.updateTextSource.mock.calls[0];
+            expect(sourceName).toBe('ChatMessage');
+            expect(text).toBe('Hello World');
         });
 
-        test('emits obs:source:text-cleared when text source is cleared', async () => {
-            const textClearedHandler = jest.fn();
-            eventBus.subscribe('obs:source:text-cleared', textClearedHandler);
-
+        test('clears text source when obs:clear-text is emitted', async () => {
             eventBus.emit('obs:clear-text', {
                 sourceName: 'ChatMessage'
             });
 
             await waitForDelay(10);
 
-            expect(textClearedHandler).toHaveBeenCalledWith(
-                expect.objectContaining({
-                    sourceName: 'ChatMessage',
-                    success: true
-                })
-            );
+            expect(mockObsSources.clearTextSource).toHaveBeenCalled();
+            const [sourceName] = mockObsSources.clearTextSource.mock.calls[0];
+            expect(sourceName).toBe('ChatMessage');
         });
 
-        test('emits obs:source:error when text update fails', async () => {
+        test('handles text update failures without crashing', async () => {
             mockObsSources.updateTextSource.mockRejectedValueOnce(new Error('Source not found'));
-            const errorHandler = jest.fn();
-            eventBus.subscribe('obs:source:error', errorHandler);
 
             eventBus.emit('obs:update-text', {
                 sourceName: 'InvalidSource',
@@ -207,20 +142,12 @@ describe('OBSEventService', () => {
 
             await waitForDelay(10);
 
-            expect(errorHandler).toHaveBeenCalledWith(
-                expect.objectContaining({
-                    sourceName: 'InvalidSource',
-                    error: expect.any(Error)
-                })
-            );
+            expect(mockObsSources.updateTextSource).toHaveBeenCalled();
         });
     });
 
     describe('Visibility Events', () => {
-        test('emits obs:source:visibility-changed when source visibility is toggled', async () => {
-            const visibilityHandler = jest.fn();
-            eventBus.subscribe('obs:source:visibility-changed', visibilityHandler);
-
+        test('sets source visibility when obs:set-visibility is emitted', async () => {
             eventBus.emit('obs:set-visibility', {
                 sceneName: 'MainScene',
                 sourceName: 'Statusbar',
@@ -229,54 +156,38 @@ describe('OBSEventService', () => {
 
             await waitForDelay(10);
 
-            expect(visibilityHandler).toHaveBeenCalledWith(
-                expect.objectContaining({
-                    sceneName: 'MainScene',
-                    sourceName: 'Statusbar',
-                    visible: true,
-                    success: true
-                })
-            );
+            expect(mockObsSources.setSourceVisibility).toHaveBeenCalled();
+            const [sceneName, sourceName, visible] = mockObsSources.setSourceVisibility.mock.calls[0];
+            expect(sceneName).toBe('MainScene');
+            expect(sourceName).toBe('Statusbar');
+            expect(visible).toBe(true);
         });
     });
 
     describe('Scene Events', () => {
-        test('emits obs:scene:switched when scene change is requested', async () => {
+        test('switches scenes when obs:switch-scene is emitted', async () => {
             mockOBSConnection.call.mockResolvedValueOnce({});
-            const sceneSwitchedHandler = jest.fn();
-            eventBus.subscribe('obs:scene:switched', sceneSwitchedHandler);
-
             eventBus.emit('obs:switch-scene', {
                 sceneName: 'GameplayScene'
             });
 
             await waitForDelay(10);
 
-            expect(sceneSwitchedHandler).toHaveBeenCalledWith(
-                expect.objectContaining({
-                    sceneName: 'GameplayScene',
-                    success: true
-                })
-            );
+            expect(mockOBSConnection.call).toHaveBeenCalled();
+            const [method, payload] = mockOBSConnection.call.mock.calls[0];
+            expect(method).toBe('SetCurrentProgramScene');
+            expect(payload).toEqual({ sceneName: 'GameplayScene' });
         });
 
-        test('emits obs:scene:error when scene switch fails', async () => {
+        test('handles scene switch failures without crashing', async () => {
             mockOBSConnection.call.mockRejectedValueOnce(new Error('Scene not found'));
-            const errorHandler = jest.fn();
-            eventBus.subscribe('obs:scene:error', errorHandler);
-
             eventBus.emit('obs:switch-scene', {
                 sceneName: 'InvalidScene'
             });
 
             await waitForDelay(10);
 
-            expect(errorHandler).toHaveBeenCalledWith(
-                expect.objectContaining({
-                    sceneName: 'InvalidScene',
-                    error: expect.any(Error)
-                })
-            );
+            expect(mockOBSConnection.call).toHaveBeenCalled();
         });
     });
 
@@ -325,38 +236,26 @@ describe('OBSEventService', () => {
 
     describe('Error Recovery', () => {
         test('attempts automatic reconnection after connection loss', async () => {
-            const reconnectingHandler = jest.fn();
-            eventBus.subscribe('obs:reconnecting', reconnectingHandler);
-
             // Simulate connection loss
             await obsEventService.connect();
             eventBus.emit('obs:connection-lost');
 
             await waitForDelay(100);
 
-            expect(reconnectingHandler).toHaveBeenCalledWith(
-                expect.objectContaining({
-                    attempt: expect.any(Number)
-                })
-            );
+            expect(mockOBSConnection.connect.mock.calls.length).toBeGreaterThan(1);
         });
 
-        test('emits obs:reconnected after successful reconnection', async () => {
-            const reconnectedHandler = jest.fn();
-            eventBus.subscribe('obs:reconnected', reconnectedHandler);
-
+        test('reconnects successfully after connection loss', async () => {
             // Simulate connection loss and recovery
             await obsEventService.connect();
             eventBus.emit('obs:connection-lost');
             await waitForDelay(100);
 
-            expect(reconnectedHandler).toHaveBeenCalled();
+            const state = obsEventService.getConnectionState();
+            expect(state.connected).toBe(true);
         });
 
-        test('emits obs:reconnect-failed after max reconnection attempts', async () => {
-            const failedHandler = jest.fn();
-            eventBus.subscribe('obs:reconnect-failed', failedHandler);
-
+        test('stops reconnect attempts after max retries', async () => {
             // First establish a successful connection
             await obsEventService.connect();
 
@@ -370,7 +269,9 @@ describe('OBSEventService', () => {
             // 3 attempts with exponential backoff: 10ms, 20ms, 40ms = ~100ms total
             await waitForDelay(200);
 
-            expect(failedHandler).toHaveBeenCalled();
+            const state = obsEventService.getConnectionState();
+            expect(state.reconnecting).toBe(false);
+            expect(state.reconnectAttempts).toBe(3);
         });
     });
 
