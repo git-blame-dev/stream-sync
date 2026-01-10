@@ -927,17 +927,6 @@ class NotificationManager extends EventEmitter {
                 await this._processGreetingNotification(chatMessage);
             }
 
-            // Emit notification processed event for the original chat message
-            const notificationData = {
-                type: 'chat',
-                platform: chatMessage.platform,
-                username: chatMessage.username,
-                userId: chatMessage.userId,
-                message: chatMessage.message,  // Use original message, not greeting
-                isFirstMessage,
-                timestamp: new Date().toISOString()
-            };
-
         } catch (error) {
             this._handleNotificationError(
                 `[NotificationManager] Error processing chat message: ${error.message}`,
@@ -1080,16 +1069,6 @@ class NotificationManager extends EventEmitter {
 
     async _processGreetingNotification(chatMessage) {
         try {
-            const greetingData = {
-                type: 'chat',
-                subType: 'greeting',
-                platform: chatMessage.platform,
-                username: chatMessage.username,
-                userId: chatMessage.userId,
-                message: `Welcome ${chatMessage.username}!`,
-                isFirstMessage: true
-            };
-
             // Process through existing greeting handler if available
             if (typeof this.handleGreeting === 'function') {
                 await this.handleGreeting(chatMessage.platform, {
