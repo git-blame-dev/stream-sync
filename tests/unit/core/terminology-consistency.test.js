@@ -20,7 +20,7 @@ jest.mock('../../../src/core/logging', () => ({
 
 const { initializeTestLogging, createTestUser, TEST_TIMEOUTS } = require('../../helpers/test-setup');
 const { setupAutomatedCleanup } = require('../../helpers/mock-lifecycle');
-const { createTestAppRuntime } = require('../../helpers/runtime-test-harness');
+const PlatformEventRouter = require('../../../src/services/PlatformEventRouter');
 const { generateLogMessage } = require('../../helpers/notification-test-utils');
 const constants = require('../../../src/core/constants');
 
@@ -35,36 +35,75 @@ setupAutomatedCleanup({
 describe('Terminology Consistency', () => {
     jest.setTimeout(TEST_TIMEOUTS.UNIT);
 
-    const buildAppRuntime = () => createTestAppRuntime({
-        general: { enabled: true },
-        youtube: { enabled: true },
-        twitch: { enabled: true },
-        tiktok: { enabled: true }
-    });
+    const buildRouterHarness = () => {
+        const handled = [];
+        const runtime = {
+            handlePaypiggyNotification: async (platform, username, data) => {
+                handled.push({ platform, username, data });
+            }
+        };
+        const eventBus = { subscribe: jest.fn(() => () => {}) };
+        const notificationManager = { handleNotification: jest.fn(async () => true) };
+        const configService = { areNotificationsEnabled: jest.fn(() => true) };
+        const logger = {
+            debug: jest.fn(),
+            info: jest.fn(),
+            warn: jest.fn(),
+            error: jest.fn()
+        };
+        const router = new PlatformEventRouter({
+            eventBus,
+            runtime,
+            notificationManager,
+            configService,
+            logger
+        });
+        return { handled, router };
+    };
 
     describe('Event routing', () => {
-        test('YouTube paypiggy routes to handlePaypiggyNotification with membership wording', async () => {
-            const { runtime } = buildAppRuntime();
+        test('YouTube paypiggy routes through PlatformEventRouter', async () => {
+            const { handled, router } = buildRouterHarness();
             const user = createTestUser({ username: 'TestMember', platform: 'youtube' });
-            const membershipData = { type: 'paypiggy', platform: 'youtube', username: user.username };
+            const membershipData = {
+                username: user.username,
+                userId: 'user-1',
+                timestamp: '2024-01-01T00:00:00Z'
+            };
 
-            const paypiggySpy = jest.spyOn(runtime, 'handlePaypiggyNotification').mockResolvedValue();
+            await router.routeEvent({
+                platform: 'youtube',
+                type: 'paypiggy',
+                data: membershipData
+            });
 
-            await runtime.handleNotificationEvent('youtube', 'paypiggy', membershipData);
-
-            expect(paypiggySpy).toHaveBeenCalledWith('youtube', user.username, membershipData);
+            expect(handled).toHaveLength(1);
+            expect(handled[0].platform).toBe('youtube');
+            expect(handled[0].username).toBe(user.username);
+            expect(handled[0].data.userId).toBe('user-1');
+            expect(handled[0].data.platform).toBe('youtube');
         });
 
-        test('Twitch subscription routes to handlePaypiggyNotification', async () => {
-            const { runtime } = buildAppRuntime();
+        test('Twitch subscription routes through PlatformEventRouter', async () => {
+            const { handled, router } = buildRouterHarness();
             const user = createTestUser({ username: 'SubUser', platform: 'twitch' });
-            const subscriptionData = { type: 'paypiggy', platform: 'twitch', username: user.username };
+            const subscriptionData = {
+                username: user.username,
+                userId: 'user-2',
+                timestamp: '2024-01-01T00:00:00Z'
+            };
 
-            const paypiggySpy = jest.spyOn(runtime, 'handlePaypiggyNotification').mockResolvedValue();
+            await router.routeEvent({
+                platform: 'twitch',
+                type: 'paypiggy',
+                data: subscriptionData
+            });
 
-            await runtime.handleNotificationEvent('twitch', 'paypiggy', subscriptionData);
-
-            expect(paypiggySpy).toHaveBeenCalledWith('twitch', user.username, subscriptionData);
+            expect(handled).toHaveLength(1);
+            expect(handled[0].platform).toBe('twitch');
+            expect(handled[0].username).toBe(user.username);
+            expect(handled[0].data.userId).toBe('user-2');
+            expect(handled[0].data.platform).toBe('twitch');
         });
     });
 

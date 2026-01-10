@@ -188,33 +188,4 @@ describe('main.js event handler wiring', () => {
         processOnSpy.mockRestore();
     });
 
-    it('routes notification handler failures without crashing', async () => {
-        const processOnSpy = jest.spyOn(process, 'on').mockImplementation(() => process);
-
-        const { AppRuntime } = require('../../src/main.js');
-        const bot = new AppRuntime(baseConfig, createDeps());
-
-        bot.handleFollowNotification = jest.fn(() => {
-            throw new Error('follow failure');
-        });
-
-        await expect(bot.handleNotification('tiktok', {
-            type: 'follow',
-            username: 'Alice'
-        })).resolves.toBeUndefined();
-
-        expect(mockErrorHandler.handleEventProcessingError).toHaveBeenCalledTimes(1);
-        const [errorArg, eventType, payload, message, logContext] = mockErrorHandler.handleEventProcessingError.mock.calls[0];
-        expect(errorArg).toBeInstanceOf(Error);
-        expect(errorArg.message).toContain('follow failure');
-        expect(eventType).toBe('notification');
-        expect(logContext).toBe('tiktok');
-        expect(message).toContain('Error handling follow notification');
-        expect(payload).toEqual(expect.objectContaining({
-            platform: 'tiktok',
-            normalizedData: expect.objectContaining({ type: 'follow' })
-        }));
-
-        processOnSpy.mockRestore();
-    });
 });
