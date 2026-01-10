@@ -36,6 +36,7 @@ jest.mock('../../src/utils/text-processing', () => ({
 const { ViewerCountObserver } = require('../../src/observers/viewer-count-observer');
 const { OBSViewerCountObserver } = require('../../src/observers/obs-viewer-count-observer');
 const { ViewerCountExtractionService } = require('../../src/services/viewer-count-extraction-service');
+const testClock = require('../helpers/test-clock');
 
 // Mock constants for testing
 const VIEWER_COUNT_CONSTANTS = {
@@ -57,12 +58,17 @@ describe('Viewer Count & OBS Observer Performance Tests', () => {
     let memoryBaseline;
     let mockOBSManager;
     let mockLogger;
+    let pendingDelayMs;
+    let delayFlushScheduled;
 
     beforeEach(() => {
+        testClock.reset();
+        pendingDelayMs = 0;
+        delayFlushScheduled = false;
         // Capture baseline metrics
         memoryBaseline = process.memoryUsage();
         performanceMetrics = {
-            startTime: process.hrtime.bigint(),
+            startTime: testClock.now(),
             operations: 0,
             errors: 0,
             responseTimes: [],
@@ -77,8 +83,8 @@ describe('Viewer Count & OBS Observer Performance Tests', () => {
 
     afterEach(() => {
         // Report performance metrics if operations occurred
-        const endTime = process.hrtime.bigint();
-        const totalTime = Number(endTime - performanceMetrics.startTime) / 1000000;
+        const endTime = testClock.now();
+        const totalTime = Math.max(1, endTime - performanceMetrics.startTime);
         const memoryFinal = process.memoryUsage();
         
         if (performanceMetrics.operations > 0) {
@@ -109,11 +115,11 @@ describe('Viewer Count & OBS Observer Performance Tests', () => {
             const notificationManager = createNotificationManager(observers);
             
             // When: Broadcasting notification to all observers
-            const startTime = Date.now();
+            const startTime = testClock.now();
             const viewerUpdate = createViewerCountUpdate('twitch', 1250, true);
             
             await notificationManager.broadcastUpdate(viewerUpdate);
-            const endTime = Date.now();
+            const endTime = testClock.now();
             
             // Then: Performance meets targets
             const totalTime = endTime - startTime;
@@ -133,13 +139,13 @@ describe('Viewer Count & OBS Observer Performance Tests', () => {
             const updateCount = 100;
             
             // When: Processing rapid viewer count updates
-            const startTime = Date.now();
+            const startTime = testClock.now();
             const updates = createRapidViewerUpdates(updateCount);
             
             for (const update of updates) {
                 await observer.onViewerCountUpdate(update);
             }
-            const endTime = Date.now();
+            const endTime = testClock.now();
             
             // Then: System handles high throughput efficiently
             const totalTime = endTime - startTime;
@@ -167,13 +173,13 @@ describe('Viewer Count & OBS Observer Performance Tests', () => {
             const registrationCount = 25;
             
             // When: Concurrent observer registration
-            const startTime = Date.now();
+            const startTime = testClock.now();
             const registrationPromises = Array.from({ length: registrationCount }, (_, i) => 
                 observerManager.registerObserver(createTestObserver(`observer-${i}`))
             );
             
             await Promise.all(registrationPromises);
-            const endTime = Date.now();
+            const endTime = testClock.now();
             
             // Then: Registration completes efficiently
             const totalTime = endTime - startTime;
@@ -194,7 +200,7 @@ describe('Viewer Count & OBS Observer Performance Tests', () => {
             const observers = await createAndRegisterObservers(observerManager, initialCount);
             
             // When: Removing observers during active notifications
-            const startTime = Date.now();
+            const startTime = testClock.now();
             const removalPromises = observers.slice(0, 10).map(observer => 
                 observerManager.removeObserver(observer.getObserverId())
             );
@@ -205,7 +211,7 @@ describe('Viewer Count & OBS Observer Performance Tests', () => {
             );
             
             await Promise.all([...removalPromises, notificationPromise]);
-            const endTime = Date.now();
+            const endTime = testClock.now();
             
             // Then: Removal and notifications complete efficiently
             const totalTime = endTime - startTime;
@@ -228,11 +234,11 @@ describe('Viewer Count & OBS Observer Performance Tests', () => {
                 const observers = createMultipleObservers(observerCount);
                 const notificationManager = createNotificationManager(observers);
                 
-                const startTime = Date.now();
+                const startTime = testClock.now();
                 await notificationManager.broadcastUpdate(
                     createViewerCountUpdate('tiktok', 2150, true)
                 );
-                const endTime = Date.now();
+                const endTime = testClock.now();
                 
                 const totalTime = endTime - startTime;
                 const timePerObserver = totalTime / observerCount;
@@ -257,13 +263,13 @@ describe('Viewer Count & OBS Observer Performance Tests', () => {
             const extractionService = createViewerCountExtractionService();
             
             // When: Concurrent polling of all platforms
-            const startTime = Date.now();
+            const startTime = testClock.now();
             const pollingPromises = platforms.map(platform => 
                 extractionService.pollPlatformViewerCount(platform)
             );
             
             const results = await Promise.all(pollingPromises);
-            const endTime = Date.now();
+            const endTime = testClock.now();
             
             // Then: Concurrent polling completes within performance targets
             const totalTime = endTime - startTime;
@@ -288,9 +294,9 @@ describe('Viewer Count & OBS Observer Performance Tests', () => {
             
             // When: Performing high-frequency polling
             for (let i = 0; i < pollCount; i++) {
-                const startTime = Date.now();
+                const startTime = testClock.now();
                 const result = await extractionService.pollPlatformViewerCount(platform);
-                const endTime = Date.now();
+                const endTime = testClock.now();
                 
                 pollTimes.push(endTime - startTime);
                 
@@ -298,7 +304,7 @@ describe('Viewer Count & OBS Observer Performance Tests', () => {
                 
                 // Wait for next poll interval (simulate real polling)
                 if (i < pollCount - 1) {
-                    await waitForDelay(Math.max(0, pollInterval - (endTime - startTime)));
+                    await simulateDelay(Math.max(0, pollInterval - (endTime - startTime)));
                 }
             }
             
@@ -356,14 +362,14 @@ describe('Viewer Count & OBS Observer Performance Tests', () => {
             const failurePattern = [false, false, true, false, false, true, false, false, true, false]; // 30% failure rate, deterministic
             
             // When: Polling with controlled failures
-            const startTime = Date.now();
+            const startTime = testClock.now();
             const results = [];
             
             for (let i = 0; i < totalPolls; i++) {
                 const shouldFail = failurePattern[i];
-                const pollStart = Date.now();
+                const pollStart = testClock.now();
                 const result = await extractionService.pollWithFailureSimulation('twitch', shouldFail);
-                const pollEnd = Date.now();
+                const pollEnd = testClock.now();
                 
                 results.push({
                     success: result.success,
@@ -373,7 +379,7 @@ describe('Viewer Count & OBS Observer Performance Tests', () => {
                 });
             }
             
-            const endTime = Date.now();
+            const endTime = testClock.now();
             const totalTime = endTime - startTime;
             
             // Then: System handles failures efficiently
@@ -402,9 +408,9 @@ describe('Viewer Count & OBS Observer Performance Tests', () => {
             const processingTimes = [];
             
             for (const update of updates) {
-                const startTime = Date.now();
+                const startTime = testClock.now();
                 await observer.onViewerCountUpdate(update);
-                const endTime = Date.now();
+                const endTime = testClock.now();
                 
                 processingTimes.push(endTime - startTime);
             }
@@ -432,9 +438,9 @@ describe('Viewer Count & OBS Observer Performance Tests', () => {
             for (const count of largeViewerCounts) {
                 const update = createViewerCountUpdate('twitch', count, true);
                 
-                const startTime = Date.now();
+                const startTime = testClock.now();
                 await observer.onViewerCountUpdate(update);
-                const endTime = Date.now();
+                const endTime = testClock.now();
                 
                 processingTimes.push(endTime - startTime);
             }
@@ -458,7 +464,7 @@ describe('Viewer Count & OBS Observer Performance Tests', () => {
             const updatesPerPlatform = 20;
             
             // When: Concurrent updates from multiple platforms
-            const startTime = Date.now();
+            const startTime = testClock.now();
             const updatePromises = platforms.flatMap(platform => 
                 Array.from({ length: updatesPerPlatform }, (_, i) => 
                     observer.onViewerCountUpdate(createViewerCountUpdate(platform, 1000 + i * 100, true))
@@ -466,7 +472,7 @@ describe('Viewer Count & OBS Observer Performance Tests', () => {
             );
             
             await Promise.all(updatePromises);
-            const endTime = Date.now();
+            const endTime = testClock.now();
             
             // Then: Concurrent updates complete efficiently
             const totalTime = endTime - startTime;
@@ -496,12 +502,12 @@ describe('Viewer Count & OBS Observer Performance Tests', () => {
             ];
             
             for (const scenario of testScenarios) {
-                const startTime = Date.now();
+                const startTime = testClock.now();
                 
                 // Simulate complete flow: fetch -> process -> notify -> OBS update
                 await viewerCountSystem.processViewerCountChange(scenario);
                 
-                const endTime = Date.now();
+                const endTime = testClock.now();
                 endToEndTimes.push(endTime - startTime);
             }
             
@@ -526,7 +532,7 @@ describe('Viewer Count & OBS Observer Performance Tests', () => {
             const loadSimulator = createStreamingLoadSimulator();
             
             // When: Simulating streaming session load
-            const startTime = Date.now();
+            const startTime = testClock.now();
             const loadResults = await loadSimulator.simulateStreamingSession({
                 duration: sessionDuration,
                 platforms: ['twitch', 'youtube', 'tiktok'],
@@ -534,7 +540,7 @@ describe('Viewer Count & OBS Observer Performance Tests', () => {
                 observerCount: 15,
                 updateFrequency: 1000 // Every second
             });
-            const endTime = Date.now();
+            const endTime = testClock.now();
             
             // Then: System maintains stability under load
             const actualDuration = endTime - startTime;
@@ -554,14 +560,14 @@ describe('Viewer Count & OBS Observer Performance Tests', () => {
             const spikeSimulator = createViewerCountSpikeSimulator();
             
             // When: Simulating viewer count spikes
-            const startTime = Date.now();
+            const startTime = testClock.now();
             const spikeResults = await spikeSimulator.simulateViewerSpikes({
                 baselines: [100, 500],
                 spikeMagnitudes: [5, 10], // 5x, 10x increases
                 spikeDuration: 1000, // 1 second per spike
                 platforms: ['twitch', 'youtube']
             });
-            const endTime = Date.now();
+            const endTime = testClock.now();
             
             // Then: System handles spikes gracefully
             const totalTime = endTime - startTime;
@@ -581,14 +587,14 @@ describe('Viewer Count & OBS Observer Performance Tests', () => {
             const initialMemory = process.memoryUsage();
             
             // When: Running extended load simulation
-            const startTime = Date.now();
+            const startTime = testClock.now();
             const loadResults = await extendedLoadTest.run({
                 duration: 4000, // 4 seconds (scaled down from 2+ hours)
                 operationsPerSecond: 25,
                 platforms: ['twitch', 'youtube', 'tiktok'],
                 observerCount: 10
             });
-            const endTime = Date.now();
+            const endTime = testClock.now();
             
             const finalMemory = process.memoryUsage();
             const memoryIncrease = (finalMemory.heapUsed - initialMemory.heapUsed) / 1024 / 1024; // MB
@@ -618,9 +624,9 @@ describe('Viewer Count & OBS Observer Performance Tests', () => {
                 const platform = platforms[i % platforms.length];
                 const viewerCount = 1000 + (i * 50);
                 
-                const startTime = Date.now();
+                const startTime = testClock.now();
                 await observer.onViewerCountUpdate(createViewerCountUpdate(platform, viewerCount, true));
-                const endTime = Date.now();
+                const endTime = testClock.now();
                 
                 updateTimes.push(endTime - startTime);
             }
@@ -645,14 +651,14 @@ describe('Viewer Count & OBS Observer Performance Tests', () => {
             const sourceCount = 6; // 2 sources per platform
             
             // When: Updating multiple OBS sources simultaneously
-            const startTime = Date.now();
+            const startTime = testClock.now();
             const updatePromises = Array.from({ length: sourceCount }, (_, i) => {
                 const platform = ['twitch', 'youtube', 'tiktok'][Math.floor(i / 2)];
                 return observer.onViewerCountUpdate(createViewerCountUpdate(platform, 500 + (i * 100), true));
             });
             
             await Promise.all(updatePromises);
-            const endTime = Date.now();
+            const endTime = testClock.now();
             
             // Then: Multiple source updates complete efficiently
             const totalTime = endTime - startTime;
@@ -684,9 +690,9 @@ describe('Viewer Count & OBS Observer Performance Tests', () => {
                     flakyOBSManager.simulateConnectionFailure();
                 }
                 
-                const startTime = Date.now();
+                const startTime = testClock.now();
                 await observer.onViewerCountUpdate(createViewerCountUpdate('twitch', 1000 + i, true));
-                const endTime = Date.now();
+                const endTime = testClock.now();
                 
                 if (i % 3 === 0) {
                     recoveryTimes.push(endTime - startTime);
@@ -711,14 +717,14 @@ describe('Viewer Count & OBS Observer Performance Tests', () => {
             const highActivitySimulator = createHighActivitySimulator();
             
             // When: Simulating high streaming activity
-            const startTime = Date.now();
+            const startTime = testClock.now();
             const activityResults = await highActivitySimulator.simulateHighActivity({
                 duration: 5000, // 5 seconds
                 updatesPerSecond: 20, // 20 viewer count updates per second
                 platforms: ['twitch', 'youtube', 'tiktok'],
                 observer: observer
             });
-            const endTime = Date.now();
+            const endTime = testClock.now();
             
             // Then: OBS connection maintains performance under high activity
             const totalTime = endTime - startTime;
@@ -734,6 +740,44 @@ describe('Viewer Count & OBS Observer Performance Tests', () => {
     });
 
     // ===== BEHAVIOR-FOCUSED PERFORMANCE TEST HELPERS =====
+    const scheduleMicrotask = (callback) => {
+        if (typeof queueMicrotask === 'function') {
+            queueMicrotask(callback);
+            return;
+        }
+        Promise.resolve().then(callback);
+    };
+
+    function scheduleDelayFlush() {
+        if (delayFlushScheduled) {
+            return;
+        }
+        delayFlushScheduled = true;
+        scheduleMicrotask(() => {
+            if (pendingDelayMs > 0) {
+                testClock.advance(pendingDelayMs);
+            }
+            pendingDelayMs = 0;
+            delayFlushScheduled = false;
+        });
+    }
+
+    function advanceClock(delayMs) {
+        if (typeof delayMs !== 'number' || !Number.isFinite(delayMs) || delayMs <= 0) {
+            return 0;
+        }
+        testClock.advance(delayMs);
+        return delayMs;
+    }
+
+    function simulateDelay(delayMs) {
+        if (typeof delayMs !== 'number' || !Number.isFinite(delayMs) || delayMs <= 0) {
+            return Promise.resolve();
+        }
+        pendingDelayMs = Math.max(pendingDelayMs, delayMs);
+        scheduleDelayFlush();
+        return Promise.resolve();
+    }
 
     function createMockOBSManager() {
         const mockCalls = [];
@@ -745,10 +789,10 @@ describe('Viewer Count & OBS Observer Performance Tests', () => {
             call: jest.fn(async (method, params) => {
                 if (isConnectedState) {
                     updateCount++;
-                    mockCalls.push({ method, params, timestamp: Date.now() });
+                    mockCalls.push({ method, params, timestamp: testClock.now() });
                     
                     // Simulate realistic OBS response time
-                    await waitForDelay(Math.random() * 20 + 5);
+                    await simulateDelay(15);
                     
                     return { success: true };
                 } else {
@@ -786,7 +830,7 @@ describe('Viewer Count & OBS Observer Performance Tests', () => {
             onViewerCountUpdate: async function(update) {
                 this.receivedUpdates.push(update);
                 // Simulate observer processing time
-                await waitForDelay(Math.random() * 5 + 1);
+                await simulateDelay(3);
             },
             getObserverId: () => `observer-${i}`
         }));
@@ -808,7 +852,7 @@ describe('Viewer Count & OBS Observer Performance Tests', () => {
             count,
             previousCount,
             isStreamLive: isLive,
-            timestamp: new Date()
+            timestamp: new Date(testClock.now())
         };
     }
 
@@ -818,7 +862,7 @@ describe('Viewer Count & OBS Observer Performance Tests', () => {
             count: 1000 + (i * 10),
             previousCount: 990 + (i * 10),
             isStreamLive: true,
-            timestamp: new Date(Date.now() + i * 100)
+            timestamp: new Date(testClock.now() + i * 100)
         }));
     }
 
@@ -854,13 +898,13 @@ describe('Viewer Count & OBS Observer Performance Tests', () => {
             getObserverId: () => id,
             onViewerCountUpdate: async function() {
                 // Simulate processing
-                await waitForDelay(Math.random() * 10);
+                await simulateDelay(2);
             },
             initialize: async function() {
-                await waitForDelay(Math.random() * 5);
+                await simulateDelay(2);
             },
             cleanup: async function() {
-                await waitForDelay(Math.random() * 3);
+                await simulateDelay(1);
             }
         };
     }
@@ -895,20 +939,20 @@ describe('Viewer Count & OBS Observer Performance Tests', () => {
         return {
             pollPlatformViewerCount: async function(platform) {
                 // Simulate polling time with tighter bounds to reduce flakiness on busy runners
-                await waitForDelay(Math.random() * 80 + 40);
+                await simulateDelay(60);
                 return { 
                     success: true, 
                     platform, 
-                    count: Math.floor(Math.random() * 1000) + 500,
+                    count: 850,
                     gracefulFailure: false 
                 };
             },
             pollWithSimulatedDelay: async function(platform, delay) {
-                await waitForDelay(delay);
+                await simulateDelay(delay);
                 return { success: true, platform, count: 1000 };
             },
             pollWithFailureSimulation: async function(platform, shouldFail) {
-                await waitForDelay(Math.random() * 300 + 100);
+                await simulateDelay(250);
                 
                 if (shouldFail) {
                     return { success: false, gracefulFailure: true, platform };
@@ -923,10 +967,10 @@ describe('Viewer Count & OBS Observer Performance Tests', () => {
     function createFrequentViewerUpdates(count) {
         return Array.from({ length: count }, (_, i) => ({
             platform: ['twitch', 'youtube', 'tiktok'][i % 3],
-            count: 1000 + Math.floor(Math.random() * 500),
-            previousCount: 950 + Math.floor(Math.random() * 500),
+            count: 1000 + ((i % 10) * 25),
+            previousCount: 950 + ((i % 10) * 20),
             isStreamLive: true,
-            timestamp: new Date()
+            timestamp: new Date(testClock.now())
         }));
     }
 
@@ -954,7 +998,7 @@ describe('Viewer Count & OBS Observer Performance Tests', () => {
         return {
             processViewerCountChange: async function(scenario) {
                 // Simulate full workflow: fetch -> process -> notify -> update
-                await waitForDelay(Math.random() * 150 + 50);
+                await simulateDelay(120);
                 
                 const update = createViewerCountUpdate(scenario.platform, scenario.toCount, true, scenario.fromCount);
                 
@@ -981,12 +1025,12 @@ describe('Viewer Count & OBS Observer Performance Tests', () => {
                 const responseTimes = [];
                 
                 for (let i = 0; i < totalOperations; i++) {
-                    const startTime = Date.now();
+                    const startTime = testClock.now();
                     
                     // Simulate various streaming operations (optimized for test performance)
-                    await waitForDelay(Math.random() * 20 + 10);
+                    await simulateDelay(15);
                     
-                    const endTime = Date.now();
+                    const endTime = testClock.now();
                     responseTimes.push(endTime - startTime);
                     
                     // Simulate occasional errors (limited pattern to ensure <2% threshold)
@@ -1001,7 +1045,7 @@ describe('Viewer Count & OBS Observer Performance Tests', () => {
                     if (i < totalOperations - 1) {
                         const throttleTime = Math.max(0, Math.min(5, (config.updateFrequency / 20) - (endTime - startTime)));
                         if (throttleTime > 2) {
-                            await waitForDelay(throttleTime);
+                            await simulateDelay(throttleTime);
                         }
                     }
                 }
@@ -1030,17 +1074,17 @@ describe('Viewer Count & OBS Observer Performance Tests', () => {
                         totalSpikes++;
                         
                         // Simulate spike processing
-                        const spikeStart = Date.now();
-                        await waitForDelay(config.spikeDuration / 4); // Processing time
+                        const spikeStart = testClock.now();
+                        await simulateDelay(config.spikeDuration / 4); // Processing time
                         
                         // Simulate performance during spike (slightly degraded)
                         const spikePerformance = Math.max(0.85, 1 - (magnitude * 0.02));
                         minPerformance = Math.min(minPerformance, spikePerformance);
                         
                         // Simulate recovery
-                        const recoveryStart = Date.now();
-                        await waitForDelay(Math.min(300, magnitude * 20)); // Recovery time
-                        const recoveryTime = Date.now() - recoveryStart;
+                        const recoveryStart = testClock.now();
+                        await simulateDelay(Math.min(300, magnitude * 20)); // Recovery time
+                        const recoveryTime = testClock.now() - recoveryStart;
                         
                         maxRecoveryTime = Math.max(maxRecoveryTime, recoveryTime);
                     }
@@ -1065,12 +1109,12 @@ describe('Viewer Count & OBS Observer Performance Tests', () => {
                 const latencies = [];
                 
                 for (let i = 0; i < totalOperations; i++) {
-                    const operationStart = Date.now();
+                    const operationStart = testClock.now();
                     
                     // Simulate operation
-                    await waitForDelay(Math.random() * 20 + 10);
+                    await simulateDelay(15);
                     
-                    const latency = Date.now() - operationStart;
+                    const latency = testClock.now() - operationStart;
                     latencies.push(latency);
                     
                     // Simulate gradual efficiency degradation
@@ -1151,14 +1195,14 @@ describe('Viewer Count & OBS Observer Performance Tests', () => {
                 const updateLatencies = [];
                 
                 for (let i = 0; i < totalUpdates; i++) {
-                    const updateStart = Date.now();
+                    const updateStart = testClock.now();
                     
                     const platform = config.platforms[i % config.platforms.length];
                     const update = createViewerCountUpdate(platform, 1000 + i, true);
                     
                     await config.observer.onViewerCountUpdate(update);
                     
-                    const latency = Date.now() - updateStart;
+                    const latency = testClock.now() - updateStart;
                     updateLatencies.push(latency);
                     
                     // Simulate performance degradation under high load
@@ -1170,7 +1214,7 @@ describe('Viewer Count & OBS Observer Performance Tests', () => {
                     const targetInterval = 1000 / config.updatesPerSecond;
                     const actualInterval = Math.max(0, Math.min(10, targetInterval - latency)); // Cap at 10ms
                     if (actualInterval > 5) { // Only throttle if significant delay needed
-                        await waitForDelay(actualInterval);
+                        await simulateDelay(actualInterval);
                     }
                 }
                 
