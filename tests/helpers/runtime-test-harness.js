@@ -32,6 +32,7 @@ const {
     createMockNotificationManager,
     createMockLogger
 } = require('./mock-factories');
+const testClock = require('./test-clock');
 const { createRuntimeConstantsFixture } = require('./runtime-constants-fixture');
 
 const createEventBusStub = () => {
@@ -228,7 +229,7 @@ function createAppRuntimeTestDependencies(options = {}) {
         commandCooldownService,
         platformLifecycleService,
         dependencyFactory,
-        timestampService: options.timestampService || { now: jest.fn(() => Date.now()) },
+        timestampService: options.timestampService || { now: jest.fn(() => testClock.now()) },
         obsManager: options.obsManager || null,
         authManager: options.authManager || null,
         authFactory: options.authFactory || null,

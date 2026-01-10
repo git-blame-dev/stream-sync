@@ -1,6 +1,7 @@
 
 const EventEmitter = require('events');
-const { waitForDelay, scheduleTimeout } = require('./time-utils');
+const { waitForDelay, scheduleTimeout, resolveDelay } = require('./time-utils');
+const testClock = require('./test-clock');
 
 const waitForEvent = (emitter, eventName, timeout = 5000) => {
     return new Promise((resolve, reject) => {
@@ -20,13 +21,15 @@ const waitForEvent = (emitter, eventName, timeout = 5000) => {
 
 const waitFor = async (condition, options = {}) => {
     const { timeout = 5000, interval = 50 } = options;
-    const start = Date.now();
+    const start = testClock.now();
+    const effectiveInterval = resolveDelay(interval);
     
-    while (Date.now() - start < timeout) {
+    while (testClock.now() - start < timeout) {
         if (await condition()) {
             return true;
         }
-        await waitForDelay(interval);
+        await waitForDelay(effectiveInterval);
+        testClock.advance(effectiveInterval);
     }
     
     throw new Error(`Condition not met within ${timeout}ms`);
@@ -50,12 +53,12 @@ class UserExperienceObserver {
             statusChanges: [],
             userInteractions: []
         };
-        this.startTime = Date.now();
+        this.startTime = testClock.now();
     }
 
     recordNotification(notification) {
         this.observations.notifications.push({
-            timestamp: Date.now() - this.startTime,
+            timestamp: testClock.now() - this.startTime,
             content: notification.content,
             type: notification.type,
             visible: true,
@@ -65,7 +68,7 @@ class UserExperienceObserver {
 
     recordDisplayChange(change) {
         this.observations.displayChanges.push({
-            timestamp: Date.now() - this.startTime,
+            timestamp: testClock.now() - this.startTime,
             source: change.source,
             newValue: change.newValue,
             previousValue: change.previousValue,
@@ -75,7 +78,7 @@ class UserExperienceObserver {
 
     recordAudioEvent(audioEvent) {
         this.observations.audioEvents.push({
-            timestamp: Date.now() - this.startTime,
+            timestamp: testClock.now() - this.startTime,
             type: audioEvent.type,
             content: audioEvent.content,
             audible: true
@@ -84,7 +87,7 @@ class UserExperienceObserver {
 
     recordUserFacingError(error) {
         this.observations.errors.push({
-            timestamp: Date.now() - this.startTime,
+            timestamp: testClock.now() - this.startTime,
             message: error.message,
             severity: error.severity,
             userImpact: error.userImpact,
@@ -94,7 +97,7 @@ class UserExperienceObserver {
 
     recordStatusChange(status) {
         this.observations.statusChanges.push({
-            timestamp: Date.now() - this.startTime,
+            timestamp: testClock.now() - this.startTime,
             component: status.component,
             newStatus: status.newStatus,
             previousStatus: status.previousStatus,
@@ -105,7 +108,7 @@ class UserExperienceObserver {
     getObservations() {
         return {
             ...this.observations,
-            totalDuration: Date.now() - this.startTime,
+            totalDuration: testClock.now() - this.startTime,
             summary: this.generateSummary()
         };
     }
@@ -247,7 +250,7 @@ const expectNoTechnicalArtifacts = (content) => {
 
 class TimeSimulator {
     constructor() {
-        this.currentTime = Date.now();
+        this.currentTime = testClock.now();
         this.timers = new Map();
         this.intervals = new Map();
         this.nextTimerId = 1;

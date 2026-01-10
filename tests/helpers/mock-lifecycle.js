@@ -1,5 +1,6 @@
 
 const { validateMockContract } = require('./mock-validation');
+const testClock = require('./test-clock');
 
 // ================================================================================================
 // MOCK LIFECYCLE MANAGER
@@ -38,8 +39,8 @@ class MockLifecycleManager {
         this.activeMocks.set(mockId, {
             mock: mockObject,
             options: defaultOptions,
-            createdAt: Date.now(),
-            lastUsed: Date.now(),
+            createdAt: testClock.now(),
+            lastUsed: testClock.now(),
             useCount: 0
         });
 
@@ -53,7 +54,7 @@ class MockLifecycleManager {
     getMock(mockId) {
         const mockData = this.activeMocks.get(mockId);
         if (mockData) {
-            mockData.lastUsed = Date.now();
+            mockData.lastUsed = testClock.now();
             mockData.useCount++;
             return mockData.mock;
         }
@@ -61,7 +62,7 @@ class MockLifecycleManager {
     }
 
     cleanup(mockId = null, cleanupOptions = {}) {
-        const startTime = Date.now();
+        const startTime = testClock.now();
         const defaultCleanupOptions = {
             clearCalls: true,
             resetImplementations: false,
@@ -77,7 +78,7 @@ class MockLifecycleManager {
         }
 
         // Update performance metrics
-        const cleanupTime = Date.now() - startTime;
+        const cleanupTime = testClock.now() - startTime;
         this.performanceMetrics.totalCleanupOperations++;
         this._updateAverageCleanupTime(cleanupTime);
     }
@@ -274,7 +275,7 @@ const setupAutomatedCleanup = (options = {}) => {
 const withLifecycleManagement = (factoryFunction, mockType, lifecycleOptions = {}) => {
     return (...args) => {
         const mockObject = factoryFunction(...args);
-        const mockId = `${mockType}_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+        const mockId = `${mockType}_${testClock.now()}_${Math.random().toString(36).substr(2, 9)}`;
         
         return globalLifecycleManager.registerMock(mockId, mockObject, {
             contractName: mockType,
@@ -284,7 +285,7 @@ const withLifecycleManagement = (factoryFunction, mockType, lifecycleOptions = {
 };
 
 const createManagedMock = (mockObject, options = {}) => {
-    const mockId = `managed_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    const mockId = `managed_${testClock.now()}_${Math.random().toString(36).substr(2, 9)}`;
     return globalLifecycleManager.registerMock(mockId, mockObject, options);
 };
 

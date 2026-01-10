@@ -5,6 +5,7 @@ const {
     createMockNotificationManager,
     setupAutomatedCleanup
 } = require('./mock-factories');
+const testClock = require('./test-clock');
 
 // ================================================================================================
 // USER WORKFLOW VALIDATION
@@ -24,7 +25,7 @@ const validateUserGiftFlow = async (platform, giftData) => {
         },
         failureReason: null,
         performanceMetrics: {
-            startTime: Date.now(),
+            startTime: testClock.now(),
             endTime: null,
             duration: null
         }
@@ -90,7 +91,7 @@ const validateUserGiftFlow = async (platform, giftData) => {
         };
     }
 
-    result.performanceMetrics.endTime = Date.now();
+    result.performanceMetrics.endTime = testClock.now();
     result.performanceMetrics.duration = result.performanceMetrics.endTime - result.performanceMetrics.startTime;
 
     return result;

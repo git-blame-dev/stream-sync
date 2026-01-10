@@ -3,7 +3,9 @@ const crypto = require('crypto');
 const { EventEmitter } = require('events');
 const { logger } = require('../../src/core/logging');
 const { safeDelay } = require('../../src/utils/timeout-validator');
+const { resolveDelay } = require('./time-utils');
 const { createPlatformErrorHandler } = require('../../src/utils/platform-error-handler');
+const testClock = require('./test-clock');
 
 class WebSocketMessageSimulator extends EventEmitter {
     constructor(options = {}) {
@@ -24,7 +26,9 @@ class WebSocketMessageSimulator extends EventEmitter {
 
         try {
             // Simulate message processing with realistic timing
-            await safeDelay(this.processingDelay, this.processingDelay || 50, 'E2E message processing delay');
+            const effectiveDelay = resolveDelay(this.processingDelay, this.processingDelay || 50);
+            await safeDelay(effectiveDelay, this.processingDelay || 50, 'E2E message processing delay');
+            testClock.advance(effectiveDelay);
             
             let result = null;
             
@@ -40,7 +44,7 @@ class WebSocketMessageSimulator extends EventEmitter {
                 platform: this.platform,
                 message: rawMessage,
                 result: result,
-                timestamp: Date.now()
+                timestamp: testClock.now()
             });
 
             return result;
@@ -52,7 +56,7 @@ class WebSocketMessageSimulator extends EventEmitter {
                 platform: this.platform,
                 message: rawMessage,
                 error: error,
-                timestamp: Date.now()
+                timestamp: testClock.now()
             });
             
             throw error;
@@ -76,7 +80,7 @@ class WebSocketMessageSimulator extends EventEmitter {
 
     async simulateHighFrequencyProcessing(messages, platform, options = {}) {
         const { concurrent = false, maxConcurrency = 10 } = options;
-        const startTime = Date.now();
+        const startTime = testClock.now();
         
         let results = [];
         
@@ -102,7 +106,7 @@ class WebSocketMessageSimulator extends EventEmitter {
             results = await this.processMessageSequence(messages, platform);
         }
         
-        const endTime = Date.now();
+        const endTime = testClock.now();
         const duration = endTime - startTime;
         
         const successCount = results.filter(r => r.success).length;
@@ -148,7 +152,7 @@ class CrossPlatformIntegrationTester {
     async processSimultaneousEvents(simultaneousEvents, options = {}) {
         this.logger.debug('[E2E] Processing simultaneous multi-platform events', 'e2e-testing');
         
-        const startTime = Date.now();
+        const startTime = testClock.now();
         const results = {};
         
         // Capture initial system state
@@ -185,7 +189,7 @@ class CrossPlatformIntegrationTester {
 
             // Capture final system state
             const finalState = this._captureSystemState();
-            const endTime = Date.now();
+            const endTime = testClock.now();
             this.systemStateHistory.push({ type: 'final', state: finalState, timestamp: endTime });
 
             return {
@@ -217,7 +221,7 @@ class CrossPlatformIntegrationTester {
         
         // Simulate notification processing with priority logic
         const processedNotifications = [];
-        const startTime = Date.now();
+        const startTime = testClock.now();
         
         // Sort by priority and value for resolution
         const sortedNotifications = [...competingNotifications].sort((a, b) => {
@@ -245,7 +249,7 @@ class CrossPlatformIntegrationTester {
 
         // Process notifications in priority order within time window
         for (const notification of sortedNotifications) {
-            const processTime = Date.now();
+            const processTime = testClock.now();
             if (processTime - startTime > timeWindow) {
                 break; // Time window exceeded
             }
@@ -258,6 +262,7 @@ class CrossPlatformIntegrationTester {
 
             // Simulate processing delay
             await safeDelay(10, 10, 'E2E notification delay');
+            testClock.advance(10);
         }
 
         return {
@@ -266,7 +271,7 @@ class CrossPlatformIntegrationTester {
             totalNotifications: competingNotifications.length,
             processedNotifications,
             droppedCount: competingNotifications.length - processedNotifications.length,
-            processingTime: Date.now() - startTime
+            processingTime: testClock.now() - startTime
         };
     }
 
@@ -282,7 +287,7 @@ class CrossPlatformIntegrationTester {
             throw new Error(`No connection state provided for platform ${eventPlatform}`);
         }
 
-        const currentTime = Date.now();
+        const currentTime = testClock.now();
         const timeSinceLastMessage = currentTime - platformState.lastMessage;
         const isStale = timeSinceLastMessage > maxStaleTime;
         
@@ -332,14 +337,14 @@ class CrossPlatformIntegrationTester {
 
     _captureSystemState() {
         return {
-            timestamp: Date.now(),
+            timestamp: testClock.now(),
             platformStates: Object.keys(this.platforms).reduce((states, name) => {
                 const platform = this.platforms[name];
                 states[name] = {
                     connected: platform.isConnected ? platform.isConnected() : false,
                     active: platform.isActive ? platform.isActive() : false,
                     hasDispatcher: !!platform.notificationDispatcher,
-                    lastActivity: Date.now()
+                    lastActivity: testClock.now()
                 };
                 return states;
             }, {}),
@@ -351,7 +356,7 @@ class CrossPlatformIntegrationTester {
     captureNotification(notification) {
         this.notificationCapture.push({
             ...notification,
-            capturedAt: Date.now()
+            capturedAt: testClock.now()
         });
     }
 
@@ -391,7 +396,7 @@ class UserJourneyValidator {
         this.logger.debug('[E2E] Validating complete user journey', 'e2e-testing');
         
         const journeyId = `journey_${crypto.randomUUID()}`;
-        const startTime = Date.now();
+        const startTime = testClock.now();
         
         const journey = {
             id: journeyId,
@@ -421,7 +426,7 @@ class UserJourneyValidator {
 
             // Calculate overall success
             journey.success = journey.stages.every(stage => stage.success);
-            journey.endTime = Date.now();
+            journey.endTime = testClock.now();
             journey.duration = journey.endTime - journey.startTime;
 
             this.journeyHistory.push(journey);
@@ -431,7 +436,7 @@ class UserJourneyValidator {
         } catch (error) {
             journey.error = error;
             journey.success = false;
-            journey.endTime = Date.now();
+            journey.endTime = testClock.now();
             journey.duration = journey.endTime - journey.startTime;
             
             this.journeyHistory.push(journey);
@@ -508,7 +513,7 @@ class UserJourneyValidator {
             validationResults.securityIssues.push({
                 type: 'validation_error',
                 message: error.message,
-                timestamp: Date.now()
+                timestamp: testClock.now()
             });
 
             return validationResults;
@@ -520,7 +525,7 @@ class UserJourneyValidator {
         return {
             stage: 'input_processing',
             success: !!input.rawWebSocketData,
-            timestamp: Date.now(),
+            timestamp: testClock.now(),
             details: {
                 hasRawData: !!input.rawWebSocketData,
                 platform: input.platform,
@@ -538,7 +543,7 @@ class UserJourneyValidator {
         return {
             stage: 'message_parsing',
             success: hasRequiredFields,
-            timestamp: Date.now(),
+            timestamp: testClock.now(),
             details: {
                 hasSubscriptionType: !!input.rawWebSocketData?.subscription_type,
                 hasEvent: !!input.rawWebSocketData?.event,
@@ -552,11 +557,11 @@ class UserJourneyValidator {
         return {
             stage: 'event_processing',
             success: true,
-            timestamp: Date.now(),
+            timestamp: testClock.now(),
             details: {
                 eventType: input.rawWebSocketData?.subscription_type,
                 processed: true,
-                timestamp: Date.now()
+                timestamp: testClock.now()
             }
         };
     }
@@ -566,7 +571,7 @@ class UserJourneyValidator {
         return {
             stage: 'notification_generation',
             success: true,
-            timestamp: Date.now(),
+            timestamp: testClock.now(),
             details: {
                 notificationCreated: true,
                 platform: input.platform,
@@ -580,7 +585,7 @@ class UserJourneyValidator {
         return {
             stage: 'final_output',
             success: true,
-            timestamp: Date.now(),
+            timestamp: testClock.now(),
             details: {
                 obsDisplay: expectedOutput.obsDisplay,
                 ttsOutput: expectedOutput.ttsOutput,

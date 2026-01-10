@@ -1,5 +1,6 @@
 
-const { scheduleTimeout } = require('./time-utils');
+const { scheduleTimeout, resolveDelay } = require('./time-utils');
+const testClock = require('./test-clock');
 
 // ================================================================================================
 // TEST DATA STORAGE
@@ -15,7 +16,7 @@ class TestDataStore {
     set(key, value, metadata = {}) {
         this.data.set(key, value);
         this.metadata.set(key, {
-            createdAt: Date.now(),
+            createdAt: testClock.now(),
             accessCount: 0,
             ...metadata
         });
@@ -25,7 +26,7 @@ class TestDataStore {
         const metadata = this.metadata.get(key);
         if (metadata) {
             metadata.accessCount++;
-            metadata.lastAccessed = Date.now();
+            metadata.lastAccessed = testClock.now();
         }
         return this.data.get(key);
     }
@@ -59,7 +60,7 @@ class TestDataStore {
         };
 
         let totalAccesses = 0;
-        let oldestTime = Date.now();
+        let oldestTime = testClock.now();
         let newestTime = 0;
 
         for (const [key, metadata] of this.metadata) {
@@ -103,7 +104,7 @@ class TestStateManager {
 
         this.currentTest = testName;
         this.testSuite = suiteName;
-        this.executionStart = Date.now();
+        this.executionStart = testClock.now();
         this.cleanupQueue = [];
     }
 
@@ -117,7 +118,7 @@ class TestStateManager {
             return 0;
         }
 
-        const now = Date.now();
+        const now = testClock.now();
         const executionTime = now - this.executionStart;
 
         // Prevent negative timing values due to clock adjustments or race conditions
@@ -135,7 +136,7 @@ class TestStateManager {
         this.cleanupQueue.push({
             fn: cleanupFn,
             description,
-            addedAt: Date.now()
+            addedAt: testClock.now()
         });
     }
 
@@ -147,14 +148,14 @@ class TestStateManager {
                 results.push({
                     success: true,
                     description: task.description,
-                    executionTime: Date.now() - task.addedAt
+                    executionTime: testClock.now() - task.addedAt
                 });
             } catch (error) {
                 results.push({
                     success: false,
                     description: task.description,
                     error: error.message,
-                    executionTime: Date.now() - task.addedAt
+                    executionTime: testClock.now() - task.addedAt
                 });
             }
         }
@@ -165,7 +166,7 @@ class TestStateManager {
     saveSnapshot(name, state) {
         this.stateSnapshots.set(name, {
             state: JSON.parse(JSON.stringify(state)), // Deep clone
-            timestamp: Date.now(),
+            timestamp: testClock.now(),
             testName: this.currentTest
         });
     }
@@ -280,20 +281,20 @@ const createTestDataFactory = (type, options = {}) => {
     const factories = {
         user: (overrides = {}) => ({
             id: Math.random().toString(36).substr(2, 9),
-            username: `testuser_${Date.now()}`,
-            displayName: `Test User ${Date.now()}`,
-            email: `test${Date.now()}@example.com`,
-            createdAt: new Date().toISOString(),
+            username: `testuser_${testClock.now()}`,
+            displayName: `Test User ${testClock.now()}`,
+            email: `test${testClock.now()}@example.com`,
+            createdAt: new Date(testClock.now()).toISOString(),
             ...overrides
         }),
         
         notification: (overrides = {}) => ({
             id: Math.random().toString(36).substr(2, 9),
             type: 'gift',
-            username: `testuser_${Date.now()}`,
+            username: `testuser_${testClock.now()}`,
             platform: 'tiktok',
-            message: `Test notification ${Date.now()}`,
-            timestamp: new Date().toISOString(),
+            message: `Test notification ${testClock.now()}`,
+            timestamp: new Date(testClock.now()).toISOString(),
             ...overrides
         }),
         
@@ -309,7 +310,7 @@ const createTestDataFactory = (type, options = {}) => {
             id: Math.random().toString(36).substr(2, 9),
             type: 'chat',
             platform: 'tiktok',
-            timestamp: new Date().toISOString(),
+            timestamp: new Date(testClock.now()).toISOString(),
             data: {},
             ...overrides
         })
@@ -320,7 +321,8 @@ const createTestDataFactory = (type, options = {}) => {
 
 const waitForCondition = (condition, timeout = 5000, interval = 100) => {
     return new Promise((resolve, reject) => {
-        const startTime = Date.now();
+        const startTime = testClock.now();
+        const effectiveInterval = resolveDelay(interval);
         
         const checkCondition = () => {
             try {
@@ -329,12 +331,13 @@ const waitForCondition = (condition, timeout = 5000, interval = 100) => {
                     return;
                 }
                 
-                if (Date.now() - startTime > timeout) {
+                if (testClock.now() - startTime > timeout) {
                     reject(new Error(`Condition not met within ${timeout}ms`));
                     return;
                 }
                 
-                scheduleTimeout(checkCondition, interval);
+                scheduleTimeout(checkCondition, effectiveInterval);
+                testClock.advance(effectiveInterval);
             } catch (error) {
                 reject(error);
             }
@@ -344,7 +347,7 @@ const waitForCondition = (condition, timeout = 5000, interval = 100) => {
     });
 };
 
-const createMockTimer = (startTime = Date.now()) => {
+const createMockTimer = (startTime = testClock.now()) => {
     let currentTime = startTime;
     
     return {

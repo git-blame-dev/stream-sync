@@ -3,6 +3,7 @@ const { spawn } = require('child_process');
 const path = require('path');
 const fs = require('fs');
 const { scheduleTimeout } = require('./time-utils');
+const testClock = require('./test-clock');
 
 const STARTUP_TEST_CONFIGS = {
     // Fast startup configuration - skips external dependencies
@@ -59,7 +60,7 @@ function startApplication(config = 'fast', customArgs = [], options = {}) {
         let stdout = '';
         let stderr = '';
         let success = false;
-        let startTime = Date.now();
+        let startTime = testClock.now();
         let resolved = false;
         let timeoutId = null;
         let terminationScheduled = false;
@@ -106,7 +107,7 @@ function startApplication(config = 'fast', customArgs = [], options = {}) {
                 return;
             }
 
-            const endTime = Date.now();
+            const endTime = testClock.now();
             success = true;
             terminateChild();
 
@@ -135,7 +136,7 @@ function startApplication(config = 'fast', customArgs = [], options = {}) {
         
         // Handle process completion
         child.on('close', (code) => {
-            const endTime = Date.now();
+            const endTime = testClock.now();
             const duration = endTime - startTime;
             
             success = code === 0;
@@ -152,7 +153,7 @@ function startApplication(config = 'fast', customArgs = [], options = {}) {
         
         // Handle process errors
         child.on('error', (error) => {
-            const endTime = Date.now();
+            const endTime = testClock.now();
             const duration = endTime - startTime;
             
             finalize({
@@ -198,11 +199,11 @@ function startApplication(config = 'fast', customArgs = [], options = {}) {
 
 async function measureStartupPerformance(args = [], options = {}) {
     const startMemory = process.memoryUsage();
-    const startTime = Date.now();
+    const startTime = testClock.now();
     
     const result = await startApplication('fast', args, options);
     
-    const endTime = Date.now();
+    const endTime = testClock.now();
     const endMemory = process.memoryUsage();
     
     return {

@@ -3,6 +3,8 @@
 // LOG LEVEL DEFINITIONS
 // ================================================================================================
 
+const testClock = require('./test-clock');
+
 const LOG_LEVELS = {
     ERROR: 0,
     WARN: 1,
@@ -24,7 +26,7 @@ const LOG_LEVEL_NAMES = {
 // ================================================================================================
 
 class LogEntry {
-    constructor(level, message, meta = {}, timestamp = Date.now()) {
+    constructor(level, message, meta = {}, timestamp = testClock.now()) {
         this.level = level;
         this.levelName = LOG_LEVEL_NAMES[level];
         this.message = message;
@@ -115,7 +117,7 @@ class TestLogger {
     }
 
     log(level, message, meta = {}) {
-        const startTime = Date.now();
+        const startTime = testClock.now();
 
         // Check if message should be filtered
         if (this.filters.some(filter => !filter(level, message, meta))) {
@@ -144,7 +146,7 @@ class TestLogger {
             }
 
             // Update performance stats
-            this.updatePerformanceStats(level, Date.now() - startTime);
+            this.updatePerformanceStats(level, testClock.now() - startTime);
 
             // Console output if enabled
             if (this.options.enableConsole) {

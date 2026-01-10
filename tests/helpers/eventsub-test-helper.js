@@ -1,6 +1,7 @@
 
 const { EventEmitter } = require('events');
 const { scheduleTimeout } = require('./time-utils');
+const testClock = require('./test-clock');
 
 class MockWebSocket extends EventEmitter {
     constructor(url) {
@@ -50,13 +51,13 @@ function createSessionWelcomeMessage(sessionId = 'test-session-id') {
         metadata: {
             message_id: 'test-message-id',
             message_type: 'session_welcome',
-            message_timestamp: new Date().toISOString()
+            message_timestamp: new Date(testClock.now()).toISOString()
         },
         payload: {
             session: {
                 id: sessionId,
                 status: 'connected',
-                connected_at: new Date().toISOString(),
+                connected_at: new Date(testClock.now()).toISOString(),
                 keepalive_timeout_seconds: 10,
                 reconnect_url: null,
                 recovery_url: null
@@ -70,7 +71,7 @@ function createKeepaliveMessage() {
         metadata: {
             message_id: 'test-keepalive-id',
             message_type: 'session_keepalive',
-            message_timestamp: new Date().toISOString()
+            message_timestamp: new Date(testClock.now()).toISOString()
         },
         payload: {}
     });
@@ -81,7 +82,7 @@ function createNotificationMessage(eventType, eventData) {
         metadata: {
             message_id: 'test-notification-id',
             message_type: 'notification',
-            message_timestamp: new Date().toISOString(),
+            message_timestamp: new Date(testClock.now()).toISOString(),
             subscription_type: eventType,
             subscription_version: '1'
         },
@@ -94,7 +95,7 @@ function createNotificationMessage(eventType, eventData) {
                 cost: 1,
                 condition: { broadcaster_user_id: '123456' },
                 transport: { method: 'websocket', session_id: 'test-session-id' },
-                created_at: new Date().toISOString()
+                created_at: new Date(testClock.now()).toISOString()
             },
             event: eventData
         }
@@ -116,7 +117,7 @@ function createChatMessageEvent(username = 'TestUser', message = 'Hello World') 
         broadcaster_display_name: 'TestBroadcaster',
         badges: [],
         color: '#FF0000',
-        timestamp: new Date().toISOString()
+        timestamp: new Date(testClock.now()).toISOString()
     };
 }
 
@@ -128,7 +129,7 @@ function createFollowEvent(username = 'TestFollower') {
         broadcaster_user_id: '123456',
         broadcaster_user_name: 'TestBroadcaster',
         broadcaster_display_name: 'TestBroadcaster',
-        followed_at: new Date().toISOString()
+        followed_at: new Date(testClock.now()).toISOString()
     };
 }
 
@@ -145,7 +146,7 @@ function createPaypiggyEvent(username = 'TestSubscriber', tier = '1000') {
         cumulative_months: 3,
         streak_months: 2,
         duration_months: 3,
-        timestamp: new Date().toISOString()
+        timestamp: new Date(testClock.now()).toISOString()
     };
 }
 
@@ -169,7 +170,7 @@ function createMockTwitchAuth() {
         getAuthProvider: jest.fn().mockResolvedValue({
             getAccessTokenForUser: jest.fn().mockResolvedValue({
                 accessToken: 'test-access-token',
-                expiresAt: new Date(Date.now() + 3600000)
+                expiresAt: new Date(testClock.now() + 3600000)
             })
         })
     };
