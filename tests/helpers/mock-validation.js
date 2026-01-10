@@ -3,6 +3,8 @@
 // API CONTRACT DEFINITIONS
 // ================================================================================================
 
+const testClock = require('./test-clock');
+
 const API_CONTRACTS = {
     NotificationDispatcher: {
         requiredMethods: [
@@ -357,7 +359,7 @@ class MockContractMonitor {
     }
 
     registerMock(name, mock, contractName) {
-        this.registeredMocks.set(name, { mock, contractName, registeredAt: Date.now() });
+        this.registeredMocks.set(name, { mock, contractName, registeredAt: testClock.now() });
     }
 
     validateAll() {
@@ -365,7 +367,7 @@ class MockContractMonitor {
         const report = validateMockSuite(mockSpecs);
         
         this.validationHistory.push({
-            timestamp: Date.now(),
+            timestamp: testClock.now(),
             report
         });
 

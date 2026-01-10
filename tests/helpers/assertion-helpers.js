@@ -3,6 +3,8 @@
 // NOTIFICATION ASSERTION HELPERS
 // ================================================================================================
 
+const testClock = require('./test-clock');
+
 const expectValidNotification = (notification, expectedType, expectedPlatform) => {
     // Required fields for all notifications
     const requiredFields = [
@@ -157,7 +159,7 @@ const expectNotificationContent = (notification, patterns) => {
 };
 
 const expectNotificationTiming = (notification, expectedTiming) => {
-    const now = Date.now();
+    const now = testClock.now();
     const processedAt = notification.processedAt;
     const createdAt = notification.createdAt || processedAt;
     
@@ -441,7 +443,7 @@ const expectTikTokGiftAggregation = (giftEvents, expectedAggregation) => {
     // Validate aggregation decision
     if (expectedAggregation.hasOwnProperty('shouldAggregate')) {
         const timeWindow = 5000; // 5 seconds
-        const timestamps = giftEvents.map(e => e.timestamp || Date.now());
+        const timestamps = giftEvents.map(e => e.timestamp || testClock.now());
         const timeSpan = Math.max(...timestamps) - Math.min(...timestamps);
         const actualShouldAggregate = timeSpan <= timeWindow && giftEvents.length > 1;
         

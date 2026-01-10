@@ -1,4 +1,5 @@
 
+const testClock = require('./test-clock');
 const BASE_TIMESTAMP_MS = Date.parse('2024-01-01T00:00:00.000Z');
 let sequence = 0;
 const nextSequence = () => {
@@ -577,7 +578,7 @@ const findUnusedMocks = () => {
 
 const collectMockUsageMetrics = () => {
     return {
-        timestamp: Date.now(),
+        timestamp: testClock.now(),
         totalMocksActive: 0, // Would need global tracking
         memoryUsage: process.memoryUsage()
     };
