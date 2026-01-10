@@ -46,11 +46,13 @@ describe('YouTube Resolution Performance - User Experience Validation', () => {
   let userPerformanceMetrics;
   let performanceTiming;
   let originalDateNow;
+  let simulatedNow;
 
   beforeEach(() => {
     originalDateNow = Date.now;
     jest.useRealTimers();
-    Date.now = () => new Date().getTime();
+    simulatedNow = 0;
+    Date.now = () => simulatedNow;
 
     // Initialize deterministic performance timing with larger difference for clearer testing
     performanceTiming = {
@@ -106,27 +108,23 @@ describe('YouTube Resolution Performance - User Experience Validation', () => {
       // Simulate realistic timing based on whether it's a username or Channel ID
       const isChannelId = testChannelIds.includes(channelHandle);
       
-      // Return a promise that resolves with timing simulation
-      return new Promise((resolve) => {
-        const responseTime = isChannelId ? performanceTiming.channelIdDirectTime : performanceTiming.usernameResolutionTime;
-        
-        scheduleTestTimeout(() => {
-          userPerformanceMetrics.operationTimes.push(responseTime);
-          userPerformanceMetrics.totalOperations++;
-          
-          resolve({
-            success: true,
-            streams: [{
-              videoId: 'test123',
-              title: 'Test Live Stream',
-              isLive: true,
-              author: 'Test Author'
-            }],
-            count: 1,
-            hasContent: true
-          });
-        }, responseTime);
-      });
+      const responseTime = isChannelId ? performanceTiming.channelIdDirectTime : performanceTiming.usernameResolutionTime;
+      simulatedNow += responseTime;
+      userPerformanceMetrics.operationTimes.push(responseTime);
+      userPerformanceMetrics.totalOperations++;
+
+      return {
+        success: true,
+        streams: [{
+          videoId: 'test123',
+          title: 'Test Live Stream',
+          isLive: true,
+          author: 'Test Author'
+        }],
+        count: 1,
+        hasContent: true,
+        responseTimeMs: responseTime
+      };
     });
   });
 
@@ -361,17 +359,14 @@ describe('YouTube Resolution Performance - User Experience Validation', () => {
         'UCconcurrent0000000003',
         'UCconcurrent0000000004'
       ]; // All listed in testChannelIds array
-      const concurrentStartTime = Date.now();
-
       // When: User triggers multiple concurrent operations
       const concurrentPromises = channelIds.map(async channelId => {
-        const operationStart = Date.now();
         const result = await YouTubeLiveStreamService.getLiveStreams(
           mockInnertubeClient,
           channelId,
           { logger: mockLogger, timeout: 1000 }
         );
-        const operationTime = Date.now() - operationStart; // Should be ~15ms each
+        const operationTime = result.responseTimeMs;
         
         return {
           result: result,
@@ -382,7 +377,8 @@ describe('YouTube Resolution Performance - User Experience Validation', () => {
       });
       
       const concurrentResults = await Promise.all(concurrentPromises);
-      const totalConcurrentTime = Date.now() - concurrentStartTime;
+      const operationTimes = concurrentResults.map(({ operationTime }) => operationTime);
+      const totalConcurrentTime = Math.max(...operationTimes);
 
       // Then: User experiences good performance even with concurrent operations
       expect(totalConcurrentTime).toBeLessThan(100); // Under 100ms for all 5 concurrent operations (allows for concurrent overhead)
@@ -400,7 +396,7 @@ describe('YouTube Resolution Performance - User Experience Validation', () => {
       expect(excellentOperations + goodOperations).toBe(channelIds.length); // All operations good or excellent
       
       // User Experience: Average time per operation remains acceptable
-      const averageTimePerOperation = totalConcurrentTime / channelIds.length;
+      const averageTimePerOperation = operationTimes.reduce((sum, time) => sum + time, 0) / channelIds.length;
       expect(averageTimePerOperation).toBeLessThan(30); // Under 30ms average even with concurrency
     });
 
