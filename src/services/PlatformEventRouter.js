@@ -3,6 +3,17 @@ const { logger: defaultLogger } = require('../core/logging');
 const { createPlatformErrorHandler } = require('../utils/platform-error-handler');
 const { NOTIFICATION_CONFIGS } = require('../core/constants');
 
+const ALIAS_PAID_TYPES = [
+    'subscription',
+    'resubscription',
+    'membership',
+    'member',
+    'subscribe',
+    'superfan',
+    'supporter',
+    'paid_supporter'
+];
+
 class PlatformEventRouter {
     constructor(options) {
         if (!options) {
@@ -46,8 +57,7 @@ class PlatformEventRouter {
             throw new Error('PlatformEventRouter requires platform, type, and data');
         }
 
-        const aliasPaidTypes = ['subscription', 'resubscription', 'membership', 'member', 'subscribe', 'superfan', 'supporter', 'paid_supporter'];
-        if (aliasPaidTypes.includes(type)) {
+        if (ALIAS_PAID_TYPES.includes(type)) {
             throw new Error(`Unsupported paid alias event type: ${type}`);
         }
 
@@ -74,71 +84,41 @@ class PlatformEventRouter {
                     if (data.count === undefined) {
                         throw new Error('Viewer-count event requires count');
                     }
-                    this.runtime.updateViewerCount(platform, data.count);
+                    const count = typeof data.count === 'string' ? Number(data.count) : data.count;
+                    if (!Number.isFinite(count)) {
+                        throw new Error('Viewer-count event requires numeric count');
+                    }
+                    this.runtime.updateViewerCount(platform, count);
                 }
                 return;
             case 'gift': {
-                if (this.runtime?.handleGiftNotification) {
-                    const sanitized = this._sanitizeNotificationPayload(data, type, platform);
-                    if (!sanitized) {
-                        return;
-                    }
-                    await this.runtime.handleGiftNotification(platform, sanitized.username, {
-                        ...sanitized,
-                        type
-                    });
-                }
+                await this._routeRuntimeNotification('handleGiftNotification', type, platform, data, (sanitized) => ({
+                    ...sanitized,
+                    type
+                }));
                 return;
             }
             case 'paypiggy': {
-                if (this.runtime?.handlePaypiggyNotification) {
-                    const sanitized = this._sanitizeNotificationPayload(data, type, platform);
-                    if (!sanitized) {
-                        return;
-                    }
-                    sanitized.type = 'paypiggy';
-                    await this.runtime.handlePaypiggyNotification(platform, sanitized.username, sanitized);
-                }
+                await this._routeRuntimeNotification('handlePaypiggyNotification', type, platform, data, (sanitized) => ({
+                    ...sanitized,
+                    type: 'paypiggy'
+                }));
                 return;
             }
             case 'giftpaypiggy': {
-                if (this.runtime?.handleGiftPaypiggyNotification) {
-                    const sanitized = this._sanitizeNotificationPayload(data, type, platform);
-                    if (!sanitized) {
-                        return;
-                    }
-                    await this.runtime.handleGiftPaypiggyNotification(platform, sanitized.username, sanitized);
-                }
+                await this._routeRuntimeNotification('handleGiftPaypiggyNotification', type, platform, data);
                 return;
             }
             case 'follow': {
-                if (this.runtime?.handleFollowNotification) {
-                    const sanitized = this._sanitizeNotificationPayload(data, type, platform);
-                    if (!sanitized) {
-                        return;
-                    }
-                    await this.runtime.handleFollowNotification(platform, sanitized.username, sanitized);
-                }
+                await this._routeRuntimeNotification('handleFollowNotification', type, platform, data);
                 return;
             }
             case 'share': {
-                if (this.runtime?.handleShareNotification) {
-                    const sanitized = this._sanitizeNotificationPayload(data, type, platform);
-                    if (!sanitized) {
-                        return;
-                    }
-                    await this.runtime.handleShareNotification(platform, sanitized.username, sanitized);
-                }
+                await this._routeRuntimeNotification('handleShareNotification', type, platform, data);
                 return;
             }
             case 'raid': {
-                if (this.runtime?.handleRaidNotification) {
-                    const sanitized = this._sanitizeNotificationPayload(data, type, platform);
-                    if (!sanitized) {
-                        return;
-                    }
-                    await this.runtime.handleRaidNotification(platform, sanitized.username, sanitized);
-                }
+                await this._routeRuntimeNotification('handleRaidNotification', type, platform, data);
                 return;
             }
             case 'stream-status':
@@ -214,6 +194,9 @@ class PlatformEventRouter {
         if (!data.message.text || typeof data.message.text !== 'string') {
             throw new Error('Chat event requires message text');
         }
+        if (!data.message.text.trim()) {
+            throw new Error('Chat event requires non-empty message text');
+        }
         if (!data.username || typeof data.username !== 'string' || !data.username.trim()) {
             throw new Error('Chat event requires username');
         }
@@ -241,14 +224,28 @@ class PlatformEventRouter {
         return normalized;
     }
 
+    async _routeRuntimeNotification(handlerName, type, platform, data, payloadBuilder = null) {
+        const handler = this.runtime?.[handlerName];
+        if (!handler) {
+            return;
+        }
+
+        const sanitized = this._sanitizeNotificationPayload(data, type, platform);
+        if (!sanitized) {
+            return;
+        }
+        const payload = payloadBuilder ? payloadBuilder(sanitized) : sanitized;
+        await handler.call(this.runtime, platform, sanitized.username, payload);
+    }
+
     _sanitizeNotificationPayload(data = {}, sourceType = null, sourcePlatform = null) {
         if (!data || typeof data !== 'object') {
             throw new Error('Notification payload must be an object');
         }
 
         const sanitized = { ...data };
-        const originalType = sanitized.type || sourceType;
-        const originalPlatform = sanitized.platform || sourcePlatform;
+        const originalType = sourceType;
+        const originalPlatform = sourcePlatform;
 
         delete sanitized.type;
         delete sanitized.platform;
@@ -258,9 +255,6 @@ class PlatformEventRouter {
         if (!sanitized.username || typeof sanitized.username !== 'string' || !sanitized.username.trim()) {
             throw new Error('Notification payload requires username');
         }
-        if (!sanitized.userId) {
-            throw new Error('Notification payload requires userId');
-        }
         if (!originalPlatform) {
             throw new Error('Notification payload requires platform');
         }
@@ -268,13 +262,43 @@ class PlatformEventRouter {
             throw new Error('Notification payload requires type');
         }
 
-        return {
+        const isErrorPayload = sanitized.isError === true;
+        const normalizedUserId = sanitized.userId === undefined || sanitized.userId === null
+            ? undefined
+            : String(sanitized.userId);
+
+        if (!normalizedUserId && !isErrorPayload) {
+            throw new Error('Notification payload requires userId');
+        }
+
+        if (!isErrorPayload) {
+            if (originalType === 'gift' || originalType === 'envelope') {
+                const giftType = typeof sanitized.giftType === 'string' ? sanitized.giftType.trim() : '';
+                const giftCount = sanitized.giftCount;
+                const amount = sanitized.amount;
+                const currency = typeof sanitized.currency === 'string' ? sanitized.currency.trim() : '';
+                const id = sanitized.id;
+                if (!id || !giftType || giftCount === undefined || amount === undefined || !currency) {
+                    throw new Error('Notification payload requires id, giftType, giftCount, amount, and currency');
+                }
+            }
+            if (originalType === 'giftpaypiggy') {
+                if (sanitized.giftCount === undefined) {
+                    throw new Error('Notification payload requires giftCount');
+                }
+            }
+        }
+
+        const result = {
+            ...sanitized,
             username: sanitized.username.trim(),
-            userId: sanitized.userId,
             platform: originalPlatform,
-            sourceType: originalType,
-            ...sanitized
+            sourceType: originalType
         };
+        if (normalizedUserId !== undefined) {
+            result.userId = normalizedUserId;
+        }
+        return result;
     }
 
 }
