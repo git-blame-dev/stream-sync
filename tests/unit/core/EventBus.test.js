@@ -1,6 +1,7 @@
 
-const { EventBus, EventTypes, createEventBus } = require('../../../src/core/EventBus');
+const { EventBus, createEventBus } = require('../../../src/core/EventBus');
 const { logger } = require('../../../src/core/logging');
+const { PlatformEvents } = require('../../../src/interfaces/PlatformEvents');
 
 // Mock logger to capture debug output
 jest.mock('../../../src/core/logging', () => ({
@@ -255,6 +256,24 @@ describe('EventBus', () => {
             const errorEventArgs = errorEventHandler.mock.calls[0][0];
             expect(errorEventArgs.eventName).toBe('test-event');
             expect(errorEventArgs.error).toBeInstanceOf(Error);
+        });
+
+        test('does not re-emit handler-error when handler-error handler fails', async () => {
+            const errorHandler = jest.fn(() => {
+                throw new Error('Test error');
+            });
+            const handlerErrorHandler = jest.fn(() => {
+                throw new Error('Handler error failure');
+            });
+
+            eventBus.subscribe('test-event', errorHandler);
+            eventBus.subscribe('handler-error', handlerErrorHandler);
+
+            eventBus.emit('test-event', 'data');
+
+            await waitForDelay(50);
+
+            expect(handlerErrorHandler).toHaveBeenCalledTimes(1);
         });
 
         test('should handle context errors gracefully', async () => {
@@ -597,27 +616,13 @@ describe('EventBus', () => {
         });
     });
 
-    describe('EventTypes Constants', () => {
-        test('should export EventTypes with correct constants', () => {
-            expect(EventTypes).toBeDefined();
-            expect(EventTypes.VFX_COMMAND).toBe('vfx:command');
-            expect(EventTypes.VFX_EXECUTED).toBe('vfx:executed');
-            expect(EventTypes.VFX_FAILED).toBe('vfx:failed');
-            expect(EventTypes.TTS_SPEAK).toBe('tts:speak');
-            expect(EventTypes.TTS_STARTED).toBe('tts:started');
-            expect(EventTypes.TTS_COMPLETED).toBe('tts:completed');
-            expect(EventTypes.NOTIFICATION_RECEIVED).toBe('notification:received');
-            expect(EventTypes.NOTIFICATION_PROCESSED).toBe('notification:processed');
-            expect(EventTypes.NOTIFICATION_SUPPRESSED).toBe('notification:suppressed');
-            expect(EventTypes.HANDLER_ERROR).toBe('handler-error');
-        });
-
-        test('should use EventTypes constants in actual events', () => {
+    describe('PlatformEvents interop', () => {
+        test('supports PlatformEvents constants in actual events', () => {
             const handler = jest.fn();
-            eventBus.subscribe(EventTypes.VFX_COMMAND, handler);
-            
-            const result = eventBus.emit(EventTypes.VFX_COMMAND, { command: 'hello' });
-            
+            eventBus.subscribe(PlatformEvents.VFX_COMMAND_RECEIVED, handler);
+
+            const result = eventBus.emit(PlatformEvents.VFX_COMMAND_RECEIVED, { command: 'hello' });
+
             expect(result).toBe(true);
             expect(handler).toHaveBeenCalledTimes(1);
         });
@@ -642,6 +647,23 @@ describe('EventBus', () => {
     });
 
     describe('Performance and Edge Cases', () => {
+        test('does not throw when logger methods are missing', () => {
+            const originalDebug = logger.debug;
+            const originalWarn = logger.warn;
+
+            logger.debug = undefined;
+            logger.warn = undefined;
+
+            const bus = new EventBus({ debugEnabled: true });
+            const handler = jest.fn();
+
+            expect(() => bus.subscribe('test-event', handler)).not.toThrow();
+            expect(() => bus.emit('test-event', 'data')).not.toThrow();
+
+            logger.debug = originalDebug;
+            logger.warn = originalWarn;
+        });
+
         test('should handle rapid event emissions', async () => {
             const handler = jest.fn();
             eventBus.subscribe('rapid-event', handler);

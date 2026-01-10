@@ -11,6 +11,7 @@ const MessageTTSHandler = require('../utils/message-tts-handler');
 const { isNotificationType, isChatType } = require('../utils/notification-types');
 const { createPlatformErrorHandler } = require('../utils/platform-error-handler');
 const { safeSetTimeout, safeDelay } = require('../utils/timeout-validator');
+const { PlatformEvents } = require('../interfaces/PlatformEvents');
 
 let displayQueueErrorHandler = logger ? createPlatformErrorHandler(logger, 'display-queue') : null;
 
@@ -518,7 +519,7 @@ class DisplayQueue {
         }
 
         const timeoutMs = typeof options.timeoutMs === 'number' ? options.timeoutMs : 10000;
-        const eventNames = ['vfx:effect-completed', 'vfx:executed'];
+        const eventNames = [PlatformEvents.VFX_EFFECT_COMPLETED, PlatformEvents.VFX_COMMAND_EXECUTED];
         const subscribe = (eventName, handler) => {
             if (typeof this.eventBus.subscribe === 'function') {
                 return this.eventBus.subscribe(eventName, handler);
@@ -623,7 +624,7 @@ class DisplayQueue {
                 vfxConfig
             };
 
-            this.eventBus.emit('vfx:command', payload);
+            this.eventBus.emit(PlatformEvents.VFX_COMMAND_RECEIVED, payload);
             return { emitted: true, match };
         } catch (error) {
             handleDisplayQueueError('[DisplayQueue] Error emitting VFX command', error, payload);
@@ -703,7 +704,7 @@ class DisplayQueue {
                         vfxConfig
                     };
 
-                    this.eventBus.emit('vfx:command', payload);
+                    this.eventBus.emit(PlatformEvents.VFX_COMMAND_RECEIVED, payload);
                 } catch (error) {
                     handleDisplayQueueError('[Gift] Error emitting VFX command', error, payload);
                 }

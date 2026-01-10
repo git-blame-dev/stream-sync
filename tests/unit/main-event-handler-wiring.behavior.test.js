@@ -37,6 +37,7 @@ jest.mock('../../src/chat/commands', () => ({
 }));
 
 const { createRuntimeConstantsFixture } = require('../helpers/runtime-constants-fixture');
+const { PlatformEvents } = require('../../src/interfaces/PlatformEvents');
 
 describe('main.js event handler wiring', () => {
     const baseConfig = {
@@ -140,9 +141,9 @@ describe('main.js event handler wiring', () => {
         const { AppRuntime } = require('../../src/main.js');
         new AppRuntime(baseConfig, createDeps({ eventBus, vfxCommandService }));
 
-        expect(eventBus.subscribe).toHaveBeenCalledWith('vfx:command', expect.any(Function));
+        expect(eventBus.subscribe).toHaveBeenCalledWith(PlatformEvents.VFX_COMMAND_RECEIVED, expect.any(Function));
 
-        await expect(handlers['vfx:command']({
+        await expect(handlers[PlatformEvents.VFX_COMMAND_RECEIVED]({
             command: '!boom',
             platform: 'twitch',
             username: 'alice',

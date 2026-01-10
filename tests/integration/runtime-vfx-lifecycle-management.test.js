@@ -24,6 +24,7 @@ const { AppRuntime } = require('../../src/main');
 const { createAppRuntimeTestDependencies } = require('../helpers/runtime-test-harness');
 const path = require('path');
 const { safeDelay } = require('../../src/utils/timeout-validator');
+const { PlatformEvents } = require('../../src/interfaces/PlatformEvents');
 
 // Initialize logging and cleanup
 initializeTestLogging();
@@ -110,7 +111,7 @@ describe('AppRuntime VFXCommandService Lifecycle Management', () => {
             });
 
             // WHEN: VFX command event is emitted
-            runtime.eventBus.emit('vfx:command', {
+            runtime.eventBus.emit(PlatformEvents.VFX_COMMAND_RECEIVED, {
                 command: '!hello',
                 username: 'TestUser',
                 platform: 'twitch',
@@ -137,7 +138,7 @@ describe('AppRuntime VFXCommandService Lifecycle Management', () => {
             );
 
             // WHEN: VFX command event is emitted
-            runtime.eventBus.emit('vfx:command', {
+            runtime.eventBus.emit(PlatformEvents.VFX_COMMAND_RECEIVED, {
                 command: '!invalid',
                 username: 'TestUser',
                 platform: 'twitch',
@@ -162,7 +163,7 @@ describe('AppRuntime VFXCommandService Lifecycle Management', () => {
             runtime.vfxCommandService.executeCommand = jest.fn();
 
             // WHEN: EventBus receives event sourced from VFX service
-            runtime.eventBus.emit('vfx:command', {
+            runtime.eventBus.emit(PlatformEvents.VFX_COMMAND_RECEIVED, {
                 command: '!hello',
                 username: 'LoopTester',
                 platform: 'tiktok',
@@ -191,7 +192,7 @@ describe('AppRuntime VFXCommandService Lifecycle Management', () => {
 
             runtime.vfxCommandService.executeCommand = jest.fn();
 
-            runtime.eventBus.emit('vfx:command', {
+            runtime.eventBus.emit(PlatformEvents.VFX_COMMAND_RECEIVED, {
                 command: '!hello',
                 username: 'NoCmd',
                 platform: 'twitch',
@@ -211,7 +212,7 @@ describe('AppRuntime VFXCommandService Lifecycle Management', () => {
 
             runtime.vfxCommandService.executeCommand = jest.fn().mockResolvedValue({ success: true });
 
-            runtime.eventBus.emit('vfx:command', {
+            runtime.eventBus.emit(PlatformEvents.VFX_COMMAND_RECEIVED, {
                 command: '!hello',
                 username: 'CmdUser',
                 platform: 'twitch',
@@ -231,7 +232,7 @@ describe('AppRuntime VFXCommandService Lifecycle Management', () => {
 
             runtime.vfxCommandService.executeCommand = jest.fn();
 
-            runtime.eventBus.emit('vfx:command', {
+            runtime.eventBus.emit(PlatformEvents.VFX_COMMAND_RECEIVED, {
                 command: '!hello',
                 username: 'LoopUser',
                 platform: 'twitch',
@@ -252,7 +253,7 @@ describe('AppRuntime VFXCommandService Lifecycle Management', () => {
 
             runtime.vfxCommandService.executeCommand = jest.fn();
 
-            runtime.eventBus.emit('vfx:command', {
+            runtime.eventBus.emit(PlatformEvents.VFX_COMMAND_RECEIVED, {
                 command: '!hello',
                 username: 'LoopUser',
                 platform: 'twitch',
@@ -274,7 +275,7 @@ describe('AppRuntime VFXCommandService Lifecycle Management', () => {
             // Simulate missing VFX service (e.g., initialization failure)
             runtime.vfxCommandService = null;
 
-            runtime.eventBus.emit('vfx:command', {
+            runtime.eventBus.emit(PlatformEvents.VFX_COMMAND_RECEIVED, {
                 command: '!hello',
                 username: 'NoService',
                 platform: 'tiktok',
@@ -296,7 +297,7 @@ describe('AppRuntime VFXCommandService Lifecycle Management', () => {
             runtime.vfxCommandService.executeCommand = jest.fn();
             runtime.vfxCommandService.executeCommandForKey = jest.fn();
 
-            runtime.eventBus.emit('vfx:command', {
+            runtime.eventBus.emit(PlatformEvents.VFX_COMMAND_RECEIVED, {
                 username: 'NoCommand',
                 platform: 'youtube',
                 userId: 'user-8',
@@ -317,7 +318,7 @@ describe('AppRuntime VFXCommandService Lifecycle Management', () => {
             runtime.vfxCommandService.executeCommand = jest.fn();
             runtime.vfxCommandService.executeCommandForKey = jest.fn().mockResolvedValue({ success: true });
 
-            runtime.eventBus.emit('vfx:command', {
+            runtime.eventBus.emit(PlatformEvents.VFX_COMMAND_RECEIVED, {
                 commandKey: 'gifts',
                 username: 'KeyUser',
                 platform: 'youtube',
@@ -349,7 +350,7 @@ describe('AppRuntime VFXCommandService Lifecycle Management', () => {
 
             runtime.vfxCommandService.executeCommandForKey = jest.fn().mockResolvedValue({ success: true });
 
-            runtime.eventBus.emit('vfx:command', {
+            runtime.eventBus.emit(PlatformEvents.VFX_COMMAND_RECEIVED, {
                 commandKey: 'gifts',
                 username: 'DisabledKeyUser',
                 platform: 'tiktok',
