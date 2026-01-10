@@ -648,30 +648,6 @@ class AppRuntime {
             }
         });
 
-        // TTS events - handle text-to-speech
-        this.eventBus.subscribe(PlatformEvents.TTS_SPEECH_REQUESTED, async (event) => {
-            try {
-                if (event?.source === 'tts-service') {
-                    return;
-                }
-
-                const { text, platform, options } = event;
-                if (!options || typeof options !== 'object') {
-                    throw new Error('TTS speak event requires options');
-                }
-                logger.debug(`[EventHandler] TTS speak event received for platform: ${platform}`, 'AppRuntime');
-                
-                // Use existing speakTTS logic if available
-                if (this.speakTTS && typeof this.speakTTS === 'function') {
-                    await this.speakTTS(text, platform, options);
-                } else {
-                    throw new Error('speakTTS method not available');
-                }
-            } catch (error) {
-                logMainError('[EventHandler] Error handling TTS speak event', error, { event }, { eventType: 'event-handler', logContext: 'AppRuntime' });
-            }
-        });
-
         logger.debug('Event handlers registered successfully', 'AppRuntime');
     }
 
@@ -841,6 +817,20 @@ class AppRuntime {
         } catch (error) {
             this._handleAppRuntimeError(
                 `Error stopping viewer count polling: ${error.message}`,
+                error,
+                null,
+                { eventType: 'shutdown', logContext: 'system' }
+            );
+        }
+
+        try {
+            if (typeof this.viewerCountStatusCleanup === 'function') {
+                this.viewerCountStatusCleanup();
+                this.logger.debug('Stopped viewer count status listeners', 'system');
+            }
+        } catch (error) {
+            this._handleAppRuntimeError(
+                `Error cleaning up viewer count status listeners: ${error.message}`,
                 error,
                 null,
                 { eventType: 'shutdown', logContext: 'system' }
@@ -1088,37 +1078,6 @@ class AppRuntime {
         return this.handleUnifiedNotification('paypiggy', platform, username, options);
     }
 
-    async handleNotificationEvent(platform, type, data) {
-        try {
-            if (!data || typeof data !== 'object') {
-                throw new Error('handleNotificationEvent requires data');
-            }
-            // Method name mapping for consistent routing
-            const methodMap = {
-                'paypiggy': 'handlePaypiggyNotification',
-                'follow': 'handleFollowNotification',
-                'gift': 'handleGiftNotification'
-            };
-
-            const methodName = methodMap[type];
-            if (methodName && typeof this[methodName] === 'function') {
-                if (!data.username) {
-                    throw new Error(`Missing username for ${type} notification`);
-                }
-                await this[methodName](platform, data.username, data);
-            } else {
-                throw new Error(`Unknown notification type: ${type}`);
-            }
-        } catch (error) {
-            this._handleAppRuntimeError(
-                `Error handling ${type} notification event: ${error.message}`,
-                error,
-                { platform, type, data },
-                { eventType: 'notification-event', logContext: platform }
-            );
-        }
-    }
-
     async handleRaidNotification(platform, raiderName, options) {
         if (!options || typeof options !== 'object') {
             throw new Error('handleRaidNotification requires options');
@@ -1349,117 +1308,6 @@ class AppRuntime {
                 `Error handling resub notification for ${username}: ${error.message}`,
                 error,
                 { platform, username, options },
-                { eventType: 'notification', logContext: platform }
-            );
-        }
-    }
-
-	    async handleNotification(platform, normalizedData) {
-	        let options;
-	        let type;
-	        try {
-	            if (!normalizedData || !normalizedData.type) {
-	                this.logger.warn(`Invalid notification data received from ${platform}`, platform);
-	                return;
-	            }
-
-            ({ type } = normalizedData);
-            const { username, ...notificationOptions } = normalizedData;
-            options = notificationOptions;
-            if (!username) {
-                this.logger.warn(`Missing username for ${type} notification`, platform, { normalizedData });
-                return;
-            }
-
-            this.logger.debug(`Routing ${type} notification from ${platform} for ${username}`, platform);
-
-            switch (type) {
-                case 'chat':
-                    // Route chat messages to notification manager
-                    if (this.notificationManager) {
-                        if (!normalizedData.message || !normalizedData.timestamp || !normalizedData.userId) {
-                            throw new Error('Chat notification requires message, timestamp, and userId');
-                        }
-                        await this.notificationManager.handleNotification('chat', platform, {
-                            username,
-                            message: normalizedData.message,
-                            timestamp: normalizedData.timestamp,
-                            userId: normalizedData.userId,
-                            ...options
-                        });
-                    } else {
-                        throw new Error('NotificationManager unavailable for chat notifications');
-                    }
-                    break;
-                    
-                case 'follow':
-                    await this.handleFollowNotification(platform, username, options);
-                    break;
-                
-                case 'paypiggy':
-                    await this.handlePaypiggyNotification(platform, username, options);
-                    break;
-                
-                case 'raid':
-                    if (normalizedData.viewerCount === undefined) {
-                        throw new Error('Raid notification requires viewerCount');
-                    }
-                    await this.handleRaidNotification(platform, username, {
-                        viewerCount: normalizedData.viewerCount,
-                        ...options
-                    });
-                    break;
-
-                case 'giftpaypiggy': {
-                    const requiresTier = platform === 'twitch';
-                    if (normalizedData.giftCount === undefined || !normalizedData.userId || !normalizedData.timestamp || (requiresTier && normalizedData.tier === undefined)) {
-                        throw new Error(requiresTier
-                            ? 'Giftpaypiggy notification requires giftCount, tier, userId, and timestamp'
-                            : 'Giftpaypiggy notification requires giftCount, userId, and timestamp');
-                    }
-                    await this.handleGiftPaypiggyNotification(platform, username, {
-                        giftCount: normalizedData.giftCount,
-                        userId: normalizedData.userId,
-                        timestamp: normalizedData.timestamp,
-                        isAnonymous: normalizedData.isAnonymous,
-                        cumulativeTotal: normalizedData.cumulativeTotal,
-                        ...(normalizedData.tier !== undefined ? { tier: normalizedData.tier } : {}),
-                        ...(normalizedData.isError === true ? { isError: true } : {})
-                    });
-                    break;
-                }
-
-                case 'gift':
-                    {
-                        const isError = normalizedData.isError === true;
-                        if (normalizedData.giftCount === undefined || !normalizedData.giftType || normalizedData.amount === undefined || !normalizedData.currency || !normalizedData.userId || !normalizedData.timestamp || (!isError && !normalizedData.id)) {
-                            throw new Error('Gift notification requires giftCount, giftType, amount, currency, id, userId, and timestamp');
-                        }
-                        await this.handleGiftNotification(platform, username, {
-                            amount: normalizedData.amount,
-                            giftCount: normalizedData.giftCount,
-                            tier: normalizedData.tier,
-                            giftType: normalizedData.giftType,
-                            currency: normalizedData.currency,
-                            repeatCount: normalizedData.repeatCount,
-                            ...(normalizedData.id ? { id: normalizedData.id } : {}),
-                            type: 'gift',
-                            userId: normalizedData.userId,
-                            timestamp: normalizedData.timestamp,
-                            ...options
-                        });
-                    }
-                    break;
-                
-                default:
-                    throw new Error(`Unknown notification type '${type}' from ${platform}`);
-            }
-        } catch (error) {
-            const errorType = normalizedData ? normalizedData.type : undefined;
-            this._handleAppRuntimeError(
-                `Error handling ${errorType} notification from ${platform}: ${error.message}`,
-                error,
-                { platform, normalizedData, options },
                 { eventType: 'notification', logContext: platform }
             );
         }

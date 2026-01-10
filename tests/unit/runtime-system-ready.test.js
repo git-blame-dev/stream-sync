@@ -71,7 +71,8 @@ describe('AppRuntime shutdown lifecycle', () => {
         bot.logger = {
             info: jest.fn(),
             error: jest.fn(),
-            debug: jest.fn()
+            debug: jest.fn(),
+            warn: jest.fn()
         };
         return bot;
     };
@@ -93,5 +94,22 @@ describe('AppRuntime shutdown lifecycle', () => {
                 reason: 'test'
             })
         );
+    });
+
+    it('invokes viewer count status cleanup during shutdown', async () => {
+        const runtime = createAppRuntimeDouble();
+        runtime.platformLifecycleService = { disconnectAll: jest.fn().mockResolvedValue() };
+        runtime.obsEventService = { disconnect: jest.fn().mockResolvedValue() };
+        runtime.platformEventRouter = { dispose: jest.fn() };
+        runtime.viewerCountSystem = { stopPolling: jest.fn() };
+        runtime.streamDetector = { cleanup: jest.fn() };
+        runtime.notificationManager = { stopSuppressionCleanup: jest.fn() };
+        runtime.viewerCountStatusCleanup = jest.fn();
+        runtime.emitSystemShutdown = jest.fn();
+        runtime._handleAppRuntimeError = jest.fn();
+
+        await runtime.shutdown();
+
+        expect(runtime.viewerCountStatusCleanup).toHaveBeenCalledTimes(1);
     });
 });
