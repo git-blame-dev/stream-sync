@@ -304,11 +304,17 @@ class TwitchPlatform extends EventEmitter {
                         }
                     }
                     if (errorNotificationType === 'giftpaypiggy') {
-                        baseOverrides.giftCount = data?.giftCount;
-                        baseOverrides.tier = data?.tier;
+                        if (Number.isFinite(Number(data?.giftCount))) {
+                            baseOverrides.giftCount = Number(data.giftCount);
+                        }
+                        if (typeof data?.tier === 'string' && data.tier.trim()) {
+                            baseOverrides.tier = data.tier;
+                        }
                     }
                     if (errorNotificationType === 'paypiggy') {
-                        baseOverrides.months = data?.months;
+                        if (Number.isFinite(Number(data?.months))) {
+                            baseOverrides.months = Number(data.months);
+                        }
                     }
                     const errorPayload = createMonetizationErrorPayload({
                         notificationType: errorNotificationType,
@@ -358,11 +364,17 @@ class TwitchPlatform extends EventEmitter {
                     }
                 }
                 if (errorNotificationType === 'giftpaypiggy') {
-                    baseOverrides.giftCount = data?.giftCount;
-                    baseOverrides.tier = data?.tier;
+                    if (Number.isFinite(Number(data?.giftCount))) {
+                        baseOverrides.giftCount = Number(data.giftCount);
+                    }
+                    if (typeof data?.tier === 'string' && data.tier.trim()) {
+                        baseOverrides.tier = data.tier;
+                    }
                 }
                 if (errorNotificationType === 'paypiggy') {
-                    baseOverrides.months = data?.months;
+                    if (Number.isFinite(Number(data?.months))) {
+                        baseOverrides.months = Number(data.months);
+                    }
                 }
                 const errorPayload = createMonetizationErrorPayload({
                     notificationType: errorNotificationType,
