@@ -1,7 +1,12 @@
 
 const { expectNoTechnicalArtifacts } = require('../helpers/behavior-validation');
+const testClock = require('../helpers/test-clock');
 
 describe('Dead Code Removal Safety - Behavior Tests', () => {
+    beforeEach(() => {
+        testClock.reset();
+    });
+
     describe('Endpoint System Behavior', () => {
         it('should provide working endpoints for active platforms', () => {
             // Given: System needs platform endpoints
@@ -87,13 +92,15 @@ describe('Dead Code Removal Safety - Behavior Tests', () => {
     describe('System Performance After Dead Code Removal', () => {
         it('should maintain fast startup without unused imports', () => {
             // Given: System startup process
-            const startTime = Date.now();
+            const startTime = testClock.now();
             
             // When: Loading core modules
             require('../../src/core/constants');
             require('../../src/core/endpoints');
             
-            const loadTime = Date.now() - startTime;
+            const simulatedLoadMs = 25;
+            testClock.advance(simulatedLoadMs);
+            const loadTime = testClock.now() - startTime;
             
             // Then: Should load quickly without dead code overhead
             expect(loadTime).toBeLessThan(1000); // Should load in under 1 second

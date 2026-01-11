@@ -1,5 +1,6 @@
 
 const { initializeTestLogging, createMockConfig, createMockPlatformDependencies } = require('../helpers/test-setup');
+const testClock = require('../helpers/test-clock');
 
 // Initialize test environment BEFORE requiring platform
 initializeTestLogging();
@@ -16,6 +17,7 @@ describe('YouTube Handler Redundancy Audit', () => {
     let dispatcherCalls;
 
     beforeEach(() => {
+        testClock.reset();
         // Track all method calls for redundancy analysis
         authorExtractionCalls = [];
         notificationBuilderCalls = [];
@@ -81,7 +83,7 @@ describe('YouTube Handler Redundancy Audit', () => {
         // Mock AuthorExtractor to track calls
         platform.AuthorExtractor = {
             extractAuthor: jest.fn().mockImplementation((...args) => {
-                authorExtractionCalls.push({ args, timestamp: Date.now() });
+                authorExtractionCalls.push({ args, timestamp: testClock.now() });
                 return { name: 'MockUser', id: '12345' };
             })
         };
@@ -89,7 +91,7 @@ describe('YouTube Handler Redundancy Audit', () => {
         // Mock NotificationBuilder to track calls
         platform.NotificationBuilder = {
             build: jest.fn().mockImplementation((...args) => {
-                notificationBuilderCalls.push({ args, timestamp: Date.now() });
+                notificationBuilderCalls.push({ args, timestamp: testClock.now() });
                 return { id: 'mock-notification', ...args[0] };
             })
         };
@@ -97,10 +99,10 @@ describe('YouTube Handler Redundancy Audit', () => {
         // Mock notification dispatcher to track calls
         platform.notificationDispatcher = {
             dispatchSuperChat: jest.fn().mockImplementation((...args) => {
-                dispatcherCalls.push({ method: 'dispatchSuperChat', args, timestamp: Date.now() });
+                dispatcherCalls.push({ method: 'dispatchSuperChat', args, timestamp: testClock.now() });
             }),
             dispatchMembership: jest.fn().mockImplementation((...args) => {
-                dispatcherCalls.push({ method: 'dispatchMembership', args, timestamp: Date.now() });
+                dispatcherCalls.push({ method: 'dispatchMembership', args, timestamp: testClock.now() });
             })
         };
     });

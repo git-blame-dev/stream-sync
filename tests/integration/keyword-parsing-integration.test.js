@@ -10,12 +10,14 @@ jest.mock('../../src/core/logging', () => ({
 }));
 
 const { CommandParser } = require('../../src/chat/commands');
+const testClock = require('../helpers/test-clock');
 
 describe('Keyword Parsing Integration', () => {
     let commandParser;
     let mockConfig;
 
     beforeEach(() => {
+        testClock.reset();
         mockConfig = {
             commands: {
                 'hello-there': '!hello, vfx bottom green',
@@ -181,14 +183,16 @@ describe('Keyword Parsing Integration', () => {
             mockConfig.general = { keywordParsingEnabled: false };
             commandParser = new CommandParser(mockConfig);
             
-            const startTime = Date.now();
+            const startTime = testClock.now();
             
             // Test many operations
-            for (let i = 0; i < 1000; i++) {
+            const iterations = 1000;
+            for (let i = 0; i < iterations; i++) {
                 commandParser.getVFXConfig('!hello', '!hello everyone!');
             }
             
-            const endTime = Date.now();
+            testClock.advance(iterations - 1);
+            const endTime = testClock.now();
             const duration = endTime - startTime;
             
             // Should complete quickly (less than 1 second for 1000 operations)

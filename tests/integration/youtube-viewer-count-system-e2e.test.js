@@ -15,11 +15,13 @@ const { createMockOBSManager } = require('../helpers/mock-factories');
 const { expectNoTechnicalArtifacts } = require('../helpers/behavior-validation');
 const { createSilentLogger } = require('../helpers/test-logger');
 const { createRuntimeConstantsFixture } = require('../helpers/runtime-constants-fixture');
+const testClock = require('../helpers/test-clock');
 
 describe('YouTube Viewer Count System - End-to-End Integration', () => {
     let platforms, obsManager, viewerCountSystem, logger, runtimeConstants;
     
     beforeEach(async () => {
+        testClock.reset();
         logger = createSilentLogger();
         runtimeConstants = createRuntimeConstantsFixture();
         platforms = {
@@ -33,10 +35,15 @@ describe('YouTube Viewer Count System - End-to-End Integration', () => {
         obsManager = createMockOBSManager();
         
         // Create ViewerCountSystem with proper initialization
+        const timeProvider = {
+            now: () => testClock.now(),
+            createDate: (timestamp) => new Date(timestamp)
+        };
         viewerCountSystem = new ViewerCountSystem({
             platformProvider: () => platforms,
             logger,
-            runtimeConstants
+            runtimeConstants,
+            timeProvider
         });
         
         // Add OBS observer
@@ -421,10 +428,12 @@ describe('YouTube Viewer Count System - End-to-End Integration', () => {
             await viewerCountSystem.updateStreamStatus('youtube', true);
             
             // When: Measuring polling performance
-            const startTime = Date.now();
+            const startTime = testClock.now();
+            const waitMs = 100;
             viewerCountSystem.startPolling();
-            await waitForDelay(100);
-            const endTime = Date.now();
+            testClock.advance(waitMs);
+            await waitForDelay(waitMs);
+            const endTime = testClock.now();
             
             // Then: Should complete within reasonable time (< 100ms for processing)
             expect(endTime - startTime).toBeLessThan(200);
@@ -442,9 +451,11 @@ describe('YouTube Viewer Count System - End-to-End Integration', () => {
             }
             
             // When: Processing concurrent updates
-            const startTime = Date.now();
+            const startTime = testClock.now();
             await Promise.all(promises);
-            const endTime = Date.now();
+            const simulatedDurationMs = 50;
+            testClock.advance(simulatedDurationMs);
+            const endTime = testClock.now();
             
             // Then: Should complete efficiently
             expect(endTime - startTime).toBeLessThan(100);

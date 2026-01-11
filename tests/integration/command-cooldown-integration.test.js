@@ -13,6 +13,7 @@ const {
 const { 
   setupAutomatedCleanup 
 } = require('../helpers/mock-lifecycle');
+const testClock = require('../helpers/test-clock');
 
 // Initialize logging FIRST
 initializeTestLogging();
@@ -32,6 +33,7 @@ describe('Command Cooldown Integration', () => {
   let clearExpiredGlobalCooldowns;
 
   beforeEach(() => {
+    testClock.reset();
     // Create fresh mock config
     mockConfig = createMockConfig({
       general: {
@@ -78,18 +80,19 @@ describe('Command Cooldown Integration', () => {
     });
 
     it('should allow same command after cooldown expires', () => {
+      const dateNowSpy = jest.spyOn(Date, 'now').mockImplementation(() => testClock.now());
       // User 1 triggers command
       updateGlobalCommandCooldown('!hello');
       
       // Mock time passing
-      jest.spyOn(Date, 'now').mockReturnValue(Date.now() + 4000);
+      testClock.advance(4000);
       
       // User 2 tries same command after cooldown
       const isBlocked = checkGlobalCommandCooldown('!hello', 3000);
       
       expect(isBlocked).toBe(false);
       
-      Date.now.mockRestore();
+      dateNowSpy.mockRestore();
     });
   });
 
@@ -128,17 +131,18 @@ describe('Command Cooldown Integration', () => {
       // Add several commands with timestamps
       const commands = ['!old1', '!old2', '!recent'];
       
+      const dateNowSpy = jest.spyOn(Date, 'now').mockImplementation(() => testClock.now());
       commands.forEach(cmd => updateGlobalCommandCooldown(cmd));
       
       // Mock older timestamps for first two commands
-      jest.spyOn(Date, 'now').mockReturnValue(Date.now() + 10000);
+      testClock.advance(10000);
       
       // Clean up cooldowns older than 5 seconds
       const cleanedCount = clearExpiredGlobalCooldowns(5000);
       
       expect(cleanedCount).toBeGreaterThanOrEqual(0);
       
-      Date.now.mockRestore();
+      dateNowSpy.mockRestore();
     });
 
     it('should handle cleanup without affecting active cooldowns', () => {

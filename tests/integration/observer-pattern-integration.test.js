@@ -7,6 +7,12 @@ const { OBSViewerCountObserver } = require('../../src/observers/obs-viewer-count
 const { createMockOBSManager } = require('../helpers/mock-factories');
 const { expectNoTechnicalArtifacts } = require('../helpers/behavior-validation');
 const { createSilentLogger } = require('../helpers/test-logger');
+const testClock = require('../helpers/test-clock');
+
+const createTimeProvider = () => ({
+    now: () => testClock.now(),
+    createDate: (timestamp) => new Date(timestamp)
+});
 
 describe('Observer Pattern Integration', () => {
     let viewerCountSystem;
@@ -14,6 +20,7 @@ describe('Observer Pattern Integration', () => {
     let logger;
     
     beforeEach(async () => {
+        testClock.reset();
         logger = createSilentLogger();
         platforms = {
             youtube: {
@@ -28,7 +35,8 @@ describe('Observer Pattern Integration', () => {
         
         viewerCountSystem = new ViewerCountSystem({
             platforms,
-            logger
+            logger,
+            timeProvider: createTimeProvider()
         });
         await viewerCountSystem.initialize();
     });
@@ -111,20 +119,22 @@ describe('Observer Pattern Integration', () => {
             observers.forEach(observer => viewerCountSystem.addObserver(observer));
             
             // When: Stream goes live and polling occurs
+            const expectedTimestampMs = testClock.now();
             await viewerCountSystem.updateStreamStatus('youtube', true);
             viewerCountSystem.startPolling();
             await waitForDelay(50);
             
             // Then: All observers should receive updates
             observers.forEach(observer => {
-                expect(observer.onViewerCountUpdate).toHaveBeenCalledWith(
-                    expect.objectContaining({
-                        platform: 'youtube',
-                        count: 1000,
-                        isStreamLive: true,
-                        timestamp: expect.any(Date)
-                    })
-                );
+                expect(observer.onViewerCountUpdate).toHaveBeenCalled();
+                const updateCall = observer.onViewerCountUpdate.mock.calls[0][0];
+                expect(updateCall).toMatchObject({
+                    platform: 'youtube',
+                    count: 1000,
+                    isStreamLive: true
+                });
+                expect(updateCall.timestamp).toBeInstanceOf(Date);
+                expect(updateCall.timestamp.getTime()).toBe(expectedTimestampMs);
             });
         });
 
@@ -134,27 +144,30 @@ describe('Observer Pattern Integration', () => {
             viewerCountSystem.addObserver(observer);
             
             // When: Stream status changes
+            const firstTimestampMs = testClock.now();
             await viewerCountSystem.updateStreamStatus('youtube', true);
+            testClock.advance(1000);
+            const secondTimestampMs = testClock.now();
             await viewerCountSystem.updateStreamStatus('youtube', false);
             
             // Then: Observer should receive status change notifications
-            expect(observer.onStreamStatusChange).toHaveBeenCalledWith(
-                expect.objectContaining({
-                    platform: 'youtube',
-                    isLive: true,
-                    wasLive: false,
-                    timestamp: expect.any(Date)
-                })
-            );
-            
-            expect(observer.onStreamStatusChange).toHaveBeenCalledWith(
-                expect.objectContaining({
-                    platform: 'youtube',
-                    isLive: false,
-                    wasLive: true,
-                    timestamp: expect.any(Date)
-                })
-            );
+            expect(observer.onStreamStatusChange).toHaveBeenCalledTimes(2);
+            const firstCall = observer.onStreamStatusChange.mock.calls[0][0];
+            const secondCall = observer.onStreamStatusChange.mock.calls[1][0];
+            expect(firstCall).toMatchObject({
+                platform: 'youtube',
+                isLive: true,
+                wasLive: false
+            });
+            expect(secondCall).toMatchObject({
+                platform: 'youtube',
+                isLive: false,
+                wasLive: true
+            });
+            expect(firstCall.timestamp).toBeInstanceOf(Date);
+            expect(secondCall.timestamp).toBeInstanceOf(Date);
+            expect(firstCall.timestamp.getTime()).toBe(firstTimestampMs);
+            expect(secondCall.timestamp.getTime()).toBe(secondTimestampMs);
         });
 
         test('should include correct metadata in observer notifications', async () => {
@@ -163,6 +176,7 @@ describe('Observer Pattern Integration', () => {
             viewerCountSystem.addObserver(observer);
             
             // When: Viewer count updates
+            const expectedTimestampMs = testClock.now();
             await viewerCountSystem.updateStreamStatus('youtube', true);
             viewerCountSystem.startPolling();
             await waitForDelay(50);
@@ -173,13 +187,13 @@ describe('Observer Pattern Integration', () => {
                 platform: 'youtube',
                 count: 1000,
                 previousCount: 0,
-                isStreamLive: true,
-                timestamp: expect.any(Date)
+                isStreamLive: true
             });
             
-            // Validate timestamp is recent
-            const timeDiff = Date.now() - updateCall.timestamp.getTime();
-            expect(timeDiff).toBeLessThan(1000); // Within 1 second
+            // Validate timestamp is a real Date value
+            expect(updateCall.timestamp instanceof Date).toBe(true);
+            expect(Number.isFinite(updateCall.timestamp.getTime())).toBe(true);
+            expect(updateCall.timestamp.getTime()).toBe(expectedTimestampMs);
         });
     });
 

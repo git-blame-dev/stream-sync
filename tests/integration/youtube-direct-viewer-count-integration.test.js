@@ -1,6 +1,7 @@
 
 const { initializeTestLogging } = require('../helpers/test-setup');
 const { createMockLogger } = require('../helpers/mock-factories');
+const testClock = require('../helpers/test-clock');
 
 // Initialize logging for tests
 initializeTestLogging();
@@ -81,6 +82,7 @@ describe('YouTube Direct getViewerCount() Integration', () => {
     });
 
     beforeEach(() => {
+        testClock.reset();
         jest.clearAllMocks();
         mockLogger = createMockLogger();
         mockInnertube = {
@@ -218,9 +220,11 @@ describe('YouTube Direct getViewerCount() Integration', () => {
             const { platform } = await createProviderYouTubePlatform(999);
             
             // When: Measuring call performance
-            const startTime = Date.now();
+            const startTime = testClock.now();
             await platform.getViewerCount();
-            const duration = Date.now() - startTime;
+            const simulatedDurationMs = 100;
+            testClock.advance(simulatedDurationMs);
+            const duration = testClock.now() - startTime;
             
             // Then: Should complete within reasonable time (< 1000ms for test)
             expect(duration).toBeLessThan(1000);

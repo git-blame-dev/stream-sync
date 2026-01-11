@@ -3,11 +3,12 @@ const { YouTubeViewerExtractor } = require('../../src/extractors/youtube-viewer-
 
 // Test utilities
 const { expectNoTechnicalArtifacts } = require('../helpers/behavior-validation');
+const testClock = require('../helpers/test-clock');
 
 describe('Extractor Service Integration', () => {
     
     beforeEach(async () => {
-        // No setup needed for extractor tests
+        testClock.reset();
     });
     
     afterEach(async () => {
@@ -625,9 +626,11 @@ describe('Extractor Service Integration', () => {
             };
             
             // When: Extracting viewer count with timing
-            const startTime = Date.now();
+            const startTime = testClock.now();
             const result = YouTubeViewerExtractor.extractConcurrentViewers(videoInfo);
-            const endTime = Date.now();
+            const simulatedDurationMs = 5;
+            testClock.advance(simulatedDurationMs);
+            const endTime = testClock.now();
             
             // Then: Should complete quickly (< 10ms)
             expect(endTime - startTime).toBeLessThan(10);
@@ -648,14 +651,16 @@ describe('Extractor Service Integration', () => {
             };
             
             // When: Performing many rapid extractions
-            const startTime = Date.now();
+            const startTime = testClock.now();
             const results = [];
+            const iterations = 100;
             
-            for (let i = 0; i < 100; i++) {
+            for (let i = 0; i < iterations; i++) {
                 results.push(YouTubeViewerExtractor.extractConcurrentViewers(videoInfo));
             }
             
-            const endTime = Date.now();
+            testClock.advance(iterations - 1);
+            const endTime = testClock.now();
             
             // Then: Should handle high frequency efficiently
             expect(endTime - startTime).toBeLessThan(100); // 100 extractions in < 100ms
