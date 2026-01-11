@@ -43,21 +43,28 @@ describe('RetrySystem.handleConnectionError', () => {
     });
 
     it('cancels an in-flight retry timer when a newer error arrives', async () => {
-        const retrySystem = new RetrySystem({ logger: createLogger() });
-        retrySystem.isConnected = () => false;
-        retrySystem.incrementRetryCount = jest.fn().mockReturnValue(5);
-        retrySystem.getRetryCount = jest.fn().mockReturnValue(1);
+        jest.useFakeTimers();
+        try {
+            const retrySystem = new RetrySystem({ logger: createLogger() });
+            retrySystem.isConnected = () => false;
+            retrySystem.incrementRetryCount = jest.fn().mockReturnValue(5);
+            retrySystem.getRetryCount = jest.fn().mockReturnValue(1);
 
-        const cleanupFn = jest.fn().mockResolvedValue();
-        const reconnectFn = jest.fn();
+            const cleanupFn = jest.fn().mockResolvedValue();
+            const reconnectFn = jest.fn();
 
-        retrySystem.handleConnectionError('tiktok', new Error('first'), reconnectFn, cleanupFn);
-        retrySystem.handleConnectionError('tiktok', new Error('second'), reconnectFn, cleanupFn);
+            retrySystem.handleConnectionError('tiktok', new Error('first'), reconnectFn, cleanupFn);
+            retrySystem.handleConnectionError('tiktok', new Error('second'), reconnectFn, cleanupFn);
 
-        await safeDelay(10);
+            await Promise.resolve();
+            await Promise.resolve();
+            await jest.runOnlyPendingTimersAsync();
 
-        expect(reconnectFn).toHaveBeenCalledTimes(1);
-        expect(cleanupFn).toHaveBeenCalledTimes(2);
+            expect(reconnectFn).toHaveBeenCalledTimes(1);
+            expect(cleanupFn).toHaveBeenCalledTimes(2);
+        } finally {
+            jest.useRealTimers();
+        }
     });
 
     it('continues scheduling retries when a scheduled reconnect throws', async () => {
