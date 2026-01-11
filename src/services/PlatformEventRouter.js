@@ -297,8 +297,9 @@ class PlatformEventRouter {
             platform: originalPlatform,
             sourceType: originalType
         };
-        if (!isErrorPayload && sanitized.username) {
-            result.username = sanitized.username.trim();
+        const normalizedUsername = typeof sanitized.username === 'string' ? sanitized.username.trim() : '';
+        if (normalizedUsername) {
+            result.username = normalizedUsername;
         }
         if (normalizedUserId !== undefined) {
             result.userId = normalizedUserId;

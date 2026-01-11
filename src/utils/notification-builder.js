@@ -295,7 +295,7 @@ class NotificationBuilder {
             case 'gift':
                 return 'gift';
             case 'giftpaypiggy':
-                return 'gifted subscription';
+                return 'gift';
             case 'paypiggy':
                 return 'subscription';
             case 'envelope':

@@ -1121,10 +1121,12 @@ class AppRuntime {
             }
         }
 
-        const giftType = typeof options.giftType === 'string' ? options.giftType.trim() : '';
-        const giftCount = Number(options.giftCount);
-        const amount = Number(options.amount);
-        const currency = typeof options.currency === 'string' ? options.currency.trim() : '';
+        let giftType = typeof options.giftType === 'string' ? options.giftType.trim() : '';
+        const rawGiftCount = options.giftCount;
+        let giftCount = rawGiftCount === undefined || rawGiftCount === null ? undefined : Number(rawGiftCount);
+        const rawAmount = options.amount;
+        let amount = rawAmount === undefined || rawAmount === null ? undefined : Number(rawAmount);
+        let currency = typeof options.currency === 'string' ? options.currency.trim() : '';
         const repeatCount = options.repeatCount;
 
         if (!isError) {
@@ -1134,6 +1136,21 @@ class AppRuntime {
         }
         if (!isError && (giftCount <= 0 || amount <= 0)) {
             throw new Error('Gift notification requires giftType, giftCount, amount, and currency');
+        }
+
+        if (isError) {
+            if (!giftType) {
+                giftType = undefined;
+            }
+            if (giftCount !== undefined && (!Number.isFinite(giftCount) || giftCount < 0)) {
+                giftCount = undefined;
+            }
+            if (amount !== undefined && (!Number.isFinite(amount) || amount < 0)) {
+                amount = undefined;
+            }
+            if (!currency) {
+                currency = undefined;
+            }
         }
 
         // Get random VFX command for gift
@@ -1160,15 +1177,24 @@ class AppRuntime {
         if (!isError && !options.id) {
             throw new Error('Gift notification requires id');
         }
+        const {
+            giftType: _giftType,
+            giftCount: _giftCount,
+            amount: _amount,
+            currency: _currency,
+            id: giftId,
+            ...payloadBase
+        } = options;
+
         const notificationPayload = {
-            ...options,
-            giftCount,
-            giftType,
-            amount,
-            currency,
+            ...payloadBase,
+            ...(giftType ? { giftType } : {}),
+            ...(giftCount !== undefined ? { giftCount } : {}),
+            ...(amount !== undefined ? { amount } : {}),
+            ...(currency ? { currency } : {}),
             repeatCount,
             vfxConfig: giftVFXConfig,
-            ...(options.id ? { id: options.id } : {})
+            ...(giftId ? { id: giftId } : {})
         };
 
         // Delegate to handleUnifiedNotification with preprocessed gift data
@@ -1192,19 +1218,24 @@ class AppRuntime {
         if (!options || typeof options !== 'object') {
             throw new Error('handleGiftPaypiggyEvent requires options');
         }
-        const requiresTier = platform === 'twitch';
-        if (options.giftCount === undefined || (requiresTier && options.tier === undefined)) {
-            throw new Error(requiresTier
-                ? 'handleGiftPaypiggyEvent requires tier and giftCount'
-                : 'handleGiftPaypiggyEvent requires giftCount');
-        }
-        const giftCount = Number(options.giftCount);
-        if (!Number.isFinite(giftCount)) {
-            throw new Error('handleGiftPaypiggyEvent requires giftCount');
-        }
         const isError = options.isError === true;
+        const requiresTier = platform === 'twitch';
+        const rawGiftCount = options.giftCount;
+        let giftCount = rawGiftCount === undefined || rawGiftCount === null ? undefined : Number(rawGiftCount);
+        if (!isError) {
+            if (giftCount === undefined || (requiresTier && options.tier === undefined)) {
+                throw new Error(requiresTier
+                    ? 'handleGiftPaypiggyEvent requires tier and giftCount'
+                    : 'handleGiftPaypiggyEvent requires giftCount');
+            }
+            if (!Number.isFinite(giftCount)) {
+                throw new Error('handleGiftPaypiggyEvent requires giftCount');
+            }
+        } else if (giftCount !== undefined && (!Number.isFinite(giftCount) || giftCount < 0)) {
+            giftCount = undefined;
+        }
         const payload = {
-            giftCount,
+            ...(giftCount !== undefined ? { giftCount } : {}),
             userId: options.userId,
             timestamp: options.timestamp,
             ...(isError ? { isError: true } : {})
@@ -1244,20 +1275,30 @@ class AppRuntime {
             if (!data || typeof data !== 'object') {
                 throw new Error('handleEnvelopeNotification requires data');
             }
-            if (!data.userId || !data.username) {
-                throw new Error('Envelope notification requires userId and username');
-            }
             const isError = data.isError === true;
             const giftType = typeof data.giftType === 'string' ? data.giftType.trim() : '';
-            const giftCount = Number(data.giftCount);
-            const amount = Number(data.amount);
+            const rawGiftCount = data.giftCount;
+            let giftCount = rawGiftCount === undefined || rawGiftCount === null ? undefined : Number(rawGiftCount);
+            const rawAmount = data.amount;
+            let amount = rawAmount === undefined || rawAmount === null ? undefined : Number(rawAmount);
             const currency = typeof data.currency === 'string' ? data.currency.trim() : '';
             const repeatCount = data.repeatCount;
-            if (!giftType || !Number.isFinite(giftCount) || giftCount < 0 || !Number.isFinite(amount) || amount < 0 || !currency || !data.timestamp) {
-                throw new Error('Envelope notification requires giftType, giftCount, amount, currency, timestamp, and id');
+            if (!isError) {
+                if (!data.userId || !data.username) {
+                    throw new Error('Envelope notification requires userId and username');
+                }
+                if (!giftType || !Number.isFinite(giftCount) || giftCount < 0 || !Number.isFinite(amount) || amount < 0 || !currency || !data.timestamp) {
+                    throw new Error('Envelope notification requires giftType, giftCount, amount, currency, timestamp, and id');
+                }
+                if (giftCount <= 0 || amount <= 0 || !data.id) {
+                    throw new Error('Envelope notification requires giftType, giftCount, amount, currency, timestamp, and id');
+                }
             }
-            if (!isError && (giftCount <= 0 || amount <= 0 || !data.id)) {
-                throw new Error('Envelope notification requires giftType, giftCount, amount, currency, timestamp, and id');
+            if (giftCount !== undefined && (!Number.isFinite(giftCount) || giftCount < 0)) {
+                giftCount = undefined;
+            }
+            if (amount !== undefined && (!Number.isFinite(amount) || amount < 0)) {
+                amount = undefined;
             }
             
             // Pass to handleGiftNotification as a special gift type
