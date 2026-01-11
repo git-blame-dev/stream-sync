@@ -354,9 +354,11 @@ class NotificationManager extends EventEmitter {
             notificationData.type = canonicalType;
             
             // Ensure required fields exist
-            const { formatUsername12 } = require('../utils/validation');
-            const sanitizedUsername = formatUsername12(data.username, false);
-            const sanitizedTtsUsername = formatUsername12(data.username, true);
+            if (data.username) {
+                const { formatUsername12 } = require('../utils/validation');
+                formatUsername12(data.username, false);
+                formatUsername12(data.username, true);
+            }
 
             // Add sourceType metadata for non-monetization notifications only
             if (resolvedSourceType !== undefined) {

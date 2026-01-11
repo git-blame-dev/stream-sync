@@ -945,6 +945,9 @@ class DisplayQueue {
         }
 
         const username = data.username;
+        if (data.isError === true && (typeof username !== 'string' || !username.trim())) {
+            return null;
+        }
         if (typeof username !== 'string' || !username.trim()) {
             logger.warn('[DisplayQueue] extractUsername: Missing username field in notification data.', 'display-queue', {
                 callerMethod: 'extractUsername',
