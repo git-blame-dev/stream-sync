@@ -71,4 +71,47 @@ describe('monetization error payload no-fallback behavior', () => {
 
         expect(payload.timestamp).toBe('2024-01-01T00:00:00.000Z');
     });
+
+    it('omits zero gift values for gift error payloads', () => {
+        const { createMonetizationErrorPayload } = require('../../../src/utils/monetization-error-utils');
+
+        const payload = createMonetizationErrorPayload({
+            notificationType: 'gift',
+            platform: 'twitch',
+            giftType: 'bits',
+            giftCount: 0,
+            amount: 0,
+            currency: 'bits'
+        });
+
+        expect(payload.giftType).toBe('bits');
+        expect(payload.currency).toBe('bits');
+        expect(payload).not.toHaveProperty('giftCount');
+        expect(payload).not.toHaveProperty('amount');
+    });
+
+    it('omits zero giftCount for giftpaypiggy error payloads', () => {
+        const { createMonetizationErrorPayload } = require('../../../src/utils/monetization-error-utils');
+
+        const payload = createMonetizationErrorPayload({
+            notificationType: 'giftpaypiggy',
+            platform: 'twitch',
+            giftCount: 0,
+            tier: '1000'
+        });
+
+        expect(payload).not.toHaveProperty('giftCount');
+    });
+
+    it('omits zero months for paypiggy error payloads', () => {
+        const { createMonetizationErrorPayload } = require('../../../src/utils/monetization-error-utils');
+
+        const payload = createMonetizationErrorPayload({
+            notificationType: 'paypiggy',
+            platform: 'youtube',
+            months: 0
+        });
+
+        expect(payload).not.toHaveProperty('months');
+    });
 });
