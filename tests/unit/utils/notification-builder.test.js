@@ -151,5 +151,20 @@ describe('NotificationBuilder', () => {
         });
     });
 
+    it('uses generic error copy when username is missing', () => {
+        const notification = NotificationBuilder.build({
+            platform: 'twitch',
+            type: 'gift',
+            isError: true
+        });
+
+        expect(notification.displayMessage).toMatch(/error/i);
+        expect(notification.displayMessage.toLowerCase()).not.toContain('from ');
+        expect(notification.ttsMessage).toMatch(/error/i);
+        expect(notification.ttsMessage.toLowerCase()).not.toContain('from ');
+        expect(notification.logMessage).toMatch(/error/i);
+        expect(notification.logMessage.toLowerCase()).not.toContain('from ');
+    });
+
     // Edge cases are handled by graceful degradation in implementation
 }); 
