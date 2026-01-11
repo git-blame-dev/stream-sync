@@ -2,6 +2,7 @@
 const { createEventBus } = require('../../src/core/EventBus');
 const { createOBSEventService } = require('../../src/obs/obs-event-service');
 const { createSceneManagementService } = require('../../src/obs/scene-management-service');
+const testClock = require('../helpers/test-clock');
 
 describe('OBS Event-Driven Integration', () => {
     let eventBus;
@@ -180,7 +181,7 @@ describe('OBS Event-Driven Integration', () => {
             const latencies = [];
 
             for (let i = 0; i < 50; i++) {
-                const startTime = Date.now();
+                const startTime = testClock.now();
 
                 eventBus.emit('obs:update-text', {
                     sourceName: 'Message',
@@ -188,8 +189,9 @@ describe('OBS Event-Driven Integration', () => {
                 });
 
                 await waitForDelay(1);
+                testClock.advance(1);
 
-                const latency = Date.now() - startTime;
+                const latency = testClock.now() - startTime;
                 latencies.push(latency);
             }
 

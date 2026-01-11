@@ -1,5 +1,6 @@
 
 const { createTestUser, createMockConfig } = require('../helpers/test-setup');
+const testClock = require('../helpers/test-clock');
 
 describe('OBSHealthChecker', () => {
     let OBSHealthChecker;
@@ -7,6 +8,11 @@ describe('OBSHealthChecker', () => {
     let healthChecker;
     let mockLogger;
 
+    const createHealthChecker = (config = {}) => new OBSHealthChecker(mockOBSManager, {
+        timeProvider: () => testClock.now(),
+        ...config
+    });
+ 
     beforeEach(() => {
         // Reset modules for clean testing
         jest.resetModules();
@@ -35,7 +41,7 @@ describe('OBSHealthChecker', () => {
 
     describe('Constructor', () => {
         it('should initialize with default configuration', () => {
-            healthChecker = new OBSHealthChecker(mockOBSManager);
+            healthChecker = createHealthChecker();
             
             expect(healthChecker.obsManager).toBe(mockOBSManager);
             expect(healthChecker.cacheTimeout).toBe(2000); // 2 seconds default
@@ -51,7 +57,7 @@ describe('OBSHealthChecker', () => {
                 maxFailures: 5
             };
             
-            healthChecker = new OBSHealthChecker(mockOBSManager, customConfig);
+            healthChecker = createHealthChecker(customConfig);
             
             expect(healthChecker.cacheTimeout).toBe(5000);
             expect(healthChecker.maxFailures).toBe(5);
@@ -64,7 +70,7 @@ describe('OBSHealthChecker', () => {
 
     describe('isReady()', () => {
         beforeEach(() => {
-            healthChecker = new OBSHealthChecker(mockOBSManager);
+            healthChecker = createHealthChecker();
         });
 
         it('should return false when OBS is not connected', async () => {
@@ -101,8 +107,6 @@ describe('OBSHealthChecker', () => {
         });
 
         it('should use cached result when cache is valid', async () => {
-            jest.useFakeTimers();
-            
             mockOBSManager.isConnected.mockReturnValue(true);
             mockOBSManager.call.mockResolvedValue({ version: '28.0.0' });
             
@@ -112,15 +116,13 @@ describe('OBSHealthChecker', () => {
             expect(mockOBSManager.call).toHaveBeenCalledTimes(1);
             
             // Second call within cache timeout
-            jest.advanceTimersByTime(1000); // 1 second
+            testClock.advance(1000); // 1 second
             const result2 = await healthChecker.isReady();
             expect(result2).toBe(true);
             expect(mockOBSManager.call).toHaveBeenCalledTimes(1); // Should use cache
         });
 
         it('should perform new health check when cache expires', async () => {
-            jest.useFakeTimers();
-            
             mockOBSManager.isConnected.mockReturnValue(true);
             mockOBSManager.call.mockResolvedValue({ version: '28.0.0' });
             
@@ -129,7 +131,7 @@ describe('OBSHealthChecker', () => {
             expect(mockOBSManager.call).toHaveBeenCalledTimes(1);
             
             // Second call after cache timeout
-            jest.advanceTimersByTime(3000); // 3 seconds (past 2 second cache)
+            testClock.advance(3000); // 3 seconds (past 2 second cache)
             await healthChecker.isReady();
             expect(mockOBSManager.call).toHaveBeenCalledTimes(2); // Should make new call
         });
@@ -164,7 +166,7 @@ describe('OBSHealthChecker', () => {
 
     describe('Circuit Breaker', () => {
         beforeEach(() => {
-            healthChecker = new OBSHealthChecker(mockOBSManager, { maxFailures: 2 });
+            healthChecker = createHealthChecker({ maxFailures: 2 });
         });
 
         it('should open circuit after maximum failures', async () => {
@@ -205,7 +207,7 @@ describe('OBSHealthChecker', () => {
 
     describe('Performance Considerations', () => {
         beforeEach(() => {
-            healthChecker = new OBSHealthChecker(mockOBSManager);
+            healthChecker = createHealthChecker();
         });
 
         it('should issue a GetVersion health check call', async () => {
@@ -232,12 +234,12 @@ describe('OBSHealthChecker', () => {
 
     describe('Cache Management', () => {
         beforeEach(() => {
-            healthChecker = new OBSHealthChecker(mockOBSManager);
+            healthChecker = createHealthChecker();
         });
 
         it('should invalidate cache on connection state change', () => {
             // Set up cached result
-            healthChecker.lastCheck = Date.now();
+            healthChecker.lastCheck = testClock.now();
             healthChecker.lastResult = true;
             
             healthChecker.invalidateCache();
@@ -249,7 +251,7 @@ describe('OBSHealthChecker', () => {
         it('should provide method to get cache status', () => {
             expect(healthChecker.isCacheValid()).toBe(false);
             
-            healthChecker.lastCheck = Date.now();
+            healthChecker.lastCheck = testClock.now();
             expect(healthChecker.isCacheValid()).toBe(true);
         });
     });

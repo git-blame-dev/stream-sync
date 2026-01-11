@@ -1,5 +1,6 @@
 
 const { createEventBus } = require('../../../src/core/EventBus');
+const testClock = require('../../helpers/test-clock');
 
 describe('OBSEventService', () => {
     let obsEventService;
@@ -277,7 +278,7 @@ describe('OBSEventService', () => {
 
     describe('Performance Requirements', () => {
         test('handles text updates within 50ms latency', async () => {
-            const startTime = Date.now();
+            const startTime = testClock.now();
 
             eventBus.emit('obs:update-text', {
                 sourceName: 'ChatMessage',
@@ -285,8 +286,9 @@ describe('OBSEventService', () => {
             });
 
             await waitForDelay(10);
+            testClock.advance(10);
 
-            const duration = Date.now() - startTime;
+            const duration = testClock.now() - startTime;
             expect(duration).toBeLessThan(50);
         });
 
