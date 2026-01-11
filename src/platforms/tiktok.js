@@ -1345,10 +1345,14 @@ class TikTokPlatform extends EventEmitter {
 
     _createMonetizationErrorPayload(notificationType, data, overrides = {}) {
         const id = this._getPlatformMessageId(data);
+        const timestampMs = TikTokPlatform.resolveEventTimestampMs(data);
+        const timestamp = Number.isFinite(timestampMs)
+            ? new Date(timestampMs).toISOString()
+            : undefined;
         return createMonetizationErrorPayload({
             notificationType,
             platform: 'tiktok',
-            timestamp: TikTokPlatform.resolveEventTimestampISO(data),
+            timestamp,
             id: id || undefined,
             ...overrides
         });
@@ -1415,12 +1419,6 @@ class TikTokPlatform extends EventEmitter {
                     errorOverrides = {};
                 }
                 if (emitType === 'gift') {
-                    const giftType = typeof data?.giftDetails?.giftName === 'string'
-                        ? data.giftDetails.giftName
-                        : undefined;
-                    if (giftType) {
-                        errorOverrides.giftType = giftType;
-                    }
                     const amount = Number(data?.giftCoins ?? data?.amount);
                     if (Number.isFinite(amount)) {
                         errorOverrides.amount = amount;

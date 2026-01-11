@@ -20,9 +20,21 @@ class UnifiedNotificationProcessor {
     async processNotification(chatItem, eventType, eventData = {}) {
         try {
             const author = this.AuthorExtractor.extractAuthor(chatItem);
+            const monetizationTypes = new Set(['gift', 'paypiggy', 'giftpaypiggy', 'envelope']);
 
             if (this.shouldSuppressNotification(author)) {
                 this.logger.debug(`Suppressed ${eventType} notification for anonymous/junk user`, 'youtube', { author });
+                return;
+            }
+
+            const handlerName = `on${eventType.charAt(0).toUpperCase() + eventType.slice(1)}`;
+            const handler = this.platform.handlers?.[handlerName];
+
+            if (!author) {
+                this.logger.warn(`Suppressed ${eventType} notification: missing author`, 'youtube');
+                if (monetizationTypes.has(eventType) && this.notificationDispatcher) {
+                    await this.notificationDispatcher.dispatchErrorNotification(chatItem, eventType, handler, handlerName);
+                }
                 return;
             }
 
@@ -32,11 +44,17 @@ class UnifiedNotificationProcessor {
             const userId = author?.id || null;
             if (!userId) {
                 this.logger.warn(`Suppressed ${eventType} notification: missing userId`, 'youtube');
+                if (monetizationTypes.has(eventType) && this.notificationDispatcher) {
+                    await this.notificationDispatcher.dispatchErrorNotification(chatItem, eventType, handler, handlerName);
+                }
                 return;
             }
             const timestamp = extractYouTubeTimestamp(chatItem);
             if (!timestamp) {
                 this.logger.warn(`Suppressed ${eventType} notification: missing timestamp`, 'youtube');
+                if (monetizationTypes.has(eventType) && this.notificationDispatcher) {
+                    await this.notificationDispatcher.dispatchErrorNotification(chatItem, eventType, handler, handlerName);
+                }
                 return;
             }
             const id = extractYouTubeNotificationId(chatItem);
@@ -52,9 +70,8 @@ class UnifiedNotificationProcessor {
                 ...eventData
             };
 
-            const handlerName = `on${eventType.charAt(0).toUpperCase() + eventType.slice(1)}`;
-            if (this.platform.handlers[handlerName]) {
-                this.platform.handlers[handlerName](notification);
+            if (handler) {
+                handler(notification);
             }
 
             this.logger.debug(`${eventType} notification processed via unified method`, 'youtube');
