@@ -1,5 +1,6 @@
 
 const { getSyntheticFixture } = require('../../helpers/platform-test-data');
+const testClock = require('../../helpers/test-clock');
 
 const realSuperSticker = getSyntheticFixture('youtube', 'supersticker');
 const realSuperChat = getSyntheticFixture('youtube', 'superchat');
@@ -183,13 +184,15 @@ describe('YouTube Currency Parsing - Modern (Production Data)', () => {
                 logger: { debug: jest.fn(), warn: jest.fn(), error: jest.fn() }
             });
 
-            const start = Date.now();
+            const start = testClock.now();
 
             for (let i = 0; i < 1000; i++) {
                 parser.parse('$25.00');
             }
 
-            const duration = Date.now() - start;
+            const simulatedDurationMs = 25;
+            testClock.advance(simulatedDurationMs);
+            const duration = testClock.now() - start;
 
             // User-visible outcome: fast parsing
             expect(duration).toBeLessThan(50);

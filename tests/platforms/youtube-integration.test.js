@@ -5,6 +5,7 @@ const { initializeTestLogging } = require('../helpers/test-setup');
 initializeTestLogging();
 
 const { YouTubePlatform } = require('../../src/platforms/youtube');
+const testClock = require('../helpers/test-clock');
 
 // Mock isChatMessageEvent for testing
 const isChatMessageEvent = jest.fn();
@@ -69,7 +70,7 @@ describe('YouTubePlatform handleChatMessage Integration', () => {
                 // Handle timestamp filtering (mock logic)
                 if (chatItem.videoId) {
                     const connectionStatus = youtubePlatform.youtubeConnectionStatus.get(chatItem.videoId);
-                    const messageTime = chatItem.item?.timestamp || chatItem.timestamp || Date.now() * 1000;
+                    const messageTime = chatItem.item?.timestamp || chatItem.timestamp || testClock.now() * 1000;
                     const connectionTime = connectionStatus ? connectionStatus.time : undefined;
                     
                     if (connectionTime && messageTime <= connectionTime) {

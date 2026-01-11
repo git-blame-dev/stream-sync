@@ -1,6 +1,7 @@
 
 const { validateMockContract } = require('./mock-validation');
 const testClock = require('./test-clock');
+const { nextTestId } = require('./test-id');
 
 // ================================================================================================
 // MOCK LIFECYCLE MANAGER
@@ -275,7 +276,7 @@ const setupAutomatedCleanup = (options = {}) => {
 const withLifecycleManagement = (factoryFunction, mockType, lifecycleOptions = {}) => {
     return (...args) => {
         const mockObject = factoryFunction(...args);
-        const mockId = `${mockType}_${testClock.now()}_${Math.random().toString(36).substr(2, 9)}`;
+        const mockId = nextTestId(mockType);
         
         return globalLifecycleManager.registerMock(mockId, mockObject, {
             contractName: mockType,
@@ -285,7 +286,7 @@ const withLifecycleManagement = (factoryFunction, mockType, lifecycleOptions = {
 };
 
 const createManagedMock = (mockObject, options = {}) => {
-    const mockId = `managed_${testClock.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    const mockId = nextTestId('managed');
     return globalLifecycleManager.registerMock(mockId, mockObject, options);
 };
 

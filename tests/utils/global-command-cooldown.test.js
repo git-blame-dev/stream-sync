@@ -12,6 +12,7 @@ const {
 const { 
   setupAutomatedCleanup 
 } = require('../helpers/mock-lifecycle');
+const testClock = require('../helpers/test-clock');
 
 // Initialize logging FIRST
 initializeTestLogging();
@@ -29,11 +30,16 @@ describe('GlobalCommandCooldownManager', () => {
 
   beforeEach(() => {
     mockLogger = createMockLogger('debug', { captureConsole: true });
+    jest.spyOn(Date, 'now').mockImplementation(() => testClock.now());
     
     // Import and create fresh instance for each test
     delete require.cache[require.resolve('../../src/utils/global-command-cooldown')];
     const { GlobalCommandCooldownManager } = require('../../src/utils/global-command-cooldown');
     cooldownManager = new GlobalCommandCooldownManager(mockLogger);
+  });
+
+  afterEach(() => {
+    global.Date.now.mockRestore();
   });
 
   describe('when checking cooldown for new command', () => {
@@ -66,13 +72,11 @@ describe('GlobalCommandCooldownManager', () => {
 
     it('should allow command after cooldown expires', () => {
       // Mock time passing
-      jest.spyOn(Date, 'now').mockReturnValue(Date.now() + 6000);
+      testClock.advance(6000);
       
       const result = cooldownManager.isCommandOnCooldown('!hello', 5000);
       
       expect(result).toBe(false);
-      
-      Date.now.mockRestore();
     });
 
     it('should log cooldown status with time remaining', () => {
@@ -109,9 +113,10 @@ describe('GlobalCommandCooldownManager', () => {
 
   describe('when updating command timestamps', () => {
     it('should record current timestamp for command', () => {
-      const beforeTime = Date.now();
+      const beforeTime = testClock.now();
       cooldownManager.updateCommandTimestamp('!hello');
-      const afterTime = Date.now();
+      testClock.advance(1);
+      const afterTime = testClock.now();
       
       // Verify cooldown is active (timestamp was recorded)
       const result = cooldownManager.isCommandOnCooldown('!hello', 1000);
@@ -233,13 +238,11 @@ describe('GlobalCommandCooldownManager', () => {
 
     it('should remove expired cooldowns', () => {
       // Mock time passing beyond cooldown
-      jest.spyOn(Date, 'now').mockReturnValue(Date.now() + 10000);
+      testClock.advance(10000);
       
       const removedCount = cooldownManager.clearExpiredCooldowns(5000);
       
       expect(removedCount).toBe(2);
-      
-      Date.now.mockRestore();
     });
 
     it('should keep active cooldowns', () => {
@@ -253,7 +256,7 @@ describe('GlobalCommandCooldownManager', () => {
 
     it('should log cleanup operation', () => {
       // Mock time passing beyond cooldown so cleanup actually occurs
-      jest.spyOn(Date, 'now').mockReturnValue(Date.now() + 10000);
+      testClock.advance(10000);
       
       cooldownManager.clearExpiredCooldowns(5000);
       
@@ -261,8 +264,6 @@ describe('GlobalCommandCooldownManager', () => {
         expect.stringContaining('Cleared'),
         'global-cooldown'
       );
-      
-      Date.now.mockRestore();
     });
   });
 }, TEST_TIMEOUTS.FAST);

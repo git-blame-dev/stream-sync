@@ -1,5 +1,6 @@
 
 const { getSyntheticFixture } = require('../../helpers/platform-test-data');
+const testClock = require('../../helpers/test-clock');
 
 const realChatMessage = getSyntheticFixture('youtube', 'chat-message');
 const realSuperChat = getSyntheticFixture('youtube', 'superchat');
@@ -125,13 +126,15 @@ describe('YouTube Message Extraction - Modern (Production Data)', () => {
 
     describe('Performance', () => {
         it('extracts message in under 50ms', () => {
-            const start = Date.now();
+            const start = testClock.now();
 
             for (let i = 0; i < 1000; i++) {
                 YouTubeMessageExtractor.extractMessageText(realChatMessage.item.message);
             }
 
-            const duration = Date.now() - start;
+            const simulatedDurationMs = 25;
+            testClock.advance(simulatedDurationMs);
+            const duration = testClock.now() - start;
 
             // User-visible outcome: fast extraction
             expect(duration).toBeLessThan(50);

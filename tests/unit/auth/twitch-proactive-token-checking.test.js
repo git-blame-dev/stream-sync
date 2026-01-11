@@ -1,5 +1,6 @@
 
 const { describe, test, expect, beforeEach, afterEach } = require('@jest/globals');
+const testClock = require('../../helpers/test-clock');
 
 describe('Twitch Proactive Token Checking', () => {
     let TwitchAuthInitializer;
@@ -12,6 +13,7 @@ describe('Twitch Proactive Token Checking', () => {
     beforeEach(() => {
         jest.resetModules();
         jest.clearAllMocks();
+        jest.spyOn(Date, 'now').mockImplementation(() => testClock.now());
 
         // Mock logger
         mockLogger = {
@@ -52,7 +54,7 @@ describe('Twitch Proactive Token Checking', () => {
 
     describe('ensureValidToken (timestamp guard)', () => {
         test('refreshes when token is within near-expiry threshold without calling validate', async () => {
-            authService.tokenExpiresAt = Date.now() + (10 * 60 * 1000); // 10 minutes left
+            authService.tokenExpiresAt = testClock.now() + (10 * 60 * 1000); // 10 minutes left
 
             const mockRefreshToken = jest.spyOn(authInitializer, 'refreshToken').mockResolvedValue(true);
 
@@ -64,7 +66,7 @@ describe('Twitch Proactive Token Checking', () => {
         });
 
         test('skips refresh when token is healthy and avoids validate calls', async () => {
-            authService.tokenExpiresAt = Date.now() + (2 * 60 * 60 * 1000); // 2 hours left
+            authService.tokenExpiresAt = testClock.now() + (2 * 60 * 60 * 1000); // 2 hours left
 
             const mockRefreshToken = jest.spyOn(authInitializer, 'refreshToken').mockResolvedValue(true);
 
@@ -77,7 +79,7 @@ describe('Twitch Proactive Token Checking', () => {
 
         test('returns true when no refresh token is available and does not call validate', async () => {
             authService.config.refreshToken = null;
-            authService.tokenExpiresAt = Date.now() + (30 * 60 * 1000);
+            authService.tokenExpiresAt = testClock.now() + (30 * 60 * 1000);
 
             const mockRefreshToken = jest.spyOn(authInitializer, 'refreshToken').mockResolvedValue(true);
 
@@ -116,7 +118,7 @@ describe('Twitch Proactive Token Checking', () => {
             const success = await authInitializer.initializeAuthentication(authService);
 
             expect(success).toBe(true);
-            expect(authService.tokenExpiresAt).toBeGreaterThan(Date.now());
+            expect(authService.tokenExpiresAt).toBeGreaterThan(testClock.now());
         });
     });
 });

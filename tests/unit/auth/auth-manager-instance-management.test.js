@@ -1,5 +1,7 @@
 
 const { describe, test, expect, beforeEach, afterEach } = require('@jest/globals');
+const testClock = require('../../helpers/test-clock');
+const { nextTestId } = require('../../helpers/test-id');
 
 // Initialize test logging FIRST
 const { initializeTestLogging } = require('../../helpers/test-setup');
@@ -42,7 +44,7 @@ function createContextConfiguration(context, overrides = {}) {
         refreshToken: `${context}-refresh-token`,
         channel: `${context}-channel`,
         context: context,
-        mockUserId: `${Date.now()}${Math.random().toString(36).substr(2, 9)}`,
+        mockUserId: nextTestId(`${context}-user`),
         ...overrides
     };
 }
@@ -420,7 +422,9 @@ describe('TwitchAuthManager Instance Management', () => {
                 await instance.initialize();
                 
                 // Simulate some work
-                await waitForDelay(Math.random() * 10);
+                const simulatedDelayMs = 5;
+                await waitForDelay(simulatedDelayMs);
+                testClock.advance(simulatedDelayMs);
                 
                 // Update configuration
                 const updatedConfig = createContextConfiguration(context, {

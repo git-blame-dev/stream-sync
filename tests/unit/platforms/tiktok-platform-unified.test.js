@@ -4,6 +4,7 @@ jest.unmock('../../../src/services/PlatformEventRouter');
 
 const PlatformEventRouter = require('../../../src/services/PlatformEventRouter');
 const { TikTokPlatform } = require('../../../src/platforms/tiktok');
+const testClock = require('../../helpers/test-clock');
 
 describe('TikTokPlatform unified event contract (expected behavior)', () => {
     let platform;
@@ -73,7 +74,7 @@ describe('TikTokPlatform unified event contract (expected behavior)', () => {
             },
             ControlEvent: {},
             timestampService: {
-                extractTimestamp: jest.fn(() => new Date().toISOString())
+                extractTimestamp: jest.fn(() => new Date(testClock.now()).toISOString())
             }
         };
 
@@ -102,7 +103,7 @@ describe('TikTokPlatform unified event contract (expected behavior)', () => {
                 nickname: 'User1'
             },
             comment: 'hello world',
-            createTime: Date.now()
+            createTime: testClock.now()
         });
 
         expect(runtime.handleChatMessage).toHaveBeenCalledTimes(1);
@@ -117,7 +118,7 @@ describe('TikTokPlatform unified event contract (expected behavior)', () => {
     });
 
     it('routes gift events through platform:event to PlatformEventRouter', async () => {
-        const timestamp = new Date().toISOString();
+        const timestamp = new Date(testClock.now()).toISOString();
         await platform._handleGift({
             user: {
                 userId: 'tt-gift-1',
@@ -165,7 +166,7 @@ describe('TikTokPlatform unified event contract (expected behavior)', () => {
                 nickname: 'NoBridgeUser'
             },
             comment: 'hello from no bridge',
-            createTime: Date.now()
+            createTime: testClock.now()
         });
 
         const chatEvent = emitted.find((entry) => entry.type === 'chat');

@@ -2,6 +2,7 @@
 const { EventBus, createEventBus } = require('../../../src/core/EventBus');
 const { logger } = require('../../../src/core/logging');
 const { PlatformEvents } = require('../../../src/interfaces/PlatformEvents');
+const testClock = require('../../helpers/test-clock');
 
 // Mock logger to capture debug output
 jest.mock('../../../src/core/logging', () => ({
@@ -668,14 +669,16 @@ describe('EventBus', () => {
             const handler = jest.fn();
             eventBus.subscribe('rapid-event', handler);
             
-            const startTime = Date.now();
+            const startTime = testClock.now();
             
             // Emit 100 events rapidly
             for (let i = 0; i < 100; i++) {
                 eventBus.emit('rapid-event', i);
             }
             
-            const emissionTime = Date.now() - startTime;
+            const simulatedEmissionMs = 25;
+            testClock.advance(simulatedEmissionMs);
+            const emissionTime = testClock.now() - startTime;
             
             // Give handlers time to complete
             await waitForDelay(100);

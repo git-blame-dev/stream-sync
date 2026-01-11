@@ -3,6 +3,7 @@ const { initializeTestLogging, createTestUser, TEST_TIMEOUTS } = require('../hel
 const { createMockLogger, createMockNotificationBuilder } = require('../helpers/mock-factories');
 const { setupAutomatedCleanup } = require('../helpers/mock-lifecycle');
 const { expectValidNotification } = require('../helpers/assertion-helpers');
+const testClock = require('../helpers/test-clock');
 
 // Initialize logging FIRST (required for all tests)
 initializeTestLogging();
@@ -172,7 +173,7 @@ describe('Object Logging Serialization Validation', () => {
             // Given: An object that needs to be logged
             const testObject = {
                 config: { enabled: true, value: 42 },
-                timestamp: Date.now()
+                timestamp: testClock.now()
             };
             
             // When: Object is properly serialized before logging

@@ -5,6 +5,7 @@ const { createMockLogger, createMockNotificationBuilder, createMockConfig } = re
 const { setupAutomatedCleanup } = require('../../helpers/mock-lifecycle');
 const { expectNoTechnicalArtifacts, expectValidNotification } = require('../../helpers/assertion-helpers');
 const { extractTikTokUserData } = require('../../../src/utils/tiktok-data-extraction');
+const testClock = require('../../helpers/test-clock');
 
 // Initialize logging FIRST
 initializeTestLogging();
@@ -92,7 +93,7 @@ describe('TikTok Envelope Notification - Behavior Testing', () => {
                 platform,
                 username,
                 giftData,
-                timestamp: Date.now()
+                timestamp: testClock.now()
             };
             capturedGiftCalls.push(call);
             
@@ -105,8 +106,8 @@ describe('TikTok Envelope Notification - Behavior Testing', () => {
                 displayMessage: `${username} sent a Treasure Chest`,
                 ttsMessage: `${username} sent a treasure chest`,
                 logMessage: `[Gift] ${username} sent Treasure Chest`,
-                processedAt: Date.now(),
-                timestamp: new Date().toISOString(),
+                processedAt: testClock.now(),
+                timestamp: new Date(testClock.now()).toISOString(),
                 data: giftData
             };
         });
@@ -143,7 +144,7 @@ describe('TikTok Envelope Notification - Behavior Testing', () => {
         amount: 500,
         currency: 'coins',
         id: 'envelope-test-id',
-        timestamp: new Date().toISOString(),
+        timestamp: new Date(testClock.now()).toISOString(),
         ...overrides
     });
 
@@ -306,7 +307,7 @@ describe('TikTok Envelope Notification - Behavior Testing', () => {
                     userId: "test_user_id_envelope_nested"
                 },
                 amount: 300,
-                timestamp: new Date().toISOString()
+                timestamp: new Date(testClock.now()).toISOString()
             });
 
             // When: Processing envelope notification
@@ -415,7 +416,7 @@ describe('TikTok Envelope Notification - Behavior Testing', () => {
                 amount: 200,
                 currency: 'coins',
                 id: 'envelope-empty-user-id',
-                timestamp: new Date().toISOString()
+                timestamp: new Date(testClock.now()).toISOString()
                 // No user fields at all
             };
 
@@ -444,7 +445,7 @@ describe('TikTok Envelope Notification - Behavior Testing', () => {
                 amount: 350,
                 currency: 'coins',
                 id: 'envelope-empty-strings',
-                timestamp: new Date().toISOString()
+                timestamp: new Date(testClock.now()).toISOString()
             };
 
             // When: Processing envelope notification
@@ -472,7 +473,7 @@ describe('TikTok Envelope Notification - Behavior Testing', () => {
                 amount: 450,
                 currency: 'coins',
                 id: 'envelope-null-user',
-                timestamp: new Date().toISOString()
+                timestamp: new Date(testClock.now()).toISOString()
             };
 
             // When: Processing envelope notification

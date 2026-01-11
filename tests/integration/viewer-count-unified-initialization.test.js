@@ -330,10 +330,10 @@ describe('ViewerCount Unified Initialization Behavior', () => {
             const { system } = createViewerCountSystemWithBehaviors();
             await system.initialize();
             
-            // When: Platforms become ready in different orders (random timing)
-            const randomOrder = ['youtube', 'tiktok', 'twitch'].sort(() => Math.random() - 0.5);
+            // When: Platforms become ready in a shuffled order
+            const platformOrder = ['youtube', 'twitch', 'tiktok'];
             
-            for (const platform of randomOrder) {
+            for (const platform of platformOrder) {
                 await simulatePlatformReadiness(system, platform, true);
             }
             

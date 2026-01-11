@@ -1,10 +1,20 @@
 const { YouTubeStreamDetectionService } = require('../../../src/services/youtube-stream-detection-service');
+const testClock = require('../../helpers/test-clock');
 
 const logger = { debug: jest.fn(), info: jest.fn(), warn: jest.fn(), error: jest.fn() };
 
 describe('YouTubeStreamDetectionService behavior', () => {
+    let dateNowSpy;
+
     beforeEach(() => {
         jest.clearAllMocks();
+        dateNowSpy = jest.spyOn(Date, 'now').mockImplementation(() => testClock.now());
+    });
+
+    afterEach(() => {
+        if (dateNowSpy) {
+            dateNowSpy.mockRestore();
+        }
     });
 
     it('returns error response for invalid channel handle', async () => {
@@ -19,7 +29,7 @@ describe('YouTubeStreamDetectionService behavior', () => {
     it('short-circuits when circuit breaker is open', async () => {
         const service = new YouTubeStreamDetectionService({}, { logger });
         service._circuitBreaker.isOpen = true;
-        service._circuitBreaker.lastFailureTime = Date.now();
+        service._circuitBreaker.lastFailureTime = testClock.now();
         service._circuitBreaker.cooldownPeriod = 10_000;
 
         const result = await service.detectLiveStreams('channel');

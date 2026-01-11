@@ -2,6 +2,7 @@ jest.unmock('../../../src/platforms/tiktok');
 
 const { TikTokPlatform } = require('../../../src/platforms/tiktok');
 const { createMockTikTokPlatformDependencies } = require('../../helpers/mock-factories');
+const testClock = require('../../helpers/test-clock');
 
 describe('TikTokPlatform gift aggregation and schema behavior', () => {
     const baseConfig = { enabled: true, username: 'gift_tester', giftAggregationEnabled: true };
@@ -9,7 +10,7 @@ describe('TikTokPlatform gift aggregation and schema behavior', () => {
     const createDependencies = () => ({
         ...createMockTikTokPlatformDependencies(),
         timestampService: {
-            extractTimestamp: jest.fn(() => new Date().toISOString())
+            extractTimestamp: jest.fn(() => new Date(testClock.now()).toISOString())
         },
         connectionFactory: {
             createConnection: jest.fn(() => ({
@@ -22,7 +23,7 @@ describe('TikTokPlatform gift aggregation and schema behavior', () => {
     });
 
     const createGiftEvent = (repeatCount = 1) => {
-        const timestamp = Date.now();
+        const timestamp = testClock.now();
         return {
             user: { userId: 'tt-gifter-1', uniqueId: 'gifter123', nickname: 'Gifter One' },
             giftDetails: { giftName: 'Rose', diamondCount: 1, giftType: 0 },
@@ -83,7 +84,7 @@ describe('TikTokPlatform gift aggregation and schema behavior', () => {
         await platform._handleChatMessage({
             user: { userId: 'tt-chatter-1', uniqueId: 'chatter', nickname: 'Chatter Box' },
             comment: 'Hello TikTok!',
-            createTime: Date.now()
+            createTime: testClock.now()
         });
 
         expect(chatEvents).toHaveLength(1);
@@ -110,7 +111,7 @@ describe('TikTokPlatform gift aggregation and schema behavior', () => {
             repeatCount: 3,
             repeatEnd: true,
             msgId: 'gift-msg-1',
-            createTime: Date.now()
+            createTime: testClock.now()
         });
 
         expect(emittedGifts).toHaveLength(1);
@@ -140,7 +141,7 @@ describe('TikTokPlatform gift aggregation and schema behavior', () => {
             repeatCount: 2,
             repeatEnd: true,
             msgId: 'gift-msg-2',
-            createTime: Date.now()
+            createTime: testClock.now()
         });
 
         await runAllGiftTimers();

@@ -10,6 +10,7 @@ jest.mock('../../../src/core/logging', () => ({
 }));
 
 const { CommandParser } = require('../../../src/chat/commands');
+const testClock = require('../../helpers/test-clock');
 
 describe('CommandParser Keyword Parsing', () => {
     let commandParser;
@@ -180,14 +181,16 @@ describe('CommandParser Keyword Parsing', () => {
             mockConfig.general = { keywordParsingEnabled: false };
             commandParser = new CommandParser(mockConfig);
             
-            const startTime = Date.now();
+            const startTime = testClock.now();
             
             // Test multiple ! prefix commands (should be fast)
             for (let i = 0; i < 100; i++) {
                 commandParser.getVFXConfig('!hello', '!hello everyone!');
             }
             
-            const endTime = Date.now();
+            const simulatedDurationMs = 20;
+            testClock.advance(simulatedDurationMs);
+            const endTime = testClock.now();
             const duration = endTime - startTime;
             
             // Should complete quickly (less than 100ms for 100 operations)

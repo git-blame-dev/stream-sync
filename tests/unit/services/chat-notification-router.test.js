@@ -18,6 +18,7 @@ jest.mock('../../../src/utils/notification-builder', () => ({
 const ChatNotificationRouter = require('../../../src/services/ChatNotificationRouter');
 const NotificationBuilder = require('../../../src/utils/notification-builder');
 const { createRuntimeConstantsFixture } = require('../../helpers/runtime-constants-fixture');
+const testClock = require('../../helpers/test-clock');
 
 describe('ChatNotificationRouter', () => {
     const baseMessage = {
@@ -25,7 +26,7 @@ describe('ChatNotificationRouter', () => {
         displayName: 'Viewer',
         username: 'viewer',
         userId: 'user-1',
-        timestamp: new Date().toISOString()
+        timestamp: new Date(testClock.now()).toISOString()
     };
 
     beforeEach(() => {
@@ -150,7 +151,7 @@ describe('ChatNotificationRouter', () => {
     });
 
     it('skips old messages prior to platform connection', async () => {
-        const connectionTime = Date.now();
+        const connectionTime = testClock.now();
         const { router, runtime } = createRouter({
             runtime: {
                 platformLifecycleService: {
@@ -168,7 +169,7 @@ describe('ChatNotificationRouter', () => {
     });
 
     it('does not skip chat when timestamp is invalid even if connection time exists', async () => {
-        const connectionTime = Date.now();
+        const connectionTime = testClock.now();
         const { router, runtime } = createRouter({
             runtime: {
                 platformLifecycleService: {
@@ -549,7 +550,7 @@ describe('ChatNotificationRouter', () => {
 
     it('does not skip old messages when filterOldMessages is disabled', async () => {
         const displayQueue = { addItem: jest.fn() };
-        const connectionTime = Date.now();
+        const connectionTime = testClock.now();
         const { router, runtime } = createRouter({
             runtime: {
                 config: {
@@ -582,7 +583,7 @@ describe('ChatNotificationRouter', () => {
 
         await router.handleChatMessage('twitch', {
             ...baseMessage,
-            timestamp: new Date(Date.now() - 100000).toISOString()
+            timestamp: new Date(testClock.now() - 100000).toISOString()
         });
 
         expect(runtime.displayQueue.addItem).toHaveBeenCalledWith(expect.objectContaining({ type: 'chat' }));

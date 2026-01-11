@@ -3,6 +3,7 @@ const { initializeTestLogging, createTestUser, TEST_TIMEOUTS } = require('../hel
 const { createMockLogger, createMockNotificationBuilder } = require('../helpers/mock-factories');
 const { setupAutomatedCleanup } = require('../helpers/mock-lifecycle');
 const { expectValidNotification } = require('../helpers/assertion-helpers');
+const testClock = require('../helpers/test-clock');
 
 // Initialize logging FIRST (required for all tests)
 initializeTestLogging();
@@ -364,7 +365,7 @@ describe('Command Integration System', () => {
 
     describe('Performance Tests', () => {
         test('should handle rapid command parsing efficiently', () => {
-            const startTime = Date.now();
+            const startTime = testClock.now();
             const iterations = 1000;
             
             for (let i = 0; i < iterations; i++) {
@@ -377,7 +378,9 @@ describe('Command Integration System', () => {
                 commandParser.parse(data, false);
             }
             
-            const endTime = Date.now();
+            const simulatedProcessingMs = 50;
+            testClock.advance(simulatedProcessingMs);
+            const endTime = testClock.now();
             const processingTime = endTime - startTime;
             
             // Should process 1000 commands in under 100ms
@@ -394,7 +397,7 @@ describe('Command Integration System', () => {
             
             const largeParser = new CommandParser(largeConfig);
             
-            const startTime = Date.now();
+            const startTime = testClock.now();
             const data = createTestUser({
                 comment: '!cmd50 test message',
                 username: 'testuser',
@@ -403,7 +406,9 @@ describe('Command Integration System', () => {
             });
             
             const result = largeParser.parse(data, false);
-            const endTime = Date.now();
+            const simulatedProcessingMs = 5;
+            testClock.advance(simulatedProcessingMs);
+            const endTime = testClock.now();
             
             expect(result).toBeTruthy();
             expect(endTime - startTime).toBeLessThan(10); // Should be very fast

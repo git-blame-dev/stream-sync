@@ -1,5 +1,6 @@
 
 const PlatformLifecycleService = require('../../../src/services/PlatformLifecycleService');
+const testClock = require('../../helpers/test-clock');
 
 const createDeferred = () => {
     let resolve;
@@ -376,7 +377,7 @@ describe('PlatformLifecycleService', () => {
         it('should dispose resources when service stops', () => {
             // Given: Service with platforms
             service.platforms = { twitch: {}, youtube: {} };
-            service.platformConnectionTimes = { twitch: Date.now() };
+            service.platformConnectionTimes = { twitch: testClock.now() };
             service.backgroundPlatformInits = [{ promise: Promise.resolve() }];
 
             // When: dispose() is called

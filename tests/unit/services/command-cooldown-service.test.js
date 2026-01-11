@@ -1,6 +1,7 @@
 
 const CommandCooldownService = require('../../../src/services/CommandCooldownService');
 const { createRuntimeConstantsFixture } = require('../../helpers/runtime-constants-fixture');
+const testClock = require('../../helpers/test-clock');
 
 describe('CommandCooldownService', () => {
     let service;
@@ -8,8 +9,10 @@ describe('CommandCooldownService', () => {
     let mockLogger;
     let eventSubscriptions;
     let runtimeConstants;
+    let dateNowSpy;
 
     beforeEach(() => {
+        dateNowSpy = jest.spyOn(Date, 'now').mockImplementation(() => testClock.now());
         eventSubscriptions = {};
 
         // Create mock EventBus with subscribe support
@@ -44,6 +47,9 @@ describe('CommandCooldownService', () => {
         // Clean up service
         if (service) {
             service.dispose();
+        }
+        if (dateNowSpy) {
+            dateNowSpy.mockRestore();
         }
     });
 
@@ -188,7 +194,7 @@ describe('CommandCooldownService', () => {
             }
 
             // Simulate cooldown expiry
-            service.userLastCommand.set(userId, Date.now() - heavyCooldown - 10);
+            service.userLastCommand.set(userId, testClock.now() - heavyCooldown - 10);
 
             const canExecute = service.checkUserCooldown(userId, 0, heavyCooldown);
 
@@ -201,7 +207,7 @@ describe('CommandCooldownService', () => {
             service.cooldownConfig.heavyCommandThreshold = 2;
             service.cooldownConfig.heavyCommandWindow = 1000;
 
-            const staleTimestamp = Date.now() - 5000;
+            const staleTimestamp = testClock.now() - 5000;
             service.userCommandTimestamps.set(userId, [staleTimestamp, staleTimestamp - 100]);
 
             service.updateUserCooldown(userId);
@@ -241,7 +247,7 @@ describe('CommandCooldownService', () => {
             const commandName = '!hello';
             service.globalCommandCooldowns.set(
                 commandName,
-                Date.now() - 120000
+                testClock.now() - 120000
             );
 
             const canExecute = service.checkGlobalCooldown(commandName, 60000);
@@ -359,11 +365,11 @@ describe('CommandCooldownService', () => {
         it('should update user cooldown timestamp when command executed', () => {
             // Given: User executes command
             const userId = 'user123';
-            const beforeTime = Date.now();
+            const beforeTime = testClock.now();
 
             // When: Cooldown is updated
             service.updateUserCooldown(userId);
-            const afterTime = Date.now();
+            const afterTime = testClock.now();
 
             // Then: User's last command time should be recorded
             const status = service.getCooldownStatus(userId);
@@ -396,9 +402,9 @@ describe('CommandCooldownService', () => {
         it('should cleanup old cooldown entries to prevent memory leaks', () => {
             service.cooldownConfig.maxEntries = 2;
 
-            service.userCommandTimestamps.set('user1', [Date.now()]);
-            service.userCommandTimestamps.set('user2', [Date.now()]);
-            service.userCommandTimestamps.set('user3', [Date.now()]);
+            service.userCommandTimestamps.set('user1', [testClock.now()]);
+            service.userCommandTimestamps.set('user2', [testClock.now()]);
+            service.userCommandTimestamps.set('user3', [testClock.now()]);
 
             service.cleanupExpiredCooldowns();
 
@@ -407,7 +413,7 @@ describe('CommandCooldownService', () => {
 
         it('should remove expired cooldowns during cleanup', () => {
             const expiredCommand = '!slow';
-            service.globalCommandCooldowns.set(expiredCommand, Date.now() - 700000);
+            service.globalCommandCooldowns.set(expiredCommand, testClock.now() - 700000);
 
             service.cleanupExpiredCooldowns();
 

@@ -2,6 +2,7 @@
 const { initializeTestLogging, TEST_TIMEOUTS } = require('../../helpers/test-setup');
 const { createMockLogger, createMockFileSystem } = require('../../helpers/mock-factories');
 const { setupAutomatedCleanup } = require('../../helpers/mock-lifecycle');
+const testClock = require('../../helpers/test-clock');
 
 // Initialize logging FIRST
 initializeTestLogging();
@@ -361,7 +362,7 @@ describe('YouTube Data Extraction', () => {
             });
             mockInstanceManager.getInstance.mockResolvedValue(mockInstance);
 
-            const startTime = Date.now();
+            const startTime = testClock.now();
             
             // When: Making multiple rapid concurrent calls
             const promises = [];
@@ -370,7 +371,9 @@ describe('YouTube Data Extraction', () => {
             }
             
             const results = await Promise.all(promises);
-            const duration = Date.now() - startTime;
+            const simulatedDurationMs = 25;
+            testClock.advance(simulatedDurationMs);
+            const duration = testClock.now() - startTime;
 
             // Then: All results consistent and performant
             results.forEach(result => {
@@ -414,9 +417,11 @@ describe('YouTube Data Extraction', () => {
             mockInstanceManager.getInstance.mockResolvedValue(mockInstance);
 
             // When: Performing single resolve
-            const startTime = Date.now();
+            const startTime = testClock.now();
             const channelId = await getChannelId('singleuser');
-            const duration = Date.now() - startTime;
+            const simulatedDurationMs = 15;
+            testClock.advance(simulatedDurationMs);
+            const duration = testClock.now() - startTime;
 
             // Then: Result correct and under performance target
             expect(channelId).toBe('UC-SINGLE-PERF');

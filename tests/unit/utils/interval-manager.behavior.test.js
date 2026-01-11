@@ -1,12 +1,18 @@
-jest.mock('../../../src/utils/timeout-validator', () => ({
-    safeSetInterval: jest.fn((callback) => {
-        // return an id that lets us call later if needed
-        return { id: Math.random(), callback };
-    })
-}));
+let intervalId = 0;
+
+jest.mock('../../../src/utils/timeout-validator', () => {
+    let intervalId = 0;
+    return {
+        safeSetInterval: jest.fn((callback) => {
+            intervalId += 1;
+            return { id: `interval-${intervalId}`, callback };
+        })
+    };
+});
 
 const { safeSetInterval } = require('../../../src/utils/timeout-validator');
 const { IntervalManager } = require('../../../src/utils/interval-manager');
+const testClock = require('../../helpers/test-clock');
 
 describe('IntervalManager behavior', () => {
     let logger;
@@ -56,7 +62,7 @@ describe('IntervalManager behavior', () => {
         manager.createInterval('old', () => {}, 1000, 'monitoring');
         // force start time to 2 hours ago to trigger long-running detection
         const info = manager.getIntervalInfo('old');
-        info.startTime = new Date(Date.now() - 7200000).toISOString();
+        info.startTime = new Date(testClock.now() - 7200000).toISOString();
 
         const health = manager.getHealthCheck();
 
