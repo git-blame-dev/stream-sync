@@ -360,23 +360,34 @@ class AppRuntime {
         }
 
         try {
+            const isError = options.isError === true;
             if (!username || typeof username !== 'string' || !username.trim()) {
-                throw new Error(`Missing username for ${type} notification`);
+                if (!isError) {
+                    throw new Error(`Missing username for ${type} notification`);
+                }
             }
-            if (!options.userId) {
-                throw new Error(`Missing userId for ${type} notification`);
-            }
-            if (!options.timestamp) {
-                throw new Error(`Missing timestamp for ${type} notification`);
+            if (!isError) {
+                if (!options.userId) {
+                    throw new Error(`Missing userId for ${type} notification`);
+                }
+                if (!options.timestamp) {
+                    throw new Error(`Missing timestamp for ${type} notification`);
+                }
             }
 
             const notificationData = {
-                username,
-                userId: options.userId,
-                platform: platform,
-                timestamp: options.timestamp,
                 ...options
             };
+            if (username) {
+                notificationData.username = username;
+            }
+            if (options.userId !== undefined) {
+                notificationData.userId = options.userId;
+            }
+            notificationData.platform = platform;
+            if (options.timestamp !== undefined) {
+                notificationData.timestamp = options.timestamp;
+            }
 
             // Delegate to NotificationManager for all processing
             if (this.notificationManager) {
@@ -1093,27 +1104,33 @@ class AppRuntime {
         if (!options || typeof options !== 'object') {
             throw new Error('handleGiftNotification requires options');
         }
-        if (!options.userId || !options.timestamp) {
-            throw new Error('handleGiftNotification requires userId and timestamp');
+        const isError = options.isError === true;
+        if (!isError) {
+            if (!options.userId || !options.timestamp) {
+                throw new Error('handleGiftNotification requires userId and timestamp');
+            }
         }
         if (!this.config || !this.config.general) {
             throw new Error('AppRuntime config unavailable for gift notifications');
         }
 
         if (!username || (typeof username === 'string' && username.trim().length === 0)) {
-            this.logger.warn('Missing username for gift notification', platform, { options });
-            return;
+            if (!isError) {
+                this.logger.warn('Missing username for gift notification', platform, { options });
+                return;
+            }
         }
 
-        const isError = options.isError === true;
         const giftType = typeof options.giftType === 'string' ? options.giftType.trim() : '';
         const giftCount = Number(options.giftCount);
         const amount = Number(options.amount);
         const currency = typeof options.currency === 'string' ? options.currency.trim() : '';
         const repeatCount = options.repeatCount;
 
-        if (!giftType || !Number.isFinite(giftCount) || giftCount < 0 || !Number.isFinite(amount) || amount < 0 || !currency) {
-            throw new Error('Gift notification requires giftType, giftCount, amount, and currency');
+        if (!isError) {
+            if (!giftType || !Number.isFinite(giftCount) || giftCount < 0 || !Number.isFinite(amount) || amount < 0 || !currency) {
+                throw new Error('Gift notification requires giftType, giftCount, amount, and currency');
+            }
         }
         if (!isError && (giftCount <= 0 || amount <= 0)) {
             throw new Error('Gift notification requires giftType, giftCount, amount, and currency');

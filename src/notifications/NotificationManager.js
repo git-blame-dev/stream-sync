@@ -288,7 +288,7 @@ class NotificationManager extends EventEmitter {
         }
 
         const username = (typeof data.username === 'string') ? data.username.trim() : '';
-        if (!username) {
+        if (!username && !isErrorPayload) {
             this._handleNotificationError(
                 `[NotificationManager] ${notificationType} notification missing username`,
                 null,
@@ -297,7 +297,9 @@ class NotificationManager extends EventEmitter {
             );
             return { success: false, error: 'Missing username', notificationType, platform };
         }
-        data.username = username;
+        if (username) {
+            data.username = username;
+        }
         if (data.userId !== undefined && data.userId !== null) {
             data.userId = String(data.userId);
         }

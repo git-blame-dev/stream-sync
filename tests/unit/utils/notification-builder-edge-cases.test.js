@@ -122,4 +122,33 @@ describe('Notification Builder Edge Cases', () => {
             expect(notification.userId).toBe('12345');
         });
     });
+
+    describe('Error Notification Edge Cases', () => {
+        test('allows isError notification without username', () => {
+            const data = {
+                platform: 'twitch',
+                type: 'gift',
+                isError: true
+            };
+
+            const notification = NotificationBuilder.build(data);
+            expect(notification).not.toBeNull();
+            expect(notification.isError).toBe(true);
+            expect(notification).not.toHaveProperty('username');
+            expect(notification.displayMessage).toContain('Error');
+        });
+
+        test('error notification generates generic display message', () => {
+            const data = {
+                platform: 'twitch',
+                type: 'gift',
+                isError: true
+            };
+
+            const notification = NotificationBuilder.build(data);
+            expect(notification.displayMessage).toBe('Error processing gift');
+            expect(notification.ttsMessage).toBe('Error processing gift');
+            expect(notification.logMessage).toBe('Error processing gift');
+        });
+    });
 });

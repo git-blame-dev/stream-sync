@@ -10,6 +10,7 @@ class YouTubeNotificationDispatcher {
     constructor(dependencies = {}) {
         validateLoggerInterface(dependencies.logger);
         this.logger = dependencies.logger;
+        this.platform = dependencies.platform;
 
         this.errorHandler = createPlatformErrorHandler(this.logger, 'youtube-notification-dispatcher');
 
@@ -118,6 +119,10 @@ class YouTubeNotificationDispatcher {
 
     async dispatchErrorNotification(chatItem, notificationType, handler, handlerName, overrides = {}) {
         const errorNotification = this.buildErrorNotification(chatItem, notificationType, overrides);
+        if (this.platform && typeof this.platform._emitPlatformEvent === 'function') {
+            this.platform._emitPlatformEvent(notificationType, errorNotification);
+            return true;
+        }
         return this.dispatchToHandler(errorNotification, handler, handlerName);
     }
 

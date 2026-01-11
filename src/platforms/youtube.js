@@ -83,7 +83,8 @@ class YouTubePlatform extends EventEmitter {
         });
 
         this.notificationDispatcher = dependencies.notificationDispatcher || new YouTubeNotificationDispatcher({
-            logger: this.logger
+            logger: this.logger,
+            platform: this
         });
         
         // Logger reference for debug calls
@@ -1036,6 +1037,7 @@ class YouTubePlatform extends EventEmitter {
         const handlerMap = {
             'chat': 'onChat',
             'gift': 'onGift',
+            'giftpaypiggy': 'onGiftPaypiggy',
             'paypiggy': 'onMembership',
             'stream-status': 'onStreamStatus',
             'stream-detected': 'onStreamDetected',

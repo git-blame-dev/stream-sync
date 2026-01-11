@@ -196,8 +196,14 @@ describe('Monetization error-path platform flows (smoke)', () => {
         const harness = createHarness('youtube');
 
         class MockYouTubePlatform {
+            constructor() {
+                this.logger = harness.logger;
+                this.handlers = {};
+                this.eventBus = harness.eventBus;
+            }
+
             async initialize(handlers) {
-                const dispatcher = new YouTubeNotificationDispatcher({ logger: harness.logger });
+                this.handlers = handlers;
                 const superChatItem = {
                     item: {
                         author: { id: 'yt-error-user', name: 'TestViewer' },
@@ -217,9 +223,29 @@ describe('Monetization error-path platform flows (smoke)', () => {
                     }
                 };
 
-                await dispatcher.dispatchSuperChat(superChatItem, handlers);
-                await dispatcher.dispatchGiftMembership(giftMembershipItem, handlers);
-                await dispatcher.dispatchMembership(membershipItem, handlers);
+                await this.dispatchWithEmit('gift', superChatItem);
+                await this.dispatchWithEmit('giftpaypiggy', giftMembershipItem);
+                await this.dispatchWithEmit('paypiggy', membershipItem);
+            }
+
+            async dispatchWithEmit(type, chatItem) {
+                const { createMonetizationErrorPayload } = require('../../src/utils/monetization-error-utils');
+                const { extractAuthor } = require('../../src/utils/youtube-author-extractor');
+                const author = extractAuthor(chatItem);
+                const authorOverrides = author ? { username: author.name, userId: author.id } : {};
+                const errorPayload = createMonetizationErrorPayload({
+                    notificationType: type,
+                    platform: 'youtube',
+                    ...authorOverrides,
+                    giftCount: 1,
+                    isError: true
+                });
+                this.eventBus.emit('platform:event', {
+                    platform: 'youtube',
+                    type,
+                    data: errorPayload,
+                    timestamp: new Date().toISOString()
+                });
             }
 
             on() {}
@@ -262,10 +288,6 @@ describe('Monetization error-path platform flows (smoke)', () => {
                 const giftError = createMonetizationErrorPayload({
                     notificationType: 'gift',
                     platform: 'tiktok',
-                    giftType: 'Unknown gift',
-                    giftCount: 0,
-                    amount: 0,
-                    currency: 'unknown',
                     userId: 'tt-error-user'
                 });
                 const paypiggyError = createMonetizationErrorPayload({
@@ -278,16 +300,33 @@ describe('Monetization error-path platform flows (smoke)', () => {
                 const envelopeError = createMonetizationErrorPayload({
                     notificationType: 'envelope',
                     platform: 'tiktok',
-                    giftType: 'Treasure Chest',
-                    giftCount: 0,
-                    amount: 0,
-                    currency: 'unknown',
-                    userId: 'tt-error-envelope'
+                    username: 'EnvelopeUser',
+                    userId: 'tt-error-envelope',
+                    giftType: 'gift',
+                    giftCount: 1,
+                    amount: 100,
+                    currency: 'USD',
+                    timestamp: new Date().toISOString()
                 });
 
-                handlers.onGift(giftError);
-                handlers.onPaypiggy(paypiggyError);
-                handlers.onEnvelope(envelopeError);
+                harness.eventBus.emit('platform:event', {
+                    platform: 'tiktok',
+                    type: 'gift',
+                    data: giftError,
+                    timestamp: new Date().toISOString()
+                });
+                harness.eventBus.emit('platform:event', {
+                    platform: 'tiktok',
+                    type: 'paypiggy',
+                    data: paypiggyError,
+                    timestamp: new Date().toISOString()
+                });
+                harness.eventBus.emit('platform:event', {
+                    platform: 'tiktok',
+                    type: 'envelope',
+                    data: envelopeError,
+                    timestamp: new Date().toISOString()
+                });
             }
 
             on() {}

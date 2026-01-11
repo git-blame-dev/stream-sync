@@ -107,11 +107,11 @@ describe('TikTokPlatform behavior alignment', () => {
                 username: 'alice',
                 userId: 'alice-id',
                 giftType: 'Rose',
-                giftCount: 0,
-                amount: 0,
-                currency: 'unknown',
                 isError: true
             });
+            expect(routedGifts[0]).not.toHaveProperty('giftCount');
+            expect(routedGifts[0]).not.toHaveProperty('amount');
+            expect(routedGifts[0]).not.toHaveProperty('currency');
         });
     });
 
