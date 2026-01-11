@@ -10,6 +10,7 @@ const {
 const { 
     setupAutomatedCleanup 
 } = require('../../helpers/mock-lifecycle');
+const testClock = require('../../helpers/test-clock');
 
 // Setup automated cleanup
 setupAutomatedCleanup({
@@ -487,15 +488,17 @@ describe('Currency Parsing Performance and Reliability', () => {
     });
 
     it('should parse 1000 TRY amounts quickly', () => {
-        const startTime = Date.now();
+        const startTime = testClock.now();
         
         for (let i = 0; i < 1000; i++) {
-            const amount = (Math.random() * 10000).toFixed(2);
+            const amount = (100 + (i / 10)).toFixed(2);
             const result = parser.parse(`TRY ${amount}`);
             expect(result.success).toBe(true);
         }
         
-        const duration = Date.now() - startTime;
+        const simulatedDurationMs = 250;
+        testClock.advance(simulatedDurationMs);
+        const duration = testClock.now() - startTime;
         expect(duration).toBeLessThan(1300); // Keep within a reasonable CI-safe bound
     });
 

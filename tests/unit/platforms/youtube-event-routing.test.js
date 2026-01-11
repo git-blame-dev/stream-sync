@@ -1,6 +1,7 @@
 
 const PlatformEvents = require('../../../src/interfaces/PlatformEvents');
 const EventEmitter = require('events');
+const testClock = require('../../helpers/test-clock');
 
 describe('YouTube Platform Event Routing', () => {
     let youtubePlatform;
@@ -78,7 +79,7 @@ describe('YouTube Platform Event Routing', () => {
                 username: 'Test User',
                 userId: 'user123',
                 message: { text: 'Hello world' },
-                timestamp: new Date().toISOString()
+                timestamp: new Date(testClock.now()).toISOString()
             };
 
             youtubePlatform._emitPlatformEvent('chat', chatPayload);
@@ -94,7 +95,7 @@ describe('YouTube Platform Event Routing', () => {
                 username: 'Test Channel',
                 userId: 'UC_channel_id',
                 message: { text: 'Test message with emoji 😊' },
-                timestamp: new Date().toISOString(),
+                timestamp: new Date(testClock.now()).toISOString(),
                 metadata: {
                     isMod: false,
                     isOwner: false,
@@ -119,7 +120,7 @@ describe('YouTube Platform Event Routing', () => {
                 currency: 'USD',
                 giftType: 'Super Chat',
                 giftCount: 1,
-                timestamp: new Date().toISOString()
+                timestamp: new Date(testClock.now()).toISOString()
             };
 
             youtubePlatform._emitPlatformEvent('gift', giftPayload);
@@ -188,7 +189,7 @@ describe('YouTube Platform Event Routing', () => {
                 type: PlatformEvents.STREAM_STATUS,
                 platform: 'youtube',
                 isLive: true,
-                timestamp: new Date().toISOString()
+                timestamp: new Date(testClock.now()).toISOString()
             };
 
             youtubePlatform._emitPlatformEvent('stream-status', streamStatusPayload);
@@ -203,7 +204,7 @@ describe('YouTube Platform Event Routing', () => {
                 type: PlatformEvents.VIEWER_COUNT,
                 platform: 'youtube',
                 count: 42,
-                timestamp: new Date().toISOString()
+                timestamp: new Date(testClock.now()).toISOString()
             };
 
             youtubePlatform._emitPlatformEvent('viewer-count', viewerCountPayload);
@@ -247,7 +248,7 @@ describe('YouTube Platform Event Routing', () => {
                 username: 'test',
                 userId: '123',
                 message: { text: 'test' },
-                timestamp: new Date().toISOString()
+                timestamp: new Date(testClock.now()).toISOString()
             };
 
             expect(() => {
@@ -264,7 +265,7 @@ describe('YouTube Platform Event Routing', () => {
                 username: 'test',
                 userId: '123',
                 message: { text: 'test' },
-                timestamp: new Date().toISOString()
+                timestamp: new Date(testClock.now()).toISOString()
             };
 
             youtubePlatform._emitPlatformEvent('chat', chatPayload);
@@ -302,7 +303,7 @@ describe('YouTube Platform Event Routing', () => {
                 username: 'test',
                 userId: '123',
                 message: { text: 'test' },
-                timestamp: new Date().toISOString()
+                timestamp: new Date(testClock.now()).toISOString()
             };
 
             youtubePlatform._emitPlatformEvent('chat', chatPayload);
@@ -324,7 +325,7 @@ describe('YouTube Platform Event Routing', () => {
                     name: 'Test User'
                 },
                 message: [{ text: 'Hello from test' }],
-                timestamp: Date.now()
+                timestamp: testClock.now()
             };
 
             // This would be the actual integration point

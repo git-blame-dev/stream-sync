@@ -542,10 +542,11 @@ describe('Refresh Token Storage and Update Handling (Twitch Best Practices)', ()
             fsPromises.writeFile.mockImplementation((path, content) => {
                 writeCount++;
                 // Simulate delay for race condition
+                const simulatedDelayMs = 5;
                 return new Promise(resolve => {
                     scheduleTestTimeout(() => {
                         resolve();
-                    }, Math.random() * 10); // Random delay
+                    }, simulatedDelayMs);
                 });
             });
 

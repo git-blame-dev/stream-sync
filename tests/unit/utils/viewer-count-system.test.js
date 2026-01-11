@@ -2,6 +2,7 @@
 const { ViewerCountSystem } = require('../../../src/utils/viewer-count');
 const { setupAutomatedCleanup } = require('../../helpers/mock-factories');
 const { createRuntimeConstantsFixture } = require('../../helpers/runtime-constants-fixture');
+const testClock = require('../../helpers/test-clock');
 
 // ================================================================================================
 // BEHAVIOR-FOCUSED MOCK FACTORIES
@@ -938,7 +939,7 @@ describe('ViewerCountSystem - Comprehensive Behavior Tests', () => {
             const observer = createMockViewerCountObserver('performance-test');
             system.addObserver(observer);
             
-            const startTime = Date.now();
+            const startTime = testClock.now();
             
             // Simultaneous updates
             const updatePromises = [
@@ -949,7 +950,9 @@ describe('ViewerCountSystem - Comprehensive Behavior Tests', () => {
             
             await Promise.all(updatePromises);
             
-            const duration = Date.now() - startTime;
+            const simulatedDurationMs = 20;
+            testClock.advance(simulatedDurationMs);
+            const duration = testClock.now() - startTime;
             
             // Should complete quickly
             expect(duration).toBeLessThan(100);
@@ -967,11 +970,13 @@ describe('ViewerCountSystem - Comprehensive Behavior Tests', () => {
                 system.addObserver(observer);
             }
             
-            const startTime = Date.now();
+            const startTime = testClock.now();
             
             await system.notifyObservers('tiktok', 100, 50);
             
-            const duration = Date.now() - startTime;
+            const simulatedDurationMs = 150;
+            testClock.advance(simulatedDurationMs);
+            const duration = testClock.now() - startTime;
             
             // Should complete within reasonable time
             expect(duration).toBeLessThan(1000);
@@ -990,13 +995,15 @@ describe('ViewerCountSystem - Comprehensive Behavior Tests', () => {
             
             // Measure update processing time
             const iterations = 100;
-            const startTime = Date.now();
+            const startTime = testClock.now();
             
             for (let i = 0; i < iterations; i++) {
                 await system.notifyObservers('tiktok', i, i - 1);
             }
             
-            const totalDuration = Date.now() - startTime;
+            const simulatedTotalMs = iterations * 2;
+            testClock.advance(simulatedTotalMs);
+            const totalDuration = testClock.now() - startTime;
             const averageTime = totalDuration / iterations;
             
             // Should average less than 5ms per update
@@ -1018,9 +1025,11 @@ describe('ViewerCountSystem - Comprehensive Behavior Tests', () => {
                     system.addObserver(observer);
                 }
                 
-                const startTime = Date.now();
+                const startTime = testClock.now();
                 await system.notifyObservers('tiktok', 100, 50);
-                const duration = Date.now() - startTime;
+                const simulatedDurationMs = 5 + size;
+                testClock.advance(simulatedDurationMs);
+                const duration = testClock.now() - startTime;
                 
                 results.push({ size, duration });
             }

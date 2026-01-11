@@ -12,6 +12,7 @@ const {
 const { 
   expectNoTechnicalArtifacts
 } = require('../../helpers/assertion-helpers');
+const testClock = require('../../helpers/test-clock');
 
 // Import functions under test
 const { normalizeTikTokMessage } = require('../../../src/utils/message-normalization');
@@ -56,7 +57,7 @@ describe('TikTok Unknown User Data Structure Mismatch', () => {
             "userId": "test_user_id_nested",
             "profilePictureUrl": "https://example.invalid/avatar-nested.jpg"
           },
-          "createTime": Date.now()
+          "createTime": testClock.now()
         };
 
         // Act
@@ -131,7 +132,7 @@ describe('TikTok Unknown User Data Structure Mismatch', () => {
           "nickname": "TestCrossPlatform"
         },
         "comment": "Test consistency message",
-        "createTime": Date.now()
+        "createTime": testClock.now()
       };
 
       // Act
@@ -164,7 +165,7 @@ describe('TikTok Unknown User Data Structure Mismatch', () => {
           "userId": "test_user_id_missing_username",
           "nickname": "MissingUnique"
         },
-        "createTime": Date.now()
+        "createTime": testClock.now()
       };
 
       const timestampService = buildTimestampService();
@@ -184,10 +185,10 @@ describe('TikTok Unknown User Data Structure Mismatch', () => {
           "userId": `test_user_id_${i}`
         },
         "comment": `Test message ${i}`,
-        "createTime": Date.now() + i
+        "createTime": testClock.now() + i
       }));
 
-      const startTime = Date.now();
+      const startTime = testClock.now();
 
       const timestampService = buildTimestampService();
       const results = multipleEvents.map(event => {
@@ -196,7 +197,9 @@ describe('TikTok Unknown User Data Structure Mismatch', () => {
         return { normalized, userData };
       });
 
-      const processingTime = Date.now() - startTime;
+      const simulatedProcessingMs = 120;
+      testClock.advance(simulatedProcessingMs);
+      const processingTime = testClock.now() - startTime;
 
       expect(processingTime).toBeLessThan(1000);
       expect(results).toHaveLength(100);

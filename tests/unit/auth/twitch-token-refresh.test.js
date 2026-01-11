@@ -1,5 +1,7 @@
 
 const { describe, test, expect, beforeEach, afterEach } = require('@jest/globals');
+const testClock = require('../../helpers/test-clock');
+const mockTestClock = testClock;
 
 describe('Twitch Token Refresh Implementation', () => {
     let TwitchAuthInitializer;
@@ -14,6 +16,7 @@ describe('Twitch Token Refresh Implementation', () => {
         // Reset modules
         jest.resetModules();
         jest.clearAllMocks();
+        jest.spyOn(Date, 'now').mockImplementation(() => testClock.now());
 
         // Mock enhanced HTTP client
         mockHttpClient = {
@@ -68,7 +71,7 @@ describe('Twitch Token Refresh Implementation', () => {
                 calculateRefreshTiming: jest.fn((expiresAt) => ({
                     timeUntilExpiration: 3600000,
                     timeUntilRefresh: 3300000,
-                    refreshAt: Date.now() + 3300000,
+                    refreshAt: mockTestClock.now() + 3300000,
                     actualDelay: 3300000,
                     shouldRefreshImmediately: false
                 })),
@@ -158,8 +161,8 @@ describe('Twitch Token Refresh Implementation', () => {
             expect(authService.config.refreshToken).toBe('new-refresh-token-456');
 
             // Should update token expiration
-            expect(authService.tokenExpiresAt).toBeGreaterThan(Date.now());
-            expect(authService.tokenExpiresAt).toBeLessThanOrEqual(Date.now() + (14400 * 1000));
+            expect(authService.tokenExpiresAt).toBeGreaterThan(testClock.now());
+            expect(authService.tokenExpiresAt).toBeLessThanOrEqual(testClock.now() + (14400 * 1000));
 
             // Should return success
             expect(result).toBe(true);
@@ -201,8 +204,8 @@ describe('Twitch Token Refresh Implementation', () => {
             
             // User's authentication won't expire immediately
             expect(authService.isTokenExpired()).toBe(false);
-            expect(authService.tokenExpiresAt).toBeGreaterThan(Date.now());
-            expect(authService.tokenExpiresAt).toBeLessThanOrEqual(Date.now() + (14400 * 1000));
+            expect(authService.tokenExpiresAt).toBeGreaterThan(testClock.now());
+            expect(authService.tokenExpiresAt).toBeLessThanOrEqual(testClock.now() + (14400 * 1000));
             
             // User's credentials persist and remain functional after refresh
             expect(authService.isAuthenticated()).toBe(true);
@@ -364,7 +367,7 @@ describe('Twitch Token Refresh Implementation', () => {
     describe('Automatic Token Refresh Before Expiration', () => {
         test('should schedule automatic refresh before token expires', async () => {
             // Given: Token with known expiration time (1 hour)
-            authService.tokenExpiresAt = Date.now() + (3600 * 1000); // 1 hour from now
+            authService.tokenExpiresAt = testClock.now() + (3600 * 1000); // 1 hour from now
 
             // When: Setting up automatic refresh
             const refreshTimer = authInitializer.scheduleTokenRefresh(authService);
@@ -383,7 +386,7 @@ describe('Twitch Token Refresh Implementation', () => {
 
         test('should cancel existing refresh timer when scheduling new one', async () => {
             // Given: Token with expiration and existing refresh timer
-            authService.tokenExpiresAt = Date.now() + (3600 * 1000);
+            authService.tokenExpiresAt = testClock.now() + (3600 * 1000);
             const firstTimer = authInitializer.scheduleTokenRefresh(authService);
             
             // Skip test if timer is null (shouldn't happen with valid expiration)
@@ -413,7 +416,7 @@ describe('Twitch Token Refresh Implementation', () => {
                 return 'mock-timer-id';
             });
             // Set token to expire in the future
-            authService.tokenExpiresAt = Date.now() + (10 * 60 * 1000);
+            authService.tokenExpiresAt = testClock.now() + (10 * 60 * 1000);
 
             // When: Scheduling refresh
             const timer = authInitializer.scheduleTokenRefresh(authService);
@@ -449,7 +452,7 @@ describe('Twitch Token Refresh Implementation', () => {
 
             // Then: Should have scheduled next refresh
             expect(authInitializer.refreshTimer).toBeDefined();
-            expect(authInitializer.refreshTimer.refreshTime).toBeGreaterThan(Date.now());
+            expect(authInitializer.refreshTimer.refreshTime).toBeGreaterThan(testClock.now());
 
             // Cleanup
             if (authInitializer.refreshTimer && authInitializer.refreshTimer.cancel) {
@@ -488,7 +491,7 @@ describe('Twitch Token Refresh Implementation', () => {
             authService.setAuthenticationState({
                 userId: '123456',
                 isInitialized: true,
-                tokenExpiresAt: Date.now() + 3600000
+                tokenExpiresAt: testClock.now() + 3600000
             });
 
             const mockResponse = {
@@ -587,7 +590,7 @@ describe('Twitch Token Refresh Implementation', () => {
 
         test('should cleanup timer on service cleanup', () => {
             // Given: Active refresh timer
-            authService.tokenExpiresAt = Date.now() + 3600000;
+            authService.tokenExpiresAt = testClock.now() + 3600000;
             const timer = authInitializer.scheduleTokenRefresh(authService);
             const cancelSpy = jest.fn();
             timer.cancel = cancelSpy;

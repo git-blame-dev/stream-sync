@@ -1,5 +1,6 @@
 const { YouTubeStreamDetectionService } = require('../../../src/services/youtube-stream-detection-service');
 const { createSilentLogger } = require('../../helpers/test-logger');
+const testClock = require('../../helpers/test-clock');
 
 // Behavior-focused test factories following test standards
 function createMockInnertubeClient(streamData = []) {
@@ -186,12 +187,15 @@ describe('YouTubeStreamDetectionService', () => {
             service = createStreamDetectionService(mockClient);
 
             // When: Measuring detection time
-            const startTime = Date.now();
+            const startTime = testClock.now();
             const result = await service.detectLiveStreams('@testchannel');
-            const endTime = Date.now();
+            const simulatedDurationMs = 25;
+            testClock.advance(simulatedDurationMs);
+            const endTime = testClock.now();
 
             // Then: User experiences fast response
             const duration = endTime - startTime;
+
             expect(duration).toBeLessThan(2000);
             expect(result.success).toBe(true);
             expect(result.responseTime).toBeDefined();

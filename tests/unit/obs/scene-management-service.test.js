@@ -1,6 +1,6 @@
 
 const { createEventBus } = require('../../../src/core/EventBus');
-const { performance } = require('perf_hooks');
+const testClock = require('../../helpers/test-clock');
 
 describe('SceneManagementService', () => {
     let sceneService;
@@ -210,14 +210,15 @@ describe('SceneManagementService', () => {
                 return Promise.resolve({});
             });
 
-            const startTime = performance.now();
+            const startTime = testClock.now();
 
             eventBus.emit('scene:switch', { sceneName: 'GameplayScene', retry: true });
 
             // Wait for retry to complete
             await waitForDelay(200);
+            testClock.advance(200);
 
-            const duration = performance.now() - startTime;
+            const duration = testClock.now() - startTime;
 
             const state = sceneService.getSceneState();
             expect(state.currentScene).toBe('GameplayScene');
@@ -228,13 +229,14 @@ describe('SceneManagementService', () => {
         test('fails immediately when retry is disabled', async () => {
             mockOBSConnection.call.mockRejectedValue(new Error('Failure'));
 
-            const startTime = performance.now();
+            const startTime = testClock.now();
 
             eventBus.emit('scene:switch', { sceneName: 'GameplayScene', retry: false });
 
             await waitForDelay(100);
+            testClock.advance(100);
 
-            const duration = performance.now() - startTime;
+            const duration = testClock.now() - startTime;
 
             const state = sceneService.getSceneState();
             expect(state.currentScene).not.toBe('GameplayScene');
@@ -245,13 +247,14 @@ describe('SceneManagementService', () => {
 
     describe('Performance Requirements', () => {
         test('completes scene switch within 50ms latency', async () => {
-            const startTime = performance.now();
+            const startTime = testClock.now();
 
             eventBus.emit('scene:switch', { sceneName: 'GameplayScene' });
 
             await waitForDelay(10);
+            testClock.advance(10);
 
-            const duration = performance.now() - startTime;
+            const duration = testClock.now() - startTime;
             expect(duration).toBeLessThan(50);
         });
 

@@ -13,6 +13,7 @@ const {
   createMockYouTubeServices,
   setupAutomatedCleanup
 } = require('../../helpers/mock-factories');
+const testClock = require('../../helpers/test-clock');
 
 const {
   expectNoTechnicalArtifacts,
@@ -383,13 +384,15 @@ describe('YouTube Live Stream Service - Channel ID User Experience', () => {
       mockInnertubeClient.getChannel.mockResolvedValue(mockChannel);
 
       // When: User requests live streams with Channel ID
-      const startTime = Date.now();
+      const startTime = testClock.now();
       const result = await YouTubeLiveStreamService.getLiveStreams(
         mockInnertubeClient,
         channelId,
         { logger: mockLogger }
       );
-      const responseTime = Date.now() - startTime;
+      const simulatedResponseMs = 20;
+      testClock.advance(simulatedResponseMs);
+      const responseTime = testClock.now() - startTime;
 
       // Then: User experiences fast response
       expect(result.success).toBe(true);

@@ -15,6 +15,9 @@ jest.mock('../../../src/core/logging', () => ({
     }))
 }));
 
+const testClock = require('../../helpers/test-clock');
+let dateNowSpy;
+
 jest.mock('../../../src/utils/auth-errors', () => {
     class TokenRefreshError extends Error {
         constructor(message, options = {}) {
@@ -69,6 +72,7 @@ describe('TwitchTokenRefresh behavior edges', () => {
 
     beforeEach(() => {
         jest.clearAllMocks();
+        dateNowSpy = jest.spyOn(Date, 'now').mockImplementation(() => testClock.now());
         createPlatformErrorHandler.mockImplementation(() => ({
             handleEventProcessingError: jest.fn(),
             logOperationalError: jest.fn()
@@ -84,6 +88,12 @@ describe('TwitchTokenRefresh behavior edges', () => {
             needsNewTokens: true,
             code: 'MOCK_ERROR'
         }));
+    });
+
+    afterEach(() => {
+        if (dateNowSpy) {
+            dateNowSpy.mockRestore();
+        }
     });
 
     it('returns null when refresh token is missing and logs operational error', async () => {
@@ -274,7 +284,7 @@ describe('TwitchTokenRefresh behavior edges', () => {
         refresh.isRefreshing = true;
         refresh.refreshSuccessCount = 5;
         refresh.refreshFailureCount = 3;
-        refresh.lastRefreshTime = Date.now();
+        refresh.lastRefreshTime = testClock.now();
 
         refresh.cleanup();
 
@@ -344,7 +354,7 @@ describe('TwitchTokenRefresh behavior edges', () => {
         it('returns false when token expiry is far in the future without remote validate', async () => {
             const refresh = new TwitchTokenRefresh(baseConfig);
             refresh.logger = { debug: jest.fn(), info: jest.fn(), warn: jest.fn(), error: jest.fn() };
-            refresh.config.tokenExpiresAt = Date.now() + (2 * 60 * 60 * 1000);
+            refresh.config.tokenExpiresAt = testClock.now() + (2 * 60 * 60 * 1000);
             refresh.makeRequest = jest.fn();
 
             const needs = await refresh.needsRefresh('token');
@@ -356,7 +366,7 @@ describe('TwitchTokenRefresh behavior edges', () => {
         it('returns true when token expiry is within threshold without remote validate', async () => {
             const refresh = new TwitchTokenRefresh(baseConfig);
             refresh.logger = { debug: jest.fn(), info: jest.fn(), warn: jest.fn(), error: jest.fn() };
-            refresh.config.tokenExpiresAt = Date.now() + (5 * 60 * 1000);
+            refresh.config.tokenExpiresAt = testClock.now() + (5 * 60 * 1000);
             refresh.makeRequest = jest.fn();
 
             const needs = await refresh.needsRefresh('token');

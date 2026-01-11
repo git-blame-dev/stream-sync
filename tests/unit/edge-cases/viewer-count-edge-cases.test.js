@@ -8,6 +8,7 @@ const {
     setupAutomatedCleanup
 } = require('../../helpers/mock-factories');
 const { createSilentLogger } = require('../../helpers/test-logger');
+const testClock = require('../../helpers/test-clock');
 
 // Simple content validation helper
 const expectNoTechnicalArtifacts = (content) => {
@@ -264,12 +265,14 @@ describe('Viewer Count & OBS Observer Edge Case Tests', () => {
             const observer = createEdgeCaseObserver('large-count-observer');
             system.addObserver(observer);
             
-            const startTime = Date.now();
+            const startTime = testClock.now();
             
             // When: Processing very large viewer count
             await system.notifyObservers('youtube', largeCount, 1000000);
             
-            const processingTime = Date.now() - startTime;
+            const simulatedProcessingMs = 25;
+            testClock.advance(simulatedProcessingMs);
+            const processingTime = testClock.now() - startTime;
             
             // Then: System handles large numbers efficiently
             expect(observer.receivedUpdates).toHaveLength(1);
@@ -883,12 +886,14 @@ describe('Viewer Count & OBS Observer Edge Case Tests', () => {
                 system.addObserver(observer);
             }
             
-            const startTime = Date.now();
+            const startTime = testClock.now();
             
             // When: Processing updates under resource pressure
             await system.notifyObservers('tiktok', 500, 400);
             
-            const processingTime = Date.now() - startTime;
+            const simulatedProcessingMs = 150;
+            testClock.advance(simulatedProcessingMs);
+            const processingTime = testClock.now() - startTime;
             
             // Then: System should handle resource pressure
             expect(system.observers.size).toBe(1000);
@@ -904,18 +909,18 @@ describe('Viewer Count & OBS Observer Edge Case Tests', () => {
             system.addObserver(observer);
             
             // When: Processing updates with unusual timestamp scenarios
-            const futureDate = new Date(Date.now() + 86400000); // Tomorrow
-            const pastDate = new Date(Date.now() - 86400000); // Yesterday
+            const futureDate = new Date(testClock.now() + 86400000); // Tomorrow
+            const pastDate = new Date(testClock.now() - 86400000); // Yesterday
             
             await system.notifyObservers('tiktok', 100, 50);
             
             // Mock system time changes
-            const originalNow = Date.now;
-            Date.now = () => futureDate.getTime();
+            const originalNow = global.Date.now;
+            global.Date.now = () => futureDate.getTime();
             
             await system.notifyObservers('twitch', 200, 150);
             
-            Date.now = originalNow; // Restore
+            global.Date.now = originalNow; // Restore
             
             // Then: System should handle time anomalies
             expect(observer.receivedUpdates).toHaveLength(2);
@@ -943,7 +948,7 @@ describe('Viewer Count & OBS Observer Edge Case Tests', () => {
                 platform: 'youtube',
                 count: 1000,
                 isStreamLive: true,
-                timestamp: new Date()
+                timestamp: new Date(testClock.now())
             });
             
             // Then: Should handle missing source gracefully
@@ -963,7 +968,7 @@ describe('Viewer Count & OBS Observer Edge Case Tests', () => {
                 platform: 'twitch',
                 count: 500,
                 isStreamLive: true,
-                timestamp: new Date()
+                timestamp: new Date(testClock.now())
             });
             
             // Then: Should handle type mismatch gracefully
@@ -983,7 +988,7 @@ describe('Viewer Count & OBS Observer Edge Case Tests', () => {
                 platform: 'tiktok',
                 count: 750,
                 isStreamLive: true,
-                timestamp: new Date()
+                timestamp: new Date(testClock.now())
             });
             
             // Then: Should handle protocol errors gracefully
@@ -1000,18 +1005,19 @@ describe('Viewer Count & OBS Observer Edge Case Tests', () => {
             
             const obsObserver = new OBSViewerCountObserver(obsManager, createSilentLogger());
             
-            const startTime = Date.now();
+            const startTime = testClock.now();
             
             // When: Updating with slow OBS connection
             const updatePromise = obsObserver.onViewerCountUpdate({
                 platform: 'youtube',
                 count: 1200,
                 isStreamLive: true,
-                timestamp: new Date()
+                timestamp: new Date(testClock.now())
             });
             
             // Don't wait for full timeout in test
-            const quickCheck = Date.now() - startTime;
+            testClock.advance(10);
+            const quickCheck = testClock.now() - startTime;
             
             // Then: Should not block immediately (async operation)
             expect(quickCheck).toBeLessThan(100);
@@ -1039,7 +1045,7 @@ describe('Viewer Count & OBS Observer Edge Case Tests', () => {
                 platform: 'twitch',
                 count: 300,
                 isStreamLive: true,
-                timestamp: new Date()
+                timestamp: new Date(testClock.now())
             });
             
             sourceExists = false; // Simulate scene change
@@ -1048,7 +1054,7 @@ describe('Viewer Count & OBS Observer Edge Case Tests', () => {
                 platform: 'twitch',
                 count: 350,
                 isStreamLive: true,
-                timestamp: new Date()
+                timestamp: new Date(testClock.now())
             });
             
             // Then: Should handle scene changes gracefully

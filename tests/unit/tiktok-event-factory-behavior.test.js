@@ -5,6 +5,7 @@ const logging = jest.requireActual('../../src/core/logging');
 logging.setConfigValidator(() => ({ logging: {} }));
 
 const { TikTokPlatform } = jest.requireActual('../../src/platforms/tiktok');
+const testClock = require('../helpers/test-clock');
 
 describe('TikTok eventFactory chat message behavior', () => {
     it('builds a normalized chat event from raw TikTok data', () => {
@@ -25,7 +26,7 @@ describe('TikTok eventFactory chat message behavior', () => {
                 logger,
                 connectionFactory,
                 timestampService: {
-                    extractTimestamp: jest.fn(() => new Date().toISOString())
+                    extractTimestamp: jest.fn(() => new Date(testClock.now()).toISOString())
                 }
             }
         );
@@ -37,7 +38,7 @@ describe('TikTok eventFactory chat message behavior', () => {
                 uniqueId: 'user123',
                 nickname: 'StreamerFan'
             },
-            createTime: Date.now()
+            createTime: testClock.now()
         };
 
         const event = platform.eventFactory.createChatMessage(rawChat);

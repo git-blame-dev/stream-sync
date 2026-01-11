@@ -2,6 +2,7 @@
 const { describe, test, expect, beforeEach, afterEach } = require('@jest/globals');
 const { setupAutomatedCleanup } = require('../../helpers/mock-lifecycle');
 const { createMockLogger } = require('../../helpers/mock-factories');
+const testClock = require('../../helpers/test-clock');
 
 describe('Token Refresh Integration - Preventing Daily Re-authentication', () => {
     let TwitchAuthInitializer;
@@ -26,11 +27,12 @@ describe('Token Refresh Integration - Preventing Daily Re-authentication', () =>
         
         // Store original time functions
         systemTime = {
-            originalNow: Date.now,
+            originalNow: global.Date.now,
             originalSetTimeout: global.setTimeout,
             originalClearTimeout: global.clearTimeout,
-            currentTime: Date.now()
+            currentTime: testClock.now()
         };
+        jest.spyOn(Date, 'now').mockImplementation(() => testClock.now());
         
         // Mock axios for token validation
         mockAxios = {
@@ -102,7 +104,7 @@ describe('Token Refresh Integration - Preventing Daily Re-authentication', () =>
 
     afterEach(() => {
         // Restore time functions
-        Date.now = systemTime.originalNow;
+        global.Date.now = systemTime.originalNow;
         global.setTimeout = systemTime.originalSetTimeout;
         global.clearTimeout = systemTime.originalClearTimeout;
         
@@ -443,7 +445,7 @@ describe('Token Refresh Integration - Preventing Daily Re-authentication', () =>
             await authManager.initialize();
 
             mockAxios.get.mockClear();
-            authManager.twitchAuthService.tokenExpiresAt = Date.now() + (10 * 60 * 1000);
+            authManager.twitchAuthService.tokenExpiresAt = testClock.now() + (10 * 60 * 1000);
 
             mockEnhancedHttpClient.post.mockResolvedValueOnce({
                 status: 200,
@@ -477,7 +479,7 @@ describe('Token Refresh Integration - Preventing Daily Re-authentication', () =>
             await authManager.initialize();
 
             mockAxios.get.mockClear();
-            authManager.twitchAuthService.tokenExpiresAt = Date.now() + (2 * 60 * 60 * 1000);
+            authManager.twitchAuthService.tokenExpiresAt = testClock.now() + (2 * 60 * 60 * 1000);
 
             const isValid = await authManager.ensureValidToken();
 
@@ -505,7 +507,7 @@ describe('Token Refresh Integration - Preventing Daily Re-authentication', () =>
             await authManager.initialize();
 
             mockAxios.get.mockClear();
-            authManager.twitchAuthService.tokenExpiresAt = Date.now() + (30 * 60 * 1000);
+            authManager.twitchAuthService.tokenExpiresAt = testClock.now() + (30 * 60 * 1000);
 
             const isValid = await authManager.ensureValidToken();
 
@@ -722,7 +724,7 @@ describe('Token Refresh Integration - Preventing Daily Re-authentication', () =>
 
             authManager = TwitchAuthManager.getInstance(testConfig, { mockOAuthHandler });
             await authManager.initialize();
-            authManager.twitchAuthService.tokenExpiresAt = Date.now() + (60 * 60 * 1000);
+            authManager.twitchAuthService.tokenExpiresAt = testClock.now() + (60 * 60 * 1000);
 
             const { TwitchApiClient } = require('../../../src/utils/api-clients/twitch-api-client');
             const apiClient = new TwitchApiClient(authManager, authManager.getConfig());
@@ -770,7 +772,7 @@ describe('Token Refresh Integration - Preventing Daily Re-authentication', () =>
             await authManager.initialize();
 
             // Token is now near expiry based on timestamp guard
-            authManager.twitchAuthService.tokenExpiresAt = Date.now() + (5 * 60 * 1000);
+            authManager.twitchAuthService.tokenExpiresAt = testClock.now() + (5 * 60 * 1000);
 
             // But refresh fails
             mockEnhancedHttpClient.post.mockRejectedValueOnce(new Error('Server error'));

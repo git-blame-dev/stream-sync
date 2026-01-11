@@ -2,13 +2,14 @@ jest.unmock('../../../../src/platforms/tiktok');
 
 const { TikTokPlatform } = require('../../../../src/platforms/tiktok');
 const { createMockTikTokPlatformDependencies } = require('../../../helpers/mock-factories');
+const testClock = require('../../../helpers/test-clock');
 
 describe('TikTok paypiggy routing', () => {
     const baseConfig = { enabled: true, username: 'paypiggy_tester' };
 
     const createPlatform = () => new TikTokPlatform(baseConfig, {
         ...createMockTikTokPlatformDependencies(),
-        timestampService: { extractTimestamp: jest.fn(() => new Date().toISOString()) }
+        timestampService: { extractTimestamp: jest.fn(() => new Date(testClock.now()).toISOString()) }
     });
 
     test('emits paypiggy for subscription events with nested identity', async () => {
@@ -22,7 +23,7 @@ describe('TikTok paypiggy routing', () => {
         await platform._handleStandardEvent('paypiggy', {
             user: { userId: 'tt-sub-1', uniqueId: 'subscriber_one' },
             message: 'hello there',
-            createTime: Date.now()
+            createTime: testClock.now()
         }, {
             factoryMethod: 'createSubscription',
             emitType: 'paypiggy'
@@ -45,7 +46,7 @@ describe('TikTok paypiggy routing', () => {
         await platform._handleStandardEvent('paypiggy', {
             user: { userId: 'tt-super-1', uniqueId: 'superfan_one' },
             message: 'superfan here',
-            createTime: Date.now()
+            createTime: testClock.now()
         }, {
             factoryMethod: 'createSuperfan',
             emitType: 'paypiggy'

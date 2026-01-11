@@ -9,6 +9,7 @@ const ChatNotificationRouter = require('../../src/services/ChatNotificationRoute
 const { initializeTestLogging, createTestUser, TEST_TIMEOUTS } = require('../helpers/test-setup');
 const { createMockLogger } = require('../helpers/mock-factories');
 const { setupAutomatedCleanup } = require('../helpers/mock-lifecycle');
+const testClock = require('../helpers/test-clock');
 
 initializeTestLogging();
 
@@ -61,7 +62,7 @@ describe('Old Message Filter', () => {
     });
 
     test('skips messages sent before the latest platform connection', async () => {
-        const connectionTime = Date.now();
+        const connectionTime = testClock.now();
         const { router, runtime } = buildRouter({ connectionTime });
         runtime.platformLifecycleService.getPlatformConnectionTime.mockReturnValue(connectionTime);
 
@@ -78,7 +79,7 @@ describe('Old Message Filter', () => {
     });
 
     test('allows messages when filterOldMessages is disabled', async () => {
-        const connectionTime = Date.now();
+        const connectionTime = testClock.now();
         const { router, runtime } = buildRouter({
             connectionTime,
             general: { filterOldMessages: false }
@@ -99,15 +100,15 @@ describe('Old Message Filter', () => {
 
     test('allows messages when connection time is unavailable', async () => {
         const { router } = buildRouter({ connectionTime: null });
-        await router.handleChatMessage('twitch', createMessage(new Date().toISOString()));
+        await router.handleChatMessage('twitch', createMessage(new Date(testClock.now()).toISOString()));
 
         expect(logChatMessageSkipped).not.toHaveBeenCalled();
         expect(router.enqueueChatMessage).toHaveBeenCalled();
     });
 
     test('shouldSkipForConnection returns false for invalid timestamps', () => {
-        const { router, runtime } = buildRouter({ connectionTime: Date.now() });
-        runtime.platformLifecycleService.getPlatformConnectionTime.mockReturnValue(Date.now());
+        const { router, runtime } = buildRouter({ connectionTime: testClock.now() });
+        runtime.platformLifecycleService.getPlatformConnectionTime.mockReturnValue(testClock.now());
 
         expect(router.shouldSkipForConnection('twitch', 'not-a-date')).toBe(false);
     });

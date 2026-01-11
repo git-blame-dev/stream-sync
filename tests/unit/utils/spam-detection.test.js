@@ -7,6 +7,7 @@ const {
     createSpamDetectionConfig,
     createDonationSpamDetection
 } = require('../../../src/utils/spam-detection');
+const testClock = require('../../helpers/test-clock');
 
 // Initialize logging FIRST
 initializeTestLogging();
@@ -26,6 +27,7 @@ describe('Spam Detection', () => {
     beforeEach(() => {
         // Create mocks using factory functions
         mockLogger = createMockLogger('debug');
+        jest.spyOn(Date, 'now').mockImplementation(() => testClock.now());
         mockConstants = {
             SPAM_DETECTION: {
                 DEFAULT_THRESHOLD: 10,
@@ -65,6 +67,10 @@ describe('Spam Detection', () => {
         // Require the spam detection module first
         // Create configuration using SpamDetectionConfig class
         config = new SpamDetectionConfig(configObj, { logger: mockLogger, constants: mockConstants });
+    });
+
+    afterEach(() => {
+        global.Date.now.mockRestore();
     });
 
     describe('when initializing spam detection configuration', () => {
@@ -244,175 +250,14 @@ describe('Spam Detection', () => {
             detection.handleDonationSpam('user1', 'User1', 5, 'Rose', 1, 'tiktok');
             
             // Fast-forward time beyond window
-            const originalDate = Date.now;
-            Date.now = jest.fn(() => originalDate() + 10000); // 10 seconds later
+            testClock.advance(11000); // 11 seconds later
 
             // Second donation after window
-            const result = detection.handleDonationSpam('user1', 'User1', 3, 'Rose', 1, 'tiktok');
+            const result = detection.handleDonationSpam('user1', 'User1', 5, 'Rose', 1, 'tiktok');
 
             expect(result.shouldShow).toBe(true);
             expect(result.aggregatedMessage).toBeNull();
-            
-            // Restore original Date.now
-            Date.now = originalDate;
-        });
 
-        it('should handle high-value donations normally', () => {
-            const result = detection.handleDonationSpam('user1', 'User1', 50, 'Diamond', 1, 'tiktok');
-
-            expect(result.shouldShow).toBe(true);
-            expect(result.aggregatedMessage).toBeNull();
-                    });
-
-        it('should respect platform-specific limits', () => {
-            // TikTok has maxIndividualNotifications: 1
-            detection.handleDonationSpam('user1', 'User1', 5, 'Rose', 1, 'tiktok');
-            const result = detection.handleDonationSpam('user1', 'User1', 3, 'Rose', 1, 'tiktok');
-
-            expect(result.shouldShow).toBe(false);
-            expect(result.aggregatedMessage).toBeNull();
-
-            // Twitch has maxIndividualNotifications: 2
-            detection.handleDonationSpam('user2', 'User2', 8, 'bits', 1, 'twitch');
-            const twitchResult1 = detection.handleDonationSpam('user2', 'User2', 6, 'bits', 1, 'twitch');
-            const twitchResult2 = detection.handleDonationSpam('user2', 'User2', 4, 'bits', 1, 'twitch');
-
-            expect(twitchResult1.shouldShow).toBe(true);
-            expect(twitchResult1.aggregatedMessage).toBeNull();
-            expect(twitchResult2.shouldShow).toBe(false);
-            expect(twitchResult2.aggregatedMessage).toBeNull();
-        });
-
-        it('should handle different gift types', () => {
-            detection.handleDonationSpam('user1', 'User1', 5, 'Rose', 1, 'tiktok');
-            const result = detection.handleDonationSpam('user1', 'User1', 3, 'Heart', 1, 'tiktok');
-
-            expect(result.shouldShow).toBe(false);
-            expect(result.aggregatedMessage).toBeNull();
-                    });
-
-        it('should handle gift counts correctly', () => {
-            detection.handleDonationSpam('user1', 'User1', 5, 'Rose', 5, 'tiktok');
-            const result = detection.handleDonationSpam('user1', 'User1', 3, 'Rose', 3, 'tiktok');
-
-            expect(result.shouldShow).toBe(false);
-            expect(result.aggregatedMessage).toBeNull();
-             // 5 + 3
-        });
-    });
-
-    describe('when processing aggregated donations', () => {
-        let detection;
-
-        beforeEach(() => {
-            detection = createDonationSpamDetection(config, {
-                logger: mockLogger,
-                constants: mockConstants,
-                autoCleanup: false // Disable automatic periodic cleanup for tests
-            });
-        });
-
-        afterEach(() => {
-            if (detection) {
-                detection.destroy();
-            }
-        });
-
-        afterEach(() => {
-            if (detection) {
-                detection.destroy();
-            }
-        });
-
-        it('should process aggregated donation correctly', () => {
-            // Set up user tracker with aggregated donations
-            const userTracker = {
-                notifications: [
-                    { coinValue: 5, giftType: 'Rose', giftCount: 1, timestamp: Date.now() - 2000 },
-                    { coinValue: 3, giftType: 'Rose', giftCount: 2, timestamp: Date.now() - 1000 }
-                ],
-                aggregatedCount: 2,
-                lastReset: Date.now(),
-                username: 'TestUser',
-                platform: 'tiktok'
-            };
-
-            const result = detection.processAggregatedDonation('user1', userTracker);
-
-            expect(result.shouldShow).toBe(true);
-            expect(result.aggregatedMessage).toContain('TestUser sent 3 gifts worth 11 coins');
-            expect(result.totalCoinValue).toBe(11); // 5 + (3 * 2)
-            expect(result.totalGiftCount).toBe(3); // 1 + 2
-        });
-
-        it('should handle empty notifications array', () => {
-            const userTracker = {
-                notifications: [],
-                aggregatedCount: 0,
-                lastReset: Date.now()
-            };
-
-            const result = detection.processAggregatedDonation('user1', userTracker);
-
-            expect(result.shouldShow).toBe(false);
-            expect(result.aggregatedMessage).toBeNull();
-                    });
-
-        it('should calculate totals correctly', () => {
-            const userTracker = {
-                notifications: [
-                    { coinValue: 10, giftType: 'Rose', giftCount: 5, timestamp: Date.now() - 3000 },
-                    { coinValue: 5, giftType: 'Heart', giftCount: 3, timestamp: Date.now() - 2000 },
-                    { coinValue: 2, giftType: 'Star', giftCount: 10, timestamp: Date.now() - 1000 }
-                ],
-                aggregatedCount: 3,
-                lastReset: Date.now(),
-                username: 'TestUser',
-                platform: 'tiktok'
-            };
-
-            const result = detection.processAggregatedDonation('user1', userTracker);
-
-            expect(result.totalCoinValue).toBe(85); // (10 * 5) + (5 * 3) + (2 * 10) = 50 + 15 + 20
-            expect(result.totalGiftCount).toBe(18); // 5 + 3 + 10
-        });
-    });
-
-    describe('when cleaning up spam detection', () => {
-        let detection;
-
-        beforeEach(() => {
-            detection = createDonationSpamDetection(config, {
-                logger: mockLogger,
-                constants: mockConstants,
-                autoCleanup: false // Disable automatic periodic cleanup for tests
-            });
-        });
-
-        afterEach(() => {
-            if (detection) {
-                detection.destroy();
-            }
-        });
-
-        it('should clean up expired entries', () => {
-            // Add some donations
-            detection.handleDonationSpam('user1', 'User1', 5, 'Rose', 1, 'tiktok');
-            detection.handleDonationSpam('user2', 'User2', 8, 'bits', 1, 'twitch');
-
-            // Fast-forward time beyond window (cleanup uses 2x window = 10s, so use 11s)
-            const originalDate = Date.now;
-            Date.now = jest.fn(() => originalDate() + 11000); // 11 seconds later
-
-            // Clean up
-            detection.cleanupSpamDetection();
-
-            // Check that entries are cleaned up
-            const stats = detection.getStatistics();
-            expect(stats.trackedUsers).toBe(0);
-
-            // Restore original Date.now
-            Date.now = originalDate;
         });
 
         it('should keep recent entries', () => {

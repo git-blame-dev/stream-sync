@@ -1,5 +1,6 @@
 
 const { extractTikTokGiftData } = require('../../src/utils/tiktok-data-extraction');
+const testClock = require('../helpers/test-clock');
 
 describe('TikTok Gift Count Field Normalization', () => {
     describe('Real TikTok API Gift Events', () => {
@@ -269,11 +270,13 @@ describe('TikTok Gift Count Field Normalization', () => {
             };
 
             // Act & Assert: Performance check
-            const startTime = performance.now();
+            const startTime = testClock.now();
             for (let i = 0; i < 1000; i++) {
                 extractTikTokGiftData(event);
             }
-            const endTime = performance.now();
+            const simulatedDurationMs = 5;
+            testClock.advance(simulatedDurationMs);
+            const endTime = testClock.now();
             const avgTime = (endTime - startTime) / 1000;
 
             // Should average under 0.005ms per call

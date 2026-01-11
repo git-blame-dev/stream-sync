@@ -1,5 +1,7 @@
 
 const { describe, test, expect, beforeEach, afterEach } = require('@jest/globals');
+const testClock = require('../../helpers/test-clock');
+const { nextTestId } = require('../../helpers/test-id');
 
 // Initialize test logging FIRST
 const { initializeTestLogging } = require('../../helpers/test-setup');
@@ -33,7 +35,7 @@ function createTestConfiguration(testName, overrides = {}) {
         refreshToken: `test-refresh-${testName}`,
         channel: `test-channel-${testName}`,
         testName: testName,
-        mockUserId: `${Date.now()}${Math.random().toString(36).substr(2, 9)}`,
+        mockUserId: nextTestId(`user-${testName}`),
         ...overrides
     };
 }

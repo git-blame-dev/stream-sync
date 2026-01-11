@@ -16,6 +16,7 @@ jest.mock('../../../src/utils/notification-builder', () => ({
 }));
 
 const ChatNotificationRouter = require('../../../src/services/ChatNotificationRouter');
+const testClock = require('../../helpers/test-clock');
 
 describe('ChatNotificationRouter platform chat behavior', () => {
     const baseMessage = {
@@ -23,7 +24,7 @@ describe('ChatNotificationRouter platform chat behavior', () => {
         displayName: 'Viewer',
         username: 'viewer',
         userId: 'user-1',
-        timestamp: new Date().toISOString()
+        timestamp: new Date(testClock.now()).toISOString()
     };
 
     const createRouter = (overrides = {}) => {
@@ -178,7 +179,7 @@ describe('ChatNotificationRouter platform chat behavior', () => {
     });
 
     it('skips chat sent before platform connection time', async () => {
-        const connectionTime = Date.now();
+        const connectionTime = testClock.now();
         const { router, runtime } = createRouter({
             runtime: {
                 config: {

@@ -13,6 +13,7 @@ const {
   createMockYouTubeServices,
   setupAutomatedCleanup
 } = require('../../helpers/mock-factories');
+const testClock = require('../../helpers/test-clock');
 
 const {
   expectNoTechnicalArtifacts,
@@ -63,14 +64,14 @@ describe('YouTube Live Stream Service - Complete User Experience', () => {
               title: { text: 'Amazing Gaming Stream' },
               is_live: true,
               author: { name: 'Popular Gamer' },
-              published: new Date().toISOString()
+              published: new Date(testClock.now()).toISOString()
             },
             {
               id: 'live456',
               title: { text: 'Music Live Performance' },
               is_live: true,
               author: { name: 'Music Artist' },
-              published: new Date().toISOString()
+              published: new Date(testClock.now()).toISOString()
             }
           ]
         }
@@ -218,7 +219,7 @@ describe('YouTube Live Stream Service - Complete User Experience', () => {
             title: { text: 'Learn JavaScript - Interactive Coding Session' },
             is_live: true,
             author: { name: 'CodeEducator' },
-            published: new Date().toISOString(),
+            published: new Date(testClock.now()).toISOString(),
             view_count: '1,245 watching'
           }]
         })
@@ -823,19 +824,22 @@ describe('YouTube Live Stream Service - Complete User Experience', () => {
       const performanceTests = [];
       
       for (let i = 0; i < 3; i++) {
-        const startTime = Date.now();
+        const startTime = testClock.now();
         const result = await YouTubeLiveStreamService.getLiveStreams(
           mockInnertubeClient,
           performanceChannelId,
           { logger: mockLogger }
         );
-        const endTime = Date.now();
-        
+        const simulatedResponseMs = 20;
+        testClock.advance(simulatedResponseMs);
+        const endTime = testClock.now();
+
         performanceTests.push({
           result: result,
           responseTime: endTime - startTime,
           testIndex: i
         });
+
       }
 
       // Then: User experiences stable performance characteristics

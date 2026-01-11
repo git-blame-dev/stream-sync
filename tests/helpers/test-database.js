@@ -1,6 +1,7 @@
 
 const { scheduleTimeout, resolveDelay } = require('./time-utils');
 const testClock = require('./test-clock');
+const { nextTestId } = require('./test-id');
 
 // ================================================================================================
 // TEST DATA STORAGE
@@ -280,7 +281,7 @@ class TestEnvironment {
 const createTestDataFactory = (type, options = {}) => {
     const factories = {
         user: (overrides = {}) => ({
-            id: Math.random().toString(36).substr(2, 9),
+            id: nextTestId('user'),
             username: `testuser_${testClock.now()}`,
             displayName: `Test User ${testClock.now()}`,
             email: `test${testClock.now()}@example.com`,
@@ -289,7 +290,7 @@ const createTestDataFactory = (type, options = {}) => {
         }),
         
         notification: (overrides = {}) => ({
-            id: Math.random().toString(36).substr(2, 9),
+            id: nextTestId('notification'),
             type: 'gift',
             username: `testuser_${testClock.now()}`,
             platform: 'tiktok',
@@ -307,7 +308,7 @@ const createTestDataFactory = (type, options = {}) => {
         }),
         
         event: (overrides = {}) => ({
-            id: Math.random().toString(36).substr(2, 9),
+            id: nextTestId('event'),
             type: 'chat',
             platform: 'tiktok',
             timestamp: new Date(testClock.now()).toISOString(),

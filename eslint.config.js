@@ -58,7 +58,25 @@ module.exports = [
       }
     },
     rules: {
-      'no-undef': 'error'
+      'no-undef': 'error',
+      'no-restricted-properties': [
+        'error',
+        {
+          object: 'Date',
+          property: 'now',
+          message: 'Use testClock.now() for deterministic test timing.'
+        },
+        {
+          object: 'performance',
+          property: 'now',
+          message: 'Use testClock.now() for deterministic test timing.'
+        },
+        {
+          object: 'Math',
+          property: 'random',
+          message: 'Use deterministic test data instead of Math.random().'
+        }
+      ]
     }
   }
 ];

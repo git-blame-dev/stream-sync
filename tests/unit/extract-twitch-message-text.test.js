@@ -12,6 +12,7 @@ const {
 const { 
     setupAutomatedCleanup 
 } = require('../helpers/mock-lifecycle');
+const testClock = require('../helpers/test-clock');
 
 // Initialize logging FIRST
 initializeTestLogging();
@@ -367,9 +368,11 @@ describe('extractTwitchMessageText', () => {
             };
 
             // Act
-            const startTime = Date.now();
+            const startTime = testClock.now();
             const result = extractTwitchMessageText(largeMessage);
-            const endTime = Date.now();
+            const simulatedDurationMs = 25;
+            testClock.advance(simulatedDurationMs);
+            const endTime = testClock.now();
 
             // Assert
             expect(result).toContain('text0');

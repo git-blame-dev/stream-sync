@@ -4,6 +4,7 @@
 // ================================================================================================
 
 const testClock = require('./test-clock');
+const { nextTestId } = require('./test-id');
 
 const LOG_LEVELS = {
     ERROR: 0,
@@ -36,7 +37,7 @@ class LogEntry {
     }
 
     generateId() {
-        return `${this.timestamp}-${Math.random().toString(36).substr(2, 9)}`;
+        return nextTestId('log');
     }
 
     toJSON() {

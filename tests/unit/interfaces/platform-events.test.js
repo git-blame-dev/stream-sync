@@ -1,6 +1,7 @@
 
 const { createTestUser, createMockConfig } = require('../../helpers/test-setup');
 const { PlatformEvents, PlatformEventValidator } = require('../../../src/interfaces/PlatformEvents');
+const testClock = require('../../helpers/test-clock');
 
 describe('Platform Events Interface', () => {
     describe('Event Schema Validation', () => {
@@ -141,7 +142,7 @@ describe('Platform Events Interface', () => {
         });
 
         it('should normalize message data consistently across platforms', () => {
-            const now = Date.now();
+            const now = testClock.now();
             const rawMessages = {
                 tiktok: { message: { text: 'Hello TikTok!' }, username: 'TikUser', userId: 'tt-1', timestamp: now },
                 twitch: { message: { text: 'Hello Twitch!' }, username: 'TwitchUser', userId: 'tw-1', timestamp: now, emotes: {} },
@@ -368,7 +369,7 @@ describe('Platform Events Interface', () => {
                 eventType: 'stream-detected',
                 newStreamIds: ['stream-1', 'stream-2'],
                 allStreamIds: ['stream-1', 'stream-2'],
-                detectionTime: Date.now(),
+                detectionTime: testClock.now(),
                 connectionCount: 0
             };
 

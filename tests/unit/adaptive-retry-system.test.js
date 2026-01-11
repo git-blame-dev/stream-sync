@@ -3,6 +3,7 @@ const { initializeTestLogging, createTestUser, TEST_TIMEOUTS } = require('../hel
 const { createMockLogger, createMockNotificationBuilder, createMockPlatform } = require('../helpers/mock-factories');
 const { setupAutomatedCleanup } = require('../helpers/mock-lifecycle');
 const { expectValidNotification } = require('../helpers/assertion-helpers');
+const testClock = require('../helpers/test-clock');
 
 // Initialize logging FIRST (required for all tests)
 initializeTestLogging();
@@ -229,9 +230,10 @@ describe('Unified Adaptive Retry System', () => {
         test('should handle very high retry counts efficiently', () => {
             platformRetryCount.TikTok = 100;
             
-            const startTime = Date.now();
+            const startTime = testClock.now();
             const delay = retrySystem.calculateAdaptiveRetryDelay('TikTok');
-            const endTime = Date.now();
+            testClock.advance(1);
+            const endTime = testClock.now();
             
             expect(delay).toBe(60000); // Should be capped
             expect(endTime - startTime).toBeLessThan(10); // Should be fast

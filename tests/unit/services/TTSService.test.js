@@ -10,6 +10,7 @@ jest.mock('../../../src/core/logging', () => ({
 }));
 
 const { TTSService, createTTSService } = require('../../../src/services/TTSService');
+const testClock = require('../../helpers/test-clock');
 describe('TTSService', () => {
     let ttsService;
     let mockConfigService;
@@ -197,7 +198,7 @@ describe('TTSService', () => {
             ttsService.currentTTS = {
                 id: 'current-123',
                 text: 'Long text message that should be truncated',
-                startTime: Date.now()
+                startTime: testClock.now()
             };
             ttsService.stats.totalRequests = 10;
 

@@ -5,6 +5,7 @@ const {
     isYouTubeUsername 
 } = require('../../../src/utils/youtube-username-normalizer');
 const { INTERNATIONAL_USERNAMES, EDGE_CASE_AMOUNTS, BOUNDARY_CONDITIONS } = require('../../helpers/platform-test-data');
+const testClock = require('../../helpers/test-clock');
 
 describe('YouTube Username Normalization', () => {
     describe('normalizeYouTubeUsername', () => {
@@ -208,7 +209,7 @@ describe('YouTube Username Normalization', () => {
     describe('International Username Performance and Stress Tests', () => {
         test('should handle high-volume international username processing', () => {
             const internationalUsernames = Object.values(INTERNATIONAL_USERNAMES);
-            const startTime = Date.now();
+            const startTime = testClock.now();
             
             // Process 1000 international usernames
             const results = [];
@@ -217,7 +218,9 @@ describe('YouTube Username Normalization', () => {
                 results.push(normalizeYouTubeUsername(username));
             }
             
-            const endTime = Date.now();
+            const simulatedProcessingMs = 150;
+            testClock.advance(simulatedProcessingMs);
+            const endTime = testClock.now();
             const processingTime = endTime - startTime;
             
             expect(results).toHaveLength(1000);

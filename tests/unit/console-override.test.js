@@ -6,6 +6,7 @@ const { initializeTestLogging, createTestUser, TEST_TIMEOUTS } = require('../hel
 const { createMockLogger, createMockNotificationBuilder } = require('../helpers/mock-factories');
 const { setupAutomatedCleanup } = require('../helpers/mock-lifecycle');
 const { expectValidNotification } = require('../helpers/assertion-helpers');
+const testClock = require('../helpers/test-clock');
 
 // Initialize logging FIRST (required for all tests)
 initializeTestLogging();
@@ -338,7 +339,7 @@ describe('Console Override Pattern', () => {
         test('should handle logging without throwing errors', () => {
             initializeConsoleOverride();
             
-            const start = Date.now();
+            const start = testClock.now();
             const messageCount = 10; // Reduced count for testing
             
             expect(() => {
@@ -347,7 +348,9 @@ describe('Console Override Pattern', () => {
                 }
             }).not.toThrow();
             
-            const end = Date.now();
+            const simulatedDurationMs = 20;
+            testClock.advance(simulatedDurationMs);
+            const end = testClock.now();
             const duration = end - start;
             
             // Should complete within reasonable time
