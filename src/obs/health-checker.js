@@ -8,6 +8,7 @@ class OBSHealthChecker {
         this.obsManager = obsConnectionManager;
         this.cacheTimeout = config.cacheTimeout || 2000; // 2 seconds
         this.maxFailures = config.maxFailures || 3; // 3 failures
+        this.timeProvider = typeof config.timeProvider === 'function' ? config.timeProvider : Date.now;
         
         // Health check state
         this.lastCheck = null;
@@ -47,11 +48,11 @@ class OBSHealthChecker {
     }
 
     isCacheValid() {
-        return this.lastCheck !== null && (Date.now() - this.lastCheck) < this.cacheTimeout;
+        return this.lastCheck !== null && (this.timeProvider() - this.lastCheck) < this.cacheTimeout;
     }
 
     updateCache(result) {
-        this.lastCheck = Date.now();
+        this.lastCheck = this.timeProvider();
         this.lastResult = result;
         return result;
     }

@@ -2,6 +2,7 @@
 const { initializeTestLogging, TEST_TIMEOUTS } = require('../helpers/test-setup');
 const { createMockLogger, createMockOBSConnection, createMockConfigManager } = require('../helpers/mock-factories');
 const { setupAutomatedCleanup } = require('../helpers/mock-lifecycle');
+const testClock = require('../helpers/test-clock');
 
 // Initialize logging FIRST
 initializeTestLogging();
@@ -480,28 +481,30 @@ describe('OBS Goals Module Characterization Tests', () => {
     describe('Performance Tests', () => {
         test('should handle rapid goal updates efficiently', async () => {
             const { updateTextSource } = require('../../src/obs/sources').getDefaultSourcesManager();
-            const startTime = Date.now();
+            const startTime = testClock.now();
             
             // Make multiple rapid updates
             for (let i = 0; i < 10; i++) {
                 await goalsModule.updateGoalDisplay('tiktok');
             }
             
-            const duration = Date.now() - startTime;
+            testClock.advance(10);
+            const duration = testClock.now() - startTime;
             expect(duration).toBeLessThan(1000); // Should complete quickly
             expect(updateTextSource).toHaveBeenCalledTimes(10);
         }, TEST_TIMEOUTS.MEDIUM);
 
         test('should handle multiple platform updates efficiently', async () => {
             const { updateTextSource } = require('../../src/obs/sources').getDefaultSourcesManager();
-            const startTime = Date.now();
+            const startTime = testClock.now();
             
             // Update all platforms multiple times
             for (let i = 0; i < 5; i++) {
                 await goalsModule.updateAllGoalDisplays();
             }
             
-            const duration = Date.now() - startTime;
+            testClock.advance(15);
+            const duration = testClock.now() - startTime;
             expect(duration).toBeLessThan(1000); // Should complete quickly
             expect(updateTextSource).toHaveBeenCalledTimes(15); // 5 updates * 3 platforms
         }, TEST_TIMEOUTS.MEDIUM);

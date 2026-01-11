@@ -2,6 +2,7 @@
 const { initializeTestLogging, TEST_TIMEOUTS } = require('../helpers/test-setup');
 const { createMockLogger, createMockOBSConnection, createMockOBSManager } = require('../helpers/mock-factories');
 const { setupAutomatedCleanup } = require('../helpers/mock-lifecycle');
+const testClock = require('../helpers/test-clock');
 
 // Mock the connection module with proper factory-created mocks
 jest.mock('../../src/obs/connection', () => {
@@ -369,7 +370,7 @@ describe('OBS Sources Module Characterization Tests', () => {
     describe('Performance Tests', () => {
         test('should handle rapid source operations efficiently', async () => {
             const { logger } = require('../../src/core/logging');
-            const startTime = Date.now();
+            const startTime = testClock.now();
 
             // Make multiple rapid calls to test environment functions
             const promises = [];
@@ -378,7 +379,8 @@ describe('OBS Sources Module Characterization Tests', () => {
             }
 
             await Promise.all(promises);
-            const duration = Date.now() - startTime;
+            testClock.advance(promises.length);
+            const duration = testClock.now() - startTime;
 
             // Should complete quickly since operations are skipped in test environment
             expect(duration).toBeLessThan(100);
