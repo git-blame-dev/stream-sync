@@ -152,8 +152,8 @@ describe('YouTube Notification Dispatcher - Modern (Production Data)', () => {
             expect(mockHandlers.onGiftPaypiggy).toHaveBeenCalledTimes(1);
 
             const notification = mockHandlers.onGiftPaypiggy.mock.calls[0][0];
-            expect(notification.username).toBe('Unknown');
-            expect(notification.userId).toBe('unknown');
+            expect(notification).not.toHaveProperty('username');
+            expect(notification).not.toHaveProperty('userId');
             expect(notification.giftCount).toBe(5);
             expect(notification.type).toBe('giftpaypiggy');
             expect(notification.id).toBe(fixtureGiftPurchaseHeader.item.id);
@@ -217,12 +217,12 @@ describe('YouTube Notification Dispatcher - Modern (Production Data)', () => {
                 userId: 'test',
                 giftType: 'Super Chat',
                 giftCount: 1,
-                amount: 0,
-                currency: 'unknown',
                 isError: true
             });
+            expect(notification).not.toHaveProperty('amount');
+            expect(notification).not.toHaveProperty('currency');
             expect(notification).not.toHaveProperty('id');
-            expect(notification.timestamp).toEqual(expect.any(String));
+            expect(notification).not.toHaveProperty('timestamp');
         });
 
         it('emits error notification when currency parsing fails', async () => {
@@ -252,11 +252,11 @@ describe('YouTube Notification Dispatcher - Modern (Production Data)', () => {
                 userId: fixtureSuperChat.item.author.id,
                 giftType: 'Super Chat',
                 giftCount: 1,
-                amount: 0,
-                currency: 'unknown',
                 isError: true,
                 id: fixtureSuperChat.item.id
             });
+            expect(notification).not.toHaveProperty('amount');
+            expect(notification).not.toHaveProperty('currency');
             expect(notification.timestamp).toBe(resolveTimestampIso(fixtureSuperChat));
         });
 
@@ -407,10 +407,10 @@ describe('YouTube Notification Dispatcher - Modern (Production Data)', () => {
                 type: 'giftpaypiggy',
                 username: 'GiftGifter',
                 userId: 'UC-GIFTER-2',
-                giftCount: 0,
                 isError: true,
                 id: 'LCC.test-membership-gift-002'
             });
+            expect(notification).not.toHaveProperty('giftCount');
             expect(notification.timestamp).toBe(resolveTimestampIso(membershipGift));
         });
     });

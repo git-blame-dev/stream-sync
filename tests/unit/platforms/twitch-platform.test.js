@@ -474,10 +474,10 @@ describe('Twitch Platform', () => {
                 platform: 'twitch',
                 username: 'gifter',
                 userId: 'gift123',
-                giftCount: 0,
                 tier: '1000',
                 isError: true
             });
+            expect(payload).not.toHaveProperty('giftCount');
             expect(payload.timestamp).toEqual(expect.any(String));
         });
     });

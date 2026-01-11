@@ -252,9 +252,8 @@ class PlatformEventRouter {
         delete sanitized.user;
         delete sanitized.displayName;
 
-        if (!sanitized.username || typeof sanitized.username !== 'string' || !sanitized.username.trim()) {
-            throw new Error('Notification payload requires username');
-        }
+        const isErrorPayload = sanitized.isError === true;
+
         if (!originalPlatform) {
             throw new Error('Notification payload requires platform');
         }
@@ -262,13 +261,17 @@ class PlatformEventRouter {
             throw new Error('Notification payload requires type');
         }
 
-        const isErrorPayload = sanitized.isError === true;
         const normalizedUserId = sanitized.userId === undefined || sanitized.userId === null
             ? undefined
             : String(sanitized.userId);
 
-        if (!normalizedUserId && !isErrorPayload) {
-            throw new Error('Notification payload requires userId');
+        if (!isErrorPayload) {
+            if (!sanitized.username || typeof sanitized.username !== 'string' || !sanitized.username.trim()) {
+                throw new Error('Notification payload requires username');
+            }
+            if (!normalizedUserId) {
+                throw new Error('Notification payload requires userId');
+            }
         }
 
         if (!isErrorPayload) {
@@ -291,10 +294,12 @@ class PlatformEventRouter {
 
         const result = {
             ...sanitized,
-            username: sanitized.username.trim(),
             platform: originalPlatform,
             sourceType: originalType
         };
+        if (!isErrorPayload && sanitized.username) {
+            result.username = sanitized.username.trim();
+        }
         if (normalizedUserId !== undefined) {
             result.userId = normalizedUserId;
         }

@@ -1421,29 +1421,25 @@ class TikTokPlatform extends EventEmitter {
                     if (giftType) {
                         errorOverrides.giftType = giftType;
                     }
-                    if (!errorOverrides.giftType) {
-                        errorOverrides.giftType = 'Unknown gift';
+                    const amount = Number(data?.giftCoins ?? data?.amount);
+                    if (Number.isFinite(amount)) {
+                        errorOverrides.amount = amount;
                     }
-                    const amount = Number(data?.giftCoins ?? data?.amount ?? 0);
-                    errorOverrides.amount = Number.isFinite(amount) ? amount : 0;
-                    const repeatCount = Number(data?.giftCount ?? data?.repeatCount ?? 0);
-                    errorOverrides.giftCount = Number.isFinite(repeatCount) ? repeatCount : 0;
+                    const repeatCount = Number(data?.giftCount ?? data?.repeatCount);
+                    if (Number.isFinite(repeatCount)) {
+                        errorOverrides.giftCount = repeatCount;
+                    }
                     if (typeof data?.currency === 'string' && data.currency.trim()) {
                         errorOverrides.currency = data.currency.trim();
-                    } else if (!errorOverrides.currency) {
-                        errorOverrides.currency = 'unknown';
                     }
                 }
                 if (emitType === 'envelope') {
-                    errorOverrides.giftType = 'Treasure Chest';
                     const amount = Number(data?.giftCoins ?? data?.amount);
                     if (Number.isFinite(amount)) {
                         errorOverrides.amount = amount;
                     }
                     if (typeof data?.currency === 'string' && data.currency.trim()) {
                         errorOverrides.currency = data.currency.trim();
-                    } else {
-                        errorOverrides.currency = 'unknown';
                     }
                 }
                 const errorPayload = this._createMonetizationErrorPayload(emitType, data, errorOverrides);

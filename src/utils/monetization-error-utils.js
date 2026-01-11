@@ -1,7 +1,3 @@
-const DEFAULT_PLACEHOLDER_USERNAME = 'Unknown';
-const DEFAULT_USER_ID = 'unknown';
-const DEFAULT_GIFT_TYPE = 'Unknown gift';
-const DEFAULT_CURRENCY = 'unknown';
 
 function resolveNonEmptyString(value) {
     if (typeof value !== 'string') {
@@ -67,18 +63,25 @@ function createMonetizationErrorPayload(options = {}) {
         throw new Error('Monetization error payload requires platform');
     }
 
-    const resolvedTimestamp = resolveTimestampValue(timestamp) || new Date().toISOString();
+    const resolvedTimestamp = resolveTimestampValue(timestamp);
     const resolvedUsername = resolveNonEmptyString(username);
     const resolvedUserId = resolveIdValue(userId);
     const resolvedId = resolveIdValue(id);
 
     const payload = {
         platform,
-        username: resolvedUsername || DEFAULT_PLACEHOLDER_USERNAME,
-        userId: resolvedUserId || DEFAULT_USER_ID,
-        timestamp: resolvedTimestamp,
         isError: true
     };
+
+    if (resolvedUsername) {
+        payload.username = resolvedUsername;
+    }
+    if (resolvedUserId) {
+        payload.userId = resolvedUserId;
+    }
+    if (resolvedTimestamp) {
+        payload.timestamp = resolvedTimestamp;
+    }
 
     if (eventType) {
         payload.type = eventType;
@@ -89,46 +92,64 @@ function createMonetizationErrorPayload(options = {}) {
 
     switch (notificationType) {
         case 'gift': {
-            const resolvedGiftType = resolveNonEmptyString(giftType) || DEFAULT_GIFT_TYPE;
+            const resolvedGiftType = resolveNonEmptyString(giftType);
             const resolvedGiftCount = resolveNonNegativeNumber(giftCount);
             const resolvedAmount = resolveNonNegativeNumber(amount);
-            const resolvedCurrency = resolveNonEmptyString(currency) || DEFAULT_CURRENCY;
-            return {
-                ...payload,
-                giftType: resolvedGiftType,
-                giftCount: resolvedGiftCount ?? 0,
-                amount: resolvedAmount ?? 0,
-                currency: resolvedCurrency
-            };
+            const resolvedCurrency = resolveNonEmptyString(currency);
+            const result = { ...payload };
+            if (resolvedGiftType) {
+                result.giftType = resolvedGiftType;
+            }
+            if (resolvedGiftCount !== null) {
+                result.giftCount = resolvedGiftCount;
+            }
+            if (resolvedAmount !== null) {
+                result.amount = resolvedAmount;
+            }
+            if (resolvedCurrency) {
+                result.currency = resolvedCurrency;
+            }
+            return result;
         }
         case 'giftpaypiggy': {
             const resolvedGiftCount = resolveNonNegativeNumber(giftCount);
             const resolvedTier = resolveNonEmptyString(tier);
-            return {
-                ...payload,
-                giftCount: resolvedGiftCount ?? 0,
-                ...(platform === 'twitch' ? { tier: resolvedTier || 'unknown' } : {})
-            };
+            const result = { ...payload };
+            if (resolvedGiftCount !== null) {
+                result.giftCount = resolvedGiftCount;
+            }
+            if (platform === 'twitch' && resolvedTier) {
+                result.tier = resolvedTier;
+            }
+            return result;
         }
         case 'paypiggy': {
             const resolvedMonths = resolveNonNegativeNumber(months);
-            return {
-                ...payload,
-                months: resolvedMonths ?? 0
-            };
+            const result = { ...payload };
+            if (resolvedMonths !== null) {
+                result.months = resolvedMonths;
+            }
+            return result;
         }
         case 'envelope': {
-            const resolvedGiftType = resolveNonEmptyString(giftType) || DEFAULT_GIFT_TYPE;
+            const resolvedGiftType = resolveNonEmptyString(giftType);
             const resolvedGiftCount = resolveNonNegativeNumber(giftCount);
             const resolvedAmount = resolveNonNegativeNumber(amount);
-            const resolvedCurrency = resolveNonEmptyString(currency) || DEFAULT_CURRENCY;
-            return {
-                ...payload,
-                giftType: resolvedGiftType,
-                giftCount: resolvedGiftCount ?? 0,
-                amount: resolvedAmount ?? 0,
-                currency: resolvedCurrency
-            };
+            const resolvedCurrency = resolveNonEmptyString(currency);
+            const result = { ...payload };
+            if (resolvedGiftType) {
+                result.giftType = resolvedGiftType;
+            }
+            if (resolvedGiftCount !== null) {
+                result.giftCount = resolvedGiftCount;
+            }
+            if (resolvedAmount !== null) {
+                result.amount = resolvedAmount;
+            }
+            if (resolvedCurrency) {
+                result.currency = resolvedCurrency;
+            }
+            return result;
         }
         default:
             return payload;

@@ -3,7 +3,6 @@ const crypto = require('crypto');
 // Import notification templates for template-based message generation
 const { NOTIFICATION_TEMPLATES, interpolateTemplate } = require('./notification-strings');
 const { normalizeCurrency } = require('./currency-utils');
-const DEFAULT_PLACEHOLDER_USERNAME = 'Unknown';
 
 class NotificationBuilder {
     static build(input) {
@@ -14,7 +13,7 @@ class NotificationBuilder {
         let { type } = input;
         const isError = input.isError === true;
         const normalizedUsername = (typeof username === 'string') ? username.trim() : '';
-        if (!normalizedUsername) {
+        if (!normalizedUsername && !isError) {
             return null;
         }
         if (typeof type !== 'string' || !type.trim()) {
@@ -96,7 +95,6 @@ class NotificationBuilder {
             id: `${normalizedPlatform}-${finalType}-${crypto.randomUUID()}`,
             platform: normalizedPlatform,
             type: finalType,
-            username: normalizedUsername,
             message,
             displayMessage,
             ttsMessage,
@@ -104,6 +102,9 @@ class NotificationBuilder {
             processedAt: now,
             timestamp: new Date(now).toISOString()
         };
+        if (normalizedUsername) {
+            notification.username = normalizedUsername;
+        }
         if (normalizedUserId !== undefined) {
             notification.userId = normalizedUserId;
         }
@@ -305,11 +306,12 @@ class NotificationBuilder {
     }
 
     static _buildErrorMessage(type, username) {
-        const safeName = (typeof username === 'string' && username.trim())
-            ? username
-            : DEFAULT_PLACEHOLDER_USERNAME;
+        const hasUsername = typeof username === 'string' && username.trim();
         const label = this._getErrorLabel(type);
-        return `Error processing ${label} from ${safeName}`;
+        if (hasUsername) {
+            return `Error processing ${label} from ${username}`;
+        }
+        return `Error processing ${label}`;
     }
 
     static generateDisplayMessage(input) {
