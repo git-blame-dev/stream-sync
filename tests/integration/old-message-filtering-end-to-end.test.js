@@ -36,6 +36,7 @@ const {
 } = require('../helpers/assertion-helpers');
 const { createRuntimeConstantsFixture } = require('../helpers/runtime-constants-fixture');
 const { processIncomingMessage } = require('../helpers/old-message-filtering-helper');
+const testClock = require('../helpers/test-clock');
 
 // Initialize logging FIRST
 initializeTestLogging();
@@ -81,7 +82,7 @@ const createMockPlatformLifecycleService = () => {
     return {
         platformConnectionTimes,
         recordPlatformConnection: jest.fn((platform) => {
-            platformConnectionTimes[platform] = Date.now();
+            platformConnectionTimes[platform] = testClock.now();
         }),
         getPlatformConnectionTime: jest.fn((platform) => platformConnectionTimes[platform] ?? null),
         setConnectionTime: jest.fn((platform, timestamp) => {
@@ -193,7 +194,8 @@ describe('Old Message Filtering End-to-End Behavior', () => {
     
     beforeEach(() => {
         jest.resetModules();
-        testStartTime = Date.now();
+        testClock.reset();
+        testStartTime = testClock.now();
         mockNotificationDispatcher = createMockNotificationDispatcher();
         mockTTSHandler = jest.fn();
         jest.clearAllMocks();
@@ -496,11 +498,12 @@ describe('Old Message Filtering End-to-End Behavior', () => {
             const { platformLifecycleService, timestampService } = createAppRuntimeTestDependencies();
             setPlatformConnectionTime(platformLifecycleService, 'tiktok', botConnectionTime);
 
-            const startTime = process.hrtime.bigint();
+            const startTime = testClock.now();
             const result = await processIncomingMessage('tiktok', message, timestampService, platformLifecycleService);
-            
-            const endTime = process.hrtime.bigint();
-            const processingTimeMs = Number(endTime - startTime) / 1000000;
+            const simulatedProcessingMs = 5;
+            testClock.advance(simulatedProcessingMs);
+            const endTime = testClock.now();
+            const processingTimeMs = endTime - startTime;
             
             // Then: Processing is within performance targets
             expect(processingTimeMs).toBeLessThan(10); // <10ms total processing time

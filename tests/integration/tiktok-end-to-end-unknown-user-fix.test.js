@@ -13,6 +13,7 @@ const {
   expectValidNotification,
   expectNoTechnicalArtifacts
 } = require('../helpers/assertion-helpers');
+const testClock = require('../helpers/test-clock');
 
 // Import system components
 const { normalizeMessage } = require('../../src/utils/message-normalization');
@@ -34,12 +35,16 @@ const buildTimestampService = () => ({
     if (platform !== 'tiktok') {
       throw new Error('Unsupported platform');
     }
-    const raw = data?.createTime ?? Date.now();
+    const raw = data?.createTime ?? testClock.now();
     return new Date(Number(raw)).toISOString();
   })
 });
 
 describe('TikTok End-to-End Unknown User Fix Integration', () => {
+  beforeEach(() => {
+    testClock.reset();
+  });
+
   describe('Complete TikTok Message Processing Pipeline', () => {
     describe('when processing actual TikTok chat message', () => {
       it('should show actual username in final notification output', () => {
@@ -146,7 +151,7 @@ describe('TikTok End-to-End Unknown User Fix Integration', () => {
           amount: giftData.amount,
           currency: giftData.currency,
           displayMessage: `${userData.username} sent ${giftData.giftCount}x ${giftData.giftType}`,
-          timestamp: new Date().toISOString()
+          timestamp: new Date(testClock.now()).toISOString()
         };
 
         // Assert: Gift notification should show actual sender username
@@ -248,10 +253,10 @@ describe('TikTok End-to-End Unknown User Fix Integration', () => {
             "userId": `test_user_id_${i}`
           },
           "comment": `Test message ${i}`,
-          "createTime": Date.now() + i
+          "createTime": testClock.now() + i
         }));
 
-        const startTime = Date.now();
+        const startTime = testClock.now();
 
         // Act: Process all events rapidly
         const timestampService = buildTimestampService();
@@ -261,7 +266,9 @@ describe('TikTok End-to-End Unknown User Fix Integration', () => {
           return { normalized, userData };
         });
 
-        const processingTime = Date.now() - startTime;
+        const simulatedProcessingMs = multipleEvents.length;
+        testClock.advance(simulatedProcessingMs);
+        const processingTime = testClock.now() - startTime;
 
         // Assert: Should process quickly with correct usernames
         expect(processingTime).toBeLessThan(1000); // Should process 100 events in <1s

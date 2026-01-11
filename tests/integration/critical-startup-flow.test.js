@@ -2,6 +2,7 @@
 const fs = require('fs');
 const path = require('path');
 const { spawn } = require('child_process');
+const testClock = require('../helpers/test-clock');
 
 describe('Critical Startup Flow', () => {
     let startupResult;
@@ -27,7 +28,8 @@ describe('Critical Startup Flow', () => {
 
 async function runApplicationStartup() {
     return new Promise((resolve) => {
-        const startTime = Date.now();
+        testClock.reset();
+        const startTime = testClock.now();
         const bootstrap = path.join(__dirname, '../../src/bootstrap.js');
         const missingConfigPath = path.join(__dirname, 'fixtures', 'missing-config.ini');
         
@@ -49,7 +51,7 @@ async function runApplicationStartup() {
             child.kill('SIGTERM');
             scheduleTestTimeout(() => child.kill('SIGKILL'), 1000);
 
-            const endTime = Date.now();
+            const endTime = testClock.now();
             let output = stdout + stderr;
             let outputLines = output.split('\n').filter(line => line.trim());
 
@@ -83,7 +85,7 @@ async function runApplicationStartup() {
         // Handle normal exit
         child.on('close', (code) => {
             clearTimeout(startupTimeoutId);
-            const endTime = Date.now();
+            const endTime = testClock.now();
             let output = stdout + stderr;
             let outputLines = output.split('\n').filter(line => line.trim());
 
@@ -108,7 +110,7 @@ async function runApplicationStartup() {
         // Handle spawn errors
         child.on('error', (error) => {
             clearTimeout(startupTimeoutId);
-            const endTime = Date.now();
+            const endTime = testClock.now();
             resolve({
                 exitCode: -1,
                 output: error.message,

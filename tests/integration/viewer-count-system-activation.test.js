@@ -60,6 +60,7 @@ const {
     setupAutomatedCleanup
 } = require('../helpers/mock-lifecycle');
 const { createAppRuntimeTestDependencies } = require('../helpers/runtime-test-harness');
+const testClock = require('../helpers/test-clock');
 
 const createMockPlatformLifecycleService = () => {
     const service = {
@@ -69,7 +70,7 @@ const createMockPlatformLifecycleService = () => {
         getPlatforms: jest.fn(() => ({})),
         getPlatform: jest.fn(() => null),
         isPlatformAvailable: jest.fn(() => false),
-        getPlatformConnectionTime: jest.fn(() => Date.now()),
+        getPlatformConnectionTime: jest.fn(() => testClock.now()),
         recordPlatformConnection: jest.fn(),
         disconnectAll: jest.fn().mockResolvedValue(),
         waitForBackgroundInits: jest.fn().mockResolvedValue()
@@ -114,6 +115,7 @@ describe('ViewerCount System Activation Integration', () => {
     };
     
     beforeEach(() => {
+        testClock.reset();
         // Reset modules to get fresh instances
         jest.resetModules();
         

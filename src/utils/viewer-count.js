@@ -4,6 +4,28 @@ const { safeSetInterval, safeDelay } = require('./timeout-validator');
 const { createPlatformErrorHandler } = require('./platform-error-handler');
 const { validateLoggerInterface } = require('./dependency-validator');
 
+const DEFAULT_TIME_PROVIDER = {
+    now: () => Date.now(),
+    createDate: (timestampMs) => new Date(timestampMs)
+};
+
+const resolveTimeProvider = (timeProvider) => {
+    if (!timeProvider) {
+        return DEFAULT_TIME_PROVIDER;
+    }
+    if (typeof timeProvider.now !== 'function') {
+        throw new Error('ViewerCountSystem timeProvider.now must be a function');
+    }
+    const boundNow = timeProvider.now.bind(timeProvider);
+    const createDate = typeof timeProvider.createDate === 'function'
+        ? timeProvider.createDate.bind(timeProvider)
+        : (timestampMs) => new Date(timestampMs);
+    return {
+        now: boundNow,
+        createDate
+    };
+};
+
 class ViewerCountSystem {
     constructor(dependencies = {}) {
         const fallbackLogger = process.env.NODE_ENV === 'test' ? getDefaultTestLogger() : null;
@@ -19,6 +41,7 @@ class ViewerCountSystem {
         if (!this.runtimeConstants) {
             throw new Error('ViewerCountSystem requires runtimeConstants');
         }
+        this.timeProvider = resolveTimeProvider(dependencies.timeProvider);
         this.isPolling = false;
         this.pollingInterval = null;
         this.pollingHandles = {};
@@ -44,7 +67,7 @@ class ViewerCountSystem {
         this.pollingStats = {
             totalPolls: 0,
             successfulPolls: 0,
-            startTime: Date.now(),
+            startTime: this._now(),
             memoryOptimized: true
         };
         
@@ -52,7 +75,7 @@ class ViewerCountSystem {
         this.memoryConfig = {
             maxHistoryEntries: 3, // Ultra-aggressive limit to prevent memory bloat
             cleanupInterval: 2 * 60 * 1000, // Cleanup every 2 minutes (very frequent)
-            lastCleanup: Date.now()
+            lastCleanup: this._now()
         };
 
         // Start memory optimization routine
@@ -66,6 +89,14 @@ class ViewerCountSystem {
             this._errorHandler = createPlatformErrorHandler(this.logger, 'viewer-count');
         }
         return this._errorHandler;
+    }
+
+    _now() {
+        return this.timeProvider.now();
+    }
+
+    _createDate(timestampMs) {
+        return this.timeProvider.createDate(timestampMs);
     }
 
     _handleViewerCountError(message, error = null, eventType = 'viewer-count', eventData = null) {
@@ -95,7 +126,7 @@ class ViewerCountSystem {
 
     _trackStatusChange(platform, wasLive, isLive) {
         const change = {
-            timestamp: Date.now(),
+            timestamp: this._now(),
             from: wasLive,
             to: isLive,
             reason: this._getStatusChangeReason(wasLive, isLive)
@@ -158,7 +189,7 @@ class ViewerCountSystem {
             count,
             previousCount,
             isStreamLive: this.isStreamLive(platform),
-            timestamp: new Date()
+            timestamp: this._createDate(this._now())
         };
 
         const notificationPromises = [];
@@ -181,7 +212,7 @@ class ViewerCountSystem {
             platform,
             isLive,
             wasLive,
-            timestamp: new Date()
+            timestamp: this._createDate(this._now())
         };
 
         const notificationPromises = [];
@@ -364,7 +395,7 @@ class ViewerCountSystem {
 
     getPollingEfficiency() {
         const { totalPolls, successfulPolls, startTime } = this.pollingStats;
-        const runtime = Date.now() - startTime;
+        const runtime = this._now() - startTime;
         
         return {
             successRate: totalPolls > 0 ? (successfulPolls / totalPolls) * 100 : 0,
@@ -410,7 +441,7 @@ class ViewerCountSystem {
     }
 
     _performMemoryOptimization() {
-        const now = Date.now();
+        const now = this._now();
         
         // Only run if enough time has passed (reduced threshold for more frequent cleanup)
         if (now - this.memoryConfig.lastCleanup < this.memoryConfig.cleanupInterval - 10000) {
@@ -491,7 +522,7 @@ class ViewerCountSystem {
         this.pollingStats = {
             totalPolls: 0,
             successfulPolls: 0,
-            startTime: Date.now(),
+            startTime: this._now(),
             memoryOptimized: true
         };
         
@@ -506,7 +537,7 @@ class ViewerCountSystem {
             statusHistorySize: Array.from(this.statusChangeHistory.values())
                 .reduce((total, history) => total + history.length, 0),
             lastCleanup: this.memoryConfig.lastCleanup,
-            timeSinceCleanup: Date.now() - this.memoryConfig.lastCleanup
+            timeSinceCleanup: this._now() - this.memoryConfig.lastCleanup
         };
     }
 
@@ -587,7 +618,7 @@ class ViewerCountSystem {
             count,
             previousCount,
             isStreamLive: this.isStreamLive(platformName),
-            timestamp: new Date()
+            timestamp: this._createDate(this._now())
         };
     }
 

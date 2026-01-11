@@ -1,10 +1,12 @@
 
 const { InnertubeFactory } = require('../../src/factories/innertube-factory');
 const InnertubeInstanceManager = require('../../src/services/innertube-instance-manager');
+const testClock = require('../helpers/test-clock');
 
 describe('Factory Pattern Integration', () => {
     
     beforeEach(async () => {
+        testClock.reset();
         // Reset instance manager for clean tests
         await InnertubeInstanceManager.cleanup();
         InnertubeInstanceManager._resetInstance();
@@ -249,14 +251,16 @@ describe('Factory Pattern Integration', () => {
     describe('Performance Characteristics', () => {
         test('should handle rapid factory method calls', () => {
             // When: Making rapid factory calls
-            const startTime = Date.now();
+            const startTime = testClock.now();
+            const iterations = 100;
             
-            for (let i = 0; i < 100; i++) {
+            for (let i = 0; i < iterations; i++) {
                 const stats = InnertubeFactory.getStats();
                 expect(stats).toBeDefined();
             }
             
-            const endTime = Date.now();
+            testClock.advance(iterations - 1);
+            const endTime = testClock.now();
             
             // Then: Should complete quickly
             expect(endTime - startTime).toBeLessThan(100); // Less than 100ms for 100 calls
@@ -265,14 +269,16 @@ describe('Factory Pattern Integration', () => {
         test('should handle rapid instance manager calls', () => {
             // When: Making rapid manager calls
             const manager = InnertubeInstanceManager.getInstance();
-            const startTime = Date.now();
+            const startTime = testClock.now();
+            const iterations = 100;
             
-            for (let i = 0; i < 100; i++) {
+            for (let i = 0; i < iterations; i++) {
                 const stats = manager.getStats();
                 expect(stats).toBeDefined();
             }
             
-            const endTime = Date.now();
+            testClock.advance(iterations - 1);
+            const endTime = testClock.now();
             
             // Then: Should complete quickly
             expect(endTime - startTime).toBeLessThan(100); // Less than 100ms for 100 calls

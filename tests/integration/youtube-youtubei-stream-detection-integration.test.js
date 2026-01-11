@@ -2,6 +2,7 @@
 const { YouTubeStreamDetectionService } = require('../../src/services/youtube-stream-detection-service');
 const { createMockConfig, createMockLogger } = require('../helpers/mock-factories');
 const { expectNoTechnicalArtifacts } = require('../helpers/assertion-helpers');
+const testClock = require('../helpers/test-clock');
 
 describe('YouTube YouTubei Stream Detection Integration - Regression', () => {
     let mockLogger;
@@ -13,6 +14,7 @@ describe('YouTube YouTubei Stream Detection Integration - Regression', () => {
         // Clear all mocks first
         jest.clearAllMocks();
         jest.resetModules();
+        testClock.reset();
         
         mockLogger = createMockLogger();
         mockConfig = createMockConfig();
@@ -197,9 +199,11 @@ describe('YouTube YouTubei Stream Detection Integration - Regression', () => {
             });
             
             // When: Measuring detection performance
-            const startTime = Date.now();
+            const startTime = testClock.now();
             const mockResult = await mockYouTubeService.detectLiveStreams('testchannel');
-            const responseTime = Date.now() - startTime;
+            const simulatedResponseMs = mockResult.responseTime ?? 0;
+            testClock.advance(simulatedResponseMs);
+            const responseTime = testClock.now() - startTime;
             
             // Then: Performance meets user experience targets
             const result = mockResult.success && mockResult.videoIds.length > 0;

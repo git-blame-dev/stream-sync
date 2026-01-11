@@ -7,6 +7,7 @@ const {
     createMockDisplayQueue 
 } = require('../helpers/mock-factories');
 const { setupAutomatedCleanup } = require('../helpers/mock-lifecycle');
+const testClock = require('../helpers/test-clock');
 
 // Initialize logging FIRST
 initializeTestLogging();
@@ -98,6 +99,7 @@ describe('End-to-End Platform Workflow Integration Tests', () => {
     let mockDisplayQueue;
 
     beforeEach(() => {
+        testClock.reset();
         // Create mocks using factories
         mockLogger = createMockLogger('debug');
         mockConfigManager = createMockConfigManager();
@@ -181,7 +183,7 @@ describe('End-to-End Platform Workflow Integration Tests', () => {
             const chatMessage = {
                 displayName: 'TestUser',
                 comment: 'Hello world!',
-                timestamp: Date.now(),
+                timestamp: testClock.now(),
                 platform: 'tiktok'
             };
 
@@ -202,7 +204,7 @@ describe('End-to-End Platform Workflow Integration Tests', () => {
                 username: 'NewFollower',
                 displayName: 'NewFollower',
                 platform: 'twitch',
-                timestamp: Date.now()
+                timestamp: testClock.now()
             };
 
             // Act: Verify notification structure
@@ -222,7 +224,7 @@ describe('End-to-End Platform Workflow Integration Tests', () => {
                 currency: 'USD',
                 message: 'Hello from super chat!',
                 platform: 'youtube',
-                timestamp: Date.now()
+                timestamp: testClock.now()
             };
 
             // Act: Verify super chat structure
@@ -320,13 +322,15 @@ describe('End-to-End Platform Workflow Integration Tests', () => {
             const messages = Array.from({ length: 50 }, (_, i) => ({
                 username: `User${i}`,
                 message: `Message ${i}`,
-                timestamp: Date.now() + i
+                timestamp: testClock.now() + i
             }));
 
             // Act: Simulate rapid processing
-            const startTime = Date.now();
+            const startTime = testClock.now();
             const processedCount = messages.length;
-            const processingTime = Date.now() - startTime;
+            const simulatedProcessingMs = messages.length;
+            testClock.advance(simulatedProcessingMs);
+            const processingTime = testClock.now() - startTime;
 
             // Assert: Processing is efficient
             expect(processedCount).toBe(50);
@@ -339,13 +343,15 @@ describe('End-to-End Platform Workflow Integration Tests', () => {
                 type: 'chat',
                 username: `User${i}`,
                 platform: i % 3 === 0 ? 'tiktok' : i % 3 === 1 ? 'twitch' : 'youtube',
-                timestamp: Date.now()
+                timestamp: testClock.now()
             }));
 
             // Act: Simulate concurrent processing
-            const startTime = Date.now();
+            const startTime = testClock.now();
             const processedCount = notifications.length;
-            const processingTime = Date.now() - startTime;
+            const simulatedProcessingMs = notifications.length;
+            testClock.advance(simulatedProcessingMs);
+            const processingTime = testClock.now() - startTime;
 
             // Assert: Concurrent processing is efficient
             expect(processedCount).toBe(20);
