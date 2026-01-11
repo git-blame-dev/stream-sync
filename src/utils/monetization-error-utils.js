@@ -15,12 +15,12 @@ function resolveIdValue(value) {
     return trimmed ? trimmed : null;
 }
 
-function resolveNonNegativeNumber(value) {
+function resolvePositiveNumber(value) {
     if (value === undefined || value === null) {
         return null;
     }
     const num = Number(value);
-    return Number.isFinite(num) && num >= 0 ? num : null;
+    return Number.isFinite(num) && num > 0 ? num : null;
 }
 
 function resolveTimestampValue(value) {
@@ -63,7 +63,9 @@ function createMonetizationErrorPayload(options = {}) {
         throw new Error('Monetization error payload requires platform');
     }
 
-    const resolvedTimestamp = resolveTimestampValue(timestamp);
+    const resolvedTimestamp = timestamp === undefined || timestamp === null
+        ? null
+        : resolveTimestampValue(timestamp);
     const resolvedUsername = resolveNonEmptyString(username);
     const resolvedUserId = resolveIdValue(userId);
     const resolvedId = resolveIdValue(id);
@@ -93,8 +95,8 @@ function createMonetizationErrorPayload(options = {}) {
     switch (notificationType) {
         case 'gift': {
             const resolvedGiftType = resolveNonEmptyString(giftType);
-            const resolvedGiftCount = resolveNonNegativeNumber(giftCount);
-            const resolvedAmount = resolveNonNegativeNumber(amount);
+            const resolvedGiftCount = resolvePositiveNumber(giftCount);
+            const resolvedAmount = resolvePositiveNumber(amount);
             const resolvedCurrency = resolveNonEmptyString(currency);
             const result = { ...payload };
             if (resolvedGiftType) {
@@ -112,7 +114,7 @@ function createMonetizationErrorPayload(options = {}) {
             return result;
         }
         case 'giftpaypiggy': {
-            const resolvedGiftCount = resolveNonNegativeNumber(giftCount);
+            const resolvedGiftCount = resolvePositiveNumber(giftCount);
             const resolvedTier = resolveNonEmptyString(tier);
             const result = { ...payload };
             if (resolvedGiftCount !== null) {
@@ -124,7 +126,7 @@ function createMonetizationErrorPayload(options = {}) {
             return result;
         }
         case 'paypiggy': {
-            const resolvedMonths = resolveNonNegativeNumber(months);
+            const resolvedMonths = resolvePositiveNumber(months);
             const result = { ...payload };
             if (resolvedMonths !== null) {
                 result.months = resolvedMonths;
@@ -133,8 +135,8 @@ function createMonetizationErrorPayload(options = {}) {
         }
         case 'envelope': {
             const resolvedGiftType = resolveNonEmptyString(giftType);
-            const resolvedGiftCount = resolveNonNegativeNumber(giftCount);
-            const resolvedAmount = resolveNonNegativeNumber(amount);
+            const resolvedGiftCount = resolvePositiveNumber(giftCount);
+            const resolvedAmount = resolvePositiveNumber(amount);
             const resolvedCurrency = resolveNonEmptyString(currency);
             const result = { ...payload };
             if (resolvedGiftType) {
