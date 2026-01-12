@@ -62,12 +62,10 @@ class PlatformEventRouter {
             throw new Error(`Unsupported paid alias event type: ${type}`);
         }
 
-        const notificationType = this._resolveNotificationType(type);
-
         // Config gating only applies to notification types with explicit settings
-        if (notificationType && NOTIFICATION_CONFIGS[notificationType]?.settingKey) {
-            if (this._isNotificationEnabled(notificationType, platform) === false) {
-                this.logger.debug(`[${platform}] ${notificationType} notifications disabled at router`, 'PlatformEventRouter');
+        if (NOTIFICATION_CONFIGS[type]?.settingKey) {
+            if (this._isNotificationEnabled(type, platform) === false) {
+                this.logger.debug(`[${platform}] ${type} notifications disabled at router`, 'PlatformEventRouter');
                 return;
             }
         }
@@ -98,33 +96,33 @@ class PlatformEventRouter {
                 }
                 return;
             case PlatformEvents.GIFT: {
-                await this._routeRuntimeNotification('handleGiftNotification', notificationType, platform, data, (sanitized) => ({
+                await this._routeRuntimeNotification('handleGiftNotification', type, platform, data, (sanitized) => ({
                     ...sanitized,
-                    type: notificationType
+                    type
                 }));
                 return;
             }
             case PlatformEvents.PAYPIGGY: {
-                await this._routeRuntimeNotification('handlePaypiggyNotification', notificationType, platform, data, (sanitized) => ({
+                await this._routeRuntimeNotification('handlePaypiggyNotification', type, platform, data, (sanitized) => ({
                     ...sanitized,
-                    type: 'paypiggy'
+                    type
                 }));
                 return;
             }
             case PlatformEvents.GIFTPAYPIGGY: {
-                await this._routeRuntimeNotification('handleGiftPaypiggyNotification', notificationType, platform, data);
+                await this._routeRuntimeNotification('handleGiftPaypiggyNotification', type, platform, data);
                 return;
             }
             case PlatformEvents.FOLLOW: {
-                await this._routeRuntimeNotification('handleFollowNotification', notificationType, platform, data);
+                await this._routeRuntimeNotification('handleFollowNotification', type, platform, data);
                 return;
             }
             case PlatformEvents.SHARE: {
-                await this._routeRuntimeNotification('handleShareNotification', notificationType, platform, data);
+                await this._routeRuntimeNotification('handleShareNotification', type, platform, data);
                 return;
             }
             case PlatformEvents.RAID: {
-                await this._routeRuntimeNotification('handleRaidNotification', notificationType, platform, data);
+                await this._routeRuntimeNotification('handleRaidNotification', type, platform, data);
                 return;
             }
             case PlatformEvents.STREAM_STATUS:
@@ -142,30 +140,17 @@ class PlatformEventRouter {
                 return;
             case PlatformEvents.ENVELOPE:
                 if (this.runtime?.handleEnvelopeNotification) {
-                    const sanitized = this._sanitizeNotificationPayload(data, notificationType, platform);
+                    const sanitized = this._sanitizeNotificationPayload(data, type, platform);
                     await this.runtime.handleEnvelopeNotification(platform, sanitized);
                 }
                 return;
             default:
-                if (notificationType) {
-                    await this.forwardToNotificationManager(notificationType, platform, data);
+                if (NOTIFICATION_CONFIGS[type]) {
+                    await this.forwardToNotificationManager(type, platform, data);
                     return;
                 }
                 throw new Error(`Unsupported platform event type: ${type}`);
         }
-    }
-
-    _resolveNotificationType(type) {
-        if (!type || typeof type !== 'string') {
-            return null;
-        }
-        if (!type.startsWith('platform:')) {
-            return null;
-        }
-        if (type === PlatformEvents.CHAT_MESSAGE) {
-            return 'chat';
-        }
-        return type.replace('platform:', '');
     }
 
     _isNotificationEnabled(type, platform) {
@@ -275,9 +260,6 @@ class PlatformEventRouter {
 
         const sanitized = { ...data };
         const originalType = sourceType;
-        const normalizedType = typeof originalType === 'string' && originalType.startsWith('platform:')
-            ? originalType.replace('platform:', '')
-            : originalType;
         const originalPlatform = sourcePlatform;
 
         delete sanitized.type;
@@ -311,7 +293,7 @@ class PlatformEventRouter {
         }
 
         if (!isErrorPayload) {
-            if (normalizedType === 'gift' || normalizedType === 'envelope') {
+            if (originalType === PlatformEvents.GIFT || originalType === PlatformEvents.ENVELOPE) {
                 const giftType = typeof sanitized.giftType === 'string' ? sanitized.giftType.trim() : '';
                 const giftCount = sanitized.giftCount;
                 const amount = sanitized.amount;
@@ -321,7 +303,7 @@ class PlatformEventRouter {
                     throw new Error('Notification payload requires id, giftType, giftCount, amount, and currency');
                 }
             }
-            if (normalizedType === 'giftpaypiggy') {
+            if (originalType === PlatformEvents.GIFTPAYPIGGY) {
                 if (sanitized.giftCount === undefined) {
                     throw new Error('Notification payload requires giftCount');
                 }
@@ -331,7 +313,8 @@ class PlatformEventRouter {
         const result = {
             ...sanitized,
             platform: originalPlatform,
-            sourceType: normalizedType
+            sourceType: originalType,
+            type: originalType
         };
         const normalizedUsername = typeof sanitized.username === 'string' ? sanitized.username.trim() : '';
         if (normalizedUsername) {

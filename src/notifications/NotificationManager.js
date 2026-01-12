@@ -118,18 +118,18 @@ class NotificationManager extends EventEmitter {
         
         // Map notification types to priority levels for backward compatibility
         const priorityMap = {
-            'follow': this.PRIORITY_LEVELS.FOLLOW,
-            'gift': this.PRIORITY_LEVELS.GIFT,
-            'envelope': this.PRIORITY_LEVELS.ENVELOPE,
-            'paypiggy': this.PRIORITY_LEVELS.MEMBER,
-            'raid': this.PRIORITY_LEVELS.RAID,
-            'share': this.PRIORITY_LEVELS.SHARE,
+            'platform:follow': this.PRIORITY_LEVELS.FOLLOW,
+            'platform:gift': this.PRIORITY_LEVELS.GIFT,
+            'platform:envelope': this.PRIORITY_LEVELS.ENVELOPE,
+            'platform:paypiggy': this.PRIORITY_LEVELS.MEMBER,
+            'platform:raid': this.PRIORITY_LEVELS.RAID,
+            'platform:share': this.PRIORITY_LEVELS.SHARE,
             'redemption': this.PRIORITY_LEVELS.REDEMPTION,
-            'giftpaypiggy': this.PRIORITY_LEVELS.GIFTPAYPIGGY,
+            'platform:giftpaypiggy': this.PRIORITY_LEVELS.GIFTPAYPIGGY,
             'command': this.PRIORITY_LEVELS.COMMAND,
             'greeting': this.PRIORITY_LEVELS.GREETING,
             'farewell': this.PRIORITY_LEVELS.GREETING,
-            'chat': this.PRIORITY_LEVELS.CHAT,
+            'platform:chat-message': this.PRIORITY_LEVELS.CHAT,
             'general': this.PRIORITY_LEVELS.DEFAULT
         };
         
@@ -157,7 +157,7 @@ class NotificationManager extends EventEmitter {
             };
             
             // Process as a regular gift notification, but skip spam detection
-            this.handleNotificationInternal('gift', aggregatedData.platform, syntheticGiftData, true);
+            this.handleNotificationInternal('platform:gift', aggregatedData.platform, syntheticGiftData, true);
             
         } catch (error) {
             this._handleNotificationError(`Error handling aggregated donation: ${error.message}`, error, { aggregatedData }, { eventType: 'aggregated-donation' });
@@ -206,7 +206,12 @@ class NotificationManager extends EventEmitter {
             return { success: false, error: 'Unknown notification type', notificationType: canonicalType, platform };
         }
         notificationType = canonicalType;
-        const monetizationTypes = new Set(['gift', 'paypiggy', 'giftpaypiggy', 'envelope']);
+        const monetizationTypes = new Set([
+            'platform:gift',
+            'platform:paypiggy',
+            'platform:giftpaypiggy',
+            'platform:envelope'
+        ]);
         const isMonetizationType = monetizationTypes.has(notificationType);
 
         const normalizedData = { ...data };
@@ -235,7 +240,7 @@ class NotificationManager extends EventEmitter {
         }
 
         // Filter zero-amount monetary notifications (fiat-based gifts only)
-        if (!isErrorPayload && notificationType === 'gift' &&
+        if (!isErrorPayload && notificationType === 'platform:gift' &&
             typeof data.amount === 'number' &&
             data.amount <= 0) {
             const currency = typeof data.currency === 'string' ? data.currency.trim().toLowerCase() : '';
@@ -254,7 +259,7 @@ class NotificationManager extends EventEmitter {
         }
 
         // Handle gift spam before any other processing (unless skipped)
-        if (notificationType === 'gift' && this.donationSpamDetector && !skipSpamDetection && !data.isAggregated && !isErrorPayload) {
+        if (notificationType === 'platform:gift' && this.donationSpamDetector && !skipSpamDetection && !data.isAggregated && !isErrorPayload) {
             try {
             if (!data.giftType || data.giftCount === undefined || data.amount === undefined) {
                 throw new Error('Gift spam detection requires giftType, giftCount, and amount');
@@ -540,7 +545,7 @@ class NotificationManager extends EventEmitter {
 
         // Default logic for complex types
         switch (notificationType) {
-            case 'gift': {
+            case 'platform:gift': {
                 if (!data.giftType || data.giftCount === undefined || data.amount === undefined || !data.currency) {
                     throw new Error('Gift log message requires giftType, giftCount, amount, and currency');
                 }
@@ -563,7 +568,7 @@ class NotificationManager extends EventEmitter {
                     : `${amount} ${data.currency}`;
                 return `Gift from ${data.username}: ${giftType} (${formattedAmount})`;
             }
-            case 'raid':
+            case 'platform:raid':
                 if (data.viewerCount === undefined) {
                     throw new Error('Raid log message requires viewerCount');
                 }
@@ -630,7 +635,7 @@ class NotificationManager extends EventEmitter {
     }
 
     async handleGiftNotification(platform, data) {
-        await this.handleNotification('gift', platform, data);
+        await this.handleNotification('platform:gift', platform, data);
     }
 
     async processChatMessage(platform, data) {

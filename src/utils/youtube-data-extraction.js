@@ -168,7 +168,7 @@ function extractSuperChatData(chatItem) {
         return {
             amount: chatItem.superchat.amount,
             currency: chatItem.superchat.currency,
-            type: 'gift',
+            type: 'platform:gift',
             giftType: 'Super Chat',
             giftCount: 1,
             message: typeof chatItem.message === 'string' ? chatItem.message : undefined,
@@ -189,7 +189,7 @@ function extractSuperChatData(chatItem) {
         return {
             amount: chatItem.supersticker.amount,
             currency: chatItem.supersticker.currency,
-            type: 'gift',
+            type: 'platform:gift',
             giftType: 'Super Sticker',
             giftCount: 1,
             message: typeof chatItem.message === 'string' ? chatItem.message : undefined,

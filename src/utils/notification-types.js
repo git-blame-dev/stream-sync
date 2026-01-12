@@ -52,12 +52,12 @@ module.exports = {
     isNotificationType,
     isChatType,
     isValidDisplayItemType,
-    
+
     // Configuration access functions
     getNotificationConfig,
     getAllNotificationTypes,
     getNotificationDuration,
-    
+
     // Utility functions
     clearCache
 };

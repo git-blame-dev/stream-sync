@@ -59,59 +59,59 @@ const REGEX_PATTERNS = {
 };
 
 const NOTIFICATION_TYPES = {
-    FOLLOW: 'follow',
-    GIFT: 'gift',
-    ENVELOPE: 'envelope',
-    PAYPIGGY: 'paypiggy',
-    GIFTPAYPIGGY: 'giftpaypiggy',
-    RAID: 'raid',
-    SHARE: 'share',
+    FOLLOW: 'platform:follow',
+    GIFT: 'platform:gift',
+    ENVELOPE: 'platform:envelope',
+    PAYPIGGY: 'platform:paypiggy',
+    GIFTPAYPIGGY: 'platform:giftpaypiggy',
+    RAID: 'platform:raid',
+    SHARE: 'platform:share',
     COMMAND: 'command',
     GREETING: 'greeting',
     FAREWELL: 'farewell',
     REDEMPTION: 'redemption',
-    CHAT: 'chat',
+    CHAT: 'platform:chat-message',
     GENERAL: 'general'
 };
 
 const NOTIFICATION_CONFIGS = {
-    follow: {
+    'platform:follow': {
         timing: 'simultaneous',
         settingKey: 'followsEnabled',
         commandKey: 'follows',
         hasSpecialProcessing: false
     },
-    gift: {
+    'platform:gift': {
         timing: 'three_step',
         settingKey: 'giftsEnabled',
         commandKey: 'gifts',
         hasSpecialProcessing: true
     },
-    envelope: {
+    'platform:envelope': {
         timing: 'sequential',
         settingKey: 'giftsEnabled',
         commandKey: 'gifts',
         hasSpecialProcessing: false
     },
-    paypiggy: {
+    'platform:paypiggy': {
         timing: 'sequential',
         settingKey: 'paypiggiesEnabled',
         commandKey: 'paypiggies',
         hasSpecialProcessing: false
     },
-    giftpaypiggy: {
+    'platform:giftpaypiggy': {
         timing: 'sequential',
         settingKey: 'giftsEnabled',
         commandKey: 'gifts',
         hasSpecialProcessing: false
     },
-    raid: {
+    'platform:raid': {
         timing: 'sequential',
         settingKey: 'raidsEnabled',
         commandKey: 'raids',
         hasSpecialProcessing: false
     },
-    share: {
+    'platform:share': {
         timing: 'sequential',
         settingKey: 'sharesEnabled',
         commandKey: 'shares',
@@ -141,7 +141,7 @@ const NOTIFICATION_CONFIGS = {
         commandKey: 'redemptions',
         hasSpecialProcessing: false
     },
-    chat: {
+    'platform:chat-message': {
         timing: 'immediate',
         settingKey: 'messagesEnabled',
         commandKey: 'chat',

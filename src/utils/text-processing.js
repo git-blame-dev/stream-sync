@@ -195,11 +195,11 @@ class TextProcessingManager {
             return data.giftType;
         }
 
-        if (platform === 'tiktok' && type === 'gift') {
+        if (platform === 'tiktok' && type === 'platform:gift') {
             return 'gift';
         }
 
-        if (type === 'gift') {
+        if (type === 'platform:gift') {
             return 'gift';
         }
 

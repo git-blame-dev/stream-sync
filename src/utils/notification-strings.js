@@ -432,7 +432,7 @@ function enrichPaypiggyData(data) {
         return {};
     }
 
-    const shouldEnrich = data.type === 'paypiggy' || data.sourceType === 'paypiggy';
+    const shouldEnrich = data.type === 'paypiggy' || data.type === 'platform:paypiggy' || data.sourceType === 'paypiggy' || data.sourceType === 'platform:paypiggy';
     if (!shouldEnrich) {
         return data;
     }
