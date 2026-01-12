@@ -1,5 +1,6 @@
 jest.unmock('../../../../src/platforms/tiktok');
 
+const { PlatformEvents } = require('../../../../src/interfaces/PlatformEvents');
 const { TikTokPlatform } = require('../../../../src/platforms/tiktok');
 const { createMockTikTokPlatformDependencies } = require('../../../helpers/mock-factories');
 const testClock = require('../../../helpers/test-clock');
@@ -26,7 +27,7 @@ describe('TikTok paypiggy routing', () => {
             createTime: testClock.now()
         }, {
             factoryMethod: 'createSubscription',
-            emitType: 'paypiggy'
+            emitType: PlatformEvents.PAYPIGGY
         });
 
         expect(paypiggyEvents).toHaveLength(1);
@@ -49,7 +50,7 @@ describe('TikTok paypiggy routing', () => {
             createTime: testClock.now()
         }, {
             factoryMethod: 'createSuperfan',
-            emitType: 'paypiggy'
+            emitType: PlatformEvents.PAYPIGGY
         });
 
         expect(paypiggyEvents).toHaveLength(1);

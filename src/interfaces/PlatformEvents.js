@@ -8,9 +8,11 @@ const PlatformEvents = {
     CHAT_CONNECTED: 'platform:chat-connected', 
     CHAT_DISCONNECTED: 'platform:chat-disconnected',
     FOLLOW: 'platform:follow',
+    SHARE: 'platform:share',
     PAYPIGGY: 'platform:paypiggy',
     GIFTPAYPIGGY: 'platform:giftpaypiggy',
     GIFT: 'platform:gift',
+    ENVELOPE: 'platform:envelope',
     RAID: 'platform:raid',
     CONNECTION_STATUS: 'platform:connection-status',
     AUTHENTICATION_REQUIRED: 'platform:authentication-required',
@@ -118,6 +120,18 @@ const EVENT_SCHEMAS = {
         optional: ['metadata'],
         properties: {
             type: { type: 'string', enum: ['platform:follow'] },
+            platform: { type: 'string', enum: VALID_PLATFORMS },
+            username: { type: 'string' },
+            userId: { type: 'string' },
+            timestamp: { type: 'string' },
+            metadata: { type: 'object' }
+        }
+    },
+    'platform:share': {
+        required: ['type', 'platform', 'username', 'userId', 'timestamp'],
+        optional: ['metadata'],
+        properties: {
+            type: { type: 'string', enum: ['platform:share'] },
             platform: { type: 'string', enum: VALID_PLATFORMS },
             username: { type: 'string' },
             userId: { type: 'string' },
@@ -244,7 +258,7 @@ const EVENT_SCHEMAS = {
             type: { type: 'string', enum: ['platform:connection'] },
             platform: { type: 'string', enum: VALID_PLATFORMS },
             status: { type: 'string' },
-            timestamp: { type: 'object' },
+            timestamp: { type: 'string' },
             correlationId: { type: 'string' },
             id: { type: 'string' },
             error: { type: ['object', 'null'] },
@@ -258,7 +272,7 @@ const EVENT_SCHEMAS = {
             type: { type: 'string', enum: ['platform:notification'] },
             platform: { type: 'string', enum: VALID_PLATFORMS },
             notificationType: { type: 'string' },
-            timestamp: { type: 'object' },
+            timestamp: { type: 'string' },
             priority: { type: 'number' },
             data: { type: 'object' },
             username: { type: 'string' },
@@ -277,11 +291,15 @@ const EVENT_SCHEMAS = {
         }
     },
     'platform:stream-status': {
-        required: ['type', 'platform', 'isLive', 'title', 'category'],
+        required: ['type', 'platform', 'isLive', 'timestamp'],
+        optional: ['status', 'message', 'title', 'category'],
         properties: {
             type: { type: 'string', enum: ['platform:stream-status'] },
             platform: { type: 'string', enum: VALID_PLATFORMS },
             isLive: { type: 'boolean' },
+            timestamp: { type: 'string' },
+            status: { type: 'string' },
+            message: { type: 'string' },
             title: { type: 'string' },
             category: { type: 'string' }
         }
@@ -749,7 +767,7 @@ class EnhancedPlatformEvents {
             platform: this._validatePlatform(platform),
             notificationType: notificationType,
             correlationId: this._generateCorrelationId(),
-            timestamp: new Date(),
+            timestamp: new Date().toISOString(),
             priority: this._calculatePriority(notificationType),
             data: data || {},
             username: data?.username || null,
@@ -764,7 +782,7 @@ class EnhancedPlatformEvents {
             platform: this._validatePlatform(platform),
             status: status,
             correlationId: this._generateCorrelationId(),
-            timestamp: new Date(),
+            timestamp: new Date().toISOString(),
             error: error,
             willReconnect: status === 'disconnected'
         };
@@ -776,7 +794,7 @@ class EnhancedPlatformEvents {
             type: 'platform:error',
             platform: this._validatePlatform(platform),
             correlationId: this._generateCorrelationId(),
-            timestamp: new Date(),
+            timestamp: new Date().toISOString(),
             error: {
                 message: error.message || 'Unknown error',
                 code: error.code || 'UNKNOWN',
@@ -1037,7 +1055,7 @@ class EventBuilder {
         this._event = {
             id: EnhancedPlatformEvents._generateId(),
             correlationId: EnhancedPlatformEvents._generateCorrelationId(),
-            timestamp: new Date()
+            timestamp: new Date().toISOString()
         };
     }
 

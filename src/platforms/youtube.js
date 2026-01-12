@@ -14,6 +14,7 @@ const { normalizeYouTubeConfig, DEFAULT_YOUTUBE_CONFIG } = require('../utils/con
 const { YouTubeNotificationDispatcher } = require('../utils/youtube-notification-dispatcher');
 const { YouTubeConnectionManager } = require('../utils/youtube-connection-manager');
 const { createPlatformErrorHandler } = require('../utils/platform-error-handler');
+const { PlatformEvents } = require('../interfaces/PlatformEvents');
 const { YouTubeLiveStreamService } = require('../services/youtube-live-stream-service');
 const { createYouTubeEventDispatchTable } = require('./youtube/events/youtube-event-dispatch-table');
 const { normalizeYouTubeChatItem } = require('./youtube/events/youtube-chat-item-normalizer');
@@ -482,7 +483,7 @@ class YouTubePlatform extends EventEmitter {
                 const eventPlatform = chatConnectedEvent.platform;
                 this.emit('platform:event', {
                     platform: eventPlatform,
-                    type: 'chat-connected',
+                    type: PlatformEvents.CHAT_CONNECTED,
                     data: chatConnectedEvent
                 });
                 this._emitStreamStatusIfNeeded(previousCount, {
@@ -627,7 +628,7 @@ class YouTubePlatform extends EventEmitter {
         // Emit standardized chat message event
         try {
             const eventData = this.eventFactory.createChatMessageEvent(normalizedData);
-            this._emitPlatformEvent('chat', eventData);
+            this._emitPlatformEvent(PlatformEvents.CHAT_MESSAGE, eventData);
             this.logger.debug(`Chat message event emitted for ${normalizedData.username}`, 'youtube');
         } catch (eventError) {
             this._handleProcessingError(`Error emitting chat message event: ${eventError.message}`, eventError, 'chat-message', normalizedData);
@@ -963,7 +964,7 @@ class YouTubePlatform extends EventEmitter {
             const eventPlatform = eventData.platform;
             this.emit('platform:event', {
                 platform: eventPlatform,
-                type: 'error',
+                type: PlatformEvents.ERROR,
                 data: eventData
             });
         }
@@ -1005,7 +1006,7 @@ class YouTubePlatform extends EventEmitter {
                 streamViewerCount: count,
                 timestamp: new Date().toISOString()
             });
-            this._emitPlatformEvent('viewer-count', eventData);
+            this._emitPlatformEvent(PlatformEvents.VIEWER_COUNT, eventData);
         } catch (eventError) {
             this._handleProcessingError(`Error emitting viewer count event: ${eventError.message}`, eventError, 'viewer-count', {
                 streamId,
@@ -1035,13 +1036,13 @@ class YouTubePlatform extends EventEmitter {
 
         // Forward to injected handlers (e.g., EventBus via PlatformLifecycleService)
         const handlerMap = {
-            'chat': 'onChat',
-            'gift': 'onGift',
-            'giftpaypiggy': 'onGiftPaypiggy',
-            'paypiggy': 'onMembership',
-            'stream-status': 'onStreamStatus',
-            'stream-detected': 'onStreamDetected',
-            'viewer-count': 'onViewerCount'
+            [PlatformEvents.CHAT_MESSAGE]: 'onChat',
+            [PlatformEvents.GIFT]: 'onGift',
+            [PlatformEvents.GIFTPAYPIGGY]: 'onGiftPaypiggy',
+            [PlatformEvents.PAYPIGGY]: 'onMembership',
+            [PlatformEvents.STREAM_STATUS]: 'onStreamStatus',
+            [PlatformEvents.STREAM_DETECTED]: 'onStreamDetected',
+            [PlatformEvents.VIEWER_COUNT]: 'onViewerCount'
         };
 
         const handlerName = handlerMap[type];
@@ -1067,12 +1068,13 @@ class YouTubePlatform extends EventEmitter {
             return;
         }
 
-        this._emitPlatformEvent('stream-status', {
-            ...context,
+        const isLive = becameLive;
+        this._emitPlatformEvent(PlatformEvents.STREAM_STATUS, {
             platform: 'youtube',
-            isLive: becameLive,
+            isLive,
             timestamp: new Date().toISOString()
         });
+
     }
 
     getHealthStatus() {

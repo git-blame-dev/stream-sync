@@ -4,7 +4,7 @@ describe('PlatformEventRouter chat normalization', () => {
     const platform = 'twitch';
     const baseEvent = {
         platform,
-        type: 'chat',
+        type: 'platform:chat-message',
         data: {}
     };
 

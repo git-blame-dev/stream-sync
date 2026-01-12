@@ -136,15 +136,18 @@ describe('Monetization error-path platform flows (smoke)', () => {
             async initialize(handlers) {
                 const giftError = createMonetizationErrorPayload({
                     notificationType: 'gift',
-                    platform: 'twitch'
+                    platform: 'twitch',
+                    timestamp: '2024-01-01T00:00:00.000Z'
                 });
                 const giftpaypiggyError = createMonetizationErrorPayload({
                     notificationType: 'giftpaypiggy',
-                    platform: 'twitch'
+                    platform: 'twitch',
+                    timestamp: '2024-01-01T00:00:00.000Z'
                 });
                 const paypiggyError = createMonetizationErrorPayload({
                     notificationType: 'paypiggy',
-                    platform: 'twitch'
+                    platform: 'twitch',
+                    timestamp: '2024-01-01T00:00:00.000Z'
                 });
 
                 handlers.onGift(giftError);
@@ -222,7 +225,8 @@ describe('Monetization error-path platform flows (smoke)', () => {
                 const errorPayload = createMonetizationErrorPayload({
                     notificationType: type,
                     platform: 'youtube',
-                    isError: true
+                    isError: true,
+                    timestamp: '2024-01-01T00:00:00.000Z'
                 });
 
                 if (type === 'gift') {
@@ -234,7 +238,7 @@ describe('Monetization error-path platform flows (smoke)', () => {
                     return;
                 }
                 if (type === 'paypiggy') {
-                    handlers.onMembership(errorPayload);
+                    handlers.onPaypiggy(errorPayload);
                 }
             }
 
@@ -277,15 +281,18 @@ describe('Monetization error-path platform flows (smoke)', () => {
             async initialize(handlers) {
                 const giftError = createMonetizationErrorPayload({
                     notificationType: 'gift',
-                    platform: 'tiktok'
+                    platform: 'tiktok',
+                    timestamp: '2024-01-01T00:00:00.000Z'
                 });
                 const paypiggyError = createMonetizationErrorPayload({
                     notificationType: 'paypiggy',
-                    platform: 'tiktok'
+                    platform: 'tiktok',
+                    timestamp: '2024-01-01T00:00:00.000Z'
                 });
                 const envelopeError = createMonetizationErrorPayload({
                     notificationType: 'envelope',
-                    platform: 'tiktok'
+                    platform: 'tiktok',
+                    timestamp: '2024-01-01T00:00:00.000Z'
                 });
 
                 handlers.onGift(giftError);

@@ -1,3 +1,5 @@
+const { PlatformEvents } = require('../../../interfaces/PlatformEvents');
+
 function createYouTubeMultiStreamManager(options = {}) {
     const {
         platform,
@@ -172,7 +174,7 @@ function createYouTubeMultiStreamManager(options = {}) {
                     connectionCount: platform.connectionManager.getConnectionCount()
                 };
 
-                platform._emitPlatformEvent('stream-detected', streamDetectedEvent);
+                platform._emitPlatformEvent(PlatformEvents.STREAM_DETECTED, streamDetectedEvent);
             }
 
             if (videoIds.length === 0 && platform.connectionManager.getConnectionCount() > 0) {

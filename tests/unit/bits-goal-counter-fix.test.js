@@ -111,7 +111,7 @@ describe('Bits Goal Counter Fix', () => {
 
         await mockEventBus.emit('platform:event', {
             platform: 'twitch',
-            type: 'gift',
+            type: 'platform:gift',
             data
         });
     };

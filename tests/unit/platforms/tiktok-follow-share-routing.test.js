@@ -40,7 +40,7 @@ describe('TikTok follow/share routing', () => {
         });
 
         await eventBus.emit('platform:event', {
-            type: 'follow',
+            type: 'platform:follow',
             platform: 'tiktok',
             data: { username: 'Follower', userId: 'user-1', timestamp: new Date().toISOString(), metadata: {} }
         });
@@ -65,12 +65,12 @@ describe('TikTok follow/share routing', () => {
 
         // Platform handler uses injected onShare in other tests; here simulate emitter
         eventBus.emit('platform:event', {
-            type: 'share',
+            type: 'platform:share',
             platform: 'tiktok',
             data: { username: 'Sharer', userId: 'user-2', timestamp: new Date().toISOString(), metadata: {} }
         });
 
-        expect(emitted.find((p) => p.type === 'share')).toBeDefined();
+        expect(emitted.find((p) => p.type === 'platform:share')).toBeDefined();
         expect(handled).toHaveLength(1);
         expect(handled[0].type).toBe('share');
     });

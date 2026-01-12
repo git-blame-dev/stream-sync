@@ -3,10 +3,11 @@ const { logger } = require('../core/logging');
 const { safeDelay } = require('../utils/timeout-validator');
 const { createPlatformErrorHandler } = require('../utils/platform-error-handler');
 const { assertPlatformInterface } = require('../utils/platform-interface-validator');
+const { PlatformEvents } = require('../interfaces/PlatformEvents');
 
 class PlatformLifecycleService {
     constructor(options = {}) {
-        this.config = options.config;
+        this.config = options.config || {};
         this.eventBus = options.eventBus || null;
         this.streamDetector = options.streamDetector;
         this.dependencyFactory = options.dependencyFactory;
@@ -31,7 +32,7 @@ class PlatformLifecycleService {
 
         for (const platformName in platformModules) {
             this.logger.debug(`Processing platform: ${platformName}`, 'PlatformLifecycleService');
-            const platformConfig = this.config[platformName];
+            const platformConfig = this.config?.[platformName];
 
             this.ensurePlatformHealthEntry(platformName);
 
@@ -116,21 +117,22 @@ class PlatformLifecycleService {
 
     createDefaultEventHandlers(platformName) {
         const handlers = {
-            onChat: (data) => this.emitPlatformEvent(platformName, 'chat', data),
+            onChat: (data) => this.emitPlatformEvent(platformName, PlatformEvents.CHAT_MESSAGE, data),
             onViewerCount: (data) => {
-                const payload = typeof data === 'number' ? { count: data } : data;
-                this.emitPlatformEvent(platformName, 'viewer-count', payload);
+                const payload = typeof data === 'number'
+                    ? { count: data, timestamp: new Date().toISOString() }
+                    : data;
+                this.emitPlatformEvent(platformName, PlatformEvents.VIEWER_COUNT, payload);
             },
-            onGift: (data) => this.emitPlatformEvent(platformName, 'gift', data),
-            onPaypiggy: (data) => this.emitPlatformEvent(platformName, 'paypiggy', data),
-            onMembership: (data) => this.emitPlatformEvent(platformName, 'paypiggy', data),
-            onGiftPaypiggy: (data) => this.emitPlatformEvent(platformName, 'giftpaypiggy', data),
-            onFollow: (data) => this.emitPlatformEvent(platformName, 'follow', data),
-            onShare: (data) => this.emitPlatformEvent(platformName, 'share', data),
-            onRaid: (data) => this.emitPlatformEvent(platformName, 'raid', data),
-            onEnvelope: (data) => this.emitPlatformEvent(platformName, 'envelope', data),
-            onStreamStatus: (data) => this.emitPlatformEvent(platformName, 'stream-status', data),
-            onStreamDetected: (data) => this.emitPlatformEvent(platformName, 'stream-detected', data)
+            onGift: (data) => this.emitPlatformEvent(platformName, PlatformEvents.GIFT, data),
+            onPaypiggy: (data) => this.emitPlatformEvent(platformName, PlatformEvents.PAYPIGGY, data),
+            onGiftPaypiggy: (data) => this.emitPlatformEvent(platformName, PlatformEvents.GIFTPAYPIGGY, data),
+            onFollow: (data) => this.emitPlatformEvent(platformName, PlatformEvents.FOLLOW, data),
+            onShare: (data) => this.emitPlatformEvent(platformName, PlatformEvents.SHARE, data),
+            onRaid: (data) => this.emitPlatformEvent(platformName, PlatformEvents.RAID, data),
+            onEnvelope: (data) => this.emitPlatformEvent(platformName, PlatformEvents.ENVELOPE, data),
+            onStreamStatus: (data) => this.emitPlatformEvent(platformName, PlatformEvents.STREAM_STATUS, data),
+            onStreamDetected: (data) => this.emitPlatformEvent(platformName, PlatformEvents.STREAM_DETECTED, data)
         };
 
         return handlers;
@@ -142,11 +144,33 @@ class PlatformLifecycleService {
             return;
         }
 
+        const sanitizedData = this._sanitizePlatformEventData(platformName, type, data);
+        const requiresTimestamp = new Set([
+            PlatformEvents.CHAT_MESSAGE,
+            PlatformEvents.FOLLOW,
+            PlatformEvents.SHARE,
+            PlatformEvents.PAYPIGGY,
+            PlatformEvents.GIFTPAYPIGGY,
+            PlatformEvents.GIFT,
+            PlatformEvents.ENVELOPE,
+            PlatformEvents.RAID,
+            PlatformEvents.VIEWER_COUNT,
+            PlatformEvents.STREAM_STATUS
+        ]);
+
+        if (requiresTimestamp.has(type)) {
+            if (!sanitizedData || typeof sanitizedData !== 'object' || !sanitizedData.timestamp) {
+                this.logger.warn(`Platform event missing timestamp: ${type}`, 'PlatformLifecycleService', {
+                    platform: platformName
+                });
+                return;
+            }
+        }
+
         this.eventBus.emit('platform:event', {
             platform: platformName,
             type,
-            data: this._sanitizePlatformEventData(platformName, type, data),
-            timestamp: new Date().toISOString()
+            data: sanitizedData
         });
     }
 
@@ -224,7 +248,7 @@ class PlatformLifecycleService {
                 isLive
             };
 
-            this.emitPlatformEvent(platformName, 'stream-status', {
+            this.emitPlatformEvent(platformName, PlatformEvents.STREAM_STATUS, {
                 status: normalizedStatus || status,
                 message,
                 isLive,

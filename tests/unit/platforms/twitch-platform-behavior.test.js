@@ -41,7 +41,7 @@ describe('TwitchPlatform behavior standards', () => {
         const platform = buildPlatform();
         const emitted = [];
         platform.on('platform:event', (payload) => {
-            if (payload.type === 'chat') emitted.push(payload.data);
+            if (payload.type === 'platform:chat-message') emitted.push(payload.data);
         });
 
         const context = {
@@ -67,7 +67,7 @@ describe('TwitchPlatform behavior standards', () => {
         const platform = buildPlatform();
         const connectedEvents = [];
         platform.on('platform:event', (payload) => {
-            if (payload.type === 'stream-status') connectedEvents.push(payload.data);
+            if (payload.type === 'platform:stream-status') connectedEvents.push(payload.data);
         });
 
         platform._handleEventSubConnectionChange(true, { reason: 'connected-test' });
@@ -126,7 +126,7 @@ describe('TwitchPlatform behavior standards', () => {
 
         const payload = { type: 'platform:paypiggy', platform: 'twitch', username: 'supporter' };
 
-        platform._emitPlatformEvent('paypiggy', payload);
+        platform._emitPlatformEvent('platform:paypiggy', payload);
         platform._emitPlatformEvent('subscription', payload);
 
         expect(paypiggyHandler).toHaveBeenCalledTimes(1);

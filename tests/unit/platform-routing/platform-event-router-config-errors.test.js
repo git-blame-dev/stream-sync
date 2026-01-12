@@ -28,7 +28,7 @@ describe('PlatformEventRouter config gating error handling', () => {
 
         await expect(router.routeEvent({
             platform: 'twitch',
-            type: 'follow',
+            type: 'platform:follow',
             data: {
                 username: 'Follower',
                 userId: '123',
@@ -56,12 +56,8 @@ describe('PlatformEventRouter config gating error handling', () => {
             platform: 'youtube',
             type: 'custom-event',
             data: { username: 'User', userId: 'user-1' }
-        })).resolves.toBeUndefined();
-        expect(notificationManager.handleNotification).toHaveBeenCalledWith(
-            'custom-event',
-            'youtube',
-            expect.objectContaining({ username: 'User', userId: 'user-1' })
-        );
+        })).rejects.toThrow('Unsupported platform event type: custom-event');
+        expect(notificationManager.handleNotification).not.toHaveBeenCalled();
         expect(configService.areNotificationsEnabled).not.toHaveBeenCalled();
     });
 
@@ -80,12 +76,8 @@ describe('PlatformEventRouter config gating error handling', () => {
             platform: 'youtube',
             type: 'unknown-type',
             data: { username: 'User', userId: 'user-2' }
-        })).resolves.toBeUndefined();
-        expect(notificationManager.handleNotification).toHaveBeenCalledWith(
-            'unknown-type',
-            'youtube',
-            expect.objectContaining({ username: 'User', userId: 'user-2' })
-        );
+        })).rejects.toThrow('Unsupported platform event type: unknown-type');
+        expect(notificationManager.handleNotification).not.toHaveBeenCalled();
         expect(configService.areNotificationsEnabled).not.toHaveBeenCalled();
     });
 
@@ -102,8 +94,9 @@ describe('PlatformEventRouter config gating error handling', () => {
 
         await router.routeEvent({
             platform: 'twitch',
-            type: 'chat',
+            type: 'platform:chat-message',
             data: {
+
                 username: 'Chatter',
                 message: { text: 'hi' },
                 userId: 'user-3',
@@ -131,7 +124,7 @@ describe('PlatformEventRouter config gating error handling', () => {
 
         await expect(router.routeEvent({
             platform: 'twitch',
-            type: 'chat',
+            type: 'platform:chat-message',
             data: {
                 username: 'Chatter',
                 message: { text: 'hi' },
@@ -159,12 +152,12 @@ describe('PlatformEventRouter config gating error handling', () => {
 
         await expect(router.routeEvent({
             platform: 'twitch',
-            type: 'follow',
+            type: 'platform:follow',
             data: { username: 'Follower', userId: 'f1', timestamp: new Date().toISOString(), metadata: {} }
         })).rejects.toThrow('toggle fail');
         await expect(router.routeEvent({
             platform: 'twitch',
-            type: 'raid',
+            type: 'platform:raid',
             data: { username: 'Raider', userId: 'r1', viewerCount: 10, timestamp: new Date().toISOString(), metadata: {} }
         })).rejects.toThrow('toggle fail');
         expect(runtime.handleFollowNotification).not.toHaveBeenCalled();
@@ -186,7 +179,7 @@ describe('PlatformEventRouter config gating error handling', () => {
 
         await expect(router.routeEvent({
             platform: 'tiktok',
-            type: 'gift',
+            type: 'platform:gift',
             data: { username: 'Gifter', userId: 'g1', coins: 50, timestamp: new Date().toISOString(), metadata: {} }
         })).rejects.toThrow('toggle fail');
         expect(runtime.handleGiftNotification).not.toHaveBeenCalled();
@@ -207,7 +200,7 @@ describe('PlatformEventRouter config gating error handling', () => {
 
         await expect(router.routeEvent({
             platform: 'tiktok',
-            type: 'envelope',
+            type: 'platform:envelope',
             data: { id: 'e1', username: 'User', userId: 'e1', timestamp: new Date().toISOString(), metadata: {} }
         })).rejects.toThrow('toggle fail');
         expect(runtime.handleEnvelopeNotification).not.toHaveBeenCalled();
@@ -228,12 +221,8 @@ describe('PlatformEventRouter config gating error handling', () => {
             platform: 'youtube',
             type: 'unknown-type',
             data: { username: 'User', userId: 'user-4' }
-        })).resolves.toBeUndefined();
-        expect(notificationManager.handleNotification).toHaveBeenCalledWith(
-            'unknown-type',
-            'youtube',
-            expect.objectContaining({ username: 'User', userId: 'user-4' })
-        );
+        })).rejects.toThrow('Unsupported platform event type: unknown-type');
+        expect(notificationManager.handleNotification).not.toHaveBeenCalled();
         expect(configService.areNotificationsEnabled).not.toHaveBeenCalled();
     });
 

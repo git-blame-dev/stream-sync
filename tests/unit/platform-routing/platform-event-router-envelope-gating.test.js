@@ -24,7 +24,7 @@ describe('PlatformEventRouter envelope gating', () => {
 
         await router.routeEvent({
             platform: 'tiktok',
-            type: 'envelope',
+            type: 'platform:envelope',
             data: {
                 username: 'ChestUser',
                 userId: 'user-1',

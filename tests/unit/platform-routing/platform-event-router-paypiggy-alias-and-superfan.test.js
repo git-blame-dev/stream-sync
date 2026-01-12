@@ -27,7 +27,7 @@ describe('PlatformEventRouter paypiggy months handling', () => {
 
         await router.routeEvent({
             platform: 'tiktok',
-            type: 'paypiggy',
+            type: 'platform:paypiggy',
             data: {
                 username: 'SuperFanUser',
                 userId: 'sf-1',
@@ -54,7 +54,7 @@ describe('PlatformEventRouter paypiggy months handling', () => {
 
         await router.routeEvent({
             platform: 'twitch',
-            type: 'paypiggy',
+            type: 'platform:paypiggy',
             data: {
                 username: 'MonthsUser',
                 userId: 'user-3',

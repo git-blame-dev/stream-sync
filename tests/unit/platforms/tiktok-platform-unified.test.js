@@ -3,6 +3,7 @@ jest.unmock('../../../src/platforms/tiktok');
 jest.unmock('../../../src/services/PlatformEventRouter');
 
 const PlatformEventRouter = require('../../../src/services/PlatformEventRouter');
+const { PlatformEvents } = require('../../../src/interfaces/PlatformEvents');
 const { TikTokPlatform } = require('../../../src/platforms/tiktok');
 const testClock = require('../../helpers/test-clock');
 
@@ -85,10 +86,10 @@ describe('TikTokPlatform unified event contract (expected behavior)', () => {
 
         // Inject handlers that route to EventBus (production pattern)
         const platformHandlers = {
-            onChat: (data) => mockEventBus.emit('platform:event', { platform: 'tiktok', type: 'chat', data }),
-            onFollow: (data) => mockEventBus.emit('platform:event', { platform: 'tiktok', type: 'follow', data }),
-            onGift: (data) => mockEventBus.emit('platform:event', { platform: 'tiktok', type: 'gift', data }),
-            onShare: (data) => mockEventBus.emit('platform:event', { platform: 'tiktok', type: 'share', data })
+            onChat: (data) => mockEventBus.emit('platform:event', { platform: 'tiktok', type: PlatformEvents.CHAT_MESSAGE, data }),
+            onFollow: (data) => mockEventBus.emit('platform:event', { platform: 'tiktok', type: PlatformEvents.FOLLOW, data }),
+            onGift: (data) => mockEventBus.emit('platform:event', { platform: 'tiktok', type: PlatformEvents.GIFT, data }),
+            onShare: (data) => mockEventBus.emit('platform:event', { platform: 'tiktok', type: PlatformEvents.SHARE, data })
         };
 
         // Initialize platform with handlers (production pattern)
@@ -148,7 +149,7 @@ describe('TikTokPlatform unified event contract (expected behavior)', () => {
         const sharePayload = { username: 'user123', actionType: 'share' };
         platform.handlers.onShare(sharePayload);
 
-        const shareEvent = emitted.find((entry) => entry.type === 'share');
+        const shareEvent = emitted.find((entry) => entry.type === PlatformEvents.SHARE);
 
         expect(shareEvent).toBeDefined();
         expect(shareEvent.data).toEqual(sharePayload);
@@ -169,7 +170,7 @@ describe('TikTokPlatform unified event contract (expected behavior)', () => {
             createTime: testClock.now()
         });
 
-        const chatEvent = emitted.find((entry) => entry.type === 'chat');
+        const chatEvent = emitted.find((entry) => entry.type === PlatformEvents.CHAT_MESSAGE);
         expect(chatEvent).toBeDefined();
         expect(chatEvent.data?.message?.text).toContain('hello from no bridge');
     });
@@ -179,12 +180,12 @@ describe('TikTokPlatform unified event contract (expected behavior)', () => {
         platform.on('platform:event', (payload) => emitted.push(payload));
 
         const payload = { platform: 'tiktok', message: { text: 'hello' } };
-        platform._emitPlatformEvent('chat', payload);
+        platform._emitPlatformEvent(PlatformEvents.CHAT_MESSAGE, payload);
 
         expect(emitted).toEqual([
             {
                 platform: 'tiktok',
-                type: 'chat',
+                type: PlatformEvents.CHAT_MESSAGE,
                 data: payload
             }
         ]);

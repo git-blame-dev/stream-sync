@@ -37,7 +37,7 @@ function wireStreamStatusHandlers({ eventBus, viewerCountSystem, logger, isViewe
             if (!event || typeof event !== 'object') {
                 return;
             }
-            if (event.type !== 'stream-status') {
+            if (event.type !== 'platform:stream-status') {
                 return;
             }
             if (!event.data || typeof event.data !== 'object') {

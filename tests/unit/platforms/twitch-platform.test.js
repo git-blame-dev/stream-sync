@@ -572,7 +572,7 @@ describe('Twitch Platform', () => {
         it('should route chat events end-to-end via platform:event', async () => {
             // Wire platform handlers to emit platform:event
             platform.handlers = {
-                onChat: (data) => mockEventBus.emit('platform:event', { platform: 'twitch', type: 'chat', data })
+                onChat: (data) => mockEventBus.emit('platform:event', { platform: 'twitch', type: 'platform:chat-message', data })
             };
 
             const context = { username: 'user1', 'display-name': 'User1', 'user-id': 'u1', mod: false, subscriber: false };
@@ -586,7 +586,7 @@ describe('Twitch Platform', () => {
 
         it('should route follow events end-to-end via platform:event', async () => {
             platform.handlers = {
-                onFollow: (data) => mockEventBus.emit('platform:event', { platform: 'twitch', type: 'follow', data })
+                onFollow: (data) => mockEventBus.emit('platform:event', { platform: 'twitch', type: 'platform:follow', data })
             };
             const followEvent = { username: 'follower', userId: 'follower-id', timestamp: new Date().toISOString() };
 

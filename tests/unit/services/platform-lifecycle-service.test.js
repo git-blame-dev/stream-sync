@@ -168,6 +168,23 @@ describe('PlatformLifecycleService', () => {
             expect(service.isPlatformAvailable('youtube')).toBe(false);
         });
 
+        it('should handle missing config safely', async () => {
+            const localService = new PlatformLifecycleService({
+                eventBus: mockEventBus,
+                logger: mockLogger,
+                streamDetector: mockStreamDetector
+            });
+
+            const platformModules = {
+                twitch: jest.fn()
+            };
+
+            const result = await localService.initializeAllPlatforms(platformModules, {});
+
+            expect(result).toEqual({});
+            expect(localService.isPlatformAvailable('twitch')).toBe(false);
+        });
+
         it('should emit platform:initialized event when platform is ready', async () => {
             // Given: YouTube is enabled
             mockConfig.youtube = { enabled: true, username: 'test-channel' };
@@ -193,12 +210,22 @@ describe('PlatformLifecycleService', () => {
 
         it('should emit EventBus platform events when default handlers are used', async () => {
             mockConfig.twitch = { enabled: true };
+            const timestamp = new Date().toISOString();
 
             const mockPlatformClass = jest.fn().mockImplementation(() => ({
                 initialize: jest.fn().mockImplementation((handlers) => {
-                    handlers.onChat({ message: { text: 'hello' } });
+                    handlers.onChat({ message: { text: 'hello' }, username: 'user', userId: 'u1', timestamp });
                     handlers.onViewerCount(42);
-                    handlers.onGift({ username: 'donor' });
+                    handlers.onGift({
+                        username: 'donor',
+                        userId: 'u2',
+                        id: 'gift-1',
+                        giftType: 'rose',
+                        giftCount: 1,
+                        amount: 5,
+                        currency: 'coins',
+                        timestamp
+                    });
                     return Promise.resolve(true);
                 }),
                 cleanup: jest.fn().mockResolvedValue(),
@@ -216,20 +243,54 @@ describe('PlatformLifecycleService', () => {
             expect(platformEvents).toEqual(expect.arrayContaining([
                 expect.objectContaining({
                     platform: 'twitch',
-                    type: 'chat',
-                    data: { message: { text: 'hello' } }
+                    type: 'platform:chat-message',
+                    data: expect.objectContaining({
+                        message: { text: 'hello' },
+                        timestamp
+                    })
                 }),
                 expect.objectContaining({
                     platform: 'twitch',
-                    type: 'viewer-count',
-                    data: { count: 42 }
+                    type: 'platform:viewer-count',
+                    data: expect.objectContaining({
+                        count: 42,
+                        timestamp: expect.any(String)
+                    })
                 }),
                 expect.objectContaining({
                     platform: 'twitch',
-                    type: 'gift',
-                    data: { username: 'donor' }
+                    type: 'platform:gift',
+                    data: expect.objectContaining({
+                        username: 'donor',
+                        timestamp
+                    })
                 })
             ]));
+        });
+
+        it('emits canonical platform events with timestamps', () => {
+            const handlers = service.createDefaultEventHandlers('twitch');
+            const timestamp = '2024-02-02T10:00:00.000Z';
+
+            handlers.onChat({
+                username: 'User',
+                userId: 'user-1',
+                message: { text: 'hello' },
+                timestamp
+            });
+            handlers.onViewerCount(42);
+
+            const chatEvent = mockEventBus.emit.mock.calls.find(([, payload]) => payload?.type === 'platform:chat-message');
+            expect(chatEvent).toBeTruthy();
+            expect(chatEvent[1].data.timestamp).toBe(timestamp);
+
+            const viewerEvent = mockEventBus.emit.mock.calls.find(([, payload]) => payload?.type === 'platform:viewer-count');
+            expect(viewerEvent).toBeTruthy();
+            expect(viewerEvent[1].data.count).toBe(42);
+            expect(viewerEvent[1].data.timestamp).toEqual(expect.any(String));
+
+            expect(handlers.onMembership).toBeUndefined();
+            expect(typeof handlers.onPaypiggy).toBe('function');
         });
 
         it('should validate PlatformClass is a constructor', async () => {

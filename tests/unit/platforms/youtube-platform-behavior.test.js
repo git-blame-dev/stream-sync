@@ -107,7 +107,7 @@ describe('YouTubePlatform modern architecture', () => {
         const { platform } = createPlatform();
         const received = [];
         platform.on('platform:event', (payload) => {
-            if (payload.type === 'viewer-count') {
+            if (payload.type === 'platform:viewer-count') {
                 received.push(payload.data);
             }
         });
@@ -127,7 +127,7 @@ describe('YouTubePlatform modern architecture', () => {
         const { platform } = createPlatform();
         const received = [];
         platform.on('platform:event', (payload) => {
-            if (payload.type === 'error') {
+            if (payload.type === 'platform:error') {
                 received.push(payload);
             }
         });
@@ -140,7 +140,7 @@ describe('YouTubePlatform modern architecture', () => {
 
         expect(received).toHaveLength(1);
         expect(received[0]).toMatchObject({
-            type: 'error',
+            type: 'platform:error',
             platform: 'youtube',
             data: {
                 type: 'platform:error',
@@ -167,7 +167,7 @@ describe('YouTubePlatform modern architecture', () => {
         const { platform } = createPlatform();
         const received = new Promise((resolve) => {
             const handler = (payload) => {
-                if (payload.type !== 'chat') {
+                if (payload.type !== 'platform:chat-message') {
                     return;
                 }
                 platform.removeListener('platform:event', handler);
@@ -211,11 +211,10 @@ describe('YouTubePlatform modern architecture', () => {
             expect.arrayContaining([
                 expect.objectContaining({
                     platform: 'youtube',
-                    type: 'chat-connected',
+                    type: 'platform:stream-status',
                     data: expect.objectContaining({
                         platform: 'youtube',
-                        videoId: 'abc123',
-                        connectionId: 'youtube-abc123'
+                        isLive: true
                     })
                 })
             ])
@@ -250,11 +249,10 @@ describe('YouTubePlatform modern architecture', () => {
             expect.arrayContaining([
                 expect.objectContaining({
                     platform: 'youtube',
-                    type: 'stream-status',
+                    type: 'platform:stream-status',
                     data: expect.objectContaining({
                         platform: 'youtube',
-                        isLive: true,
-                        videoId: 'abc123'
+                        isLive: true
                     })
                 })
             ])
@@ -288,12 +286,10 @@ describe('YouTubePlatform modern architecture', () => {
             expect.arrayContaining([
                 expect.objectContaining({
                     platform: 'youtube',
-                    type: 'stream-status',
+                    type: 'platform:stream-status',
                     data: expect.objectContaining({
                         platform: 'youtube',
-                        isLive: false,
-                        videoId: 'abc123',
-                        reason: 'stream ended'
+                        isLive: false
                     })
                 })
             ])

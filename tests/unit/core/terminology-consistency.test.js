@@ -73,7 +73,7 @@ describe('Terminology Consistency', () => {
 
             await router.routeEvent({
                 platform: 'youtube',
-                type: 'paypiggy',
+                type: 'platform:paypiggy',
                 data: membershipData
             });
 
@@ -95,7 +95,7 @@ describe('Terminology Consistency', () => {
 
             await router.routeEvent({
                 platform: 'twitch',
-                type: 'paypiggy',
+                type: 'platform:paypiggy',
                 data: subscriptionData
             });
 

@@ -59,8 +59,8 @@ describe('YouTube stream-status viewer count integration (smoke)', () => {
     it('starts polling YouTube when stream status is live and records viewer count', async () => {
         await eventBus.emit('platform:event', {
             platform: 'youtube',
-            type: 'stream-status',
-            data: { isLive: true }
+            type: 'platform:stream-status',
+            data: { isLive: true, timestamp: new Date().toISOString() }
         });
 
         expect(platforms.youtube.getViewerCount).toHaveBeenCalled();

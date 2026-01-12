@@ -2,7 +2,7 @@
 describe('PlatformEventRouter error handling', () => {
     const baseEvent = {
         platform: 'twitch',
-        type: 'chat',
+        type: 'platform:chat-message',
         data: {
             username: 'User',
             message: { text: 'hi' },
@@ -69,7 +69,7 @@ describe('PlatformEventRouter error handling', () => {
 
         expect(errorHandler.handleEventProcessingError).toHaveBeenCalledWith(
             thrownError,
-            'chat',
+            'platform:chat-message',
             null,
             expect.stringContaining('route boom')
         );
