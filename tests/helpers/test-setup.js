@@ -81,7 +81,7 @@ const createTestGift = (overrides = {}) => {
     };
 };
 
-const createTestNotification = (type = 'gift', overrides = {}) => {
+const createTestNotification = (type = 'platform:gift', overrides = {}) => {
     const timestampMs = nextTimestampMs();
     const timestampIso = new Date(timestampMs).toISOString();
 

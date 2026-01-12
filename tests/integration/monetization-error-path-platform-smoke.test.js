@@ -135,17 +135,17 @@ describe('Monetization error-path platform flows (smoke)', () => {
         class MockTwitchPlatform {
             async initialize(handlers) {
                 const giftError = createMonetizationErrorPayload({
-                    notificationType: 'gift',
+                    notificationType: 'platform:gift',
                     platform: 'twitch',
                     timestamp: '2024-01-01T00:00:00.000Z'
                 });
                 const giftpaypiggyError = createMonetizationErrorPayload({
-                    notificationType: 'giftpaypiggy',
+                    notificationType: 'platform:giftpaypiggy',
                     platform: 'twitch',
                     timestamp: '2024-01-01T00:00:00.000Z'
                 });
                 const paypiggyError = createMonetizationErrorPayload({
-                    notificationType: 'paypiggy',
+                    notificationType: 'platform:paypiggy',
                     platform: 'twitch',
                     timestamp: '2024-01-01T00:00:00.000Z'
                 });
@@ -170,17 +170,17 @@ describe('Monetization error-path platform flows (smoke)', () => {
             const items = harness.displayQueue.addItem.mock.calls.map((call) => call[0]);
             expect(items).toHaveLength(3);
 
-            const giftItem = items.find((item) => item.type === 'gift');
-            const giftpaypiggyItem = items.find((item) => item.type === 'giftpaypiggy');
-            const paypiggyItem = items.find((item) => item.type === 'paypiggy');
+            const giftItem = items.find((item) => item.type === 'platform:gift');
+            const giftpaypiggyItem = items.find((item) => item.type === 'platform:giftpaypiggy');
+            const paypiggyItem = items.find((item) => item.type === 'platform:paypiggy');
 
             expect(giftItem).toBeTruthy();
             expect(giftpaypiggyItem).toBeTruthy();
             expect(paypiggyItem).toBeTruthy();
 
-            assertErrorNotification(giftItem, { platform: 'twitch', type: 'gift', expectMissingUsername: true });
-            assertErrorNotification(giftpaypiggyItem, { platform: 'twitch', type: 'giftpaypiggy', expectMissingUsername: true });
-            assertErrorNotification(paypiggyItem, { platform: 'twitch', type: 'paypiggy', expectMissingUsername: true });
+            assertErrorNotification(giftItem, { platform: 'twitch', type: 'platform:gift', expectMissingUsername: true });
+            assertErrorNotification(giftpaypiggyItem, { platform: 'twitch', type: 'platform:giftpaypiggy', expectMissingUsername: true });
+            assertErrorNotification(paypiggyItem, { platform: 'twitch', type: 'platform:paypiggy', expectMissingUsername: true });
         } finally {
             harness.runtime.platformEventRouter?.dispose();
             harness.platformLifecycleService.dispose();
@@ -215,9 +215,9 @@ describe('Monetization error-path platform flows (smoke)', () => {
                     }
                 };
 
-                this.dispatchWithHandler(handlers, 'gift', superChatItem);
-                this.dispatchWithHandler(handlers, 'giftpaypiggy', giftMembershipItem);
-                this.dispatchWithHandler(handlers, 'paypiggy', membershipItem);
+                this.dispatchWithHandler(handlers, 'platform:gift', superChatItem);
+                this.dispatchWithHandler(handlers, 'platform:giftpaypiggy', giftMembershipItem);
+                this.dispatchWithHandler(handlers, 'platform:paypiggy', membershipItem);
             }
 
             dispatchWithHandler(handlers, type, chatItem) {
@@ -229,15 +229,15 @@ describe('Monetization error-path platform flows (smoke)', () => {
                     timestamp: '2024-01-01T00:00:00.000Z'
                 });
 
-                if (type === 'gift') {
+                if (type === 'platform:gift') {
                     handlers.onGift(errorPayload);
                     return;
                 }
-                if (type === 'giftpaypiggy') {
+                if (type === 'platform:giftpaypiggy') {
                     handlers.onGiftPaypiggy(errorPayload);
                     return;
                 }
-                if (type === 'paypiggy') {
+                if (type === 'platform:paypiggy') {
                     handlers.onPaypiggy(errorPayload);
                 }
             }
@@ -257,17 +257,17 @@ describe('Monetization error-path platform flows (smoke)', () => {
             const items = harness.displayQueue.addItem.mock.calls.map((call) => call[0]);
             expect(items).toHaveLength(3);
 
-            const giftItem = items.find((item) => item.type === 'gift');
-            const giftpaypiggyItem = items.find((item) => item.type === 'giftpaypiggy');
-            const paypiggyItem = items.find((item) => item.type === 'paypiggy');
+            const giftItem = items.find((item) => item.type === 'platform:gift');
+            const giftpaypiggyItem = items.find((item) => item.type === 'platform:giftpaypiggy');
+            const paypiggyItem = items.find((item) => item.type === 'platform:paypiggy');
 
             expect(giftItem).toBeTruthy();
             expect(giftpaypiggyItem).toBeTruthy();
             expect(paypiggyItem).toBeTruthy();
 
-            assertErrorNotification(giftItem, { platform: 'youtube', type: 'gift', expectMissingUsername: true });
-            assertErrorNotification(giftpaypiggyItem, { platform: 'youtube', type: 'giftpaypiggy', expectMissingUsername: true });
-            assertErrorNotification(paypiggyItem, { platform: 'youtube', type: 'paypiggy', expectMissingUsername: true });
+            assertErrorNotification(giftItem, { platform: 'youtube', type: 'platform:gift', expectMissingUsername: true });
+            assertErrorNotification(giftpaypiggyItem, { platform: 'youtube', type: 'platform:giftpaypiggy', expectMissingUsername: true });
+            assertErrorNotification(paypiggyItem, { platform: 'youtube', type: 'platform:paypiggy', expectMissingUsername: true });
         } finally {
             harness.runtime.platformEventRouter?.dispose();
             harness.platformLifecycleService.dispose();
@@ -280,17 +280,17 @@ describe('Monetization error-path platform flows (smoke)', () => {
         class MockTikTokPlatform {
             async initialize(handlers) {
                 const giftError = createMonetizationErrorPayload({
-                    notificationType: 'gift',
+                    notificationType: 'platform:gift',
                     platform: 'tiktok',
                     timestamp: '2024-01-01T00:00:00.000Z'
                 });
                 const paypiggyError = createMonetizationErrorPayload({
-                    notificationType: 'paypiggy',
+                    notificationType: 'platform:paypiggy',
                     platform: 'tiktok',
                     timestamp: '2024-01-01T00:00:00.000Z'
                 });
                 const envelopeError = createMonetizationErrorPayload({
-                    notificationType: 'envelope',
+                    notificationType: 'platform:envelope',
                     platform: 'tiktok',
                     timestamp: '2024-01-01T00:00:00.000Z'
                 });
@@ -315,17 +315,17 @@ describe('Monetization error-path platform flows (smoke)', () => {
             const items = harness.displayQueue.addItem.mock.calls.map((call) => call[0]);
             expect(items).toHaveLength(3);
 
-            const giftItem = items.find((item) => item.type === 'gift');
-            const paypiggyItem = items.find((item) => item.type === 'paypiggy');
-            const envelopeItem = items.find((item) => item.type === 'envelope');
+            const giftItem = items.find((item) => item.type === 'platform:gift');
+            const paypiggyItem = items.find((item) => item.type === 'platform:paypiggy');
+            const envelopeItem = items.find((item) => item.type === 'platform:envelope');
 
             expect(giftItem).toBeTruthy();
             expect(paypiggyItem).toBeTruthy();
             expect(envelopeItem).toBeTruthy();
 
-            assertErrorNotification(giftItem, { platform: 'tiktok', type: 'gift', expectMissingUsername: true });
-            assertErrorNotification(paypiggyItem, { platform: 'tiktok', type: 'paypiggy', expectMissingUsername: true });
-            assertErrorNotification(envelopeItem, { platform: 'tiktok', type: 'envelope', expectMissingUsername: true });
+            assertErrorNotification(giftItem, { platform: 'tiktok', type: 'platform:gift', expectMissingUsername: true });
+            assertErrorNotification(paypiggyItem, { platform: 'tiktok', type: 'platform:paypiggy', expectMissingUsername: true });
+            assertErrorNotification(envelopeItem, { platform: 'tiktok', type: 'platform:envelope', expectMissingUsername: true });
         } finally {
             harness.runtime.platformEventRouter?.dispose();
             harness.platformLifecycleService.dispose();

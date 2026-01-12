@@ -13,7 +13,7 @@ describe('event-driven-testing', () => {
         testClock.advance(250);
         observer.recordNotification({
             content: 'test notification',
-            type: 'gift',
+            type: 'platform:gift',
             platform: 'twitch'
         });
 

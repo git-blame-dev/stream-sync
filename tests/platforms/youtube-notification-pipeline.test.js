@@ -43,7 +43,7 @@ describe('YouTube monetized notification pipeline', () => {
         expect(giftEvents).toHaveLength(1);
         expect(giftEvents[0]).toMatchObject({
             platform: 'youtube',
-            type: 'gift',
+            type: 'platform:gift',
             username: 'SuperChatUser',
             giftType: 'Super Chat',
             giftCount: 1,

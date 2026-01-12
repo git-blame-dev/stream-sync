@@ -176,7 +176,7 @@ describe('YouTube gift platform flow (smoke)', () => {
 
             expect(displayQueue.addItem).toHaveBeenCalledTimes(1);
             const queued = displayQueue.addItem.mock.calls[0][0];
-            expect(queued.type).toBe('gift');
+            expect(queued.type).toBe('platform:gift');
             expect(queued.platform).toBe('youtube');
             expect(queued.data.giftType).toBe('Super Chat');
             expect(queued.data.currency).toBe('USD');
@@ -226,7 +226,7 @@ describe('YouTube gift platform flow (smoke)', () => {
 
             expect(displayQueue.addItem).toHaveBeenCalledTimes(1);
             const queued = displayQueue.addItem.mock.calls[0][0];
-            expect(queued.type).toBe('gift');
+            expect(queued.type).toBe('platform:gift');
             expect(queued.platform).toBe('youtube');
             expect(queued.data.giftType).toBe('Super Sticker');
             expect(queued.data.message).toBe('Nice sticker');

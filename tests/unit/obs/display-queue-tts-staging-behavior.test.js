@@ -167,7 +167,7 @@ describe('DisplayQueue notification TTS staging', () => {
         eventBus.on(PlatformEvents.VFX_COMMAND_RECEIVED, (payload) => capturedVfx.push(payload));
 
         await queue.handleNotificationEffects({
-            type: 'gift',
+            type: 'platform:gift',
             platform: 'tiktok',
             data: {
                 username: 'Gifter',
@@ -280,7 +280,7 @@ describe('DisplayQueue notification TTS staging', () => {
         eventBus.on(PlatformEvents.VFX_COMMAND_RECEIVED, (payload) => capturedVfx.push(payload));
 
         await queue.handleNotificationEffects({
-            type: 'gift',
+            type: 'platform:gift',
             platform: 'tiktok',
             data: {
                 username: 'Gifter',

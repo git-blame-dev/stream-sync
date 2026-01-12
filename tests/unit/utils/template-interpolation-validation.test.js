@@ -126,7 +126,7 @@ describe('Template Interpolation Validation', () => {
                 currency: 'bits'
             };
 
-            const result = createNotificationData('gift', 'twitch', userData, eventData);
+            const result = createNotificationData('platform:gift', 'twitch', userData, eventData);
 
             // The key test: verify the interpolation data was populated correctly
             expect(result.displayMessage).not.toContain('{formattedGiftCountForDisplay}');
@@ -143,7 +143,7 @@ describe('Template Interpolation Validation', () => {
                 currency: 'bits'
             };
 
-            const result = createNotificationData('gift', 'twitch', userData, eventData);
+            const result = createNotificationData('platform:gift', 'twitch', userData, eventData);
 
             // Verify no template variables remain
             expect(result.displayMessage).not.toMatch(/\{.*\}/);

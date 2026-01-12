@@ -30,11 +30,11 @@ class OptimizedTestFactory {
 
         // Type-specific minimal data
         const typeDefaults = {
-            'gift': {},
-            'follow': {
+            'platform:gift': {},
+            'platform:follow': {
                 followCount: 1
             },
-            'paypiggy': {
+            'platform:paypiggy': {
                 tier: '1000',
                 months: 1
             }
@@ -46,7 +46,7 @@ class OptimizedTestFactory {
             ...overrides
         };
 
-        if (type === 'gift') {
+        if (type === 'platform:gift') {
             const requiredFields = ['giftType', 'giftCount', 'amount', 'currency'];
             requiredFields.forEach((field) => {
                 if (payload[field] === undefined) {

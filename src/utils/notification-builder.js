@@ -64,7 +64,7 @@ class NotificationBuilder {
         const effectiveInput = normalizedInput;
         const finalType = effectiveInput.type;
 
-        if (finalType === 'gift' && !isError) {
+        if (finalType === 'platform:gift' && !isError) {
             if (typeof effectiveInput.giftType !== 'string' || !effectiveInput.giftType.trim()) {
                 throw new Error('Gift notification requires giftType');
             }
@@ -79,7 +79,7 @@ class NotificationBuilder {
             }
         }
 
-        if (finalType === 'giftpaypiggy' && !isError) {
+        if (finalType === 'platform:giftpaypiggy' && !isError) {
             if (typeof effectiveInput.giftCount !== 'number' || !Number.isFinite(effectiveInput.giftCount) || effectiveInput.giftCount <= 0) {
                 throw new Error('Giftpaypiggy notification requires giftCount');
             }

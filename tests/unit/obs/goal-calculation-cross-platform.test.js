@@ -84,7 +84,7 @@ describe('Cross-Platform Goal Calculation', () => {
             mockConfig.goals.enabled = true;
             
             const tiktokGift = {
-                type: 'gift',
+                type: 'platform:gift',
                 data: {
                     username: 'TikTokUser',
                     displayName: 'TikTokUser',
@@ -110,7 +110,7 @@ describe('Cross-Platform Goal Calculation', () => {
             mockConfig.goals.enabled = true;
             
             const tiktokDiamonds = {
-                type: 'gift',
+                type: 'platform:gift',
                 data: {
                     username: 'TikTokDiamondUser',
                     displayName: 'TikTokDiamondUser',
@@ -138,7 +138,7 @@ describe('Cross-Platform Goal Calculation', () => {
             mockConfig.goals.enabled = true;
             
             const youtubeDonation = {
-                type: 'gift',
+                type: 'platform:gift',
                 data: {
                     username: 'YouTubeUser',
                     displayName: 'YouTubeUser',
@@ -166,7 +166,7 @@ describe('Cross-Platform Goal Calculation', () => {
             mockConfig.goals.enabled = true;
             
             const twitchBits = {
-                type: 'gift',
+                type: 'platform:gift',
                 data: {
                     username: 'TwitchUser',
                     displayName: 'TwitchUser',
@@ -197,7 +197,7 @@ describe('Cross-Platform Goal Calculation', () => {
             
             const edgeCases = [
                 {
-                    type: 'gift',
+                    type: 'platform:gift',
                     data: {
                         username: 'User1',
                         giftType: 'Rose',
@@ -210,7 +210,7 @@ describe('Cross-Platform Goal Calculation', () => {
                     platform: 'tiktok'
                 },
                 {
-                    type: 'gift',
+                    type: 'platform:gift',
                     data: {
                         username: 'User2',
                         giftType: 'Rose',
@@ -223,7 +223,7 @@ describe('Cross-Platform Goal Calculation', () => {
                     platform: 'tiktok'
                 },
                 {
-                    type: 'gift',
+                    type: 'platform:gift',
                     data: {
                         username: 'User3',
                         // No gift value fields
@@ -249,7 +249,7 @@ describe('Cross-Platform Goal Calculation', () => {
             mockConfig.goals.enabled = true;
 
             const errorGift = {
-                type: 'gift',
+                type: 'platform:gift',
                 data: {
                     username: 'Unknown User',
                     giftType: 'Unknown gift',

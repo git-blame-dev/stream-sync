@@ -98,7 +98,7 @@ const validateUserGiftFlow = async (platform, giftData) => {
 };
 
 const validateNotificationFlow = async (type, platform, data) => {
-    const allowedTypes = ['gift', 'follow', 'paypiggy', 'raid', 'envelope'];
+    const allowedTypes = ['platform:gift', 'platform:follow', 'platform:paypiggy', 'platform:raid', 'platform:envelope'];
     if (!allowedTypes.includes(type)) {
         throw new Error(`Invalid notification type: ${type}`);
     }
@@ -137,10 +137,10 @@ const validateNotificationFlow = async (type, platform, data) => {
         }
 
         // Extract platform-specific data
-        if (type === 'paypiggy' && notificationResult.tier) {
+        if (type === 'platform:paypiggy' && notificationResult.tier) {
             result.platformSpecific.tier = notificationResult.tier;
         }
-        if (type === 'raid' && notificationResult.viewerCount) {
+        if (type === 'platform:raid' && notificationResult.viewerCount) {
             result.platformSpecific.viewerCount = notificationResult.viewerCount;
         }
 
@@ -311,7 +311,7 @@ const validateNotificationData = (notificationData) => {
         }
     });
 
-    const validTypes = ['gift', 'follow', 'paypiggy', 'raid', 'envelope'];
+    const validTypes = ['platform:gift', 'platform:follow', 'platform:paypiggy', 'platform:raid', 'platform:envelope'];
     if (!validTypes.includes(notificationData.type)) {
         throw new Error(`Invalid notification type: ${notificationData.type}`);
     }

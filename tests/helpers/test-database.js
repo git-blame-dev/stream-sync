@@ -291,7 +291,7 @@ const createTestDataFactory = (type, options = {}) => {
         
         notification: (overrides = {}) => ({
             id: nextTestId('notification'),
-            type: 'gift',
+            type: 'platform:gift',
             username: `testuser_${testClock.now()}`,
             platform: 'tiktok',
             message: `Test notification ${testClock.now()}`,

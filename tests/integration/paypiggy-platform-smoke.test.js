@@ -170,7 +170,7 @@ describe('Paypiggy platform flows (smoke)', () => {
 
             expect(harness.displayQueue.addItem).toHaveBeenCalledTimes(1);
             const queued = harness.displayQueue.addItem.mock.calls[0][0];
-            expect(queued.type).toBe('paypiggy');
+            expect(queued.type).toBe('platform:paypiggy');
             expect(queued.platform).toBe(platformKey);
             assertUserFacingOutput(queued.data, copyExpectations);
             assertFn(queued);
