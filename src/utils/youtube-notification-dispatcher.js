@@ -150,8 +150,8 @@ class YouTubeNotificationDispatcher {
 
     async dispatchSuperChat(chatItem, handlers) {
         try {
-            const notification = this.buildMonetizedNotification(chatItem, 'superchat', {
-                notificationType: 'gift',
+            const notification = this.buildMonetizedNotification(chatItem, 'platform:gift', {
+                notificationType: 'platform:gift',
                 requireId: true,
                 extraFields: {
                     giftType: 'Super Chat',
@@ -160,7 +160,7 @@ class YouTubeNotificationDispatcher {
                 }
             });
             if (!notification) {
-                return await this.dispatchErrorNotification(chatItem, 'gift', handlers?.onGift, 'onGift', {
+                return await this.dispatchErrorNotification(chatItem, 'platform:gift', handlers?.onGift, 'onGift', {
                     giftType: 'Super Chat',
                     giftCount: 1
                 });
@@ -185,9 +185,9 @@ class YouTubeNotificationDispatcher {
                 chatItem.item?.sticker?.altText ||
                 this.extractStructuredText(chatItem.item?.sticker?.label);
 
-            const notification = this.buildMonetizedNotification(chatItem, 'supersticker', {
+            const notification = this.buildMonetizedNotification(chatItem, 'platform:gift', {
                 message: stickerDescription || '',
-                notificationType: 'gift',
+                notificationType: 'platform:gift',
                 requireId: true,
                 extraFields: {
                     giftType: 'Super Sticker',
@@ -197,7 +197,7 @@ class YouTubeNotificationDispatcher {
             });
 
             if (!notification) {
-                return await this.dispatchErrorNotification(chatItem, 'gift', handlers?.onGift, 'onGift', {
+                return await this.dispatchErrorNotification(chatItem, 'platform:gift', handlers?.onGift, 'onGift', {
                     giftType: 'Super Sticker',
                     giftCount: 1
                 });
@@ -223,7 +223,7 @@ class YouTubeNotificationDispatcher {
 
             const membershipMonths = chatItem.item?.memberMilestoneDurationInMonths;
 
-            const notification = this.buildBasicNotification(chatItem, 'paypiggy', {
+            const notification = this.buildBasicNotification(chatItem, 'platform:paypiggy', {
                 message: membershipMessage,
                 extraFields: {
                     membershipLevel: membershipLevel || undefined,
@@ -233,7 +233,7 @@ class YouTubeNotificationDispatcher {
 
             if (!notification) {
                 const resolvedMonths = Number.isFinite(Number(membershipMonths)) ? membershipMonths : undefined;
-                return await this.dispatchErrorNotification(chatItem, 'paypiggy', handlers?.onMembership, 'onMembership', {
+                return await this.dispatchErrorNotification(chatItem, 'platform:paypiggy', handlers?.onMembership, 'onMembership', {
                     months: resolvedMonths
                 });
             }
@@ -255,11 +255,11 @@ class YouTubeNotificationDispatcher {
             const giftCount = chatItem.item?.giftMembershipsCount;
             if (typeof giftCount !== 'number' || !Number.isFinite(giftCount)) {
                 this.logger.warn('Missing giftMembershipsCount in gift membership notification');
-                return await this.dispatchErrorNotification(chatItem, 'giftpaypiggy', handlers?.onGiftPaypiggy, 'onGiftPaypiggy');
+                return await this.dispatchErrorNotification(chatItem, 'platform:giftpaypiggy', handlers?.onGiftPaypiggy, 'onGiftPaypiggy');
             }
             const giftMessage = extractMessageText(chatItem.item?.message);
 
-            const notification = this.buildBasicNotification(chatItem, 'giftpaypiggy', {
+            const notification = this.buildBasicNotification(chatItem, 'platform:giftpaypiggy', {
                 message: giftMessage,
                 extraFields: {
                     giftCount
@@ -268,7 +268,7 @@ class YouTubeNotificationDispatcher {
 
             if (!notification) {
                 const resolvedGiftCount = Number.isFinite(Number(giftCount)) ? giftCount : undefined;
-                return await this.dispatchErrorNotification(chatItem, 'giftpaypiggy', handlers?.onGiftPaypiggy, 'onGiftPaypiggy', {
+                return await this.dispatchErrorNotification(chatItem, 'platform:giftpaypiggy', handlers?.onGiftPaypiggy, 'onGiftPaypiggy', {
                     giftCount: resolvedGiftCount
                 });
             }

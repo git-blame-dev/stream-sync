@@ -1056,21 +1056,21 @@ class AppRuntime {
         if (!options || typeof options !== 'object') {
             throw new Error('handleFollowNotification requires options');
         }
-        return this.handleUnifiedNotification('follow', platform, username, options);
+        return this.handleUnifiedNotification('platform:follow', platform, username, options);
     }
 
     async handleShareNotification(platform, username, options) {
         if (!options || typeof options !== 'object') {
             throw new Error('handleShareNotification requires options');
         }
-        return this.handleUnifiedNotification('share', platform, username, options);
+        return this.handleUnifiedNotification('platform:share', platform, username, options);
     }
 
     async handlePaypiggyNotification(platform, username, options) {
         if (!options || typeof options !== 'object') {
             throw new Error('handlePaypiggyNotification requires options');
         }
-        return this.handleUnifiedNotification('paypiggy', platform, username, options);
+        return this.handleUnifiedNotification('platform:paypiggy', platform, username, options);
     }
 
     async handleRaidNotification(platform, raiderName, options) {
@@ -1080,7 +1080,7 @@ class AppRuntime {
         if (options.viewerCount === undefined) {
             throw new Error('handleRaidNotification requires viewerCount');
         }
-        return this.handleUnifiedNotification('raid', platform, raiderName, {
+        return this.handleUnifiedNotification('platform:raid', platform, raiderName, {
             viewerCount: options.viewerCount,
             ...options
         });
@@ -1093,7 +1093,7 @@ class AppRuntime {
         if (!options.rewardTitle || options.rewardCost === undefined) {
             throw new Error('handleRedemptionNotification requires rewardTitle and rewardCost');
         }
-        return this.handleUnifiedNotification('redemption', platform, username, {
+        return this.handleUnifiedNotification('platform:redemption', platform, username, {
             rewardTitle: options.rewardTitle,
             rewardCost: options.rewardCost,
             ...options
@@ -1208,7 +1208,7 @@ class AppRuntime {
         if (!options.command) {
             throw new Error('handleFarewellNotification requires command');
         }
-        return this.handleUnifiedNotification('farewell', platform, username, {
+        return this.handleUnifiedNotification('platform:farewell', platform, username, {
             command: options.command,
             ...options
         });
@@ -1250,7 +1250,7 @@ class AppRuntime {
             payload.isAnonymous = options.isAnonymous;
         }
 
-        return this.handleUnifiedNotification('giftpaypiggy', platform, username, payload);
+        return this.handleUnifiedNotification('platform:giftpaypiggy', platform, username, payload);
     }
 
     async handleResubEvent(platform, username, options) {
@@ -1260,7 +1260,7 @@ class AppRuntime {
         if (options.tier === undefined || options.months === undefined || options.message === undefined) {
             throw new Error('handleResubEvent requires tier, months, and message');
         }
-        return this.handleUnifiedNotification('paypiggy', platform, username, {
+        return this.handleUnifiedNotification('platform:paypiggy', platform, username, {
             tier: options.tier,
             months: options.months,
             message: options.message,

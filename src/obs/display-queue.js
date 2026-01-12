@@ -118,15 +118,15 @@ class DisplayQueue {
         }
 
         const typeToPriorityMap = {
-            'paypiggy': this.constants.PRIORITY_LEVELS.MEMBER,
-            'gift': this.constants.PRIORITY_LEVELS.GIFT,
-            'follow': this.constants.PRIORITY_LEVELS.FOLLOW,
+            'platform:paypiggy': this.constants.PRIORITY_LEVELS.MEMBER,
+            'platform:gift': this.constants.PRIORITY_LEVELS.GIFT,
+            'platform:follow': this.constants.PRIORITY_LEVELS.FOLLOW,
             'greeting': this.constants.PRIORITY_LEVELS.GREETING,
-            'raid': this.constants.PRIORITY_LEVELS.RAID,
-            'share': this.constants.PRIORITY_LEVELS.SHARE,
-            'envelope': this.constants.PRIORITY_LEVELS.ENVELOPE,
+            'platform:raid': this.constants.PRIORITY_LEVELS.RAID,
+            'platform:share': this.constants.PRIORITY_LEVELS.SHARE,
+            'platform:envelope': this.constants.PRIORITY_LEVELS.ENVELOPE,
             'redemption': this.constants.PRIORITY_LEVELS.REDEMPTION,
-            'giftpaypiggy': this.constants.PRIORITY_LEVELS.GIFTPAYPIGGY,
+            'platform:giftpaypiggy': this.constants.PRIORITY_LEVELS.GIFTPAYPIGGY,
             'chat': this.constants.PRIORITY_LEVELS.CHAT,
             'command': this.constants.PRIORITY_LEVELS.COMMAND
         };
@@ -403,7 +403,7 @@ class DisplayQueue {
         // --- Exact notification display sequence ---
         
         // Process goal tracking when notification starts displaying (moved from NotificationManager)
-        if (item.type === 'gift' && item.data && !item.data.isError) {
+        if (item.type === 'platform:gift' && item.data && !item.data.isError) {
             // Prevent double goal processing by checking if this gift has already been processed
             if (item.data.goalProcessed) {
                 logger.debug(`[Display Queue] Goal already processed for ${username}, skipping`, 'display-queue');
@@ -484,7 +484,7 @@ class DisplayQueue {
             const ttsStages = MessageTTSHandler.createTTSStages(item.data);
             logger.debug(`[Display Queue] Generated ${ttsStages.length} TTS stages`, 'display-queue', { stages: ttsStages });
             
-            if (item.type === 'gift') {
+            if (item.type === 'platform:gift') {
                 await this.handleGiftEffects(item, ttsStages);
             } else {
                 await this.handleSequentialEffects(item, ttsStages);
@@ -696,11 +696,11 @@ class DisplayQueue {
                         username,
                         platform: item.platform,
                         userId: item.data.userId,
-                        notificationType: 'gift',
+                        notificationType: item.type,
                         delayApplied: 2000,
                         correlationId,
                         source: 'display-queue',
-                        context: { source: 'display-queue', notificationType: 'gift', delayApplied: 2000, skipCooldown: true, correlationId },
+                        context: { source: 'display-queue', notificationType: item.type, delayApplied: 2000, skipCooldown: true, correlationId },
                         vfxConfig
                     };
 
@@ -1008,7 +1008,7 @@ class DisplayQueue {
             result.warnings.push('Chat context but no message field found');
         }
 
-        if (context.includes('gift') && data.amount === undefined) {
+        if ((context.includes('gift') || context.includes('platform:gift')) && data.amount === undefined) {
             result.warnings.push('Gift context but no monetary amount field found');
         }
 

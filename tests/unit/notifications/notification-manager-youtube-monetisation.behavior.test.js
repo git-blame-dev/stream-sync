@@ -51,7 +51,7 @@ describe('NotificationManager YouTube monetisation behavior', () => {
     });
 
     it('enqueues paypiggy with member priority and renewal copy fields', async () => {
-        await notificationManager.handleNotification('paypiggy', 'youtube', {
+        await notificationManager.handleNotification('platform:paypiggy', 'youtube', {
             username: 'MemberHero',
             userId: 'yt-user-1',
             membershipLevel: 'Member',
@@ -62,7 +62,7 @@ describe('NotificationManager YouTube monetisation behavior', () => {
 
         expect(displayQueue.addItem).toHaveBeenCalledTimes(1);
         const item = displayQueue.addItem.mock.calls[0][0];
-        expect(item.type).toBe('paypiggy');
+        expect(item.type).toBe('platform:paypiggy');
         expect(item.platform).toBe('youtube');
         expect(item.priority).toBe(notificationManager.PRIORITY_LEVELS.MEMBER);
         expect(item.data.username).toBe('MemberHero');
@@ -70,7 +70,7 @@ describe('NotificationManager YouTube monetisation behavior', () => {
     });
 
     it('enqueues YouTube paid messages as gift with gift priority', async () => {
-        await notificationManager.handleNotification('gift', 'youtube', {
+        await notificationManager.handleNotification('platform:gift', 'youtube', {
             username: 'ChatHero',
             userId: 'yt-user-2',
             giftType: 'Super Chat',
@@ -83,13 +83,13 @@ describe('NotificationManager YouTube monetisation behavior', () => {
 
         expect(displayQueue.addItem).toHaveBeenCalledTimes(1);
         const item = displayQueue.addItem.mock.calls[0][0];
-        expect(item.type).toBe('gift');
+        expect(item.type).toBe('platform:gift');
         expect(item.platform).toBe('youtube');
         expect(item.priority).toBe(notificationManager.PRIORITY_LEVELS.GIFT);
     });
 
     it('enqueues Super Sticker as gift with gift priority', async () => {
-        await notificationManager.handleNotification('gift', 'youtube', {
+        await notificationManager.handleNotification('platform:gift', 'youtube', {
             username: 'StickerHero',
             userId: 'yt-user-3',
             giftType: 'Super Sticker',
@@ -103,13 +103,13 @@ describe('NotificationManager YouTube monetisation behavior', () => {
 
         expect(displayQueue.addItem).toHaveBeenCalledTimes(1);
         const item = displayQueue.addItem.mock.calls[0][0];
-        expect(item.type).toBe('gift');
+        expect(item.type).toBe('platform:gift');
         expect(item.platform).toBe('youtube');
         expect(item.priority).toBe(notificationManager.PRIORITY_LEVELS.GIFT);
     });
 
     it('enqueues gift memberships with giftpaypiggy priority', async () => {
-        await notificationManager.handleNotification('giftpaypiggy', 'youtube', {
+        await notificationManager.handleNotification('platform:giftpaypiggy', 'youtube', {
             username: 'Gifter',
             userId: 'yt-user-4',
             giftCount: 3,
@@ -119,7 +119,7 @@ describe('NotificationManager YouTube monetisation behavior', () => {
 
         expect(displayQueue.addItem).toHaveBeenCalledTimes(1);
         const item = displayQueue.addItem.mock.calls[0][0];
-        expect(item.type).toBe('giftpaypiggy');
+        expect(item.type).toBe('platform:giftpaypiggy');
         expect(item.platform).toBe('youtube');
         expect(item.priority).toBe(notificationManager.PRIORITY_LEVELS.GIFTPAYPIGGY);
     });
@@ -127,7 +127,7 @@ describe('NotificationManager YouTube monetisation behavior', () => {
     it('respects config gating and skips when notifications are disabled', async () => {
         configService.areNotificationsEnabled.mockReturnValue(false);
 
-        await notificationManager.handleNotification('paypiggy', 'youtube', {
+        await notificationManager.handleNotification('platform:paypiggy', 'youtube', {
             username: 'GatedUser'
         });
 

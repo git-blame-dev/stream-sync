@@ -19,7 +19,6 @@ class NotificationBuilder {
         if (typeof type !== 'string' || !type.trim()) {
             throw new Error('Notification requires type');
         }
-        type = type.trim();
         const normalizedUserId = (userId === null || userId === undefined) ? undefined : String(userId);
 
         // Some notification types require a message, others don't
@@ -129,7 +128,7 @@ class NotificationBuilder {
     static _getPaypiggyVariant(input = {}) {
         const type = input.type;
 
-        const isPaypiggyFamily = type === 'paypiggy';
+        const isPaypiggyFamily = type === 'paypiggy' || type === 'platform:paypiggy';
         if (!isPaypiggyFamily) {
             return null;
         }
@@ -292,13 +291,13 @@ class NotificationBuilder {
 
     static _getErrorLabel(type) {
         switch (type) {
-            case 'gift':
+            case 'platform:gift':
                 return 'gift';
-            case 'giftpaypiggy':
+            case 'platform:giftpaypiggy':
                 return 'gift';
-            case 'paypiggy':
+            case 'platform:paypiggy':
                 return 'subscription';
-            case 'envelope':
+            case 'platform:envelope':
                 return 'treasure chest';
             default:
                 return 'notification';
@@ -322,7 +321,7 @@ class NotificationBuilder {
             return this._buildErrorMessage(type, userName);
         }
 
-        if (type === 'giftpaypiggy') {
+        if (type === 'giftpaypiggy' || type === 'platform:giftpaypiggy') {
             const totalGifts = Number.isFinite(Number(giftCount)) ? Number(giftCount) : undefined;
             if (totalGifts === undefined) {
                 return '';
@@ -341,7 +340,7 @@ class NotificationBuilder {
             return `${userName} gifted a ${giftNoun}!${displayTierText}`;
         }
 
-        if (type === 'gift') {
+        if (type === 'platform:gift') {
             const giftType = typeof input.giftType === 'string' ? input.giftType : '';
             if (!giftType) {
                 return '';
@@ -373,19 +372,19 @@ class NotificationBuilder {
             return baseText;
         }
 
-        if (type === 'paypiggy' || this._getPaypiggyVariant(input)) {
+        if (type === 'platform:paypiggy' || this._getPaypiggyVariant(input)) {
             return this._buildPaypiggyDisplayMessage(input);
         }
 
-        if (type === 'follow') {
+        if (type === 'platform:follow') {
             return `${this.getTruncatedUsername(username)} just followed!`;
         }
 
-        if (type === 'share') {
+        if (type === 'platform:share') {
             return `${this.getTruncatedUsername(username)} shared the stream`;
         }
 
-        if (type === 'raid') {
+        if (type === 'platform:raid') {
             const viewerCount = Number(input.viewerCount);
             if (!Number.isFinite(viewerCount)) {
                 throw new Error('Raid notification requires viewerCount');
@@ -395,13 +394,13 @@ class NotificationBuilder {
             return `Incoming raid from ${this.getTruncatedUsername(username)} with ${viewerCount} ${viewerText}!`;
         }
 
-        if (type === 'envelope') {
+        if (type === 'platform:envelope') {
             return `${userName} sent a treasure chest!`;
         }
 
         // Check if type has a template in NOTIFICATION_TEMPLATES
         // Only use template for types that don't have hardcoded implementations above
-        const hardcodedTypes = ['gift', 'giftpaypiggy', 'paypiggy', 'follow', 'share', 'raid', 'envelope'];
+        const hardcodedTypes = ['platform:gift', 'platform:giftpaypiggy', 'platform:paypiggy', 'platform:follow', 'platform:share', 'platform:raid', 'platform:envelope'];
         if (!hardcodedTypes.includes(type) && NOTIFICATION_TEMPLATES[type] && NOTIFICATION_TEMPLATES[type].display) {
             const templateData = {
                 username: this.getTruncatedUsername(username),
@@ -423,7 +422,7 @@ class NotificationBuilder {
             return this._buildErrorMessage(type, userName);
         }
 
-        if (type === 'giftpaypiggy') {
+        if (type === 'platform:giftpaypiggy') {
             const totalGifts = Number.isFinite(Number(giftCount)) ? Number(giftCount) : undefined;
             if (totalGifts === undefined) {
                 return '';
@@ -436,7 +435,7 @@ class NotificationBuilder {
             return `${userName} gifted a ${giftNoun}`;
         }
 
-        if (type === 'gift') {
+        if (type === 'platform:gift') {
             const giftType = typeof input.giftType === 'string' ? input.giftType : '';
             if (!giftType) {
                 return '';
@@ -467,19 +466,19 @@ class NotificationBuilder {
             return `${userName} sent ${countText}${giftType}`;
         }
 
-        if (type === 'paypiggy' || this._getPaypiggyVariant(input)) {
+        if (type === 'platform:paypiggy' || this._getPaypiggyVariant(input)) {
             return this._buildPaypiggyTtsMessage(input);
         }
 
-        if (type === 'follow') {
+        if (type === 'platform:follow') {
             return `${this.sanitizeUsernameForTts(username)} just followed`;
         }
 
-        if (type === 'share') {
+        if (type === 'platform:share') {
             return `${this.getTruncatedUsername(username)} shared the stream`;
         }
 
-        if (type === 'raid') {
+        if (type === 'platform:raid') {
             const viewerCount = Number(input.viewerCount);
             if (!Number.isFinite(viewerCount)) {
                 throw new Error('Raid notification requires viewerCount');
@@ -488,14 +487,14 @@ class NotificationBuilder {
             return `Incoming raid from ${this.sanitizeUsernameForTts(username)} with ${viewerCount} ${viewerText}`;
         }
 
-        if (type === 'envelope') {
+        if (type === 'platform:envelope') {
             const shortUsername = this.sanitizeUsernameForTts(username, 12);
             return `${shortUsername} sent a treasure chest`;
         }
 
         // Check if type has a template in NOTIFICATION_TEMPLATES
         // Only use template for types that don't have hardcoded implementations above
-        const hardcodedTypes = ['gift', 'giftpaypiggy', 'paypiggy', 'follow', 'share', 'raid', 'envelope'];
+        const hardcodedTypes = ['platform:gift', 'platform:giftpaypiggy', 'platform:paypiggy', 'platform:follow', 'platform:share', 'platform:raid', 'platform:envelope'];
         if (!hardcodedTypes.includes(type) && NOTIFICATION_TEMPLATES[type] && NOTIFICATION_TEMPLATES[type].tts) {
             const templateData = {
                 username: this.getTruncatedUsername(username),
@@ -517,7 +516,7 @@ class NotificationBuilder {
             return this._buildErrorMessage(type, userName);
         }
 
-        if (type === 'giftpaypiggy') {
+        if (type === 'platform:giftpaypiggy') {
             const totalGifts = Number.isFinite(Number(giftCount)) ? Number(giftCount) : undefined;
             if (totalGifts === undefined) {
                 return '';
@@ -535,7 +534,7 @@ class NotificationBuilder {
             return `${userName} gifted a ${giftNoun}!${tierText}`;
         }
 
-        if (type === 'gift') {
+        if (type === 'platform:gift') {
             const giftType = typeof input.giftType === 'string' ? input.giftType : '';
             if (!giftType) {
                 return '';
@@ -563,19 +562,19 @@ class NotificationBuilder {
             return `TikTok Gift: ${countText}${giftType}${coinText} from ${userName}`;
         }
         
-        if (type === 'paypiggy' || this._getPaypiggyVariant(input)) {
+        if (type === 'platform:paypiggy' || this._getPaypiggyVariant(input)) {
             return this._buildPaypiggyLogMessage(input);
         }
         
-        if (type === 'follow') {
+        if (type === 'platform:follow') {
             return `New follower: ${userName}`;
         }
         
-        if (type === 'share') {
+        if (type === 'platform:share') {
             return `Share from ${userName}`;
         }
         
-        if (type === 'raid') {
+        if (type === 'platform:raid') {
             const viewerCount = Number(input.viewerCount);
             if (!Number.isFinite(viewerCount)) {
                 throw new Error('Raid notification requires viewerCount');
@@ -584,13 +583,13 @@ class NotificationBuilder {
             return `Incoming raid from ${userName} with ${viewerCount} ${viewerText}!`;
         }
         
-        if (type === 'envelope') {
+        if (type === 'platform:envelope') {
             return `Treasure chest from ${userName}`;
         }
         
         // Check if type has a template in NOTIFICATION_TEMPLATES
         // Only use template for types that don't have hardcoded implementations above
-        const hardcodedTypes = ['gift', 'giftpaypiggy', 'paypiggy', 'follow', 'share', 'raid', 'envelope'];
+        const hardcodedTypes = ['platform:gift', 'platform:giftpaypiggy', 'platform:paypiggy', 'platform:follow', 'platform:share', 'platform:raid', 'platform:envelope'];
         if (!hardcodedTypes.includes(type) && NOTIFICATION_TEMPLATES[type] && NOTIFICATION_TEMPLATES[type].log) {
             const templateData = {
                 username: userName,
