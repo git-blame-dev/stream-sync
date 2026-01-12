@@ -81,6 +81,19 @@ describe('Platform Event Interface Design', () => {
                 const result = validator.validate(event);
                 expect(result.valid).toBe(true);
             });
+
+            it('should validate platform:share event with user details', () => {
+                const event = {
+                    type: 'platform:share',
+                    platform: 'tiktok',
+                    username: 'sharer',
+                    userId: 'share-1',
+                    timestamp: new Date().toISOString(),
+                    metadata: { interactionType: 'share' }
+                };
+                const result = validator.validate(event);
+                expect(result.valid).toBe(true);
+            });
             
             it('should validate platform:paypiggy event with tier and duration', () => {
             const event = {
@@ -237,6 +250,29 @@ describe('Platform Event Interface Design', () => {
                 const result = validator.validate(event);
                 expect(result.valid).toBe(true);
             });
+
+            it('should validate platform:connection event with timestamp', () => {
+                const event = {
+                    type: 'platform:connection',
+                    platform: 'twitch',
+                    status: 'connected',
+                    timestamp: new Date().toISOString()
+                };
+                const result = validator.validate(event);
+                expect(result.valid).toBe(true);
+            });
+
+            it('should validate platform:notification event with timestamp', () => {
+                const event = {
+                    type: 'platform:notification',
+                    platform: 'twitch',
+                    notificationType: 'gift',
+                    timestamp: new Date().toISOString(),
+                    data: { message: 'test' }
+                };
+                const result = validator.validate(event);
+                expect(result.valid).toBe(true);
+            });
             
             it('should validate platform:authentication-required event', () => {
                 const event = {
@@ -276,8 +312,7 @@ describe('Platform Event Interface Design', () => {
                     type: 'platform:stream-status',
                     platform: 'twitch',
                     isLive: true,
-                    title: 'Live Coding Stream',
-                    category: 'Software and Game Development'
+                    timestamp: new Date().toISOString()
                 };
                 const result = validator.validate(event);
                 expect(result.valid).toBe(true);
@@ -561,7 +596,7 @@ describe('Platform Event Interface Design', () => {
             const expectedEventTypes = [
                 // Platform Events
                 'platform:chat-message', 'platform:chat-connected', 'platform:chat-disconnected',
-                'platform:follow', 'platform:paypiggy', 'platform:giftpaypiggy', 'platform:gift', 'platform:raid', 'platform:envelope',
+                'platform:follow', 'platform:paypiggy', 'platform:giftpaypiggy', 'platform:gift', 'platform:raid', 'platform:share', 'platform:envelope',
                 'platform:connection-status', 'platform:authentication-required', 'platform:rate-limit-hit',
                 'platform:connection', 'platform:notification', 'platform:viewer-count', 'platform:stream-status',
                 'platform:stream-detected', 'platform:error', 'platform:health-check',

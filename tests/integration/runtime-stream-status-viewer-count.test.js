@@ -61,8 +61,8 @@ describe('AppRuntime stream-status viewer count routing', () => {
 
         eventBus.emit('platform:event', {
             platform: 'youtube',
-            type: 'stream-status',
-            data: { isLive: true }
+            type: 'platform:stream-status',
+            data: { isLive: true, timestamp: new Date().toISOString() }
         });
 
         await Promise.resolve();
@@ -82,8 +82,8 @@ describe('AppRuntime stream-status viewer count routing', () => {
 
         eventBus.emit('platform:event', {
             platform: 'youtube',
-            type: 'stream-status',
-            data: { isLive: 'not-boolean' }
+            type: 'platform:stream-status',
+            data: { isLive: 'not-boolean', timestamp: new Date().toISOString() }
         });
 
         await Promise.resolve();

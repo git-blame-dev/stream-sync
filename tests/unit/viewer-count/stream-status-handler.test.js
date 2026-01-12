@@ -37,13 +37,13 @@ describe('stream-status-handler', () => {
 
         await eventBus.emit('platform:event', {
             platform: 'twitch',
-            type: 'stream-status',
-            data: { isLive: true }
+            type: 'platform:stream-status',
+            data: { isLive: true, timestamp: new Date().toISOString() }
         });
         await eventBus.emit('platform:event', {
             platform: 'youtube',
-            type: 'stream-status',
-            data: { isLive: false }
+            type: 'platform:stream-status',
+            data: { isLive: false, timestamp: new Date().toISOString() }
         });
 
         expect(viewerCountSystem.updates).toEqual([
@@ -60,10 +60,10 @@ describe('stream-status-handler', () => {
 
         await eventBus.emit('platform:event', {
             platform: 'twitch',
-            type: 'stream-status',
-            data: { isLive: 'maybe' }
+            type: 'platform:stream-status',
+            data: { isLive: 'maybe', timestamp: new Date().toISOString() }
         });
-        await eventBus.emit('platform:event', { type: 'stream-status', data: {} });
+        await eventBus.emit('platform:event', { type: 'platform:stream-status', data: { timestamp: new Date().toISOString() } });
 
         expect(viewerCountSystem.updates).toEqual([]);
     });
@@ -85,8 +85,8 @@ describe('stream-status-handler', () => {
 
         await eventBus.emit('platform:event', {
             platform: 'twitch',
-            type: 'stream-status',
-            data: { isLive: true }
+            type: 'platform:stream-status',
+            data: { isLive: true, timestamp: new Date().toISOString() }
         });
 
         expect(warnings.length).toBeGreaterThan(0);
@@ -104,13 +104,13 @@ describe('stream-status-handler', () => {
 
         await eventBus.emit('platform:event', {
             platform: 'youtube',
-            type: 'stream-status',
-            data: { isLive: true }
+            type: 'platform:stream-status',
+            data: { isLive: true, timestamp: new Date().toISOString() }
         });
         await eventBus.emit('platform:event', {
             platform: 'twitch',
-            type: 'stream-status',
-            data: { isLive: true }
+            type: 'platform:stream-status',
+            data: { isLive: true, timestamp: new Date().toISOString() }
         });
 
         expect(viewerCountSystem.updates).toEqual([
@@ -124,7 +124,7 @@ describe('stream-status-handler', () => {
 
         wireStreamStatusHandlers({ eventBus, viewerCountSystem });
 
-        await eventBus.emit('platform:event', { type: 'stream-status', data: { isLive: true } });
+        await eventBus.emit('platform:event', { type: 'platform:stream-status', data: { isLive: true, timestamp: new Date().toISOString() } });
 
         expect(viewerCountSystem.updates).toEqual([]);
     });
@@ -159,8 +159,8 @@ describe('stream-status-handler', () => {
 
         await expect(eventBus.emit('platform:event', {
             platform: 'twitch',
-            type: 'stream-status',
-            data: { isLive: true }
+            type: 'platform:stream-status',
+            data: { isLive: true, timestamp: new Date().toISOString() }
         })).resolves.toBeUndefined();
         expect(typeof unsubscribe).toBe('function');
         expect(() => unsubscribe()).not.toThrow();
@@ -174,8 +174,8 @@ describe('stream-status-handler', () => {
 
         await eventBus.emit('platform:event', {
             platform: 'twitch',
-            type: 'stream-status',
-            data: { isLive: true }
+            type: 'platform:stream-status',
+            data: { isLive: true, timestamp: new Date().toISOString() }
         });
 
         expect(viewerCountSystem.updates).toBeUndefined();
@@ -197,8 +197,8 @@ describe('stream-status-handler', () => {
 
         await eventBus.emit('platform:event', {
             platform: 'twitch',
-            type: 'stream-status',
-            data: { isLive: true }
+            type: 'platform:stream-status',
+            data: { isLive: true, timestamp: new Date().toISOString() }
         });
 
         expect(viewerCountSystem.updates).toEqual([{ platform: 'twitch', isLive: true }]);

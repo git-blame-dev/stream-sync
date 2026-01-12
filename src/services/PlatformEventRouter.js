@@ -2,6 +2,7 @@
 const { logger: defaultLogger } = require('../core/logging');
 const { createPlatformErrorHandler } = require('../utils/platform-error-handler');
 const { NOTIFICATION_CONFIGS } = require('../core/constants');
+const { PlatformEvents } = require('../interfaces/PlatformEvents');
 
 const ALIAS_PAID_TYPES = [
     'subscription',
@@ -61,16 +62,18 @@ class PlatformEventRouter {
             throw new Error(`Unsupported paid alias event type: ${type}`);
         }
 
+        const notificationType = this._resolveNotificationType(type);
+
         // Config gating only applies to notification types with explicit settings
-        if (NOTIFICATION_CONFIGS[type]?.settingKey) {
-            if (this._isNotificationEnabled(type, platform) === false) {
-                this.logger.debug(`[${platform}] ${type} notifications disabled at router`, 'PlatformEventRouter');
+        if (notificationType && NOTIFICATION_CONFIGS[notificationType]?.settingKey) {
+            if (this._isNotificationEnabled(notificationType, platform) === false) {
+                this.logger.debug(`[${platform}] ${notificationType} notifications disabled at router`, 'PlatformEventRouter');
                 return;
             }
         }
 
         switch (type) {
-            case 'chat':
+            case PlatformEvents.CHAT_MESSAGE:
                 if (this.runtime?.handleChatMessage) {
                     const normalizedChat = this._normalizeChatEvent(data, platform);
                     if (!normalizedChat) {
@@ -79,8 +82,11 @@ class PlatformEventRouter {
                     await this.runtime.handleChatMessage(platform, normalizedChat);
                 }
                 return;
-            case 'viewer-count':
+            case PlatformEvents.VIEWER_COUNT:
                 if (this.runtime?.updateViewerCount) {
+                    if (!data?.timestamp) {
+                        throw new Error('Viewer-count event requires timestamp');
+                    }
                     if (data.count === undefined) {
                         throw new Error('Viewer-count event requires count');
                     }
@@ -91,51 +97,75 @@ class PlatformEventRouter {
                     this.runtime.updateViewerCount(platform, count);
                 }
                 return;
-            case 'gift': {
-                await this._routeRuntimeNotification('handleGiftNotification', type, platform, data, (sanitized) => ({
+            case PlatformEvents.GIFT: {
+                await this._routeRuntimeNotification('handleGiftNotification', notificationType, platform, data, (sanitized) => ({
                     ...sanitized,
-                    type
+                    type: notificationType
                 }));
                 return;
             }
-            case 'paypiggy': {
-                await this._routeRuntimeNotification('handlePaypiggyNotification', type, platform, data, (sanitized) => ({
+            case PlatformEvents.PAYPIGGY: {
+                await this._routeRuntimeNotification('handlePaypiggyNotification', notificationType, platform, data, (sanitized) => ({
                     ...sanitized,
                     type: 'paypiggy'
                 }));
                 return;
             }
-            case 'giftpaypiggy': {
-                await this._routeRuntimeNotification('handleGiftPaypiggyNotification', type, platform, data);
+            case PlatformEvents.GIFTPAYPIGGY: {
+                await this._routeRuntimeNotification('handleGiftPaypiggyNotification', notificationType, platform, data);
                 return;
             }
-            case 'follow': {
-                await this._routeRuntimeNotification('handleFollowNotification', type, platform, data);
+            case PlatformEvents.FOLLOW: {
+                await this._routeRuntimeNotification('handleFollowNotification', notificationType, platform, data);
                 return;
             }
-            case 'share': {
-                await this._routeRuntimeNotification('handleShareNotification', type, platform, data);
+            case PlatformEvents.SHARE: {
+                await this._routeRuntimeNotification('handleShareNotification', notificationType, platform, data);
                 return;
             }
-            case 'raid': {
-                await this._routeRuntimeNotification('handleRaidNotification', type, platform, data);
+            case PlatformEvents.RAID: {
+                await this._routeRuntimeNotification('handleRaidNotification', notificationType, platform, data);
                 return;
             }
-            case 'stream-status':
+            case PlatformEvents.STREAM_STATUS:
+            case PlatformEvents.CHAT_CONNECTED:
+            case PlatformEvents.CHAT_DISCONNECTED:
+            case PlatformEvents.CONNECTION_STATUS:
+            case PlatformEvents.PLATFORM_CONNECTION:
+            case PlatformEvents.ERROR:
+            case PlatformEvents.HEALTH_CHECK:
                 return;
-            case 'stream-detected':
+            case PlatformEvents.STREAM_DETECTED:
                 if (this.runtime?.handleStreamDetected) {
                     await this.runtime.handleStreamDetected(platform, data);
                 }
                 return;
-            case 'envelope':
+            case PlatformEvents.ENVELOPE:
                 if (this.runtime?.handleEnvelopeNotification) {
-                    await this.runtime.handleEnvelopeNotification(platform, data);
+                    const sanitized = this._sanitizeNotificationPayload(data, notificationType, platform);
+                    await this.runtime.handleEnvelopeNotification(platform, sanitized);
                 }
                 return;
             default:
-                await this.forwardToNotificationManager(type, platform, data);
+                if (notificationType) {
+                    await this.forwardToNotificationManager(notificationType, platform, data);
+                    return;
+                }
+                throw new Error(`Unsupported platform event type: ${type}`);
         }
+    }
+
+    _resolveNotificationType(type) {
+        if (!type || typeof type !== 'string') {
+            return null;
+        }
+        if (!type.startsWith('platform:')) {
+            return null;
+        }
+        if (type === PlatformEvents.CHAT_MESSAGE) {
+            return 'chat';
+        }
+        return type.replace('platform:', '');
     }
 
     _isNotificationEnabled(type, platform) {
@@ -245,6 +275,9 @@ class PlatformEventRouter {
 
         const sanitized = { ...data };
         const originalType = sourceType;
+        const normalizedType = typeof originalType === 'string' && originalType.startsWith('platform:')
+            ? originalType.replace('platform:', '')
+            : originalType;
         const originalPlatform = sourcePlatform;
 
         delete sanitized.type;
@@ -259,6 +292,9 @@ class PlatformEventRouter {
         }
         if (!originalType) {
             throw new Error('Notification payload requires type');
+        }
+        if (!sanitized.timestamp) {
+            throw new Error('Notification payload requires timestamp');
         }
 
         const normalizedUserId = sanitized.userId === undefined || sanitized.userId === null
@@ -275,7 +311,7 @@ class PlatformEventRouter {
         }
 
         if (!isErrorPayload) {
-            if (originalType === 'gift' || originalType === 'envelope') {
+            if (normalizedType === 'gift' || normalizedType === 'envelope') {
                 const giftType = typeof sanitized.giftType === 'string' ? sanitized.giftType.trim() : '';
                 const giftCount = sanitized.giftCount;
                 const amount = sanitized.amount;
@@ -285,7 +321,7 @@ class PlatformEventRouter {
                     throw new Error('Notification payload requires id, giftType, giftCount, amount, and currency');
                 }
             }
-            if (originalType === 'giftpaypiggy') {
+            if (normalizedType === 'giftpaypiggy') {
                 if (sanitized.giftCount === undefined) {
                     throw new Error('Notification payload requires giftCount');
                 }
@@ -295,7 +331,7 @@ class PlatformEventRouter {
         const result = {
             ...sanitized,
             platform: originalPlatform,
-            sourceType: originalType
+            sourceType: normalizedType
         };
         const normalizedUsername = typeof sanitized.username === 'string' ? sanitized.username.trim() : '';
         if (normalizedUsername) {

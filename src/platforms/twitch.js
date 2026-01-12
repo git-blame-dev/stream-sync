@@ -262,7 +262,7 @@ class TwitchPlatform extends EventEmitter {
                         correlationId: PlatformEvents._generateCorrelationId()
                     }
                 };
-                this._emitPlatformEvent('chat', eventData);
+                this._emitPlatformEvent(PlatformEvents.CHAT_MESSAGE, eventData);
             } catch (messageError) {
                 this._logPlatformError(`Error emitting chat message event: ${messageError.message}`, messageError, 'chat-message-emission');
             }
@@ -323,7 +323,7 @@ class TwitchPlatform extends EventEmitter {
                         id: data?.id,
                         ...baseOverrides
                     });
-                    this._emitPlatformEvent(eventType, errorPayload);
+                    this._emitPlatformEvent(this._resolvePlatformEventType(eventType), errorPayload);
                 }
                 return;
             }
@@ -337,7 +337,7 @@ class TwitchPlatform extends EventEmitter {
             const eventData = this.eventFactory[factoryMethod](data);
 
             // Emit standardized event (allow override for specific emit type names)
-            const emitEventType = options.emitEventType || eventType;
+            const emitEventType = options.emitEventType || eventData.type || this._resolvePlatformEventType(eventType);
             this._emitPlatformEvent(emitEventType, eventData);
         } catch (error) {
             this.errorHandler.handleEventProcessingError(error, eventType, data);
@@ -383,18 +383,21 @@ class TwitchPlatform extends EventEmitter {
                     id: data?.id,
                     ...baseOverrides
                 });
-                this._emitPlatformEvent(eventType, errorPayload);
+                this._emitPlatformEvent(this._resolvePlatformEventType(eventType), errorPayload);
             }
         }
     }
 
     async handleFollowEvent(followData) {
-        return this._handleStandardEvent('follow', followData, { validateUser: true });
+        return this._handleStandardEvent('follow', followData, {
+            validateUser: true,
+            emitEventType: PlatformEvents.FOLLOW
+        });
     }
 
     async handlePaypiggyEvent(subData) {
         return this._handleStandardEvent('paypiggy', subData, {
-            emitEventType: 'paypiggy',
+            emitEventType: PlatformEvents.PAYPIGGY,
             factoryMethod: 'createPaypiggyEvent',
             logEventType: 'paypiggy'
         });
@@ -402,7 +405,7 @@ class TwitchPlatform extends EventEmitter {
 
     async handlePaypiggyMessageEvent(subData) {
         return this._handleStandardEvent('paypiggy', subData, {
-            emitEventType: 'paypiggy',
+            emitEventType: PlatformEvents.PAYPIGGY,
             factoryMethod: 'createPaypiggyMessageEvent',
             logEventType: 'paypiggy-message'
         });
@@ -410,18 +413,38 @@ class TwitchPlatform extends EventEmitter {
 
     async handlePaypiggyGiftEvent(giftData) {
         return this._handleStandardEvent('giftpaypiggy', giftData, {
-            emitEventType: 'giftpaypiggy',
+            emitEventType: PlatformEvents.GIFTPAYPIGGY,
             factoryMethod: 'createGiftPaypiggyEvent',
             logEventType: 'paypiggy-gift'
         });
     }
 
     async handleRaidEvent(raidData) {
-        return this._handleStandardEvent('raid', raidData, { validateUser: true });
+        return this._handleStandardEvent('raid', raidData, {
+            validateUser: true,
+            emitEventType: PlatformEvents.RAID
+        });
     }
 
     async handleGiftEvent(giftData) {
-        return this._handleStandardEvent('gift', giftData, { validateUser: true });
+        return this._handleStandardEvent('gift', giftData, {
+            validateUser: true,
+            emitEventType: PlatformEvents.GIFT
+        });
+    }
+
+    _resolvePlatformEventType(eventType) {
+        const mapping = {
+            chat: PlatformEvents.CHAT_MESSAGE,
+            follow: PlatformEvents.FOLLOW,
+            paypiggy: PlatformEvents.PAYPIGGY,
+            gift: PlatformEvents.GIFT,
+            giftpaypiggy: PlatformEvents.GIFTPAYPIGGY,
+            raid: PlatformEvents.RAID,
+            'stream-status': PlatformEvents.STREAM_STATUS
+        };
+
+        return mapping[eventType] || eventType;
     }
 
     handleStreamOnlineEvent(data) {
@@ -430,7 +453,7 @@ class TwitchPlatform extends EventEmitter {
         this._logRawEvent('stream-online', data);
 
         const eventData = this.eventFactory.createStreamOnlineEvent(data);
-        this._emitPlatformEvent('stream-status', eventData);
+        this._emitPlatformEvent(PlatformEvents.STREAM_STATUS, eventData);
 
         this.initializeViewerCountProvider();
     }
@@ -441,7 +464,7 @@ class TwitchPlatform extends EventEmitter {
         this._logRawEvent('stream-offline', data);
 
         const eventData = this.eventFactory.createStreamOfflineEvent(data);
-        this._emitPlatformEvent('stream-status', eventData);
+        this._emitPlatformEvent(PlatformEvents.STREAM_STATUS, eventData);
 
         if (this.viewerCountProvider && typeof this.viewerCountProvider.stopPolling === 'function') {
             try {
@@ -614,13 +637,13 @@ class TwitchPlatform extends EventEmitter {
 
         // Forward to injected handlers (e.g., EventBus via PlatformLifecycleService)
         const handlerMap = {
-            'chat': 'onChat',
-            'follow': 'onFollow',
-            'paypiggy': 'onPaypiggy',
-            'gift': 'onGift',
-            'giftpaypiggy': 'onGiftPaypiggy',
-            'raid': 'onRaid',
-            'stream-status': 'onStreamStatus'
+            [PlatformEvents.CHAT_MESSAGE]: 'onChat',
+            [PlatformEvents.FOLLOW]: 'onFollow',
+            [PlatformEvents.PAYPIGGY]: 'onPaypiggy',
+            [PlatformEvents.GIFT]: 'onGift',
+            [PlatformEvents.GIFTPAYPIGGY]: 'onGiftPaypiggy',
+            [PlatformEvents.RAID]: 'onRaid',
+            [PlatformEvents.STREAM_STATUS]: 'onStreamStatus'
         };
 
         const handlerName = handlerMap[type];
@@ -651,7 +674,7 @@ class TwitchPlatform extends EventEmitter {
         this.isConnected = !!isConnected;
         this.isConnecting = false;
 
-        this._emitPlatformEvent('stream-status', payload);
+        this._emitPlatformEvent(PlatformEvents.STREAM_STATUS, payload);
     }
 
     _logPlatformError(message, error = null, eventType = 'twitch-platform', payload = null) {

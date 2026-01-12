@@ -66,7 +66,7 @@ describe('TikTokPlatform behavior alignment', () => {
             const errors = [];
             const routedGifts = [];
             platform.on('platform:event', (payload) => {
-                if (payload.type === 'error') {
+                if (payload.type === PlatformEvents.ERROR) {
                     errors.push(payload);
                 }
             });
@@ -90,7 +90,7 @@ describe('TikTokPlatform behavior alignment', () => {
 
             expect(errors.length).toBe(1);
             expect(errors[0]).toMatchObject({
-                type: 'error',
+                type: PlatformEvents.ERROR,
                 platform: 'tiktok',
                 data: expect.objectContaining({
                     type: PlatformEvents.ERROR,
@@ -122,10 +122,10 @@ describe('TikTokPlatform behavior alignment', () => {
             const disconnectedEvents = [];
 
             platform.on('platform:event', (payload) => {
-                if (payload.type === 'chat-connected') {
+                if (payload.type === PlatformEvents.CHAT_CONNECTED) {
                     connectedEvents.push(payload);
                 }
-                if (payload.type === 'chat-disconnected') {
+                if (payload.type === PlatformEvents.CHAT_DISCONNECTED) {
                     disconnectedEvents.push(payload);
                 }
             });
@@ -135,7 +135,7 @@ describe('TikTokPlatform behavior alignment', () => {
 
             expect(connectedEvents.length).toBe(1);
             expect(connectedEvents[0]).toMatchObject({
-                type: 'chat-connected',
+                type: PlatformEvents.CHAT_CONNECTED,
                 platform: 'tiktok',
                 data: expect.objectContaining({
                     type: PlatformEvents.CHAT_CONNECTED,
@@ -148,7 +148,7 @@ describe('TikTokPlatform behavior alignment', () => {
 
             expect(disconnectedEvents.length).toBe(1);
             expect(disconnectedEvents[0]).toMatchObject({
-                type: 'chat-disconnected',
+                type: PlatformEvents.CHAT_DISCONNECTED,
                 platform: 'tiktok',
                 data: expect.objectContaining({
                     type: PlatformEvents.CHAT_DISCONNECTED,
@@ -175,7 +175,7 @@ describe('TikTokPlatform behavior alignment', () => {
             };
 
             platform.on('platform:event', (payload) => {
-                if (payload.type === 'error') {
+                if (payload.type === PlatformEvents.ERROR) {
                     errors.push(payload);
                 }
             });

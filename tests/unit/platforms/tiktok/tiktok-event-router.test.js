@@ -73,7 +73,7 @@ describe('TikTok event router', () => {
         await listeners[platform.WebcastEvent.ROOM_USER]({ viewerCount: 42 });
 
         expect(platform.cachedViewerCount).toBe(42);
-        expect(emitted.some((entry) => entry.type === 'viewer-count' && entry.payload.count === 42)).toBe(true);
+        expect(emitted.some((entry) => entry.type === 'platform:viewer-count' && entry.payload.count === 42)).toBe(true);
     });
 
     test('skips chat event when comment is invalid', async () => {

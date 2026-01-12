@@ -61,12 +61,33 @@ describe('PlatformEventRouter validation', () => {
         expect(runtime.handlePaypiggyNotification).not.toHaveBeenCalled();
     });
 
+    it('routes platform chat messages with timestamps', async () => {
+        const { router, runtime } = buildRouter();
+        const timestamp = new Date().toISOString();
+
+        await router.routeEvent({
+            platform: 'twitch',
+            type: 'platform:chat-message',
+            data: {
+                username: 'User',
+                userId: 'u1',
+                message: { text: 'hello' },
+                timestamp
+            }
+        });
+
+        expect(runtime.handleChatMessage).toHaveBeenCalledWith('twitch', expect.objectContaining({
+            message: 'hello',
+            timestamp
+        }));
+    });
+
     it('rejects monetization payloads missing required fields when not marked isError', async () => {
         const { router, runtime } = buildRouter();
 
         await expect(router.routeEvent({
             platform: 'tiktok',
-            type: 'gift',
+            type: 'platform:gift',
             data: {
                 username: 'gifter',
                 userId: 'u2',
@@ -84,7 +105,7 @@ describe('PlatformEventRouter validation', () => {
 
         await router.routeEvent({
             platform: 'tiktok',
-            type: 'gift',
+            type: 'platform:gift',
             data: {
                 username: 'gifter',
                 userId: 'u3',
@@ -96,12 +117,32 @@ describe('PlatformEventRouter validation', () => {
         expect(runtime.handleGiftNotification).toHaveBeenCalledTimes(1);
     });
 
+    it('rejects monetization payloads missing timestamps', async () => {
+        const { router, runtime } = buildRouter();
+
+        await expect(router.routeEvent({
+            platform: 'tiktok',
+            type: 'platform:gift',
+            data: {
+                username: 'gifter',
+                userId: 'u2',
+                id: 'gift-2',
+                giftType: 'rose',
+                giftCount: 1,
+                amount: 5,
+                currency: 'coins'
+            }
+        })).rejects.toThrow('Notification payload requires timestamp');
+
+        expect(runtime.handleGiftNotification).not.toHaveBeenCalled();
+    });
+
     it('normalizes userId to string when routing notifications', async () => {
         const { router, runtime } = buildRouter();
 
         await router.routeEvent({
             platform: 'twitch',
-            type: 'follow',
+            type: 'platform:follow',
             data: {
                 username: 'Follower',
                 userId: 12345,
@@ -118,9 +159,21 @@ describe('PlatformEventRouter validation', () => {
 
         await expect(router.routeEvent({
             platform: 'twitch',
-            type: 'viewer-count',
-            data: { count: 'nope' }
+            type: 'platform:viewer-count',
+            data: { count: 'nope', timestamp: new Date().toISOString() }
         })).rejects.toThrow('Viewer-count event requires numeric count');
+
+        expect(runtime.updateViewerCount).not.toHaveBeenCalled();
+    });
+
+    it('rejects viewer-count events missing timestamps', async () => {
+        const { router, runtime } = buildRouter();
+
+        await expect(router.routeEvent({
+            platform: 'twitch',
+            type: 'platform:viewer-count',
+            data: { count: 3 }
+        })).rejects.toThrow('Viewer-count event requires timestamp');
 
         expect(runtime.updateViewerCount).not.toHaveBeenCalled();
     });
@@ -130,7 +183,7 @@ describe('PlatformEventRouter validation', () => {
 
         await expect(router.routeEvent({
             platform: 'twitch',
-            type: 'chat',
+            type: 'platform:chat-message',
             data: {
                 username: 'User',
                 userId: 'u4',

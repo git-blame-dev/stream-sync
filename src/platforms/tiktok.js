@@ -914,7 +914,7 @@ class TikTokPlatform extends EventEmitter {
                     userId,
                     giftType
                 });
-                this._emitPlatformEvent('gift', errorPayload);
+                this._emitPlatformEvent(PlatformEvents.GIFT, errorPayload);
                 return;
             }
 
@@ -952,7 +952,7 @@ class TikTokPlatform extends EventEmitter {
                     amount,
                     currency
                 });
-                this._emitPlatformEvent('gift', errorPayload);
+                this._emitPlatformEvent(PlatformEvents.GIFT, errorPayload);
                 return;
             }
 
@@ -1011,7 +1011,7 @@ class TikTokPlatform extends EventEmitter {
                     userId: fallbackIdentity.userId,
                     giftType: fallbackGiftType
                 });
-                this._emitPlatformEvent('gift', errorPayload);
+                this._emitPlatformEvent(PlatformEvents.GIFT, errorPayload);
                 return;
             }
             this.errorHandler.handleEventProcessingError(
@@ -1034,7 +1034,7 @@ class TikTokPlatform extends EventEmitter {
                 userId: fallbackIdentity.userId,
                 giftType: fallbackGiftType
             });
-            this._emitPlatformEvent('gift', errorPayload);
+            this._emitPlatformEvent(PlatformEvents.GIFT, errorPayload);
         }
     }
 
@@ -1407,7 +1407,13 @@ class TikTokPlatform extends EventEmitter {
             this._emitPlatformEvent(emitType, eventData);
         } catch (error) {
             this.errorHandler.handleEventProcessingError(error, emitType, data);
-            if (emitType === 'gift' || emitType === 'paypiggy' || emitType === 'envelope') {
+            const monetizationTypes = new Set([
+                PlatformEvents.GIFT,
+                PlatformEvents.PAYPIGGY,
+                PlatformEvents.GIFTPAYPIGGY,
+                PlatformEvents.ENVELOPE
+            ]);
+            if (monetizationTypes.has(emitType)) {
                 let errorOverrides = {};
                 try {
                     const identity = extractTikTokUserData(data);
@@ -1418,7 +1424,7 @@ class TikTokPlatform extends EventEmitter {
                 } catch (extractError) {
                     errorOverrides = {};
                 }
-                if (emitType === 'gift') {
+                if (emitType === PlatformEvents.GIFT) {
                     const amount = Number(data?.giftCoins ?? data?.amount);
                     if (Number.isFinite(amount)) {
                         errorOverrides.amount = amount;
@@ -1431,7 +1437,7 @@ class TikTokPlatform extends EventEmitter {
                         errorOverrides.currency = data.currency.trim();
                     }
                 }
-                if (emitType === 'envelope') {
+                if (emitType === PlatformEvents.ENVELOPE) {
                     const amount = Number(data?.giftCoins ?? data?.amount);
                     if (Number.isFinite(amount)) {
                         errorOverrides.amount = amount;
@@ -1440,7 +1446,10 @@ class TikTokPlatform extends EventEmitter {
                         errorOverrides.currency = data.currency.trim();
                     }
                 }
-                const errorPayload = this._createMonetizationErrorPayload(emitType, data, errorOverrides);
+                const notificationType = typeof emitType === 'string' && emitType.startsWith('platform:')
+                    ? emitType.replace('platform:', '')
+                    : emitType;
+                const errorPayload = this._createMonetizationErrorPayload(notificationType, data, errorOverrides);
                 this._emitPlatformEvent(emitType, errorPayload);
             }
         }
@@ -1454,7 +1463,7 @@ class TikTokPlatform extends EventEmitter {
     async _handleChatMessage(data, normalizedData = null) {
         return this._handleStandardEvent('chatMessage', data, {
             factoryMethod: 'createChatMessage',
-            emitType: 'chat',
+            emitType: PlatformEvents.CHAT_MESSAGE,
             normalizedData
         });
     }
@@ -1462,7 +1471,7 @@ class TikTokPlatform extends EventEmitter {
     async _handleGift(data) {
         return this._handleStandardEvent('gift', data, {
             factoryMethod: 'createGift',
-            emitType: 'gift'
+            emitType: PlatformEvents.GIFT
         });
     }
 
@@ -1484,7 +1493,7 @@ class TikTokPlatform extends EventEmitter {
                 }
             });
 
-            this._emitPlatformEvent('follow', eventData);
+            this._emitPlatformEvent(PlatformEvents.FOLLOW, eventData);
         } catch (error) {
             this._handleError(error, { operation: 'handleFollow', data });
         }
@@ -1508,7 +1517,7 @@ class TikTokPlatform extends EventEmitter {
                 }
             });
 
-            this._emitPlatformEvent('share', eventData);
+            this._emitPlatformEvent(PlatformEvents.SHARE, eventData);
         } catch (error) {
             this._handleError(error, { operation: 'handleShare', data });
         }
@@ -1520,10 +1529,10 @@ class TikTokPlatform extends EventEmitter {
             const eventPlatform = eventData.platform;
             this.emit('platform:event', {
                 platform: eventPlatform,
-                type: 'chat-connected',
+                type: PlatformEvents.CHAT_CONNECTED,
                 data: eventData
             });
-            this._emitPlatformEvent('stream-status', {
+            this._emitPlatformEvent(PlatformEvents.STREAM_STATUS, {
                 platform: 'tiktok',
                 isLive: true,
                 timestamp: eventData.timestamp,
@@ -1541,10 +1550,10 @@ class TikTokPlatform extends EventEmitter {
             const eventPlatform = eventData.platform;
             this.emit('platform:event', {
                 platform: eventPlatform,
-                type: 'chat-disconnected',
+                type: PlatformEvents.CHAT_DISCONNECTED,
                 data: eventData
             });
-            this._emitPlatformEvent('stream-status', {
+            this._emitPlatformEvent(PlatformEvents.STREAM_STATUS, {
                 platform: 'tiktok',
                 isLive: false,
                 reason,
@@ -1592,10 +1601,10 @@ class TikTokPlatform extends EventEmitter {
             const eventPlatform = eventData.platform;
             this.emit('platform:event', {
                 platform: eventPlatform,
-                type: 'error',
+                type: PlatformEvents.ERROR,
                 data: eventData
             });
-            this._emitPlatformEvent('stream-status', {
+            this._emitPlatformEvent(PlatformEvents.STREAM_STATUS, {
                 platform: 'tiktok',
                 isLive: false,
                 error,
@@ -1620,16 +1629,15 @@ class TikTokPlatform extends EventEmitter {
 
         // Route event through injected handler to event bus
         const handlerMap = {
-            'chat': 'onChat',
-            'gift': 'onGift',
-            'follow': 'onFollow',
-            'paypiggy': 'onPaypiggy',
-            'raid': 'onRaid',
-            'share': 'onShare',
-            'envelope': 'onEnvelope',
-            'stream-status': 'onStreamStatus',
-            'viewer-count': 'onViewerCount',
-            'interaction': 'onInteraction'
+            [PlatformEvents.CHAT_MESSAGE]: 'onChat',
+            [PlatformEvents.GIFT]: 'onGift',
+            [PlatformEvents.FOLLOW]: 'onFollow',
+            [PlatformEvents.PAYPIGGY]: 'onPaypiggy',
+            [PlatformEvents.RAID]: 'onRaid',
+            [PlatformEvents.SHARE]: 'onShare',
+            [PlatformEvents.ENVELOPE]: 'onEnvelope',
+            [PlatformEvents.STREAM_STATUS]: 'onStreamStatus',
+            [PlatformEvents.VIEWER_COUNT]: 'onViewerCount'
         };
 
         const handlerName = handlerMap[type];
@@ -1643,16 +1651,15 @@ class TikTokPlatform extends EventEmitter {
     _createDefaultHandlers() {
         const emitToBus = (type, data) => this._emitToEventBus(type, data);
         return {
-            onChat: (data) => emitToBus('chat', data),
-            onViewerCount: (data) => emitToBus('viewer-count', data),
-            onGift: (data) => emitToBus('gift', data),
-            onPaypiggy: (data) => emitToBus('paypiggy', data),
-            onFollow: (data) => emitToBus('follow', data),
-            onShare: (data) => emitToBus('share', data),
-            onRaid: (data) => emitToBus('raid', data),
-            onEnvelope: (data) => emitToBus('envelope', data),
-            onStreamStatus: (data) => emitToBus('stream-status', data),
-            onInteraction: (data) => emitToBus('interaction', data)
+            onChat: (data) => emitToBus(PlatformEvents.CHAT_MESSAGE, data),
+            onViewerCount: (data) => emitToBus(PlatformEvents.VIEWER_COUNT, data),
+            onGift: (data) => emitToBus(PlatformEvents.GIFT, data),
+            onPaypiggy: (data) => emitToBus(PlatformEvents.PAYPIGGY, data),
+            onFollow: (data) => emitToBus(PlatformEvents.FOLLOW, data),
+            onShare: (data) => emitToBus(PlatformEvents.SHARE, data),
+            onRaid: (data) => emitToBus(PlatformEvents.RAID, data),
+            onEnvelope: (data) => emitToBus(PlatformEvents.ENVELOPE, data),
+            onStreamStatus: (data) => emitToBus(PlatformEvents.STREAM_STATUS, data)
         };
     }
 

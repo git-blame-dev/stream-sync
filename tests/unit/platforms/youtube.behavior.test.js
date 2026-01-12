@@ -96,10 +96,10 @@ describe('YouTubePlatform behavior', () => {
         const eventSpy = jest.fn();
         platform.on('platform:event', eventSpy);
 
-        platform._emitPlatformEvent('chat', { platform: 'youtube', type: 'chat:event', message: { text: 'hi' } });
+        platform._emitPlatformEvent('platform:chat-message', { platform: 'youtube', type: 'chat:event', message: { text: 'hi' } });
 
         expect(handler).toHaveBeenCalled();
-        expect(eventSpy).toHaveBeenCalledWith(expect.objectContaining({ type: 'chat', data: expect.objectContaining({ message: { text: 'hi' } }) }));
+        expect(eventSpy).toHaveBeenCalledWith(expect.objectContaining({ type: 'platform:chat-message', data: expect.objectContaining({ message: { text: 'hi' } }) }));
     });
 
     it('skips remove/delete chat actions in message filtering', () => {

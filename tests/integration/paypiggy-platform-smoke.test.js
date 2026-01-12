@@ -207,7 +207,7 @@ describe('Paypiggy platform flows (smoke)', () => {
     it('routes YouTube memberships through lifecycle, router, and runtime', async () => {
         await runPaypiggySmoke({
             platformKey: 'youtube',
-            handlerName: 'onMembership',
+            handlerName: 'onPaypiggy',
             payload: {
                 username: 'MemberUser',
                 userId: 'yt-member-1',

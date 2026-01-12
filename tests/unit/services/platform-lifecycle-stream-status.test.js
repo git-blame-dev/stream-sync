@@ -34,20 +34,22 @@ describe('PlatformLifecycleService stream status events', () => {
         const firstCall = eventBus.emit.mock.calls.find(([eventName, payload]) => (
             eventName === 'platform:event' &&
             payload?.platform === 'custom' &&
-            payload?.type === 'stream-status' &&
+            payload?.type === 'platform:stream-status' &&
             payload?.data?.isLive === true &&
             payload?.data?.status === 'live'
         ));
         expect(firstCall).toBeTruthy();
+        expect(firstCall[1].data.timestamp).toEqual(expect.any(String));
 
         capturedStatusCallback('waiting', 'Still waiting');
         const secondCall = eventBus.emit.mock.calls.find(([eventName, payload]) => (
             eventName === 'platform:event' &&
             payload?.platform === 'custom' &&
-            payload?.type === 'stream-status' &&
+            payload?.type === 'platform:stream-status' &&
             payload?.data?.isLive === false &&
             payload?.data?.status === 'waiting'
         ));
         expect(secondCall).toBeTruthy();
+        expect(secondCall[1].data.timestamp).toEqual(expect.any(String));
     });
 });

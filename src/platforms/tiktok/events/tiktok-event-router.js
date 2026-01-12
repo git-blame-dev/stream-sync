@@ -1,4 +1,5 @@
 const { normalizeTikTokMessage, validateNormalizedMessage } = require('../../../utils/message-normalization');
+const { PlatformEvents } = require('../../../interfaces/PlatformEvents');
 
 function cleanupTikTokEventListeners(platform) {
     if (!platform?.connection) {
@@ -185,7 +186,7 @@ function setupTikTokEventListeners(platform) {
                 await platform._logIncomingEvent('envelope', data);
                 await platform._handleStandardEvent('envelope', data, {
                     factoryMethod: 'createEnvelope',
-                    emitType: 'envelope'
+                    emitType: PlatformEvents.ENVELOPE
                 });
             } catch (error) {
                 platform.errorHandler.handleEventProcessingError(error, 'envelope', data, 'Error in handleEnvelopeNotification');
@@ -200,7 +201,7 @@ function setupTikTokEventListeners(platform) {
             try {
                 await platform._handleStandardEvent('paypiggy', data, {
                     factoryMethod: 'createSubscription',
-                    emitType: 'paypiggy'
+                    emitType: PlatformEvents.PAYPIGGY
                 });
             } catch (error) {
                 platform.errorHandler.handleEventProcessingError(error, 'subscribe', data, 'Error in handleSubscriptionNotification');
@@ -215,7 +216,7 @@ function setupTikTokEventListeners(platform) {
             try {
                 await platform._handleStandardEvent('paypiggy', data, {
                     factoryMethod: 'createSuperfan',
-                    emitType: 'paypiggy'
+                    emitType: PlatformEvents.PAYPIGGY
                 });
             } catch (error) {
                 platform.errorHandler.handleEventProcessingError(error, 'superfan', data, 'Error in handleSuperfanNotification');
@@ -239,9 +240,10 @@ function setupTikTokEventListeners(platform) {
         platform._logIncomingEvent('roomUser', data);
         platform.cachedViewerCount = data.viewerCount;
 
-        platform._emitPlatformEvent('viewer-count', {
+        platform._emitPlatformEvent(PlatformEvents.VIEWER_COUNT, {
             platform: 'tiktok',
-            count: data.viewerCount
+            count: data.viewerCount,
+            timestamp: new Date().toISOString()
         });
     });
 

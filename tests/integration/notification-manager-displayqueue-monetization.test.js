@@ -193,7 +193,7 @@ describe('Monetisation pipeline integration', () => {
         } else {
             eventBus.emit('platform:event', {
                 platform,
-                type,
+                type: `platform:${type}`,
                 data: payload
             });
         }
@@ -225,7 +225,7 @@ describe('Monetisation pipeline integration', () => {
 
         eventBus.emit('platform:event', {
             platform: 'twitch',
-            type: 'paypiggy',
+            type: 'platform:paypiggy',
             data: { username: 'GatedMember', userId: 'member-1', id: 'paypiggy-1', timestamp: fixedTimestamp }
         });
 
@@ -241,7 +241,7 @@ describe('Monetisation pipeline integration', () => {
 
         eventBus.emit('platform:event', {
             platform: 'twitch',
-            type: 'gift',
+            type: 'platform:gift',
             data: {
                 username: 'GatedGifter',
                 userId: 'gifter-1',
@@ -265,7 +265,7 @@ describe('Monetisation pipeline integration', () => {
     it('normalizes paypiggy months/levels and builds copy/TTS/log without placeholders', async () => {
         eventBus.emit('platform:event', {
             platform: 'youtube',
-            type: 'paypiggy',
+            type: 'platform:paypiggy',
             data: {
                 username: 'RenewedMember',
                 userId: 'member-22',

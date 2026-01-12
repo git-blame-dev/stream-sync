@@ -52,7 +52,7 @@ describe('YouTube multi-stream manager', () => {
 
         expect(emitted).toHaveLength(1);
         expect(emitted[0]).toMatchObject({
-            type: 'stream-detected',
+            type: 'platform:stream-detected',
             payload: expect.objectContaining({
                 eventType: 'stream-detected',
                 newStreamIds: ['stream-1'],
