@@ -8,6 +8,10 @@ const {
     setupAutomatedCleanup 
 } = require('../../helpers/mock-lifecycle');
 
+const {
+    expectNoTechnicalArtifacts
+} = require('../../helpers/behavior-validation');
+
 // Initialize logging FIRST
 initializeTestLogging();
 
@@ -103,6 +107,31 @@ describe('User-Facing Content Validation', () => {
                 expect(result.displayMessage).not.toMatch(/^\s|\s$/); // No leading/trailing whitespace
                 expect(result.displayMessage).not.toMatch(/\s{2,}/); // No multiple spaces
             });
+        }, TEST_TIMEOUTS.FAST);
+
+        test('should keep gift notifications user-facing and artifact-free', () => {
+            const userData = { username: 'TestUser', userId: '12345' };
+            const eventData = { giftType: 'Rose', giftCount: 5, amount: 5, currency: 'coins' };
+
+            const notificationData = createNotificationData('platform:gift', 'tiktok', userData, eventData);
+            const messageText = notificationData.displayMessage || notificationData.message || '';
+
+            expect(notificationData).toBeDefined();
+            expect(messageText).toContain('TestUser');
+            expect(messageText.length).toBeGreaterThan(0);
+            expectNoTechnicalArtifacts(messageText);
+        }, TEST_TIMEOUTS.FAST);
+
+        test('should keep follow notifications free of deprecated markers', () => {
+            const followData = { username: 'NewFollower', userId: '123' };
+            const followNotification = createNotificationData('platform:follow', 'twitch', followData);
+            const messageText = followNotification.displayMessage || followNotification.message || '';
+
+            expect(followNotification).toBeDefined();
+            expect(messageText.length).toBeGreaterThan(0);
+            expectNoTechnicalArtifacts(messageText);
+            expect(messageText).not.toContain('DEPRECATED');
+            expect(messageText).not.toContain('BRIDGE');
         }, TEST_TIMEOUTS.FAST);
 
         test('should handle special characters in usernames gracefully', () => {
