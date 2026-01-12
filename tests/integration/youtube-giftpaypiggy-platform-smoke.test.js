@@ -147,7 +147,7 @@ describe('YouTube giftpaypiggy platform flow (smoke)', () => {
 
             expect(displayQueue.addItem).toHaveBeenCalledTimes(1);
             const queued = displayQueue.addItem.mock.calls[0][0];
-            expect(queued.type).toBe('giftpaypiggy');
+            expect(queued.type).toBe('platform:giftpaypiggy');
             expect(queued.platform).toBe('youtube');
             expect(queued.data.username).toBe('GiftMember');
             expect(queued.data.giftCount).toBe(5);

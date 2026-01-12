@@ -64,7 +64,7 @@ const expectValidNotification = (notification, expectedType, expectedPlatform) =
 };
 
 const validatePlatformSpecificNotification = (notification, type, platform) => {
-    if (type === 'gift') {
+    if (type === 'platform:gift') {
         if (!notification.hasOwnProperty('giftType')) {
             throw new Error('Gift notifications must have giftType field');
         }
@@ -95,7 +95,7 @@ const validatePlatformSpecificNotification = (notification, type, platform) => {
 
     switch (platform) {
         case 'youtube':
-            if (type === 'gift') {
+            if (type === 'platform:gift') {
                 if (!notification.hasOwnProperty('giftType')) {
                     throw new Error('YouTube gifts must have giftType field');
                 }
@@ -109,12 +109,12 @@ const validatePlatformSpecificNotification = (notification, type, platform) => {
             break;
             
         case 'twitch':
-            if (type === 'paypiggy' || type === 'giftpaypiggy') {
+            if (type === 'platform:paypiggy' || type === 'platform:giftpaypiggy') {
                 if (notification.hasOwnProperty('tier') && !['1000', '2000', '3000'].includes(notification.tier)) {
                     throw new Error('Twitch paypiggy tier must be 1000, 2000, or 3000');
                 }
             }
-            if (type === 'raid') {
+            if (type === 'platform:raid') {
                 if (!notification.hasOwnProperty('viewerCount')) {
                     throw new Error('Twitch raid must have viewerCount field');
                 }
@@ -125,7 +125,7 @@ const validatePlatformSpecificNotification = (notification, type, platform) => {
             break;
             
         case 'tiktok':
-            if (type === 'gift') {
+            if (type === 'platform:gift') {
                 if (!notification.hasOwnProperty('giftType')) {
                     throw new Error('TikTok gift must have giftType field');
                 }
@@ -265,7 +265,7 @@ const expectYouTubeEventProcessing = (eventData, expectedOutcome) => {
         'chat': 'LiveChatTextMessage'
     };
 
-    if (expectedOutcome.notificationType === 'gift') {
+    if (expectedOutcome.notificationType === 'platform:gift') {
         const giftTypes = ['LiveChatPaidMessage', 'LiveChatPaidSticker'];
         if (!giftTypes.includes(eventType)) {
             throw new Error(
@@ -1268,7 +1268,7 @@ const expectValidGiftNotification = (notification, expectedData = {}) => {
     }
     
     // First validate as general notification
-    expectValidNotification(notification, 'gift', expectedData.platform || notification.platform);
+    expectValidNotification(notification, 'platform:gift', expectedData.platform || notification.platform);
     
     // Gift-specific validations
     const requiredGiftFields = ['amount', 'currency'];

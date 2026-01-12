@@ -184,12 +184,12 @@ describe('Text Processing', () => {
         });
 
         it('returns provided giftType when present', () => {
-            expect(manager.determineGiftName({ giftType: 'Custom Gift' }, 'youtube', 'gift')).toBe('Custom Gift');
+            expect(manager.determineGiftName({ giftType: 'Custom Gift' }, 'youtube', 'platform:gift')).toBe('Custom Gift');
         });
 
         it('falls back to generic gift or unknown when no mapping exists', () => {
-            expect(manager.determineGiftName({}, 'tiktok', 'gift')).toBe('gift');
-            expect(manager.determineGiftName({}, 'twitch', 'paypiggy')).toBe('unknown');
+            expect(manager.determineGiftName({}, 'tiktok', 'platform:gift')).toBe('gift');
+            expect(manager.determineGiftName({}, 'twitch', 'platform:paypiggy')).toBe('unknown');
         });
     });
 

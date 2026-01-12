@@ -247,7 +247,7 @@ describe('YouTube Notification Dispatcher - Modern (Production Data)', () => {
             const notification = mockHandlers.onGift.mock.calls[0][0];
             expect(notification).toMatchObject({
                 platform: 'youtube',
-                type: 'gift',
+                type: 'platform:gift',
                 username: 'SuperChatDonor',
                 userId: fixtureSuperChat.item.author.id,
                 giftType: 'Super Chat',
@@ -377,7 +377,7 @@ describe('YouTube Notification Dispatcher - Modern (Production Data)', () => {
             expect(mockHandlers.onGiftPaypiggy).toHaveBeenCalledTimes(1);
             const notification = mockHandlers.onGiftPaypiggy.mock.calls[0][0];
             expect(notification.giftCount).toBe(3);
-            expect(notification.type).toBe('giftpaypiggy');
+            expect(notification.type).toBe('platform:giftpaypiggy');
             expect(notification.message).toBe('');
         });
 
@@ -404,7 +404,7 @@ describe('YouTube Notification Dispatcher - Modern (Production Data)', () => {
             const notification = mockHandlers.onGiftPaypiggy.mock.calls[0][0];
             expect(notification).toMatchObject({
                 platform: 'youtube',
-                type: 'giftpaypiggy',
+                type: 'platform:giftpaypiggy',
                 username: 'GiftGifter',
                 userId: 'UC-GIFTER-2',
                 isError: true,

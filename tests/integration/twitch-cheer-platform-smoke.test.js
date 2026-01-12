@@ -129,7 +129,7 @@ describe('Twitch bits gift platform flow (smoke)', () => {
 
             expect(displayQueue.addItem).toHaveBeenCalledTimes(1);
             const queued = displayQueue.addItem.mock.calls[0][0];
-            expect(queued.type).toBe('gift');
+            expect(queued.type).toBe('platform:gift');
             expect(queued.platform).toBe('twitch');
             expect(queued.data.username).toBe('test_user');
             expect(queued.data.amount).toBe(234);

@@ -131,7 +131,7 @@ const testNotificationGeneration = (type, userData, eventData, expectedPatterns)
 };
 
 const testGiftNotification = (giftData, expectations) => {
-    return testNotificationGeneration('gift', 
+    return testNotificationGeneration('platform:gift', 
         { username: 'TestUser' }, 
         giftData, 
         expectations
@@ -152,7 +152,7 @@ const testCommandNotification = (command, expectedCommandName, username = 'TestU
 };
 
 const testFollowNotification = (username = 'TestUser') => {
-    return testNotificationGeneration('follow',
+    return testNotificationGeneration('platform:follow',
         { username },
         {},
         {
@@ -164,7 +164,7 @@ const testFollowNotification = (username = 'TestUser') => {
 };
 
 const testSubscriptionNotification = (userData, subData, expectedType = 'new') => {
-    const notification = testNotificationGeneration('paypiggy', userData, subData, {});
+    const notification = testNotificationGeneration('platform:paypiggy', userData, subData, {});
     
     switch (expectedType) {
         case 'new':
@@ -238,7 +238,7 @@ const createNotificationTestSuite = (notificationType, testCases) => {
 };
 
 const validateNotificationTemplates = () => {
-    const requiredTypes = ['gift', 'follow', 'paypiggy', 'raid', 'envelope', 'greeting', 'farewell', 'command', 'redemption'];
+    const requiredTypes = ['platform:gift', 'platform:follow', 'platform:paypiggy', 'platform:raid', 'platform:envelope', 'greeting', 'farewell', 'command', 'redemption'];
 
     requiredTypes.forEach(type => {
         expect(NOTIFICATION_TEMPLATES).toHaveProperty(type);
@@ -249,7 +249,7 @@ const validateNotificationTemplates = () => {
 };
 
 const testUsernameSanitization = (rawUsername, expectedDisplay, expectedTTS) => {
-    const notification = createNotificationData('follow', 'tiktok', 
+    const notification = createNotificationData('platform:follow', 'tiktok', 
         { username: rawUsername },
         {}
     );

@@ -112,7 +112,7 @@ const createMockNotificationBuilder = (dataOverrides = {}) => {
             const platform = requireNonEmptyString(notificationData.platform, 'platform');
             const username = requireNonEmptyString(notificationData.username, 'username');
 
-            if (type === 'gift') {
+            if (type === 'platform:gift') {
                 requireGiftFields(notificationData);
             }
 
@@ -170,7 +170,7 @@ const createMockNotificationManager = (overrides = {}) => {
             const platform = requireNonEmptyString(sourceNotification.platform, 'platform');
             const username = requireNonEmptyString(sourceNotification.username, 'username');
 
-            if (type === 'gift') {
+            if (type === 'platform:gift') {
                 requireGiftFields(sourceNotification);
             }
 
@@ -238,7 +238,7 @@ const createMockNotificationManager = (overrides = {}) => {
                 processed: true,
                 notification: {
                     id: buildTestId('gift'),
-                    type: 'gift',
+                    type: 'platform:gift',
                     platform,
                     username,
                     userId: giftData.userId,
@@ -267,7 +267,7 @@ const createMockNotificationManager = (overrides = {}) => {
             return {
                 notification: {
                     id: buildTestId('follow'),
-                    type: 'follow',
+                    type: 'platform:follow',
                     platform,
                     username,
                     userId: followData.userId,
@@ -293,7 +293,7 @@ const createMockNotificationManager = (overrides = {}) => {
             return {
                 notification: {
                     id: buildTestId('sub'),
-                    type: 'paypiggy',
+                    type: 'platform:paypiggy',
                     platform,
                     username,
                     userId: subData.userId,
@@ -1104,7 +1104,7 @@ const createMockYouTubePlatform = (behaviorConfig = {}) => {
             const message = typeof superChatData?.message === 'string' ? superChatData.message : '';
             const notification = {
                 id: buildTestId('superchat-youtube'),
-                type: 'gift',
+                type: 'platform:gift',
                 platform: 'youtube',
                 username,
                 userId: superChatData.userId,
@@ -1134,7 +1134,7 @@ const createMockYouTubePlatform = (behaviorConfig = {}) => {
                 priority,
                 notification: {
                     id: buildTestId('paypiggy'),
-                    type: 'paypiggy',
+                    type: 'platform:paypiggy',
                     platform: 'youtube',
                     username,
                     userId: membershipData.userId,
@@ -1179,7 +1179,7 @@ const createMockTwitchPlatform = (behaviorConfig = {}) => {
                 processed: true,
                 notification: {
                     id: buildTestId('sub'),
-                    type: 'paypiggy',
+                    type: 'platform:paypiggy',
                     platform: 'twitch',
                     username: subData.username || 'TestUser',
                     userId: subData.userId,
@@ -1198,7 +1198,7 @@ const createMockTwitchPlatform = (behaviorConfig = {}) => {
                 priority,
                 notification: {
                     id: buildTestId('raid'),
-                    type: 'raid',
+                    type: 'platform:raid',
                     platform: 'twitch',
                     username: raidData.username || 'TestUser',
                     userId: raidData.userId,
@@ -1215,7 +1215,7 @@ const createMockTwitchPlatform = (behaviorConfig = {}) => {
                 processed: true,
                 notification: {
                     id: buildTestId('follow'),
-                    type: 'follow',
+                    type: 'platform:follow',
                     platform: 'twitch',
                     username: followData.username || 'TestUser',
                     userId: followData.userId,
@@ -1260,7 +1260,7 @@ const createMockTikTokPlatform = (behaviorConfig = {}) => {
                 obsUpdated: true,
                 notification: {
                     id: buildTestId('gift'),
-                    type: 'gift',
+                    type: 'platform:gift',
                     platform: 'tiktok',
                     username: normalizedUser.username,
                     userId: normalizedUser.userId,
@@ -1353,7 +1353,7 @@ const createUserGiftScenario = (scenarioConfig = {}) => {
         
         build() {
             return {
-                type: 'gift',
+                type: 'platform:gift',
                 platform: scenario.platform,
                 username: scenario.username,
                 userId: scenario.userId,
@@ -1513,7 +1513,7 @@ const createTikTokGiftBuilder = () => {
         build() {
             const timestamp = createTimestamp();
             return {
-                type: 'gift',
+                type: 'platform:gift',
                 platform: 'tiktok',
                 username: gift.username,
                 userId: gift.userId,
@@ -1754,7 +1754,7 @@ const createMockPlatform = (platformName, behaviorConfig = {}) => {
             const timestamp = createTimestamp();
             const notification = {
                 id: buildTestId(`gift-${platformName}`),
-                type: 'gift',
+                type: 'platform:gift',
                 platform: giftData.platform || platformName,
                 username: normalizedUser.username,
                 userId: normalizedUser.userId,
@@ -1812,7 +1812,7 @@ const createMockPlatform = (platformName, behaviorConfig = {}) => {
             const timestamp = createTimestamp();
             return {
                 id: buildTestId('follow'),
-                type: 'follow',
+                type: 'platform:follow',
                 eventType: 'follow',
                 messageType: 'follow',
                 platform: 'tiktok',
@@ -1955,7 +1955,7 @@ const createMockPlatform = (platformName, behaviorConfig = {}) => {
 
             return {
                 id: buildTestId('follow-twitch'),
-                type: 'follow',
+                type: 'platform:follow',
                 eventType: 'follow',
                 messageType: 'follow',
                 platform: 'twitch',
@@ -1980,7 +1980,7 @@ const createMockPlatform = (platformName, behaviorConfig = {}) => {
             
             return {
                 id: buildTestId('raid-twitch'),
-                type: 'raid',
+                type: 'platform:raid',
                 eventType: 'raid',
                 messageType: 'raid',
                 platform: 'twitch',
@@ -2146,7 +2146,7 @@ const createMockPlatform = (platformName, behaviorConfig = {}) => {
                 return {
                     id: webhookData.eventId || buildTestId(`follow-${targetPlatform}`),
                     eventId: webhookData.eventId || buildTestId(`follow-${targetPlatform}`),
-                    type: 'follow',
+                    type: 'platform:follow',
                     eventType: 'follow',
                     messageType: 'follow',
                     platform: targetPlatform, // Use the target platform, not StreamElements
@@ -2168,7 +2168,7 @@ const createMockPlatform = (platformName, behaviorConfig = {}) => {
                 
                 return {
                     id: buildTestId(`paypiggy-${targetPlatform}`),
-                    type: 'paypiggy',
+                    type: 'platform:paypiggy',
                     eventType: 'paypiggy',
                     messageType: 'paypiggy',
                     platform: targetPlatform,
@@ -2342,7 +2342,7 @@ const createMockPlatform = (platformName, behaviorConfig = {}) => {
             return {
                 success: true,
                 messageId: message.id,
-                type: 'gift',
+                type: 'platform:gift',
                 timestamp: timestamp.ms
             };
         }),
@@ -2443,7 +2443,7 @@ const createMockPlatform = (platformName, behaviorConfig = {}) => {
 
                 return {
                     id: buildTestId('superchat-youtube'),
-                    type: 'gift',
+                    type: 'platform:gift',
                     platform: 'youtube',
                     username: userName,
                     userId: userId,
@@ -2505,7 +2505,7 @@ const createMockPlatform = (platformName, behaviorConfig = {}) => {
                 // Return notification directly to match test expectations
                 return {
                     id: buildTestId('gift'),
-                    type: 'gift',
+                    type: 'platform:gift',
                     platform: 'tiktok',
                     username: normalizedUser.username,
                     userId: normalizedUser.userId,

@@ -38,7 +38,7 @@ describe('YouTubePlatform dispatch table behavior', () => {
 
         expect(giftEvents).toHaveLength(1);
         const [event] = giftEvents;
-        expect(event.type).toBe('giftpaypiggy');
+        expect(event.type).toBe('platform:giftpaypiggy');
         expect(event.platform).toBe('youtube');
         expect(event.giftCount).toBe(5);
         expect(event.username).toBe('GiftGiver');

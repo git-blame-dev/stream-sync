@@ -49,22 +49,22 @@ describe('Platform Events Interface', () => {
             const testCases = [
                 {
                     platform: 'tiktok',
-                    type: 'gift',
+                    type: 'platform:gift',
                     data: { giftType: 'rose', amount: 5, username: 'Gifter' }
                 },
                 {
                     platform: 'twitch',
-                    type: 'paypiggy',
+                    type: 'platform:paypiggy',
                     data: { tier: 1, duration: 1, username: 'Subscriber' }
                 },
                 {
                     platform: 'youtube',
-                    type: 'paypiggy',
+                    type: 'platform:paypiggy',
                     data: { level: 'sponsor', username: 'Member' }
                 },
                 {
                     platform: 'tiktok',
-                    type: 'paypiggy',
+                    type: 'platform:paypiggy',
                     data: { tier: 'superfan', username: 'SuperFanUser' }
                 }
             ];
@@ -165,7 +165,7 @@ describe('Platform Events Interface', () => {
         it('should normalize gift data consistently across platforms', () => {
             const rawGifts = {
                 tiktok: { 
-                    type: 'gift',
+                    type: 'platform:gift',
                     id: 'tt-gift-event-1',
                     giftType: 'rose',
                     giftCount: 1,
@@ -176,7 +176,7 @@ describe('Platform Events Interface', () => {
                     timestamp: 1234567890000
                 },
                 twitch: {
-                    type: 'gift',
+                    type: 'platform:gift',
                     id: 'tw-gift-event-1',
                     giftType: 'bits',
                     giftCount: 1,
@@ -188,7 +188,7 @@ describe('Platform Events Interface', () => {
                     timestamp: 1234567890001
                 },
                 youtube: {
-                    type: 'gift',
+                    type: 'platform:gift',
                     id: 'yt-gift-event-1',
                     giftType: 'Super Chat',
                     giftCount: 1,
@@ -235,12 +235,12 @@ describe('Platform Events Interface', () => {
 
         it('should create standardized notification events with priority', () => {
             const notificationData = {
-                type: 'gift',
+                type: 'platform:gift',
                 username: 'Gifter',
                 amount: 10
             };
             
-            const event = PlatformEvents.createNotificationEvent('tiktok', 'gift', notificationData);
+            const event = PlatformEvents.createNotificationEvent('tiktok', 'platform:gift', notificationData);
             
             expect(event.priority).toBeDefined();
             expect(typeof event.priority).toBe('number');

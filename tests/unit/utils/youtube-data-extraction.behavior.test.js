@@ -459,13 +459,13 @@ describe('youtube-data-extraction', () => {
                 message: 'hi',
                 author: { name: 'User' }
             });
-            expect(sc).toMatchObject({ amount: 5, currency: 'USD', type: 'gift', giftType: 'Super Chat', giftCount: 1, message: 'hi' });
+            expect(sc).toMatchObject({ amount: 5, currency: 'USD', type: 'platform:gift', giftType: 'Super Chat', giftCount: 1, message: 'hi' });
 
             const sticker = extractSuperChatData({
                 supersticker: { amount: 2, currency: 'ARS' },
                 author: { name: 'User' }
             });
-            expect(sticker.type).toBe('gift');
+            expect(sticker.type).toBe('platform:gift');
             expect(sticker.giftType).toBe('Super Sticker');
             expect(sticker.amount).toBe(2);
         });
@@ -478,7 +478,7 @@ describe('youtube-data-extraction', () => {
                 author: { name: 'Dual' }
             });
 
-            expect(data.type).toBe('gift');
+            expect(data.type).toBe('platform:gift');
             expect(data.giftType).toBe('Super Chat');
             expect(data.amount).toBe(9);
             expect(data.currency).toBe('EUR');

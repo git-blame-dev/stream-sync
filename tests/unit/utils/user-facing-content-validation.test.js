@@ -192,17 +192,17 @@ describe('User-Facing Content Validation', () => {
 
             edgeCases.forEach(eventData => {
                 const NotificationBuilder = require('../../../src/utils/notification-builder');
-                expect(() => NotificationBuilder.build({
-                    platform: 'twitch',
-                    type: 'gift',
-                    username: 'testuser',
-                    ...eventData
-                })).toThrow();
+                    expect(() => NotificationBuilder.build({
+                        platform: 'twitch',
+                        type: 'platform:gift',
+                        username: 'testuser',
+                        ...eventData
+                    })).toThrow();
             });
         }, TEST_TIMEOUTS.FAST);
 
         test('should handle very large numbers gracefully', () => {
-            const result = createNotificationData('gift', 'twitch',
+            const result = createNotificationData('platform:gift', 'twitch',
                 { username: 'bigspender' },
                 { giftCount: 1, giftType: 'bits', amount: 999999, currency: 'bits' }
             );
@@ -216,7 +216,7 @@ describe('User-Facing Content Validation', () => {
 
     function getTestDataForType(type, platform) {
         switch (type) {
-            case 'gift':
+            case 'platform:gift':
                 if (platform === 'youtube') {
                     return { giftCount: 1, giftType: 'Super Chat', amount: 5, currency: 'USD' };
                 }
@@ -224,13 +224,13 @@ describe('User-Facing Content Validation', () => {
                     return { giftCount: 1, giftType: 'bits', amount: 100, currency: 'bits' };
                 }
                 return { giftCount: 1, giftType: 'Rose', amount: 2, currency: 'coins' };
-            case 'follow':
+            case 'platform:follow':
                 return {};
-            case 'paypiggy':
+            case 'platform:paypiggy':
                 return { tier: '1000' };
-            case 'raid':
+            case 'platform:raid':
                 return { viewerCount: 42 };
-            case 'envelope':
+            case 'platform:envelope':
                 return { coins: 42 };
             default:
                 return {};

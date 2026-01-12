@@ -10,7 +10,7 @@ describe('MessageTTS Integration', () => {
     describe('YouTube SuperChat Integration', () => {
         test('should create SuperChat notification with proper message content', () => {
             const notificationData = createNotificationData(
-                'gift',
+                'platform:gift',
                 'youtube',
                 { username: 'SuperChatUser' },
                 {
@@ -26,12 +26,12 @@ describe('MessageTTS Integration', () => {
             expect(notificationData.message).toBe('Thanks for the stream!');
             expect(notificationData.ttsMessage).toContain('SuperChatUser sent');
             expect(notificationData.ttsMessage).toContain('5 US dollars');
-            expect(notificationData.type).toBe('gift');
+            expect(notificationData.type).toBe('platform:gift');
         });
 
         test('should generate TTS with message included for SuperChat', () => {
             const notificationData = createNotificationData(
-                'gift',
+                'platform:gift',
                 'youtube',
                 { username: 'SuperChatUser' },
                 {
@@ -57,7 +57,7 @@ describe('MessageTTS Integration', () => {
 
         test('should generate single-stage TTS for SuperChat without message', () => {
             const notificationData = createNotificationData(
-                'gift',
+                'platform:gift',
                 'youtube',
                 { username: 'SuperChatUser' },
                 {
@@ -79,7 +79,7 @@ describe('MessageTTS Integration', () => {
     describe('YouTube Membership Integration', () => {
         test('should create membership notification with message content', () => {
             const notificationData = createNotificationData(
-                'paypiggy',
+                'platform:paypiggy',
                 'youtube',
                 { username: 'MemberUser' },
                 {
@@ -89,12 +89,12 @@ describe('MessageTTS Integration', () => {
 
             // Test user-visible behavior
             expect(notificationData.message).toBe('Happy to support!');
-            expect(notificationData.type).toBe('paypiggy');
+            expect(notificationData.type).toBe('platform:paypiggy');
         });
 
         test('should generate two-stage TTS for membership so user message is spoken', () => {
             const notificationData = createNotificationData(
-                'paypiggy',
+                'platform:paypiggy',
                 'youtube',
                 { username: 'MemberUser' },
                 {
@@ -121,7 +121,7 @@ describe('MessageTTS Integration', () => {
     describe('Twitch Paypiggy Message Integration', () => {
         test('should create paypiggy notification with message content', () => {
             const notificationData = createNotificationData(
-                'paypiggy',
+                'platform:paypiggy',
                 'twitch',
                 { username: 'TwitchSub' },
                 {
@@ -132,12 +132,12 @@ describe('MessageTTS Integration', () => {
 
             // Test user-visible behavior
             expect(notificationData.message).toBe('Love this channel!');
-            expect(notificationData.type).toBe('paypiggy');
+            expect(notificationData.type).toBe('platform:paypiggy');
         });
 
         test('should generate two-stage TTS for paypiggy renewals so user message is spoken', () => {
             const notificationData = createNotificationData(
-                'paypiggy',
+                'platform:paypiggy',
                 'twitch',
                 { username: 'TwitchSub' },
                 {
@@ -165,7 +165,7 @@ describe('MessageTTS Integration', () => {
     describe('Twitch Bits Integration', () => {
         test('should create bits notification with message content', () => {
             const notificationData = createNotificationData(
-                'gift',
+                'platform:gift',
                 'twitch',
                 { username: 'BitUser' },
                 {
@@ -180,13 +180,13 @@ describe('MessageTTS Integration', () => {
 
             // Test user-visible behavior
             expect(notificationData.message).toBe('Great stream!');
-            expect(notificationData.type).toBe('gift');
+            expect(notificationData.type).toBe('platform:gift');
             expect(notificationData.currency).toBe('bits');
         });
 
         test('should generate single-stage TTS for bits with message included', () => {
             const notificationData = createNotificationData(
-                'gift',
+                'platform:gift',
                 'twitch',
                 { username: 'BitUser' },
                 {
@@ -247,19 +247,19 @@ describe('MessageTTS Integration', () => {
     describe('Non-Message Supporting Notifications', () => {
         test('should have correct type for follow notifications', () => {
             const notificationData = createNotificationData(
-                'follow',
+                'platform:follow',
                 'twitch',
                 { username: 'Follower' },
                 { message: 'This should be ignored' }
             );
 
-            // Follow notifications use 'follow' type
-            expect(notificationData.type).toBe('follow');
+            // Follow notifications use canonical platform:follow type
+            expect(notificationData.type).toBe('platform:follow');
         });
 
         test('should generate single-stage TTS for non-message notifications', () => {
             const notificationData = createNotificationData(
-                'follow',
+                'platform:follow',
                 'twitch',
                 { username: 'Follower' },
                 { message: 'This should be ignored' }
@@ -273,7 +273,7 @@ describe('MessageTTS Integration', () => {
 
         test('should use gift type for TikTok gift notifications', () => {
             const notificationData = createNotificationData(
-                'gift',
+                'platform:gift',
                 'tiktok',
                 { username: 'GiftSender' },
                 {
@@ -285,15 +285,15 @@ describe('MessageTTS Integration', () => {
                 }
             );
 
-            // TikTok gifts use 'gift' type
-            expect(notificationData.type).toBe('gift');
+            // TikTok gifts use canonical platform:gift type
+            expect(notificationData.type).toBe('platform:gift');
         });
     });
 
     describe('Message Validation Integration', () => {
         test('should ignore empty messages in SuperChat', () => {
             const notificationData = createNotificationData(
-                'gift',
+                'platform:gift',
                 'youtube',
                 { username: 'SuperChatUser' },
                 {
@@ -313,7 +313,7 @@ describe('MessageTTS Integration', () => {
 
         test('should ignore whitespace-only messages', () => {
             const notificationData = createNotificationData(
-                'gift',
+                'platform:gift',
                 'youtube',
                 { username: 'SuperChatUser' },
                 {
@@ -333,7 +333,7 @@ describe('MessageTTS Integration', () => {
 
         test('should trim message content for TTS', () => {
             const notificationData = createNotificationData(
-                'gift',
+                'platform:gift',
                 'youtube',
                 { username: 'SuperChatUser' },
                 {
@@ -356,7 +356,7 @@ describe('MessageTTS Integration', () => {
     describe('Cross-Platform Currency Support', () => {
         test('should handle EUR SuperChat with message', () => {
             const notificationData = createNotificationData(
-                'gift',
+                'platform:gift',
                 'youtube',
                 { username: 'EuroUser' },
                 {
@@ -378,7 +378,7 @@ describe('MessageTTS Integration', () => {
 
         test('should handle GBP SuperChat with message', () => {
             const notificationData = createNotificationData(
-                'gift',
+                'platform:gift',
                 'youtube',
                 { username: 'BritUser' },
                 {
@@ -402,7 +402,7 @@ describe('MessageTTS Integration', () => {
     describe('Username Sanitization Integration', () => {
         test('should sanitize usernames with emojis for TTS messages', () => {
             const notificationData = createNotificationData(
-                'gift',
+                'platform:gift',
                 'youtube',
                 { username: '🎮SuperLongUsernameWithEmojis🎮' },
                 {

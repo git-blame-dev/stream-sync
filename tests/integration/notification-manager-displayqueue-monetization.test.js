@@ -122,16 +122,16 @@ describe('Monetisation pipeline integration', () => {
 
         const runtime = {
             handleGiftNotification: jest.fn((platform, _username, payload) =>
-                notificationManager.handleNotification(payload.type || 'gift', platform, payload)
+                notificationManager.handleNotification(payload.type || 'platform:gift', platform, payload)
             ),
             handleGiftPaypiggyNotification: jest.fn((platform, _username, payload) =>
-                notificationManager.handleNotification('giftpaypiggy', platform, payload)
+                notificationManager.handleNotification('platform:giftpaypiggy', platform, payload)
             ),
             handlePaypiggyNotification: jest.fn((platform, _username, payload) =>
-                notificationManager.handleNotification('paypiggy', platform, payload)
+                notificationManager.handleNotification('platform:paypiggy', platform, payload)
             ),
             handleEnvelopeNotification: jest.fn((platform, _username, payload) =>
-                notificationManager.handleNotification('envelope', platform, payload)
+                notificationManager.handleNotification('platform:envelope', platform, payload)
             )
         };
 
@@ -157,13 +157,13 @@ describe('Monetisation pipeline integration', () => {
     });
 
     const flows = [
-        { platform: 'youtube', type: 'giftpaypiggy', expectedCommandKey: 'gifts', username: 'GiftPilot', userId: 'yt-gift-1' },
-        { platform: 'youtube', type: 'gift', giftType: 'Super Chat', giftCount: 1, amount: 5, currency: 'USD', expectedCommandKey: 'gifts', username: 'ChatPilot', userId: 'yt-superchat-2' },
-        { platform: 'youtube', type: 'gift', giftType: 'Super Sticker', giftCount: 1, amount: 10, currency: 'USD', expectedCommandKey: 'gifts', username: 'StickerPilot', userId: 'yt-sticker-3' },
-        { platform: 'twitch', type: 'giftpaypiggy', expectedCommandKey: 'gifts', username: 'SubPilot', userId: 'tw-giftpaypiggy-4' },
-        { platform: 'twitch', type: 'gift', giftType: 'bits', giftCount: 1, amount: 100, currency: 'bits', expectedCommandKey: 'gifts', username: 'BitsPilot', userId: 'tw-bits-5' },
-        { platform: 'tiktok', type: 'paypiggy', expectedCommandKey: 'paypiggies', username: 'MemberPilot', userId: 'tt-paypiggy-7' },
-        { platform: 'tiktok', type: 'envelope', giftType: 'Treasure Chest', giftCount: 1, amount: 100, currency: 'coins', expectedCommandKey: 'gifts', username: 'ChestPilot', userId: 'tt-envelope-1' }
+        { platform: 'youtube', type: 'platform:giftpaypiggy', expectedCommandKey: 'gifts', username: 'GiftPilot', userId: 'yt-gift-1' },
+        { platform: 'youtube', type: 'platform:gift', giftType: 'Super Chat', giftCount: 1, amount: 5, currency: 'USD', expectedCommandKey: 'gifts', username: 'ChatPilot', userId: 'yt-superchat-2' },
+        { platform: 'youtube', type: 'platform:gift', giftType: 'Super Sticker', giftCount: 1, amount: 10, currency: 'USD', expectedCommandKey: 'gifts', username: 'StickerPilot', userId: 'yt-sticker-3' },
+        { platform: 'twitch', type: 'platform:giftpaypiggy', expectedCommandKey: 'gifts', username: 'SubPilot', userId: 'tw-giftpaypiggy-4' },
+        { platform: 'twitch', type: 'platform:gift', giftType: 'bits', giftCount: 1, amount: 100, currency: 'bits', expectedCommandKey: 'gifts', username: 'BitsPilot', userId: 'tw-bits-5' },
+        { platform: 'tiktok', type: 'platform:paypiggy', expectedCommandKey: 'paypiggies', username: 'MemberPilot', userId: 'tt-paypiggy-7' },
+        { platform: 'tiktok', type: 'platform:envelope', giftType: 'Treasure Chest', giftCount: 1, amount: 100, currency: 'coins', expectedCommandKey: 'gifts', username: 'ChestPilot', userId: 'tt-envelope-1' }
     ];
 
     test.each(flows)('routes %s %s with canonical command key', async ({ platform, type, expectedCommandKey, username, userId, giftType, giftCount, amount, currency }) => {
@@ -176,8 +176,8 @@ describe('Monetisation pipeline integration', () => {
             timestamp: fixedTimestamp
         };
         const typeData = {
-            giftpaypiggy: { giftCount: 5, tier: '1000' },
-            paypiggy: { membershipLevel: 'Member', months: 2 }
+            'platform:giftpaypiggy': { giftCount: 5, tier: '1000' },
+            'platform:paypiggy': { membershipLevel: 'Member', months: 2 }
         };
         const payload = {
             ...baseData,
@@ -188,12 +188,12 @@ describe('Monetisation pipeline integration', () => {
             ...(currency ? { currency } : {})
         };
 
-        if (type === 'envelope') {
-            await notificationManager.handleNotification('envelope', platform, payload);
+        if (type === 'platform:envelope') {
+            await notificationManager.handleNotification('platform:envelope', platform, payload);
         } else {
             eventBus.emit('platform:event', {
                 platform,
-                type: `platform:${type}`,
+                type,
                 data: payload
             });
         }

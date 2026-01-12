@@ -67,7 +67,7 @@ describe('Optimized Business Logic Performance Tests', () => {
                 const opStart = testClock.now();
                 
                 const platform = ['youtube', 'tiktok', 'twitch'][i % 3];
-                const type = ['gift', 'paypiggy', 'follow'][i % 3];
+                const type = ['platform:gift', 'platform:paypiggy', 'platform:follow'][i % 3];
                 
                 const result = NotificationBuilder.build({
                     platform,
@@ -136,7 +136,7 @@ describe('Optimized Business Logic Performance Tests', () => {
                             : { giftType: 'Super Chat', giftCount: 1, amount: 5, currency: 'USD' };
                     const result = NotificationBuilder.build({
                         platform,
-                        type: 'gift',
+                        type: 'platform:gift',
                         username: `SustainedUser${totalNotifications + i}`,
                         userId: `sustained-${totalNotifications + i}`,
                         message: 'Sustained load test',
@@ -193,7 +193,7 @@ describe('Optimized Business Logic Performance Tests', () => {
                     
                     const result = NotificationBuilder.build({
                         platform,
-                        type: 'gift',
+                        type: 'platform:gift',
                         username: `MemTestUser${notificationId}`,
                         userId: `mem-${notificationId}`,
                         message: `Memory test ${notificationId}`,
@@ -246,7 +246,7 @@ describe('Optimized Business Logic Performance Tests', () => {
             for (let i = 0; i < 1000; i++) {
                 const complexData = {
                     platform: 'youtube',
-                    type: 'gift',
+                    type: 'platform:gift',
                     username: `ComplexUser${i}`,
                     userId: `user-${i}`,
                     message: `Complex message with emoji 🎮 and special characters @#$%^&*()`,
@@ -312,7 +312,7 @@ describe('Optimized Business Logic Performance Tests', () => {
                 for (const currency of currencies) {
                     const result = NotificationBuilder.build({
                         platform: 'youtube',
-                        type: 'gift',
+                        type: 'platform:gift',
                         username: 'CurrencyUser',
                         userId: 'currency-user',
                         message: 'Currency test',
@@ -376,7 +376,7 @@ describe('Optimized Business Logic Performance Tests', () => {
                 for (const testString of testStrings) {
                     const result = NotificationBuilder.build({
                         platform: 'tiktok',
-                        type: 'gift',
+                        type: 'platform:gift',
                         username: `StringUser${i}`,
                         userId: `string-${i}`,
                         message: testString,
@@ -421,7 +421,7 @@ describe('Optimized Business Logic Performance Tests', () => {
                     for (let i = 0; i < batchSize; i++) {
                         const result = NotificationBuilder.build({
                             platform: 'twitch',
-                            type: 'follow',
+                            type: 'platform:follow',
                             username: `ConcurrentUser${batch}-${i}`,
                             userId: `concurrent-${batch}-${i}`,
                             batchId: batch,
