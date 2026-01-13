@@ -3,6 +3,7 @@ const { logger } = require('../core/logging');
 const { safeDelay } = require('../utils/timeout-validator');
 const { createPlatformErrorHandler } = require('../utils/platform-error-handler');
 const { assertPlatformInterface } = require('../utils/platform-interface-validator');
+const { getSystemTimestampISO } = require('../utils/validation');
 const { PlatformEvents } = require('../interfaces/PlatformEvents');
 
 class PlatformLifecycleService {
@@ -119,10 +120,13 @@ class PlatformLifecycleService {
         const handlers = {
             onChat: (data) => this.emitPlatformEvent(platformName, PlatformEvents.CHAT_MESSAGE, data),
             onViewerCount: (data) => {
-                const payload = typeof data === 'number'
-                    ? { count: data, timestamp: new Date().toISOString() }
-                    : data;
-                this.emitPlatformEvent(platformName, PlatformEvents.VIEWER_COUNT, payload);
+                if (typeof data === 'number') {
+                    this.logger.warn(`Viewer count missing timestamp for ${platformName}`, 'PlatformLifecycleService', {
+                        count: data
+                    });
+                    return;
+                }
+                this.emitPlatformEvent(platformName, PlatformEvents.VIEWER_COUNT, data);
             },
             onGift: (data) => this.emitPlatformEvent(platformName, PlatformEvents.GIFT, data),
             onPaypiggy: (data) => this.emitPlatformEvent(platformName, PlatformEvents.PAYPIGGY, data),
@@ -237,7 +241,7 @@ class PlatformLifecycleService {
 
         // Create status callback for stream detection updates
         const statusCallback = (status, message) => {
-            const timestamp = new Date().toISOString();
+            const timestamp = getSystemTimestampISO();
             const normalizedStatus = typeof status === 'string' ? status.toLowerCase() : status;
             const isLive = normalizedStatus === 'live';
             this.logger.info(`${platformName} stream status: ${status} - ${message}`, 'PlatformLifecycleService');
@@ -385,7 +389,7 @@ class PlatformLifecycleService {
         const disabled = platformNames.filter((name) => this.platformHealth[name].state === 'disabled');
 
         return {
-            timestamp: new Date().toISOString(),
+            timestamp: getSystemTimestampISO(),
             totalConfigured: Object.keys(this.config || {}).length,
             initializedPlatforms: ready,
             initializingPlatforms: initializing,
@@ -437,7 +441,7 @@ class PlatformLifecycleService {
             next.failures = current.failures || 0;
         }
 
-        next.lastUpdated = patch.lastUpdated || new Date().toISOString();
+        next.lastUpdated = patch.lastUpdated || getSystemTimestampISO();
 
         this.platformHealth[platformName] = next;
         return next;
@@ -448,7 +452,7 @@ class PlatformLifecycleService {
             return;
         }
 
-        const timestamp = new Date().toISOString();
+        const timestamp = getSystemTimestampISO();
         this.recordPlatformConnection(platformName);
 
         this.updatePlatformHealth(platformName, {
@@ -461,7 +465,7 @@ class PlatformLifecycleService {
     }
 
     markPlatformFailure(platformName, error) {
-        const timestamp = new Date().toISOString();
+        const timestamp = getSystemTimestampISO();
         this.platformErrors.push({
             platform: platformName,
             message: error?.message || String(error),

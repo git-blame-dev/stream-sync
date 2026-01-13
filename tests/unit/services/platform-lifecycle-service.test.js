@@ -215,7 +215,8 @@ describe('PlatformLifecycleService', () => {
             const mockPlatformClass = jest.fn().mockImplementation(() => ({
                 initialize: jest.fn().mockImplementation((handlers) => {
                     handlers.onChat({ message: { text: 'hello' }, username: 'user', userId: 'u1', timestamp });
-                    handlers.onViewerCount(42);
+                    handlers.onViewerCount({ count: 42, timestamp });
+
                     handlers.onGift({
                         username: 'donor',
                         userId: 'u2',
@@ -278,7 +279,7 @@ describe('PlatformLifecycleService', () => {
                 message: { text: 'hello' },
                 timestamp
             });
-            handlers.onViewerCount(42);
+            handlers.onViewerCount({ count: 42, timestamp });
 
             const chatEvent = mockEventBus.emit.mock.calls.find(([, payload]) => payload?.type === 'platform:chat-message');
             expect(chatEvent).toBeTruthy();
@@ -287,7 +288,7 @@ describe('PlatformLifecycleService', () => {
             const viewerEvent = mockEventBus.emit.mock.calls.find(([, payload]) => payload?.type === 'platform:viewer-count');
             expect(viewerEvent).toBeTruthy();
             expect(viewerEvent[1].data.count).toBe(42);
-            expect(viewerEvent[1].data.timestamp).toEqual(expect.any(String));
+            expect(viewerEvent[1].data.timestamp).toBe(timestamp);
 
             expect(handlers.onMembership).toBeUndefined();
             expect(typeof handlers.onPaypiggy).toBe('function');

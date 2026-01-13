@@ -3,7 +3,6 @@ const { isIsoTimestamp } = require('../../../utils/validation');
 
 function createYouTubeEventFactory(options = {}) {
     const platformName = options.platformName || 'youtube';
-    const nowIso = options.nowIso || (() => new Date().toISOString());
     const generateCorrelationId = options.generateCorrelationId || (() => PlatformEvents._generateCorrelationId());
 
     const ensureIsoTimestamp = (value, errorMessage) => {

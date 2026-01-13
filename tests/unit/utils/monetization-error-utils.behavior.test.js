@@ -5,6 +5,7 @@ describe('monetization error payload no-fallback behavior', () => {
         const payload = createMonetizationErrorPayload({
             notificationType: 'platform:gift',
             platform: 'twitch',
+            timestamp: '2024-01-01T00:00:00.000Z',
             giftType: 'bits',
             giftCount: 1,
             amount: 5,
@@ -22,6 +23,7 @@ describe('monetization error payload no-fallback behavior', () => {
         const payload = createMonetizationErrorPayload({
             notificationType: 'platform:gift',
             platform: 'twitch',
+            timestamp: '2024-01-01T00:00:00.000Z',
             username: 'TestUser',
             userId: '123',
             giftType: 'bits',
@@ -40,7 +42,8 @@ describe('monetization error payload no-fallback behavior', () => {
 
         const payload = createMonetizationErrorPayload({
             notificationType: 'platform:gift',
-            platform: 'twitch'
+            platform: 'twitch',
+            timestamp: '2024-01-01T00:00:00.000Z'
         });
 
         expect(payload).not.toHaveProperty('giftType');
@@ -49,15 +52,13 @@ describe('monetization error payload no-fallback behavior', () => {
         expect(payload).not.toHaveProperty('currency');
     });
 
-    it('omits timestamp when not provided', () => {
+    it('requires a timestamp when building error payloads', () => {
         const { createMonetizationErrorPayload } = require('../../../src/utils/monetization-error-utils');
 
-        const payload = createMonetizationErrorPayload({
+        expect(() => createMonetizationErrorPayload({
             notificationType: 'platform:gift',
             platform: 'twitch'
-        });
-
-        expect(payload).not.toHaveProperty('timestamp');
+        })).toThrow('Monetization error payload requires ISO timestamp');
     });
 
     it('includes timestamp when provided', () => {
@@ -78,6 +79,7 @@ describe('monetization error payload no-fallback behavior', () => {
         const payload = createMonetizationErrorPayload({
             notificationType: 'platform:gift',
             platform: 'twitch',
+            timestamp: '2024-01-01T00:00:00.000Z',
             giftType: 'bits',
             giftCount: 0,
             amount: 0,
@@ -96,6 +98,7 @@ describe('monetization error payload no-fallback behavior', () => {
         const payload = createMonetizationErrorPayload({
             notificationType: 'platform:giftpaypiggy',
             platform: 'twitch',
+            timestamp: '2024-01-01T00:00:00.000Z',
             giftCount: 0,
             tier: '1000'
         });
@@ -109,6 +112,7 @@ describe('monetization error payload no-fallback behavior', () => {
         const payload = createMonetizationErrorPayload({
             notificationType: 'platform:paypiggy',
             platform: 'youtube',
+            timestamp: '2024-01-01T00:00:00.000Z',
             months: 0
         });
 

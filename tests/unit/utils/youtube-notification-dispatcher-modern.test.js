@@ -191,6 +191,7 @@ describe('YouTube Notification Dispatcher - Modern (Production Data)', () => {
                 type: 'AddChatItemAction',
                 item: {
                     type: 'LiveChatPaidMessage',
+                    timestampUsec: 1700000000000000,
                     author: {
                         id: 'test',
                         name: 'Test'
@@ -217,12 +218,12 @@ describe('YouTube Notification Dispatcher - Modern (Production Data)', () => {
                 userId: 'test',
                 giftType: 'Super Chat',
                 giftCount: 1,
-                isError: true
+                isError: true,
+                timestamp: new Date(1700000000000).toISOString()
             });
             expect(notification).not.toHaveProperty('amount');
             expect(notification).not.toHaveProperty('currency');
             expect(notification).not.toHaveProperty('id');
-            expect(notification).not.toHaveProperty('timestamp');
         });
 
         it('emits error notification when currency parsing fails', async () => {

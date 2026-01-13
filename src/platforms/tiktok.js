@@ -14,6 +14,7 @@ const { createPlatformErrorHandler } = require('../utils/platform-error-handler'
 const { createMonetizationErrorPayload } = require('../utils/monetization-error-utils');
 const { createRetrySystem } = require('../utils/retry-system');
 const TimestampExtractionService = require('../services/TimestampExtractionService');
+const { getSystemTimestampISO } = require('../utils/validation');
 const { extractTikTokUserData, extractTikTokGiftData, logTikTokGiftData, formatCoinAmount } = require('../utils/tiktok-data-extraction');
 const { validateNotificationManagerInterface } = require('../utils/dependency-validator');
 const { normalizeTikTokMessage } = require('../utils/message-normalization');
@@ -278,7 +279,8 @@ class TikTokPlatform extends EventEmitter {
             },
             createConnection: (connectionId = PlatformEvents._generateCorrelationId()) => {
                 const correlationId = PlatformEvents._generateCorrelationId();
-                const timestamp = new Date().toISOString();
+                const timestamp = getSystemTimestampISO();
+
                 return {
                     type: PlatformEvents.CHAT_CONNECTED,
                     platform: 'tiktok',
@@ -292,7 +294,8 @@ class TikTokPlatform extends EventEmitter {
             },
             createDisconnection: (reason, willReconnect) => {
                 const correlationId = PlatformEvents._generateCorrelationId();
-                const timestamp = new Date().toISOString();
+                const timestamp = getSystemTimestampISO();
+
                 return {
                     type: PlatformEvents.CHAT_DISCONNECTED,
                     platform: 'tiktok',
@@ -307,7 +310,7 @@ class TikTokPlatform extends EventEmitter {
             },
             createError: (error, context) => {
                 const correlationId = PlatformEvents._generateCorrelationId();
-                const timestamp = new Date().toISOString();
+                const timestamp = getSystemTimestampISO();
                 return {
                     type: PlatformEvents.ERROR,
                     platform: 'tiktok',
@@ -916,6 +919,9 @@ class TikTokPlatform extends EventEmitter {
                     userId,
                     giftType
                 });
+                if (!errorPayload) {
+                    return;
+                }
                 this._emitPlatformEvent(PlatformEvents.GIFT, errorPayload);
                 return;
             }
@@ -932,7 +938,7 @@ class TikTokPlatform extends EventEmitter {
                     hasRepeatCount: 'repeatCount' in data,
                     repeatCountValue: data.repeatCount,
                     rawDataKeys: Object.keys(data),
-                    timestamp: new Date().toISOString(),
+                    timestamp: getSystemTimestampISO(),
                     reason: 'gift-count-invalid',
                     recoverable: true
                 };
@@ -954,6 +960,9 @@ class TikTokPlatform extends EventEmitter {
                     amount,
                     currency
                 });
+                if (!errorPayload) {
+                    return;
+                }
                 this._emitPlatformEvent(PlatformEvents.GIFT, errorPayload);
                 return;
             }
@@ -1013,6 +1022,9 @@ class TikTokPlatform extends EventEmitter {
                     userId: fallbackIdentity.userId,
                     giftType: fallbackGiftType
                 });
+                if (!errorPayload) {
+                    return;
+                }
                 this._emitPlatformEvent(PlatformEvents.GIFT, errorPayload);
                 return;
             }
@@ -1036,6 +1048,9 @@ class TikTokPlatform extends EventEmitter {
                 userId: fallbackIdentity.userId,
                 giftType: fallbackGiftType
             });
+            if (!errorPayload) {
+                return;
+            }
             this._emitPlatformEvent(PlatformEvents.GIFT, errorPayload);
         }
     }
@@ -1351,6 +1366,10 @@ class TikTokPlatform extends EventEmitter {
     _createMonetizationErrorPayload(notificationType, data, overrides = {}) {
         const id = this._getPlatformMessageId(data);
         const timestamp = this._getTimestamp(data);
+        if (!timestamp) {
+            this.logger.warn('[TikTok Error] Missing timestamp for monetization error payload', 'tiktok', { data });
+            return null;
+        }
         return createMonetizationErrorPayload({
             notificationType,
             platform: 'tiktok',
@@ -1452,6 +1471,9 @@ class TikTokPlatform extends EventEmitter {
                     ? emitType.replace('platform:', '')
                     : emitType;
                 const errorPayload = this._createMonetizationErrorPayload(notificationType, data, errorOverrides);
+                if (!errorPayload) {
+                    return;
+                }
                 this._emitPlatformEvent(emitType, errorPayload);
             }
         }

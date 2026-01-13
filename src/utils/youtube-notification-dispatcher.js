@@ -89,13 +89,17 @@ class YouTubeNotificationDispatcher {
 
     buildErrorNotification(chatItem, notificationType, overrides = {}) {
         const timestamp = this.extractTimestamp(chatItem);
+        if (!timestamp) {
+            this.logger.warn(`Cannot build ${notificationType} error notification: missing timestamp`);
+            return null;
+        }
         const id = this.extractNotificationId(chatItem);
         const author = extractAuthor(chatItem);
         const authorOverrides = author ? { username: author.name, userId: author.id } : {};
         return createMonetizationErrorPayload({
             notificationType,
             platform: 'youtube',
-            timestamp: timestamp || undefined,
+            timestamp,
             id: id || undefined,
             eventType: notificationType,
             ...authorOverrides,

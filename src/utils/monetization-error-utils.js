@@ -23,20 +23,17 @@ function resolvePositiveNumber(value) {
     return Number.isFinite(num) && num > 0 ? num : null;
 }
 
+const { isIsoTimestamp } = require('./validation');
+
 function resolveTimestampValue(value) {
-    if (typeof value === 'string') {
-        const trimmed = value.trim();
-        return trimmed ? trimmed : null;
+    if (typeof value !== 'string') {
+        return null;
     }
-    if (value && typeof value === 'object' && typeof value.toISOString === 'function') {
-        const iso = value.toISOString();
-        return iso ? iso : null;
+    const trimmed = value.trim();
+    if (!trimmed) {
+        return null;
     }
-    if (typeof value === 'number' && Number.isFinite(value)) {
-        const date = new Date(value);
-        return Number.isNaN(date.getTime()) ? null : date.toISOString();
-    }
-    return null;
+    return isIsoTimestamp(trimmed) ? trimmed : null;
 }
 
 function createMonetizationErrorPayload(options = {}) {
@@ -63,11 +60,16 @@ function createMonetizationErrorPayload(options = {}) {
         throw new Error('Monetization error payload requires platform');
     }
 
+    const resolvedTimestamp = resolveTimestampValue(timestamp);
+    if (!resolvedTimestamp) {
+        throw new Error('Monetization error payload requires ISO timestamp');
+    }
+
     const payload = {
         type: notificationType,
         platform,
         isError: true,
-        ...(timestamp ? { timestamp: resolveTimestampValue(timestamp) } : {}),
+        timestamp: resolvedTimestamp,
         ...(id ? { id: resolveIdValue(id) } : {}),
         ...(username ? { username: resolveNonEmptyString(username) } : {}),
         ...(userId ? { userId: resolveIdValue(userId) } : {}),

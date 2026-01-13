@@ -102,6 +102,7 @@ if (cliArgs.disableKeywordParsing) {
 }
 
 const { createRetrySystem } = require('./utils/retry-system');
+const { getSystemTimestampISO } = require('./utils/validation');
 
 // Import authentication validation
 const { validateAuthentication } = require('./auth/token-validator');
@@ -1019,7 +1020,7 @@ class AppRuntime {
 
         const readyPayload = {
             services: this.getReadyServices(),
-            timestamp: new Date().toISOString()
+            timestamp: getSystemTimestampISO()
         };
 
         if (correlationId) {

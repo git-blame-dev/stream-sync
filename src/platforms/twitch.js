@@ -8,6 +8,7 @@ const { PlatformEvents } = require('../interfaces/PlatformEvents');
 const { createPlatformErrorHandler } = require('../utils/platform-error-handler');
 const { normalizeTwitchMessage, validateNormalizedMessage } = require('../utils/message-normalization');
 const { createMonetizationErrorPayload } = require('../utils/monetization-error-utils');
+const { getSystemTimestampISO } = require('../utils/validation');
 const TimestampExtractionService = require('../services/TimestampExtractionService');
 const {
     normalizeTwitchPlatformConfig,
@@ -328,6 +329,10 @@ class TwitchPlatform extends EventEmitter {
                             baseOverrides.months = Number(data.months);
                         }
                     }
+                    if (!payloadTimestamp) {
+                        this.logger.warn(`Skipping ${eventType} error payload: missing timestamp`, 'twitch', { data });
+                        return;
+                    }
                     const errorPayload = createMonetizationErrorPayload({
                         notificationType: errorNotificationType,
                         platform: this.platformName,
@@ -388,6 +393,10 @@ class TwitchPlatform extends EventEmitter {
                     if (Number.isFinite(Number(data?.months))) {
                         baseOverrides.months = Number(data.months);
                     }
+                }
+                if (!payloadTimestamp) {
+                    this.logger.warn(`Skipping ${eventType} error payload: missing timestamp`, 'twitch', { data });
+                    return;
                 }
                 const errorPayload = createMonetizationErrorPayload({
                     notificationType: errorNotificationType,
@@ -644,7 +653,7 @@ class TwitchPlatform extends EventEmitter {
         return {
             platform: 'twitch',
             status: this.isConnected ? 'connected' : 'disconnected',
-            timestamp: new Date().toISOString()
+            timestamp: getSystemTimestampISO()
         };
     }
 
@@ -684,7 +693,7 @@ class TwitchPlatform extends EventEmitter {
             platform: this.platformName,
             isLive: !!isConnected,
             connectionId: details.connectionId || PlatformEvents._generateCorrelationId(),
-            timestamp: new Date().toISOString(),
+            timestamp: getSystemTimestampISO(),
             reason: details.reason,
             willReconnect: details.willReconnect ?? (!this.isPlannedDisconnection && this.config.enabled),
             metadata: details.metadata || {}
