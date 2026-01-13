@@ -44,7 +44,7 @@ describe('NotificationManager Spam Protection Behavior - Modernized', () => {
                 ENVELOPE: 8
             },
             NOTIFICATION_CONFIGS: {
-                gift: {
+                'platform:gift': {
                     priority: 4,
                     duration: 5000,
                     settingKey: 'giftsEnabled',
