@@ -240,10 +240,18 @@ function setupTikTokEventListeners(platform) {
         platform._logIncomingEvent('roomUser', data);
         platform.cachedViewerCount = data.viewerCount;
 
+        const timestamp = typeof platform._getTimestamp === 'function'
+            ? platform._getTimestamp(data)
+            : null;
+        if (!timestamp) {
+            platform.logger.warn('[TikTok Viewer Count] Missing timestamp in room user payload', 'tiktok', { data });
+            return;
+        }
+
         platform._emitPlatformEvent(PlatformEvents.VIEWER_COUNT, {
             platform: 'tiktok',
             count: data.viewerCount,
-            timestamp: new Date().toISOString()
+            timestamp
         });
     });
 

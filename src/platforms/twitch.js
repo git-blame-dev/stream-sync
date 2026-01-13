@@ -8,6 +8,7 @@ const { PlatformEvents } = require('../interfaces/PlatformEvents');
 const { createPlatformErrorHandler } = require('../utils/platform-error-handler');
 const { normalizeTwitchMessage, validateNormalizedMessage } = require('../utils/message-normalization');
 const { createMonetizationErrorPayload } = require('../utils/monetization-error-utils');
+const TimestampExtractionService = require('../services/TimestampExtractionService');
 const {
     normalizeTwitchPlatformConfig,
     validateTwitchPlatformConfig
@@ -33,7 +34,8 @@ class TwitchPlatform extends EventEmitter {
 
         // Store configuration and app reference
         this.config = normalizeTwitchPlatformConfig(config);
-        this.timestampService = dependencies.timestampService || null;
+        this.timestampService = dependencies.timestampService
+            || new TimestampExtractionService({ logger: this.logger });
         
         // Require auth manager via dependency injection
         this.authManager = dependencies.authManager;
@@ -276,8 +278,18 @@ class TwitchPlatform extends EventEmitter {
         return str.charAt(0).toUpperCase() + str.slice(1);
     }
 
+    _getTimestamp(data) {
+        if (this.timestampService && typeof this.timestampService.extractTimestamp === 'function') {
+            return this.timestampService.extractTimestamp('twitch', data);
+        }
+        return typeof data?.timestamp === 'string' ? data.timestamp : undefined;
+    }
+
     async _handleStandardEvent(eventType, data, options = {}) {
+        const payloadTimestamp = this._getTimestamp(data);
+
         try {
+
             // User validation (for events that require it)
             if (options.validateUser && !data.username) {
                 this.logger.warn(`Incomplete ${eventType} data received`, 'twitch', data);
@@ -319,7 +331,7 @@ class TwitchPlatform extends EventEmitter {
                     const errorPayload = createMonetizationErrorPayload({
                         notificationType: errorNotificationType,
                         platform: this.platformName,
-                        timestamp: data?.timestamp,
+                        timestamp: payloadTimestamp,
                         id: data?.id,
                         ...baseOverrides
                     });
@@ -334,7 +346,8 @@ class TwitchPlatform extends EventEmitter {
 
             // Build event using factory
             const factoryMethod = options.factoryMethod || `create${this._capitalize(eventType)}Event`;
-            const eventData = this.eventFactory[factoryMethod](data);
+            const normalizedPayload = { ...(data || {}), timestamp: payloadTimestamp };
+            const eventData = this.eventFactory[factoryMethod](normalizedPayload);
 
             // Emit standardized event (allow override for specific emit type names)
             const emitEventType = options.emitEventType || eventData.type || this._resolvePlatformEventType(eventType);
@@ -379,7 +392,7 @@ class TwitchPlatform extends EventEmitter {
                 const errorPayload = createMonetizationErrorPayload({
                     notificationType: errorNotificationType,
                     platform: this.platformName,
-                    timestamp: data?.timestamp,
+                    timestamp: payloadTimestamp,
                     id: data?.id,
                     ...baseOverrides
                 });
@@ -452,7 +465,10 @@ class TwitchPlatform extends EventEmitter {
 
         this._logRawEvent('stream-online', data);
 
-        const eventData = this.eventFactory.createStreamOnlineEvent(data);
+        const eventData = this.eventFactory.createStreamOnlineEvent({
+            ...(data || {}),
+            timestamp: this._getTimestamp(data)
+        });
         this._emitPlatformEvent(PlatformEvents.STREAM_STATUS, eventData);
 
         this.initializeViewerCountProvider();
@@ -463,7 +479,10 @@ class TwitchPlatform extends EventEmitter {
 
         this._logRawEvent('stream-offline', data);
 
-        const eventData = this.eventFactory.createStreamOfflineEvent(data);
+        const eventData = this.eventFactory.createStreamOfflineEvent({
+            ...(data || {}),
+            timestamp: this._getTimestamp(data)
+        });
         this._emitPlatformEvent(PlatformEvents.STREAM_STATUS, eventData);
 
         if (this.viewerCountProvider && typeof this.viewerCountProvider.stopPolling === 'function') {
