@@ -51,7 +51,7 @@ describe('NotificationManager Twitch monetisation behavior', () => {
     });
 
     it('enqueues paypiggy with member priority and sanitized payload', async () => {
-        await notificationManager.handleNotification('paypiggy', 'twitch', {
+        await notificationManager.handleNotification('platform:paypiggy', 'twitch', {
             username: 'SubHero',
             userId: 'user-1',
             tier: '1000',
@@ -68,7 +68,7 @@ describe('NotificationManager Twitch monetisation behavior', () => {
     });
 
     it('enqueues gift subs with giftpaypiggy priority', async () => {
-        await notificationManager.handleNotification('giftpaypiggy', 'twitch', {
+        await notificationManager.handleNotification('platform:giftpaypiggy', 'twitch', {
             username: 'GiftHero',
             userId: 'user-2',
             tier: '1000',
@@ -84,7 +84,7 @@ describe('NotificationManager Twitch monetisation behavior', () => {
     });
 
     it('enqueues bits as gifts with gift priority', async () => {
-        await notificationManager.handleNotification('gift', 'twitch', {
+        await notificationManager.handleNotification('platform:gift', 'twitch', {
             username: 'BitsHero',
             userId: 'user-3',
             bits: 500,
@@ -106,7 +106,7 @@ describe('NotificationManager Twitch monetisation behavior', () => {
     it('respects config gating and skips when notifications are disabled', async () => {
         configService.areNotificationsEnabled.mockReturnValue(false);
 
-        await notificationManager.handleNotification('paypiggy', 'twitch', {
+        await notificationManager.handleNotification('platform:paypiggy', 'twitch', {
             username: 'GatedUser'
         });
 

@@ -52,7 +52,7 @@ describe('Notification type normalization', () => {
     });
 
     it('rejects mismatched payload types instead of enqueuing a follow notification', async () => {
-        const result = await notificationManager.handleNotification('follow', 'tiktok', {
+        const result = await notificationManager.handleNotification('platform:follow', 'tiktok', {
             username: 'alice',
             userId: 'tiktok-1',
             type: 'platform:follow'

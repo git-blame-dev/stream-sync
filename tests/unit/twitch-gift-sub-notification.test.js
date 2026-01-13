@@ -75,7 +75,7 @@ describe('Twitch gift subscriptions', () => {
             isAnonymous: false
         };
 
-        const result = await notificationManager.handleNotification('giftpaypiggy', 'twitch', twitchGiftPaypiggyData);
+        const result = await notificationManager.handleNotification('platform:giftpaypiggy', 'twitch', twitchGiftPaypiggyData);
 
         expect(result).toEqual(expect.objectContaining({ success: true }));
         expect(mockDisplayQueue.addItem).toHaveBeenCalledTimes(1);
@@ -106,7 +106,7 @@ describe('Twitch gift subscriptions', () => {
             giftCount: 2
         };
 
-        const result = await notificationManager.handleNotification('giftpaypiggy', 'twitch', minimalGiftPaypiggyData);
+        const result = await notificationManager.handleNotification('platform:giftpaypiggy', 'twitch', minimalGiftPaypiggyData);
 
         expect(result).toEqual(expect.objectContaining({ success: true }));
         expect(mockDisplayQueue.addItem).toHaveBeenCalledTimes(1);

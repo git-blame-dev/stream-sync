@@ -53,7 +53,7 @@ describe('NotificationManager paypiggy normalization', () => {
             obsGoals: { processDonationGoal: jest.fn() }
         });
 
-        await manager.handleNotification('paypiggy', 'tiktok', {
+        await manager.handleNotification('platform:paypiggy', 'tiktok', {
             username: 'PaidFan',
             userId: 'sub_123',
             platform: 'tiktok'
@@ -81,7 +81,7 @@ describe('NotificationManager paypiggy normalization', () => {
             obsGoals: { processDonationGoal: jest.fn() }
         });
 
-        await manager.handleNotification('paypiggy', 'tiktok', {
+        await manager.handleNotification('platform:paypiggy', 'tiktok', {
             username: 'AliasFreeSub',
             userId: 'alias_free_sub'
         });
@@ -202,7 +202,7 @@ describe('NotificationManager paypiggy normalization', () => {
         expect(result.success).toBe(false);
         expect(displayQueue.items).toHaveLength(0);
 
-        await manager.handleNotification('paypiggy', 'tiktok', {
+        await manager.handleNotification('platform:paypiggy', 'tiktok', {
             username: 'SuperFanUser',
             userId: 'sf_123',
             tier: 'superfan'

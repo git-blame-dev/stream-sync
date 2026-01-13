@@ -67,7 +67,7 @@ describe('NotificationManager follow/raid/share behavior', () => {
     });
 
     test('share notifications queue at raid priority and keep share VFX mapping', async () => {
-        const result = await manager.handleNotification('share', 'tiktok', {
+        const result = await manager.handleNotification('platform:share', 'tiktok', {
             username: 'StreamSharer',
             userId: 'share-1'
         });
@@ -93,7 +93,7 @@ describe('NotificationManager follow/raid/share behavior', () => {
             return true;
         });
 
-        const result = await manager.handleNotification('share', 'tiktok', {
+        const result = await manager.handleNotification('platform:share', 'tiktok', {
             username: 'MutedSharer',
             userId: 'share-2'
         });
@@ -115,7 +115,7 @@ describe('NotificationManager follow/raid/share behavior', () => {
             return true;
         });
 
-        const result = await manager.handleNotification('follow', 'twitch', {
+        const result = await manager.handleNotification('platform:follow', 'twitch', {
             username: 'MutedFollower',
             userId: 'follow-1'
         });
@@ -130,7 +130,7 @@ describe('NotificationManager follow/raid/share behavior', () => {
     });
 
     test('share notifications reject missing usernames', async () => {
-        const result = await manager.handleNotification('share', 'youtube', {
+        const result = await manager.handleNotification('platform:share', 'youtube', {
             userId: 'share-3'
         });
 
@@ -142,7 +142,7 @@ describe('NotificationManager follow/raid/share behavior', () => {
     });
 
     test('follow notifications carry follow VFX command mapping', async () => {
-        await manager.handleNotification('follow', 'youtube', {
+        await manager.handleNotification('platform:follow', 'youtube', {
             username: 'Follower',
             userId: 'follow-2'
         });
@@ -153,7 +153,7 @@ describe('NotificationManager follow/raid/share behavior', () => {
     });
 
     test('follow notifications reject missing usernames', async () => {
-        const result = await manager.handleNotification('follow', 'twitch', {
+        const result = await manager.handleNotification('platform:follow', 'twitch', {
             userId: 'only-id'
         });
 
@@ -165,7 +165,7 @@ describe('NotificationManager follow/raid/share behavior', () => {
     });
 
     test('raid notifications without viewer counts are rejected', async () => {
-        const result = await manager.handleNotification('raid', 'twitch', {
+        const result = await manager.handleNotification('platform:raid', 'twitch', {
             username: 'MysteryRaider',
             userId: 'raid-1'
         });
@@ -178,7 +178,7 @@ describe('NotificationManager follow/raid/share behavior', () => {
     });
 
     test('raid notifications with zero viewers still route and surface zero count', async () => {
-        const result = await manager.handleNotification('raid', 'twitch', {
+        const result = await manager.handleNotification('platform:raid', 'twitch', {
             username: 'ZeroRaider',
             viewerCount: 0,
             userId: 'raid-0'
@@ -191,7 +191,7 @@ describe('NotificationManager follow/raid/share behavior', () => {
     });
 
     test('raid notifications carry raid VFX command mapping', async () => {
-        await manager.handleNotification('raid', 'youtube', {
+        await manager.handleNotification('platform:raid', 'youtube', {
             username: 'VfxRaider',
             viewerCount: 25,
             userId: 'raid-vfx'
@@ -205,7 +205,7 @@ describe('NotificationManager follow/raid/share behavior', () => {
     test('throws when notification toggle check fails', async () => {
         configService.areNotificationsEnabled.mockImplementation(() => { throw new Error('config crash'); });
 
-        await expect(manager.handleNotification('follow', 'tiktok', {
+        await expect(manager.handleNotification('platform:follow', 'tiktok', {
             username: 'ResilientUser',
             userId: 'follow-err'
         })).rejects.toThrow('config crash');

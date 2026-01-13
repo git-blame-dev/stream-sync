@@ -53,7 +53,7 @@ describe('NotificationManager monetization error path', () => {
             obsGoals: { processDonationGoal: jest.fn() }
         });
 
-        const result = await manager.handleNotification('gift', 'twitch', {
+        const result = await manager.handleNotification('platform:gift', 'twitch', {
             username: 'Unknown User',
             userId: 'unknown',
             giftType: 'Unknown gift',

@@ -109,7 +109,7 @@ describe('Spam Detection Service Integration Tests - Modernized', () => {
                 currency: 'coins'
             };
 
-            await notificationManager.handleNotification('gift', 'tiktok', giftData);
+            await notificationManager.handleNotification('platform:gift', 'tiktok', giftData);
 
             // Should delegate to spam detector
             expect(mockSpamDetector.handleDonationSpam).toHaveBeenCalledWith(
@@ -135,7 +135,7 @@ describe('Spam Detection Service Integration Tests - Modernized', () => {
                 currency: 'coins'
             };
 
-            await notificationManager.handleNotification('gift', 'tiktok', giftData);
+            await notificationManager.handleNotification('platform:gift', 'tiktok', giftData);
 
             // Should add to display queue
             expect(mockDisplayQueue.addItem).toHaveBeenCalled();
@@ -198,7 +198,7 @@ describe('Spam Detection Service Integration Tests - Modernized', () => {
                 currency: 'coins'
             };
 
-            await notificationManager.handleNotification('gift', 'tiktok', giftData);
+            await notificationManager.handleNotification('platform:gift', 'tiktok', giftData);
 
             // Should add directly to display queue (no filtering)
             expect(mockDisplayQueue.addItem).toHaveBeenCalled();
@@ -213,7 +213,7 @@ describe('Spam Detection Service Integration Tests - Modernized', () => {
             ];
 
             for (const gift of rapidGifts) {
-                await notificationManager.handleNotification('gift', 'tiktok', gift);
+                await notificationManager.handleNotification('platform:gift', 'tiktok', gift);
             }
 
             // All gifts should be added (no spam protection)
@@ -271,7 +271,7 @@ describe('Spam Detection Service Integration Tests - Modernized', () => {
                 isAggregated: true
             };
 
-            await notificationManager.handleNotification('gift', 'tiktok', aggregatedGift);
+            await notificationManager.handleNotification('platform:gift', 'tiktok', aggregatedGift);
 
             // Should NOT call spam detector for aggregated gifts
             expect(mockSpamDetector.handleDonationSpam).not.toHaveBeenCalled();
@@ -297,7 +297,7 @@ describe('Spam Detection Service Integration Tests - Modernized', () => {
 
             // Should not throw
             await expect(
-                notificationManager.handleNotification('gift', 'tiktok', giftData)
+                notificationManager.handleNotification('platform:gift', 'tiktok', giftData)
             ).resolves.toBeDefined();
 
             // Gift should still be processed (graceful degradation)
