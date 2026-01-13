@@ -104,7 +104,6 @@ describe('TikTokPlatform behavior alignment', () => {
             expect(routedGifts).toHaveLength(1);
             expect(routedGifts[0]).toMatchObject({
                 platform: 'tiktok',
-                type: 'platform:gift',
                 username: 'alice',
                 userId: 'alice-id',
                 giftType: 'Rose',
@@ -206,7 +205,7 @@ describe('TikTokPlatform behavior alignment', () => {
             expect(routedEvents.length).toBe(1);
 
             const routed = routedEvents[0];
-            expect(routed.type).toBe('gift');
+            expect(routed.type).toBe('platform:gift');
             expect(routed.platform).toBe('tiktok');
 
             const payload = routed.data;

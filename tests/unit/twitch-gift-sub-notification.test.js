@@ -83,7 +83,7 @@ describe('Twitch gift subscriptions', () => {
         const queueItem = mockDisplayQueue.addItem.mock.calls[0][0];
         const notificationData = queueItem.data;
 
-        expect(queueItem.type).toBe('giftpaypiggy');
+        expect(queueItem.type).toBe('platform:giftpaypiggy');
         expect(notificationData.platform).toBe('twitch');
         expect(notificationData.displayMessage).toContain('GiftUser');
         expect(notificationData.displayMessage).toMatch(/gift|sub/i);

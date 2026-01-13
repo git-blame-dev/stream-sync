@@ -517,7 +517,7 @@ describe('TikTok Envelope Notification - Behavior Testing', () => {
             expect(giftData.giftCount).toBe(1);
             expect(giftData.amount).toBe(600);
             expect(giftData.currency).toBe('coins');
-            expect(giftData.type).toBe('envelope');
+            expect(giftData.type).toBe('platform:envelope');
             
             // Validate metadata
             expect(giftData.userId).toBe('test_user_id_envelope');
@@ -728,7 +728,7 @@ describe('TikTok Envelope Notification - Behavior Testing', () => {
             // Then: Type is preserved as 'envelope' for downstream processing
             const latestCall = getLatestGiftCall();
             const giftData = latestCall.giftData;
-            expect(giftData.type).toBe('envelope');
+            expect(giftData.type).toBe('platform:envelope');
             
             // Verify this allows for envelope-specific handling if needed
             expect(giftData.giftType).toBe('Treasure Chest');

@@ -63,8 +63,8 @@ describe('NotificationManager paypiggy normalization', () => {
         const queued = displayQueue.items[0];
         expect(queued.priority).toBe(constants.PRIORITY_LEVELS.MEMBER);
         expect(queued.vfxConfig?.commandKey).toBe('paypiggies');
-        expect(queued.type).toBe('paypiggy');
-        expect(queued.data.type).toBe('paypiggy');
+        expect(queued.type).toBe('platform:paypiggy');
+        expect(queued.data.type).toBe('platform:paypiggy');
         expect(queued.data.displayMessage).toContain('subscribed');
     });
 
@@ -88,8 +88,8 @@ describe('NotificationManager paypiggy normalization', () => {
 
         expect(displayQueue.items).toHaveLength(1);
         const queued = displayQueue.items[0];
-        expect(queued.type).toBe('paypiggy');
-        expect(queued.data.type).toBe('paypiggy');
+        expect(queued.type).toBe('platform:paypiggy');
+        expect(queued.data.type).toBe('platform:paypiggy');
         expect(queued.data.username).toBe('AliasFreeSub');
     });
 
@@ -209,7 +209,7 @@ describe('NotificationManager paypiggy normalization', () => {
         });
 
         expect(displayQueue.items).toHaveLength(1);
-        expect(displayQueue.items[0].data.type).toBe('paypiggy');
+        expect(displayQueue.items[0].data.type).toBe('platform:paypiggy');
         expect(displayQueue.items[0].data.tier).toBe('superfan');
     });
 

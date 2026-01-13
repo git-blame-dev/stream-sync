@@ -9,10 +9,10 @@ function createAppRuntimeMocks() {
         handled,
         runtime: {
             handleFollowNotification: (platform, username, payload) => {
-                handled.push({ type: 'follow', platform, username, payload });
+                handled.push({ type: 'platform:follow', platform, username, payload });
             },
             handleShareNotification: (platform, username, payload) => {
-                handled.push({ type: 'share', platform, username, payload });
+                handled.push({ type: 'platform:share', platform, username, payload });
             }
         }
     };
@@ -46,7 +46,7 @@ describe('TikTok follow/share routing', () => {
         });
 
         expect(handled).toHaveLength(1);
-        expect(handled[0].type).toBe('follow');
+        expect(handled[0].type).toBe('platform:follow');
         expect(handled[0].username).toBeDefined();
     });
 
@@ -72,6 +72,6 @@ describe('TikTok follow/share routing', () => {
 
         expect(emitted.find((p) => p.type === 'platform:share')).toBeDefined();
         expect(handled).toHaveLength(1);
-        expect(handled[0].type).toBe('share');
+        expect(handled[0].type).toBe('platform:share');
     });
 });

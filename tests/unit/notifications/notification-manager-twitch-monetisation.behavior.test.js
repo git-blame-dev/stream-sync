@@ -60,7 +60,7 @@ describe('NotificationManager Twitch monetisation behavior', () => {
 
         expect(displayQueue.addItem).toHaveBeenCalledTimes(1);
         const item = displayQueue.addItem.mock.calls[0][0];
-        expect(item.type).toBe('paypiggy');
+        expect(item.type).toBe('platform:paypiggy');
         expect(item.platform).toBe('twitch');
         expect(item.priority).toBe(notificationManager.PRIORITY_LEVELS.MEMBER);
         expect(item.data.username).toBe('SubHero');
@@ -77,7 +77,7 @@ describe('NotificationManager Twitch monetisation behavior', () => {
 
         expect(displayQueue.addItem).toHaveBeenCalledTimes(1);
         const item = displayQueue.addItem.mock.calls[0][0];
-        expect(item.type).toBe('giftpaypiggy');
+        expect(item.type).toBe('platform:giftpaypiggy');
         expect(item.platform).toBe('twitch');
         expect(item.priority).toBe(notificationManager.PRIORITY_LEVELS.GIFTPAYPIGGY);
         expect(item.data.username).toBe('GiftHero');
@@ -97,7 +97,7 @@ describe('NotificationManager Twitch monetisation behavior', () => {
 
         expect(displayQueue.addItem).toHaveBeenCalledTimes(1);
         const item = displayQueue.addItem.mock.calls[0][0];
-        expect(item.type).toBe('gift');
+        expect(item.type).toBe('platform:gift');
         expect(item.platform).toBe('twitch');
         expect(item.priority).toBe(notificationManager.PRIORITY_LEVELS.GIFT);
         expect(item.data.username).toBe('BitsHero');

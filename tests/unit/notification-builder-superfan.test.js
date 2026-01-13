@@ -3,7 +3,7 @@ const NotificationBuilder = require('../../src/utils/notification-builder');
 describe('NotificationBuilder SuperFan notifications', () => {
     it('formats SuperFan display and TTS strings with SuperFan wording', () => {
         const notification = NotificationBuilder.build({
-            type: 'paypiggy',
+            type: 'platform:paypiggy',
             platform: 'tiktok',
             username: 'SuperFanUser',
             userId: 'superfan_1',
@@ -12,6 +12,6 @@ describe('NotificationBuilder SuperFan notifications', () => {
 
         expect(notification.displayMessage).toMatch(/SuperFan/);
         expect(notification.ttsMessage).toMatch(/SuperFan/);
-        expect(notification.type).toBe('paypiggy');
+        expect(notification.type).toBe('platform:paypiggy');
     });
 });
