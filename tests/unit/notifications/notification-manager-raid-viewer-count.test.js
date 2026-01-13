@@ -51,7 +51,7 @@ describe('NotificationManager raid viewer count fallback', () => {
 
     test('throws when raid viewer count is missing', () => {
         const manager = createManager();
-        expect(() => manager.generateLogMessage('raid', { username: 'MysteryRaider' }))
+        expect(() => manager.generateLogMessage('platform:raid', { username: 'MysteryRaider' }))
             .toThrow('Raid log message requires viewerCount');
     });
 });
