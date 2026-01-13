@@ -76,7 +76,7 @@ const PlatformEvents = {
     TTS_HEALTH_CHECK: 'tts:health-check'
 };
 
-const VALID_PLATFORMS = ['twitch', 'youtube', 'tiktok', 'streamelements'];
+const VALID_PLATFORMS = ['twitch', 'youtube', 'tiktok'];
 
 const EVENT_SCHEMAS = {
     'platform:chat-message': {

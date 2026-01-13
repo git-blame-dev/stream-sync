@@ -2101,9 +2101,10 @@ const createMockPlatform = (platformName, behaviorConfig = {}) => {
             const resolvedUsername = followData.username || followData.data?.displayName || followData.data?.username || 'TestFollower';
             const resolvedUserId = followData.userId;
             const timestamp = createTimestamp();
+            const resolvedPlatform = (followData.data?.provider || followData.platform || 'youtube').toString().toLowerCase();
             return {
                 messageType: 'follow',
-                platform: 'streamelements',
+                platform: resolvedPlatform,
                 username: resolvedUsername,
                 userId: resolvedUserId,
                 provider: followData.data?.provider || 'youtube',
@@ -2117,9 +2118,10 @@ const createMockPlatform = (platformName, behaviorConfig = {}) => {
             const resolvedUsername = subData.username || subData.data?.displayName || 'TestSubscriber';
             const resolvedUserId = subData.userId;
             const timestamp = createTimestamp();
+            const resolvedPlatform = (subData.data?.provider || subData.platform || 'youtube').toString().toLowerCase();
             return {
                 messageType: 'subscription',
-                platform: 'streamelements',
+                platform: resolvedPlatform,
                 username: resolvedUsername,
                 userId: resolvedUserId,
                 tier: subData.data?.tier || '1',

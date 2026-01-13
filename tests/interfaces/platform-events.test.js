@@ -631,7 +631,7 @@ describe('Platform Event Interface Design', () => {
             };
             const result = validator.validate(invalidEvent);
             expect(result.valid).toBe(false);
-            expect(result.errors).toContain('Invalid platform: invalid_platform. Must be one of: twitch, youtube, tiktok, streamelements');
+            expect(result.errors).toContain('Invalid platform: invalid_platform. Must be one of: twitch, youtube, tiktok');
         });
         
         it('should allow optional fields while requiring mandatory ones', () => {

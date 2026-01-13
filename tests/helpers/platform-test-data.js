@@ -1508,7 +1508,9 @@ const SYNTHETIC_FIXTURES = Object.freeze({
             username: 'Test Follower',
             userId: '123456789',
             timestamp: FIXED_TIMESTAMP_ISO,
-            eventId: 'follow_1700000000000_synthetic'
+            eventId: 'follow_1700000000000_synthetic',
+            source: 'streamelements',
+            sourceType: 'streamelements:follow'
         }
     },
     obs: {
