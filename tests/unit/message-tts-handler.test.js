@@ -255,6 +255,16 @@ describe('MessageTTSHandler', () => {
             expect(MessageTTSHandler.supportsMessages(notification)).toBe(true);
         });
 
+        test('should return false for short paypiggy types', () => {
+            const notification = {
+                type: 'paypiggy',
+                message: 'Legacy payload',
+                ttsMessage: 'Legacy payload'
+            };
+
+            expect(MessageTTSHandler.supportsMessages(notification)).toBe(false);
+        });
+
         test('should return false for Twitch bits notifications', () => {
             const notification = { type: 'platform:gift', giftType: 'bits', currency: 'bits' };
             expect(MessageTTSHandler.supportsMessages(notification)).toBe(false);

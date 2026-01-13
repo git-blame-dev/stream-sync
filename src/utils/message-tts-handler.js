@@ -110,7 +110,7 @@ class MessageTTSHandler {
     }
 
     static _isPaypiggyWithMessage(notification) {
-        return (notification?.type === 'paypiggy' || notification?.type === 'platform:paypiggy') && this.hasValidMessage(notification.message);
+        return notification?.type === 'platform:paypiggy' && this.hasValidMessage(notification.message);
     }
 }
 

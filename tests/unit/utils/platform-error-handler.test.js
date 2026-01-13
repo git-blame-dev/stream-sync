@@ -65,8 +65,8 @@ describe('Platform Error Handler - User Experience Behavior', () => {
         it('should prevent chat processing pipeline disruption during event errors', () => {
             // Given: Chat processing is active and an event processing error occurs
             const eventError = new Error('Failed to parse gift data');
-            const eventType = 'gift';
-            const eventData = { id: 'gift_123', type: 'gift', username: 'TestUser' };
+            const eventType = 'platform:gift';
+            const eventData = { id: 'gift_123', type: 'platform:gift', username: 'TestUser' };
             let chatProcessingStopped = false;
             
             // When: Event processing error is handled
