@@ -231,7 +231,7 @@ describe('NotificationManager Service Dependency Injection - Modernized', () => 
                 // No VFX services
             });
 
-            await expect(notificationManager.handleNotification('gift', 'tiktok', {
+            await expect(notificationManager.handleNotification('platform:gift', 'tiktok', {
                 username: 'TestUser',
                 userId: '123',
                 giftType: 'Rose',
@@ -260,7 +260,7 @@ describe('NotificationManager Service Dependency Injection - Modernized', () => 
             });
 
             // When: User sends a gift
-            await notificationManager.handleNotification('gift', 'tiktok', {
+            await notificationManager.handleNotification('platform:gift', 'tiktok', {
                 username: 'TestUser',
                 userId: '123',
                 giftType: 'Rose',
@@ -295,7 +295,7 @@ describe('NotificationManager Service Dependency Injection - Modernized', () => 
             });
 
             // When: User sends a gift
-            await notificationManager.handleNotification('gift', 'tiktok', {
+            await notificationManager.handleNotification('platform:gift', 'tiktok', {
                 username: 'TestUser',
                 userId: '123',
                 giftType: 'Rose',
@@ -385,7 +385,7 @@ describe('NotificationManager Service Dependency Injection - Modernized', () => 
             });
 
             // Process gift
-            await notificationManager.handleNotification('gift', 'tiktok', {
+            await notificationManager.handleNotification('platform:gift', 'tiktok', {
                 username: 'TestUser',
                 userId: '123',
                 giftType: 'Rose',
@@ -416,7 +416,7 @@ describe('NotificationManager Service Dependency Injection - Modernized', () => 
             });
 
             // Process gift without spam detection
-            await notificationManager.handleNotification('gift', 'tiktok', {
+            await notificationManager.handleNotification('platform:gift', 'tiktok', {
                 username: 'TestUser',
                 userId: '123',
                 giftType: 'Rose',
@@ -450,9 +450,9 @@ describe('NotificationManager Service Dependency Injection - Modernized', () => 
 
             // Process various notification types
             const notifications = [
-                { type: 'follow', data: { username: 'User1', userId: '1' } },
-                { type: 'gift', data: { username: 'User2', userId: '2', giftType: 'Rose', giftCount: 1, amount: 1, currency: 'coins' } },
-                { type: 'paypiggy', data: { username: 'User3', userId: '3', tier: '1' } }
+                { type: 'platform:follow', data: { username: 'User1', userId: '1' } },
+                { type: 'platform:gift', data: { username: 'User2', userId: '2', giftType: 'Rose', giftCount: 1, amount: 1, currency: 'coins' } },
+                { type: 'platform:paypiggy', data: { username: 'User3', userId: '3', tier: '1' } }
             ];
 
             for (const notif of notifications) {

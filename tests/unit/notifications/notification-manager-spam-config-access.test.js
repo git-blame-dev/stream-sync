@@ -152,7 +152,7 @@ describe('NotificationManager Spam Protection Behavior - Modernized', () => {
                 currency: 'coins'
             };
 
-            await notificationManager.handleNotification('gift', 'tiktok', giftData);
+            await notificationManager.handleNotification('platform:gift', 'tiktok', giftData);
 
             // Should have called spam detector
             expect(mockSpamDetector.handleDonationSpam).toHaveBeenCalled();
@@ -190,7 +190,7 @@ describe('NotificationManager Spam Protection Behavior - Modernized', () => {
 
             // Should not throw
             await expect(
-                notificationManager.handleNotification('gift', 'tiktok', giftData)
+                notificationManager.handleNotification('platform:gift', 'tiktok', giftData)
             ).resolves.toBeDefined();
 
             // Gift should be added to queue (no filtering)
@@ -284,7 +284,7 @@ describe('NotificationManager Spam Protection Behavior - Modernized', () => {
                 currency: 'coins'
             };
 
-            await notificationManager.handleNotification('gift', 'tiktok', giftData);
+            await notificationManager.handleNotification('platform:gift', 'tiktok', giftData);
 
             // Should add to display queue
             expect(mockDisplayQueue.addItem).toHaveBeenCalled();
@@ -316,7 +316,7 @@ describe('NotificationManager Spam Protection Behavior - Modernized', () => {
                 currency: 'coins'
             };
 
-            const result = await notificationManager.handleNotificationInternal('gift', 'tiktok', giftData, false);
+            const result = await notificationManager.handleNotificationInternal('platform:gift', 'tiktok', giftData, false);
 
             // Should be suppressed
             expect(result.suppressed).toBe(true);
@@ -351,7 +351,7 @@ describe('NotificationManager Spam Protection Behavior - Modernized', () => {
                 isAggregated: true
             };
 
-            await notificationManager.handleNotification('gift', 'tiktok', aggregatedGift);
+            await notificationManager.handleNotification('platform:gift', 'tiktok', aggregatedGift);
 
             // Should NOT call spam detector for aggregated gifts
             expect(mockSpamDetector.handleDonationSpam).not.toHaveBeenCalled();
