@@ -143,5 +143,26 @@ describe('Twitch EventSub WS lifecycle', () => {
         expect(state.reconnectTimeout).toBe('timeout-id');
         expect(reconnectSpy).toHaveBeenCalled();
     });
+
+    test('handleReconnectRequest stores reconnect_url for next connection', () => {
+        const lifecycle = createTwitchEventSubWsLifecycle({
+            WebSocketCtor: MockWebSocket,
+            safeSetTimeout: jest.fn(),
+            safeDelay: async () => {},
+            validateTimeout: (value) => value,
+            setImmediateFn: () => {},
+            random: () => 0
+        });
+
+        const state = createState();
+        lifecycle.handleReconnectRequest(state, {
+            session: {
+                reconnect_url: 'wss://eventsub.wss.twitch.tv/ws?token=abc'
+            }
+        });
+
+        expect(state.reconnectUrl).toBe('wss://eventsub.wss.twitch.tv/ws?token=abc');
+        expect(state._scheduleReconnect).toHaveBeenCalled();
+    });
 });
 

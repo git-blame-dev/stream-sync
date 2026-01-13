@@ -34,7 +34,8 @@ function createTwitchEventSubWsLifecycle(options = {}) {
             try {
                 state.connectionStartTime = now();
 
-                state.ws = new WebSocketCtor('wss://eventsub.wss.twitch.tv/ws?keepalive_timeout_seconds=30');
+                const websocketUrl = state.reconnectUrl || 'wss://eventsub.wss.twitch.tv/ws?keepalive_timeout_seconds=30';
+                state.ws = new WebSocketCtor(websocketUrl);
 
                 connectionTimeout = safeSetTimeout(() => {
                     if (!connectionResolved && !state.sessionId) {
@@ -88,6 +89,7 @@ function createTwitchEventSubWsLifecycle(options = {}) {
 
                             state.sessionId = message.payload.session.id;
                             state._isConnected = true;
+                            state.reconnectUrl = null;
                             state.logger?.info?.(`EventSub session established: ${state.sessionId}`, 'twitch');
 
                             if (!state.sessionId || state.sessionId.trim() === '') {
@@ -256,6 +258,7 @@ function createTwitchEventSubWsLifecycle(options = {}) {
             state.logger?.info?.('EventSub requesting reconnection to new URL', 'twitch', {
                 reconnectUrl: payload.session.reconnect_url
             });
+            state.reconnectUrl = payload.session.reconnect_url;
             state._scheduleReconnect?.();
         }
     };
