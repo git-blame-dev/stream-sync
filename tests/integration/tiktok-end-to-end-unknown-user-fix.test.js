@@ -143,7 +143,7 @@ describe('TikTok End-to-End Unknown User Fix Integration', () => {
 
         // Simulate complete gift notification creation
         const giftNotification = {
-          type: 'gift',
+          type: 'platform:gift',
           platform: 'tiktok',
           username: userData.username,
           giftType: giftData.giftType,
@@ -194,7 +194,7 @@ describe('TikTok End-to-End Unknown User Fix Integration', () => {
 
         // Simulate combo completion notification
         const comboNotification = {
-          type: 'gift',
+          type: 'platform:gift',
           platform: 'tiktok',
           username: userData.username,
           giftType: giftData.giftType,

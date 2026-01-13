@@ -72,7 +72,7 @@ describe('DisplayQueue notification TTS disabled', () => {
         const { queue, updateCalls } = setupQueue();
 
         await queue.handleNotificationEffects({
-            type: 'paypiggy',
+            type: 'platform:paypiggy',
             platform: 'youtube',
             data: {
                 username: 'Member',

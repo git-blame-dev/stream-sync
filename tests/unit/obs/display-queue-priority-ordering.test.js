@@ -49,13 +49,13 @@ describe('DisplayQueue priority ordering', () => {
         });
 
         queue.addItem({
-            type: 'raid',
+            type: 'platform:raid',
             platform: 'twitch',
             data: { username: 'Raider', viewerCount: 5 }
         });
 
         return queue.processQueue().then(() => {
-            expect(processed).toEqual(['raid', 'chat']);
+            expect(processed).toEqual(['platform:raid', 'chat']);
         });
     });
 
@@ -67,13 +67,13 @@ describe('DisplayQueue priority ordering', () => {
         });
 
         queue.addItem({
-            type: 'gift',
+            type: 'platform:gift',
             platform: 'twitch',
             data: { username: 'Gifter1', giftType: 'bits', giftCount: 1, amount: 100, currency: 'bits' }
         });
 
         queue.addItem({
-            type: 'gift',
+            type: 'platform:gift',
             platform: 'twitch',
             data: { username: 'Gifter2', giftType: 'bits', giftCount: 1, amount: 250, currency: 'bits' }
         });

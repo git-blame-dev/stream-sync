@@ -102,7 +102,7 @@ describe('Template Interpolation Fallbacks', () => {
                     userId: 'UC123456789'
                 };
                 const incompleteEventData = {
-                    type: 'gift',
+                    type: 'platform:gift',
                     giftType: 'Super Chat',
                     giftCount: 1,
                     message: 'Love your content!'
@@ -111,7 +111,7 @@ describe('Template Interpolation Fallbacks', () => {
 
                 // Act
                 const build = () => createNotificationData(
-                    'gift', 
+                    'platform:gift', 
                     'youtube', 
                     incompleteUserData, 
                     incompleteEventData, 
@@ -131,13 +131,13 @@ describe('Template Interpolation Fallbacks', () => {
                     // other fields missing
                 };
                 const incompleteEventData = {
-                    type: 'giftpaypiggy'
+                    type: 'platform:giftpaypiggy'
                     // tier, total, giftCount all missing!
                 };
 
                 // Act
                 const build = () => createNotificationData(
-                    'giftpaypiggy', 
+                    'platform:giftpaypiggy', 
                     'twitch', 
                     incompleteUserData, 
                     incompleteEventData, 
@@ -156,13 +156,13 @@ describe('Template Interpolation Fallbacks', () => {
                     username: 'TikTokUser'
                 };
                 const incompleteEventData = {
-                    type: 'gift'
+                    type: 'platform:gift'
                     // giftType, giftCount, amount/currency all missing!
                 };
 
                 // Act
                 const build = () => createNotificationData(
-                    'gift', 
+                    'platform:gift', 
                     'tiktok', 
                     incompleteUserData, 
                     incompleteEventData, 

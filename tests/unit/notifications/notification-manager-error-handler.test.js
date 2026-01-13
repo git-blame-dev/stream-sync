@@ -66,7 +66,7 @@ describe('NotificationManager error handling with createPlatformErrorHandler', (
     it('routes display queue failures through platform error handler and returns failure', async () => {
         const { manager, errorHandler, mockEventBus } = createManagerWithFailingDisplayQueue();
 
-        const result = await manager.handleNotification('follow', 'tiktok', { username: 'User', userId: '1' });
+        const result = await manager.handleNotification('platform:follow', 'tiktok', { username: 'User', userId: '1' });
 
         expect(result).toEqual(expect.objectContaining({
             success: false,

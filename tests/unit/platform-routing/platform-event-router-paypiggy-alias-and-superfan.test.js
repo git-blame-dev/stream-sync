@@ -46,7 +46,7 @@ describe('PlatformEventRouter paypiggy months handling', () => {
         expect(payload.tier).toBe('superfan');
         expect(payload.months).toBe(3);
         expect(payload.membershipLevel).toBe('Ultra');
-        expect(payload.sourceType).toBe('paypiggy');
+        expect(payload.sourceType).toBe('platform:paypiggy');
     });
 
     it('passes through months without aliasing for Twitch paypiggy events', async () => {

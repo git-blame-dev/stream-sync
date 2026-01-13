@@ -109,7 +109,7 @@ describe('DisplayQueue notification TTS staging', () => {
         eventBus.on(PlatformEvents.VFX_COMMAND_RECEIVED, (payload) => capturedVfx.push(payload));
 
         const processing = queue.handleNotificationEffects({
-            type: 'follow',
+            type: 'platform:follow',
             platform: 'twitch',
             data: {
                 username: 'Follower',

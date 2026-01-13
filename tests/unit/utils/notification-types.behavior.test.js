@@ -24,15 +24,15 @@ describe('notification-types behavior', () => {
     });
 
     it('returns configs, durations, and all types', () => {
-        const config = getNotificationConfig('gift');
+        const config = getNotificationConfig('platform:gift');
         expect(config).toBeDefined();
         expect(config).not.toHaveProperty('duration');
-        expect(getNotificationDuration('gift')).toBe(0);
+        expect(getNotificationDuration('platform:gift')).toBe(0);
         expect(getNotificationConfig('invalid')).toBeNull();
         expect(getNotificationDuration('invalid')).toBe(0);
 
         const allTypes = getAllNotificationTypes();
-        expect(allTypes).toContain('envelope');
+        expect(allTypes).toContain('platform:envelope');
         expect(allTypes).toContain('chat');
     });
 });

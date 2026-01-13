@@ -48,7 +48,7 @@ describe('DisplayQueue platform notification gating', () => {
         queue.displayNotificationItem = jest.requireActual('../../../src/obs/display-queue').DisplayQueue.prototype.displayNotificationItem;
 
         const notificationItem = {
-            type: 'follow',
+            type: 'platform:follow',
             platform: 'twitch',
             data: {
                 username: 'Follower',

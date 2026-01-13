@@ -41,7 +41,7 @@ describe('DisplayQueue TTS-driven durations', () => {
         ttsStages = [{ text: 'Hi', delay: 0, type: 'primary' }];
         const queue = createQueue();
 
-        expect(queue.getDuration({ data: {}, type: 'gift' })).toBe(2000);
+        expect(queue.getDuration({ data: {}, type: 'platform:gift' })).toBe(2000);
     });
 
     it('sizes the window to cover staged delays and speech length', () => {
@@ -52,7 +52,7 @@ describe('DisplayQueue TTS-driven durations', () => {
         const queue = createQueue();
 
         // Longest stage: 5 words => 400 + (5 * 170) = 1250; delay 2000 => 3250; + tail 1000 => 4250
-        expect(queue.getDuration({ data: {}, type: 'paypiggy' })).toBe(4250);
+        expect(queue.getDuration({ data: {}, type: 'platform:paypiggy' })).toBe(4250);
     });
 
     it('caps extremely long staged speech at the maximum window', () => {
@@ -60,13 +60,13 @@ describe('DisplayQueue TTS-driven durations', () => {
         ttsStages = [{ text: longText, delay: 18000, type: 'message' }];
         const queue = createQueue();
 
-        expect(queue.getDuration({ data: {}, type: 'gift' })).toBe(20000);
+        expect(queue.getDuration({ data: {}, type: 'platform:gift' })).toBe(20000);
     });
 
     it('clears immediately when no TTS stages exist', () => {
         ttsStages = [];
         const queue = createQueue();
 
-        expect(queue.getDuration({ data: {}, type: 'follow' })).toBe(0);
+        expect(queue.getDuration({ data: {}, type: 'platform:follow' })).toBe(0);
     });
 });

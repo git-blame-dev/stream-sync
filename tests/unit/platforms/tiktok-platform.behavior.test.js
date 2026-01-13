@@ -171,7 +171,7 @@ describe('TikTokPlatform behavior alignment', () => {
             // Inject handlers to capture events
             platform.handlers = {
                 ...platform.handlers,
-                onGift: (data) => routedEvents.push({ type: 'gift', platform: 'tiktok', data })
+                onGift: (data) => routedEvents.push({ type: 'platform:gift', platform: 'tiktok', data })
             };
 
             platform.on('platform:event', (payload) => {

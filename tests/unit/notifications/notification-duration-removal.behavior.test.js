@@ -52,7 +52,7 @@ describe('Display items avoid hardcoded durations', () => {
         });
 
         it('enqueues follow notifications without a duration property', async () => {
-            await notificationManager.handleNotification('follow', 'tiktok', { username: 'Follower', userId: 'f-1' });
+            await notificationManager.handleNotification('platform:follow', 'tiktok', { username: 'Follower', userId: 'f-1' });
 
             expect(queuedItems[0]).toBeDefined();
             expect(queuedItems[0]).not.toHaveProperty('duration');

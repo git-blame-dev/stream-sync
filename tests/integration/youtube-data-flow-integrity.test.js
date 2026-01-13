@@ -99,7 +99,7 @@ describe('YouTube data flow integrity', () => {
         const capturedPayload = getCapturedPayload();
 
         expect(capturedPayload).toBeDefined();
-        expect(capturedPayload.type).toBe('gift');
+        expect(capturedPayload.type).toBe('platform:gift');
         expect(capturedPayload.platform).toBe('youtube');
         expect(capturedPayload.displayMessage).toBeUndefined();
         expect(capturedPayload.ttsMessage).toBeUndefined();
@@ -109,7 +109,7 @@ describe('YouTube data flow integrity', () => {
         expect(capturedPayload.timestamp.trim().length).toBeGreaterThan(0);
 
         const { displayQueue, notificationManager } = createNotificationManagerHarness();
-        const result = await notificationManager.handleNotification('gift', capturedPayload.platform, capturedPayload);
+        const result = await notificationManager.handleNotification('platform:gift', capturedPayload.platform, capturedPayload);
 
         expect(result.success).toBe(true);
         expect(result.notificationData.displayMessage).toContain('Super Chat');

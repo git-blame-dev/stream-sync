@@ -68,19 +68,19 @@ describe('User-Facing Content Validation', () => {
         test('should produce professional display messages', () => {
             const testCases = [
                 {
-                    type: 'gift',
+                    type: 'platform:gift',
                     userData: { username: 'testuser' },
                     eventData: { giftCount: 1, giftType: 'bits', amount: 100, currency: 'bits' },
                     expectedPatterns: [/testuser/, /sent/, /bits/i]
                 },
                 {
-                    type: 'follow', 
+                    type: 'platform:follow', 
                     userData: { username: 'newfollower' },
                     eventData: {},
                     expectedPatterns: [/newfollower/, /follow/i]
                 },
                 {
-                    type: 'paypiggy',
+                    type: 'platform:paypiggy',
                     userData: { username: 'subscriber' },
                     eventData: { tier: '1000' },
                     expectedPatterns: [/subscriber/, /(subscribed|member)/i]

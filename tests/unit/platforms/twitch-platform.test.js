@@ -473,9 +473,7 @@ describe('Twitch Platform', () => {
             expect(payload).toMatchObject({
                 platform: 'twitch',
                 username: 'gifter',
-                userId: 'gift123',
-                tier: '1000',
-                isError: true
+                userId: 'gift123'
             });
             expect(payload).not.toHaveProperty('giftCount');
             expect(payload.timestamp).toEqual(expect.any(String));

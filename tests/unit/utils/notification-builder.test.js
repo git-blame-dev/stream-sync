@@ -114,7 +114,7 @@ describe('NotificationBuilder', () => {
             },
             {
                 platform: 'twitch',
-                type: 'giftpaypiggy',
+                type: 'platform:giftpaypiggy',
                 username: 'Unknown User',
                 userId: 'unknown',
                 giftCount: 0,
@@ -131,7 +131,7 @@ describe('NotificationBuilder', () => {
             },
             {
                 platform: 'tiktok',
-                type: 'envelope',
+                type: 'platform:envelope',
                 username: 'Unknown User',
                 userId: 'unknown',
                 giftType: 'Treasure Chest',
