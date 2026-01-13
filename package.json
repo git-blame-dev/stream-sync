@@ -7,7 +7,8 @@
     "start": "node src/bootstrap.js",
     "start:debug": "node src/bootstrap.js --debug",
     "lint": "node scripts/lint/no-raw-timeouts.js && eslint \"src/**/*.js\" \"tests/**/*.js\" && knip --config knip.json --include files,unlisted,exports",
-    "test": "cross-env NODE_ENV=test jest"
+    "test": "cross-env NODE_ENV=test jest",
+    "test:bun": "cross-env NODE_ENV=test bun test --preload ./tests/setup/bun.prerun.js --preload ./tests/setup/bun.setup.js"
   },
   "devDependencies": {
     "@jest/globals": "^30.2.0",
