@@ -26,7 +26,7 @@ describe('NotificationStrings Resubscription Formatting', () => {
             isRenewal: true
         };
 
-        const result = createNotificationData('paypiggy', 'twitch', data, data);
+        const result = createNotificationData('platform:paypiggy', 'twitch', data, data);
 
         expect(result.displayMessage).toBe('example_user_13 renewed subscription for 3 months!');
         expect(result.displayMessage).not.toContain('Tier');
@@ -40,7 +40,7 @@ describe('NotificationStrings Resubscription Formatting', () => {
             isRenewal: true
         };
 
-        const result = createNotificationData('paypiggy', 'twitch', data, data);
+        const result = createNotificationData('platform:paypiggy', 'twitch', data, data);
 
         expect(result.displayMessage).toBe('premium_user renewed subscription for 12 months! (Tier 2)');
     });
@@ -52,7 +52,7 @@ describe('NotificationStrings Resubscription Formatting', () => {
             isRenewal: true
         };
 
-        const result = createNotificationData('paypiggy', 'twitch', data, data);
+        const result = createNotificationData('platform:paypiggy', 'twitch', data, data);
 
         expect(result.displayMessage).toBe('mystery_user renewed subscription!');
     });
