@@ -28,7 +28,7 @@ describe('DisplayQueue share priority mapping', () => {
     });
 
     test('share notifications use SHARE priority level', () => {
-        const priority = displayQueue.getTypePriority('share');
+        const priority = displayQueue.getTypePriority('platform:share');
         expect(priority).toBe(6);
     });
 });
