@@ -106,7 +106,6 @@ describe('TikTokPlatform behavior alignment', () => {
                 platform: 'tiktok',
                 username: 'alice',
                 userId: 'alice-id',
-                giftType: 'Rose',
                 isError: true
             });
             expect(routedGifts[0]).not.toHaveProperty('giftCount');
