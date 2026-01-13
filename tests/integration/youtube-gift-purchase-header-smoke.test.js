@@ -18,7 +18,7 @@ describe('YouTube Gift Purchase Smoke (Canonical Author)', () => {
         expect(onGiftPaypiggy).toHaveBeenCalledTimes(1);
 
         const notification = onGiftPaypiggy.mock.calls[0][0];
-        expect(notification.type).toBe('giftpaypiggy');
+        expect(notification.type).toBe('platform:giftpaypiggy');
         expect(notification.username).toBe('GiftGiver');
         expect(notification.userId).toBe(giftPurchaseHeaderOnly.item.author.id);
         expect(notification.giftCount).toBe(5);

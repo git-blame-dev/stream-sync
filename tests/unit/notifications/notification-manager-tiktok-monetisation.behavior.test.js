@@ -51,7 +51,7 @@ describe('NotificationManager TikTok monetisation behavior', () => {
     });
 
     it('enqueues SUPER_FAN paypiggy with member priority', async () => {
-        await notificationManager.handleNotification('paypiggy', 'tiktok', {
+        await notificationManager.handleNotification('platform:paypiggy', 'tiktok', {
             username: 'SuperFan',
             userId: 'tk-user-1',
             tier: 'superfan',
@@ -61,14 +61,14 @@ describe('NotificationManager TikTok monetisation behavior', () => {
 
         expect(displayQueue.addItem).toHaveBeenCalledTimes(1);
         const item = displayQueue.addItem.mock.calls[0][0];
-        expect(item.type).toBe('paypiggy');
+        expect(item.type).toBe('platform:paypiggy');
         expect(item.platform).toBe('tiktok');
         expect(item.priority).toBe(notificationManager.PRIORITY_LEVELS.MEMBER);
         expect(item.data.username).toBe('SuperFan');
     });
 
     it('enqueues coin gifts with gift priority', async () => {
-        await notificationManager.handleNotification('gift', 'tiktok', {
+        await notificationManager.handleNotification('platform:gift', 'tiktok', {
             username: 'CoinHero',
             userId: 'tk-user-2',
             giftType: 'Rose',
@@ -79,7 +79,7 @@ describe('NotificationManager TikTok monetisation behavior', () => {
 
         expect(displayQueue.addItem).toHaveBeenCalledTimes(1);
         const item = displayQueue.addItem.mock.calls[0][0];
-        expect(item.type).toBe('gift');
+        expect(item.type).toBe('platform:gift');
         expect(item.platform).toBe('tiktok');
         expect(item.priority).toBe(notificationManager.PRIORITY_LEVELS.GIFT);
         expect(item.data.username).toBe('CoinHero');
@@ -88,7 +88,7 @@ describe('NotificationManager TikTok monetisation behavior', () => {
     it('respects config gating and skips when notifications are disabled', async () => {
         configService.areNotificationsEnabled.mockReturnValue(false);
 
-        await notificationManager.handleNotification('paypiggy', 'tiktok', {
+        await notificationManager.handleNotification('platform:paypiggy', 'tiktok', {
             username: 'GatedUser'
         });
 

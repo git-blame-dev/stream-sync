@@ -83,7 +83,7 @@ describe('YouTube Architecture Refactoring', () => {
             const dispatcherCalls = [];
             platform.notificationDispatcher = {
                 dispatchSuperChat: jest.fn((...args) => dispatcherCalls.push({ type: 'superchat', args })),
-                dispatchMembership: jest.fn((...args) => dispatcherCalls.push({ type: 'paypiggy', args })),
+                dispatchMembership: jest.fn((...args) => dispatcherCalls.push({ type: 'platform:paypiggy', args })),
                 dispatchGiftMembership: jest.fn((...args) => dispatcherCalls.push({ type: 'giftMembership', args })),
                 dispatchSuperSticker: jest.fn((...args) => dispatcherCalls.push({ type: 'superSticker', args }))
             };

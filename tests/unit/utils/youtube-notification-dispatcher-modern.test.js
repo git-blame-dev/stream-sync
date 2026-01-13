@@ -212,7 +212,7 @@ describe('YouTube Notification Dispatcher - Modern (Production Data)', () => {
             const notification = mockHandlers.onGift.mock.calls[0][0];
             expect(notification).toMatchObject({
                 platform: 'youtube',
-                type: 'gift',
+                type: 'platform:gift',
                 username: 'Test',
                 userId: 'test',
                 giftType: 'Super Chat',

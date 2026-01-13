@@ -5,7 +5,7 @@ describe('MessageTTSHandler', () => {
     describe('createTTSStages', () => {
         test('should create two-stage TTS for SuperChat with message', () => {
             const notification = {
-                type: 'gift',
+                type: 'platform:gift',
                 isSuperChat: true,
                 username: 'TestUser',
                 ttsMessage: 'TestUser sent 5 dollars',
@@ -29,7 +29,7 @@ describe('MessageTTSHandler', () => {
 
         test('should not suppress profane messages when generating TTS stages', () => {
             const notification = {
-                type: 'gift',
+                type: 'platform:gift',
                 isSuperChat: true,
                 username: 'TestUser',
                 ttsMessage: 'TestUser sent 5 dollars',
@@ -54,7 +54,7 @@ describe('MessageTTSHandler', () => {
 
         test('should create single-stage TTS for SuperChat without message', () => {
             const notification = {
-                type: 'gift',
+                type: 'platform:gift',
                 isSuperChat: true,
                 username: 'TestUser',
                 ttsMessage: 'TestUser sent 5 dollars',
@@ -73,7 +73,7 @@ describe('MessageTTSHandler', () => {
 
         test('should create two-stage TTS for canonical paypiggy supporter messages', () => {
             const notification = {
-                type: 'paypiggy',
+                type: 'platform:paypiggy',
                 username: 'TwitchUser',
                 ttsMessage: 'TwitchUser subscribed for 6 months',
                 message: 'Love this channel!'
@@ -96,7 +96,7 @@ describe('MessageTTSHandler', () => {
 
         test('should create two-stage TTS for paypiggy renewal messages without alias flags', () => {
             const notification = {
-                type: 'paypiggy',
+                type: 'platform:paypiggy',
                 username: 'RenewalUser',
                 ttsMessage: 'RenewalUser renewed subscription for 3 months',
                 message: 'Still here after three months!'
@@ -114,7 +114,7 @@ describe('MessageTTSHandler', () => {
 
         test('should create single-stage TTS for Twitch bits with message', () => {
             const notification = {
-                type: 'gift',
+                type: 'platform:gift',
                 username: 'BitUser',
                 ttsMessage: 'BitUser sent 100 bits. Keep up the great work!',
                 message: 'Keep up the great work!',
@@ -134,7 +134,7 @@ describe('MessageTTSHandler', () => {
 
         test('treats canonical paypiggy membership copy as message-supporting only when message exists', () => {
             const notification = {
-                type: 'paypiggy',
+                type: 'platform:paypiggy',
                 platform: 'youtube',
                 isMembership: true,
                 username: 'MemberUser',
@@ -173,7 +173,7 @@ describe('MessageTTSHandler', () => {
 
         test('should handle notification without primary TTS message', () => {
             const notification = {
-                type: 'gift',
+                type: 'platform:gift',
                 isSuperChat: true,
                 username: 'TestUser',
                 message: 'Thanks!'
@@ -191,7 +191,7 @@ describe('MessageTTSHandler', () => {
 
         test('should handle notification without any message support', () => {
             const notification = {
-                type: 'follow',
+                type: 'platform:follow',
                 username: 'Follower',
                 ttsMessage: 'Follower just followed'
             };
@@ -208,7 +208,7 @@ describe('MessageTTSHandler', () => {
 
         test('should ignore whitespace-only messages', () => {
             const notification = {
-                type: 'gift',
+                type: 'platform:gift',
                 isSuperChat: true,
                 username: 'TestUser',
                 ttsMessage: 'TestUser sent 5 dollars',
@@ -224,7 +224,7 @@ describe('MessageTTSHandler', () => {
         test('should handle very long messages with proper sanitization', () => {
             const longMessage = 'A'.repeat(500);
             const notification = {
-                type: 'gift',
+                type: 'platform:gift',
                 isSuperChat: true,
                 username: 'VeryLongUsernameForTesting',
                 ttsMessage: 'User sent 10 dollars',
@@ -241,13 +241,13 @@ describe('MessageTTSHandler', () => {
 
     describe('supportsMessages', () => {
         test('should return true for SuperChat notifications', () => {
-            const notification = { type: 'gift', isSuperChat: true };
+            const notification = { type: 'platform:gift', isSuperChat: true };
             expect(MessageTTSHandler.supportsMessages(notification)).toBe(true);
         });
 
         test('should return true for paypiggy messages without alias flags', () => {
             const notification = {
-                type: 'paypiggy',
+                type: 'platform:paypiggy',
                 message: 'Membership message body',
                 ttsMessage: 'MemberUser renewed subscription'
             };
@@ -256,7 +256,7 @@ describe('MessageTTSHandler', () => {
         });
 
         test('should return false for Twitch bits notifications', () => {
-            const notification = { type: 'gift', giftType: 'bits', currency: 'bits' };
+            const notification = { type: 'platform:gift', giftType: 'bits', currency: 'bits' };
             expect(MessageTTSHandler.supportsMessages(notification)).toBe(false);
         });
 
@@ -266,17 +266,17 @@ describe('MessageTTSHandler', () => {
         });
 
         test('should return false for follow notifications', () => {
-            const notification = { type: 'follow' };
+            const notification = { type: 'platform:follow' };
             expect(MessageTTSHandler.supportsMessages(notification)).toBe(false);
         });
 
         test('should return false for raid notifications', () => {
-            const notification = { type: 'raid' };
+            const notification = { type: 'platform:raid' };
             expect(MessageTTSHandler.supportsMessages(notification)).toBe(false);
         });
 
         test('should return false for TikTok gift notifications', () => {
-            const notification = { type: 'gift', platform: 'tiktok' };
+            const notification = { type: 'platform:gift', platform: 'tiktok' };
             expect(MessageTTSHandler.supportsMessages(notification)).toBe(false);
         });
     });
@@ -337,17 +337,17 @@ describe('MessageTTSHandler', () => {
 
     describe('getMessageDelay', () => {
         test('should return 4000ms delay for SuperChat', () => {
-            const notification = { type: 'gift', isSuperChat: true };
+            const notification = { type: 'platform:gift', isSuperChat: true };
             expect(MessageTTSHandler.getMessageDelay(notification)).toBe(4000);
         });
 
         test('should return paypiggy delay for canonical paypiggy messages', () => {
-            const notification = { type: 'paypiggy', message: 'Renewal with message' };
+            const notification = { type: 'platform:paypiggy', message: 'Renewal with message' };
             expect(MessageTTSHandler.getMessageDelay(notification)).toBe(MessageTTSHandler.MESSAGE_DELAYS.paypiggy);
         });
 
         test('should return 3000ms delay for Twitch bits', () => {
-            const notification = { type: 'gift', giftType: 'bits', currency: 'bits' };
+            const notification = { type: 'platform:gift', giftType: 'bits', currency: 'bits' };
             expect(MessageTTSHandler.getMessageDelay(notification)).toBe(3000);
         });
 

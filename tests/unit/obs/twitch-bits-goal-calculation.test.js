@@ -82,7 +82,7 @@ describe('DisplayQueue - Twitch Bits Goal Calculation', () => {
             // When: User sends 200 bits total (e.g., "Corgo100 Corgo100")
             // This mimics how the NotificationManager sends gift items to DisplayQueue
             const bitsEvent = {
-                type: 'gift',  // Bits are emitted as gifts at the Twitch boundary
+                type: 'platform:gift',  // Bits are emitted as gifts at the Twitch boundary
                 data: {
                     username: 'TestUser',
                     displayName: 'TestUser',
@@ -121,7 +121,7 @@ describe('DisplayQueue - Twitch Bits Goal Calculation', () => {
             
             for (const cheer of cheers) {
                 const event = {
-                    type: 'gift',
+                    type: 'platform:gift',
                     data: {
                         username: cheer.username,
                         displayName: cheer.username,
@@ -161,7 +161,7 @@ describe('DisplayQueue - Twitch Bits Goal Calculation', () => {
             
             // When: User sends a single Cheer1 (1 bit)
                 const singleBitEvent = {
-                    type: 'gift',
+                    type: 'platform:gift',
                     data: {
                         username: 'SmallCheerer',
                         displayName: 'SmallCheerer',
@@ -196,7 +196,7 @@ describe('DisplayQueue - Twitch Bits Goal Calculation', () => {
                 jest.clearAllMocks(); // Clear before each test case
                 
                 const event = {
-                    type: 'gift',
+                    type: 'platform:gift',
                     data: {
                         username: 'TestUser',
                         displayName: 'TestUser',
@@ -230,7 +230,7 @@ describe('DisplayQueue - Twitch Bits Goal Calculation', () => {
             
             // When: User donates 200 bits
             const bitsEvent = {
-                type: 'gift',
+                type: 'platform:gift',
                 data: {
                     username: 'GenerousViewer',
                     displayName: 'GenerousViewer',
@@ -266,7 +266,7 @@ describe('DisplayQueue - Twitch Bits Goal Calculation', () => {
             
             // When: User sends "Corgo100 Corgo100" (2 Corgo100 cheermotes = 200 bits total)
             const realWorldScenario = {
-                type: 'gift',
+                type: 'platform:gift',
                 data: {
                     username: 'RealUser',
                     displayName: 'RealUser',

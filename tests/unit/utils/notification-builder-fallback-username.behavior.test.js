@@ -3,7 +3,7 @@ describe('notification builder error message behavior', () => {
         const NotificationBuilder = require('../../../src/utils/notification-builder');
 
         const ttsMessage = NotificationBuilder.generateTtsMessage({
-            type: 'gift',
+            type: 'platform:gift',
             username: '   ',
             isError: true
         });
@@ -15,7 +15,7 @@ describe('notification builder error message behavior', () => {
         const NotificationBuilder = require('../../../src/utils/notification-builder');
 
         const ttsMessage = NotificationBuilder.generateTtsMessage({
-            type: 'gift',
+            type: 'platform:gift',
             username: 'TestUser',
             isError: true
         });

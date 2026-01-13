@@ -47,7 +47,7 @@ describe('SuperSticker Notification Handling', () => {
         });
 
         await runtime.handleGiftNotification('youtube', 'StickerFan', {
-            type: 'gift',
+            type: 'platform:gift',
             giftType: 'Super Sticker',
             giftCount: 1,
             amount: 5,
@@ -59,7 +59,7 @@ describe('SuperSticker Notification Handling', () => {
         });
 
         expect(notificationManager.handleNotification).toHaveBeenCalledWith(
-            'gift',
+            'platform:gift',
             'youtube',
             expect.objectContaining({
                 username: 'StickerFan',
@@ -67,7 +67,7 @@ describe('SuperSticker Notification Handling', () => {
                 giftCount: 1,
                 amount: 5,
                 currency: 'USD',
-                type: 'gift'
+                type: 'platform:gift'
             })
         );
     });

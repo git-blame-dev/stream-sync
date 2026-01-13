@@ -42,7 +42,7 @@ describe('Gift Notification Config Resiliency', () => {
                 amount: 3,
                 currency: 'coins',
                 repeatCount: 1,
-                type: 'gift',
+                type: 'platform:gift',
                 userId: 'gifter-1',
                 timestamp: '2024-01-01T00:00:00.000Z',
                 id: 'gift-evt-1'
@@ -65,7 +65,7 @@ describe('Gift Notification Config Resiliency', () => {
                 amount: undefined,
                 currency: undefined,
                 repeatCount: undefined,
-                type: 'gift',
+                type: 'platform:gift',
                 userId: 'gifter-2',
                 timestamp: '2024-01-01T00:00:01.000Z',
                 id: 'gift-evt-2'

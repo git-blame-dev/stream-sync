@@ -48,7 +48,7 @@ const createEnvelopeNotificationHandler = (mockLogger, mockGiftHandler) => {
                 amount,
                 currency,
                 repeatCount,
-                type: 'envelope',
+                type: 'platform:envelope',
                 userId: identity.userId,
                 timestamp: data.timestamp,
                 ...(data?.id ? { id: data.id } : {}),
@@ -100,7 +100,7 @@ describe('TikTok Envelope Notification - Behavior Testing', () => {
             // Return mock notification for validation
             return {
                 id: 'test-notification-id',
-                type: 'gift',
+                type: 'platform:envelope',
                 platform: platform,
                 username: username,
                 displayMessage: `${username} sent a Treasure Chest`,
@@ -174,7 +174,7 @@ describe('TikTok Envelope Notification - Behavior Testing', () => {
                 giftCount: 1,
                 amount: 500,
                 currency: 'coins',
-                type: 'envelope',
+                type: 'platform:envelope',
                 id: completeEnvelopeData.id,
                 timestamp: completeEnvelopeData.timestamp,
                 originalEnvelopeData: completeEnvelopeData
@@ -320,7 +320,7 @@ describe('TikTok Envelope Notification - Behavior Testing', () => {
                 giftCount: 1,
                 amount: 300,
                 currency: 'coins',
-                type: 'envelope',
+                type: 'platform:envelope',
                 id: nestedUserData.id,
                 timestamp: nestedUserData.timestamp,
                 originalEnvelopeData: nestedUserData
@@ -703,7 +703,7 @@ describe('TikTok Envelope Notification - Behavior Testing', () => {
                     giftCount: 1,
                     amount: 700,
                     currency: 'coins',
-                    type: 'envelope',
+                    type: 'platform:envelope',
                     id: envelopeData.id,
                     timestamp: envelopeData.timestamp,
                     originalEnvelopeData: envelopeData

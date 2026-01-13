@@ -325,7 +325,7 @@ describe('YouTube Turkish Lira (TRY) Currency Parsing', () => {
                 };
 
                 const result = await notificationManager.handleNotification(
-                    'gift',
+                    'platform:gift',
                     'youtube',
                     zeroGiftData
                 );
@@ -386,11 +386,11 @@ describe('YouTube Turkish Lira (TRY) Currency Parsing', () => {
                         displayString: `${code} ${amount}`
                     };
 
-                    const result = await notificationManager.handleNotification(
-                        'gift',
-                        'youtube',
-                        superChatData
-                    );
+                const result = await notificationManager.handleNotification(
+                    'platform:gift',
+                    'youtube',
+                    superChatData
+                );
 
                     expect(result.success).toBe(true);
                     expect(result.filtered).not.toBe(true);
@@ -468,7 +468,7 @@ describe('YouTube Turkish Lira (TRY) Currency Parsing', () => {
             });
 
             const result = await notificationManager.handleNotification(
-                'gift',
+                'platform:gift',
                 'youtube',
                 notificationData
             );

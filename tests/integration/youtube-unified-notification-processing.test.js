@@ -282,7 +282,7 @@ describe('YouTube Unified Notification Processing Implementation', () => {
             testEvents.forEach(event => {
                 platform.NotificationBuilder.build({
                     platform: 'youtube',
-                    type: 'gift',
+                    type: 'platform:gift',
                     username: event.author.name,
                     message: 'Test message'
                 });

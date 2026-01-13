@@ -45,7 +45,7 @@ describe('YouTube Handler Redundancy Audit', () => {
                 platform.AuthorExtractor.extractAuthor(event);
             }
             if (platform.NotificationBuilder) {
-                platform.NotificationBuilder.build({ type: 'gift', platform: 'youtube' });
+                platform.NotificationBuilder.build({ type: 'platform:gift', platform: 'youtube' });
             }
         });
         
@@ -55,7 +55,7 @@ describe('YouTube Handler Redundancy Audit', () => {
             }
             if (platform.NotificationBuilder) {
                 platform.NotificationBuilder.build({ 
-                    type: 'paypiggy', 
+                    type: 'platform:paypiggy', 
                     platform: 'youtube',
                     username: 'MemberUser'
                 });

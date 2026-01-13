@@ -71,7 +71,7 @@ describe('DisplayQueue lingering chat visibility', () => {
         displayQueue.queue = [];
         displayQueue.lastChatItem = buildChatItem();
         displayQueue.currentDisplay = {
-            type: 'follow',
+            type: 'platform:follow',
             platform: 'twitch',
             data: {
                 username: 'Follower',
@@ -92,7 +92,7 @@ describe('DisplayQueue lingering chat visibility', () => {
         displayQueue.lastChatItem = buildChatItem();
         displayQueue.queue = [
             {
-                type: 'follow',
+                type: 'platform:follow',
                 platform: 'twitch',
                 data: {
                     username: 'QueuedFollower',

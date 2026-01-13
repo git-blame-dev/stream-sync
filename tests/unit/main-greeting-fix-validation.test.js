@@ -157,13 +157,13 @@ describe('Main.js Greeting Username Extraction Fix', () => {
     test('should fix all notification types using the same username extraction pattern', () => {
         // Given: A notification with username
         const notificationData = NotificationBuilder.build({
-            type: 'follow',
+            type: 'platform:follow',
             platform: 'twitch',
             username: 'TestFollower'
         });
 
         // Test each notification type to ensure they all use the improved extraction
-        const notificationTypes = ['follow', 'subscription', 'membership', 'raid', 'gift', 'redemption', 'farewell'];
+        const notificationTypes = ['platform:follow', 'platform:paypiggy', 'platform:raid', 'platform:gift', 'redemption', 'farewell'];
         
         notificationTypes.forEach(type => {
             mockLogger.console.mockClear();

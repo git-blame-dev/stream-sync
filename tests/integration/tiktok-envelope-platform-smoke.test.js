@@ -121,6 +121,7 @@ describe('TikTok envelope platform flow (smoke)', () => {
         class MockTikTokPlatform {
             async initialize(handlers) {
                 handlers.onEnvelope({
+                    type: 'platform:envelope',
                     username: 'ChestSender',
                     userId: 'tt-envelope-1',
                     giftType: 'Treasure Chest',
@@ -146,7 +147,7 @@ describe('TikTok envelope platform flow (smoke)', () => {
 
             expect(displayQueue.addItem).toHaveBeenCalledTimes(1);
             const queued = displayQueue.addItem.mock.calls[0][0];
-            expect(queued.type).toBe('envelope');
+            expect(queued.type).toBe('platform:envelope');
             expect(queued.platform).toBe('tiktok');
             expect(queued.data.username).toBe('ChestSender');
             expect(queued.data.currency).toBe('coins');

@@ -67,7 +67,7 @@ describe('DisplayQueue gift effects handcam glow', () => {
         );
 
         await queue.handleNotificationEffects({
-            type: 'gift',
+            type: 'platform:gift',
             platform: 'tiktok',
             data: {
                 username: 'Gifter',

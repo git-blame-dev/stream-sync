@@ -45,7 +45,7 @@ describe('DisplayQueue monetization VFX context', () => {
     it('emits VFX with userId for gift notifications', async () => {
         const queue = createQueue(eventBus);
         const item = {
-            type: 'gift',
+            type: 'platform:gift',
             platform: 'youtube',
             vfxConfig: {
                 commandKey: 'gifts',
@@ -75,7 +75,7 @@ describe('DisplayQueue monetization VFX context', () => {
     it('emits VFX for follow notifications with correct context', async () => {
         const queue = createQueue(eventBus);
         const item = {
-            type: 'follow',
+            type: 'platform:follow',
             platform: 'twitch',
             vfxConfig: {
                 commandKey: 'follows',
@@ -98,7 +98,7 @@ describe('DisplayQueue monetization VFX context', () => {
             username: 'FollowHero',
             platform: 'twitch',
             userId: 'follow-1',
-            context: expect.objectContaining({ source: 'display-queue', notificationType: 'follow' })
+            context: expect.objectContaining({ source: 'display-queue', notificationType: 'platform:follow' })
         }));
     });
 
@@ -107,7 +107,7 @@ describe('DisplayQueue monetization VFX context', () => {
         try {
             const queue = createQueue(eventBus);
             const item = {
-                type: 'gift',
+                type: 'platform:gift',
                 platform: 'tiktok',
                 vfxConfig: {
                     commandKey: 'gifts',
@@ -138,7 +138,7 @@ describe('DisplayQueue monetization VFX context', () => {
             const [eventName, payload] = emitSpy.mock.calls[0];
             expect(eventName).toBe(PlatformEvents.VFX_COMMAND_RECEIVED);
             expect(payload.context).toEqual(expect.objectContaining({
-                notificationType: 'gift',
+                notificationType: 'platform:gift',
                 delayApplied: 2000
             }));
             expect(payload.commandKey).toBe('gifts');
@@ -148,12 +148,12 @@ describe('DisplayQueue monetization VFX context', () => {
     });
 
     const standardFlows = [
-        { type: 'gift', giftType: 'Super Chat', giftCount: 1, amount: 5, currency: 'USD', commandKey: 'gifts', platform: 'youtube' },
-        { type: 'gift', giftType: 'Super Sticker', giftCount: 1, amount: 3, currency: 'USD', commandKey: 'gifts', platform: 'youtube' },
-        { type: 'giftpaypiggy', commandKey: 'gifts', platform: 'twitch' },
-        { type: 'gift', giftType: 'bits', giftCount: 1, amount: 100, currency: 'bits', commandKey: 'gifts', platform: 'twitch' },
-        { type: 'envelope', commandKey: 'gifts', platform: 'tiktok' },
-        { type: 'paypiggy', commandKey: 'paypiggies', platform: 'tiktok' }
+        { type: 'platform:gift', giftType: 'Super Chat', giftCount: 1, amount: 5, currency: 'USD', commandKey: 'gifts', platform: 'youtube' },
+        { type: 'platform:gift', giftType: 'Super Sticker', giftCount: 1, amount: 3, currency: 'USD', commandKey: 'gifts', platform: 'youtube' },
+        { type: 'platform:giftpaypiggy', commandKey: 'gifts', platform: 'twitch' },
+        { type: 'platform:gift', giftType: 'bits', giftCount: 1, amount: 100, currency: 'bits', commandKey: 'gifts', platform: 'twitch' },
+        { type: 'platform:envelope', commandKey: 'gifts', platform: 'tiktok' },
+        { type: 'platform:paypiggy', commandKey: 'paypiggies', platform: 'tiktok' }
     ];
 
     test.each(standardFlows)('emits VFX with userId for %s', async ({ type, commandKey, platform, giftType, giftCount, amount, currency }) => {

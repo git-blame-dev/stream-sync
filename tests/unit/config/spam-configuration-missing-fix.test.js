@@ -55,7 +55,7 @@ describe('Spam Detection Service Integration Tests', () => {
                 ENVELOPE: 8
             },
             NOTIFICATION_CONFIGS: {
-                gift: {
+                'platform:gift': {
                     priority: 4,
                     duration: 5000,
                     settingKey: 'giftsEnabled',
@@ -182,7 +182,7 @@ describe('Spam Detection Service Integration Tests', () => {
                 currency: 'coins'
             };
 
-            await notificationManager.handleNotification('gift', 'tiktok', giftData);
+            await notificationManager.handleNotification('platform:gift', 'tiktok', giftData);
 
             // Should call spam detector for gift notifications
             expect(mockSpamDetector.handleDonationSpam).toHaveBeenCalledWith(
@@ -244,7 +244,7 @@ describe('Spam Detection Service Integration Tests', () => {
                 currency: 'coins'
             };
 
-            const result = await notificationManager.handleNotificationInternal('gift', 'tiktok', giftData, false);
+            const result = await notificationManager.handleNotificationInternal('platform:gift', 'tiktok', giftData, false);
 
             // Gift should be suppressed
             expect(result.suppressed).toBe(true);
@@ -283,7 +283,7 @@ describe('Spam Detection Service Integration Tests', () => {
 
             // Should process gift without spam detection (no errors)
             await expect(
-                notificationManager.handleNotification('gift', 'tiktok', giftData)
+                notificationManager.handleNotification('platform:gift', 'tiktok', giftData)
             ).resolves.toBeDefined();
 
             // Should add gift to display queue (not blocked)
@@ -339,7 +339,7 @@ describe('Spam Detection Service Integration Tests', () => {
                 isAggregated: true
             };
 
-            await notificationManager.handleNotification('gift', 'tiktok', aggregatedGift);
+            await notificationManager.handleNotification('platform:gift', 'tiktok', aggregatedGift);
 
             // Should NOT call spam detector for aggregated gifts
             expect(mockSpamDetector.handleDonationSpam).not.toHaveBeenCalled();
@@ -428,7 +428,7 @@ describe('Spam Detection Service Integration Tests', () => {
                 currency: 'coins'
             };
 
-            await notificationManager.handleNotification('gift', 'tiktok', giftData);
+            await notificationManager.handleNotification('platform:gift', 'tiktok', giftData);
 
             // Display queue should receive clean notification data
             const queueCall = mockDisplayQueue.addItem.mock.calls[0];

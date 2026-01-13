@@ -95,7 +95,7 @@ describe('Notification Builder Edge Cases', () => {
         test('preserves numeric amounts', () => {
             const data = {
                 platform: 'youtube',
-                type: 'gift',
+                type: 'platform:gift',
                 username: 'TestUser',
                 giftType: 'Super Chat',
                 giftCount: 1,
@@ -127,7 +127,7 @@ describe('Notification Builder Edge Cases', () => {
         test('allows isError notification without username', () => {
             const data = {
                 platform: 'twitch',
-                type: 'gift',
+                type: 'platform:gift',
                 isError: true
             };
 
@@ -141,7 +141,7 @@ describe('Notification Builder Edge Cases', () => {
         test('error notification generates generic display message', () => {
             const data = {
                 platform: 'twitch',
-                type: 'gift',
+                type: 'platform:gift',
                 isError: true
             };
 

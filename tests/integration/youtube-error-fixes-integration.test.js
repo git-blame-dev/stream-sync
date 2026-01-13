@@ -55,7 +55,7 @@ describe('YouTube Error Fixes Integration', () => {
                 const amount = parseFloat(event.item.purchase_amount.replace(/[^\d.]/g, ''));
                 const currency = event.item.purchase_amount.replace(/[\d.]/g, '');
                 youtubePlatform.handlers.onGift({
-                    type: 'gift',
+                    type: 'platform:gift',
                     giftType: 'Super Chat',
                     giftCount: 1,
                     amount: amount,
@@ -147,7 +147,7 @@ describe('YouTube Error Fixes Integration', () => {
                 'youtube',
                 'Zapnard',
                 expect.objectContaining({
-                    type: 'gift',
+                    type: 'platform:gift',
                     giftType: 'Super Chat',
                     giftCount: 1,
                     amount: 2,
@@ -191,7 +191,7 @@ describe('YouTube Error Fixes Integration', () => {
                     'youtube',
                     `TestUser${index}`,
                     expect.objectContaining({
-                        type: 'gift',
+                        type: 'platform:gift',
                         giftType: 'Super Chat',
                         giftCount: 1,
                         amount: expectedAmount,
@@ -262,7 +262,7 @@ describe('YouTube Error Fixes Integration', () => {
                 'youtube',
                 'Example Person',
                 expect.objectContaining({
-                    type: 'gift',
+                    type: 'platform:gift',
                     giftType: 'Super Chat',
                     giftCount: 1,
                     amount: 500,

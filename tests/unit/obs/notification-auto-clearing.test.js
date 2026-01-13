@@ -88,7 +88,7 @@ describe('Notification Auto-Clearing Behavior', () => {
         };
 
         const notificationItem = {
-            type: 'follow',
+            type: 'platform:follow',
             data: {
                 username: 'NewFollower',
                 displayMessage: 'NewFollower just followed!'

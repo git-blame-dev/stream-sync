@@ -4,7 +4,7 @@ describe('SuperChat Notification Format', () => {
     test('formats Super Chat display and TTS output', () => {
         const result = NotificationBuilder.build({
             platform: 'youtube',
-            type: 'gift',
+            type: 'platform:gift',
             username: 'SuperChatUser',
             giftType: 'Super Chat',
             giftCount: 1,
@@ -23,7 +23,7 @@ describe('SuperChat Notification Format', () => {
     test('formats Super Sticker display and TTS output', () => {
         const result = NotificationBuilder.build({
             platform: 'youtube',
-            type: 'gift',
+            type: 'platform:gift',
             username: 'StickerUser',
             giftType: 'Super Sticker',
             giftCount: 1,

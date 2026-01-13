@@ -9,7 +9,7 @@ describe('Gift Display Details', () => {
     jest.setTimeout(TEST_TIMEOUTS.UNIT);
 
     const buildGift = (overrides = {}) => NotificationBuilder.build({
-        type: 'gift',
+        type: 'platform:gift',
         platform: overrides.platform || 'tiktok',
         username: overrides.username || 'GiftUser',
         giftType: overrides.giftType || 'Rose',
@@ -27,7 +27,7 @@ describe('Gift Display Details', () => {
             repeatCount: 4
         });
 
-        const logMessage = generateLogMessage('gift', notification);
+        const logMessage = generateLogMessage('platform:gift', notification);
 
         // NotificationBuilder format: "TikTok Gift: 4x Rose (4 coins) from GiftUser"
         expect(logMessage).toContain('GiftUser');
@@ -37,7 +37,7 @@ describe('Gift Display Details', () => {
 
     test('formats SuperChat gifts with currency/amount information', () => {
         const notification = NotificationBuilder.build({
-            type: 'gift',
+            type: 'platform:gift',
             platform: 'youtube',
             username: 'SuperChatFan',
             giftType: 'Super Chat',
@@ -47,7 +47,7 @@ describe('Gift Display Details', () => {
             message: 'Great stream!'
         });
 
-        const logMessage = generateLogMessage('gift', notification);
+        const logMessage = generateLogMessage('platform:gift', notification);
         expect(logMessage).toContain('SuperChatFan');
         expect(logMessage).toContain('Super Chat');
         expect(logMessage).toContain('25');
