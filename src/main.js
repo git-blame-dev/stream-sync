@@ -1301,14 +1301,13 @@ class AppRuntime {
                 amount = undefined;
             }
             
-            // Pass to handleGiftNotification as a special gift type
-            await this.handleGiftNotification(platform, data.username, {
+            await this.handleUnifiedNotification('platform:envelope', platform, data.username, {
                 giftType,
                 giftCount,
                 amount,
                 currency,
                 repeatCount,
-                type: 'envelope',
+                type: 'platform:envelope',
                 isError,
                 userId: data.userId,
                 timestamp: data.timestamp,

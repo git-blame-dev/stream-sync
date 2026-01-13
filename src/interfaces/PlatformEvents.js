@@ -709,10 +709,10 @@ class EnhancedPlatformEvents {
     static VALID_PLATFORMS = VALID_PLATFORMS;
     static EVENT_TYPES = PlatformEvents;
     static NOTIFICATION_TYPES = {
-        GIFT: 'gift',
-        FOLLOW: 'follow',
-        PAYPIGGY: 'paypiggy',
-        RAID: 'raid'
+        GIFT: 'platform:gift',
+        FOLLOW: 'platform:follow',
+        PAYPIGGY: 'platform:paypiggy',
+        RAID: 'platform:raid'
     };
 
     static _generateId() {

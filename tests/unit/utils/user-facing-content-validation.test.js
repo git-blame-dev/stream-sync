@@ -36,7 +36,7 @@ describe('User-Facing Content Validation', () => {
     });
 
     describe('Template Placeholder Elimination', () => {
-        const notificationTypes = ['gift', 'follow', 'paypiggy', 'raid', 'envelope'];
+        const notificationTypes = ['platform:gift', 'platform:follow', 'platform:paypiggy', 'platform:raid', 'platform:envelope'];
         const platforms = ['twitch', 'youtube', 'tiktok'];
 
         platforms.forEach(platform => {
