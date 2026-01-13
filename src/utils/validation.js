@@ -395,6 +395,10 @@ function isIsoTimestamp(value) {
     return !Number.isNaN(parsed);
 }
 
+function getSystemTimestampISO() {
+    return new Date().toISOString();
+}
+
 module.exports = {
     // Core validation functions
     sanitizeForTTS,
@@ -410,6 +414,7 @@ module.exports = {
     isValidUrl,
     isValidUserId,
     isIsoTimestamp,
+    getSystemTimestampISO,
     
     // Text processing utilities
     sanitizeForDisplay,

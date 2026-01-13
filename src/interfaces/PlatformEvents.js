@@ -1,6 +1,7 @@
 
 const { logger } = require('../core/logging');
 const crypto = require('crypto');
+const { getSystemTimestampISO } = require('../utils/validation');
 
 const PlatformEvents = {
     // Platform Events
@@ -744,7 +745,7 @@ class EnhancedPlatformEvents {
 
     static createChatMessageEvent(platform, identity, message, metadata = {}) {
         const normalizedIdentity = this.normalizeIdentity(platform, identity);
-        const timestamp = new Date().toISOString();
+        const timestamp = getSystemTimestampISO();
         return {
             id: this._generateId(),
             type: 'platform:chat-message',
@@ -767,7 +768,7 @@ class EnhancedPlatformEvents {
             platform: this._validatePlatform(platform),
             notificationType: notificationType,
             correlationId: this._generateCorrelationId(),
-            timestamp: new Date().toISOString(),
+            timestamp: getSystemTimestampISO(),
             priority: this._calculatePriority(notificationType),
             data: data || {},
             username: data?.username || null,
@@ -782,7 +783,7 @@ class EnhancedPlatformEvents {
             platform: this._validatePlatform(platform),
             status: status,
             correlationId: this._generateCorrelationId(),
-            timestamp: new Date().toISOString(),
+            timestamp: getSystemTimestampISO(),
             error: error,
             willReconnect: status === 'disconnected'
         };
@@ -794,7 +795,7 @@ class EnhancedPlatformEvents {
             type: 'platform:error',
             platform: this._validatePlatform(platform),
             correlationId: this._generateCorrelationId(),
-            timestamp: new Date().toISOString(),
+            timestamp: getSystemTimestampISO(),
             error: {
                 message: error.message || 'Unknown error',
                 code: error.code || 'UNKNOWN',
@@ -1055,7 +1056,7 @@ class EventBuilder {
         this._event = {
             id: EnhancedPlatformEvents._generateId(),
             correlationId: EnhancedPlatformEvents._generateCorrelationId(),
-            timestamp: new Date().toISOString()
+            timestamp: getSystemTimestampISO()
         };
     }
 

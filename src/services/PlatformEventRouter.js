@@ -3,6 +3,7 @@ const { logger: defaultLogger } = require('../core/logging');
 const { createPlatformErrorHandler } = require('../utils/platform-error-handler');
 const { NOTIFICATION_CONFIGS } = require('../core/constants');
 const { PlatformEvents } = require('../interfaces/PlatformEvents');
+const { isIsoTimestamp } = require('../utils/validation');
 
 const ALIAS_PAID_TYPES = [
     'subscription',
@@ -82,8 +83,8 @@ class PlatformEventRouter {
                 return;
             case PlatformEvents.VIEWER_COUNT:
                 if (this.runtime?.updateViewerCount) {
-                    if (!data?.timestamp) {
-                        throw new Error('Viewer-count event requires timestamp');
+                    if (!data?.timestamp || !isIsoTimestamp(String(data.timestamp))) {
+                        throw new Error('Viewer-count event requires ISO timestamp');
                     }
                     if (data.count === undefined) {
                         throw new Error('Viewer-count event requires count');
@@ -218,8 +219,8 @@ class PlatformEventRouter {
         if (!data.userId) {
             throw new Error('Chat event requires userId');
         }
-        if (!data.timestamp) {
-            throw new Error('Chat event requires timestamp');
+        if (!data.timestamp || !isIsoTimestamp(String(data.timestamp))) {
+            throw new Error('Chat event requires ISO timestamp');
         }
 
         const normalized = {
@@ -275,8 +276,8 @@ class PlatformEventRouter {
         if (!originalType) {
             throw new Error('Notification payload requires type');
         }
-        if (!sanitized.timestamp) {
-            throw new Error('Notification payload requires timestamp');
+        if (!sanitized.timestamp || !isIsoTimestamp(String(sanitized.timestamp))) {
+            throw new Error('Notification payload requires ISO timestamp');
         }
 
         const normalizedUserId = sanitized.userId === undefined || sanitized.userId === null

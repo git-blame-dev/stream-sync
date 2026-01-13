@@ -14,6 +14,7 @@ const { normalizeYouTubeConfig, DEFAULT_YOUTUBE_CONFIG } = require('../utils/con
 const { YouTubeNotificationDispatcher } = require('../utils/youtube-notification-dispatcher');
 const { YouTubeConnectionManager } = require('../utils/youtube-connection-manager');
 const { createPlatformErrorHandler } = require('../utils/platform-error-handler');
+const { getSystemTimestampISO } = require('../utils/validation');
 const { PlatformEvents } = require('../interfaces/PlatformEvents');
 const { YouTubeLiveStreamService } = require('../services/youtube-live-stream-service');
 const { createYouTubeEventDispatchTable } = require('./youtube/events/youtube-event-dispatch-table');
@@ -478,7 +479,7 @@ class YouTubePlatform extends EventEmitter {
             if (success) {
                 this.logger.info(`Connected to YouTube stream: ${videoId}`, 'youtube');
                 const connectionId = `youtube-${videoId}`;
-                const timestamp = new Date().toISOString();
+                const timestamp = getSystemTimestampISO();
                 const chatConnectedEvent = this.eventFactory.createChatConnectedEvent({ videoId, connectionId, timestamp });
                 const eventPlatform = chatConnectedEvent.platform;
                 this.emit('platform:event', {
@@ -958,7 +959,7 @@ class YouTubePlatform extends EventEmitter {
                 context: normalizedContext,
                 recoverable: !shouldDisconnect,
                 videoId,
-                timestamp: new Date().toISOString()
+                timestamp: getSystemTimestampISO()
             });
 
             const eventPlatform = eventData.platform;
@@ -1004,7 +1005,7 @@ class YouTubePlatform extends EventEmitter {
                 count: totalViewers,
                 streamId,
                 streamViewerCount: count,
-                timestamp: new Date().toISOString()
+                timestamp: getSystemTimestampISO()
             });
             this._emitPlatformEvent(PlatformEvents.VIEWER_COUNT, eventData);
         } catch (eventError) {
@@ -1072,7 +1073,7 @@ class YouTubePlatform extends EventEmitter {
         this._emitPlatformEvent(PlatformEvents.STREAM_STATUS, {
             platform: 'youtube',
             isLive,
-            timestamp: new Date().toISOString()
+            timestamp: getSystemTimestampISO()
         });
 
     }
@@ -1242,7 +1243,7 @@ class YouTubePlatform extends EventEmitter {
         return {
             platform: 'youtube',
             status: this.isConnected() ? 'connected' : 'disconnected',
-            timestamp: new Date().toISOString()
+            timestamp: getSystemTimestampISO()
         };
     }
 

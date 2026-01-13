@@ -132,7 +132,7 @@ describe('PlatformEventRouter validation', () => {
                 amount: 5,
                 currency: 'coins'
             }
-        })).rejects.toThrow('Notification payload requires timestamp');
+        })).rejects.toThrow('Notification payload requires ISO timestamp');
 
         expect(runtime.handleGiftNotification).not.toHaveBeenCalled();
     });
@@ -173,7 +173,7 @@ describe('PlatformEventRouter validation', () => {
             platform: 'twitch',
             type: 'platform:viewer-count',
             data: { count: 3 }
-        })).rejects.toThrow('Viewer-count event requires timestamp');
+        })).rejects.toThrow('Viewer-count event requires ISO timestamp');
 
         expect(runtime.updateViewerCount).not.toHaveBeenCalled();
     });

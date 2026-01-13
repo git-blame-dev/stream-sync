@@ -42,7 +42,6 @@ function normalizeNonNegativeNumber(value) {
 
 function createTwitchEventFactory(options = {}) {
     const platformName = options.platformName || 'twitch';
-    const nowIso = options.nowIso || (() => new Date().toISOString());
     const generateCorrelationId = options.generateCorrelationId || (() => PlatformEvents._generateCorrelationId());
 
     const getTimestamp = (data) => {

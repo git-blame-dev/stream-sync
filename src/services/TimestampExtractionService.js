@@ -3,6 +3,7 @@ const ServiceInterface = require('../interfaces/ServiceInterface');
 const { resolveTikTokTimestampMs } = require('../utils/tiktok-timestamp');
 const { createPlatformErrorHandler } = require('../utils/platform-error-handler');
 const { validateLoggerInterface } = require('../utils/dependency-validator');
+const { getSystemTimestampISO } = require('../utils/validation');
 
 class TimestampExtractionService extends ServiceInterface {
     constructor(dependencies = {}) {
@@ -90,7 +91,7 @@ class TimestampExtractionService extends ServiceInterface {
                 const error = new Error(`Unsupported platform: ${platform}`);
                 this._handleTimestampError(`Timestamp extraction failed for ${platform}`, error, 'unsupported-platform');
                 this._recordPerformance(startTime, false);
-                return new Date().toISOString();
+                return getSystemTimestampISO();
             }
 
             const timestamp = strategy(rawData);
@@ -117,7 +118,7 @@ class TimestampExtractionService extends ServiceInterface {
         } catch (error) {
             this._recordPerformance(startTime, false, null, normalizedPlatform, error);
             this._handleTimestampError(`Timestamp extraction failed for ${platform}`, error, 'extraction');
-            return new Date().toISOString(); // Fallback to current time
+            return getSystemTimestampISO(); // Fallback to current time
         }
     }
     
@@ -180,7 +181,7 @@ class TimestampExtractionService extends ServiceInterface {
     extractTikTokTimestamp(data) {
         // Fast null check with early return
         if (!data || typeof data !== 'object') {
-            return new Date().toISOString();
+            return getSystemTimestampISO();
         }
 
         const resolvedTimestampMs = resolveTikTokTimestampMs(data);
@@ -191,7 +192,7 @@ class TimestampExtractionService extends ServiceInterface {
         }
         
         // Fallback: current time
-        const currentTime = new Date().toISOString();
+        const currentTime = getSystemTimestampISO();
         this.logger.debug && this.logger.debug(`TikTok timestamp fallback to current time: ${currentTime}`, 'timestamp-service');
         return currentTime;
     }
@@ -199,7 +200,7 @@ class TimestampExtractionService extends ServiceInterface {
     extractYouTubeTimestamp(data) {
         // Fast null check with early return
         if (!data || typeof data !== 'object') {
-            return new Date().toISOString();
+            return getSystemTimestampISO();
         }
         
         // Priority 1: timestamp field (could be microseconds or milliseconds) - optimized parsing
@@ -251,7 +252,7 @@ class TimestampExtractionService extends ServiceInterface {
         }
         
         // Fallback: current time
-        const currentTime = new Date().toISOString();
+        const currentTime = getSystemTimestampISO();
         this.logger.debug && this.logger.debug(`YouTube timestamp fallback to current time: ${currentTime}`, 'timestamp-service');
         return currentTime;
     }
@@ -265,7 +266,7 @@ class TimestampExtractionService extends ServiceInterface {
 
         // Fast null check with early return
         if (!data || typeof data !== 'object') {
-            const currentTime = new Date().toISOString();
+            const currentTime = getSystemTimestampISO();
             if (logFallback) {
                 this.logger.debug && this.logger.debug(`Twitch timestamp fallback to current time: ${currentTime}`, 'timestamp-service');
             }
@@ -321,7 +322,7 @@ class TimestampExtractionService extends ServiceInterface {
         }
         
         // Fallback: current time
-        const currentTime = new Date().toISOString();
+        const currentTime = getSystemTimestampISO();
         if (logFallback) {
             this.logger.debug && this.logger.debug(`Twitch timestamp fallback to current time: ${currentTime}`, 'timestamp-service');
         }
@@ -602,7 +603,7 @@ class TimestampExtractionService extends ServiceInterface {
             performance: this.getPerformanceMetrics(),
             health: {
                 status: this._serviceState.status === 'running' && !this._serviceState.isPaused ? 'healthy' : 'degraded',
-                lastActivity: new Date().toISOString(),
+                lastActivity: getSystemTimestampISO(),
                 errorRate: this._performanceMetrics.totalExtractions > 0 
                     ? (this._performanceMetrics.errors.total / this._performanceMetrics.totalExtractions * 100).toFixed(2) + '%'
                     : '0%'
