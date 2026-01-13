@@ -3,7 +3,7 @@ describe('monetization error payload no-fallback behavior', () => {
         const { createMonetizationErrorPayload } = require('../../../src/utils/monetization-error-utils');
 
         const payload = createMonetizationErrorPayload({
-            notificationType: 'gift',
+            notificationType: 'platform:gift',
             platform: 'twitch',
             giftType: 'bits',
             giftCount: 1,
@@ -20,7 +20,7 @@ describe('monetization error payload no-fallback behavior', () => {
         const { createMonetizationErrorPayload } = require('../../../src/utils/monetization-error-utils');
 
         const payload = createMonetizationErrorPayload({
-            notificationType: 'gift',
+            notificationType: 'platform:gift',
             platform: 'twitch',
             username: 'TestUser',
             userId: '123',
@@ -39,7 +39,7 @@ describe('monetization error payload no-fallback behavior', () => {
         const { createMonetizationErrorPayload } = require('../../../src/utils/monetization-error-utils');
 
         const payload = createMonetizationErrorPayload({
-            notificationType: 'gift',
+            notificationType: 'platform:gift',
             platform: 'twitch'
         });
 
@@ -53,7 +53,7 @@ describe('monetization error payload no-fallback behavior', () => {
         const { createMonetizationErrorPayload } = require('../../../src/utils/monetization-error-utils');
 
         const payload = createMonetizationErrorPayload({
-            notificationType: 'gift',
+            notificationType: 'platform:gift',
             platform: 'twitch'
         });
 
@@ -64,7 +64,7 @@ describe('monetization error payload no-fallback behavior', () => {
         const { createMonetizationErrorPayload } = require('../../../src/utils/monetization-error-utils');
 
         const payload = createMonetizationErrorPayload({
-            notificationType: 'gift',
+            notificationType: 'platform:gift',
             platform: 'twitch',
             timestamp: '2024-01-01T00:00:00.000Z'
         });
@@ -76,7 +76,7 @@ describe('monetization error payload no-fallback behavior', () => {
         const { createMonetizationErrorPayload } = require('../../../src/utils/monetization-error-utils');
 
         const payload = createMonetizationErrorPayload({
-            notificationType: 'gift',
+            notificationType: 'platform:gift',
             platform: 'twitch',
             giftType: 'bits',
             giftCount: 0,
@@ -94,7 +94,7 @@ describe('monetization error payload no-fallback behavior', () => {
         const { createMonetizationErrorPayload } = require('../../../src/utils/monetization-error-utils');
 
         const payload = createMonetizationErrorPayload({
-            notificationType: 'giftpaypiggy',
+            notificationType: 'platform:giftpaypiggy',
             platform: 'twitch',
             giftCount: 0,
             tier: '1000'
@@ -107,7 +107,7 @@ describe('monetization error payload no-fallback behavior', () => {
         const { createMonetizationErrorPayload } = require('../../../src/utils/monetization-error-utils');
 
         const payload = createMonetizationErrorPayload({
-            notificationType: 'paypiggy',
+            notificationType: 'platform:paypiggy',
             platform: 'youtube',
             months: 0
         });
