@@ -51,7 +51,7 @@ describe('Notification type normalization', () => {
         });
     });
 
-    it('rejects mismatched payload types instead of enqueuing a follow notification', async () => {
+    it('accepts matching payload types for follow notifications', async () => {
         const result = await notificationManager.handleNotification('platform:follow', 'tiktok', {
             username: 'alice',
             userId: 'tiktok-1',
@@ -59,11 +59,11 @@ describe('Notification type normalization', () => {
         });
 
         expect(result).toEqual(expect.objectContaining({
-            success: false,
-            error: 'Unknown notification type',
-            notificationType: 'follow',
+            success: true,
+            notificationType: 'platform:follow',
             platform: 'tiktok'
         }));
-        expect(items).toHaveLength(0);
+        expect(items).toHaveLength(1);
+        expect(items[0].type).toBe('platform:follow');
     });
 });
