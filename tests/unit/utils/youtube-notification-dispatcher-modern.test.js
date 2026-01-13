@@ -61,7 +61,7 @@ describe('YouTube Notification Dispatcher - Modern (Production Data)', () => {
 
             // Verify user-visible notification data
             expect(notification.platform).toBe('youtube');
-            expect(notification.type).toBe('gift');
+            expect(notification.type).toBe('platform:gift');
             expect(notification.giftType).toBe('Super Chat');
             expect(notification.giftCount).toBe(1);
             expect(notification.username).toBe('SuperChatDonor');
@@ -107,7 +107,7 @@ describe('YouTube Notification Dispatcher - Modern (Production Data)', () => {
 
             const notification = mockHandlers.onGift.mock.calls[0][0];
             expect(notification.platform).toBe('youtube');
-            expect(notification.type).toBe('gift');
+            expect(notification.type).toBe('platform:gift');
             expect(notification.giftType).toBe('Super Sticker');
             expect(notification.giftCount).toBe(1);
             expect(notification.username).toBe('StickerSupporter');
@@ -155,7 +155,7 @@ describe('YouTube Notification Dispatcher - Modern (Production Data)', () => {
             expect(notification).not.toHaveProperty('username');
             expect(notification).not.toHaveProperty('userId');
             expect(notification.giftCount).toBe(5);
-            expect(notification.type).toBe('giftpaypiggy');
+            expect(notification.type).toBe('platform:giftpaypiggy');
             expect(notification.id).toBe(fixtureGiftPurchaseHeader.item.id);
             expect(notification.timestamp).toBe(resolveTimestampIso(fixtureGiftPurchaseHeader));
         });

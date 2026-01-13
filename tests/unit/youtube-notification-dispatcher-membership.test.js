@@ -25,7 +25,7 @@ describe('YouTubeNotificationDispatcher membership routing', () => {
 
         expect(onMembership).toHaveBeenCalledTimes(1);
         const payload = onMembership.mock.calls[0][0];
-        expect(payload.type).toBe('paypiggy');
+        expect(payload.type).toBe('platform:paypiggy');
         expect(payload.membershipLevel).toBe('Member');
         expect(payload.months).toBe(3);
         expect(payload.membershipMonths).toBeUndefined();

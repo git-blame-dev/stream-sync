@@ -82,7 +82,7 @@ describe('NotificationManager follow/raid/share behavior', () => {
             filename: 'shares.mp4'
         }));
         expect(queued.data.displayMessage).toBe('StreamSharer shared the stream');
-        expect(queued.type).toBe('share');
+        expect(queued.type).toBe('platform:share');
     });
 
     test('share notifications respect per-platform disabled toggles', async () => {

@@ -82,7 +82,7 @@ describe('DisplayQueue lingering chat visibility', () => {
         expect(displayQueue.isItemDisplayedToUser('chat')).toBe(false);
 
         const content = displayQueue.getCurrentDisplayContent();
-        expect(content.type).toBe('follow');
+        expect(content.type).toBe('platform:follow');
         expect(content.content).toContain('Follower just followed!');
         expect(content.isLingering).toBeUndefined();
     });

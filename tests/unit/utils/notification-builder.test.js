@@ -4,7 +4,7 @@ describe('NotificationBuilder', () => {
     it('should build a basic notification object from minimal input', () => {
         const input = {
             platform: 'youtube',
-            type: 'gift',
+            type: 'platform:gift',
             username: 'TestUser',
             userId: 'U123',
             message: 'Hello world!',
@@ -15,7 +15,7 @@ describe('NotificationBuilder', () => {
         };
         const notification = NotificationBuilder.build(input);
         expect(notification.platform).toBe('youtube');
-        expect(notification.type).toBe('gift');
+        expect(notification.type).toBe('platform:gift');
         expect(notification.userId).toBe('U123');
         expect(notification.username).toBe('TestUser');
         expect(notification.message).toBe('Hello world!');
@@ -24,7 +24,7 @@ describe('NotificationBuilder', () => {
     it('should include optional fields if provided', () => {
         const input = {
             platform: 'twitch',
-            type: 'gift',
+            type: 'platform:gift',
             username: 'TwitchUser',
             userId: 'T456',
             message: 'Cheer!',
@@ -66,7 +66,7 @@ describe('NotificationBuilder', () => {
     it('should allow custom notification templates', () => {
         const input = {
             platform: 'youtube',
-            type: 'gift',
+            type: 'platform:gift',
             username: 'TestUser',
             userId: 'U123',
             message: 'Hello world!',
@@ -83,7 +83,7 @@ describe('NotificationBuilder', () => {
     it('renders paypiggy with membership wording for YouTube', () => {
         const input = {
             platform: 'youtube',
-            type: 'paypiggy',
+            type: 'platform:paypiggy',
             username: 'MemberUser',
             userId: 'yt1',
             months: 3,
@@ -91,7 +91,7 @@ describe('NotificationBuilder', () => {
         };
 
         const notification = NotificationBuilder.build(input);
-        expect(notification.type).toBe('paypiggy');
+        expect(notification.type).toBe('platform:paypiggy');
         expect(notification.displayMessage).toContain('membership');
         expect(notification.displayMessage).toContain('3');
         expect(notification.displayMessage).toContain('Test Member Plus');
@@ -103,7 +103,7 @@ describe('NotificationBuilder', () => {
         const errorInputs = [
             {
                 platform: 'twitch',
-                type: 'gift',
+            type: 'platform:gift',
                 username: 'Unknown User',
                 userId: 'unknown',
                 giftType: 'Unknown gift',
@@ -123,7 +123,7 @@ describe('NotificationBuilder', () => {
             },
             {
                 platform: 'twitch',
-                type: 'paypiggy',
+            type: 'platform:paypiggy',
                 username: 'Unknown User',
                 userId: 'unknown',
                 months: 0,
@@ -154,7 +154,7 @@ describe('NotificationBuilder', () => {
     it('uses generic error copy when username is missing', () => {
         const notification = NotificationBuilder.build({
             platform: 'twitch',
-            type: 'gift',
+            type: 'platform:gift',
             isError: true
         });
 
