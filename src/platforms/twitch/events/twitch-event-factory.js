@@ -1,4 +1,5 @@
 const { PlatformEvents } = require('../../../interfaces/PlatformEvents');
+const { isIsoTimestamp } = require('../../../utils/validation');
 
 function normalizeIdentity(data) {
     if (!data || typeof data !== 'object') {
@@ -47,6 +48,9 @@ function createTwitchEventFactory(options = {}) {
     const getTimestamp = (data) => {
         if (!data || data.timestamp === undefined || data.timestamp === null) {
             throw new Error('Twitch event payload requires timestamp');
+        }
+        if (!isIsoTimestamp(data.timestamp)) {
+            throw new Error('Twitch event payload requires ISO timestamp');
         }
         return data.timestamp;
     };

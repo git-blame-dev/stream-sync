@@ -133,6 +133,25 @@ describe('TimestampExtractionService Behavior', () => {
             expect(extractedTime).toBe(fallbackTime);
         });
 
+        it('should accept string timestamp values for TikTok fallback data', () => {
+            if (!TimestampExtractionService) {
+                return expect(true).toBe(true);
+            }
+
+            const fallbackTime = testClock.now() - (5 * 60 * 1000);
+            const tikTokData = {
+                timestamp: String(fallbackTime),
+                userId: 'testuser-id',
+                uniqueId: 'TestUser',
+                comment: 'String timestamp fallback'
+            };
+
+            const extractedTimestamp = service.extractTimestamp('tiktok', tikTokData);
+            const extractedTime = new Date(extractedTimestamp).getTime();
+            expect(extractedTime).toBe(fallbackTime);
+            expect(extractedTimestamp).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/);
+        });
+
         it('should fallback to current time when no timestamp fields available', () => {
             if (!TimestampExtractionService) {
                 return expect(true).toBe(true); // Skip test - service not implemented yet
@@ -188,6 +207,49 @@ describe('TimestampExtractionService Behavior', () => {
             // Then: Original timestamp is preserved (converted from microseconds)
             const extractedTime = new Date(extractedTimestamp).getTime();
             expect(extractedTime).toBe(originalTimeMs);
+        });
+
+        it('should preserve timestamp when YouTube provides milliseconds', () => {
+            if (!TimestampExtractionService) {
+                return expect(true).toBe(true);
+            }
+
+            const originalTimeMs = testClock.now() - (2 * 60 * 1000);
+            const youTubeData = {
+                timestamp: originalTimeMs.toString(),
+                author: {
+                    name: 'TestUser',
+                    id: 'user123'
+                },
+                message: {
+                    text: 'Test YouTube message (ms)'
+                }
+            };
+
+            const extractedTimestamp = service.extractTimestamp('youtube', youTubeData);
+            const extractedTime = new Date(extractedTimestamp).getTime();
+            expect(extractedTime).toBe(originalTimeMs);
+        });
+
+        it('should accept ISO string timestamps for YouTube payloads', () => {
+            if (!TimestampExtractionService) {
+                return expect(true).toBe(true);
+            }
+
+            const isoTimestamp = new Date(testClock.now() - (3 * 60 * 1000)).toISOString();
+            const youTubeData = {
+                timestamp: isoTimestamp,
+                author: {
+                    name: 'TestUser',
+                    id: 'user123'
+                },
+                message: {
+                    text: 'Test YouTube message (iso)'
+                }
+            };
+
+            const extractedTimestamp = service.extractTimestamp('youtube', youTubeData);
+            expect(extractedTimestamp).toBe(isoTimestamp);
         });
 
         it('should handle timestampUsec field as alternative for YouTube', () => {
@@ -298,6 +360,22 @@ describe('TimestampExtractionService Behavior', () => {
             // Then: TMI timestamp is used
             const extractedTime = new Date(extractedTimestamp).getTime();
             expect(extractedTime).toBe(originalTime);
+        });
+
+        it('should accept ISO string timestamps for Twitch payloads', () => {
+            if (!TimestampExtractionService) {
+                return expect(true).toBe(true);
+            }
+
+            const isoTimestamp = new Date(testClock.now() - (9 * 60 * 1000)).toISOString();
+            const twitchData = {
+                timestamp: isoTimestamp,
+                username: 'IsoUser',
+                userId: 'iso-123'
+            };
+
+            const extractedTimestamp = service.extractTimestamp('twitch', twitchData);
+            expect(extractedTimestamp).toBe(isoTimestamp);
         });
 
         it('should use top-level fallback time when context has no timestamp fields', () => {

@@ -15,7 +15,16 @@ function parseCandidate(value) {
         if (trimmed.length === 0) {
             return null;
         }
-        numericValue = Number(trimmed);
+        const numericCandidate = Number(trimmed);
+        if (Number.isFinite(numericCandidate)) {
+            numericValue = numericCandidate;
+        } else {
+            const parsedDate = Date.parse(trimmed);
+            if (Number.isNaN(parsedDate)) {
+                return null;
+            }
+            numericValue = parsedDate;
+        }
     } else {
         return null;
     }

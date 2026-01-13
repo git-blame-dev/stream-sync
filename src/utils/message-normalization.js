@@ -307,7 +307,7 @@ function extractYouTubeMessageText(messageObj) {
     return result;
 }
 
-function createFallbackMessage({ platform, userId, username, message, error } = {}) {
+function createFallbackMessage({ platform, userId, username, message, error, timestamp } = {}) {
     if (!platform || !userId || !username) {
         return null;
     }
@@ -317,12 +317,16 @@ function createFallbackMessage({ platform, userId, username, message, error } = 
         return null;
     }
 
+    if (!timestamp || typeof timestamp !== 'string') {
+        return null;
+    }
+
     return {
         platform: platform.toLowerCase(),
         userId: String(userId),
         username: normalizedUsername,
         message: (message || '').trim(),
-        timestamp: new Date().toISOString(),
+        timestamp,
         isMod: false,
         isSubscriber: false,
         isBroadcaster: false,

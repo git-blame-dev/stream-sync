@@ -13,6 +13,7 @@ const { resolveTikTokTimestampMs, resolveTikTokTimestampISO } = require('../util
 const { createPlatformErrorHandler } = require('../utils/platform-error-handler');
 const { createMonetizationErrorPayload } = require('../utils/monetization-error-utils');
 const { createRetrySystem } = require('../utils/retry-system');
+const TimestampExtractionService = require('../services/TimestampExtractionService');
 const { extractTikTokUserData, extractTikTokGiftData, logTikTokGiftData, formatCoinAmount } = require('../utils/tiktok-data-extraction');
 const { validateNotificationManagerInterface } = require('../utils/dependency-validator');
 const { normalizeTikTokMessage } = require('../utils/message-normalization');
@@ -53,7 +54,8 @@ class TikTokPlatform extends EventEmitter {
         this.WebcastEvent = dependencies.WebcastEvent;
         this.ControlEvent = dependencies.ControlEvent;
         this.retrySystem = dependencies.retrySystem || createRetrySystem({ logger: this.logger });
-        this.timestampService = dependencies.timestampService || null;
+        this.timestampService = dependencies.timestampService
+            || new TimestampExtractionService({ logger: this.logger });
         this._validateDependencies(dependencies, this.config);
         
         // Initialize event factories for standardized event creation (with safe fallbacks for tests)
@@ -1124,7 +1126,7 @@ class TikTokPlatform extends EventEmitter {
 
     static resolveEventTimestampISO(data) {
         const millis = TikTokPlatform.resolveEventTimestampMs(data);
-        return millis ? new Date(millis).toISOString() : new Date().toISOString();
+        return millis ? new Date(millis).toISOString() : null;
     }
 
     async handleTikTokFollow(data) {
@@ -1340,15 +1342,15 @@ class TikTokPlatform extends EventEmitter {
     }
 
     _getTimestamp(data) {
+        if (this.timestampService && typeof this.timestampService.extractTimestamp === 'function') {
+            return this.timestampService.extractTimestamp('tiktok', data);
+        }
         return TikTokPlatform.resolveEventTimestampISO(data);
     }
 
     _createMonetizationErrorPayload(notificationType, data, overrides = {}) {
         const id = this._getPlatformMessageId(data);
-        const timestampMs = TikTokPlatform.resolveEventTimestampMs(data);
-        const timestamp = Number.isFinite(timestampMs)
-            ? new Date(timestampMs).toISOString()
-            : undefined;
+        const timestamp = this._getTimestamp(data);
         return createMonetizationErrorPayload({
             notificationType,
             platform: 'tiktok',
@@ -1484,10 +1486,16 @@ class TikTokPlatform extends EventEmitter {
                 return;
             }
             
+            const timestamp = this._getTimestamp(data);
+            if (!timestamp) {
+                this.logger.warn('[TikTok Follow] Missing timestamp in follow event data', 'tiktok', { data });
+                return;
+            }
+
             const eventData = this.eventFactory.createFollow({
                 username,
                 userId,
-                timestamp: TikTokPlatform.resolveEventTimestampISO(data),
+                timestamp,
                 metadata: {
                     platform: 'tiktok'
                 }
@@ -1508,10 +1516,16 @@ class TikTokPlatform extends EventEmitter {
                 return;
             }
 
+            const timestamp = this._getTimestamp(data);
+            if (!timestamp) {
+                this.logger.warn('[TikTok Share] Missing timestamp in share event data', 'tiktok', { data });
+                return;
+            }
+
             const eventData = this.eventFactory.createShare({
                 username,
                 userId,
-                timestamp: TikTokPlatform.resolveEventTimestampISO(data),
+                timestamp,
                 metadata: {
                     platform: 'tiktok'
                 }

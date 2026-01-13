@@ -59,6 +59,7 @@ describe('TikTok event router', () => {
             connectionActive: false,
             cachedViewerCount: 0,
             connectionTime: 0,
+            _getTimestamp: jest.fn(() => '2025-01-02T03:04:05.000Z'),
             _handleChatMessage: async () => handledChatMessages.push(true)
         };
 

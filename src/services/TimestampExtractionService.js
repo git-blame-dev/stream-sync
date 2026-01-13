@@ -205,19 +205,10 @@ class TimestampExtractionService extends ServiceInterface {
         // Priority 1: timestamp field (could be microseconds or milliseconds) - optimized parsing
         if (data.timestamp !== undefined && data.timestamp !== null) {
             try {
-                // Fast integer parsing with validation
                 const rawTimestamp = data.timestamp;
-                let timestampValue;
-                
-                if (typeof rawTimestamp === 'number') {
-                    timestampValue = rawTimestamp;
-                } else if (typeof rawTimestamp === 'string') {
-                    timestampValue = this._fastParseInt(rawTimestamp);
-                    if (timestampValue === null) {
-                        throw new Error(`Cannot parse timestamp: ${rawTimestamp}`);
-                    }
-                } else {
-                    throw new Error(`Invalid timestamp type: ${typeof rawTimestamp}`);
+                let timestampValue = this._parseTimestampInput(rawTimestamp);
+                if (timestampValue === null) {
+                    throw new Error(`Cannot parse timestamp: ${rawTimestamp}`);
                 }
                 
                 // Optimized microsecond detection - use constant for performance
@@ -401,6 +392,28 @@ class TimestampExtractionService extends ServiceInterface {
         this._timestampValidationCache.set(key, value);
     }
     
+    _parseTimestampInput(value) {
+        if (typeof value === 'number') {
+            return Number.isFinite(value) ? value : null;
+        }
+        if (typeof value !== 'string') {
+            return null;
+        }
+        const trimmed = value.trim();
+        if (!trimmed) {
+            return null;
+        }
+        const numericCandidate = Number(trimmed);
+        if (!Number.isNaN(numericCandidate) && Number.isFinite(numericCandidate)) {
+            return numericCandidate;
+        }
+        const parsedDate = Date.parse(trimmed);
+        if (Number.isNaN(parsedDate)) {
+            return null;
+        }
+        return parsedDate;
+    }
+
     _fastParseInt(str) {
         if (typeof str !== 'string' || str.length === 0) {
             return null;

@@ -117,6 +117,23 @@ describe('Message Normalization', () => {
             expect(normalized.rawData).toEqual({ user, message, context });
         });
 
+        it('should reject non-string timestamps from the service', () => {
+            const nonStringTimestampService = {
+                extractTimestamp: jest.fn(() => 123456789)
+            };
+            const user = { userId: '123456789', username: 'testuser' };
+            const message = 'Timestamp type check';
+            const context = { 'tmi-sent-ts': String(testClock.now()) };
+
+            expect(() => normalizeTwitchMessage(
+                user,
+                message,
+                context,
+                'twitch',
+                nonStringTimestampService
+            )).toThrow('Missing Twitch timestamp');
+        });
+
         it('should normalize EventSub message correctly', () => {
             const timestampMs = testClock.now();
             const user = {
@@ -214,6 +231,29 @@ describe('Message Normalization', () => {
             });
         });
 
+        it('should reject non-string timestamps from the service', () => {
+            const nonStringTimestampService = {
+                extractTimestamp: jest.fn(() => 123456789)
+            };
+            const chatItem = {
+                item: {
+                    id: 'yt-message-124',
+                    timestamp: testClock.now(),
+                    author: {
+                        id: 'UC123456789',
+                        name: 'youtubeuser',
+                        isModerator: false,
+                        isMember: true,
+                        isOwner: false
+                    },
+                    message: { text: 'Hello YouTube!' }
+                }
+            };
+
+            expect(() => normalizeYouTubeMessage(chatItem, 'youtube', nonStringTimestampService))
+                .toThrow('Missing YouTube timestamp');
+        });
+
         it('should normalize YouTube super chat correctly', () => {
             const timestampMs = testClock.now();
             const superChatItem = {
@@ -287,6 +327,24 @@ describe('Message Normalization', () => {
             expect(normalized.metadata).toMatchObject({
                 profilePicture: 'avatar.jpg'
             });
+        });
+
+        it('should reject non-string timestamps from the service', () => {
+            const nonStringTimestampService = {
+                extractTimestamp: jest.fn(() => 123456789)
+            };
+            const data = {
+                user: {
+                    userId: 'tt-123',
+                    uniqueId: 'tiktokuser123',
+                    nickname: 'TikTokUser'
+                },
+                comment: 'Hello TikTok!',
+                createTime: testClock.now()
+            };
+
+            expect(() => normalizeTikTokMessage(data, 'tiktok', nonStringTimestampService))
+                .toThrow('Missing TikTok timestamp');
         });
 
         it('should handle TikTok gift messages', () => {
@@ -373,7 +431,8 @@ describe('Message Normalization', () => {
                 userId: 'user-1',
                 username: 'testuser',
                 message: 'test message',
-                error
+                error,
+                timestamp: '2025-01-02T03:04:05.000Z'
             });
 
             expect(fallback).toMatchObject({
@@ -381,6 +440,7 @@ describe('Message Normalization', () => {
                 userId: 'user-1',
                 username: 'testuser',
                 message: 'test message',
+                timestamp: '2025-01-02T03:04:05.000Z',
                 isMod: false,
                 isSubscriber: false,
                 isBroadcaster: false
@@ -389,6 +449,17 @@ describe('Message Normalization', () => {
                 error: 'Normalization failed',
                 fallback: true
             });
+        });
+
+        it('should require timestamps for fallback messages', () => {
+            const fallback = createFallbackMessage({
+                platform: 'twitch',
+                userId: 'user-2',
+                username: 'iso-user',
+                message: 'timestamp check'
+            });
+
+            expect(fallback).toBeNull();
         });
 
         it('should handle missing parameters in fallback', () => {
