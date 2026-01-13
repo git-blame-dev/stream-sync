@@ -121,4 +121,72 @@ describe('Twitch EventSub event router', () => {
             timestamp: '2024-01-01T00:00:00Z'
         });
     });
+
+    test('backfills stream timestamps from metadata or started_at', () => {
+        const emitted = [];
+        const router = createTwitchEventSubEventRouter({
+            config: { dataLoggingEnabled: false },
+            logger: createLogger(),
+            emit: (type, payload) => emitted.push({ type, payload }),
+            logRawPlatformData: async () => {},
+            logError: () => {}
+        });
+
+        router.handleNotificationEvent('stream.online', {
+            id: 'stream-1',
+            started_at: '2024-02-01T00:00:00Z'
+        }, {
+            message_timestamp: '2024-02-01T00:00:30Z'
+        });
+
+        router.handleNotificationEvent('stream.offline', {
+            id: 'stream-1'
+        }, {
+            message_timestamp: '2024-02-01T01:00:00Z'
+        });
+
+        const onlineEvent = emitted.find((evt) => evt.type === 'streamOnline');
+        const offlineEvent = emitted.find((evt) => evt.type === 'streamOffline');
+        expect(onlineEvent.payload).toMatchObject({
+            streamId: 'stream-1',
+            timestamp: '2024-02-01T00:00:00Z'
+        });
+        expect(offlineEvent.payload).toMatchObject({
+            streamId: 'stream-1',
+            timestamp: '2024-02-01T01:00:00Z'
+        });
+    });
+
+    test('backfills missing timestamps for raid and gift notifications', () => {
+        const emitted = [];
+        const router = createTwitchEventSubEventRouter({
+            config: { dataLoggingEnabled: false },
+            logger: createLogger(),
+            emit: (type, payload) => emitted.push({ type, payload }),
+            logRawPlatformData: async () => {},
+            logError: () => {}
+        });
+
+        router.handleNotificationEvent('channel.raid', {
+            from_broadcaster_user_name: 'Raider',
+            from_broadcaster_user_id: 'raid-1',
+            viewers: 8
+        }, {
+            message_timestamp: '2024-03-01T00:00:00Z'
+        });
+
+        router.handleNotificationEvent('channel.subscription.gift', {
+            user_name: 'Gifter',
+            user_id: 'gift-1',
+            tier: '1000',
+            total: 2
+        }, {
+            message_timestamp: '2024-03-01T00:01:00Z'
+        });
+
+        const raidEvent = emitted.find((evt) => evt.type === 'raid');
+        const giftEvent = emitted.find((evt) => evt.type === 'paypiggyGift');
+        expect(raidEvent.payload.timestamp).toBe('2024-03-01T00:00:00Z');
+        expect(giftEvent.payload.timestamp).toBe('2024-03-01T00:01:00Z');
+    });
 });

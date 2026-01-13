@@ -67,7 +67,7 @@ describe('TwitchPlatform behavior standards', () => {
         const platform = buildPlatform();
         const connectedEvents = [];
         platform.on('platform:event', (payload) => {
-            if (payload.type === 'platform:stream-status') connectedEvents.push(payload.data);
+            if (payload.type === 'platform:connection') connectedEvents.push(payload.data);
         });
 
         platform._handleEventSubConnectionChange(true, { reason: 'connected-test' });
@@ -75,7 +75,7 @@ describe('TwitchPlatform behavior standards', () => {
         expect(connectedEvents).toHaveLength(1);
         expect(connectedEvents[0]).toMatchObject({
             platform: 'twitch',
-            isLive: true
+            status: 'connected'
         });
     });
 

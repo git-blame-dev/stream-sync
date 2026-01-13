@@ -55,6 +55,12 @@ class TwitchEventSub extends EventEmitter {
             maxSubscriptions: 50,
             cleanupInterval: 5 * 60 * 1000 // 5 minutes
         };
+
+        // EventSub dedupe + reconnect tracking
+        this.reconnectUrl = null;
+        this.recentMessageIds = new Map();
+        this.messageIdTtlMs = 5 * 60 * 1000;
+        this.maxMessageIds = 1000;
         
         try {
             this.logger.info('Manual EventSub initialized', 'twitch');
@@ -124,6 +130,34 @@ class TwitchEventSub extends EventEmitter {
             global.gc();
             this.logger.debug('Forced garbage collection completed', 'twitch');
         }
+    }
+
+    _pruneMessageIds(now) {
+        for (const [messageId, seenAt] of this.recentMessageIds.entries()) {
+            if (now - seenAt > this.messageIdTtlMs) {
+                this.recentMessageIds.delete(messageId);
+            }
+        }
+    }
+
+    _isDuplicateMessageId(metadata) {
+        const messageId = metadata?.message_id;
+        if (!messageId) {
+            return false;
+        }
+
+        const now = Date.now();
+        const lastSeen = this.recentMessageIds.get(messageId);
+        if (lastSeen && now - lastSeen < this.messageIdTtlMs) {
+            return true;
+        }
+
+        this.recentMessageIds.set(messageId, now);
+        if (this.recentMessageIds.size > this.maxMessageIds) {
+            this._pruneMessageIds(now);
+        }
+
+        return false;
     }
 
     async _validateConfig() {
@@ -423,9 +457,13 @@ class TwitchEventSub extends EventEmitter {
                 break;
                 
             case 'notification':
-                this.handleNotificationEvent(payload.subscription.type, payload.event);
+                if (this._isDuplicateMessageId(metadata)) {
+                    this.logger.debug(`Duplicate EventSub notification ignored: ${metadata.message_id}`, 'twitch');
+                    break;
+                }
+                this.handleNotificationEvent(payload.subscription.type, payload.event, metadata);
                 break;
-                
+            
             case 'session_reconnect':
                 this.logger.warn('EventSub reconnect requested', 'twitch', payload);
                 this._handleReconnectRequest(payload);
@@ -531,8 +569,8 @@ class TwitchEventSub extends EventEmitter {
         return true;
     }
 
-    handleNotificationEvent(subscriptionType, event) {
-        this.eventRouter.handleNotificationEvent(subscriptionType, event);
+    handleNotificationEvent(subscriptionType, event, metadata) {
+        this.eventRouter.handleNotificationEvent(subscriptionType, event, metadata);
     }
 
     _handleChatMessageEvent(event) {

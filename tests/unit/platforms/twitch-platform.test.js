@@ -501,6 +501,20 @@ describe('Twitch Platform', () => {
             const disconnectedState = platform.getConnectionState();
             expect(['disconnected', 'connecting'].includes(disconnectedState.status)).toBe(true);
         });
+
+        it('emits platform connection events for EventSub lifecycle', async () => {
+            await platform.initialize(platformHandlers);
+
+            const emitSpy = jest.spyOn(platform, 'emit');
+            const connectedHandler = mockTwitchEventSub.on.mock.calls.find(call => call[0] === 'eventSubConnected')[1];
+
+            await connectedHandler({ reason: 'session_welcome' });
+
+            const connectionEvent = emitSpy.mock.calls.find(call => call[0] === 'platform:event');
+            expect(connectionEvent).toBeDefined();
+            expect(connectionEvent[1].type).toBe('platform:connection');
+            expect(platformHandlers.onStreamStatus).not.toHaveBeenCalled();
+        });
     });
 
     describe('when bot sends messages to chat', () => {

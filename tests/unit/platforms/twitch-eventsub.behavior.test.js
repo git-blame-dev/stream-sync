@@ -62,6 +62,36 @@ describe('TwitchEventSub behavior', () => {
         expect(messageSpy.mock.calls[0][0].context['tmi-sent-ts']).toBe(String(Date.parse('2024-01-01T00:00:00Z')));
     });
 
+    it('ignores duplicate notification message ids', () => {
+        const instance = new TwitchEventSub({ channel: 'chan', clientId: 'cid', accessToken: 'tok' }, {
+            logger,
+            authManager: baseAuthManager(),
+            ChatFileLoggingService
+        });
+
+        const followSpy = jest.fn();
+        instance.emit = jest.fn((event, payload) => {
+            if (event === 'follow') followSpy(payload);
+        });
+
+        const message = {
+            metadata: {
+                message_id: 'dup-1',
+                message_type: 'notification',
+                message_timestamp: '2024-01-01T00:00:00Z'
+            },
+            payload: {
+                subscription: { type: 'channel.follow' },
+                event: { user_name: 'u', user_id: '1', followed_at: '2024-01-01T00:00:00Z' }
+            }
+        };
+
+        instance.handleWebSocketMessage(message);
+        instance.handleWebSocketMessage(message);
+
+        expect(followSpy).toHaveBeenCalledTimes(1);
+    });
+
     it('validates configuration using centralized auth fallback', async () => {
         const authManager = baseAuthManager();
         const instance = new TwitchEventSub({ channel: 'chan' }, { logger, authManager, ChatFileLoggingService });

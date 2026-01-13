@@ -261,6 +261,30 @@ function createTwitchEventSubEventRouter(options = {}) {
         safeEmit('paypiggyMessage', payload);
     };
 
+    const resolveNotificationTimestamp = (event, metadata, subscriptionType) => {
+        if (!event || typeof event !== 'object') {
+            return metadata?.message_timestamp;
+        }
+
+        if (subscriptionType === 'stream.online') {
+            return event.started_at || event.timestamp || metadata?.message_timestamp;
+        }
+
+        if (subscriptionType === 'stream.offline') {
+            return event.ended_at || event.timestamp || metadata?.message_timestamp;
+        }
+
+        return event.timestamp || metadata?.message_timestamp;
+    };
+
+    const applyTimestampFallback = (event, metadata, subscriptionType) => {
+        const resolvedTimestamp = resolveNotificationTimestamp(event, metadata, subscriptionType);
+        if (!resolvedTimestamp || (event && event.timestamp)) {
+            return event;
+        }
+        return { ...event, timestamp: resolvedTimestamp };
+    };
+
     const handleStreamOnlineEvent = (event) => {
         logRawIfEnabled('stream_online', event, 'stream-online-log', 'Error logging raw stream online data');
 
@@ -268,7 +292,8 @@ function createTwitchEventSubEventRouter(options = {}) {
         safeEmit('streamOnline', {
             platform: 'twitch',
             streamId: event.id,
-            startedAt: event.started_at
+            startedAt: event.started_at,
+            timestamp: event.timestamp || event.started_at
         });
     };
 
@@ -278,40 +303,42 @@ function createTwitchEventSubEventRouter(options = {}) {
         safeLogger.info('Stream went offline, stopping viewer count polling', 'twitch');
         safeEmit('streamOffline', {
             platform: 'twitch',
-            streamId: event.id
+            streamId: event.id,
+            timestamp: event.timestamp
         });
     };
 
-    const handleNotificationEvent = (subscriptionType, event) => {
+    const handleNotificationEvent = (subscriptionType, event, metadata) => {
         safeLogger.debug(`EventSub notification received: ${subscriptionType}`, 'twitch', event);
+        const normalizedEvent = applyTimestampFallback(event, metadata, subscriptionType);
 
         switch (subscriptionType) {
             case 'channel.chat.message':
-                handleChatMessageEvent(event);
+                handleChatMessageEvent(normalizedEvent);
                 break;
             case 'channel.follow':
-                handleFollowEvent(event);
+                handleFollowEvent(normalizedEvent);
                 break;
             case 'channel.subscribe':
-                handlePaypiggyEvent(event);
+                handlePaypiggyEvent(normalizedEvent);
                 break;
             case 'channel.raid':
-                handleRaidEvent(event);
+                handleRaidEvent(normalizedEvent);
                 break;
             case 'channel.bits.use':
-                handleBitsUseEvent(event);
+                handleBitsUseEvent(normalizedEvent);
                 break;
             case 'channel.subscription.gift':
-                handlePaypiggyGiftEvent(event);
+                handlePaypiggyGiftEvent(normalizedEvent);
                 break;
             case 'channel.subscription.message':
-                handlePaypiggyMessageEvent(event);
+                handlePaypiggyMessageEvent(normalizedEvent);
                 break;
             case 'stream.online':
-                handleStreamOnlineEvent(event);
+                handleStreamOnlineEvent(normalizedEvent);
                 break;
             case 'stream.offline':
-                handleStreamOfflineEvent(event);
+                handleStreamOfflineEvent(normalizedEvent);
                 break;
             default:
                 safeLogger.debug(`Unknown EventSub notification type: ${subscriptionType}`, 'twitch', event);

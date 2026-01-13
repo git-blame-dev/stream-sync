@@ -283,7 +283,12 @@ class TwitchPlatform extends EventEmitter {
         if (this.timestampService && typeof this.timestampService.extractTimestamp === 'function') {
             return this.timestampService.extractTimestamp('twitch', data);
         }
-        return typeof data?.timestamp === 'string' ? data.timestamp : undefined;
+
+        if (typeof data?.timestamp === 'string') {
+            return data.timestamp;
+        }
+
+        return getSystemTimestampISO();
     }
 
     async _handleStandardEvent(eventType, data, options = {}) {
@@ -689,20 +694,15 @@ class TwitchPlatform extends EventEmitter {
     }
 
     _handleEventSubConnectionChange(isConnected, details = {}) {
-        const payload = {
-            platform: this.platformName,
-            isLive: !!isConnected,
-            connectionId: details.connectionId || PlatformEvents._generateCorrelationId(),
-            timestamp: getSystemTimestampISO(),
-            reason: details.reason,
-            willReconnect: details.willReconnect ?? (!this.isPlannedDisconnection && this.config.enabled),
-            metadata: details.metadata || {}
-        };
+        const status = isConnected ? 'connected' : 'disconnected';
+        const error = details.error || (details.reason ? { message: details.reason } : null);
+        const payload = PlatformEvents.createConnectionEvent(this.platformName, status, error);
+        payload.willReconnect = details.willReconnect ?? (!this.isPlannedDisconnection && this.config.enabled);
 
         this.isConnected = !!isConnected;
         this.isConnecting = false;
 
-        this._emitPlatformEvent(PlatformEvents.STREAM_STATUS, payload);
+        this._emitPlatformEvent(PlatformEvents.PLATFORM_CONNECTION, payload);
     }
 
     _logPlatformError(message, error = null, eventType = 'twitch-platform', payload = null) {
