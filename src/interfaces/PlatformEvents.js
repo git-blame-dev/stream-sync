@@ -407,11 +407,10 @@ class PlatformEventValidator {
         // Check required fields
         if (schema.required) {
             for (const field of schema.required) {
-                if (field === 'id' && event.isError === true &&
-                    (event.type === 'platform:gift' || event.type === 'platform:envelope')) {
-                    continue;
-                }
-                if (!(field in event)) {
+                const fieldSchema = schema.properties?.[field];
+                const fieldTypes = fieldSchema ? (Array.isArray(fieldSchema.type) ? fieldSchema.type : [fieldSchema.type]) : [];
+                const allowsNull = fieldTypes.includes('null');
+                if (event[field] === undefined || (event[field] === null && !allowsNull)) {
                     errors.push(`Missing required field: ${field}`);
                 }
             }
@@ -425,6 +424,15 @@ class PlatformEventValidator {
                     if (!this._validateFieldType(value, fieldSchema, fieldName)) {
                         errors.push(`Invalid type for field ${fieldName}`);
                     }
+                }
+            }
+
+            const allowedFields = new Set(Object.keys(schema.properties));
+            allowedFields.add('id');
+            allowedFields.add('correlationId');
+            for (const fieldName of Object.keys(event)) {
+                if (!allowedFields.has(fieldName)) {
+                    errors.push(`Unexpected field: ${fieldName}`);
                 }
             }
         }
@@ -474,12 +482,37 @@ class PlatformEventValidator {
             }
         }
         
+        if (schema.type === 'string' && typeof value === 'string') {
+            if ((fieldName === 'username' || fieldName === 'userId') && !value.trim()) {
+                return false;
+            }
+            if (fieldName === 'timestamp' && Number.isNaN(Date.parse(value))) {
+                return false;
+            }
+        }
+
+        if (schema.type === 'number' && typeof value === 'number') {
+            if (!Number.isFinite(value)) {
+                return false;
+            }
+        }
+
         // Handle object validation with required fields
         if (schema.type === 'object' && value && typeof value === 'object' && !Array.isArray(value)) {
             if (schema.required) {
                 for (const requiredField of schema.required) {
-                    if (!(requiredField in value)) {
+                    if (value[requiredField] === undefined || value[requiredField] === null) {
                         return false;
+                    }
+                }
+            }
+
+            if (schema.properties) {
+                for (const [childName, childSchema] of Object.entries(schema.properties)) {
+                    if (childName in value) {
+                        if (!this._validateFieldType(value[childName], childSchema, childName)) {
+                            return false;
+                        }
                     }
                 }
             }
@@ -513,6 +546,12 @@ class PlatformEventBuilder {
         if (params.metadata !== undefined) {
             result.metadata = params.metadata;
         }
+
+        const validation = this.validator.validate(result);
+        if (!validation.valid) {
+            throw new Error(`Invalid event: ${validation.errors.join(', ')}`);
+        }
+
         return result;
     }
     
@@ -534,6 +573,12 @@ class PlatformEventBuilder {
         if (params.repeatCount !== undefined) {
             result.repeatCount = params.repeatCount;
         }
+
+        const validation = this.validator.validate(result);
+        if (!validation.valid) {
+            throw new Error(`Invalid event: ${validation.errors.join(', ')}`);
+        }
+
         return result;
     }
     
@@ -550,6 +595,12 @@ class PlatformEventBuilder {
         if (params.metadata !== undefined) {
             result.metadata = params.metadata;
         }
+
+        const validation = this.validator.validate(result);
+        if (!validation.valid) {
+            throw new Error(`Invalid event: ${validation.errors.join(', ')}`);
+        }
+
         return result;
     }
     
@@ -946,10 +997,35 @@ class EnhancedPlatformEvents {
     }
 
     static validateNotificationEvent(event) {
-        return !!(event && 
-               event.type === 'platform:notification' &&
-               VALID_PLATFORMS.includes(event.platform) &&
-               Object.values(this.NOTIFICATION_TYPES).includes(event.notificationType));
+        if (!event || event.type !== 'platform:notification') {
+            return false;
+        }
+
+        if (!VALID_PLATFORMS.includes(event.platform)) {
+            return false;
+        }
+
+        if (!Object.values(this.NOTIFICATION_TYPES).includes(event.notificationType)) {
+            return false;
+        }
+
+        if (!event.data || typeof event.data !== 'object') {
+            return false;
+        }
+
+        if (typeof event.priority !== 'number' || !Number.isFinite(event.priority)) {
+            return false;
+        }
+
+        if (typeof event.username !== 'string' || !event.username.trim()) {
+            return false;
+        }
+
+        if (typeof event.userId !== 'string' || !event.userId.trim()) {
+            return false;
+        }
+
+        return true;
     }
 
     static validateConnectionEvent(event) {
@@ -1007,6 +1083,8 @@ class EnhancedPlatformEvents {
     static validateEvent(event) {
         if (!event || typeof event !== 'object') return false;
 
+        const validator = new PlatformEventValidator();
+
         switch (event.type) {
             case 'platform:chat-message':
                 return this.validateChatMessageEvent(event);
@@ -1016,6 +1094,15 @@ class EnhancedPlatformEvents {
                 return this.validateConnectionEvent(event);
             case 'platform:error':
                 return this.validateErrorEvent(event);
+            case 'platform:gift':
+            case 'platform:giftpaypiggy':
+            case 'platform:paypiggy':
+            case 'platform:raid':
+            case 'platform:viewer-count':
+            case 'platform:envelope':
+            case 'platform:follow':
+            case 'platform:share':
+                return validator.validate(event).valid;
             case PlatformEvents.STREAM_DETECTED:
                 return this.validateStreamDetectedEvent(event);
             default:
@@ -1113,6 +1200,12 @@ class EventBuilder {
         
         if (!this._event.type || !Object.values(PlatformEvents).includes(this._event.type)) {
             throw new Error(`Invalid event type: ${this._event.type}`);
+        }
+
+        const validator = new PlatformEventValidator();
+        const result = validator.validate(this._event);
+        if (!result.valid) {
+            throw new Error(`Invalid event: ${result.errors.join(', ')}`);
         }
 
         return { ...this._event };
