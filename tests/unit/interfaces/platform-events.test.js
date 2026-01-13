@@ -50,22 +50,22 @@ describe('Platform Events Interface', () => {
                 {
                     platform: 'tiktok',
                     type: 'platform:gift',
-                    data: { giftType: 'rose', amount: 5, username: 'Gifter' }
+                    data: { giftType: 'rose', amount: 5, username: 'Gifter', userId: 'tt-gifter' }
                 },
                 {
                     platform: 'twitch',
                     type: 'platform:paypiggy',
-                    data: { tier: 1, duration: 1, username: 'Subscriber' }
+                    data: { tier: 1, duration: 1, username: 'Subscriber', userId: 'tw-sub' }
                 },
                 {
                     platform: 'youtube',
                     type: 'platform:paypiggy',
-                    data: { level: 'sponsor', username: 'Member' }
+                    data: { level: 'sponsor', username: 'Member', userId: 'yt-member' }
                 },
                 {
                     platform: 'tiktok',
                     type: 'platform:paypiggy',
-                    data: { tier: 'superfan', username: 'SuperFanUser' }
+                    data: { tier: 'superfan', username: 'SuperFanUser', userId: 'tt-superfan' }
                 }
             ];
 
@@ -81,6 +81,23 @@ describe('Platform Events Interface', () => {
                 expect(event.notificationType).toBe(testCase.type);
                 expect(event.platform).toBe(testCase.platform);
             });
+        });
+
+        it('should reject notification events missing required fields', () => {
+            const baseEvent = {
+                type: 'platform:notification',
+                platform: 'twitch',
+                notificationType: 'platform:gift',
+                timestamp: testClock.now(),
+                data: { username: 'TestUser', userId: 'test-user' },
+                priority: 1,
+                username: 'TestUser',
+                userId: 'test-user'
+            };
+            expect(PlatformEvents.validateNotificationEvent({ ...baseEvent, data: null })).toBe(false);
+            expect(PlatformEvents.validateNotificationEvent({ ...baseEvent, priority: undefined })).toBe(false);
+            expect(PlatformEvents.validateNotificationEvent({ ...baseEvent, username: undefined })).toBe(false);
+            expect(PlatformEvents.validateNotificationEvent({ ...baseEvent, userId: undefined })).toBe(false);
         });
 
         it('should validate connection status events', () => {
@@ -303,6 +320,63 @@ describe('Platform Events Interface', () => {
             });
         });
 
+        it('should validate monetization event types via validateEvent', () => {
+            const baseTimestamp = testClock.now();
+            const monetizationEvents = [
+                {
+                    type: 'platform:gift',
+                    platform: 'tiktok',
+                    username: 'gifter',
+                    userId: 'tt-gift',
+                    id: 'gift-1',
+                    giftType: 'rose',
+                    giftCount: 1,
+                    amount: 5,
+                    currency: 'coins',
+                    timestamp: new Date(baseTimestamp).toISOString()
+                },
+                {
+                    type: 'platform:paypiggy',
+                    platform: 'twitch',
+                    username: 'subber',
+                    userId: 'tw-sub',
+                    tier: '1',
+                    months: 1,
+                    timestamp: new Date(baseTimestamp + 1000).toISOString()
+                },
+                {
+                    type: 'platform:raid',
+                    platform: 'twitch',
+                    username: 'raider',
+                    userId: 'tw-raid',
+                    viewerCount: 5,
+                    timestamp: new Date(baseTimestamp + 2000).toISOString()
+                },
+                {
+                    type: 'platform:viewer-count',
+                    platform: 'youtube',
+                    count: 12,
+                    timestamp: new Date(baseTimestamp + 3000).toISOString()
+                },
+                {
+                    type: 'platform:envelope',
+                    platform: 'tiktok',
+                    username: 'sender',
+                    userId: 'tt-envelope',
+                    id: 'env-1',
+                    giftType: 'Treasure',
+                    giftCount: 1,
+                    amount: 10,
+                    currency: 'coins',
+                    timestamp: new Date(baseTimestamp + 4000).toISOString()
+                }
+            ];
+
+            monetizationEvents.forEach(event => {
+                expect(PlatformEvents.validateEvent(event)).toBe(true);
+            });
+        });
+
         it('should handle Unicode and emoji content properly', () => {
             const unicodeMessages = [
                 '你好世界 🌍',
@@ -331,9 +405,9 @@ describe('Platform Events Interface', () => {
                 .platform('twitch')
                 .type('chat-message')
                 .username('FluentUser')
+                .userId('fluent-user')
                 .message('Built with fluent API')
                 .metadata({ vip: true })
-                .priority(5)
                 .build();
 
             expect(event.platform).toBe('twitch');
@@ -356,6 +430,24 @@ describe('Platform Events Interface', () => {
                     .type('invalid-type')
                     .build();
             }).toThrow();
+        });
+
+        it('should reject builds missing required fields', () => {
+            expect(() => {
+                PlatformEvents.builder()
+                    .platform('twitch')
+                    .type('chat-message')
+                    .build();
+            }).toThrow('Missing required');
+
+            expect(() => {
+                PlatformEvents.builder()
+                    .platform('tiktok')
+                    .type('gift')
+                    .username('gifter')
+                    .userId('tt-gift')
+                    .build();
+            }).toThrow('Missing required');
         });
     });
 

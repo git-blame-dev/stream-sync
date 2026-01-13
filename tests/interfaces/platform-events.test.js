@@ -44,6 +44,20 @@ describe('Platform Event Interface Design', () => {
                 expect(result.errors).toContain('Missing required field: message');
                 expect(result.errors).toContain('Missing required field: timestamp');
             });
+
+            it('should reject platform:chat-message event with invalid message text', () => {
+                const event = {
+                    type: 'platform:chat-message',
+                    platform: 'twitch',
+                    username: 'testuser',
+                    userId: '12345',
+                    message: { text: 123 },
+                    timestamp: new Date().toISOString()
+                };
+                const result = validator.validate(event);
+                expect(result.valid).toBe(false);
+                expect(result.errors).toContain('Invalid type for field message');
+            });
             
             it('should validate platform:chat-connected event with connection details', () => {
                 const event = {
@@ -173,7 +187,59 @@ describe('Platform Event Interface Design', () => {
                 expect(result.errors).toContain('Missing required field: id');
             });
 
-            it('should allow platform:gift error events without id', () => {
+            it('should reject platform:gift event with blank identity', () => {
+                const event = {
+                    type: 'platform:gift',
+                    platform: 'tiktok',
+                    username: '   ',
+                    userId: '   ',
+                    id: 'gift-1',
+                    giftType: 'rose',
+                    giftCount: 1,
+                    amount: 5,
+                    currency: 'coins',
+                    timestamp: new Date().toISOString()
+                };
+                const result = validator.validate(event);
+                expect(result.valid).toBe(false);
+            });
+
+            it('should reject platform:gift event with invalid timestamp', () => {
+                const event = {
+                    type: 'platform:gift',
+                    platform: 'tiktok',
+                    username: 'gifter',
+                    userId: '22222',
+                    id: 'gift-2',
+                    giftType: 'rose',
+                    giftCount: 1,
+                    amount: 5,
+                    currency: 'coins',
+                    timestamp: 'not-a-date'
+                };
+                const result = validator.validate(event);
+                expect(result.valid).toBe(false);
+            });
+
+            it('should reject platform:gift event with unexpected field', () => {
+                const event = {
+                    type: 'platform:gift',
+                    platform: 'tiktok',
+                    username: 'gifter',
+                    userId: '22222',
+                    id: 'gift-3',
+                    giftType: 'rose',
+                    giftCount: 1,
+                    amount: 5,
+                    currency: 'coins',
+                    timestamp: new Date().toISOString(),
+                    unexpectedField: 'nope'
+                };
+                const result = validator.validate(event);
+                expect(result.valid).toBe(false);
+            });
+
+            it('should reject platform:gift error events without id', () => {
                 const event = {
                     type: 'platform:gift',
                     platform: 'tiktok',
@@ -187,7 +253,8 @@ describe('Platform Event Interface Design', () => {
                     isError: true
                 };
                 const result = validator.validate(event);
-                expect(result.valid).toBe(true);
+                expect(result.valid).toBe(false);
+                expect(result.errors).toContain('Missing required field: id');
             });
             
             it('should validate platform:raid event with user information', () => {
