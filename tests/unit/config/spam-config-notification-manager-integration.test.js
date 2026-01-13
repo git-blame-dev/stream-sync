@@ -22,7 +22,7 @@ const mockConstants = {
         ENVELOPE: 8
     },
     NOTIFICATION_CONFIGS: {
-        gift: {
+        'platform:gift': {
             priority: 4,
             duration: 5000,
             settingKey: 'giftsEnabled',
@@ -154,7 +154,7 @@ describe('Spam Detection Service Integration Tests - Modernized', () => {
                 currency: 'coins'
             };
 
-            const result = await notificationManager.handleNotificationInternal('gift', 'tiktok', giftData, false);
+            const result = await notificationManager.handleNotificationInternal('platform:gift', 'tiktok', giftData, false);
 
             // Should suppress and NOT add to display queue
             expect(result.suppressed).toBe(true);
