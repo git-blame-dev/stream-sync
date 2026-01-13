@@ -54,6 +54,21 @@ describe('Notification Builder Edge Cases', () => {
         });
     });
 
+    describe('Canonical Type Enforcement', () => {
+        test('throws when short notification types are used', () => {
+            const baseData = {
+                platform: 'twitch',
+                username: 'TestUser',
+                userId: 'user-1'
+            };
+            const shortTypes = ['gift', 'paypiggy', 'giftpaypiggy', 'follow', 'raid', 'share', 'envelope'];
+
+            shortTypes.forEach((type) => {
+                expect(() => NotificationBuilder.build({ ...baseData, type })).toThrow('canonical');
+            });
+        });
+    });
+
     describe('Username Normalization Edge Cases', () => {
         test('trims surrounding whitespace in username', () => {
             const data = {

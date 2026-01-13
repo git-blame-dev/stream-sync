@@ -117,6 +117,42 @@ describe('PlatformEventRouter validation', () => {
         expect(runtime.handleGiftNotification).toHaveBeenCalledTimes(1);
     });
 
+    it('routes gift notifications with canonical types', async () => {
+        const { router, runtime } = buildRouter();
+        const timestamp = new Date().toISOString();
+
+        await router.routeEvent({
+            platform: 'tiktok',
+            type: 'platform:gift',
+            data: {
+                id: 'gift-1',
+                username: 'gifter',
+                userId: 'u9',
+                giftType: 'rose',
+                giftCount: 1,
+                amount: 5,
+                currency: 'coins',
+                timestamp
+            }
+        });
+
+        const [, , payload] = runtime.handleGiftNotification.mock.calls[0];
+        expect(payload.type).toBe('platform:gift');
+        expect(payload.timestamp).toBe(timestamp);
+    });
+
+    it('rejects short notification types at the routing boundary', async () => {
+        const { router, runtime } = buildRouter();
+
+        await expect(router.routeEvent({
+            platform: 'twitch',
+            type: 'gift',
+            data: { username: 'legacy', userId: 'u99', timestamp: new Date().toISOString() }
+        })).rejects.toThrow('Unsupported platform event type: gift');
+
+        expect(runtime.handleGiftNotification).not.toHaveBeenCalled();
+    });
+
     it('rejects monetization payloads missing timestamps', async () => {
         const { router, runtime } = buildRouter();
 

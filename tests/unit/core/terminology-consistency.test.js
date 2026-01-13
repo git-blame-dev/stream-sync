@@ -109,7 +109,7 @@ describe('Terminology Consistency', () => {
 
     describe('Log terminology', () => {
         test('YouTube membership log uses membership terminology', () => {
-            const logMessage = generateLogMessage('paypiggy', {
+            const logMessage = generateLogMessage('platform:paypiggy', {
                 username: 'TestMember',
                 platform: 'youtube',
                 rewardTitle: 'Member'
@@ -119,7 +119,7 @@ describe('Terminology Consistency', () => {
         });
 
         test('Twitch subscription log uses "subscription"', () => {
-            const logMessage = generateLogMessage('paypiggy', {
+            const logMessage = generateLogMessage('platform:paypiggy', {
                 username: 'TwitchSub',
                 platform: 'twitch',
                 tier: 'Tier1',

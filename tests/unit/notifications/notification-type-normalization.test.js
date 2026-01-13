@@ -66,4 +66,18 @@ describe('Notification type normalization', () => {
         expect(items).toHaveLength(1);
         expect(items[0].type).toBe('platform:follow');
     });
+
+    it('rejects short notification types without normalization', async () => {
+        const result = await notificationManager.handleNotification('gift', 'tiktok', {
+            username: 'bob',
+            userId: 'tiktok-2'
+        });
+
+        expect(result).toEqual(expect.objectContaining({
+            success: false,
+            error: 'Unknown notification type',
+            notificationType: 'gift'
+        }));
+        expect(items).toHaveLength(0);
+    });
 });

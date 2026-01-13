@@ -62,7 +62,7 @@ function createPaypiggyTemplates() {
 
 const NOTIFICATION_TEMPLATES = {
     // Gift notifications with singular/plural and coin formatting
-    gift: {
+    'platform:gift': {
         display: '{username} sent {formattedGiftCountForDisplay}',
         displayWithCoins: '{username} sent {formattedCoins} [{formattedGiftCountForDisplay}]',
         tts: '{ttsUsername} sent {formattedGiftCount}',
@@ -71,24 +71,24 @@ const NOTIFICATION_TEMPLATES = {
     },
     
     // Follow notifications
-    follow: {
+    'platform:follow': {
         display: '{username} just followed!',
         tts: '{ttsUsername} just followed',
         log: 'New follower: {username}'
     },
     
     // Paypiggy canonical (platform-specific wording determined upstream; SuperFan handled via metadata)
-    paypiggy: createPaypiggyTemplates(),
+    'platform:paypiggy': createPaypiggyTemplates(),
     
     // Raid notifications with viewer counts
-    raid: {
+    'platform:raid': {
         display: 'Incoming raid from {username} with {viewerCount} viewers!',
         tts: 'Incoming raid from {ttsUsername} with {formattedViewerCount}',
         log: 'Incoming raid from {username} with {viewerCount} viewers!'
     },
     
     // Envelope notifications (TikTok treasure chest events)
-    envelope: {
+    'platform:envelope': {
         display: '{username} sent a treasure chest!',
         displayWithCoins: '{username} sent {formattedCoins} treasure chest!',
         tts: '{ttsUsername} sent a treasure chest',
@@ -432,7 +432,7 @@ function enrichPaypiggyData(data) {
         return {};
     }
 
-    const shouldEnrich = data.type === 'paypiggy' || data.type === 'platform:paypiggy' || data.sourceType === 'paypiggy' || data.sourceType === 'platform:paypiggy';
+    const shouldEnrich = data.type === 'platform:paypiggy';
     if (!shouldEnrich) {
         return data;
     }

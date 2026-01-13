@@ -19,6 +19,11 @@ class NotificationBuilder {
         if (typeof type !== 'string' || !type.trim()) {
             throw new Error('Notification requires type');
         }
+        type = type.trim();
+        const disallowedShortTypes = new Set(['gift', 'paypiggy', 'giftpaypiggy', 'follow', 'raid', 'share', 'envelope']);
+        if (disallowedShortTypes.has(type)) {
+            throw new Error(`Notification requires canonical platform type: ${type}`);
+        }
         const normalizedUserId = (userId === null || userId === undefined) ? undefined : String(userId);
 
         // Some notification types require a message, others don't
@@ -128,8 +133,7 @@ class NotificationBuilder {
     static _getPaypiggyVariant(input = {}) {
         const type = input.type;
 
-        const isPaypiggyFamily = type === 'paypiggy' || type === 'platform:paypiggy';
-        if (!isPaypiggyFamily) {
+        if (type !== 'platform:paypiggy') {
             return null;
         }
 
@@ -321,7 +325,7 @@ class NotificationBuilder {
             return this._buildErrorMessage(type, userName);
         }
 
-        if (type === 'giftpaypiggy' || type === 'platform:giftpaypiggy') {
+        if (type === 'platform:giftpaypiggy') {
             const totalGifts = Number.isFinite(Number(giftCount)) ? Number(giftCount) : undefined;
             if (totalGifts === undefined) {
                 return '';
@@ -372,7 +376,7 @@ class NotificationBuilder {
             return baseText;
         }
 
-        if (type === 'platform:paypiggy' || this._getPaypiggyVariant(input)) {
+        if (type === 'platform:paypiggy') {
             return this._buildPaypiggyDisplayMessage(input);
         }
 
@@ -466,7 +470,7 @@ class NotificationBuilder {
             return `${userName} sent ${countText}${giftType}`;
         }
 
-        if (type === 'platform:paypiggy' || this._getPaypiggyVariant(input)) {
+        if (type === 'platform:paypiggy') {
             return this._buildPaypiggyTtsMessage(input);
         }
 
@@ -562,7 +566,7 @@ class NotificationBuilder {
             return `TikTok Gift: ${countText}${giftType}${coinText} from ${userName}`;
         }
         
-        if (type === 'platform:paypiggy' || this._getPaypiggyVariant(input)) {
+        if (type === 'platform:paypiggy') {
             return this._buildPaypiggyLogMessage(input);
         }
         
