@@ -144,7 +144,7 @@ describe('User-Facing Content Validation', () => {
             ];
 
             specialUsernames.forEach(username => {
-                const result = createNotificationData('follow', 'twitch', 
+                const result = createNotificationData('platform:follow', 'twitch', 
                     { username }, 
                     {}
                 );
@@ -167,7 +167,7 @@ describe('User-Facing Content Validation', () => {
             ];
 
             internationalUsernames.forEach(username => {
-                const result = createNotificationData('gift', 'twitch',
+                const result = createNotificationData('platform:gift', 'twitch',
                     { username },
                     { giftCount: 1, giftType: 'bits', amount: 1, currency: 'bits' }
                 );
