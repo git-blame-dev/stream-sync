@@ -75,7 +75,7 @@ describe('TwitchEventSub Resubscription Notification Fix', () => {
       const [eventType, payload] = emitSpy.mock.calls[0];
       expect(eventType).toBe('paypiggyMessage');
       expect(payload).toMatchObject({
-        type: 'platform:paypiggy',
+        type: 'paypiggy',
         username: 'example_user_13',
         userId: '900000003',
         tier: '1000',
@@ -103,7 +103,7 @@ describe('TwitchEventSub Resubscription Notification Fix', () => {
       const [eventType, payload] = emitSpy.mock.calls[0];
       expect(eventType).toBe('paypiggyMessage');
       expect(payload).toMatchObject({
-        type: 'platform:paypiggy',
+        type: 'paypiggy',
         username: 'premium_user',
         tier: '2000',
         months: 12,
@@ -129,7 +129,7 @@ describe('TwitchEventSub Resubscription Notification Fix', () => {
       const [eventType, payload] = emitSpy.mock.calls[0];
       expect(eventType).toBe('paypiggy');
       expect(payload).toMatchObject({
-        type: 'platform:paypiggy',
+        type: 'paypiggy',
         username: 'new_subscriber',
         userId: 'sub123',
         tier: '2000',
