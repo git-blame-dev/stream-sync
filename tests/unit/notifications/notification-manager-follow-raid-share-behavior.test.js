@@ -101,7 +101,7 @@ describe('NotificationManager follow/raid/share behavior', () => {
         expect(result).toEqual(expect.objectContaining({
             success: false,
             disabled: true,
-            notificationType: 'share',
+            notificationType: 'platform:share',
             platform: 'tiktok'
         }));
         expect(queuedItems).toHaveLength(0);
@@ -123,7 +123,7 @@ describe('NotificationManager follow/raid/share behavior', () => {
         expect(result).toEqual(expect.objectContaining({
             success: false,
             disabled: true,
-            notificationType: 'follow',
+            notificationType: 'platform:follow',
             platform: 'twitch'
         }));
         expect(queuedItems).toHaveLength(0);
