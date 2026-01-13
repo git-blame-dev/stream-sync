@@ -14,8 +14,8 @@ describe('notification-types behavior', () => {
     });
 
     it('validates notification types and chat handling', () => {
-        expect(isNotificationType('envelope')).toBe(true);
-        expect(isNotificationType('chat')).toBe(true);
+        expect(isNotificationType('platform:envelope')).toBe(true);
+        expect(isNotificationType('chat')).toBe(false);
         expect(isNotificationType(null)).toBe(false);
 
         expect(isChatType('chat')).toBe(true);
@@ -33,6 +33,6 @@ describe('notification-types behavior', () => {
 
         const allTypes = getAllNotificationTypes();
         expect(allTypes).toContain('platform:envelope');
-        expect(allTypes).toContain('chat');
+        expect(allTypes).not.toContain('chat');
     });
 });
