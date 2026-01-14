@@ -1,4 +1,8 @@
-jest.unmock('../../../src/platforms/youtube');
+const { describe, it, expect, beforeEach, afterEach } = require('bun:test');
+const { createMockFn, restoreAllMocks } = require('../../helpers/bun-mock-utils');
+const { unmockModule, restoreAllModuleMocks, resetModules } = require('../../helpers/bun-module-mocks');
+
+unmockModule('../../../src/platforms/youtube');
 
 const { initializeTestLogging, createMockConfig, createMockPlatformDependencies } = require('../../helpers/test-setup');
 
@@ -18,14 +22,20 @@ describe('YouTubePlatform connection state reporting', () => {
         dependencies = createMockPlatformDependencies('youtube');
     });
 
+    afterEach(() => {
+        restoreAllMocks();
+        restoreAllModuleMocks();
+        resetModules();
+    });
+
     it('returns connection state based on connection manager data', () => {
         const platform = new YouTubePlatform(config, dependencies);
         platform.connectionManager = {
-            getConnectionCount: jest.fn(() => 2)
+            getConnectionCount: createMockFn(() => 2)
         };
-        platform.getActiveYouTubeVideoIds = jest.fn(() => ['video-1', 'video-2']);
+        platform.getActiveYouTubeVideoIds = createMockFn(() => ['video-1', 'video-2']);
         platform.monitoringInterval = { id: 'interval' };
-        platform.isAnyYouTubeStreamReady = jest.fn(() => false);
+        platform.isAnyYouTubeStreamReady = createMockFn(() => false);
 
         const state = platform.getConnectionState();
 
@@ -40,11 +50,11 @@ describe('YouTubePlatform connection state reporting', () => {
     it('summarizes stats using connection and monitoring status', () => {
         const platform = new YouTubePlatform(config, dependencies);
         platform.connectionManager = {
-            getConnectionCount: jest.fn(() => 1)
+            getConnectionCount: createMockFn(() => 1)
         };
-        platform.getActiveYouTubeVideoIds = jest.fn(() => ['video-1']);
+        platform.getActiveYouTubeVideoIds = createMockFn(() => ['video-1']);
         platform.monitoringInterval = { id: 'interval' };
-        platform.isAnyYouTubeStreamReady = jest.fn(() => false);
+        platform.isAnyYouTubeStreamReady = createMockFn(() => false);
 
         const stats = platform.getStats();
 

@@ -1,21 +1,24 @@
+const { describe, test, expect, beforeEach, afterEach } = require('bun:test');
+const { createMockFn, clearAllMocks, restoreAllMocks } = require('../../helpers/bun-mock-utils');
+const { mockModule, restoreAllModuleMocks, resetModules } = require('../../helpers/bun-module-mocks');
 
 // Mock the YouTube platform dependencies to control the test environment
 const mockYouTubei = {
-    LiveChat: jest.fn().mockImplementation(() => ({
-        on: jest.fn(),
-        start: jest.fn(),
-        stop: jest.fn()
+    LiveChat: createMockFn().mockImplementation(() => ({
+        on: createMockFn(),
+        start: createMockFn(),
+        stop: createMockFn()
     }))
 };
 
 const mockStreamElements = {
-    on: jest.fn(),
-    connect: jest.fn(),
-    disconnect: jest.fn()
+    on: createMockFn(),
+    connect: createMockFn(),
+    disconnect: createMockFn()
 };
 
 // Mock the platform file - this will be our test subject
-jest.mock('../../../src/platforms/youtube', () => {
+mockModule('../../../src/platforms/youtube', () => {
     const { EventEmitter } = require('events');
     
     class MockYouTubePlatform extends EventEmitter {
@@ -29,17 +32,17 @@ jest.mock('../../../src/platforms/youtube', () => {
             // Mock the connection manager
             this.connectionManager = {
                 connections: new Map(),
-                addConnection: jest.fn(),
-                removeConnection: jest.fn(),
-                setConnectionReady: jest.fn(),
-                isConnectionReady: jest.fn(),
-                getActiveVideoIds: jest.fn(() => Array.from(this.connections.keys())),
-                getAllVideoIds: jest.fn(() => Array.from(this.connections.keys())),
-                getConnectionCount: jest.fn(() => this.connections.size),
-                getReadyConnectionCount: jest.fn(),
-                hasConnection: jest.fn(),
-                getConnection: jest.fn(),
-                getConnectionState: jest.fn()
+                addConnection: createMockFn(),
+                removeConnection: createMockFn(),
+                setConnectionReady: createMockFn(),
+                isConnectionReady: createMockFn(),
+                getActiveVideoIds: createMockFn(() => Array.from(this.connections.keys())),
+                getAllVideoIds: createMockFn(() => Array.from(this.connections.keys())),
+                getConnectionCount: createMockFn(() => this.connections.size),
+                getReadyConnectionCount: createMockFn(),
+                hasConnection: createMockFn(),
+                getConnection: createMockFn(),
+                getConnectionState: createMockFn()
             };
             
             // This method will be tested - should filter to only ready connections
@@ -67,10 +70,10 @@ const YouTube = require('../../../src/platforms/youtube');
 
 // Test data factories
 const createTestLogger = () => ({
-    debug: jest.fn(),
-    info: jest.fn(),
-    warn: jest.fn(),
-    error: jest.fn()
+    debug: createMockFn(),
+    info: createMockFn(),
+    warn: createMockFn(),
+    error: createMockFn()
 });
 
 const createTestConfig = () => ({
@@ -83,18 +86,18 @@ const createTestConfig = () => ({
 });
 
 const createTestHandlers = () => ({
-    onMessage: jest.fn(),
-    onFollow: jest.fn(),
-    onGift: jest.fn(),
-    onMembership: jest.fn(),
-    onStreamStart: jest.fn(),
-    onStreamEnd: jest.fn()
+    onMessage: createMockFn(),
+    onFollow: createMockFn(),
+    onGift: createMockFn(),
+    onMembership: createMockFn(),
+    onStreamStart: createMockFn(),
+    onStreamEnd: createMockFn()
 });
 
 const createTestNotificationManager = () => ({
-    getDisplayedNotifications: jest.fn(() => []),
-    addNotification: jest.fn(),
-    clearNotifications: jest.fn()
+    getDisplayedNotifications: createMockFn(() => []),
+    addNotification: createMockFn(),
+    clearNotifications: createMockFn()
 });
 
 // Behavior validation helpers
@@ -124,7 +127,7 @@ describe('YouTube Connection Filtering Accuracy', () => {
     let mockNotificationManager;
 
     beforeEach(() => {
-        jest.clearAllMocks();
+        clearAllMocks();
         
         mockLogger = createTestLogger();
         mockConfig = createTestConfig();
@@ -132,6 +135,12 @@ describe('YouTube Connection Filtering Accuracy', () => {
         mockNotificationManager = createTestNotificationManager();
         
         youtubePlatform = new YouTube(mockConfig, mockHandlers, mockLogger, mockNotificationManager);
+    });
+
+    afterEach(() => {
+        restoreAllMocks();
+        restoreAllModuleMocks();
+        resetModules();
     });
 
     describe('User Behavior: getActiveYouTubeVideoIds() filtering accuracy', () => {

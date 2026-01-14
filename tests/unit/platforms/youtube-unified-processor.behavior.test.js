@@ -1,61 +1,65 @@
+const { describe, it, expect, beforeEach, afterEach } = require('bun:test');
+const { createMockFn, clearAllMocks, restoreAllMocks } = require('../../helpers/bun-mock-utils');
+const { mockModule, restoreAllModuleMocks, resetModules } = require('../../helpers/bun-module-mocks');
+
 const createErrorHandlerMock = () => ({
-  handleEventProcessingError: jest.fn(),
-  handleConnectionError: jest.fn(),
-  handleConfigurationError: jest.fn(),
-  handleCleanupError: jest.fn()
+  handleEventProcessingError: createMockFn(),
+  handleConnectionError: createMockFn(),
+  handleConfigurationError: createMockFn(),
+  handleCleanupError: createMockFn()
 });
 
-jest.mock('fs', () => ({
-  mkdirSync: jest.fn()
+mockModule('fs', () => ({
+  mkdirSync: createMockFn()
 }));
 
-jest.mock('../../../src/utils/dependency-validator', () => ({
-  validateYouTubePlatformDependencies: jest.fn(() => true),
-  validateLoggerInterface: jest.fn(() => true)
+mockModule('../../../src/utils/dependency-validator', () => ({
+  validateYouTubePlatformDependencies: createMockFn(() => true),
+  validateLoggerInterface: createMockFn(() => true)
 }));
 
-jest.mock('../../../src/utils/youtube-connection-manager', () => ({
-  YouTubeConnectionManager: jest.fn(() => ({
-    connectToStream: jest.fn(),
-    getConnectionCount: jest.fn(() => 0),
-    getAllVideoIds: jest.fn(() => []),
-    getActiveVideoIds: jest.fn(() => []),
-    hasConnection: jest.fn(() => false),
-    disconnectFromStream: jest.fn(),
-    cleanupAllConnections: jest.fn(),
-    removeConnection: jest.fn(),
-    getConnection: jest.fn(() => ({
-      on: jest.fn(),
-      start: jest.fn(),
-      sendMessage: jest.fn()
+mockModule('../../../src/utils/youtube-connection-manager', () => ({
+  YouTubeConnectionManager: createMockFn(() => ({
+    connectToStream: createMockFn(),
+    getConnectionCount: createMockFn(() => 0),
+    getAllVideoIds: createMockFn(() => []),
+    getActiveVideoIds: createMockFn(() => []),
+    hasConnection: createMockFn(() => false),
+    disconnectFromStream: createMockFn(),
+    cleanupAllConnections: createMockFn(),
+    removeConnection: createMockFn(),
+    getConnection: createMockFn(() => ({
+      on: createMockFn(),
+      start: createMockFn(),
+      sendMessage: createMockFn()
     })),
-    setConnectionReady: jest.fn(),
-    getConnectionStatus: jest.fn(() => ({ ready: true }))
+    setConnectionReady: createMockFn(),
+    getConnectionStatus: createMockFn(() => ({ ready: true }))
   }))
 }));
 
-jest.mock('../../../src/utils/youtube-notification-dispatcher', () => ({
-  YouTubeNotificationDispatcher: jest.fn(() => ({
-    dispatchSuperChat: jest.fn(),
-    dispatchSuperSticker: jest.fn(),
-    dispatchMembership: jest.fn(),
-    dispatchGiftMembership: jest.fn()
+mockModule('../../../src/utils/youtube-notification-dispatcher', () => ({
+  YouTubeNotificationDispatcher: createMockFn(() => ({
+    dispatchSuperChat: createMockFn(),
+    dispatchSuperSticker: createMockFn(),
+    dispatchMembership: createMockFn(),
+    dispatchGiftMembership: createMockFn()
   }))
 }));
 
-jest.mock('../../../src/utils/youtube-author-extractor', () => ({
-  extractAuthor: jest.fn(() => ({ name: 'MockUser', displayName: 'MockUser' }))
+mockModule('../../../src/utils/youtube-author-extractor', () => ({
+  extractAuthor: createMockFn(() => ({ name: 'MockUser', displayName: 'MockUser' }))
 }));
 
-jest.mock('../../../src/utils/notification-builder', () => ({
-  build: jest.fn((payload) => ({ ...payload, built: true }))
+mockModule('../../../src/utils/notification-builder', () => ({
+  build: createMockFn((payload) => ({ ...payload, built: true }))
 }));
 
-jest.mock('../../../src/utils/platform-error-handler', () => ({
-  createPlatformErrorHandler: jest.fn(() => createErrorHandlerMock())
+mockModule('../../../src/utils/platform-error-handler', () => ({
+  createPlatformErrorHandler: createMockFn(() => createErrorHandlerMock())
 }));
 
-jest.mock('../../../src/utils/config-normalizer', () => {
+mockModule('../../../src/utils/config-normalizer', () => {
   const defaults = {
     retryAttempts: 3,
     maxStreams: 5,
@@ -66,48 +70,48 @@ jest.mock('../../../src/utils/config-normalizer', () => {
   };
 
   return {
-    normalizeYouTubeConfig: jest.fn((config = {}) => ({ ...defaults, ...config })),
+    normalizeYouTubeConfig: createMockFn((config = {}) => ({ ...defaults, ...config })),
     DEFAULT_YOUTUBE_CONFIG: defaults
   };
 });
 
-jest.mock('../../../src/utils/timeout-validator', () => ({
-  validateTimeout: jest.fn((value) => value),
-  safeSetInterval: jest.fn((fn) => {
+mockModule('../../../src/utils/timeout-validator', () => ({
+  validateTimeout: createMockFn((value) => value),
+  safeSetInterval: createMockFn((fn) => {
     fn();
     return { ref: 'timer' };
   })
 }));
 
 const mockTextProcessing = {
-  extractMessageText: jest.fn(() => 'mock message')
+  extractMessageText: createMockFn(() => 'mock message')
 };
 
-jest.mock('../../../src/utils/text-processing', () => ({
-  createTextProcessingManager: jest.fn(() => mockTextProcessing),
-  TextProcessingManager: jest.fn(),
-  formatTimestampCompact: jest.fn()
+mockModule('../../../src/utils/text-processing', () => ({
+  createTextProcessingManager: createMockFn(() => mockTextProcessing),
+  TextProcessingManager: createMockFn(),
+  formatTimestampCompact: createMockFn()
 }));
 
-jest.mock('../../../src/utils/viewer-count-providers', () => ({
+mockModule('../../../src/utils/viewer-count-providers', () => ({
   ViewerCountProviderFactory: {
-    createYouTubeProvider: jest.fn(() => ({
-      getViewerCount: jest.fn().mockResolvedValue(0),
-      getViewerCountForVideo: jest.fn().mockResolvedValue(0)
+    createYouTubeProvider: createMockFn(() => ({
+      getViewerCount: createMockFn().mockResolvedValue(0),
+      getViewerCountForVideo: createMockFn().mockResolvedValue(0)
     }))
   }
 }));
 
-jest.mock('../../../src/utils/youtube-user-agent-manager', () => ({
-  YouTubeUserAgentManager: jest.fn(() => ({
-    getNextUserAgent: jest.fn(() => 'agent')
+mockModule('../../../src/utils/youtube-user-agent-manager', () => ({
+  YouTubeUserAgentManager: createMockFn(() => ({
+    getNextUserAgent: createMockFn(() => 'agent')
   }))
 }));
 
-jest.mock('../../../src/services/ChatFileLoggingService', () => {
-  return jest.fn().mockImplementation(() => ({
-    logRawPlatformData: jest.fn().mockResolvedValue(true),
-    logUnknownEvent: jest.fn().mockResolvedValue(true)
+mockModule('../../../src/services/ChatFileLoggingService', () => {
+  return createMockFn().mockImplementation(() => ({
+    logRawPlatformData: createMockFn().mockResolvedValue(true),
+    logUnknownEvent: createMockFn().mockResolvedValue(true)
   }));
 });
 
@@ -137,10 +141,10 @@ const seedMockImplementations = () => {
 };
 
 const createLogger = () => ({
-  debug: jest.fn(),
-  info: jest.fn(),
-  warn: jest.fn(),
-  error: jest.fn()
+  debug: createMockFn(),
+  info: createMockFn(),
+  warn: createMockFn(),
+  error: createMockFn()
 });
 
 const createPlatformInstance = (overrides = {}) => {
@@ -154,15 +158,15 @@ const createPlatformInstance = (overrides = {}) => {
   const dependencies = {
     logger,
     streamDetectionService: {
-      detectLiveStreams: jest.fn().mockResolvedValue({
+      detectLiveStreams: createMockFn().mockResolvedValue({
         success: true,
         videoIds: []
       })
     },
     viewerService: {
-      setActiveStream: jest.fn(),
-      clearActiveStream: jest.fn(),
-      cleanup: jest.fn()
+      setActiveStream: createMockFn(),
+      clearActiveStream: createMockFn(),
+      cleanup: createMockFn()
     },
     USER_AGENTS: ['unit-agent'],
     Innertube: null,
@@ -182,18 +186,24 @@ const createPlatformInstance = (overrides = {}) => {
 
 describe('YouTubePlatform unified notification processing', () => {
   beforeEach(() => {
-    jest.clearAllMocks();
+    clearAllMocks();
     seedMockImplementations();
+  });
+
+  afterEach(() => {
+    restoreAllMocks();
+    restoreAllModuleMocks();
+    resetModules();
   });
 
   it('suppresses anonymous/junk notifications', async () => {
     const anonymousExtractor = {
-      extractAuthor: jest.fn(() => ({ name: '', displayName: '   ' }))
+      extractAuthor: createMockFn(() => ({ name: '', displayName: '   ' }))
     };
     const { platform, logger } = createPlatformInstance({
       AuthorExtractor: anonymousExtractor
     });
-    platform.handlers.onEngagement = jest.fn();
+    platform.handlers.onEngagement = createMockFn();
 
     const result = await platform.unifiedNotificationProcessor.processNotification({ item: {} }, 'engagement');
 
@@ -209,21 +219,21 @@ describe('YouTubePlatform unified notification processing', () => {
 
   it('builds notifications and invokes the handler when author is valid', async () => {
     const engagementExtractor = {
-      extractAuthor: jest.fn(() => ({ name: 'Kit', displayName: 'Kit', id: 'yt-kit' }))
+      extractAuthor: createMockFn(() => ({ name: 'Kit', displayName: 'Kit', id: 'yt-kit' }))
     };
     const customNotificationBuilder = {
-      build: jest.fn((payload) => ({ ...payload, built: true }))
+      build: createMockFn((payload) => ({ ...payload, built: true }))
     };
     const { platform } = createPlatformInstance({
       AuthorExtractor: engagementExtractor,
       NotificationBuilder: customNotificationBuilder
     });
-    const handler = jest.fn();
+    const handler = createMockFn();
     const eventType = 'engagement';
     const handlerName = `on${eventType.charAt(0).toUpperCase() + eventType.slice(1)}`;
     platform.handlers[handlerName] = handler;
 
-    platform.unifiedNotificationProcessor.shouldSuppressNotification = jest.fn(() => false);
+    platform.unifiedNotificationProcessor.shouldSuppressNotification = createMockFn(() => false);
 
     const notification = await platform.unifiedNotificationProcessor.processNotification(
       { item: { id: 'LCC.test-engagement-001', timestampUsec: String(TEST_TIMESTAMP_MS * 1000) } },
@@ -256,8 +266,14 @@ describe('YouTubePlatform unified notification processing', () => {
 
 describe('YouTubeBaseEventHandler error handling', () => {
   beforeEach(() => {
-    jest.clearAllMocks();
+    clearAllMocks();
     seedMockImplementations();
+  });
+
+  afterEach(() => {
+    restoreAllMocks();
+    restoreAllModuleMocks();
+    resetModules();
   });
 
   it('routes dispatcher failures through the platform error handler', async () => {
@@ -266,7 +282,7 @@ describe('YouTubeBaseEventHandler error handling', () => {
     const { platform } = createPlatformInstance();
     const dispatcher = platform.notificationDispatcher;
     const error = new Error('boom');
-    dispatcher.dispatchSuperChat = jest.fn().mockRejectedValue(error);
+    dispatcher.dispatchSuperChat = createMockFn().mockRejectedValue(error);
 
     await platform.baseEventHandler.handleEvent({ payload: true }, {
       eventType: 'superchat',
