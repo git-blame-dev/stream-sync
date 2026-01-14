@@ -1,4 +1,6 @@
 
+const { describe, it, expect, beforeEach, afterEach } = require('bun:test');
+const { createMockFn, clearAllMocks } = require('../helpers/bun-mock-utils');
 const { expectNoTechnicalArtifacts } = require('../helpers/assertion-helpers');
 
 const TwitchAuthInitializer = require('../../src/auth/TwitchAuthInitializer');
@@ -14,24 +16,24 @@ describe('Twitch Authentication User Experience', () => {
     
     beforeEach(() => {
         // Clear all mocks first
-        jest.clearAllMocks();
+        clearAllMocks();
         
         // Mock logger
         mockLogger = {
-            debug: jest.fn(),
-            info: jest.fn(),
-            error: jest.fn(),
-            warn: jest.fn()
+            debug: createMockFn(),
+            info: createMockFn(),
+            error: createMockFn(),
+            warn: createMockFn()
         };
 
         // Mock axios for token validation
         mockAxios = {
-            get: jest.fn()
+            get: createMockFn()
         };
 
         // Mock enhanced HTTP client for token refresh
         mockHttpClient = {
-            post: jest.fn()
+            post: createMockFn()
         };
 
 
@@ -48,13 +50,13 @@ describe('Twitch Authentication User Experience', () => {
         
         // Mock file system operations for config updates
         const mockFs = {
-            readFileSync: jest.fn().mockReturnValue('[twitch]\naccessToken=old_token\nrefreshToken=old_refresh'),
-            writeFileSync: jest.fn()
+            readFileSync: createMockFn().mockReturnValue('[twitch]\naccessToken=old_token\nrefreshToken=old_refresh'),
+            writeFileSync: createMockFn()
         };
 
         // Mock OAuth handler for tests that need OAuth fallback
         mockOAuthHandler = {
-            runOAuthFlow: jest.fn().mockResolvedValue({
+            runOAuthFlow: createMockFn().mockResolvedValue({
                 access_token: 'new-oauth-token',
                 refresh_token: 'new-oauth-refresh'
             })
@@ -71,7 +73,7 @@ describe('Twitch Authentication User Experience', () => {
     });
 
     afterEach(() => {
-        jest.clearAllMocks();
+        clearAllMocks();
     });
 
     describe('when network issues occur during authentication', () => {
@@ -231,7 +233,7 @@ describe('Twitch Authentication User Experience', () => {
             
             // And: Should trigger OAuth flow only after refresh fails
             expect(result).toBe(false); // Will fail since OAuth flow is mocked to fail
-        }, 30000);
+        }, { timeout: 30000 });
     });
 
     describe('when access token is valid', () => {
@@ -263,7 +265,7 @@ describe('Twitch Authentication User Experience', () => {
                 expect.stringContaining('OAUTH FLOW REQUIRED')
             );
             expect(authService.isInitialized).toBe(true);
-        }, 30000);
+        }, { timeout: 30000 });
     });
 
     describe('configuration persistence after token refresh', () => {

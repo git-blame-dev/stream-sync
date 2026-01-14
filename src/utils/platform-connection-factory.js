@@ -138,7 +138,7 @@ class PlatformConnectionFactory {
             throw new Error('TikTok connection creation failed: missing TikTokWebSocketClient');
         }
 
-        const connectionConfig = this.buildTikTokConnectionConfig(config);
+        const connectionConfig = this.buildTikTokConnectionConfig(config, dependencies);
 
         try {
             this.logger.debug(`Creating TikTok connection for user: '${cleanUsername}'`, 'tiktok');
@@ -172,11 +172,12 @@ class PlatformConnectionFactory {
         }
     }
     
-    buildTikTokConnectionConfig(config) {
+    buildTikTokConnectionConfig(config, dependencies) {
         const apiKey = config.apiKey || null;
 
         const baseConfig = {
-            apiKey
+            apiKey,
+            WebSocketCtor: dependencies?.WebSocketCtor
         };
 
         if (apiKey) {

@@ -1,11 +1,16 @@
+const { describe, it, beforeEach, afterEach, expect } = require('bun:test');
+const { createMockFn, clearAllMocks, restoreAllMocks, spyOn } = require('../../helpers/bun-mock-utils');
+const { mockModule, restoreAllModuleMocks } = require('../../helpers/bun-module-mocks');
+const { useFakeTimers, useRealTimers, advanceTimersByTime } = require('../../helpers/bun-timers');
+
 // Mock the logger
-jest.mock('../../../src/core/logging', () => ({
+mockModule('../../../src/core/logging', () => ({
     logger: {
-        debug: jest.fn(),
-        info: jest.fn(),
-        warn: jest.fn(),
-        error: jest.fn(),
-        console: jest.fn()
+        debug: createMockFn(),
+        info: createMockFn(),
+        warn: createMockFn(),
+        error: createMockFn(),
+        console: createMockFn()
     }
 }));
 
@@ -17,25 +22,26 @@ describe('GracefulExitService', () => {
     let mockAppRuntime;
 
     beforeEach(() => {
-        jest.clearAllMocks();
-        jest.useFakeTimers();
+        clearAllMocks();
+        useFakeTimers();
 
         // Create mock AppRuntime with required methods
         mockAppRuntime = {
-            shutdown: jest.fn().mockResolvedValue(undefined),
-            getPlatforms: jest.fn().mockReturnValue({ tiktok: {}, twitch: {}, youtube: {} })
+            shutdown: createMockFn().mockResolvedValue(undefined),
+            getPlatforms: createMockFn().mockReturnValue({ tiktok: {}, twitch: {}, youtube: {} })
         };
 
         // Mock process.exit
-        jest.spyOn(process, 'exit').mockImplementation(() => {});
+        spyOn(process, 'exit').mockImplementation(() => {});
     });
 
     afterEach(() => {
         if (gracefulExitService && typeof gracefulExitService.stop === 'function') {
             gracefulExitService.stop();
         }
-        jest.useRealTimers();
-        jest.restoreAllMocks();
+        useRealTimers();
+        restoreAllMocks();
+        restoreAllModuleMocks();
     });
 
     describe('Service Initialization', () => {
@@ -187,7 +193,7 @@ describe('GracefulExitService', () => {
             gracefulExitService.triggerExit();
 
             // Fast-forward 10 seconds to trigger timeout
-            jest.advanceTimersByTime(10000);
+            advanceTimersByTime(10000);
 
             // Give a tick for the timeout callback to execute
             await Promise.resolve();

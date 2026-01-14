@@ -299,7 +299,7 @@ if (cliArgs.logLevel) {
 
 let app; // Declare app instance at the module level
 
-function createProductionDependencies(runtimeConstants) {
+function createProductionDependencies(runtimeConstants, overrides = {}) {
     // FAIL-FAST: Validate core dependencies before creating production dependencies
     const { validateLoggerInterface } = require('./utils/dependency-validator');
     const { DependencyFactory } = require('./utils/dependency-factory');
@@ -308,6 +308,11 @@ function createProductionDependencies(runtimeConstants) {
     
     // Validate the main logger is properly initialized
     validateLoggerInterface(logger);
+
+    const resolvedOverrides = overrides || {};
+    if (resolvedOverrides.innertubeImporter) {
+        InnertubeFactory.configure({ importer: resolvedOverrides.innertubeImporter });
+    }
     
     // Create TimestampExtractionService instance for dependency injection
     const TimestampExtractionService = require('./services/TimestampExtractionService');
@@ -327,9 +332,13 @@ function createProductionDependencies(runtimeConstants) {
         displayQueue: null, // Will be set by main function
         notificationManager: null, // Will be set by main function
         timestampService: timestampService, // Add timestamp service for platform dependency injection
-        dependencyFactory: new DependencyFactory(), // Factory for creating platform-specific dependencies
+        dependencyFactory: resolvedOverrides.dependencyFactory || new DependencyFactory(),
         lazyInnertube: InnertubeFactory.createLazyReference(),
         runtimeConstants,
+        axios: resolvedOverrides.axios,
+        WebSocketCtor: resolvedOverrides.WebSocketCtor,
+        tiktokConnector: resolvedOverrides.tiktokConnector,
+        innertubeImporter: resolvedOverrides.innertubeImporter,
 
         // Event-driven architecture services (will be created in main function)
         eventBus: null,
@@ -1387,7 +1396,10 @@ class AppRuntime {
     }
 }
 
-async function main() {
+async function main(overrides = {}) {
+    if (overrides?.innertubeImporter) {
+        innertubeInstanceManager.setInnertubeImporter(overrides.innertubeImporter);
+    }
     try {
         logger.console('Starting main application...', 'main');
         logger.info('Main application started, beginning initialization...', 'Main');
@@ -1546,7 +1558,7 @@ async function main() {
         });
         
         logger.info('About to call validateAuthentication...', 'Main');
-        const authResult = await validateAuthentication(config);
+        const authResult = await validateAuthentication(config, null, { axios: overrides?.axios });
         logger.info('validateAuthentication returned successfully', 'Main');
         if (!authResult.isValid) {
             logger.warn('Authentication validation failed - continuing with limited functionality', 'Main');
@@ -1555,7 +1567,7 @@ async function main() {
             logger.info('Authentication validation successful', 'Main');
         }
         
-        const dependencies = createProductionDependencies(runtimeConstants);
+        const dependencies = createProductionDependencies(runtimeConstants, overrides);
         dependencies.displayQueue = displayQueue;
         dependencies.notificationManager = notificationManager;
         dependencies.authFactory = authResult.authFactory;
@@ -1579,7 +1591,10 @@ async function main() {
             runtimeConstants,
             USER_AGENTS: runtimeConstants.USER_AGENTS,
             config: configManager,
-            Innertube: dependencies.lazyInnertube
+            Innertube: dependencies.lazyInnertube,
+            axios: dependencies.axios,
+            WebSocketCtor: dependencies.WebSocketCtor,
+            tiktokConnector: dependencies.tiktokConnector
         };
 
         const commandCooldownService = new CommandCooldownService({

@@ -1,5 +1,9 @@
-jest.mock('../../../src/utils/user-friendly-errors', () => ({
-    handleUserFacingError: jest.fn()
+const { describe, it, expect, beforeEach, afterEach } = require('bun:test');
+const { createMockFn, clearAllMocks } = require('../../helpers/bun-mock-utils');
+const { mockModule, restoreAllModuleMocks } = require('../../helpers/bun-module-mocks');
+
+mockModule('../../../src/utils/user-friendly-errors', () => ({
+    handleUserFacingError: createMockFn()
 }));
 
 const fs = require('fs');
@@ -90,7 +94,7 @@ ${streamelementsSection}
 
     beforeEach(() => {
         resetConfigManagerState();
-        jest.clearAllMocks();
+        clearAllMocks();
     });
 
     afterEach(() => {
@@ -368,16 +372,20 @@ jwtToken = se-jwt-token`
     it('fails validation when YouTube API usage is enabled without apiKey', () => {
         const filePath = writeTempConfig(buildConfig({
             youtubeSection: `enabled = true
-username = TestChannel
-enableAPI = true
-streamDetectionMethod = youtubei
-viewerCountMethod = youtubei`
+ username = TestChannel
+ enableAPI = true
+ streamDetectionMethod = youtubei
+ viewerCountMethod = youtubei`
         }));
         configManager.config = null;
         configManager.isLoaded = false;
         configManager.configPath = filePath;
 
         expect(() => configManager.load()).toThrow(/YouTube API key/);
+    });
+
+    afterAll(() => {
+        restoreAllModuleMocks();
     });
 
 });

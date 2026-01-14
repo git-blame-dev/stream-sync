@@ -1,31 +1,35 @@
+const { describe, test, beforeEach, afterEach, expect } = require('bun:test');
+const { createMockFn, clearAllMocks, restoreAllMocks, spyOn } = require('../../helpers/bun-mock-utils');
+const { mockModule, resetModules, restoreAllModuleMocks } = require('../../helpers/bun-module-mocks');
+
 // Shared mocks configured per test to allow module reloading
 const createHandler = () => ({
-    handleEventProcessingError: jest.fn(),
-    logOperationalError: jest.fn()
+    handleEventProcessingError: createMockFn(),
+    logOperationalError: createMockFn()
 });
 
 let gracefulHandler;
 let systemHandler;
-const mockHandlerFactory = jest.fn();
+const mockHandlerFactory = createMockFn();
 
 let scheduledTimeouts;
-const mockSafeSetTimeout = jest.fn();
+const mockSafeSetTimeout = createMockFn();
 
-jest.mock('../../../src/core/logging', () => ({
+mockModule('../../../src/core/logging', () => ({
     logger: {
-        debug: jest.fn(),
-        info: jest.fn(),
-        warn: jest.fn(),
-        error: jest.fn(),
-        console: jest.fn()
+        debug: createMockFn(),
+        info: createMockFn(),
+        warn: createMockFn(),
+        error: createMockFn(),
+        console: createMockFn()
     }
 }));
 
-jest.mock('../../../src/utils/platform-error-handler', () => ({
+mockModule('../../../src/utils/platform-error-handler', () => ({
     createPlatformErrorHandler: (...args) => mockHandlerFactory(...args)
 }));
 
-jest.mock('../../../src/utils/timeout-validator', () => ({
+mockModule('../../../src/utils/timeout-validator', () => ({
     safeSetTimeout: (...args) => mockSafeSetTimeout(...args)
 }));
 
@@ -35,7 +39,7 @@ describe('GracefulExitService additional behavior', () => {
     let runtime;
 
     beforeEach(() => {
-        jest.resetModules();
+        resetModules();
         scheduledTimeouts = [];
 
         gracefulHandler = createHandler();
@@ -54,15 +58,17 @@ describe('GracefulExitService additional behavior', () => {
         ({ GracefulExitService } = require('../../../src/services/GracefulExitService'));
 
         runtime = {
-            shutdown: jest.fn().mockResolvedValue(undefined),
-            getPlatforms: jest.fn()
+            shutdown: createMockFn().mockResolvedValue(undefined),
+            getPlatforms: createMockFn()
         };
 
-        jest.spyOn(process, 'exit').mockImplementation(() => {});
+        spyOn(process, 'exit').mockImplementation(() => {});
     });
 
     afterEach(() => {
-        jest.restoreAllMocks();
+        restoreAllMocks();
+        clearAllMocks();
+        restoreAllModuleMocks();
     });
 
     test('disables tracking when target is non-positive', () => {

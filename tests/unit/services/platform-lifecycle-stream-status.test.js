@@ -1,14 +1,20 @@
+const { describe, test, expect, afterEach } = require('bun:test');
+const { createMockFn, clearAllMocks } = require('../../helpers/bun-mock-utils');
 const { EventEmitter } = require('events');
 const PlatformLifecycleService = require('../../../src/services/PlatformLifecycleService');
 
 describe('PlatformLifecycleService stream status events', () => {
+    afterEach(() => {
+        clearAllMocks();
+    });
+
     test('status callback emits stream-status platform:event payloads', async () => {
         let capturedStatusCallback;
         const eventBus = {
-            emit: jest.fn()
+            emit: createMockFn()
         };
         const streamDetector = {
-            startStreamDetection: jest.fn(async (_platform, _config, connectCallback, statusCallback) => {
+            startStreamDetection: createMockFn(async (_platform, _config, connectCallback, statusCallback) => {
                 capturedStatusCallback = statusCallback;
                 if (typeof connectCallback === 'function') {
                     await connectCallback();
@@ -23,7 +29,7 @@ describe('PlatformLifecycleService stream status events', () => {
         });
 
         const platformInstance = {
-            initialize: jest.fn().mockResolvedValue(undefined)
+            initialize: createMockFn().mockResolvedValue(undefined)
         };
 
         await service.initializePlatformWithStreamDetection('custom', platformInstance, {}, { enabled: true });

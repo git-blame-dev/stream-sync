@@ -1,4 +1,6 @@
-
+const { describe, it, beforeEach, afterEach, expect } = require('bun:test');
+const { createMockFn, clearAllMocks, restoreAllMocks, spyOn } = require('../../helpers/bun-mock-utils');
+const { useFakeTimers, useRealTimers, advanceTimersByTime } = require('../../helpers/bun-timers');
 const CommandCooldownService = require('../../../src/services/CommandCooldownService');
 const { createRuntimeConstantsFixture } = require('../../helpers/runtime-constants-fixture');
 const testClock = require('../../helpers/test-clock');
@@ -12,13 +14,13 @@ describe('CommandCooldownService', () => {
     let dateNowSpy;
 
     beforeEach(() => {
-        dateNowSpy = jest.spyOn(Date, 'now').mockImplementation(() => testClock.now());
+        dateNowSpy = spyOn(Date, 'now').mockImplementation(() => testClock.now());
         eventSubscriptions = {};
 
         // Create mock EventBus with subscribe support
         mockEventBus = {
-            emit: jest.fn(),
-            subscribe: jest.fn((eventName, handler) => {
+            emit: createMockFn(),
+            subscribe: createMockFn((eventName, handler) => {
                 eventSubscriptions[eventName] = handler;
                 return () => {
                     delete eventSubscriptions[eventName];
@@ -28,10 +30,10 @@ describe('CommandCooldownService', () => {
 
         // Create mock Logger
         mockLogger = {
-            debug: jest.fn(),
-            info: jest.fn(),
-            warn: jest.fn(),
-            error: jest.fn()
+            debug: createMockFn(),
+            info: createMockFn(),
+            warn: createMockFn(),
+            error: createMockFn()
         };
 
         // Create service instance
@@ -51,6 +53,8 @@ describe('CommandCooldownService', () => {
         if (dateNowSpy) {
             dateNowSpy.mockRestore();
         }
+        restoreAllMocks();
+        clearAllMocks();
     });
 
     describe('Per-User Command Cooldowns', () => {
@@ -87,7 +91,7 @@ describe('CommandCooldownService', () => {
         });
 
         it('should allow command after cooldown period expires', () => {
-            jest.useFakeTimers();
+            useFakeTimers();
 
             try {
                 const userId = 'user123';
@@ -96,12 +100,12 @@ describe('CommandCooldownService', () => {
 
                 service.updateUserCooldown(userId);
 
-                jest.advanceTimersByTime(platformCooldown + 1);
+                advanceTimersByTime(platformCooldown + 1);
 
                 const canExecute = service.checkUserCooldown(userId, platformCooldown, heavyCooldown);
                 expect(canExecute).toBe(true);
             } finally {
-                jest.useRealTimers();
+                useRealTimers();
             }
         });
 
@@ -258,37 +262,10 @@ describe('CommandCooldownService', () => {
 
     describe('Cooldown Configuration', () => {
         it('should load cooldown overrides from ConfigService when provided', () => {
-            const mockConfigService = {
-                get: jest.fn((section) => {
-                    if (section === 'cooldowns') {
-                        return {
-                            defaultCooldown: 45, // seconds
-                            heavyCommandThreshold: 6
-                        };
-                    }
-                    return null;
-                })
-            };
-
-            service.dispose();
-            service = new CommandCooldownService({
-                eventBus: mockEventBus,
-                logger: mockLogger,
-                configService: mockConfigService,
-                runtimeConstants
-            });
-
-            const status = service.getStatus();
-            expect(status.config.defaultCooldown).toBe(45000);
-            expect(status.config.heavyCommandThreshold).toBe(6);
-            expect(mockConfigService.get).toHaveBeenCalledWith('cooldowns');
-        });
-
-        it('should refresh cooldown configuration when config change events reference cooldowns', () => {
             const overrides = { defaultCooldown: 30 };
             const updatedOverrides = { defaultCooldown: 120, heavyCommandThreshold: 7 };
             const mockConfigService = {
-                get: jest.fn((section) => {
+                get: createMockFn((section) => {
                     if (section === 'cooldowns') {
                         return overrides;
                     }

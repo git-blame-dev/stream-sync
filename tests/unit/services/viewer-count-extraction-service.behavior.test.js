@@ -1,3 +1,6 @@
+const { describe, it, beforeEach, afterEach, expect } = require('bun:test');
+const { createMockFn, clearAllMocks } = require('../../helpers/bun-mock-utils');
+const { mockModule, resetModules, restoreAllModuleMocks } = require('../../helpers/bun-module-mocks');
 
 describe('ViewerCountExtractionService', () => {
     let ViewerCountExtractionService;
@@ -6,20 +9,25 @@ describe('ViewerCountExtractionService', () => {
     let logger;
 
     beforeEach(() => {
-        jest.resetModules();
+        resetModules();
         mockInnertube = {
-            getVideoInfo: jest.fn()
+            getVideoInfo: createMockFn()
         };
         mockExtractor = {
-            extractConcurrentViewers: jest.fn()
+            extractConcurrentViewers: createMockFn()
         };
         logger = {
-            debug: jest.fn()
+            debug: createMockFn()
         };
-        jest.doMock('../../../src/extractors/youtube-viewer-extractor', () => ({
+        mockModule('../../../src/extractors/youtube-viewer-extractor', () => ({
             YouTubeViewerExtractor: mockExtractor
         }));
         ({ ViewerCountExtractionService } = require('../../../src/services/viewer-count-extraction-service'));
+    });
+
+    afterEach(() => {
+        clearAllMocks();
+        restoreAllModuleMocks();
     });
 
     it('returns success with count and updates stats on extraction success', async () => {
@@ -70,7 +78,7 @@ describe('ViewerCountExtractionService', () => {
     it('handles batch extraction with rejected promises', async () => {
         const service = new ViewerCountExtractionService(mockInnertube, { logger });
         let call = 0;
-        service.extractViewerCount = jest.fn((videoId) => {
+        service.extractViewerCount = createMockFn((videoId) => {
             call++;
             if (call === 1) {
                 return Promise.resolve({ success: true, count: 1, videoId });

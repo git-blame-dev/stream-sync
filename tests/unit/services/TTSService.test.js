@@ -1,11 +1,14 @@
+const { describe, it, beforeEach, afterEach, expect } = require('bun:test');
+const { createMockFn, clearAllMocks } = require('../../helpers/bun-mock-utils');
+const { mockModule, restoreAllModuleMocks } = require('../../helpers/bun-module-mocks');
 
 // Mock the logger before requiring the service
-jest.mock('../../../src/core/logging', () => ({
+mockModule('../../../src/core/logging', () => ({
     logger: {
-        debug: jest.fn(),
-        info: jest.fn(),
-        warn: jest.fn(),
-        error: jest.fn()
+        debug: createMockFn(),
+        info: createMockFn(),
+        warn: createMockFn(),
+        error: createMockFn()
     }
 }));
 
@@ -17,17 +20,21 @@ describe('TTSService', () => {
     let mockEventBus;
     let logger;
 
+    afterEach(() => {
+        restoreAllModuleMocks();
+    });
+
     beforeEach(() => {
-        jest.clearAllMocks();
+        clearAllMocks();
 
         // Create mock EventBus
         mockEventBus = {
-            emit: jest.fn()
+            emit: createMockFn()
         };
 
         // Create mock ConfigService
         mockConfigService = {
-            getTTSConfig: jest.fn(() => ({
+            getTTSConfig: createMockFn(() => ({
                 enabled: true,
                 deduplicationEnabled: true,
                 debugDeduplication: false,
@@ -36,9 +43,9 @@ describe('TTSService', () => {
                 rate: 1.0,
                 volume: 1.0
             })),
-            set: jest.fn(() => true)
+            set: createMockFn(() => true)
         };
-        logger = { debug: jest.fn(), info: jest.fn(), warn: jest.fn(), error: jest.fn() };
+        logger = { debug: createMockFn(), info: createMockFn(), warn: createMockFn(), error: createMockFn() };
     });
 
     describe('Constructor', () => {

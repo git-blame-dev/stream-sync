@@ -1,17 +1,21 @@
-jest.mock('../../../src/utils/timeout-validator', () => ({
-    validateTimeout: jest.fn((v) => v),
-    safeSetInterval: jest.fn(() => null)
+const { describe, it, beforeEach, afterAll, expect } = require('bun:test');
+const { createMockFn, clearAllMocks } = require('../../helpers/bun-mock-utils');
+const { mockModule, restoreAllModuleMocks } = require('../../helpers/bun-module-mocks');
+
+mockModule('../../../src/utils/timeout-validator', () => ({
+    validateTimeout: createMockFn((v) => v),
+    safeSetInterval: createMockFn(() => null)
 }));
 
-jest.mock('../../../src/utils/platform-error-handler', () => ({
-    createPlatformErrorHandler: jest.fn(() => ({
-        handleEventProcessingError: jest.fn(),
-        logOperationalError: jest.fn()
+mockModule('../../../src/utils/platform-error-handler', () => ({
+    createPlatformErrorHandler: createMockFn(() => ({
+        handleEventProcessingError: createMockFn(),
+        logOperationalError: createMockFn()
     }))
 }));
 
-jest.mock('../../../src/core/logging', () => ({
-    logger: { debug: jest.fn(), info: jest.fn(), warn: jest.fn() }
+mockModule('../../../src/core/logging', () => ({
+    logger: { debug: createMockFn(), info: createMockFn(), warn: createMockFn() }
 }));
 
 const { createRuntimeConstantsFixture } = require('../../helpers/runtime-constants-fixture');
@@ -28,17 +32,18 @@ const resetManager = async () => {
 
 describe('InnertubeInstanceManager behavior', () => {
     beforeEach(async () => {
-        jest.clearAllMocks();
+        clearAllMocks();
         ManagerModule.setRuntimeConstants(runtimeConstants);
         await resetManager();
     });
 
     afterAll(async () => {
         await resetManager();
+        restoreAllModuleMocks();
     });
 
     it('caches healthy instances and reuses them', async () => {
-        const createFn = jest.fn(async () => ({ id: 'instance' }));
+        const createFn = createMockFn(async () => ({ id: 'instance' }));
         const manager = new InnertubeInstanceManager({ instanceTimeout: 5000 });
 
         const first = await manager.getInstance('default', createFn);
@@ -50,7 +55,7 @@ describe('InnertubeInstanceManager behavior', () => {
     });
 
     it('creates new instance when cached is unhealthy', async () => {
-        const createFn = jest.fn()
+        const createFn = createMockFn()
             .mockResolvedValueOnce({ id: 'one' })
             .mockResolvedValueOnce({ id: 'two' });
         const manager = new InnertubeInstanceManager({ instanceTimeout: 5000 });
@@ -64,10 +69,10 @@ describe('InnertubeInstanceManager behavior', () => {
     });
 
     it('cleans up oldest instance when exceeding maxInstances', async () => {
-        const first = { dispose: jest.fn(), session: { close: jest.fn() } };
-        const second = { dispose: jest.fn(), session: { close: jest.fn() } };
-        const third = { dispose: jest.fn(), session: { close: jest.fn() } };
-        const createFn = jest.fn()
+        const first = { dispose: createMockFn(), session: { close: createMockFn() } };
+        const second = { dispose: createMockFn(), session: { close: createMockFn() } };
+        const third = { dispose: createMockFn(), session: { close: createMockFn() } };
+        const createFn = createMockFn()
             .mockResolvedValueOnce(first)
             .mockResolvedValueOnce(second)
             .mockResolvedValueOnce(third);
@@ -86,7 +91,7 @@ describe('InnertubeInstanceManager behavior', () => {
     });
 
     it('disposes all instances on cleanup', async () => {
-        const inst = { dispose: jest.fn(), session: { close: jest.fn() } };
+        const inst = { dispose: createMockFn(), session: { close: createMockFn() } };
         const manager = new InnertubeInstanceManager({ instanceTimeout: 5000 });
         manager._cacheInstance('x', inst);
 

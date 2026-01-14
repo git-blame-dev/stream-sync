@@ -1,17 +1,21 @@
-jest.unmock('../../../src/core/logging');
+const { describe, it, expect, beforeEach, afterEach } = require('bun:test');
+const { createMockFn, restoreAllMocks, spyOn } = require('../../helpers/bun-mock-utils');
+const { resetModules, unmockModule } = require('../../helpers/bun-module-mocks');
 const path = require('path');
+
+unmockModule('../../../src/core/logging');
 
 describe('core/logging behavior', () => {
     let logging;
 
     beforeEach(() => {
-        jest.resetModules();
-        jest.unmock('../../../src/core/logging');
+        resetModules();
+        unmockModule('../../../src/core/logging');
         logging = require('../../../src/core/logging');
     });
 
     afterEach(() => {
-        jest.restoreAllMocks();
+        restoreAllMocks();
     });
 
     it('requires a config validator before reading config', () => {
@@ -26,7 +30,7 @@ describe('core/logging behavior', () => {
             platforms: {},
             chat: { enabled: true }
         };
-        const validator = jest.fn(() => validatedConfig);
+        const validator = createMockFn(() => validatedConfig);
 
         logging.setConfigValidator(validator);
         const result = logging.initializeLoggingConfig({});
@@ -48,8 +52,8 @@ describe('core/logging behavior', () => {
         logging.setConfigValidator(() => validatedConfig);
         logging.initializeLoggingConfig({});
 
-        jest.spyOn(require('fs'), 'existsSync').mockReturnValue(true);
-        jest.spyOn(require('fs'), 'appendFileSync').mockImplementation((filePath, data) => {
+        spyOn(require('fs'), 'existsSync').mockReturnValue(true);
+        spyOn(require('fs'), 'appendFileSync').mockImplementation((filePath, data) => {
             writes.push({ filePath, data: String(data) });
         });
 
@@ -71,8 +75,8 @@ describe('core/logging behavior', () => {
         logging.setConfigValidator(() => validatedConfig);
         logging.initializeLoggingConfig({});
 
-        jest.spyOn(require('fs'), 'existsSync').mockReturnValue(true);
-        jest.spyOn(require('fs'), 'appendFileSync').mockImplementation((filePath, data) => {
+        spyOn(require('fs'), 'existsSync').mockReturnValue(true);
+        spyOn(require('fs'), 'appendFileSync').mockImplementation((filePath, data) => {
             writes.push({ filePath, data: String(data) });
         });
 
@@ -93,10 +97,10 @@ describe('core/logging behavior', () => {
         logging.initializeLoggingConfig({});
 
         const writes = [];
-        jest.spyOn(process, 'cwd').mockReturnValue('/tmp');
-        jest.spyOn(require('fs'), 'existsSync').mockReturnValue(false);
-        jest.spyOn(require('fs'), 'mkdirSync').mockImplementation(() => {});
-        jest.spyOn(require('fs'), 'appendFileSync').mockImplementation((filePath, data) => {
+        spyOn(process, 'cwd').mockReturnValue('/tmp');
+        spyOn(require('fs'), 'existsSync').mockReturnValue(false);
+        spyOn(require('fs'), 'mkdirSync').mockImplementation(() => {});
+        spyOn(require('fs'), 'appendFileSync').mockImplementation((filePath, data) => {
             writes.push({ filePath, data: String(data) });
         });
 

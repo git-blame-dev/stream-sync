@@ -1,3 +1,5 @@
+const { describe, it, beforeEach, afterEach, expect } = require('bun:test');
+const { createMockFn, clearAllMocks } = require('../../helpers/bun-mock-utils');
 
 // Testing Infrastructure (mandatory)
 const {
@@ -42,14 +44,14 @@ describe('YouTube Live Stream Service - Complete User Experience', () => {
     mockLogger = createMockLogger();
     
     mockInnertubeClient = {
-      getChannel: jest.fn(),
-      search: jest.fn(),
-      resolveURL: jest.fn()
+      getChannel: createMockFn(),
+      search: createMockFn(),
+      resolveURL: createMockFn()
     };
   });
 
   afterEach(() => {
-    jest.clearAllMocks();
+    clearAllMocks();
   });
 
   describe('Live Stream Detection User Experience', () => {
@@ -213,7 +215,7 @@ describe('YouTube Live Stream Service - Complete User Experience', () => {
       // Given: Channel with diverse stream content
       const channelId = 'UCdiverse123456789012345';
       const mockChannel = {
-        getLiveStreams: jest.fn().mockResolvedValue({
+        getLiveStreams: createMockFn().mockResolvedValue({
           videos: [{
             id: 'educational123',
             title: { text: 'Learn JavaScript - Interactive Coding Session' },
@@ -255,7 +257,7 @@ describe('YouTube Live Stream Service - Complete User Experience', () => {
       // Given: User provides standard YouTube Channel ID
       const channelId = 'UCaBcDeFgHiJkLmNoPqRsTuV';
       const mockChannel = {
-        getLiveStreams: jest.fn().mockResolvedValue({
+        getLiveStreams: createMockFn().mockResolvedValue({
           videos: [{
             id: 'channelid123',
             title: { text: 'Channel ID Stream' },
@@ -288,7 +290,7 @@ describe('YouTube Live Stream Service - Complete User Experience', () => {
       const username = 'popularcreator';
       const resolvedChannelId = 'UCresolved1234567890123';
       const mockChannel = {
-        getLiveStreams: jest.fn().mockResolvedValue({
+        getLiveStreams: createMockFn().mockResolvedValue({
           videos: [{
             id: 'username123',
             title: { text: 'Creator Live Stream' },
@@ -329,7 +331,7 @@ describe('YouTube Live Stream Service - Complete User Experience', () => {
       const handleInput = '@creativechannel';
       const resolvedChannelId = 'UChandle123456789012345';
       const mockChannel = {
-        getLiveStreams: jest.fn().mockResolvedValue({
+        getLiveStreams: createMockFn().mockResolvedValue({
           videos: [{
             id: 'handle123',
             title: { text: 'Creative Live Stream' },
@@ -506,7 +508,7 @@ describe('YouTube Live Stream Service - Complete User Experience', () => {
       // Given: International channel with multi-language content
       const internationalChannelId = 'UCinternational123456789';
       const mockChannel = {
-        getLiveStreams: jest.fn().mockResolvedValue({
+        getLiveStreams: createMockFn().mockResolvedValue({
           videos: [{
             id: 'intl123',
             title: { text: 'Live Stream - 中文直播 - العربية المباشرة - ライブ配信' },
@@ -540,7 +542,7 @@ describe('YouTube Live Stream Service - Complete User Experience', () => {
       // Given: Channel with emoji-rich modern content
       const emojiChannelId = 'UCemojichannel1234567890';
       const mockChannel = {
-        getLiveStreams: jest.fn().mockResolvedValue({
+        getLiveStreams: createMockFn().mockResolvedValue({
           videos: [{
             id: 'emoji123',
             title: { text: '🎮 EPIC Gaming Stream! 🔥🚀 Join the Fun! 🎉✨' },
@@ -581,7 +583,7 @@ describe('YouTube Live Stream Service - Complete User Experience', () => {
       // Given: Content with various special characters users might encounter
       const specialCharChannelId = 'UCspecial123456789012345';
       const mockChannel = {
-        getLiveStreams: jest.fn().mockResolvedValue({
+        getLiveStreams: createMockFn().mockResolvedValue({
           videos: [{
             id: 'special123',
             title: { text: 'Music & Arts: "Live Concert" — Café Sessions (50% Off!)' },
@@ -696,7 +698,7 @@ describe('YouTube Live Stream Service - Complete User Experience', () => {
           name: 'successful_streams',
           setupMock: () => {
             const mockChannel = {
-              getLiveStreams: jest.fn().mockResolvedValue({
+              getLiveStreams: createMockFn().mockResolvedValue({
                 videos: [{ 
                   id: 'test', 
                   title: { text: 'Test' }, 
@@ -713,7 +715,7 @@ describe('YouTube Live Stream Service - Complete User Experience', () => {
           name: 'no_streams',
           setupMock: () => {
             const mockChannel = {
-              getLiveStreams: jest.fn().mockResolvedValue({ videos: [] })
+              getLiveStreams: createMockFn().mockResolvedValue({ videos: [] })
             };
             mockInnertubeClient.getChannel.mockResolvedValue(mockChannel);
           },
@@ -730,7 +732,7 @@ describe('YouTube Live Stream Service - Complete User Experience', () => {
 
       // When: User encounters different scenarios
       for (const scenario of testScenarios) {
-        jest.clearAllMocks();
+        clearAllMocks();
         scenario.setupMock();
         
         const result = await YouTubeLiveStreamService.getLiveStreams(
@@ -764,7 +766,7 @@ describe('YouTube Live Stream Service - Complete User Experience', () => {
       // Given: User performing multiple requests over time
       const reliableChannelId = 'UCreliable12345678901234';
       const mockChannel = {
-        getLiveStreams: jest.fn().mockResolvedValue({
+        getLiveStreams: createMockFn().mockResolvedValue({
           videos: [{
             id: 'reliable123',
             title: { text: 'Reliable Stream Content' },
@@ -809,7 +811,7 @@ describe('YouTube Live Stream Service - Complete User Experience', () => {
       // Given: User expecting consistent response times
       const performanceChannelId = 'UCperformance12345678901';
       const mockChannel = {
-        getLiveStreams: jest.fn().mockResolvedValue({
+        getLiveStreams: createMockFn().mockResolvedValue({
           videos: [{
             id: 'perf123',
             title: { text: 'Performance Test Stream' },

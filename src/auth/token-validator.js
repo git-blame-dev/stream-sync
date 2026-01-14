@@ -4,10 +4,12 @@ const { handleUserFacingError } = require('../utils/user-friendly-errors');
 const { createPlatformErrorHandler, ensurePlatformErrorHandler } = require('../utils/platform-error-handler');
 
 class TokenValidator {
-    constructor(authFactory = null) {
+    constructor(authFactory = null, dependencies = {}) {
         this.logger = null;
         this.authFactory = authFactory;
+        this.dependencies = { ...dependencies };
         this.errorHandler = null;
+        this.axios = dependencies.axios || null;
     }
     
     initializeLogger() {
@@ -275,7 +277,7 @@ class TokenValidator {
     async _validateTokenScopes(config) {
         const TwitchAuthService = require('./TwitchAuthService');
         const ReactiveTokenRefresh = require('../utils/reactive-token-refresh');
-        const axios = require('axios');
+        const axios = this.axios || require('axios');
         
         const authService = new TwitchAuthService(config, { logger: this.logger });
         const requiredScopes = authService.getRequiredScopes();
@@ -586,13 +588,13 @@ class TokenValidator {
     }
 }
 
-async function validateAuthentication(config, authFactory = null) {
+async function validateAuthentication(config, authFactory = null, dependencies = {}) {
     const { getUnifiedLogger } = require('../core/logging');
     const logger = getUnifiedLogger();
     
     logger.debug('DEBUG: validateAuthentication started', 'auth');
     
-    const validator = new TokenValidator(authFactory);
+    const validator = new TokenValidator(authFactory, dependencies);
     logger.debug('DEBUG: TokenValidator created', 'auth');
     
     logger.debug('DEBUG: About to call validateAllTokens', 'auth');

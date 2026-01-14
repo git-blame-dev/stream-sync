@@ -1,19 +1,22 @@
+const { describe, it, beforeEach, afterEach, expect, jest } = require('bun:test');
+const { createMockFn, clearAllMocks } = require('../../helpers/bun-mock-utils');
+const { useFakeTimers, useRealTimers } = require('../../helpers/bun-timers');
 const TimestampExtractionService = require('../../../src/services/TimestampExtractionService');
 
 const testClock = require('../../helpers/test-clock');
 
 describe('TimestampExtractionService behavior', () => {
-    const logger = { debug: jest.fn(), info: jest.fn(), warn: jest.fn(), error: jest.fn(), isDebugEnabled: () => false };
-    const performanceTracker = { recordExtraction: jest.fn() };
+    const logger = { debug: createMockFn(), info: createMockFn(), warn: createMockFn(), error: createMockFn(), isDebugEnabled: () => false };
+    const performanceTracker = { recordExtraction: createMockFn() };
 
     beforeEach(() => {
-        jest.useFakeTimers();
+        useFakeTimers();
         jest.setSystemTime(new Date(testClock.now()));
-        jest.clearAllMocks();
+        clearAllMocks();
     });
 
     afterEach(() => {
-        jest.useRealTimers();
+        useRealTimers();
     });
 
     it('preserves TikTok createTime and falls back to current time', () => {

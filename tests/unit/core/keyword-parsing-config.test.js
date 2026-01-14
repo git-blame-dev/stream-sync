@@ -1,10 +1,12 @@
 
+const { describe, test, expect, beforeEach, afterEach } = require('bun:test');
+const { restoreAllMocks, spyOn } = require('../../helpers/bun-mock-utils');
 const { configManager } = require('../../../src/core/config');
 
 describe('Keyword Parsing Configuration', () => {
     beforeEach(() => {
         // Reset all mocks before each test
-        jest.restoreAllMocks();
+        restoreAllMocks();
     });
 
     describe('Default Configuration', () => {
@@ -16,7 +18,7 @@ describe('Keyword Parsing Configuration', () => {
 
         test('should enable keyword parsing when explicitly set to true', () => {
             // Mock the config to return true
-            jest.spyOn(configManager, 'getBoolean').mockReturnValue(true);
+            spyOn(configManager, 'getBoolean').mockReturnValue(true);
             
             const keywordParsingEnabled = configManager.getBoolean('general', 'keywordParsingEnabled', true);
             expect(keywordParsingEnabled).toBe(true);
@@ -24,7 +26,7 @@ describe('Keyword Parsing Configuration', () => {
 
         test('should disable keyword parsing when explicitly set to false', () => {
             // Mock the config to return false
-            jest.spyOn(configManager, 'getBoolean').mockReturnValue(false);
+            spyOn(configManager, 'getBoolean').mockReturnValue(false);
             
             const keywordParsingEnabled = configManager.getBoolean('general', 'keywordParsingEnabled', true);
             expect(keywordParsingEnabled).toBe(false);
@@ -34,7 +36,7 @@ describe('Keyword Parsing Configuration', () => {
     describe('Configuration Validation', () => {
         test('should handle string "true" as boolean true', () => {
             // Mock the raw config to return string "true"
-            jest.spyOn(configManager, 'get').mockReturnValue('true');
+            spyOn(configManager, 'get').mockReturnValue('true');
             
             const keywordParsingEnabled = configManager.getBoolean('general', 'keywordParsingEnabled', true);
             expect(keywordParsingEnabled).toBe(true);
@@ -42,7 +44,7 @@ describe('Keyword Parsing Configuration', () => {
 
         test('should handle string "false" as boolean false', () => {
             // Mock the raw config to return string "false"
-            jest.spyOn(configManager, 'get').mockReturnValue('false');
+            spyOn(configManager, 'get').mockReturnValue('false');
             
             const keywordParsingEnabled = configManager.getBoolean('general', 'keywordParsingEnabled', true);
             expect(keywordParsingEnabled).toBe(false);
@@ -50,7 +52,7 @@ describe('Keyword Parsing Configuration', () => {
 
         test('should handle case-insensitive boolean strings', () => {
             // Mock the raw config to return uppercase "TRUE"
-            jest.spyOn(configManager, 'get').mockReturnValue('TRUE');
+            spyOn(configManager, 'get').mockReturnValue('TRUE');
             
             const keywordParsingEnabled = configManager.getBoolean('general', 'keywordParsingEnabled', true);
             expect(keywordParsingEnabled).toBe(true);
@@ -58,7 +60,7 @@ describe('Keyword Parsing Configuration', () => {
 
         test('should default to true for invalid boolean values', () => {
             // Mock the raw config to return invalid value
-            jest.spyOn(configManager, 'get').mockReturnValue('invalid');
+            spyOn(configManager, 'get').mockReturnValue('invalid');
             
             const keywordParsingEnabled = configManager.getBoolean('general', 'keywordParsingEnabled', true);
             expect(keywordParsingEnabled).toBe(false); // getBoolean returns false for invalid values
@@ -68,7 +70,7 @@ describe('Keyword Parsing Configuration', () => {
     describe('Configuration Inheritance', () => {
         test('should inherit keyword parsing setting from general section', () => {
             // Mock general section to return false
-            jest.spyOn(configManager, 'getBoolean')
+            spyOn(configManager, 'getBoolean')
                 .mockImplementation((section, key, defaultValue) => {
                     if (section === 'general' && key === 'keywordParsingEnabled') {
                         return false;
@@ -85,7 +87,7 @@ describe('Keyword Parsing Configuration', () => {
 
         test('should allow platform-specific override of keyword parsing setting', () => {
             // Mock different values for general and twitch
-            jest.spyOn(configManager, 'getBoolean')
+            spyOn(configManager, 'getBoolean')
                 .mockImplementation((section, key, defaultValue) => {
                     if (section === 'general' && key === 'keywordParsingEnabled') {
                         return true;
@@ -107,7 +109,7 @@ describe('Keyword Parsing Configuration', () => {
     describe('Backward Compatibility', () => {
         test('should not break existing configuration when keyword parsing setting is missing', () => {
             // Mock existing config values
-            jest.spyOn(configManager, 'getBoolean')
+            spyOn(configManager, 'getBoolean')
                 .mockImplementation((section, key, defaultValue) => {
                     if (section === 'general' && key === 'keywordParsingEnabled') {
                         return defaultValue; // Use default (true)
@@ -132,7 +134,7 @@ describe('Keyword Parsing Configuration', () => {
 
         test('should preserve all existing general settings when adding keyword parsing', () => {
             // Mock config with keyword parsing and existing settings
-            jest.spyOn(configManager, 'getBoolean')
+            spyOn(configManager, 'getBoolean')
                 .mockImplementation((section, key, defaultValue) => {
                     if (section === 'general' && key === 'keywordParsingEnabled') {
                         return false;
@@ -143,7 +145,7 @@ describe('Keyword Parsing Configuration', () => {
                     return defaultValue;
                 });
             
-            jest.spyOn(configManager, 'get')
+            spyOn(configManager, 'get')
                 .mockImplementation((section, key, defaultValue) => {
                     if (section === 'general' && key === 'cmdCoolDown') {
                         return '60';
@@ -167,6 +169,6 @@ describe('Keyword Parsing Configuration', () => {
     });
 
     afterEach(() => {
-        jest.restoreAllMocks();
+        restoreAllMocks();
     });
 }); 

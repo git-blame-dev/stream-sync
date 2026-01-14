@@ -1,4 +1,5 @@
-
+const { describe, it, test, expect, beforeEach, afterEach } = require('bun:test');
+const { createMockFn, clearAllMocks } = require('../../helpers/bun-mock-utils');
 const PlatformLifecycleService = require('../../../src/services/PlatformLifecycleService');
 const testClock = require('../../helpers/test-clock');
 
@@ -20,16 +21,16 @@ describe('PlatformLifecycleService', () => {
     beforeEach(() => {
         // Create mock EventBus
         mockEventBus = {
-            emit: jest.fn(),
-            subscribe: jest.fn().mockReturnValue(() => {})
+            emit: createMockFn(),
+            subscribe: createMockFn().mockReturnValue(() => {})
         };
 
         // Create mock Logger
         mockLogger = {
-            debug: jest.fn(),
-            info: jest.fn(),
-            warn: jest.fn(),
-            error: jest.fn()
+            debug: createMockFn(),
+            info: createMockFn(),
+            warn: createMockFn(),
+            error: createMockFn()
         };
 
         // Create mock config
@@ -40,7 +41,7 @@ describe('PlatformLifecycleService', () => {
         };
 
         mockStreamDetector = {
-            startStreamDetection: jest.fn().mockImplementation(async (_platform, _config, connect) => {
+            startStreamDetection: createMockFn().mockImplementation(async (_platform, _config, connect) => {
                 await connect();
             })
         };
@@ -58,18 +59,18 @@ describe('PlatformLifecycleService', () => {
         it('reports ready platforms and stream statuses', async () => {
             mockConfig.twitch = { enabled: true, apiKey: 'key' };
 
-            const mockPlatformClass = jest.fn().mockImplementation(() => ({
-                initialize: jest.fn().mockImplementation(async (handlers) => {
+            const mockPlatformClass = createMockFn().mockImplementation(() => ({
+                initialize: createMockFn().mockImplementation(async (handlers) => {
                     if (handlers.onChat) {
                         await handlers.onChat({ message: { text: 'ready' } });
                     }
                 }),
-                cleanup: jest.fn().mockResolvedValue(),
-                on: jest.fn()
+                cleanup: createMockFn().mockResolvedValue(),
+                on: createMockFn()
             }));
 
             const streamDetector = {
-                startStreamDetection: jest.fn().mockImplementation(async (_platform, _config, connect, statusCb) => {
+                startStreamDetection: createMockFn().mockImplementation(async (_platform, _config, connect, statusCb) => {
                     statusCb('online', 'Stream detected');
                     await connect();
                 })
@@ -97,10 +98,10 @@ describe('PlatformLifecycleService', () => {
         it('reports failed platforms with error context', async () => {
             mockConfig.youtube = { enabled: true, username: 'channel' };
 
-            const mockPlatformClass = jest.fn().mockImplementation(() => ({
-                initialize: jest.fn().mockRejectedValue(new Error('connect failed')),
-                cleanup: jest.fn().mockResolvedValue(),
-                on: jest.fn()
+            const mockPlatformClass = createMockFn().mockImplementation(() => ({
+                initialize: createMockFn().mockRejectedValue(new Error('connect failed')),
+                cleanup: createMockFn().mockResolvedValue(),
+                on: createMockFn()
             }));
 
             await service.initializeAllPlatforms({ youtube: mockPlatformClass });
@@ -121,6 +122,7 @@ describe('PlatformLifecycleService', () => {
         if (service) {
             service.dispose();
         }
+        clearAllMocks();
     });
 
     describe('Platform Initialization', () => {
@@ -128,10 +130,10 @@ describe('PlatformLifecycleService', () => {
             // Given: Twitch is enabled
             mockConfig.twitch = { enabled: true, apiKey: 'test-key' };
 
-            const mockPlatformClass = jest.fn().mockImplementation(() => ({
-                initialize: jest.fn().mockResolvedValue(true),
-                cleanup: jest.fn().mockResolvedValue(),
-                on: jest.fn()
+            const mockPlatformClass = createMockFn().mockImplementation(() => ({
+                initialize: createMockFn().mockResolvedValue(true),
+                cleanup: createMockFn().mockResolvedValue(),
+                on: createMockFn()
             }));
 
             const platformModules = {
@@ -152,7 +154,7 @@ describe('PlatformLifecycleService', () => {
 
         it('should skip disabled platforms', async () => {
             // Given: All platforms disabled
-            const mockPlatformClass = jest.fn();
+            const mockPlatformClass = createMockFn();
 
             const platformModules = {
                 twitch: mockPlatformClass,
@@ -176,7 +178,7 @@ describe('PlatformLifecycleService', () => {
             });
 
             const platformModules = {
-                twitch: jest.fn()
+                twitch: createMockFn()
             };
 
             const result = await localService.initializeAllPlatforms(platformModules, {});
@@ -189,10 +191,10 @@ describe('PlatformLifecycleService', () => {
             // Given: YouTube is enabled
             mockConfig.youtube = { enabled: true, username: 'test-channel' };
 
-            const mockPlatformClass = jest.fn().mockImplementation(() => ({
-                initialize: jest.fn().mockResolvedValue(true),
-                cleanup: jest.fn().mockResolvedValue(),
-                on: jest.fn()
+            const mockPlatformClass = createMockFn().mockImplementation(() => ({
+                initialize: createMockFn().mockResolvedValue(true),
+                cleanup: createMockFn().mockResolvedValue(),
+                on: createMockFn()
             }));
 
             const platformModules = {
@@ -212,8 +214,8 @@ describe('PlatformLifecycleService', () => {
             mockConfig.twitch = { enabled: true };
             const timestamp = new Date().toISOString();
 
-            const mockPlatformClass = jest.fn().mockImplementation(() => ({
-                initialize: jest.fn().mockImplementation((handlers) => {
+            const mockPlatformClass = createMockFn().mockImplementation(() => ({
+                initialize: createMockFn().mockImplementation((handlers) => {
                     handlers.onChat({ message: { text: 'hello' }, username: 'user', userId: 'u1', timestamp });
                     handlers.onViewerCount({ count: 42, timestamp });
 
@@ -229,8 +231,8 @@ describe('PlatformLifecycleService', () => {
                     });
                     return Promise.resolve(true);
                 }),
-                cleanup: jest.fn().mockResolvedValue(),
-                on: jest.fn()
+                cleanup: createMockFn().mockResolvedValue(),
+                on: createMockFn()
             }));
 
             const platformModules = { twitch: mockPlatformClass };
@@ -314,10 +316,10 @@ describe('PlatformLifecycleService', () => {
     describe('Platform Instance Creation', () => {
         it('should create platform instance without DI when no factory', async () => {
             // Given: Service has no dependency factory
-            const mockPlatformClass = jest.fn().mockImplementation(() => ({
-                initialize: jest.fn().mockResolvedValue(true),
-                cleanup: jest.fn().mockResolvedValue(),
-                on: jest.fn()
+            const mockPlatformClass = createMockFn().mockImplementation(() => ({
+                initialize: createMockFn().mockResolvedValue(true),
+                cleanup: createMockFn().mockResolvedValue(),
+                on: createMockFn()
             }));
             const config = { test: 'config' };
 
@@ -333,7 +335,7 @@ describe('PlatformLifecycleService', () => {
             // Given: Service has dependency factory with createTwitchDependencies
             const mockDependencies = { auth: 'mock' };
             const mockFactory = {
-                createTwitchDependencies: jest.fn().mockReturnValue(mockDependencies)
+                createTwitchDependencies: createMockFn().mockReturnValue(mockDependencies)
             };
 
             service.dispose();
@@ -345,10 +347,10 @@ describe('PlatformLifecycleService', () => {
                 sharedDependencies: { test: 'value' }
             });
 
-            const mockPlatformClass = jest.fn().mockImplementation(() => ({
-                initialize: jest.fn().mockResolvedValue(true),
-                cleanup: jest.fn().mockResolvedValue(),
-                on: jest.fn()
+            const mockPlatformClass = createMockFn().mockImplementation(() => ({
+                initialize: createMockFn().mockResolvedValue(true),
+                cleanup: createMockFn().mockResolvedValue(),
+                on: createMockFn()
             }));
             const config = { test: 'config' };
 
@@ -365,10 +367,10 @@ describe('PlatformLifecycleService', () => {
             // Given: Factory exists but no method for platform
             service.dependencyFactory = {};
 
-            const mockPlatformClass = jest.fn().mockImplementation(() => ({
-                initialize: jest.fn().mockResolvedValue(true),
-                cleanup: jest.fn().mockResolvedValue(),
-                on: jest.fn()
+            const mockPlatformClass = createMockFn().mockImplementation(() => ({
+                initialize: createMockFn().mockResolvedValue(true),
+                cleanup: createMockFn().mockResolvedValue(),
+                on: createMockFn()
             }));
             const config = { test: 'config' };
 
@@ -456,15 +458,15 @@ describe('PlatformLifecycleService', () => {
         it('should connect YouTube directly without invoking StreamDetector (platform-managed detection)', async () => {
             mockConfig.youtube = { enabled: true, username: 'test-channel' };
 
-            const platformInitSpy = jest.fn().mockResolvedValue(true);
-            const mockPlatformClass = jest.fn().mockImplementation(() => ({
+            const platformInitSpy = createMockFn().mockResolvedValue(true);
+            const mockPlatformClass = createMockFn().mockImplementation(() => ({
                 initialize: platformInitSpy,
-                cleanup: jest.fn().mockResolvedValue(),
-                on: jest.fn()
+                cleanup: createMockFn().mockResolvedValue(),
+                on: createMockFn()
             }));
 
             const streamDetector = {
-                startStreamDetection: jest.fn()
+                startStreamDetection: createMockFn()
             };
 
             service.dispose();
@@ -488,11 +490,11 @@ describe('PlatformLifecycleService', () => {
             mockConfig.tiktok = { enabled: true, username: 'streamer' };
 
             const deferred = createDeferred();
-            const platformInitSpy = jest.fn().mockImplementation(() => deferred.promise);
-            const mockPlatformClass = jest.fn().mockImplementation(() => ({
+            const platformInitSpy = createMockFn().mockImplementation(() => deferred.promise);
+            const mockPlatformClass = createMockFn().mockImplementation(() => ({
                 initialize: platformInitSpy,
-                cleanup: jest.fn().mockResolvedValue(),
-                on: jest.fn()
+                cleanup: createMockFn().mockResolvedValue(),
+                on: createMockFn()
             }));
 
             await service.initializeAllPlatforms({ tiktok: mockPlatformClass });
@@ -510,15 +512,15 @@ describe('PlatformLifecycleService', () => {
         it('should handle platform initialization failures gracefully for stream-detector-managed platforms', async () => {
             mockConfig.custom = { enabled: true };
 
-            const platformInitSpy = jest.fn().mockResolvedValue(true);
-            const mockPlatformClass = jest.fn().mockImplementation(() => ({
+            const platformInitSpy = createMockFn().mockResolvedValue(true);
+            const mockPlatformClass = createMockFn().mockImplementation(() => ({
                 initialize: platformInitSpy,
-                cleanup: jest.fn().mockResolvedValue(),
-                on: jest.fn()
+                cleanup: createMockFn().mockResolvedValue(),
+                on: createMockFn()
             }));
 
             const streamDetector = {
-                startStreamDetection: jest.fn().mockRejectedValue(new Error('detector failed'))
+                startStreamDetection: createMockFn().mockRejectedValue(new Error('detector failed'))
             };
 
             service.dispose();
@@ -546,11 +548,11 @@ describe('PlatformLifecycleService', () => {
         it('marks platform failed when stream detection is unavailable', async () => {
             mockConfig.custom = { enabled: true };
 
-            const platformInitSpy = jest.fn().mockResolvedValue(true);
-            const mockPlatformClass = jest.fn().mockImplementation(() => ({
+            const platformInitSpy = createMockFn().mockResolvedValue(true);
+            const mockPlatformClass = createMockFn().mockImplementation(() => ({
                 initialize: platformInitSpy,
-                cleanup: jest.fn().mockResolvedValue(),
-                on: jest.fn()
+                cleanup: createMockFn().mockResolvedValue(),
+                on: createMockFn()
             }));
 
             service.dispose();
@@ -579,11 +581,11 @@ describe('PlatformLifecycleService', () => {
         it('should cleanup all platforms gracefully on service shutdown', async () => {
             mockConfig.twitch = { enabled: true };
 
-            const cleanupSpy = jest.fn().mockResolvedValue();
-            const mockPlatformClass = jest.fn().mockImplementation(() => ({
-                initialize: jest.fn().mockResolvedValue(true),
+            const cleanupSpy = createMockFn().mockResolvedValue();
+            const mockPlatformClass = createMockFn().mockImplementation(() => ({
+                initialize: createMockFn().mockResolvedValue(true),
                 cleanup: cleanupSpy,
-                on: jest.fn()
+                on: createMockFn()
             }));
 
             await service.initializeAllPlatforms({ twitch: mockPlatformClass });
@@ -597,13 +599,13 @@ describe('PlatformLifecycleService', () => {
         it('prefers cleanup even when a disconnect method exists', async () => {
             mockConfig.twitch = { enabled: true };
 
-            const cleanupSpy = jest.fn().mockResolvedValue();
-            const disconnectSpy = jest.fn().mockResolvedValue();
-            const mockPlatformClass = jest.fn().mockImplementation(() => ({
-                initialize: jest.fn().mockResolvedValue(true),
+            const cleanupSpy = createMockFn().mockResolvedValue();
+            const disconnectSpy = createMockFn().mockResolvedValue();
+            const mockPlatformClass = createMockFn().mockImplementation(() => ({
+                initialize: createMockFn().mockResolvedValue(true),
                 cleanup: cleanupSpy,
                 disconnect: disconnectSpy,
-                on: jest.fn()
+                on: createMockFn()
             }));
 
             await service.initializeAllPlatforms({ twitch: mockPlatformClass });

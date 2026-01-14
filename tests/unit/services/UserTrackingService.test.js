@@ -1,3 +1,5 @@
+const { describe, it, expect } = require('bun:test');
+const { createMockFn } = require('../../helpers/bun-mock-utils');
 const { UserTrackingService, createUserTrackingService } = require('../../../src/services/UserTrackingService');
 
 describe('UserTrackingService', () => {
@@ -16,7 +18,7 @@ describe('UserTrackingService', () => {
     });
 
     it('does not emit events when checking first message', () => {
-        const eventBus = { emit: jest.fn() };
+        const eventBus = { emit: createMockFn() };
         const service = new UserTrackingService(eventBus);
 
         service.isFirstMessage('user-2', { username: 'Viewer', platform: 'twitch' });

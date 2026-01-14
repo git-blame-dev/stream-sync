@@ -1,18 +1,22 @@
-jest.mock('../../../src/utils/chat-logger', () => ({
-    logChatMessageWithConfig: jest.fn(),
-    logChatMessageSkipped: jest.fn()
+const { describe, it, beforeEach, afterEach, expect } = require('bun:test');
+const { createMockFn, clearAllMocks } = require('../../helpers/bun-mock-utils');
+const { mockModule, restoreAllModuleMocks } = require('../../helpers/bun-module-mocks');
+
+mockModule('../../../src/utils/chat-logger', () => ({
+    logChatMessageWithConfig: createMockFn(),
+    logChatMessageSkipped: createMockFn()
 }));
 
-jest.mock('../../../src/utils/monetization-detector', () => ({
-    detectMonetization: jest.fn().mockReturnValue({ detected: false, timingMs: 1 })
+mockModule('../../../src/utils/monetization-detector', () => ({
+    detectMonetization: createMockFn().mockReturnValue({ detected: false, timingMs: 1 })
 }));
 
-jest.mock('../../../src/utils/message-normalization', () => ({
-    validateNormalizedMessage: jest.fn().mockReturnValue({ isValid: true })
+mockModule('../../../src/utils/message-normalization', () => ({
+    validateNormalizedMessage: createMockFn().mockReturnValue({ isValid: true })
 }));
 
-jest.mock('../../../src/utils/notification-builder', () => ({
-    build: jest.fn((data) => data)
+mockModule('../../../src/utils/notification-builder', () => ({
+    build: createMockFn((data) => data)
 }));
 
 const ChatNotificationRouter = require('../../../src/services/ChatNotificationRouter');
@@ -30,8 +34,12 @@ describe('ChatNotificationRouter', () => {
     };
 
     beforeEach(() => {
-        jest.clearAllMocks();
+        clearAllMocks();
         NotificationBuilder.build.mockImplementation((data) => data);
+    });
+
+    afterEach(() => {
+        restoreAllModuleMocks();
     });
 
     const createRouter = (overrides = {}) => {
@@ -47,33 +55,33 @@ describe('ChatNotificationRouter', () => {
                 twitch: {}
             },
             platformLifecycleService: {
-                getPlatformConnectionTime: jest.fn().mockReturnValue(null)
+                getPlatformConnectionTime: createMockFn().mockReturnValue(null)
             },
             displayQueue: {
-                addItem: jest.fn()
+                addItem: createMockFn()
             },
             commandCooldownService: {
-                checkUserCooldown: jest.fn().mockReturnValue(true),
-                checkGlobalCooldown: jest.fn().mockReturnValue(true),
-                updateUserCooldown: jest.fn(),
-                updateGlobalCooldown: jest.fn()
+                checkUserCooldown: createMockFn().mockReturnValue(true),
+                checkGlobalCooldown: createMockFn().mockReturnValue(true),
+                updateUserCooldown: createMockFn(),
+                updateGlobalCooldown: createMockFn()
             },
             userTrackingService: {
-                isFirstMessage: jest.fn().mockReturnValue(false)
+                isFirstMessage: createMockFn().mockReturnValue(false)
             },
             gracefulExitService: null,
             commandParser: {
-                getVFXConfig: jest.fn().mockReturnValue(null)
+                getVFXConfig: createMockFn().mockReturnValue(null)
             },
             vfxService: null,
-            isFirstMessage: jest.fn().mockReturnValue(false)
+            isFirstMessage: createMockFn().mockReturnValue(false)
         };
         const runtime = Object.assign({}, baseAppRuntime, overrides.runtime || {});
         const logger = overrides.logger || {
-            debug: jest.fn(),
-            info: jest.fn(),
-            warn: jest.fn(),
-            error: jest.fn()
+            debug: createMockFn(),
+            info: createMockFn(),
+            warn: createMockFn(),
+            error: createMockFn()
         };
         const router = new ChatNotificationRouter({
             runtime,
@@ -103,9 +111,9 @@ describe('ChatNotificationRouter', () => {
         const commandConfig = { command: '!boom' };
         const { router, runtime } = createRouter({
             runtime: {
-                isFirstMessage: jest.fn().mockReturnValue(true),
+                isFirstMessage: createMockFn().mockReturnValue(true),
                 commandParser: {
-                    getVFXConfig: jest.fn().mockReturnValue(commandConfig)
+                    getVFXConfig: createMockFn().mockReturnValue(commandConfig)
                 }
             }
         });
@@ -119,7 +127,7 @@ describe('ChatNotificationRouter', () => {
     it('includes userId on queued greeting items for first-time messages', async () => {
         const { router, runtime } = createRouter({
             runtime: {
-                isFirstMessage: jest.fn().mockReturnValue(true)
+                isFirstMessage: createMockFn().mockReturnValue(true)
             }
         });
 
@@ -139,7 +147,7 @@ describe('ChatNotificationRouter', () => {
         const { router, runtime } = createRouter({
             runtime: {
                 commandParser: {
-                    getVFXConfig: jest.fn().mockReturnValue({ command: '!boom' })
+                    getVFXConfig: createMockFn().mockReturnValue({ command: '!boom' })
                 }
             }
         });
@@ -155,7 +163,7 @@ describe('ChatNotificationRouter', () => {
         const { router, runtime } = createRouter({
             runtime: {
                 platformLifecycleService: {
-                    getPlatformConnectionTime: jest.fn().mockReturnValue(connectionTime)
+                    getPlatformConnectionTime: createMockFn().mockReturnValue(connectionTime)
                 }
             }
         });
@@ -173,7 +181,7 @@ describe('ChatNotificationRouter', () => {
         const { router, runtime } = createRouter({
             runtime: {
                 platformLifecycleService: {
-                    getPlatformConnectionTime: jest.fn().mockReturnValue(connectionTime)
+                    getPlatformConnectionTime: createMockFn().mockReturnValue(connectionTime)
                 }
             }
         });
@@ -195,7 +203,7 @@ describe('ChatNotificationRouter', () => {
             vfxFilePath: '/tmp/path',
             duration: 5000
         };
-        const getVFXConfig = jest.fn().mockResolvedValue(greetingConfig);
+        const getVFXConfig = createMockFn().mockResolvedValue(greetingConfig);
         const { router } = createRouter({
             runtime: {
                 vfxCommandService: {
@@ -231,7 +239,7 @@ describe('ChatNotificationRouter', () => {
         const { router, runtime } = createRouter({
             runtime: {
                 commandParser: {
-                    getVFXConfig: jest.fn().mockReturnValue(commandConfig)
+                    getVFXConfig: createMockFn().mockReturnValue(commandConfig)
                 }
             }
         });
@@ -323,7 +331,7 @@ describe('ChatNotificationRouter', () => {
     });
 
     it('respects global messagesEnabled config toggle', async () => {
-        const displayQueue = { addItem: jest.fn() };
+        const displayQueue = { addItem: createMockFn() };
         const { router, runtime } = createRouter({
             runtime: {
                 config: {
@@ -341,7 +349,7 @@ describe('ChatNotificationRouter', () => {
     });
 
     it('respects per-platform messagesEnabled toggle overriding global', async () => {
-        const displayQueue = { addItem: jest.fn() };
+        const displayQueue = { addItem: createMockFn() };
         const { router, runtime } = createRouter({
             runtime: {
                 config: {
@@ -360,7 +368,7 @@ describe('ChatNotificationRouter', () => {
     });
 
     it('does not perform deduplication when tts.deduplicationEnabled is false', async () => {
-        const displayQueue = { addItem: jest.fn() };
+        const displayQueue = { addItem: createMockFn() };
         const { router, runtime } = createRouter({
             runtime: {
                 config: {
@@ -381,8 +389,8 @@ describe('ChatNotificationRouter', () => {
     });
 
     it('triggers graceful exit and skips further processing when threshold hit', async () => {
-        const displayQueue = { addItem: jest.fn() };
-        const triggerExit = jest.fn();
+        const displayQueue = { addItem: createMockFn() };
+        const triggerExit = createMockFn();
         const { router } = createRouter({
             runtime: {
                 displayQueue,
@@ -391,7 +399,7 @@ describe('ChatNotificationRouter', () => {
                     incrementMessageCount: () => true,
                     triggerExit
                 },
-                commandParser: { getVFXConfig: jest.fn().mockReturnValue(null) }
+                commandParser: { getVFXConfig: createMockFn().mockReturnValue(null) }
             }
         });
 
@@ -402,8 +410,8 @@ describe('ChatNotificationRouter', () => {
     });
 
     it('continues processing when graceful exit threshold not reached', async () => {
-        const displayQueue = { addItem: jest.fn() };
-        const triggerExit = jest.fn();
+        const displayQueue = { addItem: createMockFn() };
+        const triggerExit = createMockFn();
         const { router } = createRouter({
             runtime: {
                 displayQueue,
@@ -412,7 +420,7 @@ describe('ChatNotificationRouter', () => {
                     incrementMessageCount: () => false,
                     triggerExit
                 },
-                commandParser: { getVFXConfig: jest.fn().mockReturnValue(null) }
+                commandParser: { getVFXConfig: createMockFn().mockReturnValue(null) }
             }
         });
 
@@ -450,16 +458,16 @@ describe('ChatNotificationRouter', () => {
 
     it('warns and skips command processing when CommandCooldownService is missing', async () => {
         const logger = {
-            debug: jest.fn(),
-            info: jest.fn(),
-            warn: jest.fn(),
-            error: jest.fn()
+            debug: createMockFn(),
+            info: createMockFn(),
+            warn: createMockFn(),
+            error: createMockFn()
         };
         const { router, runtime } = createRouter({
             runtime: {
                 commandCooldownService: null,
                 vfxCommandService: {
-                    selectVFXCommand: jest.fn().mockResolvedValue({ command: '!cmd' })
+                    selectVFXCommand: createMockFn().mockResolvedValue({ command: '!cmd' })
                 }
             },
             logger
@@ -472,7 +480,7 @@ describe('ChatNotificationRouter', () => {
     });
 
     it('uses platform greetings override to skip greeting when disabled', async () => {
-        const displayQueue = { addItem: jest.fn() };
+        const displayQueue = { addItem: createMockFn() };
         const { router, runtime } = createRouter({
             runtime: {
                 config: {
@@ -480,7 +488,7 @@ describe('ChatNotificationRouter', () => {
                     twitch: { greetingsEnabled: false }
                 },
                 displayQueue,
-                isFirstMessage: jest.fn().mockReturnValue(true)
+                isFirstMessage: createMockFn().mockReturnValue(true)
             }
         });
 
@@ -491,7 +499,7 @@ describe('ChatNotificationRouter', () => {
     });
 
     it('uses platform greetings override to allow greeting when global disabled', async () => {
-        const displayQueue = { addItem: jest.fn() };
+        const displayQueue = { addItem: createMockFn() };
         const { router, runtime } = createRouter({
             runtime: {
                 config: {
@@ -499,7 +507,7 @@ describe('ChatNotificationRouter', () => {
                     twitch: { greetingsEnabled: true }
                 },
                 displayQueue,
-                isFirstMessage: jest.fn().mockReturnValue(true)
+                isFirstMessage: createMockFn().mockReturnValue(true)
             }
         });
 
@@ -510,14 +518,14 @@ describe('ChatNotificationRouter', () => {
     });
 
     it('does not enqueue greeting when messages are disabled even if greetings enabled', async () => {
-        const displayQueue = { addItem: jest.fn() };
+        const displayQueue = { addItem: createMockFn() };
         const { router, runtime } = createRouter({
             runtime: {
                 config: {
                     general: { messagesEnabled: false, greetingsEnabled: true }
                 },
                 displayQueue,
-                isFirstMessage: jest.fn().mockReturnValue(true)
+                isFirstMessage: createMockFn().mockReturnValue(true)
             }
         });
 
@@ -529,11 +537,11 @@ describe('ChatNotificationRouter', () => {
     it('keeps chat TTS skipped when monetization detected even if greetings enqueue', async () => {
         const MonetizationDetector = require('../../../src/utils/monetization-detector');
         MonetizationDetector.detectMonetization.mockReturnValue({ detected: true, timingMs: 1 });
-        const displayQueue = { addItem: jest.fn() };
+        const displayQueue = { addItem: createMockFn() };
         const { router, runtime } = createRouter({
             runtime: {
                 displayQueue,
-                isFirstMessage: jest.fn().mockReturnValue(true)
+                isFirstMessage: createMockFn().mockReturnValue(true)
             }
         });
 
@@ -549,7 +557,7 @@ describe('ChatNotificationRouter', () => {
     });
 
     it('does not skip old messages when filterOldMessages is disabled', async () => {
-        const displayQueue = { addItem: jest.fn() };
+        const displayQueue = { addItem: createMockFn() };
         const connectionTime = testClock.now();
         const { router, runtime } = createRouter({
             runtime: {
@@ -558,7 +566,7 @@ describe('ChatNotificationRouter', () => {
                 },
                 displayQueue,
                 platformLifecycleService: {
-                    getPlatformConnectionTime: jest.fn().mockReturnValue(connectionTime)
+                    getPlatformConnectionTime: createMockFn().mockReturnValue(connectionTime)
                 }
             }
         });
@@ -572,7 +580,7 @@ describe('ChatNotificationRouter', () => {
     });
 
     it('processes old messages when platformLifecycleService is missing', async () => {
-        const displayQueue = { addItem: jest.fn() };
+        const displayQueue = { addItem: createMockFn() };
         const { router, runtime } = createRouter({
             runtime: {
                 config: { general: { messagesEnabled: true } },
@@ -590,16 +598,16 @@ describe('ChatNotificationRouter', () => {
     });
 
     it('skips command processing when per-user cooldown blocks', async () => {
-        const displayQueue = { addItem: jest.fn() };
+        const displayQueue = { addItem: createMockFn() };
         const { router, runtime, logger } = createRouter({
             runtime: {
                 displayQueue,
-                commandParser: { getVFXConfig: jest.fn().mockReturnValue({ command: '!boom' }) },
+                commandParser: { getVFXConfig: createMockFn().mockReturnValue({ command: '!boom' }) },
                 commandCooldownService: {
-                    checkUserCooldown: jest.fn().mockReturnValue(false),
-                    checkGlobalCooldown: jest.fn(),
-                    updateUserCooldown: jest.fn(),
-                    updateGlobalCooldown: jest.fn()
+                    checkUserCooldown: createMockFn().mockReturnValue(false),
+                    checkGlobalCooldown: createMockFn(),
+                    updateUserCooldown: createMockFn(),
+                    updateGlobalCooldown: createMockFn()
                 }
             }
         });
@@ -616,16 +624,16 @@ describe('ChatNotificationRouter', () => {
     });
 
     it('skips command processing when global cooldown blocks', async () => {
-        const displayQueue = { addItem: jest.fn() };
+        const displayQueue = { addItem: createMockFn() };
         const { router, runtime, logger } = createRouter({
             runtime: {
                 displayQueue,
-                commandParser: { getVFXConfig: jest.fn().mockReturnValue({ command: '!boom' }) },
+                commandParser: { getVFXConfig: createMockFn().mockReturnValue({ command: '!boom' }) },
                 commandCooldownService: {
-                    checkUserCooldown: jest.fn().mockReturnValue(true),
-                    checkGlobalCooldown: jest.fn().mockReturnValue(false),
-                    updateUserCooldown: jest.fn(),
-                    updateGlobalCooldown: jest.fn()
+                    checkUserCooldown: createMockFn().mockReturnValue(true),
+                    checkGlobalCooldown: createMockFn().mockReturnValue(false),
+                    updateUserCooldown: createMockFn(),
+                    updateGlobalCooldown: createMockFn()
                 }
             }
         });
@@ -642,14 +650,14 @@ describe('ChatNotificationRouter', () => {
     });
 
     it('uses commandParser for commands when vfxCommandService is unavailable', async () => {
-        const displayQueue = { addItem: jest.fn() };
+        const displayQueue = { addItem: createMockFn() };
         const commandConfig = { command: '!hey' };
         const { router, runtime } = createRouter({
             runtime: {
                 displayQueue,
                 vfxCommandService: null,
                 commandParser: {
-                    getVFXConfig: jest.fn().mockReturnValue(commandConfig)
+                    getVFXConfig: createMockFn().mockReturnValue(commandConfig)
                 }
             }
         });
@@ -662,7 +670,7 @@ describe('ChatNotificationRouter', () => {
     });
 
     it('does not enqueue command when no parser or vfxCommandService is available', async () => {
-        const displayQueue = { addItem: jest.fn() };
+        const displayQueue = { addItem: createMockFn() };
         const { router, runtime } = createRouter({
             runtime: {
                 displayQueue,
@@ -678,13 +686,13 @@ describe('ChatNotificationRouter', () => {
     });
 
     it('queues chat without command when parser returns null and vfxCommandService is unavailable', async () => {
-        const displayQueue = { addItem: jest.fn() };
+        const displayQueue = { addItem: createMockFn() };
         const { router, runtime } = createRouter({
             runtime: {
                 displayQueue,
                 vfxCommandService: null,
                 commandParser: {
-                    getVFXConfig: jest.fn().mockReturnValue(null)
+                    getVFXConfig: createMockFn().mockReturnValue(null)
                 }
             }
         });
@@ -697,18 +705,18 @@ describe('ChatNotificationRouter', () => {
     });
 
     it('updates user and global cooldowns when command is processed', async () => {
-        const displayQueue = { addItem: jest.fn() };
+        const displayQueue = { addItem: createMockFn() };
         const { router, runtime } = createRouter({
             runtime: {
                 displayQueue,
                 commandParser: {
-                    getVFXConfig: jest.fn().mockReturnValue({ command: '!run' })
+                    getVFXConfig: createMockFn().mockReturnValue({ command: '!run' })
                 },
                 commandCooldownService: {
-                    checkUserCooldown: jest.fn().mockReturnValue(true),
-                    checkGlobalCooldown: jest.fn().mockReturnValue(true),
-                    updateUserCooldown: jest.fn(),
-                    updateGlobalCooldown: jest.fn()
+                    checkUserCooldown: createMockFn().mockReturnValue(true),
+                    checkGlobalCooldown: createMockFn().mockReturnValue(true),
+                    updateUserCooldown: createMockFn(),
+                    updateGlobalCooldown: createMockFn()
                 }
             }
         });
@@ -722,7 +730,7 @@ describe('ChatNotificationRouter', () => {
     });
 
     it('queues chat even when username/displayName are missing', async () => {
-        const displayQueue = { addItem: jest.fn() };
+        const displayQueue = { addItem: createMockFn() };
         const { router } = createRouter({
             runtime: {
                 displayQueue
@@ -736,9 +744,9 @@ describe('ChatNotificationRouter', () => {
     });
 
     it('processes commands via vfxCommandService when usernames are missing', async () => {
-        const displayQueue = { addItem: jest.fn() };
-        const logger = { debug: jest.fn(), info: jest.fn(), warn: jest.fn(), error: jest.fn() };
-        const selectVFXCommand = jest.fn((command, contextMessage) => {
+        const displayQueue = { addItem: createMockFn() };
+        const logger = { debug: createMockFn(), info: createMockFn(), warn: createMockFn(), error: createMockFn() };
+        const selectVFXCommand = createMockFn((command, contextMessage) => {
             if (typeof contextMessage !== 'string') {
                 throw new Error('context required');
             }
@@ -767,7 +775,7 @@ describe('ChatNotificationRouter', () => {
         const { router } = createRouter({
             runtime: {
                 displayQueue: null,
-                commandParser: { getVFXConfig: jest.fn().mockReturnValue(null) }
+                commandParser: { getVFXConfig: createMockFn().mockReturnValue(null) }
             }
         });
         const { logChatMessageWithConfig } = require('../../../src/utils/chat-logger');
@@ -777,7 +785,7 @@ describe('ChatNotificationRouter', () => {
     });
 
     it('handles missing config safely and still processes chat', async () => {
-        const displayQueue = { addItem: jest.fn() };
+        const displayQueue = { addItem: createMockFn() };
         const { router, runtime } = createRouter({
             runtime: {
                 config: null,
@@ -791,12 +799,12 @@ describe('ChatNotificationRouter', () => {
     });
 
     it('warns when displayQueue addItem throws', async () => {
-        const addItem = jest.fn(() => { throw new Error('queue failed'); });
-        const logger = { debug: jest.fn(), info: jest.fn(), warn: jest.fn(), error: jest.fn() };
+        const addItem = createMockFn(() => { throw new Error('queue failed'); });
+        const logger = { debug: createMockFn(), info: createMockFn(), warn: createMockFn(), error: createMockFn() };
         const { router } = createRouter({
             runtime: {
                 displayQueue: { addItem },
-                commandParser: { getVFXConfig: jest.fn().mockReturnValue(null) }
+                commandParser: { getVFXConfig: createMockFn().mockReturnValue(null) }
             },
             logger
         });
@@ -810,10 +818,10 @@ describe('ChatNotificationRouter', () => {
         MonetizationDetector.detectMonetization.mockImplementation(() => {
             throw new Error('detect fail');
         });
-        const logger = { debug: jest.fn(), info: jest.fn(), warn: jest.fn(), error: jest.fn() };
+        const logger = { debug: createMockFn(), info: createMockFn(), warn: createMockFn(), error: createMockFn() };
         const { router, runtime } = createRouter({
             runtime: {
-                commandParser: { getVFXConfig: jest.fn().mockReturnValue(null) }
+                commandParser: { getVFXConfig: createMockFn().mockReturnValue(null) }
             },
             logger
         });
@@ -830,13 +838,13 @@ describe('ChatNotificationRouter', () => {
     });
 
     it('continues when vfxCommandService selectVFXCommand rejects', async () => {
-        const displayQueue = { addItem: jest.fn() };
-        const logger = { debug: jest.fn(), info: jest.fn(), warn: jest.fn(), error: jest.fn() };
+        const displayQueue = { addItem: createMockFn() };
+        const logger = { debug: createMockFn(), info: createMockFn(), warn: createMockFn(), error: createMockFn() };
         const { router, runtime } = createRouter({
             runtime: {
                 displayQueue,
                 vfxCommandService: {
-                    selectVFXCommand: jest.fn().mockRejectedValue(new Error('select failed'))
+                    selectVFXCommand: createMockFn().mockRejectedValue(new Error('select failed'))
                 }
             },
             logger
@@ -855,14 +863,14 @@ describe('ChatNotificationRouter', () => {
     });
 
     it('continues when commandParser getVFXConfig throws', async () => {
-        const displayQueue = { addItem: jest.fn() };
-        const logger = { debug: jest.fn(), info: jest.fn(), warn: jest.fn(), error: jest.fn() };
+        const displayQueue = { addItem: createMockFn() };
+        const logger = { debug: createMockFn(), info: createMockFn(), warn: createMockFn(), error: createMockFn() };
         const { router, runtime } = createRouter({
             runtime: {
                 displayQueue,
                 vfxCommandService: null,
                 commandParser: {
-                    getVFXConfig: jest.fn(() => { throw new Error('parser failed'); })
+                    getVFXConfig: createMockFn(() => { throw new Error('parser failed'); })
                 }
             },
             logger

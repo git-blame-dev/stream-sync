@@ -1,20 +1,24 @@
 
-jest.mock('../../../src/core/logging', () => ({
-    setConfigValidator: jest.fn(),
-    setDebugMode: jest.fn(),
-    initializeLoggingConfig: jest.fn(),
-    initializeConsoleOverride: jest.fn(),
+const { describe, test, expect, afterAll } = require('bun:test');
+const { createMockFn } = require('../../helpers/bun-mock-utils');
+const { mockModule, restoreAllModuleMocks } = require('../../helpers/bun-module-mocks');
+
+mockModule('../../../src/core/logging', () => ({
+    setConfigValidator: createMockFn(),
+    setDebugMode: createMockFn(),
+    initializeLoggingConfig: createMockFn(),
+    initializeConsoleOverride: createMockFn(),
     logger: {
-        info: jest.fn(),
-        warn: jest.fn(),
-        error: jest.fn(),
-        debug: jest.fn()
+        info: createMockFn(),
+        warn: createMockFn(),
+        error: createMockFn(),
+        debug: createMockFn()
     },
-    getLogger: jest.fn(() => ({
-        info: jest.fn(),
-        warn: jest.fn(),
-        error: jest.fn(),
-        debug: jest.fn()
+    getLogger: createMockFn(() => ({
+        info: createMockFn(),
+        warn: createMockFn(),
+        error: createMockFn(),
+        debug: createMockFn()
     }))
 }));
 
@@ -34,7 +38,7 @@ setupAutomatedCleanup({
 });
 
 describe('Terminology Consistency', () => {
-    jest.setTimeout(TEST_TIMEOUTS.UNIT);
+    const testOptions = { timeout: TEST_TIMEOUTS.UNIT };
 
     const buildRouterHarness = () => {
         const handled = [];
@@ -43,14 +47,14 @@ describe('Terminology Consistency', () => {
                 handled.push({ platform, username, data });
             }
         };
-        const eventBus = { subscribe: jest.fn(() => () => {}) };
-        const notificationManager = { handleNotification: jest.fn(async () => true) };
-        const configService = { areNotificationsEnabled: jest.fn(() => true) };
+        const eventBus = { subscribe: createMockFn(() => () => {}) };
+        const notificationManager = { handleNotification: createMockFn(async () => true) };
+        const configService = { areNotificationsEnabled: createMockFn(() => true) };
         const logger = {
-            debug: jest.fn(),
-            info: jest.fn(),
-            warn: jest.fn(),
-            error: jest.fn()
+            debug: createMockFn(),
+            info: createMockFn(),
+            warn: createMockFn(),
+            error: createMockFn()
         };
         const router = new PlatformEventRouter({
             eventBus,
@@ -83,7 +87,7 @@ describe('Terminology Consistency', () => {
             expect(handled[0].username).toBe(user.username);
             expect(handled[0].data.userId).toBe('user-1');
             expect(handled[0].data.platform).toBe('youtube');
-        });
+        }, testOptions);
 
         test('Twitch subscription routes through PlatformEventRouter', async () => {
             const { handled, router } = buildRouterHarness();
@@ -105,7 +109,7 @@ describe('Terminology Consistency', () => {
             expect(handled[0].username).toBe(user.username);
             expect(handled[0].data.userId).toBe('user-2');
             expect(handled[0].data.platform).toBe('twitch');
-        });
+        }, testOptions);
     });
 
     describe('Log terminology', () => {
@@ -117,7 +121,7 @@ describe('Terminology Consistency', () => {
             });
             expect(logMessage).toContain('New member');
             expect(logMessage).toContain('TestMember');
-        });
+        }, testOptions);
 
         test('Twitch subscription log uses "subscription"', () => {
             const logMessage = generateLogMessage('platform:paypiggy', {
@@ -128,7 +132,7 @@ describe('Terminology Consistency', () => {
             });
             expect(logMessage.toLowerCase()).toContain('subscriber');
             expect(logMessage).toContain('TwitchSub');
-        });
+        }, testOptions);
     });
 
     describe('Alias removal', () => {
@@ -139,6 +143,10 @@ describe('Terminology Consistency', () => {
             expect(constants.NOTIFICATION_TYPES).toBeUndefined();
             expect(PlatformEvents.NOTIFICATION_TYPES.RESUB).toBeUndefined();
             expect(PlatformEvents.NOTIFICATION_TYPES.RESUBSCRIPTION).toBeUndefined();
-        });
+        }, testOptions);
+    });
+
+    afterAll(() => {
+        restoreAllModuleMocks();
     });
 });

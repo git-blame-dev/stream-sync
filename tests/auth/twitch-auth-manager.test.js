@@ -1,38 +1,44 @@
 
-const { describe, test, expect, beforeEach, afterEach } = require('@jest/globals');
+const { describe, test, expect, beforeEach, afterEach } = require('bun:test');
+const { createMockFn, restoreAllMocks } = require('../helpers/bun-mock-utils');
+const { mockModule, resetModules, restoreAllModuleMocks } = require('../helpers/bun-module-mocks');
 
 // Initialize test logging FIRST
 const { initializeTestLogging } = require('../helpers/test-setup');
 initializeTestLogging();
 
 // Mock dependencies to prevent actual auth system access
-jest.mock('../../src/auth/TwitchAuthService', () => {
-    return jest.fn().mockImplementation((config) => ({
-        config: config || {
-            accessToken: 'mock-access-token',
-            refreshToken: 'mock-refresh-token',
-            clientId: 'test-client-id',
-            clientSecret: 'test-client-secret'
-        },
-        userId: 123456789, // Property, not a method
-        initialize: jest.fn().mockResolvedValue(),
-        getAuthProvider: jest.fn().mockReturnValue({
-            getAccessTokenForUser: jest.fn().mockResolvedValue('mock-token')
-        }),
-        getUserId: jest.fn().mockResolvedValue(123456789),
-        getAccessToken: jest.fn().mockResolvedValue('mock-access-token'),
-        cleanup: jest.fn().mockResolvedValue(),
-        isReady: jest.fn().mockReturnValue(true)
-    }));
-});
+const registerAuthMocks = () => {
+    mockModule('../../src/auth/TwitchAuthService', () => {
+        return createMockFn().mockImplementation((config) => ({
+            config: config || {
+                accessToken: 'mock-access-token',
+                refreshToken: 'mock-refresh-token',
+                clientId: 'test-client-id',
+                clientSecret: 'test-client-secret'
+            },
+            userId: 123456789, // Property, not a method
+            initialize: createMockFn().mockResolvedValue(),
+            getAuthProvider: createMockFn().mockReturnValue({
+                getAccessTokenForUser: createMockFn().mockResolvedValue('mock-token')
+            }),
+            getUserId: createMockFn().mockResolvedValue(123456789),
+            getAccessToken: createMockFn().mockResolvedValue('mock-access-token'),
+            cleanup: createMockFn().mockResolvedValue(),
+            isReady: createMockFn().mockReturnValue(true)
+        }));
+    });
 
-jest.mock('../../src/auth/TwitchAuthInitializer', () => {
-    return jest.fn().mockImplementation(() => ({
-        initializeAuthentication: jest.fn().mockResolvedValue(true),
-        validateConfig: jest.fn(),
-        cleanup: jest.fn().mockResolvedValue()
-    }));
-});
+    mockModule('../../src/auth/TwitchAuthInitializer', () => {
+        return createMockFn().mockImplementation(() => ({
+            initializeAuthentication: createMockFn().mockResolvedValue(true),
+            validateConfig: createMockFn(),
+            cleanup: createMockFn().mockResolvedValue()
+        }));
+    });
+};
+
+registerAuthMocks();
 
 describe('TwitchAuthManager', () => {
     let TwitchAuthManager;
@@ -40,12 +46,13 @@ describe('TwitchAuthManager', () => {
 
     beforeEach(() => {
         // Clear any existing singleton instances
-        jest.resetModules();
-        
+        resetModules();
+        registerAuthMocks();
+
         // Re-initialize logging after module reset
         const { initializeTestLogging } = require('../helpers/test-setup');
         initializeTestLogging();
-        
+
         mockConfig = {
             clientId: 'test-client-id',
             clientSecret: 'test-client-secret',
@@ -60,6 +67,8 @@ describe('TwitchAuthManager', () => {
         if (TwitchAuthManager && TwitchAuthManager.resetInstance) {
             TwitchAuthManager.resetInstance();
         }
+        restoreAllMocks();
+        restoreAllModuleMocks();
     });
 
     describe('Independent Instance Pattern', () => {

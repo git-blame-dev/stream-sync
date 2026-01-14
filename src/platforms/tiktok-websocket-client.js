@@ -1,6 +1,5 @@
 
 const { EventEmitter } = require('events');
-const WebSocket = require('ws');
 const { safeSetTimeout, safeSetInterval } = require('../utils/timeout-validator');
 
 class TikTokWebSocketClient extends EventEmitter {
@@ -8,6 +7,7 @@ class TikTokWebSocketClient extends EventEmitter {
         super();
         this.username = username;
         this.apiKey = options.apiKey || null;
+        this.WebSocketCtor = options.WebSocketCtor || require('ws');
 
         this.ws = null;
         this.isConnecting = false;
@@ -49,7 +49,7 @@ class TikTokWebSocketClient extends EventEmitter {
                 }
                 const wsUrl = `${this.wsUrl}?${params.toString()}`;
 
-                this.ws = new WebSocket(wsUrl, {
+                this.ws = new this.WebSocketCtor(wsUrl, {
                     handshakeTimeout: 15000,
                     perMessageDeflate: false
                 });
@@ -277,7 +277,7 @@ class TikTokWebSocketClient extends EventEmitter {
             clearInterval(this.pingInterval);
         }
         this.pingInterval = safeSetInterval(() => {
-            if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+            if (this.ws && this.ws.readyState === this.WebSocketCtor.OPEN) {
                 this.ws.ping();
             }
         }, this.pingIntervalMs);
