@@ -1,3 +1,4 @@
+const { describe, test, expect } = require('bun:test');
 const { createTwitchEventFactory } = require('../../../../src/platforms/twitch/events/twitch-event-factory');
 const { PlatformEvents } = require('../../../../src/interfaces/PlatformEvents');
 

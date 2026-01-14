@@ -1,6 +1,10 @@
 
-jest.resetModules();
-const TwitchEventSub = jest.requireActual('../../../src/platforms/twitch-eventsub');
+const { describe, it, expect } = require('bun:test');
+const { unmockModule, resetModules, requireActual } = require('../../helpers/bun-module-mocks');
+
+unmockModule('../../../src/platforms/twitch-eventsub');
+resetModules();
+const TwitchEventSub = requireActual('../../../src/platforms/twitch-eventsub');
 
 const createAuthManager = () => ({
     getState: () => 'READY',

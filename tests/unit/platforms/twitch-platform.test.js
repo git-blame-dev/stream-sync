@@ -1,4 +1,7 @@
 
+const { describe, it, expect, beforeEach, afterEach } = require('bun:test');
+const { createMockFn, restoreAllMocks, spyOn } = require('../../helpers/bun-mock-utils');
+const { unmockModule, resetModules, restoreAllModuleMocks } = require('../../helpers/bun-module-mocks');
 const { initializeTestLogging } = require('../../helpers/test-setup');
 const { createMockLogger, createMockNotificationBuilder } = require('../../helpers/mock-factories');
 const { setupAutomatedCleanup } = require('../../helpers/mock-lifecycle');
@@ -16,15 +19,21 @@ setupAutomatedCleanup({
 });
 
 // Unmock the Twitch platform to test the real implementation
-jest.unmock('../../../src/platforms/twitch');
-jest.unmock('../../../src/platforms/twitch-eventsub');
-jest.unmock('../../../src/utils/retry-system');
-jest.unmock('../../../src/core/logging');
-jest.unmock('../../../src/utils/platform-connection-state');
-jest.unmock('../../../src/utils/api-clients/twitch-api-client');
-jest.unmock('../../../src/utils/viewer-count-providers');
+unmockModule('../../../src/platforms/twitch');
+unmockModule('../../../src/platforms/twitch-eventsub');
+unmockModule('../../../src/utils/retry-system');
+unmockModule('../../../src/core/logging');
+unmockModule('../../../src/utils/platform-connection-state');
+unmockModule('../../../src/utils/api-clients/twitch-api-client');
+unmockModule('../../../src/utils/viewer-count-providers');
 
 describe('Twitch Platform', () => {
+    afterEach(() => {
+        restoreAllMocks();
+        restoreAllModuleMocks();
+        resetModules();
+    });
+
     let TwitchPlatform;
     let mockTwitchEventSub;
     let mockAuthManager;
@@ -43,38 +52,38 @@ describe('Twitch Platform', () => {
         // Create mocks using factory functions
         mockLogger = createMockLogger('debug');
         mockAuthManager = {
-            getState: jest.fn().mockReturnValue('READY'),
-            getAccessToken: jest.fn().mockResolvedValue('mock-access-token'),
-            refreshToken: jest.fn().mockResolvedValue('new-access-token'),
-            validateToken: jest.fn().mockResolvedValue(true),
-            initialize: jest.fn().mockResolvedValue()
+            getState: createMockFn().mockReturnValue('READY'),
+            getAccessToken: createMockFn().mockResolvedValue('mock-access-token'),
+            refreshToken: createMockFn().mockResolvedValue('new-access-token'),
+            validateToken: createMockFn().mockResolvedValue(true),
+            initialize: createMockFn().mockResolvedValue()
         };
         mockApiClient = {
-            getChannelInfo: jest.fn().mockResolvedValue({ id: '123456', name: 'testchannel' }),
-            getViewerCount: jest.fn().mockResolvedValue(1500),
-            sendChatMessage: jest.fn().mockResolvedValue()
+            getChannelInfo: createMockFn().mockResolvedValue({ id: '123456', name: 'testchannel' }),
+            getViewerCount: createMockFn().mockResolvedValue(1500),
+            sendChatMessage: createMockFn().mockResolvedValue()
         };
         mockViewerCountProvider = {
-            getViewerCount: jest.fn().mockResolvedValue(1500),
-            startPolling: jest.fn(),
-            stopPolling: jest.fn()
+            getViewerCount: createMockFn().mockResolvedValue(1500),
+            startPolling: createMockFn(),
+            stopPolling: createMockFn()
         };
         mockApp = {
-            handleChatMessage: jest.fn(),
-            handleFollowNotification: jest.fn(),
-            handlePaypiggyNotification: jest.fn(),
-            updateViewerCount: jest.fn()
+            handleChatMessage: createMockFn(),
+            handleFollowNotification: createMockFn(),
+            handlePaypiggyNotification: createMockFn(),
+            updateViewerCount: createMockFn()
         };
 
         // Mock Twitch EventSub
         mockTwitchEventSub = {
-            initialize: jest.fn().mockResolvedValue(),
-            connect: jest.fn().mockResolvedValue(),
-            disconnect: jest.fn().mockResolvedValue(),
-            on: jest.fn(),
-            emit: jest.fn(),
-            isConnected: jest.fn().mockReturnValue(true),
-            sendMessage: jest.fn().mockResolvedValue()
+            initialize: createMockFn().mockResolvedValue(),
+            connect: createMockFn().mockResolvedValue(),
+            disconnect: createMockFn().mockResolvedValue(),
+            on: createMockFn(),
+            emit: createMockFn(),
+            isConnected: createMockFn().mockReturnValue(true),
+            sendMessage: createMockFn().mockResolvedValue()
         };
 
         // Import the real TwitchPlatform now that we have proper mocking
@@ -93,36 +102,36 @@ describe('Twitch Platform', () => {
 
         // Create platform instance with mocks
         platform = new TwitchPlatform(config, {
-            TwitchEventSub: jest.fn().mockImplementation(() => mockTwitchEventSub),
+            TwitchEventSub: createMockFn().mockImplementation(() => mockTwitchEventSub),
             authManager: mockAuthManager,
             notificationBridge: mockApp,
             logger: mockLogger,
             timestampService: {
-                extractTimestamp: jest.fn(() => new Date().toISOString())
+                extractTimestamp: createMockFn(() => new Date().toISOString())
             }
         });
 
         platformHandlers = {
-            onChat: jest.fn(),
-            onFollow: jest.fn(),
-            onPaypiggy: jest.fn(),
-            onGift: jest.fn(),
-            onGiftPaypiggy: jest.fn(),
-            onRaid: jest.fn(),
-            onStreamStatus: jest.fn()
+            onChat: createMockFn(),
+            onFollow: createMockFn(),
+            onPaypiggy: createMockFn(),
+            onGift: createMockFn(),
+            onGiftPaypiggy: createMockFn(),
+            onRaid: createMockFn(),
+            onStreamStatus: createMockFn()
         };
 
         mockEventBus = {
             emitted: [],
-            emit: jest.fn((type, payload) => mockEventBus.emitted.push({ type, payload }))
+            emit: createMockFn((type, payload) => mockEventBus.emitted.push({ type, payload }))
         };
 
         runtime = {
-            handleChatMessage: jest.fn(),
-            handleFollowNotification: jest.fn(),
-            handlePaypiggyNotification: jest.fn(),
-            handleGiftNotification: jest.fn(),
-            handleRaidNotification: jest.fn()
+            handleChatMessage: createMockFn(),
+            handleFollowNotification: createMockFn(),
+            handlePaypiggyNotification: createMockFn(),
+            handleGiftNotification: createMockFn(),
+            handleRaidNotification: createMockFn()
         };
 
         // Build a lightweight event bus with subscribe
@@ -150,7 +159,7 @@ describe('Twitch Platform', () => {
             eventBus: mockEventBus,
             runtime,
             notificationManager: mockApp,
-            configService: { areNotificationsEnabled: jest.fn(() => true) },
+            configService: { areNotificationsEnabled: createMockFn(() => true) },
             logger: mockLogger
         });
     });
@@ -241,9 +250,9 @@ describe('Twitch Platform', () => {
     describe('when connecting', () => {
         it('should establish connection successfully', async () => {
             const handlers = {
-                onChatMessage: jest.fn(),
-                onFollowNotification: jest.fn(),
-                onPaypiggyNotification: jest.fn()
+                onChatMessage: createMockFn(),
+                onFollowNotification: createMockFn(),
+                onPaypiggyNotification: createMockFn()
             };
 
             await platform.initialize(handlers);
@@ -270,9 +279,9 @@ describe('Twitch Platform', () => {
         it('should prepare to receive all user events after connection', async () => {
             // Given: User wants to receive all Twitch events
             const handlers = {
-                onChatMessage: jest.fn(),
-                onFollowNotification: jest.fn(),
-                onPaypiggyNotification: jest.fn()
+                onChatMessage: createMockFn(),
+                onFollowNotification: createMockFn(),
+                onPaypiggyNotification: createMockFn()
             };
             
             // When: Platform initializes with handlers
@@ -505,7 +514,7 @@ describe('Twitch Platform', () => {
         it('emits platform connection events for EventSub lifecycle', async () => {
             await platform.initialize(platformHandlers);
 
-            const emitSpy = jest.spyOn(platform, 'emit');
+            const emitSpy = spyOn(platform, 'emit');
             const connectedHandler = mockTwitchEventSub.on.mock.calls.find(call => call[0] === 'eventSubConnected')[1];
 
             await connectedHandler({ reason: 'session_welcome' });
@@ -551,8 +560,8 @@ describe('Twitch Platform', () => {
 
         it('should block sending when EventSub connection is inactive', async () => {
             platform.eventSub = {
-                isConnected: jest.fn().mockReturnValue(false),
-                isActive: jest.fn().mockReturnValue(false)
+                isConnected: createMockFn().mockReturnValue(false),
+                isActive: createMockFn().mockReturnValue(false)
             };
 
             await expect(platform.sendMessage('hello')).rejects.toThrow('EventSub connection is not active');
@@ -625,7 +634,7 @@ describe('Twitch Platform', () => {
         it('should emit follow event from notification message', async () => {
             const TwitchEventSub = require('../../../src/platforms/twitch-eventsub');
             const eventSub = new TwitchEventSub({ channel: 'test', eventsub_enabled: true }, { logger: mockLogger });
-            const followListener = jest.fn();
+            const followListener = createMockFn();
             eventSub.on('follow', followListener);
 
             const message = {

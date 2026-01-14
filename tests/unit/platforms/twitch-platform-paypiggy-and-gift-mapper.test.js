@@ -1,8 +1,22 @@
 
-jest.mock('../../../src/platforms/twitch-eventsub');
-jest.mock('../../../src/core/logging', () => ({
-    logger: { debug: () => {}, info: () => {}, warn: () => {}, error: () => {} },
-    getUnifiedLogger: () => ({ debug: () => {}, info: () => {}, warn: () => {}, error: () => {} })
+const { describe, it, expect, beforeEach, afterEach } = require('bun:test');
+const { createMockFn, restoreAllMocks } = require('../../helpers/bun-mock-utils');
+const { mockModule, restoreAllModuleMocks, resetModules } = require('../../helpers/bun-module-mocks');
+
+mockModule('../../../src/platforms/twitch-eventsub', () => createMockFn());
+mockModule('../../../src/core/logging', () => ({
+    logger: {
+        debug: createMockFn(),
+        info: createMockFn(),
+        warn: createMockFn(),
+        error: createMockFn()
+    },
+    getUnifiedLogger: createMockFn(() => ({
+        debug: createMockFn(),
+        info: createMockFn(),
+        warn: createMockFn(),
+        error: createMockFn()
+    }))
 }));
 
 const EventEmitter = require('events');
@@ -12,8 +26,8 @@ const { PlatformEvents } = require('../../../src/interfaces/PlatformEvents');
 const createMockEventSub = () => {
     const emitter = new EventEmitter();
     return {
-        connect: jest.fn(),
-        disconnect: jest.fn(),
+        connect: createMockFn(),
+        disconnect: createMockFn(),
         on: emitter.on.bind(emitter),
         emit: emitter.emit.bind(emitter),
         removeListener: emitter.removeListener.bind(emitter)
@@ -21,6 +35,12 @@ const createMockEventSub = () => {
 };
 
 describe('TwitchPlatform monetisation mapping', () => {
+    afterEach(() => {
+        restoreAllMocks();
+        restoreAllModuleMocks();
+        resetModules();
+    });
+
     let twitch;
     let emitted;
 
@@ -30,13 +50,13 @@ describe('TwitchPlatform monetisation mapping', () => {
             emit: (evt, payload) => emitted.push({ evt, payload })
         };
         const mockEventSub = createMockEventSub();
-        const TwitchEventSub = jest.fn(() => mockEventSub);
+        const TwitchEventSub = createMockFn(() => mockEventSub);
 
         twitch = new TwitchPlatform(
             { username: 'tester', eventsub_enabled: true },
             {
-                authManager: { getState: jest.fn(), isTokenValid: jest.fn().mockReturnValue(true) },
-                ChatFileLoggingService: jest.fn(() => ({ start: jest.fn(), stop: jest.fn() })),
+                authManager: { getState: createMockFn(), isTokenValid: createMockFn().mockReturnValue(true) },
+                ChatFileLoggingService: createMockFn(() => ({ start: createMockFn(), stop: createMockFn() })),
                 TwitchEventSub,
                 eventBus
             }

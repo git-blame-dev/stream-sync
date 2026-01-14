@@ -1,3 +1,4 @@
+const { describe, test, expect } = require('bun:test');
 const { createTwitchEventSubSubscriptionManager } = require('../../../../src/platforms/twitch-eventsub/subscriptions/twitch-eventsub-subscription-manager');
 
 describe('Twitch EventSub subscription manager', () => {

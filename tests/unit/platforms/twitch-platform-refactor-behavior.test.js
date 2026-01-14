@@ -1,24 +1,34 @@
 
-jest.unmock('../../../src/platforms/twitch');
+const { describe, it, expect, afterEach } = require('bun:test');
+const { createMockFn, restoreAllMocks } = require('../../helpers/bun-mock-utils');
+const { unmockModule, requireActual, restoreAllModuleMocks, resetModules } = require('../../helpers/bun-module-mocks');
 
-const { TwitchPlatform } = jest.requireActual('../../../src/platforms/twitch');
+unmockModule('../../../src/platforms/twitch');
+
+const { TwitchPlatform } = requireActual('../../../src/platforms/twitch');
 
 const createLogger = () => ({
-    info: jest.fn(),
-    warn: jest.fn(),
-    error: jest.fn(),
-    debug: jest.fn()
+    info: createMockFn(),
+    warn: createMockFn(),
+    error: createMockFn(),
+    debug: createMockFn()
 });
 
 class StubChatFileLoggingService {
     constructor() {
-        this.logRawPlatformData = jest.fn().mockResolvedValue();
+        this.logRawPlatformData = createMockFn().mockResolvedValue();
     }
 }
 
 const flushAsync = () => new Promise((resolve) => setImmediate(resolve));
 
 describe('TwitchPlatform refactor behavior', () => {
+    afterEach(() => {
+        restoreAllMocks();
+        restoreAllModuleMocks();
+        resetModules();
+    });
+
     const baseConfig = {
         enabled: true,
         username: 'streamer',
@@ -38,7 +48,7 @@ describe('TwitchPlatform refactor behavior', () => {
                 authManager,
                 logger,
                 timestampService: overrides.dependencies?.timestampService || {
-                    extractTimestamp: jest.fn(() => new Date().toISOString())
+                    extractTimestamp: createMockFn(() => new Date().toISOString())
                 },
                 ChatFileLoggingService: StubChatFileLoggingService
             }
@@ -125,7 +135,7 @@ describe('TwitchPlatform refactor behavior', () => {
         const errorReports = [];
         platform.errorHandler.handleMessageSendError = (err, context) => errorReports.push({ err, context });
         const mockEventSub = {
-            sendMessage: jest.fn(),
+            sendMessage: createMockFn(),
             isConnected: () => false,
             isActive: () => false
         };
@@ -142,7 +152,7 @@ describe('TwitchPlatform refactor behavior', () => {
             config: { dataLoggingEnabled: true }
         });
         const loggingError = new Error('disk full');
-        platform._logRawEvent = jest.fn().mockRejectedValue(loggingError);
+        platform._logRawEvent = createMockFn().mockRejectedValue(loggingError);
         const loggingIssues = [];
         platform.errorHandler.handleDataLoggingError = (err, type) => loggingIssues.push({ err, type });
         let emittedChat;
@@ -200,33 +210,33 @@ describe('TwitchPlatform refactor behavior', () => {
             const listeners = {};
             return {
                 listeners,
-                on: jest.fn((event, handler) => {
+                on: createMockFn((event, handler) => {
                     listeners[event] = listeners[event] || [];
                     listeners[event].push(handler);
                 }),
-                off: jest.fn((event, handler) => {
+                off: createMockFn((event, handler) => {
                     listeners[event] = (listeners[event] || []).filter((h) => h !== handler);
                 }),
-                removeListener: jest.fn((event, handler) => {
+                removeListener: createMockFn((event, handler) => {
                     listeners[event] = (listeners[event] || []).filter((h) => h !== handler);
                 }),
-                removeAllListeners: jest.fn(() => {
+                removeAllListeners: createMockFn(() => {
                     Object.keys(listeners).forEach((key) => delete listeners[key]);
                 }),
-                initialize: jest.fn().mockResolvedValue(),
-                cleanup: jest.fn().mockResolvedValue(),
-                disconnect: jest.fn().mockResolvedValue(),
-                isConnected: jest.fn(() => true)
+                initialize: createMockFn().mockResolvedValue(),
+                cleanup: createMockFn().mockResolvedValue(),
+                disconnect: createMockFn().mockResolvedValue(),
+                isConnected: createMockFn(() => true)
             };
         })();
 
         const platform = buildPlatform({
             dependencies: {
-                TwitchEventSub: jest.fn(() => eventSubStub)
+                TwitchEventSub: createMockFn(() => eventSubStub)
             },
             authManager: {
                 getState: () => 'READY',
-                initialize: jest.fn().mockResolvedValue()
+                initialize: createMockFn().mockResolvedValue()
             }
         });
 

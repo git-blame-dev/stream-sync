@@ -1,4 +1,7 @@
 
+const { describe, it, expect, beforeEach } = require('bun:test');
+const { createMockFn } = require('../../helpers/bun-mock-utils');
+
 describe('Twitch Handler Integration', () => {
     let mockApp;
     let twitchPlatform;
@@ -29,25 +32,25 @@ describe('Twitch Handler Integration', () => {
     beforeEach(() => {
         // Mock auth manager
         mockAuthManager = {
-            getState: jest.fn().mockReturnValue('READY'),
-            initialize: jest.fn().mockResolvedValue(true),
-            getAccessToken: jest.fn().mockReturnValue('mock-token')
+            getState: createMockFn().mockReturnValue('READY'),
+            initialize: createMockFn().mockResolvedValue(true),
+            getAccessToken: createMockFn().mockReturnValue('mock-token')
         };
 
         // Create mock app that provides handlers with CORRECT naming (what Twitch platform expects)
         mockApp = {
-            handleFollowNotification: jest.fn().mockResolvedValue(),
-            handlePaypiggyNotification: jest.fn().mockResolvedValue(), 
-            handleRaidNotification: jest.fn().mockResolvedValue(),
+            handleFollowNotification: createMockFn().mockResolvedValue(),
+            handlePaypiggyNotification: createMockFn().mockResolvedValue(), 
+            handleRaidNotification: createMockFn().mockResolvedValue(),
         };
 
         // Create Twitch platform with mocked dependencies
         const { TwitchPlatform } = require('../../../src/platforms/twitch');
         const mockEventSub = {
-            initialize: jest.fn().mockResolvedValue(),
-            on: jest.fn(),
-            isConnected: jest.fn().mockReturnValue(true),
-            isActive: jest.fn().mockReturnValue(true)
+            initialize: createMockFn().mockResolvedValue(),
+            on: createMockFn(),
+            isConnected: createMockFn().mockReturnValue(true),
+            isActive: createMockFn().mockReturnValue(true)
         };
 
         twitchPlatform = new TwitchPlatform(
@@ -61,21 +64,21 @@ describe('Twitch Handler Integration', () => {
             {
                 app: mockApp,
                 authManager: mockAuthManager,
-                TwitchEventSub: jest.fn().mockImplementation(() => mockEventSub),
+                TwitchEventSub: createMockFn().mockImplementation(() => mockEventSub),
                 logger: {
-                    info: jest.fn(),
-                    debug: jest.fn(),
-                    warn: jest.fn(),
-                    error: jest.fn()
+                    info: createMockFn(),
+                    debug: createMockFn(),
+                    warn: createMockFn(),
+                    error: createMockFn()
                 }
             }
         );
 
         handlers = {
-            onFollow: jest.fn().mockResolvedValue(),
-            onPaypiggy: jest.fn().mockResolvedValue(),
-            onRaid: jest.fn().mockResolvedValue(),
-            onGift: jest.fn().mockResolvedValue()
+            onFollow: createMockFn().mockResolvedValue(),
+            onPaypiggy: createMockFn().mockResolvedValue(),
+            onRaid: createMockFn().mockResolvedValue(),
+            onGift: createMockFn().mockResolvedValue()
         };
 
         // Store handlers directly in platform - simulating completed initialization

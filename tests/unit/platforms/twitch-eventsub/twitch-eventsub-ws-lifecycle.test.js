@@ -1,3 +1,5 @@
+const { describe, test, expect } = require('bun:test');
+const { createMockFn } = require('../../../helpers/bun-mock-utils');
 const { EventEmitter } = require('events');
 
 const { createTwitchEventSubWsLifecycle } = require('../../../../src/platforms/twitch-eventsub/ws/twitch-eventsub-ws-lifecycle');
@@ -7,8 +9,8 @@ class MockWebSocket extends EventEmitter {
         super();
         this.url = url;
         this.readyState = 0;
-        this.pong = jest.fn();
-        this.close = jest.fn(() => {
+        this.pong = createMockFn();
+        this.close = createMockFn(() => {
             this.readyState = 3;
         });
     }
@@ -17,11 +19,11 @@ class MockWebSocket extends EventEmitter {
 describe('Twitch EventSub WS lifecycle', () => {
     const createState = (overrides = {}) => ({
         logger: {
-            debug: jest.fn(),
-            info: jest.fn(),
-            warn: jest.fn()
+            debug: createMockFn(),
+            info: createMockFn(),
+            warn: createMockFn()
         },
-        authManager: { getState: jest.fn(() => 'READY') },
+        authManager: { getState: createMockFn(() => 'READY') },
         config: { accessToken: 'tok', clientId: 'cid' },
         userId: '1',
         ws: null,
@@ -35,18 +37,18 @@ describe('Twitch EventSub WS lifecycle', () => {
         maxRetryAttempts: 10,
         retryDelay: 5000,
         reconnectTimeout: null,
-        emit: jest.fn(),
-        handleWebSocketMessage: jest.fn(async () => {}),
-        _validateConnectionForSubscriptions: jest.fn(() => true),
-        _setupEventSubscriptions: jest.fn(async () => {}),
-        _scheduleReconnect: jest.fn(),
-        _reconnect: jest.fn(),
-        _logEventSubError: jest.fn(),
+        emit: createMockFn(),
+        handleWebSocketMessage: createMockFn(async () => {}),
+        _validateConnectionForSubscriptions: createMockFn(() => true),
+        _setupEventSubscriptions: createMockFn(async () => {}),
+        _scheduleReconnect: createMockFn(),
+        _reconnect: createMockFn(),
+        _logEventSubError: createMockFn(),
         ...overrides
     });
 
     test('connectWebSocket resolves and emits eventSubConnected on session_welcome', async () => {
-        const safeSetTimeout = jest.fn(() => null);
+        const safeSetTimeout = createMockFn(() => null);
         const lifecycle = createTwitchEventSubWsLifecycle({
             WebSocketCtor: MockWebSocket,
             safeSetTimeout,
@@ -99,7 +101,7 @@ describe('Twitch EventSub WS lifecycle', () => {
     });
 
     test('scheduleReconnect disables initialization when max attempts exceeded', () => {
-        const safeSetTimeout = jest.fn();
+        const safeSetTimeout = createMockFn();
         const lifecycle = createTwitchEventSubWsLifecycle({
             WebSocketCtor: MockWebSocket,
             safeSetTimeout,
@@ -117,11 +119,11 @@ describe('Twitch EventSub WS lifecycle', () => {
     });
 
     test('scheduleReconnect schedules reconnect attempt when retries remain', () => {
-        const safeSetTimeout = jest.fn((fn) => {
+        const safeSetTimeout = createMockFn((fn) => {
             fn();
             return 'timeout-id';
         });
-        const reconnectSpy = jest.fn();
+        const reconnectSpy = createMockFn();
         const lifecycle = createTwitchEventSubWsLifecycle({
             WebSocketCtor: MockWebSocket,
             safeSetTimeout,
@@ -147,7 +149,7 @@ describe('Twitch EventSub WS lifecycle', () => {
     test('handleReconnectRequest stores reconnect_url for next connection', () => {
         const lifecycle = createTwitchEventSubWsLifecycle({
             WebSocketCtor: MockWebSocket,
-            safeSetTimeout: jest.fn(),
+            safeSetTimeout: createMockFn(),
             safeDelay: async () => {},
             validateTimeout: (value) => value,
             setImmediateFn: () => {},

@@ -1,3 +1,4 @@
+const { describe, test, expect } = require('bun:test');
 const { createTwitchEventSubWiring } = require('../../../../src/platforms/twitch/eventsub/twitch-eventsub-wiring');
 
 describe('Twitch EventSub wiring', () => {

@@ -1,10 +1,20 @@
 
-jest.unmock('../../../src/platforms/twitch');
+const { describe, it, expect, afterEach } = require('bun:test');
+const { createMockFn, restoreAllMocks } = require('../../helpers/bun-mock-utils');
+const { unmockModule, resetModules, requireActual, restoreAllModuleMocks } = require('../../helpers/bun-module-mocks');
 
-jest.resetModules();
-const { TwitchPlatform } = jest.requireActual('../../../src/platforms/twitch');
+unmockModule('../../../src/platforms/twitch');
+
+resetModules();
+const { TwitchPlatform } = requireActual('../../../src/platforms/twitch');
 
 describe('TwitchPlatform behavior standards', () => {
+    afterEach(() => {
+        restoreAllMocks();
+        restoreAllModuleMocks();
+        resetModules();
+    });
+
     const baseConfig = {
         enabled: true,
         username: 'streamer',
@@ -15,25 +25,25 @@ describe('TwitchPlatform behavior standards', () => {
 
     const buildPlatform = () => new TwitchPlatform(baseConfig, {
         authManager: {
-            getState: jest.fn().mockReturnValue('READY'),
-            getAccessToken: jest.fn().mockResolvedValue('mock-token'),
-            initialize: jest.fn().mockResolvedValue()
+            getState: createMockFn().mockReturnValue('READY'),
+            getAccessToken: createMockFn().mockResolvedValue('mock-token'),
+            initialize: createMockFn().mockResolvedValue()
         },
         logger: {
-            info: jest.fn(),
-            error: jest.fn(),
-            warn: jest.fn(),
-            debug: jest.fn()
+            info: createMockFn(),
+            error: createMockFn(),
+            warn: createMockFn(),
+            debug: createMockFn()
         },
         timestampService: {
-            extractTimestamp: jest.fn(() => new Date().toISOString())
+            extractTimestamp: createMockFn(() => new Date().toISOString())
         },
-        TwitchEventSub: jest.fn().mockImplementation(() => ({
-            initialize: jest.fn().mockResolvedValue(),
-            connect: jest.fn().mockResolvedValue(),
-            disconnect: jest.fn().mockResolvedValue(),
-            on: jest.fn(),
-            isConnected: jest.fn().mockReturnValue(true)
+        TwitchEventSub: createMockFn().mockImplementation(() => ({
+            initialize: createMockFn().mockResolvedValue(),
+            connect: createMockFn().mockResolvedValue(),
+            disconnect: createMockFn().mockResolvedValue(),
+            on: createMockFn(),
+            isConnected: createMockFn().mockReturnValue(true)
         }))
     });
 
@@ -117,7 +127,7 @@ describe('TwitchPlatform behavior standards', () => {
 
     it('routes paypiggy events through the canonical handler and rejects subscription aliases', () => {
         const platform = buildPlatform();
-        const paypiggyHandler = jest.fn();
+        const paypiggyHandler = createMockFn();
         const logger = platform.logger;
 
         platform.handlers = {

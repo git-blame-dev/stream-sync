@@ -1,24 +1,36 @@
-jest.mock('../../../src/utils/timeout-validator', () => ({
-    safeSetTimeout: jest.fn((fn) => {
+const { describe, it, expect, beforeEach, afterEach } = require('bun:test');
+const { createMockFn, clearAllMocks, restoreAllMocks } = require('../../helpers/bun-mock-utils');
+const { mockModule, unmockModule, requireActual, restoreAllModuleMocks, resetModules } = require('../../helpers/bun-module-mocks');
+
+mockModule('../../../src/utils/timeout-validator', () => ({
+    safeSetTimeout: createMockFn((fn) => {
         if (typeof fn === 'function') fn();
         return null;
     }),
-    safeSetInterval: jest.fn(() => null),
-    validateTimeout: jest.fn((v) => v),
-    safeDelay: jest.fn(async () => {})
+    safeSetInterval: createMockFn(() => null),
+    validateTimeout: createMockFn((v) => v),
+    safeDelay: createMockFn(async () => {})
 }));
 
-jest.mock('../../../src/utils/platform-error-handler', () => ({
-    createPlatformErrorHandler: jest.fn(() => ({
-        handleEventProcessingError: jest.fn(),
-        logOperationalError: jest.fn()
+mockModule('../../../src/utils/platform-error-handler', () => ({
+    createPlatformErrorHandler: createMockFn(() => ({
+        handleEventProcessingError: createMockFn(),
+        logOperationalError: createMockFn()
     }))
 }));
 
+unmockModule('../../../src/platforms/twitch-eventsub');
+
 const { createPlatformErrorHandler } = require('../../../src/utils/platform-error-handler');
-const TwitchEventSub = jest.requireActual('../../../src/platforms/twitch-eventsub');
+const TwitchEventSub = requireActual('../../../src/platforms/twitch-eventsub');
 
 describe('TwitchEventSub behavior', () => {
+    afterEach(() => {
+        restoreAllMocks();
+        restoreAllModuleMocks();
+        resetModules();
+    });
+
     const baseAuthManager = () => ({
         getState: () => 'READY',
         getUserId: () => '123',
@@ -26,13 +38,13 @@ describe('TwitchEventSub behavior', () => {
         getClientId: () => 'cid',
         getScopes: async () => ['user:read:chat'],
         authState: { executeWhenReady: async (fn) => fn() },
-        twitchAuth: { triggerOAuthFlow: jest.fn() }
+        twitchAuth: { triggerOAuthFlow: createMockFn() }
     });
-    const logger = { debug: jest.fn(), info: jest.fn(), warn: jest.fn(), error: jest.fn() };
+    const logger = { debug: createMockFn(), info: createMockFn(), warn: createMockFn(), error: createMockFn() };
     const ChatFileLoggingService = class { constructor() {} };
 
     beforeEach(() => {
-        jest.clearAllMocks();
+        clearAllMocks();
     });
 
     it('routes notification events to handlers and emits follow/message', () => {
@@ -42,9 +54,9 @@ describe('TwitchEventSub behavior', () => {
             ChatFileLoggingService
         });
 
-        const followSpy = jest.fn();
-        const messageSpy = jest.fn();
-        instance.emit = jest.fn((event, payload) => {
+        const followSpy = createMockFn();
+        const messageSpy = createMockFn();
+        instance.emit = createMockFn((event, payload) => {
             if (event === 'follow') followSpy(payload);
             if (event === 'message') messageSpy(payload);
         });
@@ -69,8 +81,8 @@ describe('TwitchEventSub behavior', () => {
             ChatFileLoggingService
         });
 
-        const followSpy = jest.fn();
-        instance.emit = jest.fn((event, payload) => {
+        const followSpy = createMockFn();
+        instance.emit = createMockFn((event, payload) => {
             if (event === 'follow') followSpy(payload);
         });
 
@@ -127,7 +139,7 @@ describe('TwitchEventSub behavior', () => {
 
     it('uses platform error handler when simulator operations fail', () => {
         const instance = new TwitchEventSub({ channel: 'chan', clientId: 'cid', accessToken: 'tok' }, { logger, authManager: baseAuthManager(), ChatFileLoggingService });
-        instance.errorHandler = { handleEventProcessingError: jest.fn(), logOperationalError: jest.fn() };
+        instance.errorHandler = { handleEventProcessingError: createMockFn(), logOperationalError: createMockFn() };
 
         instance._logEventSubError('msg', new Error('boom'), 'stage');
 
