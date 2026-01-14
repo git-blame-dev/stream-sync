@@ -1,4 +1,6 @@
 
+const { describe, test, expect, beforeEach, afterEach } = require('bun:test');
+
 const { 
   initializeTestLogging,
   createTestUser, 
@@ -14,6 +16,7 @@ const {
   setupAutomatedCleanup 
 } = require('../helpers/mock-lifecycle');
 const testClock = require('../helpers/test-clock');
+const { restoreAllMocks, spyOn } = require('../helpers/bun-mock-utils');
 
 // Initialize logging FIRST
 initializeTestLogging();
@@ -24,6 +27,8 @@ setupAutomatedCleanup({
   validateAfterCleanup: true,
   logPerformanceMetrics: true
 });
+
+const testWithTimeout = (name, fn) => test(name, fn, { timeout: TEST_TIMEOUTS.INTEGRATION });
 
 describe('Command Cooldown Integration', () => {
   let mockConfig;
@@ -55,11 +60,15 @@ describe('Command Cooldown Integration', () => {
     clearExpiredGlobalCooldowns = commandParserModule.clearExpiredGlobalCooldowns;
   });
 
+  afterEach(() => {
+    restoreAllMocks();
+  });
+
   describe('when multiple users trigger same command', () => {
     const user1 = createTestUser({ username: 'Alice', userId: 'user1' });
     const user2 = createTestUser({ username: 'Bob', userId: 'user2' });
 
-    it('should block second user due to global cooldown', () => {
+    testWithTimeout('should block second user due to global cooldown', () => {
       // User 1 triggers command
       updateGlobalCommandCooldown('!hello');
       
@@ -69,7 +78,7 @@ describe('Command Cooldown Integration', () => {
       expect(isBlocked).toBe(true);
     });
 
-    it('should allow different commands from same users', () => {
+    testWithTimeout('should allow different commands from same users', () => {
       // User 1 triggers !hello
       updateGlobalCommandCooldown('!hello');
       
@@ -79,8 +88,8 @@ describe('Command Cooldown Integration', () => {
       expect(isBlocked).toBe(false);
     });
 
-    it('should allow same command after cooldown expires', () => {
-      const dateNowSpy = jest.spyOn(Date, 'now').mockImplementation(() => testClock.now());
+    testWithTimeout('should allow same command after cooldown expires', () => {
+      const dateNowSpy = spyOn(Date, 'now').mockImplementation(() => testClock.now());
       // User 1 triggers command
       updateGlobalCommandCooldown('!hello');
       
@@ -97,7 +106,7 @@ describe('Command Cooldown Integration', () => {
   });
 
   describe('when handling rapid command succession', () => {
-    it('should handle multiple rapid cooldown checks correctly', () => {
+    testWithTimeout('should handle multiple rapid cooldown checks correctly', () => {
       const results = [];
       
       // First execution - should be allowed
@@ -113,7 +122,7 @@ describe('Command Cooldown Integration', () => {
       expect(results.slice(1)).toEqual([true, true, true, true, true]); // Rest blocked
     });
 
-    it('should maintain separate cooldowns for different commands', () => {
+    testWithTimeout('should maintain separate cooldowns for different commands', () => {
       const commands = ['!cmd1', '!cmd2', '!cmd3'];
       
       // Trigger all commands
@@ -127,11 +136,11 @@ describe('Command Cooldown Integration', () => {
   });
 
   describe('when memory management is required', () => {
-    it('should clean up expired cooldowns', () => {
+    testWithTimeout('should clean up expired cooldowns', () => {
       // Add several commands with timestamps
       const commands = ['!old1', '!old2', '!recent'];
       
-      const dateNowSpy = jest.spyOn(Date, 'now').mockImplementation(() => testClock.now());
+      const dateNowSpy = spyOn(Date, 'now').mockImplementation(() => testClock.now());
       commands.forEach(cmd => updateGlobalCommandCooldown(cmd));
       
       // Mock older timestamps for first two commands
@@ -145,7 +154,7 @@ describe('Command Cooldown Integration', () => {
       dateNowSpy.mockRestore();
     });
 
-    it('should handle cleanup without affecting active cooldowns', () => {
+    testWithTimeout('should handle cleanup without affecting active cooldowns', () => {
       // Add recent command
       updateGlobalCommandCooldown('!active');
       
@@ -159,7 +168,7 @@ describe('Command Cooldown Integration', () => {
   });
 
   describe('when handling edge cases', () => {
-    it('should handle concurrent cooldown operations safely', () => {
+    testWithTimeout('should handle concurrent cooldown operations safely', () => {
       const commandName = '!concurrent';
       
       // Simulate concurrent operations
@@ -181,7 +190,7 @@ describe('Command Cooldown Integration', () => {
       expect(results.some(result => result === false)).toBe(true);
     });
 
-    it('should handle malformed command names gracefully', () => {
+    testWithTimeout('should handle malformed command names gracefully', () => {
       const malformedCommands = [null, undefined, '', '   ', '!', 'normal_text'];
       
       malformedCommands.forEach(cmd => {
@@ -192,7 +201,7 @@ describe('Command Cooldown Integration', () => {
       });
     });
 
-    it('should handle extreme cooldown values', () => {
+    testWithTimeout('should handle extreme cooldown values', () => {
       updateGlobalCommandCooldown('!extreme');
       
       // Test with very large cooldown
@@ -210,7 +219,7 @@ describe('Command Cooldown Integration', () => {
   });
 
   describe('when integrating with configuration system', () => {
-    it('should respect different cooldown periods per platform', () => {
+    testWithTimeout('should respect different cooldown periods per platform', () => {
       const platforms = ['twitch', 'youtube', 'tiktok'];
       const cooldownPeriods = [1000, 2000, 3000];
       
@@ -223,7 +232,7 @@ describe('Command Cooldown Integration', () => {
       });
     });
 
-    it('should handle config changes without losing existing cooldowns', () => {
+    testWithTimeout('should handle config changes without losing existing cooldowns', () => {
       // Set up cooldown with initial config
       updateGlobalCommandCooldown('!persistent');
       const initialBlock = checkGlobalCommandCooldown('!persistent', 2000);
@@ -235,4 +244,4 @@ describe('Command Cooldown Integration', () => {
       expect(postConfigBlock).toBe(true);
     });
   });
-}, TEST_TIMEOUTS.INTEGRATION);
+});

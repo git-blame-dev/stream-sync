@@ -1,11 +1,15 @@
 
+const { describe, test, beforeEach, afterEach, expect } = require('bun:test');
+const { createMockFn, restoreAllMocks } = require('../helpers/bun-mock-utils');
+const { mockModule, restoreAllModuleMocks } = require('../helpers/bun-module-mocks');
+
 // Mock the logger before requiring modules
-jest.mock('../../src/core/logging', () => ({
+mockModule('../../src/core/logging', () => ({
     logger: {
-        debug: jest.fn(),
-        info: jest.fn(),
-        warn: jest.fn(),
-        error: jest.fn()
+        debug: createMockFn(),
+        info: createMockFn(),
+        warn: createMockFn(),
+        error: createMockFn()
     }
 }));
 
@@ -31,6 +35,11 @@ describe('Keyword Parsing Integration', () => {
                 filePath: '/path/to/vfx'
             }
         };
+    });
+
+    afterEach(() => {
+        restoreAllMocks();
+        restoreAllModuleMocks();
     });
 
     describe('Complete Flow - Keyword Parsing Enabled', () => {

@@ -1,4 +1,6 @@
 
+const { describe, beforeAll, test, expect } = require('bun:test');
+
 const fs = require('fs');
 const path = require('path');
 const { spawn } = require('child_process');
@@ -9,21 +11,21 @@ describe('Critical Startup Flow', () => {
 
     beforeAll(async () => {
         startupResult = await runApplicationStartup();
-    }, 20000);
+    }, { timeout: 20000 });
 
-    it('should fail fast when required configuration is missing', async () => {
+    test('should fail fast when required configuration is missing', async () => {
         const result = startupResult;
 
         expect(result.timeout).not.toBe(true);
         expect(result.exitCode).toBe(1);
-    }, 15000); // 15 second timeout
+    }, { timeout: 15000 });
     
-    it('should exit with failure status without a config file', async () => {
+    test('should exit with failure status without a config file', async () => {
         const result = startupResult;
 
         expect(result.timeout).not.toBe(true);
         expect(result.exitCode).toBe(1);
-    }, 15000);
+    }, { timeout: 15000 });
 });
 
 async function runApplicationStartup() {

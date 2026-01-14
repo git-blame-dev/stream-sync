@@ -1,16 +1,21 @@
+const { describe, test, afterEach, expect } = require('bun:test');
+const { createMockFn, restoreAllMocks } = require('../helpers/bun-mock-utils');
 const PlatformLifecycleService = require('../../src/services/PlatformLifecycleService');
 
 describe('PlatformLifecycleService platform contract validation (smoke)', () => {
+    afterEach(() => {
+        restoreAllMocks();
+    });
     test('fails fast with actionable error when a platform instance is invalid', async () => {
         const logger = {
-            debug: jest.fn(),
-            info: jest.fn(),
-            warn: jest.fn(),
-            error: jest.fn()
+            debug: createMockFn(),
+            info: createMockFn(),
+            warn: createMockFn(),
+            error: createMockFn()
         };
 
         const eventBus = {
-            emit: jest.fn()
+            emit: createMockFn()
         };
 
         const lifecycle = new PlatformLifecycleService({
@@ -20,7 +25,7 @@ describe('PlatformLifecycleService platform contract validation (smoke)', () => 
         });
 
         try {
-            const InvalidPlatform = jest.fn().mockImplementation(() => ({}));
+            const InvalidPlatform = createMockFn().mockImplementation(() => ({}));
             await lifecycle.initializeAllPlatforms({ twitch: InvalidPlatform });
 
             expect(lifecycle.isPlatformAvailable('twitch')).toBe(false);

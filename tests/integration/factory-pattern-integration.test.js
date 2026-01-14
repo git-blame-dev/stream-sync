@@ -1,7 +1,10 @@
 
+const { describe, beforeEach, afterEach, test, expect } = require('bun:test');
+
 const { InnertubeFactory } = require('../../src/factories/innertube-factory');
 const InnertubeInstanceManager = require('../../src/services/innertube-instance-manager');
 const testClock = require('../helpers/test-clock');
+const { clearAllMocks, restoreAllMocks } = require('../helpers/bun-mock-utils');
 
 describe('Factory Pattern Integration', () => {
     
@@ -14,7 +17,8 @@ describe('Factory Pattern Integration', () => {
     
     afterEach(async () => {
         await InnertubeInstanceManager.cleanup();
-        jest.clearAllMocks();
+        clearAllMocks();
+        restoreAllMocks();
     });
 
     describe('Factory Statistics and Metadata', () => {

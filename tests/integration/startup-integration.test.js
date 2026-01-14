@@ -1,4 +1,8 @@
 
+const { describe, it, beforeEach, afterEach, expect } = require('bun:test');
+const { createMockFn, restoreAllMocks } = require('../helpers/bun-mock-utils');
+const { mockModule, resetModules, restoreAllModuleMocks } = require('../helpers/bun-module-mocks');
+
 // MANDATORY imports
 const { 
     initializeTestLogging,
@@ -29,62 +33,64 @@ setupAutomatedCleanup({
     logPerformanceMetrics: true
 });
 
-// Mock all external dependencies to prevent real process spawning
-jest.mock('../../src/main', () => {
-    return class AppRuntime {
-        constructor(config) {
-            this.config = config;
-            this.platforms = new Map();
-            this.initialized = false;
-        }
-        
-        async start() {
-            this.initialized = true;
-            return { success: true, message: 'Bot started successfully' };
-        }
-        
-        async cleanup() {
-            this.initialized = false;
-            return { success: true };
-        }
-        
-        getStatus() {
-            return {
-                initialized: this.initialized,
-                platforms: Array.from(this.platforms.keys()),
-                uptime: 1000
-            };
-        }
-    };
-});
+const applyModuleMocks = () => {
+    // Mock all external dependencies to prevent real process spawning
+    mockModule('../../src/main', () => {
+        return class AppRuntime {
+            constructor(config) {
+                this.config = config;
+                this.platforms = new Map();
+                this.initialized = false;
+            }
+            
+            async start() {
+                this.initialized = true;
+                return { success: true, message: 'Bot started successfully' };
+            }
+            
+            async cleanup() {
+                this.initialized = false;
+                return { success: true };
+            }
+            
+            getStatus() {
+                return {
+                    initialized: this.initialized,
+                    platforms: Array.from(this.platforms.keys()),
+                    uptime: 1000
+                };
+            }
+        };
+    });
 
-// Mock bootstrap dependencies
-jest.mock('../../src/core/config', () => ({
-    loadConfig: jest.fn().mockResolvedValue({
-        general: { debug: true },
-        twitch: { enabled: true, apiKey: 'test-key' },
-        youtube: { enabled: true, apiKey: 'test-key' },
-        tiktok: { enabled: true, apiKey: 'test-key' },
-        obs: { enabled: false }
-    }),
-    validateConfig: jest.fn().mockReturnValue({ valid: true, errors: [] }),
-    config: { general: { fallbackUsername: 'Unknown User' } }
-}));
+    // Mock bootstrap dependencies
+    mockModule('../../src/core/config', () => ({
+        loadConfig: createMockFn().mockResolvedValue({
+            general: { debug: true },
+            twitch: { enabled: true, apiKey: 'test-key' },
+            youtube: { enabled: true, apiKey: 'test-key' },
+            tiktok: { enabled: true, apiKey: 'test-key' },
+            obs: { enabled: false }
+        }),
+        validateConfig: createMockFn().mockReturnValue({ valid: true, errors: [] }),
+        config: { general: { fallbackUsername: 'Unknown User' } }
+    }));
 
-jest.mock('../../src/core/logging', () => ({
-    logger: {
-        info: jest.fn(),
-        error: jest.fn(),
-        debug: jest.fn(),
-        warn: jest.fn()
-    },
-    platformLogger: {
-        info: jest.fn(),
-        error: jest.fn(),
-        debug: jest.fn()
-    },
-    initializeLogging: jest.fn()
-}));
+    mockModule('../../src/core/logging', () => ({
+        logger: {
+            info: createMockFn(),
+            error: createMockFn(),
+            debug: createMockFn(),
+            warn: createMockFn()
+        },
+        platformLogger: {
+            info: createMockFn(),
+            error: createMockFn(),
+            debug: createMockFn()
+        },
+        initializeLogging: createMockFn()
+    }));
+};
 
 describe('Application Startup Integration', () => {
     let AppRuntime;
@@ -93,7 +99,8 @@ describe('Application Startup Integration', () => {
     
     beforeEach(() => {
         // Reset modules to get fresh instances
-        jest.resetModules();
+        resetModules();
+        applyModuleMocks();
         
         AppRuntime = require('../../src/main');
         config = require('../../src/core/config');
@@ -110,6 +117,12 @@ describe('Application Startup Integration', () => {
         
         config.loadConfig.mockResolvedValue(mockConfig);
         config.validateConfig.mockReturnValue({ valid: true, errors: [] });
+    });
+
+    afterEach(() => {
+        restoreAllMocks();
+        restoreAllModuleMocks();
+        resetModules();
     });
     
     // Helper function to simulate application startup without real processes
@@ -160,7 +173,7 @@ describe('Application Startup Integration', () => {
             const bot = new AppRuntime(mockConfig);
             
             if (shouldFail && failureType === 'startup') {
-                bot.start = jest.fn().mockRejectedValue(new Error('Startup failed'));
+                bot.start = createMockFn().mockRejectedValue(new Error('Startup failed'));
             }
             
             // Attempt startup

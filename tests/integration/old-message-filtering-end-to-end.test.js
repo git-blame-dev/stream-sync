@@ -1,21 +1,27 @@
-jest.mock('../../src/core/logging', () => ({
-    setConfigValidator: jest.fn(),
-    setDebugMode: jest.fn(),
-    initializeLoggingConfig: jest.fn(),
-    initializeConsoleOverride: jest.fn(),
+const { describe, it, beforeEach, afterEach, expect } = require('bun:test');
+const { clearAllMocks, createMockFn, restoreAllMocks } = require('../helpers/bun-mock-utils');
+const { mockModule, resetModules, restoreAllModuleMocks } = require('../helpers/bun-module-mocks');
+
+const applyLoggingMock = () => mockModule('../../src/core/logging', () => ({
+    setConfigValidator: createMockFn(),
+    setDebugMode: createMockFn(),
+    initializeLoggingConfig: createMockFn(),
+    initializeConsoleOverride: createMockFn(),
     logger: {
-        info: jest.fn(),
-        warn: jest.fn(),
-        error: jest.fn(),
-        debug: jest.fn()
+        info: createMockFn(),
+        warn: createMockFn(),
+        error: createMockFn(),
+        debug: createMockFn()
     },
-    getLogger: jest.fn(() => ({
-        info: jest.fn(),
-        warn: jest.fn(),
-        error: jest.fn(),
-        debug: jest.fn()
+    getLogger: createMockFn(() => ({
+        info: createMockFn(),
+        warn: createMockFn(),
+        error: createMockFn(),
+        debug: createMockFn()
     }))
 }));
+
+applyLoggingMock();
 
 const { 
     initializeTestLogging,
@@ -81,11 +87,11 @@ const createMockPlatformLifecycleService = () => {
 
     return {
         platformConnectionTimes,
-        recordPlatformConnection: jest.fn((platform) => {
+        recordPlatformConnection: createMockFn((platform) => {
             platformConnectionTimes[platform] = testClock.now();
         }),
-        getPlatformConnectionTime: jest.fn((platform) => platformConnectionTimes[platform] ?? null),
-        setConnectionTime: jest.fn((platform, timestamp) => {
+        getPlatformConnectionTime: createMockFn((platform) => platformConnectionTimes[platform] ?? null),
+        setConnectionTime: createMockFn((platform, timestamp) => {
             platformConnectionTimes[platform] = timestamp;
         })
     };
@@ -111,24 +117,24 @@ const createAppRuntimeTestDependencies = () => {
 
     return {
         displayQueue: {
-            addItem: jest.fn(),
-            start: jest.fn(),
-            stop: jest.fn()
+            addItem: createMockFn(),
+            start: createMockFn(),
+            stop: createMockFn()
         },
         runtimeConstants: createRuntimeConstantsFixture(),
         commandCooldownService: {
-            isCommandOnCooldown: jest.fn().mockReturnValue(false),
-            setCommandCooldown: jest.fn()
+            isCommandOnCooldown: createMockFn().mockReturnValue(false),
+            setCommandCooldown: createMockFn()
         },
         notificationManager: {
-            handleNotification: jest.fn(),
-            emit: jest.fn(),
-            on: jest.fn()
+            handleNotification: createMockFn(),
+            emit: createMockFn(),
+            on: createMockFn()
         },
         authManager: {
-            validateAllConfigs: jest.fn().mockResolvedValue(true)
+            validateAllConfigs: createMockFn().mockResolvedValue(true)
         },
-        logger: { debug: jest.fn(), info: jest.fn(), warn: jest.fn(), error: jest.fn() },
+        logger: { debug: createMockFn(), info: createMockFn(), warn: createMockFn(), error: createMockFn() },
         platformLifecycleService,
         eventBus: {
             emit: eventEmitter.emit.bind(eventEmitter),
@@ -139,31 +145,31 @@ const createAppRuntimeTestDependencies = () => {
             }
         },
         configService: {
-            get: jest.fn((section) => (section ? configSnapshot[section] : configSnapshot)),
-            areNotificationsEnabled: jest.fn().mockReturnValue(true),
-            isEnabled: jest.fn().mockReturnValue(true),
-            getPlatformConfig: jest.fn((platform) => configSnapshot[platform] ?? {}),
-            getNotificationSettings: jest.fn().mockReturnValue({ enabled: true }),
-            getTTSConfig: jest.fn().mockReturnValue({ enabled: false }),
-            getTimingConfig: jest.fn().mockReturnValue({ greetingDuration: 5000 }),
-            isDebugEnabled: jest.fn().mockReturnValue(false),
-            getCLIOverrides: jest.fn().mockReturnValue({})
+            get: createMockFn((section) => (section ? configSnapshot[section] : configSnapshot)),
+            areNotificationsEnabled: createMockFn().mockReturnValue(true),
+            isEnabled: createMockFn().mockReturnValue(true),
+            getPlatformConfig: createMockFn((platform) => configSnapshot[platform] ?? {}),
+            getNotificationSettings: createMockFn().mockReturnValue({ enabled: true }),
+            getTTSConfig: createMockFn().mockReturnValue({ enabled: false }),
+            getTimingConfig: createMockFn().mockReturnValue({ greetingDuration: 5000 }),
+            isDebugEnabled: createMockFn().mockReturnValue(false),
+            getCLIOverrides: createMockFn().mockReturnValue({})
         },
         vfxCommandService: {
-            getVFXConfig: jest.fn().mockResolvedValue(null),
-            executeCommand: jest.fn().mockResolvedValue(true)
+            getVFXConfig: createMockFn().mockResolvedValue(null),
+            executeCommand: createMockFn().mockResolvedValue(true)
         },
         ttsService: {
-            speak: jest.fn().mockResolvedValue(true),
-            stop: jest.fn().mockResolvedValue(true)
+            speak: createMockFn().mockResolvedValue(true),
+            stop: createMockFn().mockResolvedValue(true)
         },
         userTrackingService: {
-            isFirstMessage: jest.fn().mockResolvedValue(false)
+            isFirstMessage: createMockFn().mockResolvedValue(false)
         },
-        obsEventService: { start: jest.fn(), stop: jest.fn(), disconnect: jest.fn() },
-        sceneManagementService: { start: jest.fn(), stop: jest.fn() },
+        obsEventService: { start: createMockFn(), stop: createMockFn(), disconnect: createMockFn() },
+        sceneManagementService: { start: createMockFn(), stop: createMockFn() },
         timestampService: {
-            extractTimestamp: jest.fn((platform, data) => {
+            extractTimestamp: createMockFn((platform, data) => {
                 const raw = (() => {
                     if (platform === 'tiktok') {
                         return data?.createTime ?? data?.common?.createTime;
@@ -193,12 +199,19 @@ describe('Old Message Filtering End-to-End Behavior', () => {
     let testStartTime;
     
     beforeEach(() => {
-        jest.resetModules();
+        resetModules();
+        applyLoggingMock();
         testClock.reset();
         testStartTime = testClock.now();
         mockNotificationDispatcher = createMockNotificationDispatcher();
-        mockTTSHandler = jest.fn();
-        jest.clearAllMocks();
+        mockTTSHandler = createMockFn();
+        clearAllMocks();
+    });
+
+    afterEach(() => {
+        restoreAllMocks();
+        restoreAllModuleMocks();
+        resetModules();
     });
 
     describe('User Experience: Old Messages Are Not Announced', () => {

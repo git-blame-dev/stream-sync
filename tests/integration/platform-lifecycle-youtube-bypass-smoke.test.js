@@ -1,10 +1,15 @@
 
+const { describe, it, afterEach, expect } = require('bun:test');
+const { createMockFn, restoreAllMocks } = require('../helpers/bun-mock-utils');
 const PlatformLifecycleService = require('../../src/services/PlatformLifecycleService');
 
 describe('PlatformLifecycleService stream detection routing (smoke)', () => {
+    afterEach(() => {
+        restoreAllMocks();
+    });
     it('initializes YouTube directly and routes other platforms through StreamDetector', async () => {
         const streamDetector = {
-            startStreamDetection: jest.fn().mockImplementation(async (_platform, _config, connect) => {
+            startStreamDetection: createMockFn().mockImplementation(async (_platform, _config, connect) => {
                 await connect();
             })
         };
@@ -17,18 +22,18 @@ describe('PlatformLifecycleService stream detection routing (smoke)', () => {
             streamDetector
         });
 
-        const youtubeInit = jest.fn().mockResolvedValue(true);
-        const customInit = jest.fn().mockResolvedValue(true);
+        const youtubeInit = createMockFn().mockResolvedValue(true);
+        const customInit = createMockFn().mockResolvedValue(true);
 
-        const youtubePlatform = jest.fn().mockImplementation(() => ({
+        const youtubePlatform = createMockFn().mockImplementation(() => ({
             initialize: youtubeInit,
-            cleanup: jest.fn().mockResolvedValue(),
-            on: jest.fn()
+            cleanup: createMockFn().mockResolvedValue(),
+            on: createMockFn()
         }));
-        const customPlatform = jest.fn().mockImplementation(() => ({
+        const customPlatform = createMockFn().mockImplementation(() => ({
             initialize: customInit,
-            cleanup: jest.fn().mockResolvedValue(),
-            on: jest.fn()
+            cleanup: createMockFn().mockResolvedValue(),
+            on: createMockFn()
         }));
 
         await lifecycle.initializeAllPlatforms({
