@@ -1,4 +1,6 @@
 
+const { describe, test, beforeEach, afterEach, expect } = require('bun:test');
+const { createMockFn, clearAllMocks, restoreAllMocks } = require('../helpers/bun-mock-utils');
 const { ViewerCountSystem } = require('../../src/utils/viewer-count');
 const { OBSViewerCountObserver } = require('../../src/observers/obs-viewer-count-observer');
 const { createOBSConnectionManager } = require('../../src/obs/connection');
@@ -51,7 +53,8 @@ describe('OBS Connection Lifecycle Integration', () => {
             await viewerCountSystem.cleanup();
         }
         
-        jest.clearAllMocks();
+        clearAllMocks();
+        restoreAllMocks();
     });
 
     describe('OBS Disconnection Behavior Tests', () => {
@@ -79,14 +82,14 @@ describe('OBS Connection Lifecycle Integration', () => {
 function createMockOBSWebSocket() {
     const mock = {
         connected: false,
-        call: jest.fn().mockResolvedValue({}),
-        connect: jest.fn().mockResolvedValue({ obsWebSocketVersion: '5.0.0', negotiatedRpcVersion: 1 }),
-        disconnect: jest.fn().mockResolvedValue(),
-        on: jest.fn(),
-        off: jest.fn(),
-        once: jest.fn(),
-        addEventListener: jest.fn(),
-        removeEventListener: jest.fn(),
+        call: createMockFn().mockResolvedValue({}),
+        connect: createMockFn().mockResolvedValue({ obsWebSocketVersion: '5.0.0', negotiatedRpcVersion: 1 }),
+        disconnect: createMockFn().mockResolvedValue(),
+        on: createMockFn(),
+        off: createMockFn(),
+        once: createMockFn(),
+        addEventListener: createMockFn(),
+        removeEventListener: createMockFn(),
         
         // Simulation methods
         setConnected: function(connected) {
@@ -99,9 +102,9 @@ function createMockOBSWebSocket() {
 
 function createStreamingPlatformMock(platformName, initialViewerCount) {
     return {
-        getViewerCount: jest.fn().mockResolvedValue(initialViewerCount),
-        isEnabled: jest.fn().mockReturnValue(true),
-        isConnected: jest.fn().mockReturnValue(true),
+        getViewerCount: createMockFn().mockResolvedValue(initialViewerCount),
+        isEnabled: createMockFn(() => true),
+        isConnected: createMockFn(() => true),
         platform: platformName
     };
 }

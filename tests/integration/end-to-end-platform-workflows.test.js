@@ -1,4 +1,7 @@
 
+const { describe, test, beforeEach, afterEach, expect } = require('bun:test');
+const { createMockFn, mockResolvedValue, clearAllMocks, restoreAllMocks } = require('../helpers/bun-mock-utils');
+const { mockModule, restoreAllModuleMocks } = require('../helpers/bun-module-mocks');
 const { initializeTestLogging, TEST_TIMEOUTS } = require('../helpers/test-setup');
 const { 
     createMockLogger, 
@@ -20,76 +23,67 @@ setupAutomatedCleanup({
 });
 
 // Mock external dependencies
-jest.mock('../../src/obs/connection', () => ({
-    ensureOBSConnected: jest.fn().mockResolvedValue(),
-    obsCall: jest.fn(),
-    getOBSConnectionManager: jest.fn(() => ({ 
+mockModule('../../src/obs/connection', () => ({
+    ensureOBSConnected: mockResolvedValue(createMockFn(), undefined),
+    obsCall: createMockFn(),
+    getOBSConnectionManager: createMockFn(() => ({
         isConnected: () => true,
         isReady: () => Promise.resolve(true)
     }))
 }));
 
-jest.mock('../../src/obs/display-queue', () => ({
-    DisplayQueue: jest.fn().mockImplementation(() => ({
-        handleNotificationEffects: jest.fn().mockResolvedValue(),
-        updateTextSource: jest.fn().mockResolvedValue(),
-        playMediaInOBS: jest.fn().mockResolvedValue(),
-        playGiftVideoAndAudio: jest.fn().mockResolvedValue()
+mockModule('../../src/obs/display-queue', () => ({
+    DisplayQueue: createMockFn(() => ({
+        handleNotificationEffects: mockResolvedValue(createMockFn(), undefined),
+        updateTextSource: mockResolvedValue(createMockFn(), undefined),
+        playMediaInOBS: mockResolvedValue(createMockFn(), undefined),
+        playGiftVideoAndAudio: mockResolvedValue(createMockFn(), undefined)
     }))
 }));
 
 // Mock logger utilities
-jest.mock('../../src/utils/logger-utils', () => ({
-    isDebugModeEnabled: jest.fn().mockReturnValue(false),
-    createNoopLogger: () => ({
-        error: jest.fn(),
-        debug: jest.fn(),
-        info: jest.fn(),
-        warn: jest.fn()
-    }),
-    getLoggerOrNoop: (logger) => logger || ({
-        error: jest.fn(),
-        debug: jest.fn(),
-        info: jest.fn(),
-        warn: jest.fn()
-    }),
-    getLazyLogger: jest.fn().mockReturnValue({
-        error: jest.fn(),
-        debug: jest.fn(),
-        info: jest.fn(),
-        warn: jest.fn()
-    }),
-    getLazyUnifiedLogger: jest.fn().mockReturnValue({
-        error: jest.fn(),
-        debug: jest.fn(),
-        info: jest.fn(),
-        warn: jest.fn(),
-        log: jest.fn()
-    })
-}));
+mockModule('../../src/utils/logger-utils', () => {
+    const createLogger = () => ({
+        error: createMockFn(),
+        debug: createMockFn(),
+        info: createMockFn(),
+        warn: createMockFn()
+    });
 
-jest.mock('../../src/core/logging', () => ({
-    debugLog: jest.fn(),
-    logger: { 
-        error: jest.fn(),
-        debug: jest.fn(),
-        info: jest.fn(),
-        warn: jest.fn()
+    return {
+        isDebugModeEnabled: createMockFn(() => false),
+        createNoopLogger: () => createLogger(),
+        getLoggerOrNoop: (logger) => logger || createLogger(),
+        getLazyLogger: createMockFn(() => createLogger()),
+        getLazyUnifiedLogger: createMockFn(() => ({
+            ...createLogger(),
+            log: createMockFn()
+        }))
+    };
+});
+
+mockModule('../../src/core/logging', () => ({
+    debugLog: createMockFn(),
+    logger: {
+        error: createMockFn(),
+        debug: createMockFn(),
+        info: createMockFn(),
+        warn: createMockFn()
     },
-    getUnifiedLogger: jest.fn().mockReturnValue({
-        error: jest.fn(),
-        debug: jest.fn(),
-        info: jest.fn(),
-        warn: jest.fn(),
-        log: jest.fn()
-    }),
-    getLogger: jest.fn().mockReturnValue({
-        error: jest.fn(),
-        debug: jest.fn(),
-        info: jest.fn(),
-        warn: jest.fn(),
-        log: jest.fn()
-    })
+    getUnifiedLogger: createMockFn(() => ({
+        error: createMockFn(),
+        debug: createMockFn(),
+        info: createMockFn(),
+        warn: createMockFn(),
+        log: createMockFn()
+    })),
+    getLogger: createMockFn(() => ({
+        error: createMockFn(),
+        debug: createMockFn(),
+        info: createMockFn(),
+        warn: createMockFn(),
+        log: createMockFn()
+    }))
 }));
 
 describe('End-to-End Platform Workflow Integration Tests', () => {
@@ -112,7 +106,9 @@ describe('End-to-End Platform Workflow Integration Tests', () => {
 
     afterEach(() => {
         delete process.env.NODE_ENV;
-        jest.clearAllMocks();
+        clearAllMocks();
+        restoreAllMocks();
+        restoreAllModuleMocks();
     });
 
     describe('Platform Initialization and Configuration', () => {
@@ -134,7 +130,7 @@ describe('End-to-End Platform Workflow Integration Tests', () => {
             expect(typeof tiktokConfig.enabled).toBe('boolean');
             expect(typeof tiktokConfig.username).toBe('string');
             expect(typeof tiktokConfig.gracePeriod).toBe('number');
-        }, TEST_TIMEOUTS.FAST);
+        }, { timeout: TEST_TIMEOUTS.FAST });
 
         test('should verify Twitch platform configuration', async () => {
             // Arrange: Create Twitch platform configuration
@@ -154,7 +150,7 @@ describe('End-to-End Platform Workflow Integration Tests', () => {
             expect(typeof twitchConfig.enabled).toBe('boolean');
             expect(typeof twitchConfig.channel).toBe('string');
             expect(typeof twitchConfig.gracePeriod).toBe('number');
-        }, TEST_TIMEOUTS.FAST);
+        }, { timeout: TEST_TIMEOUTS.FAST });
 
         test('should verify YouTube platform configuration', async () => {
             // Arrange: Create YouTube platform configuration
@@ -174,7 +170,7 @@ describe('End-to-End Platform Workflow Integration Tests', () => {
             expect(typeof youtubeConfig.enabled).toBe('boolean');
             expect(typeof youtubeConfig.channelId).toBe('string');
             expect(typeof youtubeConfig.gracePeriod).toBe('number');
-        }, TEST_TIMEOUTS.FAST);
+        }, { timeout: TEST_TIMEOUTS.FAST });
     });
 
     describe('Basic Workflow Verification', () => {
@@ -196,7 +192,7 @@ describe('End-to-End Platform Workflow Integration Tests', () => {
             expect(typeof chatMessage.displayName).toBe('string');
             expect(typeof chatMessage.comment).toBe('string');
             expect(typeof chatMessage.timestamp).toBe('number');
-        }, TEST_TIMEOUTS.FAST);
+        }, { timeout: TEST_TIMEOUTS.FAST });
 
         test('should verify Twitch follow notification workflow', async () => {
             // Arrange: Create mock follow notification data
@@ -214,7 +210,7 @@ describe('End-to-End Platform Workflow Integration Tests', () => {
             // Assert: Notification data is valid
             expect(typeof followNotification.username).toBe('string');
             expect(typeof followNotification.timestamp).toBe('number');
-        }, TEST_TIMEOUTS.FAST);
+        }, { timeout: TEST_TIMEOUTS.FAST });
 
         test('should verify YouTube super chat workflow', async () => {
             // Arrange: Create mock super chat data
@@ -237,7 +233,7 @@ describe('End-to-End Platform Workflow Integration Tests', () => {
             expect(typeof superChatData.username).toBe('string');
             expect(typeof superChatData.amount).toBe('number');
             expect(typeof superChatData.currency).toBe('string');
-        }, TEST_TIMEOUTS.FAST);
+        }, { timeout: TEST_TIMEOUTS.FAST });
     });
 
     describe('Multi-Platform Simultaneous Operation', () => {
@@ -257,7 +253,7 @@ describe('End-to-End Platform Workflow Integration Tests', () => {
             expect(platformConfigs.tiktok.enabled).toBe(true);
             expect(platformConfigs.twitch.enabled).toBe(true);
             expect(platformConfigs.youtube.enabled).toBe(true);
-        }, TEST_TIMEOUTS.FAST);
+        }, { timeout: TEST_TIMEOUTS.FAST });
     });
 
     describe('Error Recovery and Resilience', () => {
@@ -278,7 +274,7 @@ describe('End-to-End Platform Workflow Integration Tests', () => {
             expect(connectionAttempt.success).toBe(false);
             expect(shouldRetry).toBe(true);
             expect(maxRetries).toBe(3);
-        }, TEST_TIMEOUTS.FAST);
+        }, { timeout: TEST_TIMEOUTS.FAST });
 
         test('should handle display queue failures gracefully', async () => {
             // Arrange: Create mock display queue failure scenario
@@ -295,7 +291,7 @@ describe('End-to-End Platform Workflow Integration Tests', () => {
             // Assert: Fallback logic is correct
             expect(displayQueueFailure.success).toBe(false);
             expect(shouldUseFallback).toBe(true);
-        }, TEST_TIMEOUTS.FAST);
+        }, { timeout: TEST_TIMEOUTS.FAST });
 
         test('should recover from temporary failures', async () => {
             // Arrange: Create mock recovery scenario
@@ -313,7 +309,7 @@ describe('End-to-End Platform Workflow Integration Tests', () => {
             // Assert: Recovery logic is correct
             expect(canRetry).toBe(true);
             expect(isRecovered).toBe(true);
-        }, TEST_TIMEOUTS.FAST);
+        }, { timeout: TEST_TIMEOUTS.FAST });
     });
 
     describe('Performance and Load Testing', () => {
@@ -335,7 +331,7 @@ describe('End-to-End Platform Workflow Integration Tests', () => {
             // Assert: Processing is efficient
             expect(processedCount).toBe(50);
             expect(processingTime).toBeLessThan(100); // Should be very fast for mock processing
-        }, TEST_TIMEOUTS.FAST);
+        }, { timeout: TEST_TIMEOUTS.FAST });
 
         test('should handle concurrent notification processing', async () => {
             // Arrange: Create concurrent notifications
@@ -356,6 +352,6 @@ describe('End-to-End Platform Workflow Integration Tests', () => {
             // Assert: Concurrent processing is efficient
             expect(processedCount).toBe(20);
             expect(processingTime).toBeLessThan(100); // Should be very fast for mock processing
-        }, TEST_TIMEOUTS.FAST);
+        }, { timeout: TEST_TIMEOUTS.FAST });
     });
 }); 

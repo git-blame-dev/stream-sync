@@ -1,4 +1,6 @@
 
+const { describe, test, beforeEach, afterEach, expect } = require('bun:test');
+const { createMockFn, clearAllMocks, restoreAllMocks } = require('../helpers/bun-mock-utils');
 const { ViewerCountSystem } = require('../../src/utils/viewer-count');
 const { ViewerCountObserver } = require('../../src/observers/viewer-count-observer');
 const { OBSViewerCountObserver } = require('../../src/observers/obs-viewer-count-observer');
@@ -24,11 +26,11 @@ describe('Observer Pattern Integration', () => {
         logger = createSilentLogger();
         platforms = {
             youtube: {
-                getViewerCount: jest.fn().mockResolvedValue(1000),
+                getViewerCount: createMockFn().mockResolvedValue(1000),
                 isEnabled: () => true
             },
             twitch: {
-                getViewerCount: jest.fn().mockResolvedValue(2000),
+                getViewerCount: createMockFn().mockResolvedValue(2000),
                 isEnabled: () => true
             }
         };
@@ -46,7 +48,8 @@ describe('Observer Pattern Integration', () => {
             viewerCountSystem.stopPolling();
             await viewerCountSystem.cleanup();
         }
-        jest.clearAllMocks();
+        clearAllMocks();
+        restoreAllMocks();
     });
 
     describe('Observer Registration and Management', () => {
@@ -68,7 +71,7 @@ describe('Observer Pattern Integration', () => {
         test('should reject observers without required interface methods', () => {
             // Given: Invalid observer missing getObserverId
             const invalidObserver = {
-                onViewerCountUpdate: jest.fn()
+                onViewerCountUpdate: createMockFn()
                 // Missing getObserverId method
             };
             
@@ -334,12 +337,12 @@ describe('Observer Pattern Integration', () => {
             // Given: Observer that only cares about YouTube
             const youtubeObserver = {
                 getObserverId: () => 'youtube-only-observer',
-                onViewerCountUpdate: jest.fn(update => {
+                onViewerCountUpdate: createMockFn((update) => {
                     // Only process YouTube updates
                     if (update.platform !== 'youtube') return;
                     // Process YouTube update...
                 }),
-                onStreamStatusChange: jest.fn()
+                onStreamStatusChange: createMockFn()
             };
             
             viewerCountSystem.addObserver(youtubeObserver);
@@ -515,9 +518,9 @@ describe('Observer Pattern Integration', () => {
 function createTestObserver(id) {
     return {
         getObserverId: () => id,
-        onViewerCountUpdate: jest.fn(),
-        onStreamStatusChange: jest.fn(),
-        initialize: jest.fn(),
-        cleanup: jest.fn()
+        onViewerCountUpdate: createMockFn(),
+        onStreamStatusChange: createMockFn(),
+        initialize: createMockFn(),
+        cleanup: createMockFn()
     };
 }

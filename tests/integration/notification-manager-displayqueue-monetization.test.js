@@ -1,4 +1,6 @@
 
+const { describe, test, beforeEach, afterEach, expect } = require('bun:test');
+const { createMockFn, clearAllMocks, restoreAllMocks, spyOn } = require('../helpers/bun-mock-utils');
 const EventEmitter = require('events');
 const PlatformEventRouter = require('../../src/services/PlatformEventRouter');
 const NotificationManager = require('../../src/notifications/NotificationManager');
@@ -56,18 +58,18 @@ describe('Monetisation pipeline integration', () => {
         };
 
         const mockObs = createMockOBSConnection();
-        mockObs.isReady = jest.fn().mockResolvedValue(true);
-        mockObs.call = jest.fn().mockResolvedValue({ success: true });
+        mockObs.isReady = createMockFn().mockResolvedValue(true);
+        mockObs.call = createMockFn().mockResolvedValue({ success: true });
 
         runtimeConstants = createRuntimeConstantsFixture();
         displayQueue = new DisplayQueue(mockObs, config, constants, eventBus, runtimeConstants);
-        displayQueue.playGiftVideoAndAudio = jest.fn().mockResolvedValue();
-        displayQueue.isTTSEnabled = jest.fn().mockReturnValue(false);
-        jest.spyOn(displayQueue, 'addItem');
+        displayQueue.playGiftVideoAndAudio = createMockFn().mockResolvedValue();
+        displayQueue.isTTSEnabled = createMockFn(() => false);
+        spyOn(displayQueue, 'addItem');
 
         const vfxCommandService = {
-            executeCommand: jest.fn(),
-            getVFXConfig: jest.fn(async (commandKey) => ({
+            executeCommand: createMockFn(),
+            getVFXConfig: createMockFn(async (commandKey) => ({
                 commandKey,
                 command: `!${commandKey}`,
                 filename: `${commandKey}.mp4`,
@@ -78,7 +80,7 @@ describe('Monetisation pipeline integration', () => {
         };
 
         const configService = {
-            get: jest.fn((section) => {
+            get: createMockFn((section) => {
                 if (section === 'general') {
                     return {
                         userSuppressionEnabled: true,
@@ -90,20 +92,20 @@ describe('Monetisation pipeline integration', () => {
                 }
                 return undefined;
             }),
-            areNotificationsEnabled: jest.fn((settingKey) => configFlags[settingKey] !== false),
-            isEnabled: jest.fn().mockReturnValue(true),
-            getPlatformConfig: jest.fn().mockReturnValue({ notificationsEnabled: true }),
-            getNotificationSettings: jest.fn().mockReturnValue({ enabled: true }),
-            getTTSConfig: jest.fn().mockReturnValue({ enabled: false }),
-            getTimingConfig: jest.fn().mockReturnValue({ greetingDuration: 5000 }),
-            isDebugEnabled: jest.fn().mockReturnValue(false)
+            areNotificationsEnabled: createMockFn((settingKey) => configFlags[settingKey] !== false),
+            isEnabled: createMockFn(() => true),
+            getPlatformConfig: createMockFn(() => ({ notificationsEnabled: true })),
+            getNotificationSettings: createMockFn(() => ({ enabled: true })),
+            getTTSConfig: createMockFn(() => ({ enabled: false })),
+            getTimingConfig: createMockFn(() => ({ greetingDuration: 5000 })),
+            isDebugEnabled: createMockFn(() => false)
         };
 
         const logger = {
-            info: jest.fn(),
-            debug: jest.fn(),
-            warn: jest.fn(),
-            error: jest.fn()
+            info: createMockFn(),
+            debug: createMockFn(),
+            warn: createMockFn(),
+            error: createMockFn()
         };
         const textProcessing = createTextProcessingManager({ logger });
 
@@ -111,26 +113,26 @@ describe('Monetisation pipeline integration', () => {
             logger,
             constants,
             textProcessing,
-            obsGoals: { processDonationGoal: jest.fn() },
+            obsGoals: { processDonationGoal: createMockFn() },
             displayQueue,
             eventBus,
             configService,
             vfxCommandService,
-            ttsService: { speak: jest.fn() },
-            userTrackingService: { isFirstMessage: jest.fn().mockResolvedValue(false) }
+            ttsService: { speak: createMockFn() },
+            userTrackingService: { isFirstMessage: createMockFn().mockResolvedValue(false) }
         });
 
         const runtime = {
-            handleGiftNotification: jest.fn((platform, _username, payload) =>
+            handleGiftNotification: createMockFn((platform, _username, payload) =>
                 notificationManager.handleNotification(payload.type || 'platform:gift', platform, payload)
             ),
-            handleGiftPaypiggyNotification: jest.fn((platform, _username, payload) =>
+            handleGiftPaypiggyNotification: createMockFn((platform, _username, payload) =>
                 notificationManager.handleNotification('platform:giftpaypiggy', platform, payload)
             ),
-            handlePaypiggyNotification: jest.fn((platform, _username, payload) =>
+            handlePaypiggyNotification: createMockFn((platform, _username, payload) =>
                 notificationManager.handleNotification('platform:paypiggy', platform, payload)
             ),
-            handleEnvelopeNotification: jest.fn((platform, _username, payload) =>
+            handleEnvelopeNotification: createMockFn((platform, _username, payload) =>
                 notificationManager.handleNotification('platform:envelope', platform, payload)
             )
         };
@@ -141,10 +143,10 @@ describe('Monetisation pipeline integration', () => {
             notificationManager,
             configService,
             logger: {
-                info: jest.fn(),
-                debug: jest.fn(),
-                warn: jest.fn(),
-                error: jest.fn()
+                info: createMockFn(),
+                debug: createMockFn(),
+                warn: createMockFn(),
+                error: createMockFn()
             }
         });
     });
@@ -154,6 +156,8 @@ describe('Monetisation pipeline integration', () => {
         if (displayQueue && typeof displayQueue.stop === 'function') {
             displayQueue.stop();
         }
+        clearAllMocks();
+        restoreAllMocks();
     });
 
     const flows = [

@@ -1,4 +1,6 @@
 
+const { describe, test, beforeEach, afterEach, expect } = require('bun:test');
+const { createMockFn, clearAllMocks, restoreAllMocks } = require('../helpers/bun-mock-utils');
 const { createEventBus } = require('../../src/core/EventBus');
 const { createOBSEventService } = require('../../src/obs/obs-event-service');
 const { createSceneManagementService } = require('../../src/obs/scene-management-service');
@@ -18,32 +20,32 @@ describe('OBS Event-Driven Integration', () => {
 
         // Mock OBS connection
         mockOBSConnection = {
-            connect: jest.fn().mockResolvedValue(true),
-            disconnect: jest.fn().mockResolvedValue(undefined),
-            isConnected: jest.fn().mockReturnValue(true),
-            isReady: jest.fn().mockResolvedValue(true),
-            call: jest.fn().mockResolvedValue({}),
-            addEventListener: jest.fn(),
-            removeEventListener: jest.fn(),
-            getConnectionState: jest.fn().mockReturnValue({
+            connect: createMockFn().mockResolvedValue(true),
+            disconnect: createMockFn().mockResolvedValue(undefined),
+            isConnected: createMockFn(() => true),
+            isReady: createMockFn().mockResolvedValue(true),
+            call: createMockFn().mockResolvedValue({}),
+            addEventListener: createMockFn(),
+            removeEventListener: createMockFn(),
+            getConnectionState: createMockFn(() => ({
                 isConnected: true,
                 isConnecting: false
-            })
+            }))
         };
 
         // Mock OBS sources
         mockObsSources = {
-            updateTextSource: jest.fn().mockResolvedValue(undefined),
-            setSourceVisibility: jest.fn().mockResolvedValue(undefined),
-            clearTextSource: jest.fn().mockResolvedValue(undefined)
+            updateTextSource: createMockFn().mockResolvedValue(undefined),
+            setSourceVisibility: createMockFn().mockResolvedValue(undefined),
+            clearTextSource: createMockFn().mockResolvedValue(undefined)
         };
 
         // Mock logger
         mockLogger = {
-            debug: jest.fn(),
-            info: jest.fn(),
-            warn: jest.fn(),
-            error: jest.fn()
+            debug: createMockFn(),
+            info: createMockFn(),
+            warn: createMockFn(),
+            error: createMockFn()
         };
 
         // Create services
@@ -65,6 +67,8 @@ describe('OBS Event-Driven Integration', () => {
         obsEventService.destroy();
         sceneManagementService.destroy();
         eventBus.reset();
+        clearAllMocks();
+        restoreAllMocks();
     });
 
     describe('End-to-End Event Flow', () => {
@@ -226,7 +230,7 @@ describe('OBS Event-Driven Integration', () => {
         test('event bus remains functional after service destruction', async () => {
             obsEventService.destroy();
 
-            const handler = jest.fn();
+            const handler = createMockFn();
             eventBus.subscribe('test:event', handler);
 
             eventBus.emit('test:event', { data: 'test' });
