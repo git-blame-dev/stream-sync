@@ -1,4 +1,7 @@
 
+const { describe, test, beforeEach, afterEach, expect } = require('bun:test');
+const { clearAllMocks, createMockFn, restoreAllMocks } = require('../helpers/bun-mock-utils');
+
 const { ViewerCountSystem } = require('../../src/utils/viewer-count');
 const { YouTubeViewerExtractor } = require('../../src/extractors/youtube-viewer-extractor');
 const { InnertubeFactory } = require('../../src/factories/innertube-factory');
@@ -17,7 +20,7 @@ describe('System Resilience and Error Recovery Integration', () => {
     beforeEach(async () => {
         platforms = {
             youtube: {
-                getViewerCount: jest.fn().mockResolvedValue(1000),
+                getViewerCount: createMockFn().mockResolvedValue(1000),
                 isEnabled: () => true
             }
         };
@@ -40,7 +43,8 @@ describe('System Resilience and Error Recovery Integration', () => {
             await viewerCountSystem.cleanup();
         }
         await InnertubeInstanceManager.cleanup();
-        jest.clearAllMocks();
+        clearAllMocks();
+        restoreAllMocks();
     });
 
     describe('Platform API Error Handling', () => {
@@ -102,8 +106,8 @@ describe('System Resilience and Error Recovery Integration', () => {
             // Given: Observer that consistently fails
             const faultyObserver = {
                 getObserverId: () => 'faulty-observer',
-                onViewerCountUpdate: jest.fn().mockRejectedValue(new Error('Observer crashed')),
-                onStreamStatusChange: jest.fn().mockRejectedValue(new Error('Observer failed'))
+                onViewerCountUpdate: createMockFn().mockRejectedValue(new Error('Observer crashed')),
+                onStreamStatusChange: createMockFn().mockRejectedValue(new Error('Observer failed'))
             };
             
             viewerCountSystem.addObserver(faultyObserver);
@@ -306,9 +310,9 @@ describe('System Resilience and Error Recovery Integration', () => {
             // Given: Observer with cleanup errors
             const problematicObserver = {
                 getObserverId: () => 'problematic-observer',
-                onViewerCountUpdate: jest.fn(),
-                onStreamStatusChange: jest.fn(),
-                cleanup: jest.fn().mockRejectedValue(new Error('Cleanup failed'))
+                onViewerCountUpdate: createMockFn(),
+                onStreamStatusChange: createMockFn(),
+                cleanup: createMockFn().mockRejectedValue(new Error('Cleanup failed'))
             };
             
             viewerCountSystem.addObserver(problematicObserver);
@@ -328,10 +332,10 @@ describe('System Resilience and Error Recovery Integration', () => {
             let lastSuccessfulUpdate = null;
             const qualityObserver = {
                 getObserverId: () => 'quality-observer',
-                onViewerCountUpdate: jest.fn(update => {
+                onViewerCountUpdate: createMockFn(update => {
                     lastSuccessfulUpdate = update;
                 }),
-                onStreamStatusChange: jest.fn()
+                onStreamStatusChange: createMockFn()
             };
             
             viewerCountSystem.addObserver(qualityObserver);
@@ -372,9 +376,9 @@ describe('System Resilience and Error Recovery Integration', () => {
             // Given: System with failing components
             const resourceObserver = {
                 getObserverId: () => 'resource-observer',
-                onViewerCountUpdate: jest.fn(),
-                onStreamStatusChange: jest.fn(),
-                cleanup: jest.fn()
+                onViewerCountUpdate: createMockFn(),
+                onStreamStatusChange: createMockFn(),
+                cleanup: createMockFn()
             };
             
             viewerCountSystem.addObserver(resourceObserver);
@@ -403,8 +407,8 @@ describe('System Resilience and Error Recovery Integration', () => {
             for (let i = 0; i < 10; i++) {
                 const observer = {
                     getObserverId: () => `stress-observer-${i}`,
-                    onViewerCountUpdate: jest.fn(),
-                    onStreamStatusChange: jest.fn()
+                    onViewerCountUpdate: createMockFn(),
+                    onStreamStatusChange: createMockFn()
                 };
                 
                 viewerCountSystem.addObserver(observer);

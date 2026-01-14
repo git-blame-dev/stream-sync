@@ -1,20 +1,24 @@
 
-jest.mock('../../src/core/logging', () => ({
-    setConfigValidator: jest.fn(),
-    setDebugMode: jest.fn(),
-    initializeLoggingConfig: jest.fn(),
-    initializeConsoleOverride: jest.fn(),
+const { describe, test, beforeEach, afterEach, expect } = require('bun:test');
+const { clearAllMocks, createMockFn, restoreAllMocks } = require('../helpers/bun-mock-utils');
+const { mockModule, resetModules, restoreAllModuleMocks } = require('../helpers/bun-module-mocks');
+
+mockModule('../../src/core/logging', () => ({
+    setConfigValidator: createMockFn(),
+    setDebugMode: createMockFn(),
+    initializeLoggingConfig: createMockFn(),
+    initializeConsoleOverride: createMockFn(),
     logger: {
-        info: jest.fn(),
-        warn: jest.fn(),
-        error: jest.fn(),
-        debug: jest.fn()
+        info: createMockFn(),
+        warn: createMockFn(),
+        error: createMockFn(),
+        debug: createMockFn()
     },
-    getLogger: jest.fn(() => ({
-        info: jest.fn(),
-        warn: jest.fn(),
-        error: jest.fn(),
-        debug: jest.fn()
+    getLogger: createMockFn(() => ({
+        info: createMockFn(),
+        warn: createMockFn(),
+        error: createMockFn(),
+        debug: createMockFn()
     }))
 }));
 
@@ -36,16 +40,16 @@ setupAutomatedCleanup({
 
 // Mock OBS connection
 const mockOBSConnection = {
-    isConnected: jest.fn(() => true),
-    isReady: jest.fn(() => Promise.resolve(true)),
-    call: jest.fn(() => Promise.resolve({ success: true }))
+    isConnected: createMockFn(() => true),
+    isReady: createMockFn(() => Promise.resolve(true)),
+    call: createMockFn(() => Promise.resolve({ success: true }))
 };
 
-jest.mock('../../src/obs/connection', () => ({
-    ensureOBSConnected: jest.fn().mockResolvedValue(),
-    initializeOBSConnection: jest.fn().mockResolvedValue({ success: true, connected: true }),
-    obsCall: jest.fn().mockResolvedValue({ success: true }),
-    getOBSConnectionManager: jest.fn(() => mockOBSConnection)
+mockModule('../../src/obs/connection', () => ({
+    ensureOBSConnected: createMockFn().mockResolvedValue(),
+    initializeOBSConnection: createMockFn().mockResolvedValue({ success: true, connected: true }),
+    obsCall: createMockFn().mockResolvedValue({ success: true }),
+    getOBSConnectionManager: createMockFn(() => mockOBSConnection)
 }));
 
 describe('AppRuntime VFXCommandService Lifecycle Management', () => {
@@ -53,7 +57,7 @@ describe('AppRuntime VFXCommandService Lifecycle Management', () => {
     let config;
 
     beforeEach(() => {
-        jest.clearAllMocks();
+        clearAllMocks();
 
         // Minimal config for VFX testing
         config = {
@@ -77,6 +81,9 @@ describe('AppRuntime VFXCommandService Lifecycle Management', () => {
         if (runtime && typeof runtime.stop === 'function') {
             await runtime.stop();
         }
+        restoreAllMocks();
+        restoreAllModuleMocks();
+        resetModules();
     });
 
     describe('VFXCommandService Initialization', () => {
@@ -92,7 +99,7 @@ describe('AppRuntime VFXCommandService Lifecycle Management', () => {
             expect(runtime.vfxCommandService).toBeDefined();
             expect(runtime.vfxCommandService).not.toBeNull();
             expect(typeof runtime.vfxCommandService.executeCommand).toBe('function');
-        }, TEST_TIMEOUTS.INTEGRATION);
+        }, { timeout: TEST_TIMEOUTS.INTEGRATION });
     });
 
     describe('EventBus VFX Command Integration', () => {
@@ -105,7 +112,7 @@ describe('AppRuntime VFXCommandService Lifecycle Management', () => {
             // Track VFX execution
             let vfxExecuted = false;
             const originalExecuteCommand = runtime.vfxCommandService.executeCommand;
-            runtime.vfxCommandService.executeCommand = jest.fn(async (...args) => {
+            runtime.vfxCommandService.executeCommand = createMockFn(async (...args) => {
                 vfxExecuted = true;
                 return originalExecuteCommand.apply(runtime.vfxCommandService, args);
             });
@@ -124,7 +131,7 @@ describe('AppRuntime VFXCommandService Lifecycle Management', () => {
 
             // THEN: VFX should execute
             expect(vfxExecuted).toBe(true);
-        }, TEST_TIMEOUTS.INTEGRATION);
+        }, { timeout: TEST_TIMEOUTS.INTEGRATION });
 
         test('should handle VFX command errors gracefully', async () => {
             // GIVEN: Running AppRuntime
@@ -133,7 +140,7 @@ describe('AppRuntime VFXCommandService Lifecycle Management', () => {
             await runtime.start();
 
             // Mock executeCommand to throw error
-            runtime.vfxCommandService.executeCommand = jest.fn().mockRejectedValue(
+            runtime.vfxCommandService.executeCommand = createMockFn().mockRejectedValue(
                 new Error('VFX execution failed')
             );
 
@@ -151,7 +158,7 @@ describe('AppRuntime VFXCommandService Lifecycle Management', () => {
 
             // THEN: System should continue (no crash)
             expect(runtime.vfxCommandService.executeCommand).toHaveBeenCalledTimes(1);
-        }, TEST_TIMEOUTS.INTEGRATION);
+        }, { timeout: TEST_TIMEOUTS.INTEGRATION });
 
         test('should ignore events emitted by VFXCommandService to prevent recursion', async () => {
             // GIVEN: Running AppRuntime
@@ -160,7 +167,7 @@ describe('AppRuntime VFXCommandService Lifecycle Management', () => {
             await runtime.start();
 
             // AND: Spy on executeCommand
-            runtime.vfxCommandService.executeCommand = jest.fn();
+            runtime.vfxCommandService.executeCommand = createMockFn();
 
             // WHEN: EventBus receives event sourced from VFX service
             runtime.eventBus.emit(PlatformEvents.VFX_COMMAND_RECEIVED, {
@@ -176,7 +183,7 @@ describe('AppRuntime VFXCommandService Lifecycle Management', () => {
 
             // THEN: AppRuntime should ignore the event to avoid infinite loops
             expect(runtime.vfxCommandService.executeCommand).not.toHaveBeenCalled();
-        }, TEST_TIMEOUTS.INTEGRATION);
+        }, { timeout: TEST_TIMEOUTS.INTEGRATION });
 
         test('processes VFX commands even when commandsEnabled is false (current behavior)', async () => {
             const { dependencies } = createAppRuntimeTestDependencies();
@@ -190,7 +197,7 @@ describe('AppRuntime VFXCommandService Lifecycle Management', () => {
             runtime = new AppRuntime(disabledConfig, dependencies);
             await runtime.start();
 
-            runtime.vfxCommandService.executeCommand = jest.fn();
+            runtime.vfxCommandService.executeCommand = createMockFn();
 
             runtime.eventBus.emit(PlatformEvents.VFX_COMMAND_RECEIVED, {
                 command: '!hello',
@@ -203,14 +210,14 @@ describe('AppRuntime VFXCommandService Lifecycle Management', () => {
             await new Promise(resolve => setImmediate(resolve));
 
             expect(runtime.vfxCommandService.executeCommand).toHaveBeenCalledTimes(1);
-        }, TEST_TIMEOUTS.INTEGRATION);
+        }, { timeout: TEST_TIMEOUTS.INTEGRATION });
 
         test('should continue processing VFX when commands are enabled', async () => {
             const { dependencies } = createAppRuntimeTestDependencies();
             runtime = new AppRuntime(config, dependencies);
             await runtime.start();
 
-            runtime.vfxCommandService.executeCommand = jest.fn().mockResolvedValue({ success: true });
+            runtime.vfxCommandService.executeCommand = createMockFn().mockResolvedValue({ success: true });
 
             runtime.eventBus.emit(PlatformEvents.VFX_COMMAND_RECEIVED, {
                 command: '!hello',
@@ -223,14 +230,14 @@ describe('AppRuntime VFXCommandService Lifecycle Management', () => {
             await new Promise(resolve => setImmediate(resolve));
 
             expect(runtime.vfxCommandService.executeCommand).toHaveBeenCalledTimes(1);
-        }, TEST_TIMEOUTS.INTEGRATION);
+        }, { timeout: TEST_TIMEOUTS.INTEGRATION });
 
         test('ignores VFX events already sourced from eventbus to avoid recursion', async () => {
             const { dependencies } = createAppRuntimeTestDependencies();
             runtime = new AppRuntime(config, dependencies);
             await runtime.start();
 
-            runtime.vfxCommandService.executeCommand = jest.fn();
+            runtime.vfxCommandService.executeCommand = createMockFn();
 
             runtime.eventBus.emit(PlatformEvents.VFX_COMMAND_RECEIVED, {
                 command: '!hello',
@@ -244,14 +251,14 @@ describe('AppRuntime VFXCommandService Lifecycle Management', () => {
             await new Promise(resolve => setImmediate(resolve));
 
             expect(runtime.vfxCommandService.executeCommand).not.toHaveBeenCalled();
-        }, TEST_TIMEOUTS.INTEGRATION);
+        }, { timeout: TEST_TIMEOUTS.INTEGRATION });
 
         test('ignores VFX events sourced from vfx-service to avoid recursion', async () => {
             const { dependencies } = createAppRuntimeTestDependencies();
             runtime = new AppRuntime(config, dependencies);
             await runtime.start();
 
-            runtime.vfxCommandService.executeCommand = jest.fn();
+            runtime.vfxCommandService.executeCommand = createMockFn();
 
             runtime.eventBus.emit(PlatformEvents.VFX_COMMAND_RECEIVED, {
                 command: '!hello',
@@ -265,7 +272,7 @@ describe('AppRuntime VFXCommandService Lifecycle Management', () => {
             await new Promise(resolve => setImmediate(resolve));
 
             expect(runtime.vfxCommandService.executeCommand).not.toHaveBeenCalled();
-        }, TEST_TIMEOUTS.INTEGRATION);
+        }, { timeout: TEST_TIMEOUTS.INTEGRATION });
 
         test('gracefully skips when VFXCommandService is unavailable', async () => {
             const { dependencies } = createAppRuntimeTestDependencies();
@@ -287,15 +294,15 @@ describe('AppRuntime VFXCommandService Lifecycle Management', () => {
 
             // No VFX service means nothing executes, but handler should not crash
             expect(runtime.vfxCommandService).toBeNull();
-        }, TEST_TIMEOUTS.INTEGRATION);
+        }, { timeout: TEST_TIMEOUTS.INTEGRATION });
 
         test('handles VFX events with no command payload without crashing', async () => {
             const { dependencies } = createAppRuntimeTestDependencies();
             runtime = new AppRuntime(config, dependencies);
             await runtime.start();
 
-            runtime.vfxCommandService.executeCommand = jest.fn();
-            runtime.vfxCommandService.executeCommandForKey = jest.fn();
+            runtime.vfxCommandService.executeCommand = createMockFn();
+            runtime.vfxCommandService.executeCommandForKey = createMockFn();
 
             runtime.eventBus.emit(PlatformEvents.VFX_COMMAND_RECEIVED, {
                 username: 'NoCommand',
@@ -308,15 +315,15 @@ describe('AppRuntime VFXCommandService Lifecycle Management', () => {
 
             expect(runtime.vfxCommandService.executeCommand).not.toHaveBeenCalled();
             expect(runtime.vfxCommandService.executeCommandForKey).not.toHaveBeenCalled();
-        }, TEST_TIMEOUTS.INTEGRATION);
+        }, { timeout: TEST_TIMEOUTS.INTEGRATION });
 
         test('executes commandKey branch when command is absent', async () => {
             const { dependencies } = createAppRuntimeTestDependencies();
             runtime = new AppRuntime(config, dependencies);
             await runtime.start();
 
-            runtime.vfxCommandService.executeCommand = jest.fn();
-            runtime.vfxCommandService.executeCommandForKey = jest.fn().mockResolvedValue({ success: true });
+            runtime.vfxCommandService.executeCommand = createMockFn();
+            runtime.vfxCommandService.executeCommandForKey = createMockFn().mockResolvedValue({ success: true });
 
             runtime.eventBus.emit(PlatformEvents.VFX_COMMAND_RECEIVED, {
                 commandKey: 'gifts',
@@ -337,7 +344,7 @@ describe('AppRuntime VFXCommandService Lifecycle Management', () => {
                 skipCooldown: true,
                 correlationId: 'corr-10'
             }));
-        }, TEST_TIMEOUTS.INTEGRATION);
+        }, { timeout: TEST_TIMEOUTS.INTEGRATION });
 
         test('processes commandKey events even when commandsEnabled is false (current behavior)', async () => {
             const { dependencies } = createAppRuntimeTestDependencies();
@@ -348,7 +355,7 @@ describe('AppRuntime VFXCommandService Lifecycle Management', () => {
             runtime = new AppRuntime(disabledConfig, dependencies);
             await runtime.start();
 
-            runtime.vfxCommandService.executeCommandForKey = jest.fn().mockResolvedValue({ success: true });
+            runtime.vfxCommandService.executeCommandForKey = createMockFn().mockResolvedValue({ success: true });
 
             runtime.eventBus.emit(PlatformEvents.VFX_COMMAND_RECEIVED, {
                 commandKey: 'gifts',
@@ -369,7 +376,7 @@ describe('AppRuntime VFXCommandService Lifecycle Management', () => {
                 skipCooldown: true,
                 correlationId: 'corr-11'
             }));
-        }, TEST_TIMEOUTS.INTEGRATION);
+        }, { timeout: TEST_TIMEOUTS.INTEGRATION });
     });
 
     describe('AppRuntime Lifecycle Management', () => {
@@ -388,6 +395,6 @@ describe('AppRuntime VFXCommandService Lifecycle Management', () => {
             // THEN: VFXCommandService should remain available
             expect(runtime.vfxCommandService).toBe(vfxServiceBeforeStop);
             expect(runtime.vfxCommandService).toBeDefined();
-        }, TEST_TIMEOUTS.INTEGRATION);
+        }, { timeout: TEST_TIMEOUTS.INTEGRATION });
     });
 });

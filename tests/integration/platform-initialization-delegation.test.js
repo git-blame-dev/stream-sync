@@ -1,20 +1,24 @@
 
-jest.mock('../../src/core/logging', () => ({
-    setConfigValidator: jest.fn(),
-    setDebugMode: jest.fn(),
-    initializeLoggingConfig: jest.fn(),
-    initializeConsoleOverride: jest.fn(),
+const { describe, it, beforeEach, afterEach, expect } = require('bun:test');
+const { createMockFn, restoreAllMocks } = require('../helpers/bun-mock-utils');
+const { mockModule, restoreAllModuleMocks } = require('../helpers/bun-module-mocks');
+
+mockModule('../../src/core/logging', () => ({
+    setConfigValidator: createMockFn(),
+    setDebugMode: createMockFn(),
+    initializeLoggingConfig: createMockFn(),
+    initializeConsoleOverride: createMockFn(),
     logger: {
-        info: jest.fn(),
-        warn: jest.fn(),
-        error: jest.fn(),
-        debug: jest.fn()
+        info: createMockFn(),
+        warn: createMockFn(),
+        error: createMockFn(),
+        debug: createMockFn()
     },
-    getLogger: jest.fn(() => ({
-        info: jest.fn(),
-        warn: jest.fn(),
-        error: jest.fn(),
-        debug: jest.fn()
+    getLogger: createMockFn(() => ({
+        info: createMockFn(),
+        warn: createMockFn(),
+        error: createMockFn(),
+        debug: createMockFn()
     }))
 }));
 
@@ -31,7 +35,7 @@ describe('Platform Initialization Delegation', () => {
     beforeEach(() => {
         // Mock process.exit to prevent tests from terminating
         originalExit = process.exit;
-        process.exit = jest.fn();
+        process.exit = createMockFn();
 
         // Create minimal config for testing
         mockConfig = {
@@ -56,10 +60,10 @@ describe('Platform Initialization Delegation', () => {
 
         // Create a real PlatformLifecycleService for testing delegation
         const mockLogger = {
-            debug: jest.fn(),
-            info: jest.fn(),
-            warn: jest.fn(),
-            error: jest.fn()
+            debug: createMockFn(),
+            info: createMockFn(),
+            warn: createMockFn(),
+            error: createMockFn()
         };
 
         const platformLifecycleService = new PlatformLifecycleService({
@@ -73,21 +77,21 @@ describe('Platform Initialization Delegation', () => {
         // Create mock dependencies to avoid initialization errors
         mockDependencies = {
             logging: mockLogger,
-            displayQueue: { addItem: jest.fn() },
-            eventBus: { subscribe: jest.fn(), emit: jest.fn(), unsubscribe: jest.fn() },
-            configService: { get: jest.fn().mockReturnValue(mockConfig.general) },
+            displayQueue: { addItem: createMockFn() },
+            eventBus: { subscribe: createMockFn(), emit: createMockFn(), unsubscribe: createMockFn() },
+            configService: { get: createMockFn().mockReturnValue(mockConfig.general) },
             runtimeConstants: createRuntimeConstantsFixture(),
-            vfxCommandService: { executeCommandForKey: jest.fn().mockResolvedValue({ success: true }) },
-            ttsService: { speak: jest.fn().mockResolvedValue({ success: true }) },
-            userTrackingService: { isFirstMessage: jest.fn().mockResolvedValue(false) },
+            vfxCommandService: { executeCommandForKey: createMockFn().mockResolvedValue({ success: true }) },
+            ttsService: { speak: createMockFn().mockResolvedValue({ success: true }) },
+            userTrackingService: { isFirstMessage: createMockFn().mockResolvedValue(false) },
             obsEventService: {},
             sceneManagementService: {},
             commandCooldownService: {
-                checkCooldown: jest.fn(() => ({ allowed: true })),
-                recordCommand: jest.fn()
+                checkCooldown: createMockFn(() => ({ allowed: true })),
+                recordCommand: createMockFn()
             },
             notificationManager: {
-                handleNotification: jest.fn()
+                handleNotification: createMockFn()
             },
             platformLifecycleService: platformLifecycleService
         };
@@ -100,6 +104,8 @@ describe('Platform Initialization Delegation', () => {
 
         // Restore process.exit AFTER shutdown
         process.exit = originalExit;
+        restoreAllMocks();
+        restoreAllModuleMocks();
     });
 
     describe('Service-Based Platform Management', () => {
