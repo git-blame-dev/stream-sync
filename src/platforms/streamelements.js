@@ -5,6 +5,7 @@ const { safeSetTimeout, safeSetInterval } = require('../utils/timeout-validator'
 const { createPlatformErrorHandler } = require('../utils/platform-error-handler');
 const { ConfigValidatorStatic } = require('../utils/config-validator');
 const { createRetrySystem } = require('../utils/retry-system');
+const { STREAMELEMENTS } = require('../core/endpoints');
 
 
 class StreamElementsPlatform extends EventEmitter {
@@ -112,7 +113,7 @@ class StreamElementsPlatform extends EventEmitter {
     }
 
     async connectToWebSocket() {
-        const wsUrl = 'wss://astro.streamelements.com';
+        const wsUrl = STREAMELEMENTS.WEBSOCKET;
         
         this.connection = new WebSocket(wsUrl);
         this.setupEventListeners();

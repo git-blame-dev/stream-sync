@@ -18,7 +18,7 @@ setupAutomatedCleanup({
 });
 
 describe('Template Interpolation Validation', () => {
-    let interpolateTemplate, formatGiftCountForDisplay, createNotificationData;
+    let interpolateTemplate, createNotificationData;
 
     beforeEach(() => {
         jest.resetModules();
@@ -30,9 +30,9 @@ describe('Template Interpolation Validation', () => {
         const notificationStrings = require('../../../src/utils/notification-strings');
         const testUtils = require('../../helpers/notification-test-utils');
         interpolateTemplate = notificationStrings.interpolateTemplate;
-        formatGiftCountForDisplay = notificationStrings.formatGiftCountForDisplay;
         createNotificationData = testUtils.createNotificationData;
     });
+
 
     describe('interpolateTemplate Function', () => {
         test('should replace single template variable', () => {
@@ -90,31 +90,6 @@ describe('Template Interpolation Validation', () => {
         }, TEST_TIMEOUTS.FAST);
     });
 
-    describe('formatGiftCountForDisplay Function', () => {
-        test('should format single gift without count', () => {
-            const result = formatGiftCountForDisplay(1, 'Subscription');
-            expect(result).toBe('Subscription');
-            expect(result).not.toMatch(/\{.*\}/);
-        }, TEST_TIMEOUTS.FAST);
-
-        test('should format multiple gifts with count', () => {
-            const result = formatGiftCountForDisplay(5, 'Subscription');
-            expect(result).toBe('Subscription x 5');
-            expect(result).not.toMatch(/\{.*\}/);
-        }, TEST_TIMEOUTS.FAST);
-
-        test('should handle zero count', () => {
-            const result = formatGiftCountForDisplay(0, 'Subscription');
-            expect(result).toBe('Subscription x 0');
-            expect(result).not.toMatch(/\{.*\}/);
-        }, TEST_TIMEOUTS.FAST);
-
-        test('should handle different gift names', () => {
-            expect(formatGiftCountForDisplay(1, 'Rose')).toBe('Rose');
-            expect(formatGiftCountForDisplay(3, 'Heart')).toBe('Heart x 3');
-            expect(formatGiftCountForDisplay(1, 'Gift Sub')).toBe('Gift Sub');
-        }, TEST_TIMEOUTS.FAST);
-    });
 
     describe('Template Data Population', () => {
         test('should populate formattedGiftCountForDisplay in interpolation data', () => {

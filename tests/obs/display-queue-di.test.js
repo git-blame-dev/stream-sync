@@ -64,4 +64,5 @@ describe('DisplayQueue DI requirements', () => {
         expect(() => initializeDisplayQueue(mockObsManager, {}, {}, null, createRuntimeConstantsFixture())).not.toThrow();
         expect(getOBSConnectionManager).not.toHaveBeenCalled();
     });
+
 });

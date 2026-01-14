@@ -59,20 +59,8 @@ const YOUTUBE = {
     }
 };
 
-const TIKTOK = {
-    BASE: 'https://www.tiktok.com',
-    
-    buildLiveUrl(username) {
-        return `${this.BASE}/@${username}/live`;
-    },
-    
-    buildProfileUrl(username) {
-        return `${this.BASE}/@${username}`;
-    }
-};
-
 const STREAMELEMENTS = {
-    WEBSOCKET: 'wss://astro.streamelements.com/ws',
+    WEBSOCKET: 'wss://astro.streamelements.com',
     API_BASE: 'https://api.streamelements.com/kappa/v2',
     
     buildApiUrl(endpoint, params = {}) {
@@ -80,20 +68,9 @@ const STREAMELEMENTS = {
     }
 };
 
-function getAllEndpoints() {
-    return {
-        TWITCH,
-        YOUTUBE,
-        TIKTOK,
-        STREAMELEMENTS
-    };
-}
-
 module.exports = {
     TWITCH,
     YOUTUBE,
-    TIKTOK,
-    STREAMELEMENTS,
-    getAllEndpoints,
-    buildUrl // Export utility for custom use cases
+    STREAMELEMENTS
 };
+

@@ -2,6 +2,7 @@
 const TwitchAuthService = require('./TwitchAuthService');
 const TwitchAuthInitializer = require('./TwitchAuthInitializer');
 const TwitchAuthState = require('./TwitchAuthState');
+const { TWITCH } = require('../core/endpoints');
 const { getUnifiedLogger } = require('../core/logging');
 const { createPlatformErrorHandler } = require('../utils/platform-error-handler');
 const { AUTH_STATES, AuthConstants, TOKEN_REFRESH_CONFIG } = require('../utils/auth-constants');
@@ -204,9 +205,7 @@ class TwitchAuthManager {
         
         try {
             // Get scopes using centralized endpoints and enhanced HTTP client
-            const endpoints = require('../core/endpoints');
-            
-            const response = await this.enhancedHttpClient.get(endpoints.TWITCH.OAUTH.VALIDATE, {
+            const response = await this.enhancedHttpClient.get(TWITCH.OAUTH.VALIDATE, {
                 authToken: this.config.accessToken,
                 authType: 'oauth',
                 platform: 'twitch'

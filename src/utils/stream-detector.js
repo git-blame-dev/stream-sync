@@ -3,6 +3,7 @@ const { createHttpClient } = require('./http-client');
 const { validateExponentialBackoff, safeSetTimeout, safeSetInterval } = require('./timeout-validator');
 const { createPlatformErrorHandler } = require('./platform-error-handler');
 const { validateLoggerInterface } = require('./dependency-validator');
+const { YOUTUBE } = require('../core/endpoints');
 
 class StreamDetector {
     constructor(config = {}, services = {}) {
@@ -398,7 +399,7 @@ class StreamDetector {
         try {
             // Simple HTTP check for YouTube streams page
             const handleForUrl = config.username.startsWith('@') ? config.username : `@${config.username}`;
-            const liveUrl = `https://www.youtube.com/${handleForUrl}/streams`;
+            const liveUrl = YOUTUBE.buildStreamsUrl(handleForUrl);
             
             const response = await this.httpClient.get(liveUrl);
             

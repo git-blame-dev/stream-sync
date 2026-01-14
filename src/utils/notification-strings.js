@@ -394,13 +394,6 @@ function formatGiftCount(count, giftType) {
     return `${count} ${pluralGiftType}`;
 }
 
-function formatGiftCountForDisplay(count, giftType) {
-    if (!count || count === 0) return `${giftType} x 0`;
-    if (count === 1) return giftType; // No count for single gifts
-    
-    return `${giftType} x ${count}`;
-}
-
 function formatViewerCount(count) {
     if (!count || count === 0) return '0 viewers';
     return count === 1 ? '1 viewer' : `${count} viewers`;
@@ -409,21 +402,6 @@ function formatViewerCount(count) {
 function formatMonths(months) {
     if (!months || months === 0) return '0 months';
     return months === 1 ? '1 month' : `${months} months`;
-}
-
-function formatTierDisplay(tier) {
-    if (!tier) return '';
-    
-    switch (tier) {
-        case '1000':
-            return ''; // Hide Tier 1 - it's the default
-        case '2000': 
-            return ' (Tier 2)';
-        case '3000':
-            return ' (Tier 3)';
-        default:
-            return tier !== '1000' ? ` (Tier ${tier})` : '';
-    }
 }
 
 // Enrich paypiggy data with platform-aware wording for template interpolation
@@ -725,11 +703,8 @@ module.exports = {
     formatSuperChatAmount,
     formatCurrencyForTTS,
     getCurrencyWord,
-    getSingularCurrency,
     formatGiftCount,
-    formatGiftCountForDisplay,
     formatViewerCount,
     formatMonths,
-    formatTierDisplay,
     NOTIFICATION_TEMPLATES
 }; 

@@ -16,19 +16,6 @@ const PRIORITY_LEVELS = {
     MANUAL: 16
 };
 
-const PLATFORM_TERMINOLOGY = {
-    follow: {
-        youtube: 'subscribed',
-        tiktok: 'followed',
-        twitch: 'followed'
-    },
-    follower: {
-        youtube: 'subscriber',
-        tiktok: 'follower',
-        twitch: 'follower'
-    }
-};
-
 const ERROR_MESSAGES = {
     CONFIG_NOT_FOUND: 'Configuration file not found',
     CONFIG_INVALID: 'Invalid configuration format',
@@ -38,40 +25,6 @@ const ERROR_MESSAGES = {
     VFX_FILE_NOT_FOUND: 'VFX file not found',
     API_QUOTA_EXCEEDED: 'API quota exceeded',
     NETWORK_ERROR: 'Network connection error'
-};
-
-const SUCCESS_MESSAGES = {
-    CONFIG_LOADED: 'Configuration loaded successfully',
-    OBS_CONNECTED: 'Connected to OBS WebSocket',
-    PLATFORM_CONNECTED: 'Connected to platform',
-    COMMAND_EXECUTED: 'Command executed successfully',
-    VFX_PLAYED: 'VFX played successfully',
-    NOTIFICATION_SENT: 'Notification sent successfully'
-};
-
-const REGEX_PATTERNS = {
-    USERNAME_VALIDATION: /^[a-zA-Z0-9_-]{1,50}$/,
-    COMMAND_VALIDATION: /^![a-zA-Z0-9_-]+$/,
-    URL_VALIDATION: /^https?:\/\/.+/,
-    YOUTUBE_VIDEO_ID: /(?:youtube\.com\/watch\?v=|youtu\.be\/)([a-zA-Z0-9_-]{11})/,
-    TIKTOK_USERNAME: /@?([a-zA-Z0-9_.]+)/,
-    TWITCH_USERNAME: /^[a-zA-Z0-9_]{4,25}$/
-};
-
-const NOTIFICATION_TYPES = {
-    FOLLOW: 'platform:follow',
-    GIFT: 'platform:gift',
-    ENVELOPE: 'platform:envelope',
-    PAYPIGGY: 'platform:paypiggy',
-    GIFTPAYPIGGY: 'platform:giftpaypiggy',
-    RAID: 'platform:raid',
-    SHARE: 'platform:share',
-    COMMAND: 'command',
-    GREETING: 'greeting',
-    FAREWELL: 'farewell',
-    REDEMPTION: 'redemption',
-    CHAT: 'platform:chat-message',
-    GENERAL: 'general'
 };
 
 const NOTIFICATION_CONFIGS = {
@@ -155,37 +108,6 @@ const NOTIFICATION_CONFIGS = {
     }
 };
 
-const CURRENCY_FORMAT = {
-    TIKTOK: {
-        symbol: 'coins',
-        format: (amount, count = 1) => {
-            const total = amount * count;
-            const text = total === 1 ? 'coin' : 'coins';
-            return ` [${total} ${text}]`;
-        }
-    },
-    TWITCH: {
-        symbol: 'bits',
-        format: (amount, count = 1) => {
-            const total = amount * count;
-            const dollars = (total * 0.01).toFixed(2);
-            return ` (${total} bits - $${dollars})`;
-        }
-    },
-    YOUTUBE: {
-        symbol: 'USD',
-        format: (amount, count = 1) => {
-            const total = amount * count;
-            return ` ($${total.toFixed(2)})`;
-        }
-    }
-};
-
-const CHEERMOTE_PATTERNS = {
-    DEFAULT_TYPE_COMPARISON: 'cheer',
-    BITS_SUFFIX: ' Bits'
-};
-
 const VIEWER_COUNT_CONSTANTS = {
     MS_PER_SECOND: 1000,
     PLATFORM_NAMES: ['tiktok', 'twitch', 'youtube'],
@@ -209,12 +131,6 @@ const VIEWER_COUNT_CONSTANTS = {
 module.exports = {
     PRIORITY_LEVELS,
     NOTIFICATION_CONFIGS,
-    NOTIFICATION_TYPES,
-    PLATFORM_TERMINOLOGY,
     ERROR_MESSAGES,
-    SUCCESS_MESSAGES,
-    REGEX_PATTERNS,
-    CURRENCY_FORMAT,
-    CHEERMOTE_PATTERNS,
     VIEWER_COUNT_CONSTANTS
 };
