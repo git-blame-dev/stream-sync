@@ -1,10 +1,13 @@
 
+const { describe, it, expect } = require('bun:test');
+const { createMockFn } = require('../helpers/bun-mock-utils');
+
 describe('TikTok Error Message Handling', () => {
     it('should demonstrate that _handleConnectionError crashes with undefined message', () => {
         // Mock console.log to capture the error
         const originalConsoleLog = console.log;
         const logs = [];
-        console.log = jest.fn((...args) => logs.push(args.join(' ')));
+        console.log = createMockFn((...args) => logs.push(args.join(' ')));
         
         // Simulate what happens in production
         const error = {}; // Error without message property
@@ -27,33 +30,33 @@ describe('TikTok Error Message Handling', () => {
         
         // Create minimal dependencies
         const mockLogger = {
-            error: jest.fn(),
-            warn: jest.fn(),
-            info: jest.fn(),
-            debug: jest.fn()
+            error: createMockFn(),
+            warn: createMockFn(),
+            info: createMockFn(),
+            debug: createMockFn()
         };
         
         const mockConnection = {
-            on: jest.fn(),
-            connect: jest.fn(),
-            getState: jest.fn().mockReturnValue({ isConnected: false })
+            on: createMockFn(),
+            connect: createMockFn(),
+            getState: createMockFn().mockReturnValue({ isConnected: false })
         };
         
         // Create platform with complete dependencies to ensure constructor succeeds
         const platform = new TikTokPlatform(
             { enabled: true, username: 'test', apiKey: 'test' },
             {
-                WebcastPushConnection: jest.fn(() => mockConnection),
+                WebcastPushConnection: createMockFn(() => mockConnection),
                 WebcastEvent: { GIFT: 'gift', ERROR: 'error', DISCONNECT: 'disconnect' },
                 ControlEvent: {},
-                TikTokWebSocketClient: jest.fn(() => mockConnection),
+                TikTokWebSocketClient: createMockFn(() => mockConnection),
                 logger: mockLogger,
                 retrySystem: {
-                    resetRetryCount: jest.fn(),
-                    handleConnectionError: jest.fn(),
-                    handleConnectionSuccess: jest.fn(),
-                    incrementRetryCount: jest.fn(),
-                    executeWithRetry: jest.fn()
+                    resetRetryCount: createMockFn(),
+                    handleConnectionError: createMockFn(),
+                    handleConnectionSuccess: createMockFn(),
+                    incrementRetryCount: createMockFn(),
+                    executeWithRetry: createMockFn()
                 },
                 constants: { GRACE_PERIODS: { TIKTOK: 5000 } }
             }

@@ -1,13 +1,23 @@
 
-jest.unmock('../../../src/platforms/tiktok');
+const { describe, it, expect, beforeEach, afterEach } = require('bun:test');
+const { createMockFn, clearAllMocks, restoreAllMocks } = require('../../helpers/bun-mock-utils');
+const {
+    mockModule,
+    unmockModule,
+    requireActual,
+    restoreAllModuleMocks,
+    resetModules
+} = require('../../helpers/bun-module-mocks');
+
+unmockModule('../../../src/platforms/tiktok');
 
 let scheduledAggregationCallback = null;
 
-jest.mock('../../../src/utils/timeout-validator', () => {
-    const actual = jest.requireActual('../../../src/utils/timeout-validator');
+mockModule('../../../src/utils/timeout-validator', () => {
+    const actual = requireActual('../../../src/utils/timeout-validator');
     return {
         ...actual,
-        safeSetTimeout: jest.fn((callback, delay, ...args) => {
+        safeSetTimeout: createMockFn((callback, delay, ...args) => {
             scheduledAggregationCallback = () => callback(...args);
             return { ref: 'test-timer' };
         })
@@ -17,29 +27,35 @@ jest.mock('../../../src/utils/timeout-validator', () => {
 describe('TikTok gift aggregation timer error handling', () => {
     beforeEach(() => {
         scheduledAggregationCallback = null;
-        jest.clearAllMocks();
+        clearAllMocks();
+    });
+
+    afterEach(() => {
+        restoreAllMocks();
+        restoreAllModuleMocks();
+        resetModules();
     });
 
     it('routes aggregation timer failures through the error handler without crashing', async () => {
         const { TikTokPlatform } = require('../../../src/platforms/tiktok');
 
         const mockLogger = {
-            debug: jest.fn(),
-            info: jest.fn(() => {
+            debug: createMockFn(),
+            info: createMockFn(() => {
                 throw new Error('logger failure');
             }),
-            warn: jest.fn(),
-            error: jest.fn()
+            warn: createMockFn(),
+            error: createMockFn()
         };
 
         const errorHandler = {
-            handleEventProcessingError: jest.fn()
+            handleEventProcessingError: createMockFn()
         };
 
         const platform = new TikTokPlatform(
             { enabled: true, username: 'gift_tester', giftAggregationEnabled: true },
             {
-                TikTokWebSocketClient: jest.fn(() => ({})),
+                TikTokWebSocketClient: createMockFn(() => ({})),
                 WebcastEvent: {},
                 ControlEvent: {},
                 logger: mockLogger

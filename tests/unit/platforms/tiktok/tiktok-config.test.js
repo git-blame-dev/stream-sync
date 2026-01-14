@@ -1,3 +1,5 @@
+const { describe, test, expect } = require('bun:test');
+const { createMockFn } = require('../../../helpers/bun-mock-utils');
 const { ConfigValidator } = require('../../../../src/utils/config-validator');
 
 const {
@@ -7,10 +9,10 @@ const {
 
 describe('TikTok config helpers', () => {
     const logger = {
-        debug: jest.fn(),
-        info: jest.fn(),
-        warn: jest.fn(),
-        error: jest.fn()
+        debug: createMockFn(),
+        info: createMockFn(),
+        warn: createMockFn(),
+        error: createMockFn()
     };
 
     test('normalizes TikTok config values while dropping unsupported keys', () => {

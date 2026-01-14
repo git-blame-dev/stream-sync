@@ -1,18 +1,20 @@
 
+const { describe, it, expect } = require('bun:test');
+const { createMockFn } = require('../helpers/bun-mock-utils');
 const { PlatformConnectionFactory } = require('../../../src/utils/platform-connection-factory');
 
 const createMockLogger = () => ({
-  debug: jest.fn(),
-  info: jest.fn(),
-  warn: jest.fn(),
-  error: jest.fn()
+  debug: createMockFn(),
+  info: createMockFn(),
+  warn: createMockFn(),
+  error: createMockFn()
 });
 
 describe('TikTok connection creation', () => {
   it('wraps connector instances so they expose EventEmitter methods for listener setup', async () => {
     // Arrange: a connector that only implements connect (no emitter surface)
-    const bareConnectorInstance = { connect: jest.fn().mockResolvedValue(true) };
-    const TikTokWebSocketClient = jest.fn(() => bareConnectorInstance);
+    const bareConnectorInstance = { connect: createMockFn().mockResolvedValue(true) };
+    const TikTokWebSocketClient = createMockFn(() => bareConnectorInstance);
     const logger = createMockLogger();
     const factory = new PlatformConnectionFactory(logger);
 
@@ -23,7 +25,7 @@ describe('TikTok connection creation', () => {
     );
 
     // Assert: EventEmitter surface is present and functional
-    const handler = jest.fn();
+    const handler = createMockFn();
     connection.on('connected', handler);
     connection.emit('connected', 'payload');
 

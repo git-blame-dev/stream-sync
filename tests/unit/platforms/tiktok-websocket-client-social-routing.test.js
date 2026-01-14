@@ -1,10 +1,12 @@
+const { describe, it, expect } = require('bun:test');
+const { createMockFn } = require('../helpers/bun-mock-utils');
 const { TikTokWebSocketClient } = require('../../../src/platforms/tiktok-websocket-client');
 
 describe('TikTokWebSocketClient social routing', () => {
     it('emits social without follow for share actionType', () => {
         const client = new TikTokWebSocketClient('share_tester');
-        const socialHandler = jest.fn();
-        const followHandler = jest.fn();
+        const socialHandler = createMockFn();
+        const followHandler = createMockFn();
 
         client.on('social', socialHandler);
         client.on('follow', followHandler);
@@ -20,8 +22,8 @@ describe('TikTokWebSocketClient social routing', () => {
 
     it('emits follow for social payloads with follow wording but no actionType', () => {
         const client = new TikTokWebSocketClient('follow_tester');
-        const socialHandler = jest.fn();
-        const followHandler = jest.fn();
+        const socialHandler = createMockFn();
+        const followHandler = createMockFn();
 
         client.on('social', socialHandler);
         client.on('follow', followHandler);

@@ -1,3 +1,5 @@
+const { describe, test, expect } = require('bun:test');
+const { createMockFn } = require('../../../helpers/bun-mock-utils');
 const {
     createTikTokGiftAggregator
 } = require('../../../../src/platforms/tiktok/gifts/tiktok-gift-aggregator');
@@ -7,7 +9,7 @@ describe('TikTok gift aggregator', () => {
         const scheduledTimers = [];
         const timerHandle = { ref: 'timer-1' };
 
-        const safeSetTimeout = jest.fn((callback) => {
+        const safeSetTimeout = createMockFn((callback) => {
             scheduledTimers.push(callback);
             return timerHandle;
         });
@@ -18,8 +20,8 @@ describe('TikTok gift aggregator', () => {
         const platform = {
             giftAggregation: {},
             giftAggregationDelay: 2000,
-            logger: { debug: jest.fn(), info: jest.fn(), warn: jest.fn() },
-            errorHandler: { handleEventProcessingError: jest.fn() },
+            logger: { debug: createMockFn(), info: createMockFn(), warn: createMockFn() },
+            errorHandler: { handleEventProcessingError: createMockFn() },
             _handleGift: async () => undefined
         };
 

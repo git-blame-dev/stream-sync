@@ -1,6 +1,11 @@
+const { describe, test, expect, afterEach } = require('bun:test');
+const { clearAllMocks, restoreAllMocks } = require('../helpers/bun-mock-utils');
+const { mockModule, restoreAllModuleMocks, resetModules } = require('../helpers/bun-module-mocks');
+const { useFakeTimers, useRealTimers, advanceTimersByTime } = require('../helpers/bun-timers');
+
 // Mock ws to avoid real network connections
 const mockSockets = [];
-jest.mock('ws', () => {
+mockModule('ws', () => {
     const { EventEmitter } = require('events');
     class WS extends EventEmitter {
         constructor() {
@@ -30,12 +35,15 @@ const WebSocket = require('ws');
 describe('TikTokWebSocketClient (behavior)', () => {
     afterEach(() => {
         mockSockets.length = 0;
-        jest.clearAllMocks();
-        jest.useRealTimers();
+        clearAllMocks();
+        restoreAllMocks();
+        restoreAllModuleMocks();
+        resetModules();
+        useRealTimers();
     });
 
     test('resolves connect and emits room info and chat from batched messages', async () => {
-        jest.useFakeTimers();
+        useFakeTimers();
         const { TikTokWebSocketClient } = require('../../../src/platforms/tiktok-websocket-client');
         const client = new TikTokWebSocketClient('xenasosieoff', { apiKey: 'test_key' });
 
@@ -97,7 +105,7 @@ describe('TikTokWebSocketClient (behavior)', () => {
     });
 
     test('emits streamEnd on close code 4404 and rejects connect', async () => {
-        jest.useFakeTimers();
+        useFakeTimers();
         const { TikTokWebSocketClient } = require('../../../src/platforms/tiktok-websocket-client');
         const client = new TikTokWebSocketClient('xenasosieoff');
 
@@ -115,7 +123,7 @@ describe('TikTokWebSocketClient (behavior)', () => {
     });
 
     test('rejects connect when no room info arrives before timeout', async () => {
-        jest.useFakeTimers();
+        useFakeTimers();
         const { TikTokWebSocketClient } = require('../../../src/platforms/tiktok-websocket-client');
         const client = new TikTokWebSocketClient('xenasosieoff');
 
@@ -123,7 +131,7 @@ describe('TikTokWebSocketClient (behavior)', () => {
         const ws = mockSockets[0];
         ws.emit('open');
 
-        jest.advanceTimersByTime(16000);
+        advanceTimersByTime(16000);
 
         await expect(connectPromise).rejects.toThrow(/timeout/i);
     });

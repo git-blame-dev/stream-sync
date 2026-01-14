@@ -1,4 +1,8 @@
-jest.unmock('../../../src/platforms/tiktok');
+const { describe, it, expect, afterEach } = require('bun:test');
+const { createMockFn, restoreAllMocks } = require('../helpers/bun-mock-utils');
+const { unmockModule, restoreAllModuleMocks, resetModules } = require('../helpers/bun-module-mocks');
+
+unmockModule('../../../src/platforms/tiktok');
 
 const { EventEmitter } = require('events');
 
@@ -6,13 +10,19 @@ const { TikTokPlatform } = require('../../../src/platforms/tiktok');
 const { createMockTikTokPlatformDependencies } = require('../../helpers/mock-factories');
 
 describe('TikTokPlatform initialize failure propagation', () => {
+    afterEach(() => {
+        restoreAllMocks();
+        restoreAllModuleMocks();
+        resetModules();
+    });
+
     it('rejects initialize when the initial connection attempt fails', async () => {
         const failingConnection = new EventEmitter();
         failingConnection.isConnecting = false;
         failingConnection.isConnected = false;
         failingConnection.connected = false;
-        failingConnection.connect = jest.fn().mockRejectedValue(new Error('room id failure'));
-        failingConnection.disconnect = jest.fn().mockResolvedValue();
+        failingConnection.connect = createMockFn().mockRejectedValue(new Error('room id failure'));
+        failingConnection.disconnect = createMockFn().mockResolvedValue();
 
         const dependencies = createMockTikTokPlatformDependencies({
             controlEvent: { CONNECTED: 'connected', DISCONNECTED: 'disconnected', ERROR: 'error' },
@@ -37,12 +47,12 @@ describe('TikTokPlatform initialize failure propagation', () => {
         });
 
         dependencies.connectionFactory = {
-            createConnection: jest.fn().mockReturnValue(failingConnection)
+            createConnection: createMockFn().mockReturnValue(failingConnection)
         };
         dependencies.retrySystem = {
-            handleConnectionError: jest.fn().mockResolvedValue(),
-            resetRetryCount: jest.fn(),
-            isConnected: jest.fn()
+            handleConnectionError: createMockFn().mockResolvedValue(),
+            resetRetryCount: createMockFn(),
+            isConnected: createMockFn()
         };
 
         const platform = new TikTokPlatform({ enabled: true, username: 'retry_tester' }, dependencies);
