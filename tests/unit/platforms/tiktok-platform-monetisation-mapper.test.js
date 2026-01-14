@@ -1,5 +1,9 @@
 
-jest.mock('../../../src/core/logging', () => ({
+const { describe, it, expect, beforeEach, afterEach } = require('bun:test');
+const { mockModule, restoreAllModuleMocks, resetModules } = require('../helpers/bun-module-mocks');
+const { restoreAllMocks } = require('../helpers/bun-mock-utils');
+
+mockModule('../../../src/core/logging', () => ({
     logger: { debug: () => {}, info: () => {}, warn: () => {}, error: () => {} },
     getUnifiedLogger: () => ({ debug: () => {}, info: () => {}, warn: () => {}, error: () => {} })
 }));
@@ -11,6 +15,12 @@ const { PlatformEvents } = require('../../../src/interfaces/PlatformEvents');
 describe('TikTokPlatform monetisation mapping', () => {
     let platform;
     let emitted;
+
+    afterEach(() => {
+        restoreAllMocks();
+        restoreAllModuleMocks();
+        resetModules();
+    });
 
     beforeEach(() => {
         emitted = [];

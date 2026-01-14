@@ -1,18 +1,24 @@
+const { describe, test, expect, afterEach } = require('bun:test');
+const { createMockFn, restoreAllMocks } = require('../../../helpers/bun-mock-utils');
 const {
     setupTikTokEventListeners
 } = require('../../../../src/platforms/tiktok/events/tiktok-event-router');
 
 describe('TikTok event router', () => {
+    afterEach(() => {
+        restoreAllMocks();
+    });
+
     const createPlatformHarness = () => {
         const listeners = {};
         const emitted = [];
         const handledChatMessages = [];
 
         const connection = {
-            on: jest.fn((eventName, handler) => {
+            on: createMockFn((eventName, handler) => {
                 listeners[eventName] = handler;
             }),
-            removeAllListeners: jest.fn()
+            removeAllListeners: createMockFn()
         };
 
         const platform = {
@@ -41,25 +47,25 @@ describe('TikTok event router', () => {
             selfMessageDetectionService: null,
             config: { dataLoggingEnabled: false },
             logger: {
-                debug: jest.fn(),
-                info: jest.fn(),
-                warn: jest.fn()
+                debug: createMockFn(),
+                info: createMockFn(),
+                warn: createMockFn()
             },
             errorHandler: {
-                handleConnectionError: jest.fn(),
-                handleEventProcessingError: jest.fn(),
-                handleCleanupError: jest.fn()
+                handleConnectionError: createMockFn(),
+                handleEventProcessingError: createMockFn(),
+                handleCleanupError: createMockFn()
             },
-            _logIncomingEvent: jest.fn().mockResolvedValue(),
+            _logIncomingEvent: createMockFn().mockResolvedValue(),
             _emitPlatformEvent: (type, payload) => emitted.push({ type, payload }),
-            _handleStreamEnd: jest.fn(),
-            handleConnectionIssue: jest.fn(),
-            handleConnectionError: jest.fn(),
-            handleRetry: jest.fn(),
+            _handleStreamEnd: createMockFn(),
+            handleConnectionIssue: createMockFn(),
+            handleConnectionError: createMockFn(),
+            handleRetry: createMockFn(),
             connectionActive: false,
             cachedViewerCount: 0,
             connectionTime: 0,
-            _getTimestamp: jest.fn(() => '2025-01-02T03:04:05.000Z'),
+            _getTimestamp: createMockFn(() => '2025-01-02T03:04:05.000Z'),
             _handleChatMessage: async () => handledChatMessages.push(true)
         };
 

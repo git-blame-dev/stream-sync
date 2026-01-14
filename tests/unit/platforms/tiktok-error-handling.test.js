@@ -1,56 +1,59 @@
 
-const { 
+const { describe, it, expect, beforeEach, afterEach } = require('bun:test');
+const {
     initializeTestLogging,
-    createTestUser, 
+    createTestUser,
     TEST_TIMEOUTS
 } = require('../../helpers/test-setup');
+const { createMockFn, restoreAllMocks } = require('../../helpers/bun-mock-utils');
+const { mockModule, restoreAllModuleMocks, resetModules } = require('../../helpers/bun-module-mocks');
 
-const { 
+const {
     createMockLogger
 } = require('../../helpers/mock-factories');
 
-const { 
+const {
     setupAutomatedCleanup
 } = require('../../helpers/mock-lifecycle');
 
-const { 
+const {
     expectNoTechnicalArtifacts
 } = require('../../helpers/assertion-helpers');
 
 // Mock the logger-utils module
-jest.mock('../../../src/utils/logger-utils', () => ({
+mockModule('../../../src/utils/logger-utils', () => ({
   getLazyLogger: () => ({
-    debug: jest.fn(),
-    info: jest.fn(),
-    warn: jest.fn(),
-    error: jest.fn()
+    debug: createMockFn(),
+    info: createMockFn(),
+    warn: createMockFn(),
+    error: createMockFn()
   }),
   createNoopLogger: () => ({
-    debug: jest.fn(),
-    info: jest.fn(),
-    warn: jest.fn(),
-    error: jest.fn()
+    debug: createMockFn(),
+    info: createMockFn(),
+    warn: createMockFn(),
+    error: createMockFn()
   }),
   getLoggerOrNoop: (logger) => logger || ({
-    debug: jest.fn(),
-    info: jest.fn(),
-    warn: jest.fn(),
-    error: jest.fn()
+    debug: createMockFn(),
+    info: createMockFn(),
+    warn: createMockFn(),
+    error: createMockFn()
   }),
   getLazyUnifiedLogger: () => ({
-    debug: jest.fn(),
-    info: jest.fn(),
-    warn: jest.fn(),
-    error: jest.fn()
+    debug: createMockFn(),
+    info: createMockFn(),
+    warn: createMockFn(),
+    error: createMockFn()
   })
 }));
 
 // Mock TikTok data extraction module
-jest.mock('../../../src/utils/tiktok-data-extraction', () => ({
-  extractTikTokUserData: jest.fn(() => ({ userId: 'testuser', username: 'testuser' })),
-  extractTikTokGiftData: jest.fn(() => ({ giftType: 'Rose', giftCount: 1, amount: 1, currency: 'coins', unitAmount: 1 })),
-  logTikTokGiftData: jest.fn(),
-  formatCoinAmount: jest.fn(() => ' [1 coin]')
+mockModule('../../../src/utils/tiktok-data-extraction', () => ({
+  extractTikTokUserData: createMockFn(() => ({ userId: 'testuser', username: 'testuser' })),
+  extractTikTokGiftData: createMockFn(() => ({ giftType: 'Rose', giftCount: 1, amount: 1, currency: 'coins', unitAmount: 1 })),
+  logTikTokGiftData: createMockFn(),
+  formatCoinAmount: createMockFn(() => ' [1 coin]')
 }));
 
 // Initialize logging AFTER mocks
@@ -64,6 +67,12 @@ setupAutomatedCleanup({
 });
 
 describe('TikTokPlatform Error Handling', () => {
+    afterEach(() => {
+        restoreAllMocks();
+        restoreAllModuleMocks();
+        resetModules();
+    });
+
     let TikTokPlatform;
     let mockConfig;
     let mockLogger;
@@ -76,19 +85,19 @@ describe('TikTokPlatform Error Handling', () => {
         
         // Create a simple mock connection
         mockConnection = {
-            connect: jest.fn(),
-            fetchIsLive: jest.fn(),
-            waitUntilLive: jest.fn(),
-            on: jest.fn(),
-            getState: jest.fn().mockReturnValue({ isConnected: false })
+            connect: createMockFn(),
+            fetchIsLive: createMockFn(),
+            waitUntilLive: createMockFn(),
+            on: createMockFn(),
+            getState: createMockFn().mockReturnValue({ isConnected: false })
         };
         
         mockRetrySystem = {
-            handleConnectionError: jest.fn(),
-            handleConnectionSuccess: jest.fn(),
-            resetRetryCount: jest.fn(),
-            incrementRetryCount: jest.fn(),
-            executeWithRetry: jest.fn()
+            handleConnectionError: createMockFn(),
+            handleConnectionSuccess: createMockFn(),
+            resetRetryCount: createMockFn(),
+            incrementRetryCount: createMockFn(),
+            executeWithRetry: createMockFn()
         };
         
         mockConfig = {
@@ -105,7 +114,7 @@ describe('TikTokPlatform Error Handling', () => {
         // Helper function to add missing methods to platform instances
         this.addMissingMethods = (platform) => {
             // Enhanced Mock Data Pattern - comprehensive error handling implementation
-            platform.handleConnectionError = jest.fn().mockImplementation((error) => {
+            platform.handleConnectionError = createMockFn().mockImplementation((error) => {
                 // Mock implementation that logs the error with specific TLS handling
                 const errorMessage = error?.message || (typeof error === 'string' ? error : 'Unknown error');
                 
@@ -124,7 +133,7 @@ describe('TikTokPlatform Error Handling', () => {
             
             // Add missing _checkStreamStatus method for stream status tests
             if (!platform._checkStreamStatus) {
-                platform._checkStreamStatus = jest.fn().mockImplementation(async () => {
+                platform._checkStreamStatus = createMockFn().mockImplementation(async () => {
                     try {
                         if (platform.connection && platform.connection.fetchIsLive) {
                             const result = await platform.connection.fetchIsLive();
@@ -153,14 +162,14 @@ describe('TikTokPlatform Error Handling', () => {
                 const platform = this.addMissingMethods(new TikTokPlatform(mockConfig, {
                     logger: mockLogger,
                     retrySystem: mockRetrySystem,
-                    WebcastPushConnection: jest.fn(() => mockConnection),
+                    WebcastPushConnection: createMockFn(() => mockConnection),
                     WebcastEvent: {
                         GIFT: 'gift',
                         FOLLOW: 'follow',
                         CHAT: 'chat'
                     },
                     ControlEvent: {},
-                    TikTokWebSocketClient: jest.fn(() => mockConnection),
+                    TikTokWebSocketClient: createMockFn(() => mockConnection),
                     constants: { GRACE_PERIODS: { TIKTOK: 5000 } },
                     app: null
                 }));
@@ -182,10 +191,10 @@ describe('TikTokPlatform Error Handling', () => {
                 const platform = this.addMissingMethods(new TikTokPlatform(mockConfig, {
                     logger: mockLogger,
                     retrySystem: mockRetrySystem,
-                    WebcastPushConnection: jest.fn(() => mockConnection),
+                    WebcastPushConnection: createMockFn(() => mockConnection),
                     WebcastEvent: { GIFT: 'gift', FOLLOW: 'follow', CHAT: 'chat' },
                     ControlEvent: {},
-                    TikTokWebSocketClient: jest.fn(() => mockConnection)
+                    TikTokWebSocketClient: createMockFn(() => mockConnection)
                 }));
                 
                 const errorWithoutMessage = {};
@@ -210,10 +219,10 @@ describe('TikTokPlatform Error Handling', () => {
                 const platform = this.addMissingMethods(new TikTokPlatform(mockConfig, {
                     logger: mockLogger,
                     retrySystem: mockRetrySystem,
-                    WebcastPushConnection: jest.fn(() => mockConnection),
+                    WebcastPushConnection: createMockFn(() => mockConnection),
                     WebcastEvent: { GIFT: 'gift', FOLLOW: 'follow', CHAT: 'chat' },
                     ControlEvent: {},
-                    TikTokWebSocketClient: jest.fn(() => mockConnection)
+                    TikTokWebSocketClient: createMockFn(() => mockConnection)
                 }));
                 
                 // Act & Assert
@@ -231,10 +240,10 @@ describe('TikTokPlatform Error Handling', () => {
                 const platform = this.addMissingMethods(new TikTokPlatform(mockConfig, {
                     logger: mockLogger,
                     retrySystem: mockRetrySystem,
-                    WebcastPushConnection: jest.fn(() => mockConnection),
+                    WebcastPushConnection: createMockFn(() => mockConnection),
                     WebcastEvent: { GIFT: 'gift', FOLLOW: 'follow', CHAT: 'chat' },
                     ControlEvent: {},
-                    TikTokWebSocketClient: jest.fn(() => mockConnection)
+                    TikTokWebSocketClient: createMockFn(() => mockConnection)
                 }));
                 
                 const stringError = 'Connection timeout';
@@ -255,10 +264,10 @@ describe('TikTokPlatform Error Handling', () => {
                 const platform = this.addMissingMethods(new TikTokPlatform(mockConfig, {
                     logger: mockLogger,
                     retrySystem: mockRetrySystem,
-                    WebcastPushConnection: jest.fn(() => mockConnection),
+                    WebcastPushConnection: createMockFn(() => mockConnection),
                     WebcastEvent: { GIFT: 'gift', FOLLOW: 'follow', CHAT: 'chat' },
                     ControlEvent: {},
-                    TikTokWebSocketClient: jest.fn(() => mockConnection)
+                    TikTokWebSocketClient: createMockFn(() => mockConnection)
                 }));
                 
                 const tlsError = new Error('Client network socket disconnected before secure TLS connection was established');
@@ -281,10 +290,10 @@ describe('TikTokPlatform Error Handling', () => {
             const platform = this.addMissingMethods(new TikTokPlatform(mockConfig, {
                 logger: mockLogger,
                 retrySystem: null, // No retry system to test direct error logging
-                WebcastPushConnection: jest.fn(() => mockConnection),
+                WebcastPushConnection: createMockFn(() => mockConnection),
                 WebcastEvent: { GIFT: 'gift', FOLLOW: 'follow', CHAT: 'chat' },
                 ControlEvent: {},
-                TikTokWebSocketClient: jest.fn(() => mockConnection)
+                TikTokWebSocketClient: createMockFn(() => mockConnection)
             }));
             platform.retrySystem = null; // Override for this specific test
             
@@ -304,14 +313,14 @@ describe('TikTokPlatform Error Handling', () => {
             const platform = this.addMissingMethods(new TikTokPlatform(mockConfig, {
                 logger: mockLogger,
                 retrySystem: mockRetrySystem,
-                WebcastPushConnection: jest.fn(() => mockConnection),
+                WebcastPushConnection: createMockFn(() => mockConnection),
                 WebcastEvent: { GIFT: 'gift', FOLLOW: 'follow', CHAT: 'chat' },
                 ControlEvent: {},
-                TikTokWebSocketClient: jest.fn(() => mockConnection)
+                TikTokWebSocketClient: createMockFn(() => mockConnection)
             }));
             
             // Mock fetchIsLive to throw error without message
-            mockConnection.fetchIsLive = jest.fn().mockRejectedValue({});
+            mockConnection.fetchIsLive = createMockFn().mockRejectedValue({});
             platform.connection = mockConnection;
             
             // Act - Simulate the internal _checkStreamStatus behavior when fetchIsLive fails

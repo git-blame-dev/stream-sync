@@ -1,4 +1,6 @@
 
+const { describe, it, expect } = require('bun:test');
+const { createMockFn } = require('../helpers/bun-mock-utils');
 const EventEmitter = require('events');
 const PlatformEventRouter = require('../../../src/services/PlatformEventRouter');
 const { TikTokPlatform } = require('../../../src/platforms/tiktok');
@@ -34,8 +36,8 @@ describe('TikTok follow/share routing', () => {
         new PlatformEventRouter({
             eventBus,
             runtime,
-            notificationManager: { handleNotification: jest.fn() },
-            configService: { areNotificationsEnabled: jest.fn(() => true) },
+            notificationManager: { handleNotification: createMockFn() },
+            configService: { areNotificationsEnabled: createMockFn(() => true) },
             logger: { warn: () => {}, info: () => {}, debug: () => {}, error: () => {} }
         });
 
@@ -56,8 +58,8 @@ describe('TikTok follow/share routing', () => {
         new PlatformEventRouter({
             eventBus,
             runtime,
-            notificationManager: { handleNotification: jest.fn() },
-            configService: { areNotificationsEnabled: jest.fn(() => true) },
+            notificationManager: { handleNotification: createMockFn() },
+            configService: { areNotificationsEnabled: createMockFn(() => true) },
             logger: { warn: () => {}, info: () => {}, debug: () => {}, error: () => {} }
         });
         const emitted = [];

@@ -1,3 +1,5 @@
+const { describe, test, expect } = require('bun:test');
+const { createMockFn } = require('../../../helpers/bun-mock-utils');
 const {
     createTikTokConnectionOrchestrator
 } = require('../../../../src/platforms/tiktok/connection/tiktok-connection-orchestrator');
@@ -5,7 +7,7 @@ const {
 describe('TikTok connection orchestrator', () => {
     test('connect is a no-op when connection prerequisites fail', async () => {
         const platform = {
-            logger: { debug: jest.fn(), info: jest.fn(), warn: jest.fn() },
+            logger: { debug: createMockFn(), info: createMockFn(), warn: createMockFn() },
             config: { username: '' },
             connectingPromise: null,
             connectionActive: false,
@@ -14,9 +16,9 @@ describe('TikTok connection orchestrator', () => {
             listenersConfigured: false,
             checkConnectionPrerequisites: () => ({ canConnect: false, reason: 'Username is required' }),
             connectionStateManager: {
-                markDisconnected: jest.fn(),
-                markConnecting: jest.fn(),
-                markError: jest.fn(),
+                markDisconnected: createMockFn(),
+                markConnecting: createMockFn(),
+                markError: createMockFn(),
                 ensureConnection: () => {
                     throw new Error('ensureConnection should not be called');
                 }
@@ -27,7 +29,7 @@ describe('TikTok connection orchestrator', () => {
             handleConnectionSuccess: async () => {
                 throw new Error('handleConnectionSuccess should not be called');
             },
-            errorHandler: { handleConnectionError: jest.fn() }
+            errorHandler: { handleConnectionError: createMockFn() }
         };
 
         const orchestrator = createTikTokConnectionOrchestrator({ platform });

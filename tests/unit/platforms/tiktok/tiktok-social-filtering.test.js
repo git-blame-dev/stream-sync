@@ -1,15 +1,25 @@
-jest.unmock('../../../../src/platforms/tiktok');
+const { describe, test, expect, afterEach } = require('bun:test');
+const { createMockFn, restoreAllMocks } = require('../../../helpers/bun-mock-utils');
+const { unmockModule, restoreAllModuleMocks, resetModules } = require('../../../helpers/bun-module-mocks');
+
+unmockModule('../../../../src/platforms/tiktok');
 
 const { TikTokPlatform } = require('../../../../src/platforms/tiktok');
 const { createMockTikTokPlatformDependencies } = require('../../../helpers/mock-factories');
 const testClock = require('../../../helpers/test-clock');
 
 describe('TikTok social filtering', () => {
+    afterEach(() => {
+        restoreAllMocks();
+        restoreAllModuleMocks();
+        resetModules();
+    });
+
     const baseConfig = { enabled: true, username: 'social_tester' };
 
     const createPlatform = () => new TikTokPlatform(baseConfig, {
         ...createMockTikTokPlatformDependencies(),
-        timestampService: { extractTimestamp: jest.fn(() => new Date(testClock.now()).toISOString()) }
+        timestampService: { extractTimestamp: createMockFn(() => new Date(testClock.now()).toISOString()) }
     });
 
     test('ignores social actions that are not follow/share', async () => {

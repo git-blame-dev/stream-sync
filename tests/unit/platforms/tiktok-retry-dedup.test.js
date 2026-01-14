@@ -1,4 +1,8 @@
-jest.unmock('../../../src/platforms/tiktok');
+const { describe, it, expect, afterEach } = require('bun:test');
+const { createMockFn, restoreAllMocks } = require('../helpers/bun-mock-utils');
+const { unmockModule, restoreAllModuleMocks, resetModules } = require('../helpers/bun-module-mocks');
+
+unmockModule('../../../src/platforms/tiktok');
 
 const { TikTokPlatform } = require('../../../src/platforms/tiktok');
 const { createMockTikTokPlatformDependencies } = require('../../helpers/mock-factories');
@@ -6,18 +10,24 @@ const { createMockTikTokPlatformDependencies } = require('../../helpers/mock-fac
 describe('TikTokPlatform retry deduplication', () => {
     const baseConfig = { enabled: true, username: 'retry_tester' };
 
+    afterEach(() => {
+        restoreAllMocks();
+        restoreAllModuleMocks();
+        resetModules();
+    });
+
     it('only schedules one retry when queueRetry is invoked multiple times before a reconnect starts', () => {
-        const retrySystem = { handleConnectionError: jest.fn() };
+        const retrySystem = { handleConnectionError: createMockFn() };
         const dependencies = createMockTikTokPlatformDependencies();
         dependencies.retrySystem = retrySystem;
         dependencies.logger = dependencies.logger || {
-            debug: jest.fn(),
-            info: jest.fn(),
-            warn: jest.fn(),
-            error: jest.fn()
+            debug: createMockFn(),
+            info: createMockFn(),
+            warn: createMockFn(),
+            error: createMockFn()
         };
         dependencies.connectionFactory = dependencies.connectionFactory || {
-            createConnection: jest.fn()
+            createConnection: createMockFn()
         };
 
         const platform = new TikTokPlatform(baseConfig, dependencies);
@@ -29,23 +39,23 @@ describe('TikTokPlatform retry deduplication', () => {
     });
 
     it('requeues a retry when the reconnect attempt fails, without double scheduling', async () => {
-        const retrySystem = { handleConnectionError: jest.fn() };
+        const retrySystem = { handleConnectionError: createMockFn() };
         const dependencies = createMockTikTokPlatformDependencies();
         dependencies.retrySystem = retrySystem;
         dependencies.logger = dependencies.logger || {
-            debug: jest.fn(),
-            info: jest.fn(),
-            warn: jest.fn(),
-            error: jest.fn()
+            debug: createMockFn(),
+            info: createMockFn(),
+            warn: createMockFn(),
+            error: createMockFn()
         };
         dependencies.connectionFactory = dependencies.connectionFactory || {
-            createConnection: jest.fn()
+            createConnection: createMockFn()
         };
 
         const platform = new TikTokPlatform(baseConfig, dependencies);
 
         // First reconnect attempt fails, second succeeds
-        platform._connect = jest.fn()
+        platform._connect = createMockFn()
             .mockRejectedValueOnce(new Error('connect-failed'))
             .mockResolvedValueOnce(true);
 
@@ -63,13 +73,13 @@ describe('TikTokPlatform retry deduplication', () => {
     it('logs connect invocation even when a connect is already in flight', async () => {
         const dependencies = createMockTikTokPlatformDependencies();
         dependencies.logger = {
-            debug: jest.fn(),
-            info: jest.fn(),
-            warn: jest.fn(),
-            error: jest.fn()
+            debug: createMockFn(),
+            info: createMockFn(),
+            warn: createMockFn(),
+            error: createMockFn()
         };
         dependencies.connectionFactory = {
-            createConnection: jest.fn()
+            createConnection: createMockFn()
         };
 
         const platform = new TikTokPlatform(baseConfig, dependencies);

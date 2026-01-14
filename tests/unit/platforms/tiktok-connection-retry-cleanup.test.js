@@ -1,4 +1,8 @@
-jest.unmock('../../../src/platforms/tiktok');
+const { describe, it, expect, afterEach } = require('bun:test');
+const { createMockFn, restoreAllMocks } = require('../helpers/bun-mock-utils');
+const { unmockModule, restoreAllModuleMocks, resetModules } = require('../helpers/bun-module-mocks');
+
+unmockModule('../../../src/platforms/tiktok');
 
 const { EventEmitter } = require('events');
 const { TikTokPlatform } = require('../../../src/platforms/tiktok');
@@ -8,7 +12,9 @@ describe('TikTokPlatform connection recovery', () => {
     const baseConfig = { enabled: true, username: 'retry_tester' };
 
     afterEach(() => {
-        jest.restoreAllMocks();
+        restoreAllMocks();
+        restoreAllModuleMocks();
+        resetModules();
     });
 
     const createConnection = ({ shouldReject, id }) => {
@@ -17,7 +23,7 @@ describe('TikTokPlatform connection recovery', () => {
         connection.isConnecting = false;
         connection.isConnected = false;
         connection.connected = false;
-        connection.connect = jest.fn(() => {
+        connection.connect = createMockFn(() => {
             connection.isConnecting = true;
             if (shouldReject) {
                 return Promise.reject(new Error('room id failure'));
@@ -27,7 +33,7 @@ describe('TikTokPlatform connection recovery', () => {
             connection.connected = true;
             return Promise.resolve(true);
         });
-        connection.disconnect = jest.fn().mockResolvedValue(true);
+        connection.disconnect = createMockFn().mockResolvedValue(true);
         connection.removeAllListeners = connection.removeAllListeners.bind(connection);
         return connection;
     };
@@ -59,7 +65,7 @@ describe('TikTokPlatform connection recovery', () => {
         });
 
         const connectionFactory = {
-            createConnection: jest.fn()
+            createConnection: createMockFn()
                 .mockReturnValueOnce(connection1)
                 .mockReturnValueOnce(connection2)
         };

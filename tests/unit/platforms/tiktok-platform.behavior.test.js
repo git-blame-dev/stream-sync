@@ -1,39 +1,43 @@
-jest.unmock('../../../src/platforms/tiktok');
+const { describe, it, expect } = require('bun:test');
+const { createMockFn, restoreAllMocks } = require('../helpers/bun-mock-utils');
+const { unmockModule, restoreAllModuleMocks, resetModules } = require('../helpers/bun-module-mocks');
+
+unmockModule('../../../src/platforms/tiktok');
 
 const { TikTokPlatform } = require('../../../src/platforms/tiktok');
 const { PlatformEvents } = require('../../../src/interfaces/PlatformEvents');
 
 const createLogger = () => ({
-    debug: jest.fn(),
-    info: jest.fn(),
-    warn: jest.fn(),
-    error: jest.fn()
+    debug: createMockFn(),
+    info: createMockFn(),
+    warn: createMockFn(),
+    error: createMockFn()
 });
 
 const createPlatform = (configOverrides = {}, dependencyOverrides = {}) => {
     const logger = dependencyOverrides.logger || createLogger();
     const notificationManager = dependencyOverrides.notificationManager || {
-        emit: jest.fn(),
-        on: jest.fn(),
-        removeListener: jest.fn(),
-        handleNotification: jest.fn().mockResolvedValue()
+        emit: createMockFn(),
+        on: createMockFn(),
+        removeListener: createMockFn(),
+        handleNotification: createMockFn().mockResolvedValue()
     };
     const connectionFactory = dependencyOverrides.connectionFactory || {
-        createConnection: jest.fn().mockReturnValue({
-            on: jest.fn(),
-            emit: jest.fn(),
-            removeAllListeners: jest.fn(),
-            connect: jest.fn(),
-            disconnect: jest.fn()
+        createConnection: createMockFn().mockReturnValue({
+            on: createMockFn(),
+            emit: createMockFn(),
+            removeAllListeners: createMockFn(),
+            connect: createMockFn(),
+            disconnect: createMockFn()
         })
     };
 
-    const TikTokWebSocketClient = dependencyOverrides.TikTokWebSocketClient || jest.fn().mockImplementation(() => ({
-        on: jest.fn(),
-        off: jest.fn(),
-        connect: jest.fn(),
-        disconnect: jest.fn(),
-        getState: jest.fn().mockReturnValue('DISCONNECTED'),
+    const TikTokWebSocketClient = dependencyOverrides.TikTokWebSocketClient || createMockFn().mockImplementation(() => ({
+        on: createMockFn(),
+        off: createMockFn(),
+        connect: createMockFn(),
+        disconnect: createMockFn(),
+        getState: createMockFn().mockReturnValue('DISCONNECTED'),
         isConnecting: false,
         isConnected: false
     }));
@@ -60,6 +64,12 @@ const createPlatform = (configOverrides = {}, dependencyOverrides = {}) => {
 };
 
 describe('TikTokPlatform behavior alignment', () => {
+    afterEach(() => {
+        restoreAllMocks();
+        restoreAllModuleMocks();
+        resetModules();
+    });
+
     describe('gift handling', () => {
         it('emits a user-facing error when gift count is zero and does not throw', async () => {
             const platform = createPlatform();
@@ -234,16 +244,16 @@ describe('TikTokPlatform behavior alignment', () => {
                     FOLLOW: 'follow',
                     SOCIAL: 'social'
                 },
-                connectionFactory: { createConnection: jest.fn() }
+                connectionFactory: { createConnection: createMockFn() }
             });
 
             const listeners = {};
             const connection = {
-                on: jest.fn((event, handler) => { listeners[event] = handler; }),
-                off: jest.fn(),
-                connect: jest.fn(),
-                disconnect: jest.fn(),
-                removeAllListeners: jest.fn(),
+                on: createMockFn((event, handler) => { listeners[event] = handler; }),
+                off: createMockFn(),
+                connect: createMockFn(),
+                disconnect: createMockFn(),
+                removeAllListeners: createMockFn(),
                 isConnecting: false,
                 isConnected: false
             };
@@ -274,7 +284,7 @@ describe('TikTokPlatform behavior alignment', () => {
             expect(() => new TikTokPlatform({ enabled: true, username: 'tester' }, {
                 WebcastEvent: { ERROR: 'error', DISCONNECT: 'disconnect' },
                 ControlEvent: {},
-                connectionFactory: { createConnection: jest.fn() },
+                connectionFactory: { createConnection: createMockFn() },
                 logger
             })).toThrow(/TikTokWebSocketClient/i);
         });
@@ -282,9 +292,9 @@ describe('TikTokPlatform behavior alignment', () => {
         it('fails fast when WebcastEvent is missing', () => {
             const logger = createLogger();
             expect(() => new TikTokPlatform({ enabled: true, username: 'tester' }, {
-                TikTokWebSocketClient: jest.fn(),
+                TikTokWebSocketClient: createMockFn(),
                 ControlEvent: {},
-                connectionFactory: { createConnection: jest.fn() },
+                connectionFactory: { createConnection: createMockFn() },
                 logger
             })).toThrow(/WebcastEvent/i);
         });

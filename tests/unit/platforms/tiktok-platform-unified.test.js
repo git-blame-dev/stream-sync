@@ -1,6 +1,10 @@
 
-jest.unmock('../../../src/platforms/tiktok');
-jest.unmock('../../../src/services/PlatformEventRouter');
+const { describe, it, expect, beforeEach, afterEach } = require('bun:test');
+const { createMockFn, restoreAllMocks } = require('../helpers/bun-mock-utils');
+const { unmockModule, restoreAllModuleMocks, resetModules } = require('../helpers/bun-module-mocks');
+
+unmockModule('../../../src/platforms/tiktok');
+unmockModule('../../../src/services/PlatformEventRouter');
 
 const PlatformEventRouter = require('../../../src/services/PlatformEventRouter');
 const { PlatformEvents } = require('../../../src/interfaces/PlatformEvents');
@@ -11,6 +15,12 @@ describe('TikTokPlatform unified event contract (expected behavior)', () => {
     let platform;
     let mockEventBus;
     let runtime;
+
+    afterEach(() => {
+        restoreAllMocks();
+        restoreAllModuleMocks();
+        resetModules();
+    });
 
     beforeEach(() => {
         mockEventBus = {
@@ -30,18 +40,18 @@ describe('TikTokPlatform unified event contract (expected behavior)', () => {
         };
 
         runtime = {
-            handleChatMessage: jest.fn(),
-            handleFollowNotification: jest.fn(),
-            handleGiftNotification: jest.fn(),
-            handlePaypiggyNotification: jest.fn(),
-            handleRaidNotification: jest.fn()
+            handleChatMessage: createMockFn(),
+            handleFollowNotification: createMockFn(),
+            handleGiftNotification: createMockFn(),
+            handlePaypiggyNotification: createMockFn(),
+            handleRaidNotification: createMockFn()
         };
 
         new PlatformEventRouter({
             eventBus: mockEventBus,
             runtime,
-            notificationManager: { handleNotification: jest.fn() },
-            configService: { areNotificationsEnabled: jest.fn(() => true) },
+            notificationManager: { handleNotification: createMockFn() },
+            configService: { areNotificationsEnabled: createMockFn(() => true) },
             logger: { debug: () => {}, info: () => {}, warn: () => {}, error: () => {} }
         });
 
@@ -50,11 +60,11 @@ describe('TikTokPlatform unified event contract (expected behavior)', () => {
         const mockDependencies = {
             logger: mockLogger,
             connectionFactory: {
-                createConnection: jest.fn().mockReturnValue({
-                    connect: jest.fn().mockResolvedValue(),
-                    disconnect: jest.fn().mockResolvedValue(),
-                    on: jest.fn(),
-                    removeAllListeners: jest.fn()
+                createConnection: createMockFn().mockReturnValue({
+                    connect: createMockFn().mockResolvedValue(),
+                    disconnect: createMockFn().mockResolvedValue(),
+                    on: createMockFn(),
+                    removeAllListeners: createMockFn()
                 })
             },
             TikTokWebSocketClient: class MockConnection {
@@ -75,7 +85,7 @@ describe('TikTokPlatform unified event contract (expected behavior)', () => {
             },
             ControlEvent: {},
             timestampService: {
-                extractTimestamp: jest.fn(() => new Date(testClock.now()).toISOString())
+                extractTimestamp: createMockFn(() => new Date(testClock.now()).toISOString())
             }
         };
 

@@ -1,4 +1,9 @@
-jest.unmock('../../../src/platforms/tiktok');
+const { describe, it, expect, beforeEach, afterEach } = require('bun:test');
+const { createMockFn, restoreAllMocks } = require('../helpers/bun-mock-utils');
+const { unmockModule, restoreAllModuleMocks, resetModules } = require('../helpers/bun-module-mocks');
+const { useFakeTimers, useRealTimers, runOnlyPendingTimers } = require('../helpers/bun-timers');
+
+unmockModule('../../../src/platforms/tiktok');
 
 const { TikTokPlatform } = require('../../../src/platforms/tiktok');
 const { createMockTikTokPlatformDependencies } = require('../../helpers/mock-factories');
@@ -10,13 +15,13 @@ describe('TikTokPlatform gift aggregation and schema behavior', () => {
     const createDependencies = () => ({
         ...createMockTikTokPlatformDependencies(),
         timestampService: {
-            extractTimestamp: jest.fn(() => new Date(testClock.now()).toISOString())
+            extractTimestamp: createMockFn(() => new Date(testClock.now()).toISOString())
         },
         connectionFactory: {
-            createConnection: jest.fn(() => ({
-                on: jest.fn(),
-                removeAllListeners: jest.fn(),
-                disconnect: jest.fn(),
+            createConnection: createMockFn(() => ({
+                on: createMockFn(),
+                removeAllListeners: createMockFn(),
+                disconnect: createMockFn(),
                 isConnected: false
             }))
         }
@@ -35,20 +40,19 @@ describe('TikTokPlatform gift aggregation and schema behavior', () => {
     };
 
     const runAllGiftTimers = async () => {
-        if (typeof jest.runOnlyPendingTimersAsync === 'function') {
-            await jest.runOnlyPendingTimersAsync();
-        } else {
-            jest.runOnlyPendingTimers();
-            await Promise.resolve();
-        }
+        runOnlyPendingTimers();
+        await Promise.resolve();
     };
 
     beforeEach(() => {
-        jest.useFakeTimers();
+        useFakeTimers();
     });
 
     afterEach(() => {
-        jest.useRealTimers();
+        useRealTimers();
+        restoreAllMocks();
+        restoreAllModuleMocks();
+        resetModules();
     });
 
     it('emits aggregated gifts with normalized user schema and correct amount', async () => {

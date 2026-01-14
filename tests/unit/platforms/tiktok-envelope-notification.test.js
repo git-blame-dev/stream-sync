@@ -1,6 +1,8 @@
 
+const { describe, test, expect, beforeEach, afterEach } = require('bun:test');
 // Core testing infrastructure
 const { initializeTestLogging, createTestUser, TEST_TIMEOUTS } = require('../../helpers/test-setup');
+const { createMockFn, clearAllMocks, restoreAllMocks } = require('../../helpers/bun-mock-utils');
 const { createMockLogger, createMockNotificationBuilder, createMockConfig } = require('../../helpers/mock-factories');
 const { setupAutomatedCleanup } = require('../../helpers/mock-lifecycle');
 const { expectNoTechnicalArtifacts, expectValidNotification } = require('../../helpers/assertion-helpers');
@@ -88,7 +90,7 @@ describe('TikTok Envelope Notification - Behavior Testing', () => {
         capturedGiftCalls = [];
         
         // Mock gift handler that captures calls for validation
-        mockGiftHandler = jest.fn(async (platform, username, giftData) => {
+        mockGiftHandler = createMockFn(async (platform, username, giftData) => {
             const call = {
                 platform,
                 username,
@@ -117,7 +119,8 @@ describe('TikTok Envelope Notification - Behavior Testing', () => {
     });
 
     afterEach(() => {
-        jest.clearAllMocks();
+        clearAllMocks();
+        restoreAllMocks();
         capturedGiftCalls = [];
     });
 

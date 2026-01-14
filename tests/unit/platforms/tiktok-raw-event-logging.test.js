@@ -1,14 +1,24 @@
+const { describe, it, expect, afterEach } = require('bun:test');
+const { createMockFn, restoreAllMocks } = require('../helpers/bun-mock-utils');
+const { unmockModule, restoreAllModuleMocks, resetModules } = require('../helpers/bun-module-mocks');
+
 // Use real implementation (jest.setup mocks the platform by default).
-jest.unmock('../../../src/platforms/tiktok');
+unmockModule('../../../src/platforms/tiktok');
 
 const { TikTokPlatform } = require('../../../src/platforms/tiktok');
 
 describe('TikTokPlatform raw event logging', () => {
+    afterEach(() => {
+        restoreAllMocks();
+        restoreAllModuleMocks();
+        resetModules();
+    });
+
     const createPlatform = ({ dataLoggingEnabled }) => {
         const platform = Object.create(TikTokPlatform.prototype);
         platform.config = { dataLoggingEnabled };
-        platform.logger = { warn: jest.fn() };
-        platform.logRawPlatformData = jest.fn().mockResolvedValue();
+        platform.logger = { warn: createMockFn() };
+        platform.logRawPlatformData = createMockFn().mockResolvedValue();
         return platform;
     };
 
