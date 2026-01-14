@@ -1,5 +1,8 @@
-const TwitchEventSub = jest.requireActual('../../../src/platforms/twitch-eventsub');
-const { StreamElementsPlatform } = jest.requireActual('../../../src/platforms/streamelements');
+const { describe, test, expect } = require('bun:test');
+const { requireActual } = require('../../helpers/bun-module-mocks');
+
+const TwitchEventSub = requireActual('../../../src/platforms/twitch-eventsub');
+const { StreamElementsPlatform } = requireActual('../../../src/platforms/streamelements');
 
 describe('platform config parsing behavior', () => {
     test('TwitchEventSub parses dataLoggingEnabled string values', () => {
