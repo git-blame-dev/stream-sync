@@ -1,5 +1,7 @@
 
 // MANDATORY imports
+const { describe, test, beforeEach, afterEach, expect } = require('bun:test');
+
 const { 
   initializeTestLogging,
   TEST_TIMEOUTS 
@@ -14,6 +16,8 @@ const {
   expectNoTechnicalArtifacts
 } = require('../helpers/assertion-helpers');
 const testClock = require('../helpers/test-clock');
+
+const { createMockFn, restoreAllMocks } = require('../helpers/bun-mock-utils');
 
 // Import system components
 const { normalizeMessage } = require('../../src/utils/message-normalization');
@@ -31,7 +35,7 @@ setupAutomatedCleanup({
 const TEST_TIMESTAMP = 1234567890000;
 
 const buildTimestampService = () => ({
-  extractTimestamp: jest.fn((platform, data) => {
+  extractTimestamp: createMockFn((platform, data) => {
     if (platform !== 'tiktok') {
       throw new Error('Unsupported platform');
     }
@@ -45,9 +49,13 @@ describe('TikTok End-to-End Unknown User Fix Integration', () => {
     testClock.reset();
   });
 
+  afterEach(() => {
+    restoreAllMocks();
+  });
+
   describe('Complete TikTok Message Processing Pipeline', () => {
     describe('when processing actual TikTok chat message', () => {
-      it('should show actual username in final notification output', () => {
+      test('should show actual username in final notification output', () => {
         // Arrange: TikTok chat message structure (test fixture)
         const actualTikTokMessage = {
           "comment": "Love your stream! 🎉",
@@ -83,9 +91,9 @@ describe('TikTok End-to-End Unknown User Fix Integration', () => {
         // Validate notification data has no technical artifacts
         expectNoTechnicalArtifacts(notificationData.username);
         expect(notificationData.username).not.toBe('unknown');
-      }, TEST_TIMEOUTS.INTEGRATION);
+      }, { timeout: TEST_TIMEOUTS.INTEGRATION });
 
-      it('should handle unicode usernames correctly in complete pipeline', () => {
+      test('should handle unicode usernames correctly in complete pipeline', () => {
         // Arrange: TikTok message with unicode/international username
         const unicodeTikTokMessage = {
           "comment": "你好! Hello from China 🇨🇳",
@@ -111,13 +119,13 @@ describe('TikTok End-to-End Unknown User Fix Integration', () => {
         // Validate unicode content quality
         expectNoTechnicalArtifacts(normalizedMessage.username);
         expect(normalizedMessage.username).toMatch(/[\u4e00-\u9fff]/); // Contains Chinese characters
-      }, TEST_TIMEOUTS.INTEGRATION);
+      }, { timeout: TEST_TIMEOUTS.INTEGRATION });
     });
   });
 
   describe('Complete TikTok Gift Processing Pipeline', () => {
     describe('when processing actual TikTok gift event', () => {
-      it('should show actual gift sender username in final notification', () => {
+      test('should show actual gift sender username in final notification', () => {
         // Arrange: TikTok gift structure (test fixture)
         const actualTikTokGift = {
           "user": {
@@ -168,9 +176,9 @@ describe('TikTok End-to-End Unknown User Fix Integration', () => {
         expectNoTechnicalArtifacts(giftNotification.displayMessage);
         expect(giftNotification.displayMessage).not.toContain('Unknown User');
         expect(giftNotification.displayMessage).not.toContain('unknown');
-      }, TEST_TIMEOUTS.INTEGRATION);
+      }, { timeout: TEST_TIMEOUTS.INTEGRATION });
 
-      it('should handle combo gifts with actual usernames', () => {
+      test('should handle combo gifts with actual usernames', () => {
         // Arrange: TikTok combo gift (multiple gifts in sequence)
         const comboGiftData = {
           "user": {
@@ -215,13 +223,13 @@ describe('TikTok End-to-End Unknown User Fix Integration', () => {
         expect(comboNotification.displayMessage).toBe('testGiftUserCombo finished combo: 1x TestGiftCombo');
         expectNoTechnicalArtifacts(comboNotification.displayMessage);
         expect(comboNotification.displayMessage).not.toContain('Unknown User');
-      }, TEST_TIMEOUTS.INTEGRATION);
+      }, { timeout: TEST_TIMEOUTS.INTEGRATION });
     });
   });
 
   describe('Error Recovery and Fallback Behavior', () => {
     describe('when TikTok data is partially corrupted', () => {
-      it('should gracefully handle missing username fields', () => {
+      test('should gracefully handle missing username fields', () => {
         // Arrange: TikTok data missing all username fields
         const corruptedData = {
           "comment": "Test message with no user data",
@@ -238,13 +246,13 @@ describe('TikTok End-to-End Unknown User Fix Integration', () => {
 
         expect(() => extractTikTokUserData(corruptedData))
           .toThrow('user.userId and user.uniqueId');
-      }, TEST_TIMEOUTS.INTEGRATION);
+      }, { timeout: TEST_TIMEOUTS.INTEGRATION });
     });
   });
 
   describe('Performance and Memory Impact', () => {
     describe('when processing multiple TikTok events rapidly', () => {
-      it('should maintain performance with actual data structures', () => {
+      test('should maintain performance with actual data structures', () => {
         // Arrange: Multiple TikTok events simulating real stream activity
         const multipleEvents = Array.from({ length: 100 }, (_, i) => ({
           "user": {
@@ -284,7 +292,7 @@ describe('TikTok End-to-End Unknown User Fix Integration', () => {
           r.userData.username === 'Unknown User'
         );
         expect(unknownUserEvents).toHaveLength(0);
-      }, TEST_TIMEOUTS.SLOW);
+      }, { timeout: TEST_TIMEOUTS.SLOW });
     });
   });
 });

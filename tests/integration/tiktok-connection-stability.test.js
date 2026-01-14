@@ -1,4 +1,6 @@
 
+const { describe, it, beforeEach, afterEach, expect } = require('bun:test');
+
 const { 
   initializeTestLogging,
   createTestUser, 
@@ -15,51 +17,54 @@ const {
   setupAutomatedCleanup
 } = require('../helpers/mock-lifecycle');
 
+const { createMockFn, restoreAllMocks } = require('../helpers/bun-mock-utils');
+const { mockModule, requireActual, resetModules, restoreAllModuleMocks } = require('../helpers/bun-module-mocks');
+
 // Mock the logger-utils module
-jest.mock('../../src/utils/logger-utils', () => ({
+mockModule('../../src/utils/logger-utils', () => ({
   getLazyLogger: () => ({
-    debug: jest.fn(),
-    info: jest.fn(),
-    warn: jest.fn(),
-    error: jest.fn()
+    debug: createMockFn(),
+    info: createMockFn(),
+    warn: createMockFn(),
+    error: createMockFn()
   }),
   createNoopLogger: () => ({
-    debug: jest.fn(),
-    info: jest.fn(),
-    warn: jest.fn(),
-    error: jest.fn()
+    debug: createMockFn(),
+    info: createMockFn(),
+    warn: createMockFn(),
+    error: createMockFn()
   }),
   getLoggerOrNoop: (logger) => logger || ({
-    debug: jest.fn(),
-    info: jest.fn(),
-    warn: jest.fn(),
-    error: jest.fn()
+    debug: createMockFn(),
+    info: createMockFn(),
+    warn: createMockFn(),
+    error: createMockFn()
   }),
   getLazyUnifiedLogger: () => ({
-    debug: jest.fn(),
-    info: jest.fn(),
-    warn: jest.fn(),
-    error: jest.fn()
+    debug: createMockFn(),
+    info: createMockFn(),
+    warn: createMockFn(),
+    error: createMockFn()
   })
 }));
 
 // Mock message normalization module
-jest.mock('../../src/utils/message-normalization', () => ({
-  normalizeTikTokMessage: jest.fn(() => ({
+mockModule('../../src/utils/message-normalization', () => ({
+  normalizeTikTokMessage: createMockFn(() => ({
     message: 'test message',
     username: 'testuser',
     platform: 'tiktok'
   })),
-  validateNormalizedMessage: jest.fn(() => ({ isValid: true, issues: [] }))
+  validateNormalizedMessage: createMockFn(() => ({ isValid: true, issues: [] }))
 }));
 
 // Initialize logging FIRST
 initializeTestLogging();
 
 // Override the global TikTokPlatform mock to use the real implementation for construction testing
-jest.doMock('../../src/platforms/tiktok', () => {
+mockModule('../../src/platforms/tiktok', () => {
     // Import the actual TikTokPlatform for construction tests
-    const actualModule = jest.requireActual('../../src/platforms/tiktok');
+    const actualModule = requireActual('../../src/platforms/tiktok');
     return {
         ...actualModule,
         // Keep the real TikTokPlatform constructor
@@ -75,6 +80,12 @@ setupAutomatedCleanup({
 });
 
 const { TikTokPlatform } = require('../../src/platforms/tiktok');
+
+afterEach(() => {
+  restoreAllMocks();
+  restoreAllModuleMocks();
+  resetModules();
+});
 
 describe('TikTok Platform Validation', () => {
   let mockLogger;
@@ -99,10 +110,10 @@ describe('TikTok Platform Validation', () => {
       
       const dependencies = {
         logger: mockLogger,
-        TikTokWebSocketClient: jest.fn(),
+        TikTokWebSocketClient: createMockFn(),
         WebcastEvent: { CHAT: 'chat', GIFT: 'gift', FOLLOW: 'follow' },
         ControlEvent: { CONNECTED: 'connected' },
-        WebcastPushConnection: jest.fn(),
+        WebcastPushConnection: createMockFn(),
         constants: { GRACE_PERIODS: { TIKTOK: 5000 } }
       };
       
@@ -121,10 +132,10 @@ describe('TikTok Platform Validation', () => {
       const config = { enabled: true, username: 'test_user' };
       const dependencies = {
         logger: mockLogger,
-        TikTokWebSocketClient: jest.fn(),
+        TikTokWebSocketClient: createMockFn(),
         WebcastEvent: { CHAT: 'chat', GIFT: 'gift', FOLLOW: 'follow' },
         ControlEvent: { CONNECTED: 'connected' },
-        WebcastPushConnection: jest.fn(),
+        WebcastPushConnection: createMockFn(),
         constants: { GRACE_PERIODS: { TIKTOK: 5000 } }
       };
       
@@ -142,10 +153,10 @@ describe('TikTok Platform Validation', () => {
       const config = { enabled: true, username: 'test_user' };
       const dependencies = {
         logger: mockLogger,
-        TikTokWebSocketClient: jest.fn(),
+        TikTokWebSocketClient: createMockFn(),
         WebcastEvent: { CHAT: 'chat' },
         ControlEvent: { CONNECTED: 'connected' },
-        WebcastPushConnection: jest.fn(),
+        WebcastPushConnection: createMockFn(),
         constants: { GRACE_PERIODS: { TIKTOK: 5000 } }
       };
       
@@ -168,10 +179,10 @@ describe('TikTok Platform Validation', () => {
       const config = { enabled: true, username: 'test_user' };
       const dependencies = {
         logger: mockLogger,
-        TikTokWebSocketClient: jest.fn(),
+        TikTokWebSocketClient: createMockFn(),
         WebcastEvent: { CHAT: 'chat' },
         ControlEvent: { CONNECTED: 'connected' },
-        WebcastPushConnection: jest.fn(),
+        WebcastPushConnection: createMockFn(),
         constants: { GRACE_PERIODS: { TIKTOK: 5000 } }
       };
       
@@ -203,10 +214,10 @@ describe('TikTok Platform Validation', () => {
       const config = { enabled: true, username: 'test_user' };
       const dependencies = {
         logger: mockLogger,
-        TikTokWebSocketClient: jest.fn(),
+        TikTokWebSocketClient: createMockFn(),
         WebcastEvent: { CHAT: 'chat' },
         ControlEvent: { CONNECTED: 'connected' },
-        WebcastPushConnection: jest.fn(),
+        WebcastPushConnection: createMockFn(),
         constants: { GRACE_PERIODS: { TIKTOK: 5000 } }
       };
       

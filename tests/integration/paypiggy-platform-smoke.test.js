@@ -1,3 +1,5 @@
+const { describe, test, afterEach, expect } = require('bun:test');
+
 const EventEmitter = require('events');
 const PlatformLifecycleService = require('../../src/services/PlatformLifecycleService');
 const NotificationManager = require('../../src/notifications/NotificationManager');
@@ -5,8 +7,13 @@ const { createTestAppRuntime } = require('../helpers/runtime-test-harness');
 const { createMockDisplayQueue, createMockLogger } = require('../helpers/mock-factories');
 const { createTextProcessingManager } = require('../../src/utils/text-processing');
 const { expectNoTechnicalArtifacts } = require('../helpers/assertion-helpers');
+const { createMockFn, restoreAllMocks } = require('../helpers/bun-mock-utils');
 
 describe('Paypiggy platform flows (smoke)', () => {
+    afterEach(() => {
+        restoreAllMocks();
+    });
+
     const createEventBus = () => {
         const emitter = new EventEmitter();
         return {
@@ -20,18 +27,18 @@ describe('Paypiggy platform flows (smoke)', () => {
     };
 
     const createConfigService = (config) => ({
-        areNotificationsEnabled: jest.fn().mockReturnValue(true),
-        getPlatformConfig: jest.fn().mockReturnValue(true),
-        getNotificationSettings: jest.fn().mockReturnValue({ enabled: true, duration: 4000 }),
-        get: jest.fn((section) => {
+        areNotificationsEnabled: createMockFn().mockReturnValue(true),
+        getPlatformConfig: createMockFn().mockReturnValue(true),
+        getNotificationSettings: createMockFn().mockReturnValue({ enabled: true, duration: 4000 }),
+        get: createMockFn((section) => {
             if (!section) {
                 return config;
             }
             return config[section] || {};
         }),
-        isDebugEnabled: jest.fn().mockReturnValue(false),
-        getTTSConfig: jest.fn().mockReturnValue({ enabled: false }),
-        isEnabled: jest.fn().mockReturnValue(true)
+        isDebugEnabled: createMockFn().mockReturnValue(false),
+        getTTSConfig: createMockFn().mockReturnValue({ enabled: false }),
+        isEnabled: createMockFn().mockReturnValue(true)
     });
 
     const assertNonEmptyString = (value) => {
@@ -100,14 +107,14 @@ describe('Paypiggy platform flows (smoke)', () => {
             configService,
             constants: require('../../src/core/constants'),
             textProcessing,
-            obsGoals: { processDonationGoal: jest.fn() },
-            vfxCommandService: { getVFXConfig: jest.fn().mockResolvedValue(null) },
-            ttsService: { speak: jest.fn() },
-            userTrackingService: { isFirstMessage: jest.fn().mockResolvedValue(false) }
+            obsGoals: { processDonationGoal: createMockFn() },
+            vfxCommandService: { getVFXConfig: createMockFn().mockResolvedValue(null) },
+            ttsService: { speak: createMockFn() },
+            userTrackingService: { isFirstMessage: createMockFn().mockResolvedValue(false) }
         });
 
         const streamDetector = {
-            startStreamDetection: jest.fn(async (_platformName, _config, connectCallback) => connectCallback())
+            startStreamDetection: createMockFn(async (_platformName, _config, connectCallback) => connectCallback())
         };
         const platformConfig = { enabled: true };
         if (platformKey === 'youtube') {
@@ -180,7 +187,7 @@ describe('Paypiggy platform flows (smoke)', () => {
         }
     };
 
-    it('routes Twitch paypiggy through lifecycle, router, and runtime', async () => {
+    test('routes Twitch paypiggy through lifecycle, router, and runtime', async () => {
         await runPaypiggySmoke({
             platformKey: 'twitch',
             handlerName: 'onPaypiggy',
@@ -204,7 +211,7 @@ describe('Paypiggy platform flows (smoke)', () => {
         });
     });
 
-    it('routes YouTube memberships through lifecycle, router, and runtime', async () => {
+    test('routes YouTube memberships through lifecycle, router, and runtime', async () => {
         await runPaypiggySmoke({
             platformKey: 'youtube',
             handlerName: 'onPaypiggy',
@@ -227,7 +234,7 @@ describe('Paypiggy platform flows (smoke)', () => {
         });
     });
 
-    it('routes TikTok subscriptions through lifecycle, router, and runtime', async () => {
+    test('routes TikTok subscriptions through lifecycle, router, and runtime', async () => {
         await runPaypiggySmoke({
             platformKey: 'tiktok',
             handlerName: 'onPaypiggy',
