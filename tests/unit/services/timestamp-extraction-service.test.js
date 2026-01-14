@@ -1,4 +1,6 @@
-
+const { describe, it, beforeAll, beforeEach, afterEach, expect, jest } = require('bun:test');
+const { createMockFn, clearAllMocks } = require('../../helpers/bun-mock-utils');
+const { useFakeTimers, useRealTimers } = require('../../helpers/bun-timers');
 const { 
     initializeTestLogging,
     createTestUser, 
@@ -42,9 +44,9 @@ describe('TimestampExtractionService Behavior', () => {
     beforeEach(() => {
         mockLogger = createMockLogger();
         mockPerformanceTracker = {
-            recordExtraction: jest.fn()
+            recordExtraction: createMockFn()
         };
-        jest.useFakeTimers();
+        useFakeTimers();
         jest.setSystemTime(new Date(testClock.now()));
         
         if (TimestampExtractionService) {
@@ -53,11 +55,11 @@ describe('TimestampExtractionService Behavior', () => {
                 performanceTracker: mockPerformanceTracker
             });
         }
-        jest.clearAllMocks();
+        clearAllMocks();
     });
 
     afterEach(() => {
-        jest.useRealTimers();
+        useRealTimers();
     });
 
     describe('TikTok Timestamp Preservation', () => {

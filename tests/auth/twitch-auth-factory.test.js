@@ -1,48 +1,54 @@
 
-const { describe, test, expect, beforeEach, afterEach } = require('@jest/globals');
+const { describe, test, expect, beforeEach, afterEach } = require('bun:test');
+const { createMockFn, restoreAllMocks } = require('../helpers/bun-mock-utils');
+const { mockModule, resetModules, restoreAllModuleMocks } = require('../helpers/bun-module-mocks');
 
 // Initialize test logging FIRST
 const { initializeTestLogging, createMockConfig } = require('../helpers/test-setup');
 initializeTestLogging();
 
 // Mock TwitchAuthManager to prevent actual auth system initialization
-jest.mock('../../src/auth/TwitchAuthManager', () => {
-    let currentConfig = {};
-    let currentState = 'READY';
-    
-    const mockInstance = {
-        initialize: jest.fn().mockResolvedValue(),
-        getState: jest.fn().mockReturnValue('READY'),
-        getConfig: jest.fn(() => currentConfig),
-        updateConfig: jest.fn((config) => {
-            currentConfig = { ...config };
-        }),
-        cleanup: jest.fn().mockImplementation(async () => {
-            currentState = 'UNINITIALIZED';
-            mockInstance.getState = jest.fn().mockReturnValue('UNINITIALIZED');
-        }),
-        getAuthProvider: jest.fn().mockResolvedValue({
-            getAccessTokenForUser: jest.fn().mockResolvedValue('mock-token')
-        }),
-        getUserId: jest.fn().mockResolvedValue(123456789),
-        getAccessToken: jest.fn().mockResolvedValue('mock-access-token'),
-        getStatus: jest.fn().mockReturnValue({
-            state: 'READY',
-            hasAuthProvider: true,
-            userId: 123456789,
-            configValid: true,
-            lastError: null
-        })
-    };
-    
-    return {
-        getInstance: jest.fn().mockImplementation((config) => {
-            currentConfig = { ...config };
-            return mockInstance;
-        }),
-        resetInstance: jest.fn()
-    };
-});
+const registerAuthManagerMock = () => {
+    mockModule('../../src/auth/TwitchAuthManager', () => {
+        let currentConfig = {};
+        let currentState = 'READY';
+
+        const mockInstance = {
+            initialize: createMockFn().mockResolvedValue(),
+            getState: createMockFn().mockReturnValue('READY'),
+            getConfig: createMockFn(() => currentConfig),
+            updateConfig: createMockFn((config) => {
+                currentConfig = { ...config };
+            }),
+            cleanup: createMockFn().mockImplementation(async () => {
+                currentState = 'UNINITIALIZED';
+                mockInstance.getState = createMockFn().mockReturnValue('UNINITIALIZED');
+            }),
+            getAuthProvider: createMockFn().mockResolvedValue({
+                getAccessTokenForUser: createMockFn().mockResolvedValue('mock-token')
+            }),
+            getUserId: createMockFn().mockResolvedValue(123456789),
+            getAccessToken: createMockFn().mockResolvedValue('mock-access-token'),
+            getStatus: createMockFn().mockReturnValue({
+                state: 'READY',
+                hasAuthProvider: true,
+                userId: 123456789,
+                configValid: true,
+                lastError: null
+            })
+        };
+
+        return {
+            getInstance: createMockFn().mockImplementation((config) => {
+                currentConfig = { ...config };
+                return mockInstance;
+            }),
+            resetInstance: createMockFn()
+        };
+    });
+};
+
+registerAuthManagerMock();
 
 describe('TwitchAuthFactory', () => {
     let TwitchAuthFactory;
@@ -50,12 +56,13 @@ describe('TwitchAuthFactory', () => {
 
     beforeEach(() => {
         // Clear any existing singleton instances
-        jest.resetModules();
-        
+        resetModules();
+        registerAuthManagerMock();
+
         // Re-initialize logging after module reset
         const { initializeTestLogging } = require('../helpers/test-setup');
         initializeTestLogging();
-        
+
         mockConfig = {
             clientId: 'test-client-id',
             clientSecret: 'test-client-secret',
@@ -75,6 +82,8 @@ describe('TwitchAuthFactory', () => {
         } catch (error) {
             // Ignore cleanup errors
         }
+        restoreAllMocks();
+        restoreAllModuleMocks();
     });
 
     describe('Factory Creation and Dependency Injection', () => {

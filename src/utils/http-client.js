@@ -1,5 +1,4 @@
 
-const axios = require('axios');
 const { getUnifiedLogger } = require('../core/logging');
 const { config: appConfig } = require('../core/config');
 
@@ -10,7 +9,8 @@ const resolveTimeout = (value, fallback) => {
 
 class HttpClient {
     constructor(config = {}) {
-        this.logger = getUnifiedLogger();
+        this.logger = config.logger || getUnifiedLogger();
+        this.axios = config.axios || require('axios');
         this.defaultTimeout = resolveTimeout(config.timeout, appConfig.http.defaultTimeoutMs);
         this.reachabilityTimeoutMs = resolveTimeout(
             config.reachabilityTimeoutMs,
@@ -43,7 +43,7 @@ class HttpClient {
 
         try {
             this.logger.debug(`HTTP GET: ${url}`, 'http-client');
-            const response = await axios.get(url, config);
+            const response = await this.axios.get(url, config);
             this.logger.debug(`HTTP GET Success: ${url} (${response.status})`, 'http-client');
             return response;
         } catch (error) {
@@ -65,7 +65,7 @@ class HttpClient {
 
         try {
             this.logger.debug(`HTTP POST: ${url}`, 'http-client');
-            const response = await axios.post(url, data, config);
+            const response = await this.axios.post(url, data, config);
             this.logger.debug(`HTTP POST Success: ${url} (${response.status})`, 'http-client');
             return response;
         } catch (error) {

@@ -1,20 +1,20 @@
+const { describe, it, beforeEach, afterEach, expect } = require('bun:test');
+const { createMockFn, clearAllMocks, restoreAllMocks, spyOn } = require('../../helpers/bun-mock-utils');
 const { YouTubeStreamDetectionService } = require('../../../src/services/youtube-stream-detection-service');
 const testClock = require('../../helpers/test-clock');
 
-const logger = { debug: jest.fn(), info: jest.fn(), warn: jest.fn(), error: jest.fn() };
+const logger = { debug: createMockFn(), info: createMockFn(), warn: createMockFn(), error: createMockFn() };
 
 describe('YouTubeStreamDetectionService behavior', () => {
     let dateNowSpy;
 
     beforeEach(() => {
-        jest.clearAllMocks();
-        dateNowSpy = jest.spyOn(Date, 'now').mockImplementation(() => testClock.now());
+        clearAllMocks();
+        dateNowSpy = spyOn(Date, 'now').mockImplementation(() => testClock.now());
     });
 
     afterEach(() => {
-        if (dateNowSpy) {
-            dateNowSpy.mockRestore();
-        }
+        restoreAllMocks();
     });
 
     it('returns error response for invalid channel handle', async () => {
@@ -41,7 +41,7 @@ describe('YouTubeStreamDetectionService behavior', () => {
 
     it('formats successful detection with validated video IDs', async () => {
         const service = new YouTubeStreamDetectionService({}, { logger });
-        service._performDetection = jest.fn().mockResolvedValue({
+        service._performDetection = createMockFn().mockResolvedValue({
             streams: [{ videoId: 'ABCDEFGHIJK' }, { videoId: 'invalid' }],
             hasContent: true,
             detectionMethod: 'youtubei'
@@ -57,7 +57,7 @@ describe('YouTubeStreamDetectionService behavior', () => {
 
     it('opens circuit breaker after repeated failures', async () => {
         const service = new YouTubeStreamDetectionService({}, { logger });
-        service._performDetection = jest.fn().mockRejectedValue(new Error('timeout error'));
+        service._performDetection = createMockFn().mockRejectedValue(new Error('timeout error'));
 
         await service.detectLiveStreams('channel');
         await service.detectLiveStreams('channel');

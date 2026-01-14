@@ -1,5 +1,4 @@
 
-const WebSocket = require('ws');
 const { EventEmitter } = require('events');
 const { safeSetTimeout, safeSetInterval } = require('../utils/timeout-validator');
 const { createPlatformErrorHandler } = require('../utils/platform-error-handler');
@@ -22,6 +21,7 @@ class StreamElementsPlatform extends EventEmitter {
         // debugLog function removed - using logger.debug directly
         this.logger = logger;
         this.platformLogger = logger;
+        this.WebSocketCtor = dependencies.WebSocketCtor || require('ws');
         this.incrementRetryCount = retrySystem.incrementRetryCount.bind(retrySystem);
         this.resetRetryCount = retrySystem.resetRetryCount.bind(retrySystem);
         this.retryHandleConnectionError = retrySystem.handleConnectionError.bind(retrySystem);
@@ -84,7 +84,7 @@ class StreamElementsPlatform extends EventEmitter {
     }
 
     isConnected() {
-        return !!(this.connection && this.connection.readyState === WebSocket.OPEN && this.isReady);
+        return !!(this.connection && this.connection.readyState === this.WebSocketCtor.OPEN && this.isReady);
     }
 
     async connect() {
@@ -115,7 +115,7 @@ class StreamElementsPlatform extends EventEmitter {
     async connectToWebSocket() {
         const wsUrl = STREAMELEMENTS.WEBSOCKET;
         
-        this.connection = new WebSocket(wsUrl);
+        this.connection = new this.WebSocketCtor(wsUrl);
         this.setupEventListeners();
         
         // Wait for connection to be established
@@ -336,7 +336,7 @@ class StreamElementsPlatform extends EventEmitter {
     }
 
     sendMessage(message) {
-        if (this.connection && this.connection.readyState === WebSocket.OPEN) {
+        if (this.connection && this.connection.readyState === this.WebSocketCtor.OPEN) {
             this.connection.send(JSON.stringify(message));
         } else {
             this.logger.debug('[StreamElements] Cannot send message - WebSocket not connected', 'streamelements');

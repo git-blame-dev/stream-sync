@@ -1,3 +1,4 @@
+const { describe, test, expect } = require('bun:test');
 const { createRuntimeConstants } = require('../../../src/core/runtime-constants');
 
 const buildRequiredConfig = () => ({

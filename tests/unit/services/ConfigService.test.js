@@ -1,13 +1,16 @@
+const { describe, it, beforeEach, afterEach, expect } = require('bun:test');
+const { createMockFn, clearAllMocks } = require('../../helpers/bun-mock-utils');
+const { mockModule, restoreAllModuleMocks } = require('../../helpers/bun-module-mocks');
 
 const { ConfigService, createConfigService } = require('../../../src/services/ConfigService');
 
 // Mock the logger
-jest.mock('../../../src/core/logging', () => ({
+mockModule('../../../src/core/logging', () => ({
     logger: {
-        debug: jest.fn(),
-        info: jest.fn(),
-        warn: jest.fn(),
-        error: jest.fn()
+        debug: createMockFn(),
+        info: createMockFn(),
+        warn: createMockFn(),
+        error: createMockFn()
     }
 }));
 
@@ -18,19 +21,19 @@ describe('ConfigService', () => {
 
     beforeEach(() => {
         // Reset all mocks
-        jest.clearAllMocks();
+        clearAllMocks();
 
         // Create mock EventBus
         mockEventBus = {
-            emit: jest.fn()
+            emit: createMockFn()
         };
 
         // Create mock config with both ConfigManager and direct access styles
         mockConfig = {
             // ConfigManager style methods
-            get: jest.fn(),
-            set: jest.fn(),
-            reload: jest.fn(),
+            get: createMockFn(),
+            set: createMockFn(),
+            reload: createMockFn(),
 
             // Direct property access style
             general: {
@@ -78,6 +81,10 @@ describe('ConfigService', () => {
                 maxLength: 500
             }
         };
+    });
+
+    afterEach(() => {
+        restoreAllModuleMocks();
     });
 
     describe('Constructor', () => {

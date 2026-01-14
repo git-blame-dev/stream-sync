@@ -1,7 +1,11 @@
-jest.mock('../../../src/utils/platform-error-handler', () => ({
-    createPlatformErrorHandler: jest.fn(() => ({
-        handleEventProcessingError: jest.fn(),
-        logOperationalError: jest.fn()
+const { describe, it, beforeEach, afterEach, expect } = require('bun:test');
+const { createMockFn, clearAllMocks } = require('../../helpers/bun-mock-utils');
+const { mockModule, restoreAllModuleMocks } = require('../../helpers/bun-module-mocks');
+
+mockModule('../../../src/utils/platform-error-handler', () => ({
+    createPlatformErrorHandler: createMockFn(() => ({
+        handleEventProcessingError: createMockFn(),
+        logOperationalError: createMockFn()
     }))
 }));
 
@@ -9,17 +13,21 @@ const { createPlatformErrorHandler } = require('../../../src/utils/platform-erro
 const { InnertubeService } = require('../../../src/services/innertube-service');
 
 describe('InnertubeService behavior', () => {
-    const createInstance = () => ({ getInfo: jest.fn(async () => ({ video: 'info' })) });
+    const createInstance = () => ({ getInfo: createMockFn(async () => ({ video: 'info' })) });
     let factory;
     let logger;
     let handler;
 
     beforeEach(() => {
-        jest.clearAllMocks();
-        factory = { createWithTimeout: jest.fn(async () => createInstance()) };
-        logger = { debug: jest.fn(), info: jest.fn(), warn: jest.fn(), error: jest.fn() };
-        handler = { handleEventProcessingError: jest.fn(), logOperationalError: jest.fn() };
+        clearAllMocks();
+        factory = { createWithTimeout: createMockFn(async () => createInstance()) };
+        logger = { debug: createMockFn(), info: createMockFn(), warn: createMockFn(), error: createMockFn() };
+        handler = { handleEventProcessingError: createMockFn(), logOperationalError: createMockFn() };
         createPlatformErrorHandler.mockReturnValue(handler);
+    });
+
+    afterEach(() => {
+        restoreAllModuleMocks();
     });
 
     it('reuses cached instances and tracks stats', async () => {
@@ -39,7 +47,7 @@ describe('InnertubeService behavior', () => {
     });
 
     it('wraps getInfo with provided timeout helper and updates lastUsed', async () => {
-        const withTimeout = jest.fn(async (promise, timeout, label) => promise);
+        const withTimeout = createMockFn(async (promise, timeout, label) => promise);
         const service = new InnertubeService(factory, { logger, withTimeout });
 
         const result = await service.getVideoInfo('abc123', { timeout: 5000, instanceKey: 'custom' });

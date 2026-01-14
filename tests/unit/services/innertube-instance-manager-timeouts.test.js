@@ -1,3 +1,5 @@
+const { describe, test, beforeEach, afterEach, expect } = require('bun:test');
+const { clearAllMocks } = require('../../helpers/bun-mock-utils');
 
 const InnertubeInstanceManagerModule = require('../../../src/services/innertube-instance-manager');
 const { createRuntimeConstantsFixture } = require('../../helpers/runtime-constants-fixture');
@@ -14,7 +16,7 @@ describe('InnertubeInstanceManager timeouts', () => {
     afterEach(async () => {
         await InnertubeInstanceManagerModule.cleanup();
         InnertubeInstanceManagerModule._resetInstance();
-        jest.clearAllMocks();
+        clearAllMocks();
     });
 
     test('uses the platform default TTL when no override is provided', () => {

@@ -204,6 +204,8 @@ class DependencyFactory {
                 apiClient: this._createTwitchApiClient(normalizedConfig, logger),
                 ChatFileLoggingService, // Include extracted service
                 selfMessageDetectionService,
+                axios: options.axios,
+                WebSocketCtor: options.WebSocketCtor,
                 ...sanitizedOptions // Allow options to override defaults (without overriding auth resources)
             };
 
@@ -418,11 +420,12 @@ class DependencyFactory {
     }
 
     _resolveTikTokConnectorDependencies(options = {}) {
+        const connectorOverrides = options.tiktokConnector || {};
         const resolved = {
-            TikTokWebSocketClient: options.TikTokWebSocketClient,
-            WebcastEvent: options.WebcastEvent,
-            ControlEvent: options.ControlEvent,
-            WebcastPushConnection: options.WebcastPushConnection
+            TikTokWebSocketClient: options.TikTokWebSocketClient || connectorOverrides.TikTokWebSocketClient,
+            WebcastEvent: options.WebcastEvent || connectorOverrides.WebcastEvent,
+            ControlEvent: options.ControlEvent || connectorOverrides.ControlEvent,
+            WebcastPushConnection: options.WebcastPushConnection || connectorOverrides.WebcastPushConnection
         };
 
         const fallbackEvents = () => ({

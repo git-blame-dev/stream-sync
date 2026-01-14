@@ -1,24 +1,28 @@
 
-const { EventBus, createEventBus } = require('../../../src/core/EventBus');
-const { logger } = require('../../../src/core/logging');
-const { PlatformEvents } = require('../../../src/interfaces/PlatformEvents');
+const { describe, test, expect, beforeEach, afterEach, afterAll } = require('bun:test');
+const { createMockFn, clearAllMocks } = require('../../helpers/bun-mock-utils');
+const { mockModule, restoreAllModuleMocks } = require('../../helpers/bun-module-mocks');
 const testClock = require('../../helpers/test-clock');
 
 // Mock logger to capture debug output
-jest.mock('../../../src/core/logging', () => ({
+mockModule('../../../src/core/logging', () => ({
     logger: {
-        debug: jest.fn(),
-        error: jest.fn(),
-        warn: jest.fn(),
-        info: jest.fn()
+        debug: createMockFn(),
+        error: createMockFn(),
+        warn: createMockFn(),
+        info: createMockFn()
     }
 }));
+
+const { EventBus, createEventBus } = require('../../../src/core/EventBus');
+const { logger } = require('../../../src/core/logging');
+const { PlatformEvents } = require('../../../src/interfaces/PlatformEvents');
 
 describe('EventBus', () => {
     let eventBus;
     
     beforeEach(() => {
-        jest.clearAllMocks();
+        clearAllMocks();
         eventBus = new EventBus({ debugEnabled: true });
     });
     
@@ -64,7 +68,7 @@ describe('EventBus', () => {
 
     describe('Event Subscription', () => {
         test('should subscribe to events successfully', () => {
-            const handler = jest.fn();
+            const handler = createMockFn();
             const unsubscribe = eventBus.subscribe('test-event', handler);
             
             expect(typeof unsubscribe).toBe('function');
@@ -78,7 +82,7 @@ describe('EventBus', () => {
         });
 
         test('should support once subscription', () => {
-            const handler = jest.fn();
+            const handler = createMockFn();
             eventBus.subscribe('test-event', handler, { once: true });
             
             eventBus.emit('test-event', 'data');
@@ -89,7 +93,7 @@ describe('EventBus', () => {
 
         test('should support context binding', () => {
             const context = { name: 'TestContext', value: 42 };
-            const handler = jest.fn(function() {
+            const handler = createMockFn(function() {
                 return this.value;
             });
             
@@ -101,7 +105,7 @@ describe('EventBus', () => {
         });
 
         test('should return unsubscribe function from subscription', () => {
-            const handler = jest.fn();
+            const handler = createMockFn();
             const unsubscribe = eventBus.subscribe('test-event', handler);
             
             expect(eventBus.listenerCount('test-event')).toBe(1);
@@ -112,9 +116,9 @@ describe('EventBus', () => {
         });
 
         test('should handle multiple subscribers to same event', () => {
-            const handler1 = jest.fn();
-            const handler2 = jest.fn();
-            const handler3 = jest.fn();
+            const handler1 = createMockFn();
+            const handler2 = createMockFn();
+            const handler3 = createMockFn();
             
             eventBus.subscribe('test-event', handler1);
             eventBus.subscribe('test-event', handler2);
@@ -132,7 +136,7 @@ describe('EventBus', () => {
 
     describe('Event Emission', () => {
         test('should emit events successfully', () => {
-            const handler = jest.fn();
+            const handler = createMockFn();
             eventBus.subscribe('test-event', handler);
             
             const result = eventBus.emit('test-event', 'data', 42, { key: 'value' });
@@ -148,7 +152,7 @@ describe('EventBus', () => {
         });
 
         test('should update event statistics on emission', () => {
-            const handler = jest.fn();
+            const handler = createMockFn();
             eventBus.subscribe('test-event', handler);
             
             eventBus.emit('test-event');
@@ -163,7 +167,7 @@ describe('EventBus', () => {
 
     describe('Async Handler Support', () => {
         test('should handle async handlers successfully', async () => {
-            const asyncHandler = jest.fn(async (data) => {
+            const asyncHandler = createMockFn(async (data) => {
                 await waitForDelay(10);
                 return data.toUpperCase();
             });
@@ -181,7 +185,7 @@ describe('EventBus', () => {
         });
 
         test('should handle async handler errors', async () => {
-            const errorHandler = jest.fn(async () => {
+            const errorHandler = createMockFn(async () => {
                 throw new Error('Async handler error');
             });
             
@@ -196,7 +200,7 @@ describe('EventBus', () => {
         });
 
         test('should handle Promise-returning handlers', async () => {
-            const promiseHandler = jest.fn(() => {
+            const promiseHandler = createMockFn(() => {
                 return Promise.resolve('success');
             });
             
@@ -215,11 +219,11 @@ describe('EventBus', () => {
 
     describe('Error Handling and Isolation', () => {
         test('should isolate handler errors from other handlers', async () => {
-            const goodHandler = jest.fn();
-            const errorHandler = jest.fn(() => {
+            const goodHandler = createMockFn();
+            const errorHandler = createMockFn(() => {
                 throw new Error('Handler failed');
             });
-            const anotherGoodHandler = jest.fn();
+            const anotherGoodHandler = createMockFn();
             
             eventBus.subscribe('test-event', goodHandler);
             eventBus.subscribe('test-event', errorHandler);
@@ -240,10 +244,10 @@ describe('EventBus', () => {
         });
 
         test('should emit handler-error event when handler fails', async () => {
-            const errorHandler = jest.fn(() => {
+            const errorHandler = createMockFn(() => {
                 throw new Error('Test error');
             });
-            const errorEventHandler = jest.fn();
+            const errorEventHandler = createMockFn();
             
             eventBus.subscribe('test-event', errorHandler);
             eventBus.subscribe('handler-error', errorEventHandler);
@@ -260,10 +264,10 @@ describe('EventBus', () => {
         });
 
         test('does not re-emit handler-error when handler-error handler fails', async () => {
-            const errorHandler = jest.fn(() => {
+            const errorHandler = createMockFn(() => {
                 throw new Error('Test error');
             });
-            const handlerErrorHandler = jest.fn(() => {
+            const handlerErrorHandler = createMockFn(() => {
                 throw new Error('Handler error failure');
             });
 
@@ -279,7 +283,7 @@ describe('EventBus', () => {
 
         test('should handle context errors gracefully', async () => {
             const context = { name: 'TestContext' };
-            const errorHandler = jest.fn(function() {
+            const errorHandler = createMockFn(function() {
                 throw new Error('Context error');
             });
             
@@ -295,10 +299,10 @@ describe('EventBus', () => {
 
         test('should truncate long arguments in error reporting', async () => {
             const longObject = { data: 'x'.repeat(200) };
-            const errorHandler = jest.fn(() => {
+            const errorHandler = createMockFn(() => {
                 throw new Error('Handler error');
             });
-            const errorEventHandler = jest.fn();
+            const errorEventHandler = createMockFn();
             
             eventBus.subscribe('test-event', errorHandler);
             eventBus.subscribe('handler-error', errorEventHandler);
@@ -318,7 +322,7 @@ describe('EventBus', () => {
 
     describe('Unsubscribe Functionality', () => {
         test('should unsubscribe handlers successfully', () => {
-            const handler = jest.fn();
+            const handler = createMockFn();
             eventBus.subscribe('test-event', handler);
             
             expect(eventBus.listenerCount('test-event')).toBe(1);
@@ -331,7 +335,7 @@ describe('EventBus', () => {
 
         test('should handle unsubscribe with context', () => {
             const context = { name: 'TestContext' };
-            const handler = jest.fn();
+            const handler = createMockFn();
             
             eventBus.subscribe('test-event', handler, { context });
             
@@ -344,7 +348,7 @@ describe('EventBus', () => {
         test('should not unsubscribe handler with different context', () => {
             const context1 = { name: 'Context1' };
             const context2 = { name: 'Context2' };
-            const handler = jest.fn();
+            const handler = createMockFn();
             
             eventBus.subscribe('test-event', handler, { context: context1 });
             
@@ -355,7 +359,7 @@ describe('EventBus', () => {
         });
 
         test('should warn when handler not found for unsubscription', () => {
-            const handler = jest.fn();
+            const handler = createMockFn();
             
             const result = eventBus.unsubscribe('nonexistent-event', handler);
             
@@ -363,7 +367,7 @@ describe('EventBus', () => {
         });
 
         test('should handle multiple handlers with same function reference', () => {
-            const handler = jest.fn();
+            const handler = createMockFn();
             const context1 = { name: 'Context1' };
             const context2 = { name: 'Context2' };
             
@@ -391,8 +395,8 @@ describe('EventBus', () => {
 
     describe('Once Functionality', () => {
         test('should call once handlers only once', () => {
-            const onceHandler = jest.fn();
-            const regularHandler = jest.fn();
+            const onceHandler = createMockFn();
+            const regularHandler = createMockFn();
             
             eventBus.subscribe('test-event', onceHandler, { once: true });
             eventBus.subscribe('test-event', regularHandler);
@@ -405,7 +409,7 @@ describe('EventBus', () => {
         });
 
         test('should support unsubscribing once handlers before they trigger', () => {
-            const onceHandler = jest.fn();
+            const onceHandler = createMockFn();
             const unsubscribe = eventBus.subscribe('test-event', onceHandler, { once: true });
             
             unsubscribe();
@@ -424,7 +428,7 @@ describe('EventBus', () => {
                 }
             };
             
-            const handler = jest.fn(function() {
+            const handler = createMockFn(function() {
                 return this.getValue();
             });
             
@@ -443,7 +447,7 @@ describe('EventBus', () => {
             }
             
             const context = new TestClass();
-            const handler = jest.fn();
+            const handler = createMockFn();
             
             eventBus.subscribe('test-event', handler, { context });
             
@@ -451,7 +455,7 @@ describe('EventBus', () => {
         });
 
         test('should handle null context gracefully', () => {
-            const handler = jest.fn();
+            const handler = createMockFn();
             
             eventBus.subscribe('test-event', handler, { context: null });
             eventBus.emit('test-event', 'data');
@@ -462,7 +466,7 @@ describe('EventBus', () => {
 
     describe('Debug Logging', () => {
         test('should track subscription when debug enabled', () => {
-            const handler = jest.fn();
+            const handler = createMockFn();
             eventBus.subscribe('test-event', handler);
             
             expect(eventBus.listenerCount('test-event')).toBe(1);
@@ -476,7 +480,7 @@ describe('EventBus', () => {
         });
 
         test('should track handler execution when debug enabled', async () => {
-            const handler = jest.fn();
+            const handler = createMockFn();
             eventBus.subscribe('test-event', handler);
             
             eventBus.emit('test-event', 'data');
@@ -490,7 +494,7 @@ describe('EventBus', () => {
 
         test('should not log when debug disabled', () => {
             const quietBus = new EventBus({ debugEnabled: false });
-            const handler = jest.fn();
+            const handler = createMockFn();
             
             logger.debug.mockClear();
             
@@ -512,7 +516,7 @@ describe('EventBus', () => {
 
     describe('Event Statistics', () => {
         test('should track event emission statistics', () => {
-            const handler = jest.fn();
+            const handler = createMockFn();
             eventBus.subscribe('test-event', handler);
             
             eventBus.emit('test-event');
@@ -528,8 +532,8 @@ describe('EventBus', () => {
         });
 
         test('should track handler success and error rates', async () => {
-            const goodHandler = jest.fn();
-            const badHandler = jest.fn(() => {
+            const goodHandler = createMockFn();
+            const badHandler = createMockFn(() => {
                 throw new Error('Handler error');
             });
             
@@ -547,7 +551,7 @@ describe('EventBus', () => {
         });
 
         test('should calculate average duration correctly', async () => {
-            const slowHandler = jest.fn(async () => {
+            const slowHandler = createMockFn(async () => {
                 await waitForDelay(20);
             });
             
@@ -578,7 +582,7 @@ describe('EventBus', () => {
 
     describe('Memory Management and Cleanup', () => {
         test('should reset all listeners and stats', () => {
-            const handler = jest.fn();
+            const handler = createMockFn();
             eventBus.subscribe('test-event', handler);
             eventBus.emit('test-event');
             
@@ -593,7 +597,7 @@ describe('EventBus', () => {
 
         test('should handle max listeners warning', () => {
             const smallBus = new EventBus({ maxListeners: 2 });
-            const handler = jest.fn();
+            const handler = createMockFn();
             
             // This should not exceed max listeners
             smallBus.subscribe('test-event', handler);
@@ -603,7 +607,7 @@ describe('EventBus', () => {
         });
 
         test('should get listener summary', () => {
-            const handler = jest.fn();
+            const handler = createMockFn();
             eventBus.subscribe('event1', handler);
             eventBus.subscribe('event1', handler);
             eventBus.subscribe('event2', handler);
@@ -619,7 +623,7 @@ describe('EventBus', () => {
 
     describe('PlatformEvents interop', () => {
         test('supports PlatformEvents constants in actual events', () => {
-            const handler = jest.fn();
+            const handler = createMockFn();
             eventBus.subscribe(PlatformEvents.VFX_COMMAND_RECEIVED, handler);
 
             const result = eventBus.emit(PlatformEvents.VFX_COMMAND_RECEIVED, { command: 'hello' });
@@ -656,7 +660,7 @@ describe('EventBus', () => {
             logger.warn = undefined;
 
             const bus = new EventBus({ debugEnabled: true });
-            const handler = jest.fn();
+            const handler = createMockFn();
 
             expect(() => bus.subscribe('test-event', handler)).not.toThrow();
             expect(() => bus.emit('test-event', 'data')).not.toThrow();
@@ -666,7 +670,7 @@ describe('EventBus', () => {
         });
 
         test('should handle rapid event emissions', async () => {
-            const handler = jest.fn();
+            const handler = createMockFn();
             eventBus.subscribe('rapid-event', handler);
             
             const startTime = testClock.now();
@@ -691,7 +695,7 @@ describe('EventBus', () => {
         });
 
         test('should handle empty event name', () => {
-            const handler = jest.fn();
+            const handler = createMockFn();
             eventBus.subscribe('', handler);
             
             const result = eventBus.emit('', 'data');
@@ -701,7 +705,7 @@ describe('EventBus', () => {
         });
 
         test('should handle special characters in event names', () => {
-            const handler = jest.fn();
+            const handler = createMockFn();
             const eventName = 'special:event/with-chars.and_stuff';
             
             eventBus.subscribe(eventName, handler);
@@ -713,7 +717,7 @@ describe('EventBus', () => {
         });
 
         test('should handle large argument lists', () => {
-            const handler = jest.fn();
+            const handler = createMockFn();
             const largeArgs = Array.from({ length: 100 }, (_, i) => i);
             
             eventBus.subscribe('large-args', handler);
@@ -723,10 +727,10 @@ describe('EventBus', () => {
         });
 
         test('should handle circular object references in arguments', async () => {
-            const handler = jest.fn(() => {
+            const handler = createMockFn(() => {
                 throw new Error('Test error');
             });
-            const errorEventHandler = jest.fn();
+            const errorEventHandler = createMockFn();
             
             // Create circular reference
             const obj = { name: 'test' };
@@ -748,7 +752,7 @@ describe('EventBus', () => {
         });
 
         test('should handle undefined and null arguments', () => {
-            const handler = jest.fn();
+            const handler = createMockFn();
             
             eventBus.subscribe('test-event', handler);
             eventBus.emit('test-event', undefined, null, 0, '', false);
@@ -758,7 +762,7 @@ describe('EventBus', () => {
 
         test('should measure handler execution time accurately', async () => {
             const delayMs = 50;
-            const slowHandler = jest.fn(async () => {
+            const slowHandler = createMockFn(async () => {
                 await waitForDelay(delayMs);
             });
             
@@ -774,12 +778,12 @@ describe('EventBus', () => {
         });
 
         test('should handle synchronous and asynchronous handlers mixed', async () => {
-            const syncHandler = jest.fn(() => 'sync');
-            const asyncHandler = jest.fn(async () => {
+            const syncHandler = createMockFn(() => 'sync');
+            const asyncHandler = createMockFn(async () => {
                 await waitForDelay(10);
                 return 'async';
             });
-            const promiseHandler = jest.fn(() => Promise.resolve('promise'));
+            const promiseHandler = createMockFn(() => Promise.resolve('promise'));
             
             eventBus.subscribe('mixed-event', syncHandler);
             eventBus.subscribe('mixed-event', asyncHandler);
@@ -797,5 +801,9 @@ describe('EventBus', () => {
             const stats = eventBus.getEventStats();
             expect(stats['mixed-event'].success).toBe(3);
         });
+    });
+
+    afterAll(() => {
+        restoreAllModuleMocks();
     });
 });

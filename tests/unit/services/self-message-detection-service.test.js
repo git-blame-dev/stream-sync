@@ -1,3 +1,4 @@
+const { describe, it, expect } = require('bun:test');
 const SelfMessageDetectionService = require('../../../src/services/SelfMessageDetectionService');
 
 const createConfigStub = ({ general = {}, platforms = {} } = {}) => {

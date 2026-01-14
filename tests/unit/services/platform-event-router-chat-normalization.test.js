@@ -1,6 +1,12 @@
+const { describe, it, expect, afterEach } = require('bun:test');
+const { createMockFn, clearAllMocks } = require('../../helpers/bun-mock-utils');
 const PlatformEventRouter = require('../../../src/services/PlatformEventRouter');
 
 describe('PlatformEventRouter chat normalization', () => {
+    afterEach(() => {
+        clearAllMocks();
+    });
+
     const platform = 'twitch';
     const baseEvent = {
         platform,
@@ -10,13 +16,13 @@ describe('PlatformEventRouter chat normalization', () => {
 
     const createRouter = (runtimeOverrides = {}) => {
         const runtime = {
-            handleChatMessage: jest.fn(),
+            handleChatMessage: createMockFn(),
             ...runtimeOverrides
         };
-        const eventBus = { subscribe: jest.fn(() => jest.fn()), emit: jest.fn() };
-        const logger = { debug: jest.fn(), info: jest.fn(), warn: jest.fn(), error: jest.fn() };
-        const configService = { areNotificationsEnabled: jest.fn(() => true) };
-        const notificationManager = { handleNotification: jest.fn() };
+        const eventBus = { subscribe: createMockFn(() => createMockFn()), emit: createMockFn() };
+        const logger = { debug: createMockFn(), info: createMockFn(), warn: createMockFn(), error: createMockFn() };
+        const configService = { areNotificationsEnabled: createMockFn(() => true) };
+        const notificationManager = { handleNotification: createMockFn() };
         return { router: new PlatformEventRouter({ runtime, eventBus, notificationManager, configService, logger }), runtime };
     };
 

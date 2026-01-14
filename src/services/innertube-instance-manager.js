@@ -6,6 +6,7 @@ const { createPlatformErrorHandler } = require('../utils/platform-error-handler'
 const innertubeManagerErrorHandler = createPlatformErrorHandler(logger, 'innertube-manager');
 
 let defaultRuntimeConstants = null;
+let defaultInnertubeImporter = null;
 
 function resolveRuntimeConstants(runtimeConstants) {
     const resolved = runtimeConstants
@@ -46,6 +47,9 @@ class InnertubeInstanceManager {
         this.instanceTimeout = resolveInstanceTimeout(options.instanceTimeout, this.runtimeConstants);
         this.cleanupInterval = null;
         this.disposed = false;
+        this.innertubeImporter = options.innertubeImporter
+            || defaultInnertubeImporter
+            || (() => import('youtubei.js'));
         
         this._startCleanupMonitoring();
     }
@@ -75,7 +79,7 @@ class InnertubeInstanceManager {
             
             if (!createFunction) {
                 // Default Innertube creation
-                const { Innertube } = await import('youtubei.js');
+                const { Innertube } = await this.innertubeImporter();
                 const instance = await Innertube.create();
                 return this._cacheInstance(identifier, instance);
             } else {
@@ -247,12 +251,23 @@ module.exports = {
         defaultRuntimeConstants = runtimeConstants;
     },
 
+    setInnertubeImporter(importer) {
+        if (importer && typeof importer !== 'function') {
+            throw new Error('Innertube importer must be a function');
+        }
+        defaultInnertubeImporter = importer || null;
+        if (instance) {
+            instance.innertubeImporter = defaultInnertubeImporter || (() => import('youtubei.js'));
+        }
+    },
+
     getInstance(options = {}) {
         const resolvedRuntimeConstants = resolveRuntimeConstants(options.runtimeConstants);
         if (!instance) {
             instance = new InnertubeInstanceManager({
                 ...options,
-                runtimeConstants: resolvedRuntimeConstants
+                runtimeConstants: resolvedRuntimeConstants,
+                innertubeImporter: options.innertubeImporter || defaultInnertubeImporter
             });
         }
         return instance;

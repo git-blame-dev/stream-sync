@@ -26,12 +26,14 @@ class TwitchAuthManager {
         this.lastError = null;
         this.logger = dependencies.logger || getUnifiedLogger();
         this.errorHandler = createPlatformErrorHandler(this.logger, 'auth-manager');
+        this.axios = dependencies.axios || null;
         
         // Initialize centralized error handler for consistent error processing
         this.errorHandler = new AuthErrorHandler(this.logger);
 
         this.enhancedHttpClient = dependencies.enhancedHttpClient || createEnhancedHttpClient({
             logger: this.logger,
+            axios: this.axios || undefined,
             retrySystem: dependencies.retrySystem || createRetrySystem({ logger: this.logger })
         });
         
@@ -127,6 +129,7 @@ class TwitchAuthManager {
             this.twitchAuthService = new TwitchAuthService(this.config, { logger: this.logger });
             this.twitchAuthInitializer = new TwitchAuthInitializer({ 
                 logger: this.logger,
+                axios: this.axios || this.dependencies?.axios,
                 mockOAuthHandler: this.dependencies?.mockOAuthHandler,
                 tokenStorePath: this.config.tokenStorePath,
                 enhancedHttpClient: this.dependencies?.enhancedHttpClient,

@@ -1,4 +1,3 @@
-const axios = require('axios');
 const { safeDelay, validateTimeout } = require('../../../utils/timeout-validator');
 const { extractHttpErrorDetails } = require('../../../utils/http-error-utils');
 const { validateLoggerInterface } = require('../../../utils/dependency-validator');
@@ -9,11 +8,14 @@ function createTwitchEventSubSubscriptionManager(options = {}) {
         authManager,
         config,
         subscriptions,
+        axios: injectedAxios,
         getClientId,
         validateConnectionForSubscriptions,
         logError,
         now = () => Date.now()
     } = options;
+
+    const axios = injectedAxios || require('axios');
 
     const safeLogger = (() => {
         const resolvedLogger = logger || global.__TEST_LOGGER__;

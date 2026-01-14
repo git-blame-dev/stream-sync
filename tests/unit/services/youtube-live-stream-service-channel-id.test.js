@@ -1,3 +1,5 @@
+const { describe, it, beforeEach, afterEach, expect } = require('bun:test');
+const { createMockFn, clearAllMocks } = require('../../helpers/bun-mock-utils');
 
 // Testing Infrastructure (mandatory)
 const {
@@ -39,15 +41,15 @@ describe('YouTube Live Stream Service - Channel ID User Experience', () => {
   beforeEach(() => {
     // Create behavior-focused mocks
     mockInnertubeClient = {
-      getChannel: jest.fn(),
-      search: jest.fn(),
-      resolveURL: jest.fn()
+      getChannel: createMockFn(),
+      search: createMockFn(),
+      resolveURL: createMockFn()
     };
     mockLogger = createMockLogger();
   });
 
   afterEach(() => {
-    jest.clearAllMocks();
+    clearAllMocks();
   });
 
   describe('Valid Channel ID User Experience', () => {
@@ -55,7 +57,7 @@ describe('YouTube Live Stream Service - Channel ID User Experience', () => {
       // Given: User provides valid YouTube Channel ID format
       const validChannelId = 'UC' + 'a'.repeat(22); // UC + 22 characters
       const mockChannel = {
-        getLiveStreams: jest.fn().mockResolvedValue({
+        getLiveStreams: createMockFn().mockResolvedValue({
           videos: [
             {
               id: 'live123',
@@ -97,7 +99,7 @@ describe('YouTube Live Stream Service - Channel ID User Experience', () => {
       // Given: User provides valid Channel ID but channel has no live streams
       const validChannelId = 'UC' + 'x'.repeat(22);
       const mockChannel = {
-        getLiveStreams: jest.fn().mockResolvedValue({
+        getLiveStreams: createMockFn().mockResolvedValue({
           videos: []
         })
       };
@@ -377,7 +379,7 @@ describe('YouTube Live Stream Service - Channel ID User Experience', () => {
       // Given: User provides Channel ID for quick stream detection
       const channelId = 'UC' + 'p'.repeat(22);
       const mockChannel = {
-        getLiveStreams: jest.fn().mockResolvedValue({
+        getLiveStreams: createMockFn().mockResolvedValue({
           videos: []
         })
       };
@@ -408,7 +410,7 @@ describe('YouTube Live Stream Service - Channel ID User Experience', () => {
         payload: { browseId: channelId }
       });
       const mockChannelForUsername = {
-        getLiveStreams: jest.fn().mockResolvedValue({ 
+        getLiveStreams: createMockFn().mockResolvedValue({ 
           videos: [{
             id: 'username123',
             title: { text: 'Username Stream' },
@@ -430,9 +432,9 @@ describe('YouTube Live Stream Service - Channel ID User Experience', () => {
       expect(mockInnertubeClient.getChannel).toHaveBeenCalledWith(channelId);
 
       // Reset for Channel ID path
-      jest.clearAllMocks();
+      clearAllMocks();
       const mockChannel = {
-        getLiveStreams: jest.fn().mockResolvedValue({ 
+        getLiveStreams: createMockFn().mockResolvedValue({ 
           videos: [{
             id: 'channelid123',
             title: { text: 'Channel ID Stream' },
@@ -460,7 +462,7 @@ describe('YouTube Live Stream Service - Channel ID User Experience', () => {
       // Given: Channel ID for international content creators
       const internationalChannelId = 'UC' + 'i'.repeat(22);
       const mockChannel = {
-        getLiveStreams: jest.fn().mockResolvedValue({
+        getLiveStreams: createMockFn().mockResolvedValue({
           videos: [{
             id: 'intl123',
             title: { text: 'Live Stream 中文 العربية' },

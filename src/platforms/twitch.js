@@ -28,6 +28,7 @@ class TwitchPlatform extends EventEmitter {
         // Initialize unified logger (with dependency injection support for testing)
         this.logger = dependencies.logger || getUnifiedLogger();
         this.errorHandler = createPlatformErrorHandler(this.logger, 'twitch');
+        this.dependencies = { ...dependencies };
 
         // Initialize connection state
         this.isConnected = false;
@@ -100,7 +101,9 @@ class TwitchPlatform extends EventEmitter {
             this.logger.debug('Creating TwitchEventSub instance...', 'twitch');
             this.eventSub = new this.TwitchEventSub(this.config, {
                 logger: this.logger,
-                authManager: this.authManager // Pass centralized auth manager
+                authManager: this.authManager,
+                axios: this.dependencies?.axios,
+                WebSocketCtor: this.dependencies?.WebSocketCtor
             });
             this.logger.debug('TwitchEventSub instance created, calling initialize()...', 'twitch');
             await this.eventSub.initialize();

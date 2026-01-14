@@ -1,7 +1,5 @@
 
-const WebSocket = require('ws');
 const { safeSetTimeout, safeSetInterval, validateTimeout, safeDelay } = require('../utils/timeout-validator');
-const axios = require('axios');
 const { EventEmitter } = require('events');
 const { createPlatformErrorHandler } = require('../utils/platform-error-handler');
 const { ConfigValidatorStatic } = require('../utils/config-validator');
@@ -26,6 +24,8 @@ class TwitchEventSub extends EventEmitter {
         this.logger = dependencies.logger;
         this.errorHandler = createPlatformErrorHandler(this.logger, 'twitch-eventsub');
         this.authManager = dependencies.authManager || dependencies.twitchAuth;
+        this.axios = dependencies.axios || require('axios');
+        this.WebSocketCtor = dependencies.WebSocketCtor || require('ws');
         
         
         // WebSocket connection
@@ -84,13 +84,14 @@ class TwitchEventSub extends EventEmitter {
             authManager: this.authManager,
             config: this.config,
             subscriptions: this.subscriptions,
+            axios: this.axios,
             getClientId: () => this._getAvailableClientId(),
             validateConnectionForSubscriptions: () => this._validateConnectionForSubscriptions(),
             logError: (...args) => this._logEventSubError(...args)
         });
 
         this.wsLifecycle = createTwitchEventSubWsLifecycle({
-            WebSocketCtor: WebSocket,
+            WebSocketCtor: this.WebSocketCtor,
             safeSetTimeout,
             safeDelay,
             validateTimeout
@@ -630,7 +631,7 @@ class TwitchEventSub extends EventEmitter {
 
         const postMessage = async () => {
             const token = await this.authManager.getAccessToken();
-            await axios.post('https://api.twitch.tv/helix/chat/messages', payload, {
+            await this.axios.post('https://api.twitch.tv/helix/chat/messages', payload, {
                 headers: {
                     'Authorization': `Bearer ${token}`,
                     'Client-Id': clientId,

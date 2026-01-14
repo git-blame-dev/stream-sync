@@ -1,3 +1,5 @@
+const { describe, it, beforeEach, expect } = require('bun:test');
+const { createMockFn, clearAllMocks } = require('../../helpers/bun-mock-utils');
 const { YouTubeStreamDetectionService } = require('../../../src/services/youtube-stream-detection-service');
 const { createSilentLogger } = require('../../helpers/test-logger');
 const testClock = require('../../helpers/test-clock');
@@ -6,7 +8,7 @@ const testClock = require('../../helpers/test-clock');
 function createMockInnertubeClient(streamData = []) {
     // Create mock channel object that supports getLiveStreams()
     const mockChannel = {
-        getLiveStreams: jest.fn().mockResolvedValue({
+        getLiveStreams: createMockFn().mockResolvedValue({
             videos: streamData.map(stream => ({
                 id: stream.videoId,
                 video_id: stream.videoId,
@@ -18,7 +20,7 @@ function createMockInnertubeClient(streamData = []) {
     };
     
     return {
-        search: jest.fn().mockImplementation((query, options) => {
+        search: createMockFn().mockImplementation((query, options) => {
             // Mock channel search for resolution (when type: 'channel')
             if (options && options.type === 'channel') {
                 return Promise.resolve({
@@ -47,12 +49,12 @@ function createMockInnertubeClient(streamData = []) {
                 }))
             });
         }),
-        resolveURL: jest.fn().mockResolvedValue({
+        resolveURL: createMockFn().mockResolvedValue({
             payload: {
                 browseId: 'UCmockChannelId123'
             }
         }),
-        getChannel: jest.fn().mockResolvedValue(mockChannel)
+        getChannel: createMockFn().mockResolvedValue(mockChannel)
     };
 }
 
@@ -109,8 +111,9 @@ describe('YouTubeStreamDetectionService', () => {
     let mockClient;
 
     beforeEach(() => {
-        jest.clearAllMocks();
+        clearAllMocks();
     });
+
 
     describe('Core Stream Detection Behavior', () => {
         it('should detect multiple live streams for a channel', async () => {
@@ -205,10 +208,10 @@ describe('YouTubeStreamDetectionService', () => {
         it('should timeout gracefully for slow responses', async () => {
             // Given: Service that responds slowly during channel resolution
             mockClient = {
-                resolveURL: jest.fn().mockImplementation(() =>
+                resolveURL: createMockFn().mockImplementation(() =>
                     waitForDelay(5000)
                 ),
-                getChannel: jest.fn().mockResolvedValue({})
+                getChannel: createMockFn().mockResolvedValue({})
             };
             service = createStreamDetectionService(mockClient);
 
@@ -227,8 +230,8 @@ describe('YouTubeStreamDetectionService', () => {
         it('should handle network errors gracefully', async () => {
             // Given: Network connectivity issues during channel resolution
             mockClient = {
-                resolveURL: jest.fn().mockRejectedValue(new Error('Network error')),
-                getChannel: jest.fn().mockRejectedValue(new Error('Network error'))
+                resolveURL: createMockFn().mockRejectedValue(new Error('Network error')),
+                getChannel: createMockFn().mockRejectedValue(new Error('Network error'))
             };
             service = createStreamDetectionService(mockClient);
 
@@ -248,8 +251,8 @@ describe('YouTubeStreamDetectionService', () => {
             const rateLimitError = new Error('Quota exceeded');
             rateLimitError.status = 429;
             mockClient = {
-                resolveURL: jest.fn().mockRejectedValue(rateLimitError),
-                getChannel: jest.fn().mockRejectedValue(rateLimitError)
+                resolveURL: createMockFn().mockRejectedValue(rateLimitError),
+                getChannel: createMockFn().mockRejectedValue(rateLimitError)
             };
             service = createStreamDetectionService(mockClient);
 
@@ -269,8 +272,8 @@ describe('YouTubeStreamDetectionService', () => {
             const notFoundError = new Error('Channel not found');
             notFoundError.status = 404;
             mockClient = {
-                resolveURL: jest.fn().mockResolvedValue({ payload: {} }),
-                getChannel: jest.fn().mockRejectedValue(notFoundError)
+                resolveURL: createMockFn().mockResolvedValue({ payload: {} }),
+                getChannel: createMockFn().mockRejectedValue(notFoundError)
             };
             service = createStreamDetectionService(mockClient);
 
@@ -354,15 +357,15 @@ describe('YouTubeStreamDetectionService', () => {
         it('should handle malformed API responses gracefully', async () => {
             // Given: Parser error (YouTube.js type mismatch)
             const malformedChannel = {
-                getLiveStreams: jest.fn().mockRejectedValue(new Error('Type mismatch in YouTube.js parser'))
+                getLiveStreams: createMockFn().mockRejectedValue(new Error('Type mismatch in YouTube.js parser'))
             };
             mockClient = {
-                resolveURL: jest.fn().mockResolvedValue({
+                resolveURL: createMockFn().mockResolvedValue({
                     payload: {
                         browseId: 'UC' + 'p'.repeat(22)
                     }
                 }),
-                search: jest.fn().mockResolvedValue({
+                search: createMockFn().mockResolvedValue({
                     channels: [{
                         author: {
                             id: 'UC' + 'p'.repeat(22),
@@ -371,7 +374,7 @@ describe('YouTubeStreamDetectionService', () => {
                         }
                     }]
                 }),
-                getChannel: jest.fn().mockResolvedValue(malformedChannel)
+                getChannel: createMockFn().mockResolvedValue(malformedChannel)
             };
             service = createStreamDetectionService(mockClient);
 
@@ -391,8 +394,8 @@ describe('YouTubeStreamDetectionService', () => {
             // Given: A channel handle that does not resolve to any channel
             const logger = createSilentLogger();
             mockClient = {
-                resolveURL: jest.fn().mockResolvedValue({ payload: {} }),
-                getChannel: jest.fn()
+                resolveURL: createMockFn().mockResolvedValue({ payload: {} }),
+                getChannel: createMockFn()
             };
             service = new YouTubeStreamDetectionService(mockClient, { logger });
 

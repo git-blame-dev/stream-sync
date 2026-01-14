@@ -1,3 +1,4 @@
+const { describe, test, expect, beforeEach, afterEach } = require('bun:test');
 
 describe('Keyword Parsing Command Line Arguments', () => {
     let originalArgv;

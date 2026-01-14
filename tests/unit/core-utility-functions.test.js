@@ -1,4 +1,4 @@
-
+const { describe, test, expect, beforeEach } = require('bun:test');
 const { initializeTestLogging, createTestUser, TEST_TIMEOUTS } = require('../helpers/test-setup');
 const { createMockLogger, createMockNotificationBuilder } = require('../helpers/mock-factories');
 const { setupAutomatedCleanup } = require('../helpers/mock-lifecycle');
@@ -19,7 +19,6 @@ const { RetrySystem, ADAPTIVE_RETRY_CONFIG } = require('../../src/utils/retry-sy
 describe('Core Utility Functions', () => {
     describe('Adaptive Retry System', () => {
         // Test timeout protection as per rules
-        jest.setTimeout(TEST_TIMEOUTS.UNIT);
         let retrySystem;
 
         // Reset shared state before each test to ensure isolation
@@ -39,13 +38,13 @@ describe('Core Utility Functions', () => {
             expect(ADAPTIVE_RETRY_CONFIG.BASE_DELAY).toBeGreaterThan(0);
             expect(ADAPTIVE_RETRY_CONFIG.MAX_DELAY).toBeGreaterThanOrEqual(ADAPTIVE_RETRY_CONFIG.BASE_DELAY);
             expect(ADAPTIVE_RETRY_CONFIG.BACKOFF_MULTIPLIER).toBeGreaterThan(1);
-        });
+        }, { timeout: TEST_TIMEOUTS.UNIT });
 
         test('calculateAdaptiveRetryDelay should calculate initial delay correctly', () => {
             // Test initial delay calculation
             const delay = retrySystem.calculateAdaptiveRetryDelay('TestPlatform');
             expect(delay).toBe(ADAPTIVE_RETRY_CONFIG.BASE_DELAY);
-        });
+        }, { timeout: TEST_TIMEOUTS.UNIT });
 
         test('incrementRetryCount should increase the retry count and return a new delay', () => {
             // Test first increment
@@ -57,7 +56,7 @@ describe('Core Utility Functions', () => {
             const secondDelay = retrySystem.incrementRetryCount('TestPlatform');
             expect(retrySystem.getRetryCount('TestPlatform')).toBe(2);
             expect(secondDelay).toBe(ADAPTIVE_RETRY_CONFIG.BASE_DELAY * Math.pow(ADAPTIVE_RETRY_CONFIG.BACKOFF_MULTIPLIER, 2));
-        });
+        }, { timeout: TEST_TIMEOUTS.UNIT });
 
         test('resetRetryCount should reset the count for a specific platform', () => {
             // Setup: increment retry count
@@ -68,7 +67,7 @@ describe('Core Utility Functions', () => {
             // Test reset functionality
             retrySystem.resetRetryCount('TestPlatform');
             expect(retrySystem.getRetryCount('TestPlatform')).toBe(0);
-        });
+        }, { timeout: TEST_TIMEOUTS.UNIT });
 
         test('calculateAdaptiveRetryDelay should respect the MAX_DELAY', () => {
             const platform = 'TestPlatform';
@@ -84,12 +83,12 @@ describe('Core Utility Functions', () => {
             expect(finalCalculatedDelay).toBe(ADAPTIVE_RETRY_CONFIG.MAX_DELAY);
             // The delay returned by the last increment should also be capped
             expect(delay).toBe(ADAPTIVE_RETRY_CONFIG.MAX_DELAY);
-        });
+        }, { timeout: TEST_TIMEOUTS.UNIT });
 
         test('getRetryCount should return 0 for a platform that has not retried', () => {
             // Test default state for new platforms
             expect(retrySystem.getRetryCount('NewPlatform')).toBe(0);
-        });
+        }, { timeout: TEST_TIMEOUTS.UNIT });
 
         test('Retry counts should be independent across platforms', () => {
             // Test platform isolation
@@ -104,6 +103,6 @@ describe('Core Utility Functions', () => {
             retrySystem.resetRetryCount('PlatformA');
             expect(retrySystem.getRetryCount('PlatformA')).toBe(0);
             expect(retrySystem.getRetryCount('PlatformB')).toBe(1); // Should not be affected
-        });
+        }, { timeout: TEST_TIMEOUTS.UNIT });
     });
 });

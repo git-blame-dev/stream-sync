@@ -1,3 +1,5 @@
+const { describe, it, beforeEach, afterEach, expect } = require('bun:test');
+const { createMockFn, clearAllMocks, restoreAllMocks, spyOn } = require('../../helpers/bun-mock-utils');
 
 const fs = require('fs').promises;
 const path = require('path');
@@ -12,8 +14,8 @@ describe('ChatFileLoggingService - Behavior-Focused Regression Tests', () => {
     beforeEach(async () => {
         // Create mock logger that follows our patterns
         mockLogger = {
-            debug: jest.fn(),
-            error: jest.fn()
+            debug: createMockFn(),
+            error: createMockFn()
         };
 
         // Create temporary directory for test logs
@@ -40,6 +42,8 @@ describe('ChatFileLoggingService - Behavior-Focused Regression Tests', () => {
         } catch {
             // Ignore cleanup errors
         }
+        restoreAllMocks();
+        clearAllMocks();
     });
 
     describe('User-Observable Platform Logging Behavior', () => {
@@ -85,7 +89,7 @@ describe('ChatFileLoggingService - Behavior-Focused Regression Tests', () => {
                 dataLoggingEnabled: true,
                 dataLoggingPath: tempLogDir
             };
-            const appendSpy = jest.spyOn(fs, 'appendFile').mockRejectedValue(new Error('Disk full'));
+            const appendSpy = spyOn(fs, 'appendFile').mockRejectedValue(new Error('Disk full'));
 
             // When: Filesystem error occurs during logging
             // This should not throw an error (graceful degradation)

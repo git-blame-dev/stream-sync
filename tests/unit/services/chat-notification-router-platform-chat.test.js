@@ -1,24 +1,32 @@
-jest.mock('../../../src/utils/chat-logger', () => ({
-    logChatMessageWithConfig: jest.fn(),
-    logChatMessageSkipped: jest.fn()
+const { describe, it, afterEach, expect } = require('bun:test');
+const { createMockFn, clearAllMocks } = require('../../helpers/bun-mock-utils');
+const { mockModule, restoreAllModuleMocks } = require('../../helpers/bun-module-mocks');
+
+mockModule('../../../src/utils/chat-logger', () => ({
+    logChatMessageWithConfig: createMockFn(),
+    logChatMessageSkipped: createMockFn()
 }));
 
-jest.mock('../../../src/utils/monetization-detector', () => ({
-    detectMonetization: jest.fn().mockReturnValue({ detected: false, timingMs: 1 })
+mockModule('../../../src/utils/monetization-detector', () => ({
+    detectMonetization: createMockFn().mockReturnValue({ detected: false, timingMs: 1 })
 }));
 
-jest.mock('../../../src/utils/message-normalization', () => ({
-    validateNormalizedMessage: jest.fn().mockReturnValue({ isValid: true })
+mockModule('../../../src/utils/message-normalization', () => ({
+    validateNormalizedMessage: createMockFn().mockReturnValue({ isValid: true })
 }));
 
-jest.mock('../../../src/utils/notification-builder', () => ({
-    build: jest.fn((data) => data)
+mockModule('../../../src/utils/notification-builder', () => ({
+    build: createMockFn((data) => data)
 }));
 
 const ChatNotificationRouter = require('../../../src/services/ChatNotificationRouter');
 const testClock = require('../../helpers/test-clock');
 
 describe('ChatNotificationRouter platform chat behavior', () => {
+    afterEach(() => {
+        clearAllMocks();
+        restoreAllModuleMocks();
+    });
     const baseMessage = {
         message: 'Hello world',
         displayName: 'Viewer',
@@ -37,31 +45,31 @@ describe('ChatNotificationRouter platform chat behavior', () => {
                 tts: { deduplicationEnabled: true }
             },
             platformLifecycleService: {
-                getPlatformConnectionTime: jest.fn().mockReturnValue(null)
+                getPlatformConnectionTime: createMockFn().mockReturnValue(null)
             },
             displayQueue: {
-                addItem: jest.fn()
+                addItem: createMockFn()
             },
             commandCooldownService: {
-                checkUserCooldown: jest.fn().mockReturnValue(true),
-                checkGlobalCooldown: jest.fn().mockReturnValue(true),
-                updateUserCooldown: jest.fn(),
-                updateGlobalCooldown: jest.fn()
+                checkUserCooldown: createMockFn().mockReturnValue(true),
+                checkGlobalCooldown: createMockFn().mockReturnValue(true),
+                updateUserCooldown: createMockFn(),
+                updateGlobalCooldown: createMockFn()
             },
             userTrackingService: {
-                isFirstMessage: jest.fn().mockReturnValue(false)
+                isFirstMessage: createMockFn().mockReturnValue(false)
             },
             commandParser: {
-                getVFXConfig: jest.fn().mockReturnValue(null)
+                getVFXConfig: createMockFn().mockReturnValue(null)
             },
-            isFirstMessage: jest.fn().mockReturnValue(false),
+            isFirstMessage: createMockFn().mockReturnValue(false),
             ...overrides.runtime
         };
         const logger = {
-            debug: jest.fn(),
-            info: jest.fn(),
-            warn: jest.fn(),
-            error: jest.fn()
+            debug: createMockFn(),
+            info: createMockFn(),
+            warn: createMockFn(),
+            error: createMockFn()
         };
         const router = new ChatNotificationRouter({
             runtime,
@@ -87,7 +95,7 @@ describe('ChatNotificationRouter platform chat behavior', () => {
                     general: { messagesEnabled: true },
                     twitch: { messagesEnabled: false }
                 },
-                displayQueue: { addItem: jest.fn() }
+                displayQueue: { addItem: createMockFn() }
             }
         });
 
@@ -127,7 +135,7 @@ describe('ChatNotificationRouter platform chat behavior', () => {
                     general: { messagesEnabled: true },
                     youtube: { messagesEnabled: false }
                 },
-                displayQueue: { addItem: jest.fn() }
+                displayQueue: { addItem: createMockFn() }
             }
         });
 
@@ -147,7 +155,7 @@ describe('ChatNotificationRouter platform chat behavior', () => {
                     twitch: {},
                     youtube: {}
                 },
-                displayQueue: { addItem: jest.fn() }
+                displayQueue: { addItem: createMockFn() }
             }
         });
 
@@ -187,9 +195,9 @@ describe('ChatNotificationRouter platform chat behavior', () => {
                     tiktok: { messagesEnabled: true }
                 },
                 platformLifecycleService: {
-                    getPlatformConnectionTime: jest.fn().mockReturnValue(connectionTime)
+                    getPlatformConnectionTime: createMockFn().mockReturnValue(connectionTime)
                 },
-                displayQueue: { addItem: jest.fn() }
+                displayQueue: { addItem: createMockFn() }
             }
         });
 

@@ -7,15 +7,26 @@ class InnertubeFactory {
     // Singleton pattern for caching the expensive YouTube.js import
     static _innertubeClassCache = null;
     static _importPromise = null;
+    static _importer = null;
+
+    static configure(options = {}) {
+        if (options.importer && typeof options.importer !== 'function') {
+            throw new Error('InnertubeFactory importer must be a function');
+        }
+        this._importer = options.importer || null;
+        this._innertubeClassCache = null;
+        this._importPromise = null;
+    }
     
     static async _getInnertubeClass() {
         if (this._innertubeClassCache) {
             return this._innertubeClassCache;
         }
         
+        const importer = this._importer || (() => import('youtubei.js'));
         // Prevent duplicate imports if multiple calls happen simultaneously
         if (!this._importPromise) {
-            this._importPromise = import('youtubei.js');
+            this._importPromise = importer();
         }
         
         const youtubei = await this._importPromise;
