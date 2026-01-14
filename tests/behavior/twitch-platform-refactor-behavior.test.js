@@ -1,3 +1,6 @@
+const { describe, it, expect, beforeEach, afterEach } = require('bun:test');
+const { createMockFn, restoreAllMocks } = require('../helpers/bun-mock-utils');
+const { mockModule, unmockModule, requireActual, resetModules, restoreAllModuleMocks } = require('../helpers/bun-module-mocks');
 
 const { initializeTestLogging } = require('../helpers/test-setup');
 const { createMockLogger } = require('../helpers/mock-factories');
@@ -13,12 +16,12 @@ const createAuthManager = (overrides = {}) => {
     ];
 
     return {
-        getState: jest.fn().mockReturnValue(overrides.state || 'READY'),
-        getScopes: jest.fn().mockResolvedValue(requiredScopes),
-        getUserId: jest.fn().mockReturnValue(overrides.userId),
-        getAccessToken: jest.fn().mockResolvedValue(overrides.accessToken || 'centralized-token'),
-        authState: { executeWhenReady: jest.fn().mockImplementation(async (fn) => fn()) },
-        twitchAuth: { triggerOAuthFlow: jest.fn() },
+        getState: createMockFn().mockReturnValue(overrides.state || 'READY'),
+        getScopes: createMockFn().mockResolvedValue(requiredScopes),
+        getUserId: createMockFn().mockReturnValue(overrides.userId),
+        getAccessToken: createMockFn().mockResolvedValue(overrides.accessToken || 'centralized-token'),
+        authState: { executeWhenReady: createMockFn().mockImplementation(async (fn) => fn()) },
+        twitchAuth: { triggerOAuthFlow: createMockFn() },
         ...overrides
     };
 };
@@ -35,13 +38,19 @@ const baseConfig = {
 
 describe('Twitch platform refactor behaviors', () => {
     beforeEach(() => {
-        jest.resetModules();
-        jest.unmock('../../src/platforms/twitch');
-        jest.unmock('../../src/platforms/twitch-eventsub');
+        resetModules();
+        unmockModule('../../src/platforms/twitch');
+        unmockModule('../../src/platforms/twitch-eventsub');
+    });
+
+    afterEach(() => {
+        restoreAllMocks();
+        restoreAllModuleMocks();
+        resetModules();
     });
 
     it('accepts centralized auth for EventSub validation without raw tokens', async () => {
-        const TwitchEventSub = jest.requireActual('../../src/platforms/twitch-eventsub');
+        const TwitchEventSub = requireActual('../../src/platforms/twitch-eventsub');
         const eventSub = new TwitchEventSub(
             { enabled: true, eventsub_enabled: true },
             { authManager: createAuthManager({ userId: TEST_USER_ID }), logger: createMockLogger('debug') }
@@ -55,7 +64,7 @@ describe('Twitch platform refactor behaviors', () => {
     });
 
     it('keeps stream lifecycle transitions from crashing when polling hooks are missing', async () => {
-        const { TwitchPlatform } = jest.requireActual('../../src/platforms/twitch');
+        const { TwitchPlatform } = requireActual('../../src/platforms/twitch');
         const platform = new TwitchPlatform(baseConfig, {
             authManager: createAuthManager({ userId: TEST_USER_ID }),
             logger: createMockLogger('debug')
@@ -67,7 +76,7 @@ describe('Twitch platform refactor behaviors', () => {
     });
 
     it('emits raid events with normalized user shape and metadata', async () => {
-        const { TwitchPlatform } = jest.requireActual('../../src/platforms/twitch');
+        const { TwitchPlatform } = requireActual('../../src/platforms/twitch');
         const platform = new TwitchPlatform(baseConfig, {
             authManager: createAuthManager({ userId: TEST_USER_ID }),
             logger: createMockLogger('debug')
@@ -90,8 +99,8 @@ describe('Twitch platform refactor behaviors', () => {
     });
 
     it('warns but still emits chat events when normalization validation fails', async () => {
-        jest.doMock('../../src/utils/message-normalization', () => ({
-            normalizeTwitchMessage: jest.fn(() => ({
+        mockModule('../../src/utils/message-normalization', () => ({
+            normalizeTwitchMessage: createMockFn(() => ({
                 userId: 'chat-1',
                 username: 'chatter',
                 message: 'Hello world',
@@ -100,13 +109,13 @@ describe('Twitch platform refactor behaviors', () => {
                 isSubscriber: false,
                 isBroadcaster: false
             })),
-            validateNormalizedMessage: jest.fn(() => ({
+            validateNormalizedMessage: createMockFn(() => ({
                 isValid: false,
                 issues: ['missing badge data']
             }))
         }));
 
-        const { TwitchPlatform } = jest.requireActual('../../src/platforms/twitch');
+        const { TwitchPlatform } = requireActual('../../src/platforms/twitch');
         const logger = createMockLogger('debug');
         const platform = new TwitchPlatform(baseConfig, {
             authManager: createAuthManager({ userId: TEST_USER_ID }),
@@ -129,7 +138,7 @@ describe('Twitch platform refactor behaviors', () => {
     });
 
     it('returns user-friendly errors when sending without an EventSub connection', async () => {
-        const { TwitchPlatform } = jest.requireActual('../../src/platforms/twitch');
+        const { TwitchPlatform } = requireActual('../../src/platforms/twitch');
         const platform = new TwitchPlatform(baseConfig, {
             authManager: createAuthManager({ userId: TEST_USER_ID }),
             logger: createMockLogger('debug')
@@ -142,13 +151,13 @@ describe('Twitch platform refactor behaviors', () => {
         const recorded = [];
         class RecordingLoggingService {
             constructor() {
-                this.logRawPlatformData = jest.fn().mockImplementation(async (platform, eventType, data) => {
+                this.logRawPlatformData = createMockFn().mockImplementation(async (platform, eventType, data) => {
                     recorded.push({ platform, eventType, data });
                 });
             }
         }
 
-        const { TwitchPlatform } = require('../../src/platforms/twitch');
+        const { TwitchPlatform } = requireActual('../../src/platforms/twitch');
         const platform = new TwitchPlatform(
             { ...baseConfig, dataLoggingEnabled: true },
             {
@@ -159,8 +168,8 @@ describe('Twitch platform refactor behaviors', () => {
         );
 
         platform.handlers = {
-            onChat: jest.fn(),
-            onStreamStatus: jest.fn()
+            onChat: createMockFn(),
+            onStreamStatus: createMockFn()
         };
 
         await platform.onMessageHandler(
