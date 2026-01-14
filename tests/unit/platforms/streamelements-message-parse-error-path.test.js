@@ -1,22 +1,31 @@
+const { describe, it, expect, afterEach } = require('bun:test');
+const { unmockModule, restoreAllModuleMocks, resetModules } = require('../../helpers/bun-module-mocks');
+const { createMockFn, restoreAllMocks } = require('../../helpers/bun-mock-utils');
 
 // Use real implementation (jest.setup mocks the platform by default).
-jest.unmock('../../../src/platforms/streamelements');
+unmockModule('../../../src/platforms/streamelements');
+
+afterEach(() => {
+    restoreAllMocks();
+    restoreAllModuleMocks();
+    resetModules();
+});
 
 describe('StreamElementsPlatform message parsing', () => {
     it('routes invalid JSON messages through the error handler without throwing', () => {
         const { StreamElementsPlatform } = require('../../../src/platforms/streamelements');
 
         const mockLogger = {
-            debug: jest.fn(),
-            info: jest.fn(),
-            warn: jest.fn(),
-            error: jest.fn()
+            debug: createMockFn(),
+            info: createMockFn(),
+            warn: createMockFn(),
+            error: createMockFn()
         };
 
         const platform = new StreamElementsPlatform({ enabled: true }, { logger: mockLogger });
 
         const errorHandler = {
-            handleEventProcessingError: jest.fn()
+            handleEventProcessingError: createMockFn()
         };
         platform.errorHandler = errorHandler;
 
