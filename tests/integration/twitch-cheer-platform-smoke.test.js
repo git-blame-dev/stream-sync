@@ -1,11 +1,18 @@
+const { describe, test, afterEach, expect } = require('bun:test');
+
 const EventEmitter = require('events');
 const PlatformLifecycleService = require('../../src/services/PlatformLifecycleService');
 const NotificationManager = require('../../src/notifications/NotificationManager');
 const { createTestAppRuntime } = require('../helpers/runtime-test-harness');
 const { createMockDisplayQueue, createMockLogger } = require('../helpers/mock-factories');
 const { createTextProcessingManager } = require('../../src/utils/text-processing');
+const { createMockFn, restoreAllMocks } = require('../helpers/bun-mock-utils');
 
 describe('Twitch bits gift platform flow (smoke)', () => {
+    afterEach(() => {
+        restoreAllMocks();
+    });
+
     const createEventBus = () => {
         const emitter = new EventEmitter();
         return {
@@ -19,21 +26,21 @@ describe('Twitch bits gift platform flow (smoke)', () => {
     };
 
     const createConfigService = (config) => ({
-        areNotificationsEnabled: jest.fn().mockReturnValue(true),
-        getPlatformConfig: jest.fn().mockReturnValue(true),
-        getNotificationSettings: jest.fn().mockReturnValue({ enabled: true, duration: 4000 }),
-        get: jest.fn((section) => {
+        areNotificationsEnabled: createMockFn().mockReturnValue(true),
+        getPlatformConfig: createMockFn().mockReturnValue(true),
+        getNotificationSettings: createMockFn().mockReturnValue({ enabled: true, duration: 4000 }),
+        get: createMockFn((section) => {
             if (!section) {
                 return config;
             }
             return config[section] || {};
         }),
-        isDebugEnabled: jest.fn().mockReturnValue(false),
-        getTTSConfig: jest.fn().mockReturnValue({ enabled: false }),
-        isEnabled: jest.fn().mockReturnValue(true)
+        isDebugEnabled: createMockFn().mockReturnValue(false),
+        getTTSConfig: createMockFn().mockReturnValue({ enabled: false }),
+        isEnabled: createMockFn().mockReturnValue(true)
     });
 
-    it('routes bits gift through lifecycle, router, and runtime as gift', async () => {
+    test('routes bits gift through lifecycle, router, and runtime as gift', async () => {
         const eventBus = createEventBus();
         const logger = createMockLogger('debug', { captureConsole: true });
         const displayQueue = createMockDisplayQueue();
@@ -65,14 +72,14 @@ describe('Twitch bits gift platform flow (smoke)', () => {
             configService,
             constants: require('../../src/core/constants'),
             textProcessing,
-            obsGoals: { processDonationGoal: jest.fn() },
-            vfxCommandService: { getVFXConfig: jest.fn().mockResolvedValue(null) },
-            ttsService: { speak: jest.fn() },
-            userTrackingService: { isFirstMessage: jest.fn().mockResolvedValue(false) }
+            obsGoals: { processDonationGoal: createMockFn() },
+            vfxCommandService: { getVFXConfig: createMockFn().mockResolvedValue(null) },
+            ttsService: { speak: createMockFn() },
+            userTrackingService: { isFirstMessage: createMockFn().mockResolvedValue(false) }
         });
 
         const streamDetector = {
-            startStreamDetection: jest.fn(async (_platformName, _config, connectCallback) => connectCallback())
+            startStreamDetection: createMockFn(async (_platformName, _config, connectCallback) => connectCallback())
         };
         const platformLifecycleService = new PlatformLifecycleService({
             config: { twitch: { enabled: true } },
