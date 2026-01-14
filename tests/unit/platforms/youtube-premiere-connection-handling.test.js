@@ -1,3 +1,5 @@
+const { describe, test, expect, beforeEach } = require('bun:test');
+const { createMockFn } = require('../../helpers/bun-mock-utils');
 
 const path = require('path');
 
@@ -6,17 +8,17 @@ const { YouTubeConnectionManager } = require('../../../src/utils/youtube-connect
 
 // Mock logger for testing
 const createMockLogger = () => ({
-    debug: jest.fn(),
-    info: jest.fn(),
-    warn: jest.fn(),
-    error: jest.fn()
+    debug: createMockFn(),
+    info: createMockFn(),
+    warn: createMockFn(),
+    error: createMockFn()
 });
 
 // Mock connection object
 const createMockConnection = (videoId, isReady = false) => ({
     videoId,
     ready: isReady,
-    disconnect: jest.fn(),
+    disconnect: createMockFn(),
     status: 'connected'
 });
 

@@ -1,3 +1,5 @@
+const { describe, test, expect, beforeEach } = require('bun:test');
+const { createMockFn } = require('../../helpers/bun-mock-utils');
 
 const { EventEmitter } = require('events');
 
@@ -6,22 +8,22 @@ const createMockPlatform = () => {
     const platform = new EventEmitter();
     platform.connectionManager = {
         connections: new Map(),
-        connectToStream: jest.fn().mockResolvedValue(true),
-        removeConnection: jest.fn(),
-        setConnectionReady: jest.fn(),
-        isConnectionReady: jest.fn(),
-        getActiveVideoIds: jest.fn(),
-        getConnectionCount: jest.fn(),
-        getReadyConnectionCount: jest.fn(),
-        hasConnection: jest.fn(),
-        getConnection: jest.fn(),
-        getAllVideoIds: jest.fn()
+        connectToStream: createMockFn().mockResolvedValue(true),
+        removeConnection: createMockFn(),
+        setConnectionReady: createMockFn(),
+        isConnectionReady: createMockFn(),
+        getActiveVideoIds: createMockFn(),
+        getConnectionCount: createMockFn(),
+        getReadyConnectionCount: createMockFn(),
+        hasConnection: createMockFn(),
+        getConnection: createMockFn(),
+        getAllVideoIds: createMockFn()
     };
     platform.logger = {
-        debug: jest.fn(),
-        info: jest.fn(),
-        warn: jest.fn(),
-        error: jest.fn()
+        debug: createMockFn(),
+        info: createMockFn(),
+        warn: createMockFn(),
+        error: createMockFn()
     };
     platform.config = {
         youtube: {
@@ -30,7 +32,7 @@ const createMockPlatform = () => {
         }
     };
     // Add the method we're testing - this should fail because the real behavior doesn't exist yet
-    platform.getActiveYouTubeVideoIds = jest.fn(() => {
+    platform.getActiveYouTubeVideoIds = createMockFn(() => {
         // This is the behavior we want to implement:
         // Only return connections that are actually ready (have received start event)
         return platform.connectionManager.getActiveVideoIds().filter(videoId => 
@@ -41,9 +43,9 @@ const createMockPlatform = () => {
 };
 
 const createMockNotificationManager = () => ({
-    getDisplayedNotifications: jest.fn(() => []),
-    addNotification: jest.fn(),
-    clearNotifications: jest.fn()
+    getDisplayedNotifications: createMockFn(() => []),
+    addNotification: createMockFn(),
+    clearNotifications: createMockFn()
 });
 
 const expectValidNotification = (notification) => {
@@ -75,12 +77,12 @@ const createYouTubePlatform = (mockLogger, mockConnectionManager) => {
             }
         },
         {
-            onMessage: jest.fn(),
-            onFollow: jest.fn(),
-            onGift: jest.fn(),
-            onMembership: jest.fn(),
-            onStreamStart: jest.fn(),
-            onStreamEnd: jest.fn()
+            onMessage: createMockFn(),
+            onFollow: createMockFn(),
+            onGift: createMockFn(),
+            onMembership: createMockFn(),
+            onStreamStart: createMockFn(),
+            onStreamEnd: createMockFn()
         },
         mockLogger,
         createMockNotificationManager()
@@ -94,23 +96,23 @@ describe('YouTube Connection Status Reporting', () => {
 
     beforeEach(() => {
         mockLogger = {
-            debug: jest.fn(),
-            info: jest.fn(),
-            warn: jest.fn(),
-            error: jest.fn()
+            debug: createMockFn(),
+            info: createMockFn(),
+            warn: createMockFn(),
+            error: createMockFn()
         };
 
         mockConnectionManager = {
             connections: new Map(),
-            addConnection: jest.fn(),
-            removeConnection: jest.fn(),
-            setConnectionReady: jest.fn(),
-            isConnectionReady: jest.fn(),
-            getActiveVideoIds: jest.fn(),
-            getConnectionCount: jest.fn(),
-            getReadyConnectionCount: jest.fn(),
-            hasConnection: jest.fn(),
-            getConnection: jest.fn()
+            addConnection: createMockFn(),
+            removeConnection: createMockFn(),
+            setConnectionReady: createMockFn(),
+            isConnectionReady: createMockFn(),
+            getActiveVideoIds: createMockFn(),
+            getConnectionCount: createMockFn(),
+            getReadyConnectionCount: createMockFn(),
+            hasConnection: createMockFn(),
+            getConnection: createMockFn()
         };
 
         platform = createMockPlatform();
@@ -161,8 +163,8 @@ describe('YouTube Connection Status Reporting', () => {
         test('should show accurate status logging distinguishing stored vs ready connections', () => {
             // Given: Platform has 3 stored connections, 1 ready
             const storedConnections = ['video1', 'video2', 'video3'];
-            platform.connectionManager.getAllVideoIds = jest.fn().mockReturnValue(storedConnections);
-            platform.getActiveYouTubeVideoIds = jest.fn().mockReturnValue(['video1']); // Only 1 ready
+            platform.connectionManager.getAllVideoIds = createMockFn().mockReturnValue(storedConnections);
+            platform.getActiveYouTubeVideoIds = createMockFn().mockReturnValue(['video1']); // Only 1 ready
             
             // When: System logs multi-stream status
             const storedCount = platform.connectionManager.getAllVideoIds().length;

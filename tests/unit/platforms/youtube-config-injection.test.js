@@ -1,3 +1,6 @@
+const { describe, it, expect, beforeEach, afterEach } = require('bun:test');
+const { createMockFn, restoreAllMocks } = require('../../helpers/bun-mock-utils');
+const { mockModule, restoreAllModuleMocks, resetModules } = require('../../helpers/bun-module-mocks');
 
 const { initializeTestLogging } = require('../../helpers/test-setup');
 const { createMockLogger } = require('../../helpers/mock-factories');
@@ -44,8 +47,8 @@ describe('YouTube Platform Config Injection', () => {
         
         // Mock the ConfigManager that has .get() method
         mockConfigManager = {
-            get: jest.fn(),
-            getPlatformConfig: jest.fn(),
+            get: createMockFn(),
+            getPlatformConfig: createMockFn(),
             youtube: {
                 enabled: true,
                 username: 'test-channel',
@@ -63,12 +66,18 @@ describe('YouTube Platform Config Injection', () => {
         };
         
         // Mock the core/config module
-        jest.doMock('../../../src/core/config', () => ({
-            get: jest.fn((section, key, defaultValue) => {
+        mockModule('../../../src/core/config', () => ({
+            get: createMockFn((section, key, defaultValue) => {
                 if (section === 'youtube' && key === 'enableAPI') return false;
                 return defaultValue;
             })
         }));
+    });
+
+    afterEach(() => {
+        restoreAllMocks();
+        restoreAllModuleMocks();
+        resetModules();
     });
 
     describe('when YouTube platform is initialized with proper config', () => {
@@ -80,8 +89,8 @@ describe('YouTube Platform Config Injection', () => {
             const mockPlatform = {
                 config: mockConfig,
                 logger: mockLogger,
-                AuthorExtractor: { extractAuthor: jest.fn() },
-                NotificationBuilder: { build: jest.fn() }
+                AuthorExtractor: { extractAuthor: createMockFn() },
+                NotificationBuilder: { build: createMockFn() }
             };
             
             // Act - Create notification dispatcher with proper config injection
@@ -106,8 +115,8 @@ describe('YouTube Platform Config Injection', () => {
             const mockPlatform = {
                 config: mockConfig,
                 logger: mockLogger,
-                AuthorExtractor: { extractAuthor: jest.fn() },
-                NotificationBuilder: { build: jest.fn() }
+                AuthorExtractor: { extractAuthor: createMockFn() },
+                NotificationBuilder: { build: createMockFn() }
             };
             
             // Act & Assert - Should not throw during construction
@@ -128,8 +137,8 @@ describe('YouTube Platform Config Injection', () => {
             const mockPlatform = {
                 config: mockConfig,
                 logger: mockLogger,
-                AuthorExtractor: { extractAuthor: jest.fn() },
-                NotificationBuilder: { build: jest.fn() }
+                AuthorExtractor: { extractAuthor: createMockFn() },
+                NotificationBuilder: { build: createMockFn() }
             };
             
             // Act - Create dispatcher with plain config
@@ -155,8 +164,8 @@ describe('YouTube Platform Config Injection', () => {
             const mockPlatform = {
                 config: mockConfig,
                 logger: mockLogger,
-                AuthorExtractor: { extractAuthor: jest.fn() },
-                NotificationBuilder: { build: jest.fn() }
+                AuthorExtractor: { extractAuthor: createMockFn() },
+                NotificationBuilder: { build: createMockFn() }
             };
             
             // Act - This should fallback to require('../core/config')
@@ -177,7 +186,7 @@ describe('YouTube Platform Config Injection', () => {
         it('should provide clear error when config.get fails', () => {
             // Arrange
             const brokenConfig = {
-                get: jest.fn().mockImplementation(() => {
+                get: createMockFn().mockImplementation(() => {
                     throw new Error('Config access failed');
                 })
             };
@@ -185,8 +194,8 @@ describe('YouTube Platform Config Injection', () => {
             const mockPlatform = {
                 config: mockConfig,
                 logger: mockLogger,
-                AuthorExtractor: { extractAuthor: jest.fn() },
-                NotificationBuilder: { build: jest.fn() }
+                AuthorExtractor: { extractAuthor: createMockFn() },
+                NotificationBuilder: { build: createMockFn() }
             };
             
             // Act & Assert
@@ -207,7 +216,7 @@ describe('YouTube Platform Config Injection', () => {
             
             // STEP 1: Create config manager with .get() method
             const configManager = {
-                get: jest.fn((section, key, defaultValue) => {
+                get: createMockFn((section, key, defaultValue) => {
                     if (section === 'youtube' && key === 'enableAPI') return true;
                     return defaultValue;
                 })
@@ -216,8 +225,8 @@ describe('YouTube Platform Config Injection', () => {
             // STEP 2: Create service with proper config injection
             const dispatcher = new MockYouTubeNotificationDispatcher({
                 logger: mockLogger,
-                NotificationBuilder: { build: jest.fn() },
-                AuthorExtractor: { extractAuthor: jest.fn() },
+                NotificationBuilder: { build: createMockFn() },
+                AuthorExtractor: { extractAuthor: createMockFn() },
                 config: configManager // Inject config with .get() method
             });
 

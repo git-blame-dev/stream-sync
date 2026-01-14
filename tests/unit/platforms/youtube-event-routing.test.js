@@ -1,3 +1,5 @@
+const { describe, test, expect, beforeEach, afterEach } = require('bun:test');
+const { createMockFn, clearAllMocks, restoreAllMocks, spyOn } = require('../../helpers/bun-mock-utils');
 
 const PlatformEvents = require('../../../src/interfaces/PlatformEvents');
 const EventEmitter = require('events');
@@ -11,18 +13,18 @@ describe('YouTube Platform Event Routing', () => {
     beforeEach(() => {
         // Create mock handlers that track calls
         mockHandlers = {
-            onChat: jest.fn(),
-            onGift: jest.fn(),
-            onMembership: jest.fn(),
-            onStreamStatus: jest.fn(),
-            onViewerCount: jest.fn()
+            onChat: createMockFn(),
+            onGift: createMockFn(),
+            onMembership: createMockFn(),
+            onStreamStatus: createMockFn(),
+            onViewerCount: createMockFn()
         };
 
         mockLogger = {
-            info: jest.fn(),
-            debug: jest.fn(),
-            warn: jest.fn(),
-            error: jest.fn()
+            info: createMockFn(),
+            debug: createMockFn(),
+            warn: createMockFn(),
+            error: createMockFn()
         };
 
         // Create minimal test object with _emitPlatformEvent method
@@ -58,6 +60,10 @@ describe('YouTube Platform Event Routing', () => {
                 this.logger.debug(`No handler registered for event type: ${type}`, 'youtube');
             }
         };
+    });
+
+    afterEach(() => {
+        restoreAllMocks();
     });
 
     describe('_emitPlatformEvent method existence', () => {
@@ -233,7 +239,7 @@ describe('YouTube Platform Event Routing', () => {
                 youtubePlatform._emitPlatformEvent(eventType, testPayload);
 
                 expect(mockHandlers[handlerName]).toHaveBeenCalledWith(testPayload);
-                jest.clearAllMocks();
+                clearAllMocks();
             });
         });
     });
@@ -295,7 +301,7 @@ describe('YouTube Platform Event Routing', () => {
 
     describe('Event emitter integration', () => {
         test('should emit platform:event for local listeners', () => {
-            const emitSpy = jest.spyOn(youtubePlatform, 'emit');
+            const emitSpy = spyOn(youtubePlatform, 'emit');
 
             const chatPayload = {
                 type: PlatformEvents.CHAT_MESSAGE,
@@ -380,7 +386,7 @@ describe('YouTube Platform Event Routing', () => {
             // 2. Route to handler via handlerMap
             // 3. Call handler function
 
-            const emitSpy = jest.spyOn(youtubePlatform, 'emit');
+            const emitSpy = spyOn(youtubePlatform, 'emit');
             const testPayload = { type: 'test', platform: 'youtube', data: 'test' };
 
             youtubePlatform._emitPlatformEvent('chat', testPayload);

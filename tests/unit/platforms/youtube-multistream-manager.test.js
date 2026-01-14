@@ -1,3 +1,6 @@
+const { describe, test, expect } = require('bun:test');
+const { createMockFn } = require('../../helpers/bun-mock-utils');
+
 const { createYouTubeMultiStreamManager } = require('../../../src/platforms/youtube/streams/youtube-multistream-manager');
 
 describe('YouTube multi-stream manager', () => {
@@ -9,24 +12,24 @@ describe('YouTube multi-stream manager', () => {
                 fullCheckInterval: 1000
             },
             connectionManager: {
-                getConnectionCount: jest.fn(() => 0),
-                getAllVideoIds: jest.fn(() => []),
-                hasConnection: jest.fn(() => false)
+                getConnectionCount: createMockFn(() => 0),
+                getAllVideoIds: createMockFn(() => []),
+                hasConnection: createMockFn(() => false)
             },
-            getActiveYouTubeVideoIds: jest.fn(() => []),
-            getLiveVideoIds: jest.fn(async () => []),
-            connectToYouTubeStream: jest.fn().mockResolvedValue(),
-            disconnectFromYouTubeStream: jest.fn().mockResolvedValue(),
-            checkStreamShortageAndWarn: jest.fn(),
-            _logMultiStreamStatus: jest.fn(),
-            _handleProcessingError: jest.fn(),
-            _handleError: jest.fn(),
+            getActiveYouTubeVideoIds: createMockFn(() => []),
+            getLiveVideoIds: createMockFn(async () => []),
+            connectToYouTubeStream: createMockFn().mockResolvedValue(),
+            disconnectFromYouTubeStream: createMockFn().mockResolvedValue(),
+            checkStreamShortageAndWarn: createMockFn(),
+            _logMultiStreamStatus: createMockFn(),
+            _handleProcessingError: createMockFn(),
+            _handleError: createMockFn(),
             logger: {
-                info: jest.fn(),
-                debug: jest.fn(),
-                warn: jest.fn()
+                info: createMockFn(),
+                debug: createMockFn(),
+                warn: createMockFn()
             },
-            _emitPlatformEvent: jest.fn(),
+            _emitPlatformEvent: createMockFn(),
             ...overrides
         };
 
@@ -35,7 +38,7 @@ describe('YouTube multi-stream manager', () => {
 
     const buildManager = (platform, now = () => 100) => createYouTubeMultiStreamManager({
         platform,
-        safeSetInterval: jest.fn(),
+        safeSetInterval: createMockFn(),
         validateTimeout: (value) => value,
         now
     });
@@ -43,7 +46,7 @@ describe('YouTube multi-stream manager', () => {
     test('emits stream-detected platform:event when new streams appear', async () => {
         const emitted = [];
         const platform = buildPlatform({
-            getLiveVideoIds: jest.fn(async () => ['stream-1']),
+            getLiveVideoIds: createMockFn(async () => ['stream-1']),
             _emitPlatformEvent: (type, payload) => emitted.push({ type, payload })
         });
         const manager = buildManager(platform, () => 123);
@@ -65,7 +68,7 @@ describe('YouTube multi-stream manager', () => {
     test('does not emit stream-detected when no new streams are found', async () => {
         const emitted = [];
         const platform = buildPlatform({
-            getLiveVideoIds: jest.fn(async () => []),
+            getLiveVideoIds: createMockFn(async () => []),
             _emitPlatformEvent: (type, payload) => emitted.push({ type, payload })
         });
         const manager = buildManager(platform);

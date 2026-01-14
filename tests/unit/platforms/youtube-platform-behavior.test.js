@@ -1,5 +1,9 @@
-jest.mock('../../../src/utils/message-normalization', () => ({
-    normalizeYouTubeMessage: jest.fn().mockReturnValue({
+const { describe, it, expect, afterEach } = require('bun:test');
+const { createMockFn, restoreAllMocks } = require('../../helpers/bun-mock-utils');
+const { mockModule, restoreAllModuleMocks, resetModules } = require('../../helpers/bun-module-mocks');
+
+mockModule('../../../src/utils/message-normalization', () => ({
+    normalizeYouTubeMessage: createMockFn().mockReturnValue({
         userId: 'user-id',
         authorChannelId: 'author-channel',
         username: 'user',
@@ -16,16 +20,16 @@ jest.mock('../../../src/utils/message-normalization', () => ({
 
 const { YouTubePlatform } = require('../../../src/platforms/youtube');
 const createLogger = () => ({
-    debug: jest.fn(),
-    info: jest.fn(),
-    warn: jest.fn(),
-    error: jest.fn()
+    debug: createMockFn(),
+    info: createMockFn(),
+    warn: createMockFn(),
+    error: createMockFn()
 });
 
 const createPlatform = (overrides = {}) => {
     const logger = overrides.logger || createLogger();
     const streamDetectionService = overrides.streamDetectionService || {
-        detectLiveStreams: jest.fn().mockResolvedValue({
+        detectLiveStreams: createMockFn().mockResolvedValue({
             success: true,
             videoIds: [],
             detectionMethod: 'mock'
@@ -41,45 +45,45 @@ const createPlatform = (overrides = {}) => {
         notificationDispatcher: overrides.notificationDispatcher,
         ChatFileLoggingService: overrides.ChatFileLoggingService,
         notificationManager: overrides.notificationManager || {
-            emit: jest.fn(),
-            on: jest.fn(),
-            removeListener: jest.fn()
+            emit: createMockFn(),
+            on: createMockFn(),
+            removeListener: createMockFn()
         }
     };
 
     const platform = new YouTubePlatform({ enabled: true, username: 'test-channel' }, dependencies);
-    platform.startMultiStreamMonitoring = jest.fn().mockResolvedValue();
+    platform.startMultiStreamMonitoring = createMockFn().mockResolvedValue();
     if (!platform.connectionManager) {
         platform.connectionManager = {
-            connectToStream: jest.fn().mockResolvedValue(true),
-            getConnectionCount: jest.fn().mockReturnValue(0),
-            getAllVideoIds: jest.fn().mockReturnValue([]),
-            getActiveVideoIds: jest.fn().mockReturnValue([]),
-            hasConnection: jest.fn().mockReturnValue(false),
-            disconnectFromStream: jest.fn().mockResolvedValue(true),
-            cleanupAllConnections: jest.fn().mockResolvedValue(),
-            removeConnection: jest.fn()
+            connectToStream: createMockFn().mockResolvedValue(true),
+            getConnectionCount: createMockFn().mockReturnValue(0),
+            getAllVideoIds: createMockFn().mockReturnValue([]),
+            getActiveVideoIds: createMockFn().mockReturnValue([]),
+            hasConnection: createMockFn().mockReturnValue(false),
+            disconnectFromStream: createMockFn().mockResolvedValue(true),
+            cleanupAllConnections: createMockFn().mockResolvedValue(),
+            removeConnection: createMockFn()
         };
     } else {
-        platform.connectionManager.connectToStream = jest.fn().mockResolvedValue(true);
-        platform.connectionManager.getConnectionCount = jest.fn().mockReturnValue(0);
-        platform.connectionManager.getAllVideoIds = jest.fn().mockReturnValue([]);
-        platform.connectionManager.getActiveVideoIds = jest.fn().mockReturnValue([]);
-        platform.connectionManager.hasConnection = jest.fn().mockReturnValue(false);
-        platform.connectionManager.disconnectFromStream = jest.fn().mockResolvedValue(true);
-        platform.connectionManager.cleanupAllConnections = jest.fn().mockResolvedValue();
-        platform.connectionManager.removeConnection = jest.fn();
+        platform.connectionManager.connectToStream = createMockFn().mockResolvedValue(true);
+        platform.connectionManager.getConnectionCount = createMockFn().mockReturnValue(0);
+        platform.connectionManager.getAllVideoIds = createMockFn().mockReturnValue([]);
+        platform.connectionManager.getActiveVideoIds = createMockFn().mockReturnValue([]);
+        platform.connectionManager.hasConnection = createMockFn().mockReturnValue(false);
+        platform.connectionManager.disconnectFromStream = createMockFn().mockResolvedValue(true);
+        platform.connectionManager.cleanupAllConnections = createMockFn().mockResolvedValue();
+        platform.connectionManager.removeConnection = createMockFn();
     }
     if (!platform.connectionStateManager) {
         platform.connectionStateManager = {
-            markConnecting: jest.fn(),
-            markConnected: jest.fn(),
-            markError: jest.fn()
+            markConnecting: createMockFn(),
+            markConnected: createMockFn(),
+            markError: createMockFn()
         };
     } else {
-        platform.connectionStateManager.markConnecting = jest.fn();
-        platform.connectionStateManager.markConnected = jest.fn();
-        platform.connectionStateManager.markError = jest.fn();
+        platform.connectionStateManager.markConnecting = createMockFn();
+        platform.connectionStateManager.markConnected = createMockFn();
+        platform.connectionStateManager.markError = createMockFn();
     }
 
     if (typeof platform.on !== 'function' || typeof platform.emit !== 'function') {
@@ -103,6 +107,12 @@ const createPlatform = (overrides = {}) => {
 };
 
 describe('YouTubePlatform modern architecture', () => {
+    afterEach(() => {
+        restoreAllMocks();
+        restoreAllModuleMocks();
+        resetModules();
+    });
+
     it('should emit aggregated viewer counts as platform events after stream updates', () => {
         const { platform } = createPlatform();
         const received = [];
@@ -186,10 +196,10 @@ describe('YouTubePlatform modern architecture', () => {
 
     it('should emit chat connected event when connectToYouTubeStream succeeds', async () => {
         const mockConnectionManager = {
-            hasConnection: jest.fn().mockReturnValue(false),
-            connectToStream: jest.fn().mockResolvedValue(true),
-            getConnectionCount: jest.fn().mockReturnValueOnce(0).mockReturnValueOnce(1),
-            getConnectionId: jest.fn().mockReturnValue('youtube-abc123')
+            hasConnection: createMockFn().mockReturnValue(false),
+            connectToStream: createMockFn().mockResolvedValue(true),
+            getConnectionCount: createMockFn().mockReturnValueOnce(0).mockReturnValueOnce(1),
+            getConnectionId: createMockFn().mockReturnValue('youtube-abc123')
         };
 
         const youtubePlatform = new YouTubePlatform(
@@ -198,7 +208,7 @@ describe('YouTubePlatform modern architecture', () => {
                 username: 'creator',
                 viewerCountEnabled: true
             },
-            { logger: { debug: jest.fn(), info: jest.fn(), warn: jest.fn(), error: jest.fn() }, streamDetectionService: { detectLiveStreams: jest.fn() } }
+            { logger: { debug: createMockFn(), info: createMockFn(), warn: createMockFn(), error: createMockFn() }, streamDetectionService: { detectLiveStreams: createMockFn() } }
         );
 
         youtubePlatform.connectionManager = mockConnectionManager;
@@ -223,10 +233,10 @@ describe('YouTubePlatform modern architecture', () => {
 
     it('emits stream-status when the first YouTube stream becomes live', async () => {
         const mockConnectionManager = {
-            hasConnection: jest.fn().mockReturnValue(false),
-            connectToStream: jest.fn().mockResolvedValue(true),
-            getConnectionCount: jest.fn().mockReturnValueOnce(0).mockReturnValueOnce(1),
-            getConnectionId: jest.fn().mockReturnValue('youtube-abc123')
+            hasConnection: createMockFn().mockReturnValue(false),
+            connectToStream: createMockFn().mockResolvedValue(true),
+            getConnectionCount: createMockFn().mockReturnValueOnce(0).mockReturnValueOnce(1),
+            getConnectionId: createMockFn().mockReturnValue('youtube-abc123')
         };
 
         const youtubePlatform = new YouTubePlatform(
@@ -235,7 +245,7 @@ describe('YouTubePlatform modern architecture', () => {
                 username: 'creator',
                 viewerCountEnabled: true
             },
-            { logger: { debug: jest.fn(), info: jest.fn(), warn: jest.fn(), error: jest.fn() }, streamDetectionService: { detectLiveStreams: jest.fn() } }
+            { logger: { debug: createMockFn(), info: createMockFn(), warn: createMockFn(), error: createMockFn() }, streamDetectionService: { detectLiveStreams: createMockFn() } }
         );
 
         youtubePlatform.connectionManager = mockConnectionManager;
@@ -261,9 +271,9 @@ describe('YouTubePlatform modern architecture', () => {
 
     it('emits stream-status when the last YouTube stream disconnects', async () => {
         const mockConnectionManager = {
-            hasConnection: jest.fn().mockReturnValue(true),
-            disconnectFromStream: jest.fn().mockResolvedValue(true),
-            getConnectionCount: jest.fn().mockReturnValueOnce(1).mockReturnValueOnce(0)
+            hasConnection: createMockFn().mockReturnValue(true),
+            disconnectFromStream: createMockFn().mockResolvedValue(true),
+            getConnectionCount: createMockFn().mockReturnValueOnce(1).mockReturnValueOnce(0)
         };
 
         const youtubePlatform = new YouTubePlatform(
@@ -272,7 +282,7 @@ describe('YouTubePlatform modern architecture', () => {
                 username: 'creator',
                 viewerCountEnabled: true
             },
-            { logger: { debug: jest.fn(), info: jest.fn(), warn: jest.fn(), error: jest.fn() }, streamDetectionService: { detectLiveStreams: jest.fn() } }
+            { logger: { debug: createMockFn(), info: createMockFn(), warn: createMockFn(), error: createMockFn() }, streamDetectionService: { detectLiveStreams: createMockFn() } }
         );
 
         youtubePlatform.connectionManager = mockConnectionManager;
