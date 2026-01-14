@@ -1,16 +1,26 @@
 
-jest.unmock('../../../src/platforms/twitch-eventsub');
+const { describe, it, expect, afterEach } = require('bun:test');
+const { createMockFn, restoreAllMocks, spyOn } = require('../../helpers/bun-mock-utils');
+const { unmockModule, requireActual, restoreAllModuleMocks, resetModules } = require('../../helpers/bun-module-mocks');
 
-const TwitchEventSub = jest.requireActual('../../../src/platforms/twitch-eventsub');
+unmockModule('../../../src/platforms/twitch-eventsub');
+
+const TwitchEventSub = requireActual('../../../src/platforms/twitch-eventsub');
 
 describe('TwitchEventSub notification routing', () => {
+    afterEach(() => {
+        restoreAllMocks();
+        restoreAllModuleMocks();
+        resetModules();
+    });
+
     it('routes chat notifications to handleNotificationEvent', async () => {
-        const logger = { info: jest.fn(), debug: jest.fn(), warn: jest.fn(), error: jest.fn() };
+        const logger = { info: createMockFn(), debug: createMockFn(), warn: createMockFn(), error: createMockFn() };
         const eventSub = new TwitchEventSub(
             { clientId: 'cid', accessToken: 'token', channel: 'streamer', username: 'streamer' },
             { authManager: { getState: () => 'READY', getUserId: () => '1', authState: { executeWhenReady: async fn => fn() }, getAccessToken: async () => 'token' }, logger }
         );
-        jest.spyOn(eventSub, 'handleNotificationEvent');
+        spyOn(eventSub, 'handleNotificationEvent');
 
         const payload = {
             metadata: { message_type: 'notification', message_id: 'mid' },
@@ -28,12 +38,12 @@ describe('TwitchEventSub notification routing', () => {
     });
 
     it('routes follow notifications to handleNotificationEvent', async () => {
-        const logger = { info: jest.fn(), debug: jest.fn(), warn: jest.fn(), error: jest.fn() };
+        const logger = { info: createMockFn(), debug: createMockFn(), warn: createMockFn(), error: createMockFn() };
         const eventSub = new TwitchEventSub(
             { clientId: 'cid', accessToken: 'token', channel: 'streamer', username: 'streamer' },
             { authManager: { getState: () => 'READY', getUserId: () => '1', authState: { executeWhenReady: async fn => fn() }, getAccessToken: async () => 'token' }, logger }
         );
-        jest.spyOn(eventSub, 'handleNotificationEvent');
+        spyOn(eventSub, 'handleNotificationEvent');
 
         const payload = {
             metadata: { message_type: 'notification', message_id: 'mid' },
@@ -51,13 +61,13 @@ describe('TwitchEventSub notification routing', () => {
     });
 
     it('emits subscription events with canonical months for renewal handling', () => {
-        const logger = { info: jest.fn(), debug: jest.fn(), warn: jest.fn(), error: jest.fn() };
+        const logger = { info: createMockFn(), debug: createMockFn(), warn: createMockFn(), error: createMockFn() };
         const eventSub = new TwitchEventSub(
             { clientId: 'cid', accessToken: 'token', channel: 'streamer', username: 'streamer', dataLoggingEnabled: false },
             { authManager: { getState: () => 'READY', getUserId: () => '1', authState: { executeWhenReady: async fn => fn() }, getAccessToken: async () => 'token' }, logger }
         );
 
-        eventSub.emit = jest.fn();
+        eventSub.emit = createMockFn();
 
         const subscriptionEvent = {
             user_name: 'LongTenure',
@@ -80,13 +90,13 @@ describe('TwitchEventSub notification routing', () => {
     });
 
     it('emits resubscription messages with canonical months for renewal handling', () => {
-        const logger = { info: jest.fn(), debug: jest.fn(), warn: jest.fn(), error: jest.fn() };
+        const logger = { info: createMockFn(), debug: createMockFn(), warn: createMockFn(), error: createMockFn() };
         const eventSub = new TwitchEventSub(
             { clientId: 'cid', accessToken: 'token', channel: 'streamer', username: 'streamer', dataLoggingEnabled: false },
             { authManager: { getState: () => 'READY', getUserId: () => '1', authState: { executeWhenReady: async fn => fn() }, getAccessToken: async () => 'token' }, logger }
         );
 
-        eventSub.emit = jest.fn();
+        eventSub.emit = createMockFn();
 
         const resubEvent = {
             user_name: 'Resubber',
@@ -110,12 +120,12 @@ describe('TwitchEventSub notification routing', () => {
     });
 
     it('routes raid events through handleNotificationEvent', async () => {
-        const logger = { info: jest.fn(), debug: jest.fn(), warn: jest.fn(), error: jest.fn() };
+        const logger = { info: createMockFn(), debug: createMockFn(), warn: createMockFn(), error: createMockFn() };
         const eventSub = new TwitchEventSub(
             { clientId: 'cid', accessToken: 'token', channel: 'streamer', username: 'streamer' },
             { authManager: { getState: () => 'READY', getUserId: () => '1', authState: { executeWhenReady: async fn => fn() }, getAccessToken: async () => 'token' }, logger }
         );
-        jest.spyOn(eventSub, 'handleNotificationEvent');
+        spyOn(eventSub, 'handleNotificationEvent');
 
         const payload = {
             metadata: { message_type: 'notification', message_id: 'mid' },

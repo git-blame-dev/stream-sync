@@ -1,53 +1,64 @@
 
-jest.mock('../../../src/utils/platform-error-handler', () => ({
-    createPlatformErrorHandler: jest.fn(() => ({
-        handleEventProcessingError: jest.fn(),
-        logOperationalError: jest.fn()
+const { describe, it, expect, beforeEach, afterEach } = require('bun:test');
+const { createMockFn, clearAllMocks, restoreAllMocks } = require('../../helpers/bun-mock-utils');
+const { mockModule, unmockModule, requireActual, restoreAllModuleMocks, resetModules } = require('../../helpers/bun-module-mocks');
+
+mockModule('../../../src/utils/platform-error-handler', () => ({
+    createPlatformErrorHandler: createMockFn(() => ({
+        handleEventProcessingError: createMockFn(),
+        logOperationalError: createMockFn()
     }))
 }));
 
-jest.mock('ws', () => jest.fn(() => ({ readyState: 1 })));
+mockModule('ws', () => createMockFn(() => ({ readyState: 1 })));
 
-jest.mock('../../../src/utils/timeout-validator', () => ({
-    safeSetTimeout: jest.fn(),
-    safeSetInterval: jest.fn(),
-    validateTimeout: jest.fn((value) => value),
-    safeDelay: jest.fn().mockResolvedValue()
+mockModule('../../../src/utils/timeout-validator', () => ({
+    safeSetTimeout: createMockFn(),
+    safeSetInterval: createMockFn(),
+    validateTimeout: createMockFn((value) => value),
+    safeDelay: createMockFn().mockResolvedValue()
 }));
 
-jest.unmock('../../../src/platforms/twitch-eventsub');
+unmockModule('../../../src/platforms/twitch-eventsub');
+resetModules();
 const { createPlatformErrorHandler } = require('../../../src/utils/platform-error-handler');
-const TwitchEventSub = require('../../../src/platforms/twitch-eventsub');
+const TwitchEventSub = requireActual('../../../src/platforms/twitch-eventsub');
 
 const mockLogger = {
-    info: jest.fn(),
-    warn: jest.fn(),
-    error: jest.fn(),
-    debug: jest.fn()
+    info: createMockFn(),
+    warn: createMockFn(),
+    error: createMockFn(),
+    debug: createMockFn()
 };
 
 class MockChatFileLoggingService {
     constructor() {
-        this.appendLog = jest.fn();
+        this.appendLog = createMockFn();
     }
 }
 
 const readyAuthManager = (overrides = {}) => ({
-    getState: jest.fn(() => overrides.state || 'READY'),
-    getScopes: jest.fn(() => overrides.scopes || []),
-    getAccessToken: jest.fn().mockResolvedValue('token'),
-    getClientId: jest.fn(() => overrides.clientId || null),
+    getState: createMockFn(() => overrides.state || 'READY'),
+    getScopes: createMockFn(() => overrides.scopes || []),
+    getAccessToken: createMockFn().mockResolvedValue('token'),
+    getClientId: createMockFn(() => overrides.clientId || null),
     clientId: overrides.clientId || null,
     twitchAuth: {
-        triggerOAuthFlow: jest.fn().mockRejectedValue(new Error('oauth fail'))
+        triggerOAuthFlow: createMockFn().mockRejectedValue(new Error('oauth fail'))
     },
-    authState: { executeWhenReady: jest.fn((cb) => cb()) },
+    authState: { executeWhenReady: createMockFn((cb) => cb()) },
     ...overrides
 });
 
 describe('TwitchEventSub behavior guardrails', () => {
+    afterEach(() => {
+        restoreAllMocks();
+        restoreAllModuleMocks();
+        resetModules();
+    });
+
     beforeEach(() => {
-        jest.clearAllMocks();
+        clearAllMocks();
     });
 
     it('warns when relying on centralized auth for clientId and optional fields mismatch types', async () => {
@@ -78,7 +89,7 @@ describe('TwitchEventSub behavior guardrails', () => {
         instance.isInitialized = false;
 
         if (!instance.errorHandler) {
-            instance.errorHandler = { logOperationalError: jest.fn(), handleEventProcessingError: jest.fn() };
+            instance.errorHandler = { logOperationalError: createMockFn(), handleEventProcessingError: createMockFn() };
         }
         const valid = instance._validateConnectionForSubscriptions();
 
@@ -92,7 +103,7 @@ describe('TwitchEventSub behavior guardrails', () => {
         const instance = new TwitchEventSub({}, { logger: mockLogger, authManager, ChatFileLoggingService: MockChatFileLoggingService });
 
         if (!instance.errorHandler) {
-            instance.errorHandler = { logOperationalError: jest.fn(), handleEventProcessingError: jest.fn() };
+            instance.errorHandler = { logOperationalError: createMockFn(), handleEventProcessingError: createMockFn() };
         }
         instance._handleMissingScopes(['bits:read']);
         await new Promise((resolve) => setImmediate(resolve));

@@ -1,3 +1,4 @@
+const { describe, test, expect } = require('bun:test');
 const { createTwitchEventSubEventRouter } = require('../../../../src/platforms/twitch-eventsub/events/twitch-eventsub-event-router');
 
 describe('Twitch EventSub event router', () => {
