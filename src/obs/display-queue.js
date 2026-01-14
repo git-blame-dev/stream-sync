@@ -12,6 +12,7 @@ const { isNotificationType, isChatType } = require('../utils/notification-types'
 const { createPlatformErrorHandler } = require('../utils/platform-error-handler');
 const { safeSetTimeout, safeDelay } = require('../utils/timeout-validator');
 const { PlatformEvents } = require('../interfaces/PlatformEvents');
+const { PRIORITY_LEVELS } = require('../core/constants');
 
 let displayQueueErrorHandler = logger ? createPlatformErrorHandler(logger, 'display-queue') : null;
 
@@ -114,7 +115,7 @@ class DisplayQueue {
     getTypePriority(type) {
         if (!this.constants || !this.constants.PRIORITY_LEVELS) {
             logger.warn('[Display Queue] PRIORITY_LEVELS not available, using default priority');
-            return 1; // Default to chat priority
+            return PRIORITY_LEVELS.CHAT;
         }
 
         const typeToPriorityMap = {
@@ -1270,16 +1271,7 @@ function initializeDisplayQueue(obsManager, config = {}, constants = {}, eventBu
     return displayQueueInstance;
 }
 
-function getDisplayQueue() {
-    if (!displayQueueInstance) {
-        throw new Error('DisplayQueue has not been initialized. Call initializeDisplayQueue(obsManager, config, constants, eventBus) first.');
-    }
-    return displayQueueInstance;
-}
-
 module.exports = {
     initializeDisplayQueue,
-    getDisplayQueue,
-    createDisplayQueue,
     DisplayQueue // Export class for testing
 }; 

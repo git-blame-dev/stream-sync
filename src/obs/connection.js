@@ -1,6 +1,7 @@
 const { safeSetTimeout } = require('../utils/timeout-validator');
 const { withTimeout } = require('../utils/timeout-wrapper');
 const { createPlatformErrorHandler } = require('../utils/platform-error-handler');
+const { ERROR_MESSAGES: DEFAULT_ERROR_MESSAGES } = require('../core/constants');
 
 // Dependency injection support
 class OBSConnectionManager {
@@ -9,7 +10,7 @@ class OBSConnectionManager {
         const { logger } = require('../core/logging');
         this.logger = logger;
         this.log = logger;
-        this.constants = dependencies.constants || require('../core/constants');
+        this.constants = dependencies.constants || { ERROR_MESSAGES: DEFAULT_ERROR_MESSAGES };
         this.runtimeConstants = dependencies.runtimeConstants
             || (process.env.NODE_ENV === 'test' ? global.__TEST_RUNTIME_CONSTANTS__ : null);
         if (!this.runtimeConstants) {

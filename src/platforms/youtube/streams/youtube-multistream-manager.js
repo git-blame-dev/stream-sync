@@ -1,4 +1,5 @@
 const { PlatformEvents } = require('../../../interfaces/PlatformEvents');
+const { YOUTUBE } = require('../../../core/endpoints');
 
 function createYouTubeMultiStreamManager(options = {}) {
     const {
@@ -136,7 +137,7 @@ function createYouTubeMultiStreamManager(options = {}) {
             if (videoIds.length > 0) {
                 platform.logger.info('Detected live streams:', 'youtube');
                 videoIds.forEach((streamId, index) => {
-                    const streamUrl = `https://www.youtube.com/watch?v=${streamId}`;
+                    const streamUrl = `${YOUTUBE.BASE}/watch?v=${streamId}`;
                     platform.logger.debug(`  ${index + 1}. ${streamId} - ${streamUrl}`, 'youtube');
                 });
             }
@@ -262,7 +263,7 @@ function createYouTubeMultiStreamManager(options = {}) {
             if (includeActiveStreamsList && readyConnections.length > 0) {
                 platform.logger.info('Active streams:', 'youtube');
                 readyConnections.forEach((streamId, index) => {
-                    const streamUrl = `https://www.youtube.com/watch?v=${streamId}`;
+                    const streamUrl = `${YOUTUBE.BASE}/watch?v=${streamId}`;
                     platform.logger.debug(`  ${index + 1}. ${streamId} - ${streamUrl}`, 'youtube');
                 });
             }

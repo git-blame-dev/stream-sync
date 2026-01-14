@@ -1,5 +1,6 @@
 const { withTimeout } = require('../utils/timeout-wrapper');
 const { createPlatformErrorHandler } = require('../utils/platform-error-handler');
+const { YOUTUBE } = require('../core/endpoints');
 
 const DEFAULT_TIMEOUT_MS = 2000;
 
@@ -44,7 +45,7 @@ function normalizeHandleForCache(channelHandle) {
 }
 
 function buildHandleUrl(handleKey) {
-    return `https://www.youtube.com/@${handleKey}`;
+    return YOUTUBE.buildChannelUrl(handleKey);
 }
 
 async function resolveChannelId(innertubeClient, channelHandle, options = {}) {

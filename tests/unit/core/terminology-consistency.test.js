@@ -22,6 +22,7 @@ const { initializeTestLogging, createTestUser, TEST_TIMEOUTS } = require('../../
 const { setupAutomatedCleanup } = require('../../helpers/mock-lifecycle');
 const PlatformEventRouter = require('../../../src/services/PlatformEventRouter');
 const { generateLogMessage } = require('../../helpers/notification-test-utils');
+const { PlatformEvents } = require('../../../src/interfaces/PlatformEvents');
 const constants = require('../../../src/core/constants');
 
 initializeTestLogging();
@@ -135,8 +136,9 @@ describe('Terminology Consistency', () => {
             expect(constants.NOTIFICATION_CONFIGS.resub).toBeUndefined();
             expect(constants.NOTIFICATION_CONFIGS.resubscription).toBeUndefined();
             expect(constants.PRIORITY_LEVELS.RESUB).toBeUndefined();
-            expect(constants.NOTIFICATION_TYPES.RESUB).toBeUndefined();
-            expect(constants.NOTIFICATION_TYPES.RESUBSCRIPTION).toBeUndefined();
+            expect(constants.NOTIFICATION_TYPES).toBeUndefined();
+            expect(PlatformEvents.NOTIFICATION_TYPES.RESUB).toBeUndefined();
+            expect(PlatformEvents.NOTIFICATION_TYPES.RESUBSCRIPTION).toBeUndefined();
         });
     });
 });

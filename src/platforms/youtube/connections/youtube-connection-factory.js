@@ -1,3 +1,5 @@
+const { YOUTUBE } = require('../../../core/endpoints');
+
 function createYouTubeConnectionFactory(options = {}) {
     const {
         platform,
@@ -216,7 +218,7 @@ function createYouTubeConnectionFactory(options = {}) {
         platform.logger.debug('connection.start() called successfully', 'youtube');
 
         platform.logger.debug(`Successfully initiated connection to stream: ${videoId}`, 'youtube');
-        platform.logger.debug(`Stream URL: https://www.youtube.com/watch?v=${videoId}`, 'youtube');
+        platform.logger.debug(`Stream URL: ${YOUTUBE.BASE}/watch?v=${videoId}`, 'youtube');
 
         if (platform.viewerService && typeof platform.viewerService.setActiveStream === 'function') {
             try {
