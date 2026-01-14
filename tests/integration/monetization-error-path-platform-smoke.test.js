@@ -1,3 +1,5 @@
+const { describe, it, expect } = require('bun:test');
+const { createMockFn, clearAllMocks, restoreAllMocks } = require('../helpers/bun-mock-utils');
 const EventEmitter = require('events');
 const PlatformLifecycleService = require('../../src/services/PlatformLifecycleService');
 const NotificationManager = require('../../src/notifications/NotificationManager');
@@ -20,19 +22,24 @@ describe('Monetization error-path platform flows (smoke)', () => {
         };
     };
 
+    afterEach(() => {
+        clearAllMocks();
+        restoreAllMocks();
+    });
+
     const createConfigService = (config) => ({
-        areNotificationsEnabled: jest.fn().mockReturnValue(true),
-        getPlatformConfig: jest.fn().mockReturnValue(true),
-        getNotificationSettings: jest.fn().mockReturnValue({ enabled: true, duration: 4000 }),
-        get: jest.fn((section) => {
+        areNotificationsEnabled: createMockFn(() => true),
+        getPlatformConfig: createMockFn(() => true),
+        getNotificationSettings: createMockFn(() => ({ enabled: true, duration: 4000 })),
+        get: createMockFn((section) => {
             if (!section) {
                 return config;
             }
             return config[section] || {};
         }),
-        isDebugEnabled: jest.fn().mockReturnValue(false),
-        getTTSConfig: jest.fn().mockReturnValue({ enabled: false }),
-        isEnabled: jest.fn().mockReturnValue(true)
+        isDebugEnabled: createMockFn(() => false),
+        getTTSConfig: createMockFn(() => ({ enabled: false })),
+        isEnabled: createMockFn(() => true)
     });
 
     const createHarness = (platformKey) => {
@@ -70,14 +77,14 @@ describe('Monetization error-path platform flows (smoke)', () => {
             configService,
             constants: require('../../src/core/constants'),
             textProcessing,
-            obsGoals: { processDonationGoal: jest.fn() },
-            vfxCommandService: { getVFXConfig: jest.fn().mockResolvedValue(null) },
-            ttsService: { speak: jest.fn() },
-            userTrackingService: { isFirstMessage: jest.fn().mockResolvedValue(false) }
+            obsGoals: { processDonationGoal: createMockFn() },
+            vfxCommandService: { getVFXConfig: createMockFn().mockResolvedValue(null) },
+            ttsService: { speak: createMockFn() },
+            userTrackingService: { isFirstMessage: createMockFn().mockResolvedValue(false) }
         });
 
         const streamDetector = {
-            startStreamDetection: jest.fn(async (_platformName, _config, connectCallback) => connectCallback())
+            startStreamDetection: createMockFn(async (_platformName, _config, connectCallback) => connectCallback())
         };
         const platformConfig = { enabled: true };
         if (platformKey === 'youtube') {

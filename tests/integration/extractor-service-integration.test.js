@@ -1,4 +1,6 @@
 
+const { describe, test, beforeEach, afterEach, expect } = require('bun:test');
+const { clearAllMocks, restoreAllMocks } = require('../helpers/bun-mock-utils');
 const { YouTubeViewerExtractor } = require('../../src/extractors/youtube-viewer-extractor');
 
 // Test utilities
@@ -12,7 +14,8 @@ describe('Extractor Service Integration', () => {
     });
     
     afterEach(async () => {
-        jest.clearAllMocks();
+        clearAllMocks();
+        restoreAllMocks();
     });
 
     describe('Primary Extraction Strategy (View Text)', () => {

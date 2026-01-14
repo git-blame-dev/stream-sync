@@ -1,4 +1,6 @@
 
+const { describe, test, expect } = require('bun:test');
+
 // Initialize test setup
 const { initializeTestLogging } = require('../helpers/test-setup');
 initializeTestLogging();
