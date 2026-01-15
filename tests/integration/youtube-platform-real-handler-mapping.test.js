@@ -1,60 +1,64 @@
+const { describe, test, beforeEach, afterEach, expect } = require('bun:test');
+
+const { createMockFn, restoreAllMocks } = require('../helpers/bun-mock-utils');
+const { mockModule, restoreAllModuleMocks, resetModules } = require('../helpers/bun-module-mocks');
 
 // Mock the logging system to avoid initialization issues
-jest.mock('../../src/core/logging', () => ({
+mockModule('../../src/core/logging', () => ({
     getUnifiedLogger: () => ({
-        debug: jest.fn(),
-        info: jest.fn(),
-        warn: jest.fn(),
-        error: jest.fn()
+        debug: createMockFn(),
+        info: createMockFn(),
+        warn: createMockFn(),
+        error: createMockFn()
     }),
-    setConfigValidator: jest.fn()
+    setConfigValidator: createMockFn()
 }));
 
 // Mock retry system to avoid logging dependencies
-jest.mock('../../src/utils/retry-system', () => ({
-    createRetrySystem: jest.fn(() => ({
-        calculateAdaptiveRetryDelay: jest.fn(() => 1000),
-        incrementRetryCount: jest.fn(),
-        resetRetryCount: jest.fn(),
-        handleConnectionError: jest.fn(),
-        handleConnectionSuccess: jest.fn(),
-        executeWithRetry: jest.fn()
+mockModule('../../src/utils/retry-system', () => ({
+    createRetrySystem: createMockFn(() => ({
+        calculateAdaptiveRetryDelay: createMockFn(() => 1000),
+        incrementRetryCount: createMockFn(),
+        resetRetryCount: createMockFn(),
+        handleConnectionError: createMockFn(),
+        handleConnectionSuccess: createMockFn(),
+        executeWithRetry: createMockFn()
     })),
-    RetrySystem: jest.fn(),
+    RetrySystem: createMockFn(),
     ADAPTIVE_RETRY_CONFIG: { BASE_DELAY: 2000, MAX_DELAY: 60000, BACKOFF_MULTIPLIER: 1.3 }
 }));
 
 const mockTextProcessing = {
-    extractMessageText: jest.fn((text) => text)
+    extractMessageText: createMockFn((text) => text)
 };
 
 // Mock additional dependencies that YouTube platform needs
-jest.mock('../../src/utils/text-processing', () => ({
-    createTextProcessingManager: jest.fn(() => mockTextProcessing),
-    TextProcessingManager: jest.fn(),
-    formatTimestampCompact: jest.fn(() => '12:34:56')
+mockModule('../../src/utils/text-processing', () => ({
+    createTextProcessingManager: createMockFn(() => mockTextProcessing),
+    TextProcessingManager: createMockFn(),
+    formatTimestampCompact: createMockFn(() => '12:34:56')
 }));
 
-jest.mock('../../src/utils/youtube-message-extractor', () => ({
-    YouTubeMessageExtractor: jest.fn(),
-    shouldSuppressYouTubeNotification: jest.fn(() => false)
+mockModule('../../src/utils/youtube-message-extractor', () => ({
+    YouTubeMessageExtractor: createMockFn(),
+    shouldSuppressYouTubeNotification: createMockFn(() => false)
 }));
 
-jest.mock('../../src/utils/youtube-author-extractor', () => jest.fn());
+mockModule('../../src/utils/youtube-author-extractor', () => createMockFn());
 
-jest.mock('../../src/utils/notification-builder', () => jest.fn());
+mockModule('../../src/utils/notification-builder', () => createMockFn());
 
 // Mock the YouTubeNotificationDispatcher
-jest.mock('../../src/utils/youtube-notification-dispatcher', () => {
+mockModule('../../src/utils/youtube-notification-dispatcher', () => {
     const mockNotificationDispatcher = {
-        dispatchSuperChat: jest.fn().mockResolvedValue(true),
-        dispatchSuperSticker: jest.fn().mockResolvedValue(true),
-        dispatchMembership: jest.fn().mockResolvedValue(true),
-        dispatchGiftMembership: jest.fn().mockResolvedValue(true)
+        dispatchSuperChat: createMockFn().mockResolvedValue(true),
+        dispatchSuperSticker: createMockFn().mockResolvedValue(true),
+        dispatchMembership: createMockFn().mockResolvedValue(true),
+        dispatchGiftMembership: createMockFn().mockResolvedValue(true)
     };
 
     return {
-        YouTubeNotificationDispatcher: jest.fn().mockImplementation(() => mockNotificationDispatcher)
+        YouTubeNotificationDispatcher: createMockFn().mockImplementation(() => mockNotificationDispatcher)
     };
 });
 
@@ -63,47 +67,53 @@ describe('YouTube Platform Real Handler Method Mapping', () => {
     let mockHandlers;
     let mockNotificationDispatcher;
 
+    afterEach(() => {
+        restoreAllMocks();
+        restoreAllModuleMocks();
+        resetModules();
+    });
+
     beforeEach(() => {
         // Create mock notification dispatcher with expected methods
         mockNotificationDispatcher = {
-            dispatchSuperChat: jest.fn().mockResolvedValue(true),
-            dispatchSuperSticker: jest.fn().mockResolvedValue(true),
-            dispatchMembership: jest.fn().mockResolvedValue(true),
-            dispatchGiftMembership: jest.fn().mockResolvedValue(true)
+            dispatchSuperChat: createMockFn().mockResolvedValue(true),
+            dispatchSuperSticker: createMockFn().mockResolvedValue(true),
+            dispatchMembership: createMockFn().mockResolvedValue(true),
+            dispatchGiftMembership: createMockFn().mockResolvedValue(true)
         };
-        
+
         // Mock handlers
         mockHandlers = {
-            onMembership: jest.fn(),
-            onGift: jest.fn(),
-            onSuperChat: jest.fn(),
-            onSuperSticker: jest.fn()
+            onMembership: createMockFn(),
+            onGift: createMockFn(),
+            onSuperChat: createMockFn(),
+            onSuperSticker: createMockFn()
         };
 
         // Create a simplified platform mock that has the handler methods we want to test
         platform = {
-            handleMembership: jest.fn(async (chatItem) => {
+            handleMembership: createMockFn(async (chatItem) => {
                 if (mockNotificationDispatcher.dispatchMembership && typeof mockNotificationDispatcher.dispatchMembership === 'function') {
                     return await mockNotificationDispatcher.dispatchMembership(chatItem, mockHandlers);
                 }
                 platform.logger.warn('dispatchMembership method not available');
                 return null;
             }),
-            handleGiftMembershipPurchase: jest.fn(async (chatItem) => {
+            handleGiftMembershipPurchase: createMockFn(async (chatItem) => {
                 return await mockNotificationDispatcher.dispatchGiftMembership(chatItem, mockHandlers);
             }),
-            handleSuperChat: jest.fn(async (chatItem) => {
+            handleSuperChat: createMockFn(async (chatItem) => {
                 return await mockNotificationDispatcher.dispatchSuperChat(chatItem, mockHandlers);
             }),
-            handleSuperSticker: jest.fn(async (chatItem) => {
+            handleSuperSticker: createMockFn(async (chatItem) => {
                 return await mockNotificationDispatcher.dispatchSuperSticker(chatItem, mockHandlers);
             }),
             notificationDispatcher: mockNotificationDispatcher,
             handlers: mockHandlers,
             logger: {
-                debug: jest.fn(),
-                warn: jest.fn(),
-                error: jest.fn()
+                debug: createMockFn(),
+                warn: createMockFn(),
+                error: createMockFn()
             }
         };
     });

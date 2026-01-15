@@ -1,3 +1,5 @@
+const { describe, test, afterEach, expect } = require('bun:test');
+
 const EventEmitter = require('events');
 const NotificationManager = require('../../src/notifications/NotificationManager');
 const { YouTubeNotificationDispatcher } = require('../../src/utils/youtube-notification-dispatcher');
@@ -6,6 +8,7 @@ const { initializeTestLogging } = require('../helpers/test-setup');
 const { getSyntheticFixture } = require('../helpers/platform-test-data');
 const { createMockDisplayQueue, createMockLogger } = require('../helpers/mock-factories');
 const { createTextProcessingManager } = require('../../src/utils/text-processing');
+const { createMockFn, restoreAllMocks } = require('../helpers/bun-mock-utils');
 
 initializeTestLogging();
 
@@ -64,13 +67,13 @@ const createNotificationManagerHarness = () => {
         tts: { enabled: false }
     };
     const configService = {
-        areNotificationsEnabled: jest.fn().mockReturnValue(true),
-        getPlatformConfig: jest.fn().mockReturnValue(true),
-        getNotificationSettings: jest.fn().mockReturnValue({ enabled: true, duration: 4000 }),
-        get: jest.fn((section) => (section ? configSnapshot[section] || {} : configSnapshot)),
-        isDebugEnabled: jest.fn().mockReturnValue(false),
-        getTTSConfig: jest.fn().mockReturnValue({ enabled: false }),
-        isEnabled: jest.fn().mockReturnValue(true)
+        areNotificationsEnabled: createMockFn().mockReturnValue(true),
+        getPlatformConfig: createMockFn().mockReturnValue(true),
+        getNotificationSettings: createMockFn().mockReturnValue({ enabled: true, duration: 4000 }),
+        get: createMockFn((section) => (section ? configSnapshot[section] || {} : configSnapshot)),
+        isDebugEnabled: createMockFn().mockReturnValue(false),
+        getTTSConfig: createMockFn().mockReturnValue({ enabled: false }),
+        isEnabled: createMockFn().mockReturnValue(true)
     };
 
     const notificationManager = new NotificationManager({
@@ -80,10 +83,10 @@ const createNotificationManagerHarness = () => {
         configService,
         constants: require('../../src/core/constants'),
         textProcessing,
-        obsGoals: { processDonationGoal: jest.fn() },
-        vfxCommandService: { getVFXConfig: jest.fn().mockResolvedValue(null) },
-        ttsService: { speak: jest.fn() },
-        userTrackingService: { isFirstMessage: jest.fn().mockResolvedValue(false) }
+        obsGoals: { processDonationGoal: createMockFn() },
+        vfxCommandService: { getVFXConfig: createMockFn().mockResolvedValue(null) },
+        ttsService: { speak: createMockFn() },
+        userTrackingService: { isFirstMessage: createMockFn().mockResolvedValue(false) }
     });
 
     return {
@@ -93,6 +96,10 @@ const createNotificationManagerHarness = () => {
 };
 
 describe('YouTube data flow integrity', () => {
+    afterEach(() => {
+        restoreAllMocks();
+    });
+
     test('builds user-facing output from dispatcher payloads', async () => {
         const { dispatchTable, getCapturedPayload } = createDispatcherHarness();
         await dispatchTable[realSuperChat.item.type](realSuperChat);

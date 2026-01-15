@@ -1,5 +1,7 @@
+const { describe, test, beforeEach, afterEach, expect } = require('bun:test');
 
 const { createTestSetup } = require('../helpers/test-setup');
+const { createMockFn, restoreAllMocks, spyOn } = require('../helpers/bun-mock-utils');
 
 describe('YouTube Error Fixes Integration', () => {
     let testSetup;
@@ -7,13 +9,17 @@ describe('YouTube Error Fixes Integration', () => {
     let mockApp;
     let youtubePlatform;
 
+    afterEach(() => {
+        restoreAllMocks();
+    });
+
     beforeEach(() => {
         testSetup = createTestSetup();
         logger = testSetup.logger;
-        
+
         // Mock app with gift notification handler
         mockApp = {
-            handleGiftNotification: jest.fn()
+            handleGiftNotification: createMockFn()
         };
 
         // Create YouTube platform with realistic configuration
@@ -33,12 +39,12 @@ describe('YouTube Error Fixes Integration', () => {
             app: mockApp,
             logger: testSetup.logger,
             notificationManager: {
-                emit: jest.fn().mockImplementation((event, data) => true),
-                on: jest.fn().mockImplementation((event, handler) => true),
-                removeListener: jest.fn().mockImplementation((event, handler) => true)
+                emit: createMockFn().mockImplementation((event, data) => true),
+                on: createMockFn().mockImplementation((event, handler) => true),
+                removeListener: createMockFn().mockImplementation((event, handler) => true)
             },
             streamDetectionService: {
-                detectLiveStreams: jest.fn().mockResolvedValue({ success: true, videoIds: [] })
+                detectLiveStreams: createMockFn().mockResolvedValue({ success: true, videoIds: [] })
             }
         };
 
@@ -50,7 +56,7 @@ describe('YouTube Error Fixes Integration', () => {
         };
         
         // Mock the handleSuperChat method for testing (since it may not be directly exposed)
-        youtubePlatform.handleSuperChat = jest.fn((event) => {
+        youtubePlatform.handleSuperChat = createMockFn((event) => {
             if (youtubePlatform.handlers?.onGift) {
                 const amount = parseFloat(event.item.purchase_amount.replace(/[^\d.]/g, ''));
                 const currency = event.item.purchase_amount.replace(/[\d.]/g, '');
@@ -69,7 +75,7 @@ describe('YouTube Error Fixes Integration', () => {
         
         // Mock the executeWithAPIFallback method for testing (if it doesn't exist)
         if (typeof youtubePlatform.executeWithAPIFallback === 'function') {
-            jest.spyOn(youtubePlatform, 'executeWithAPIFallback').mockImplementation(async (context, apiFn, scrapeFn, fallbackValue) => {
+            spyOn(youtubePlatform, 'executeWithAPIFallback').mockImplementation(async (context, apiFn, scrapeFn, fallbackValue) => {
                 // If enableAPI is false (or undefined, which means false), skip API and go to scraping
                 const enableAPI = youtubePlatform.config?.enableAPI;
                 if (!enableAPI && scrapeFn) {
@@ -86,7 +92,7 @@ describe('YouTube Error Fixes Integration', () => {
                 }
             });
         } else {
-            youtubePlatform.executeWithAPIFallback = jest.fn(async (context, apiFn, scrapeFn, fallbackValue) => {
+            youtubePlatform.executeWithAPIFallback = createMockFn(async (context, apiFn, scrapeFn, fallbackValue) => {
                 // If enableAPI is false (or undefined, which means false), skip API and go to scraping
                 const enableAPI = youtubePlatform.config?.enableAPI;
                 if (!enableAPI && scrapeFn) {
@@ -208,10 +214,10 @@ describe('YouTube Error Fixes Integration', () => {
     describe('API Fallback Behavior', () => {
         test('should skip API calls when enableAPI is false', async () => {
             // Create a spy on the YouTube API to ensure it's not called
-            const mockApiCall = jest.fn().mockRejectedValue(new Error('API should not be called'));
+            const mockApiCall = createMockFn().mockRejectedValue(new Error('API should not be called'));
             
             // Mock the _getYouTubeApi method to return our spy
-            youtubePlatform._getYouTubeApi = jest.fn().mockReturnValue({
+            youtubePlatform._getYouTubeApi = createMockFn().mockReturnValue({
                 videos: { list: mockApiCall }
             });
 
