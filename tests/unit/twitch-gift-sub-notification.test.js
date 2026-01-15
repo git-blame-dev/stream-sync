@@ -2,9 +2,6 @@
 const { describe, test, expect, beforeEach, it, afterEach } = require('bun:test');
 const { createMockFn, restoreAllMocks } = require('../helpers/bun-mock-utils');
 
-const { initializeTestLogging } = require('../helpers/test-setup');
-initializeTestLogging();
-
 const { createMockLogger, createMockDisplayQueue } = require('../helpers/mock-factories');
 const { setupAutomatedCleanup } = require('../helpers/mock-lifecycle');
 const { expectNoTechnicalArtifacts } = require('../helpers/assertion-helpers');

@@ -2,20 +2,9 @@
 const { describe, test, expect, beforeEach, it, afterEach } = require('bun:test');
 const { createMockFn, restoreAllMocks } = require('../helpers/bun-mock-utils');
 
-const { 
-  initializeTestLogging,
-  createTestUser, 
-  TEST_TIMEOUTS 
-} = require('../helpers/test-setup');
-
-const { 
-  createMockLogger
-} = require('../helpers/mock-factories');
+const { createMockLogger } = require('../helpers/mock-factories');
 
 const { TwitchViewerCountProvider } = require('../../src/utils/viewer-count-providers');
-
-// Initialize FIRST
-initializeTestLogging();
 
 describe('Twitch Viewer Count with Invalid Authentication', () => {
     afterEach(() => {

@@ -2,9 +2,6 @@
 const { describe, test, expect, beforeEach, it, afterEach } = require('bun:test');
 const { createMockFn, clearAllMocks, restoreAllMocks } = require('../helpers/bun-mock-utils');
 const { mockModule, resetModules, restoreAllModuleMocks } = require('../helpers/bun-module-mocks');
-const { initializeTestLogging } = require('../helpers/test-setup');
-
-initializeTestLogging();
 
 describe('OBS Startup Display Clearing - Detailed Behavior', () => {
     afterEach(() => {
@@ -21,7 +18,6 @@ describe('OBS Startup Display Clearing - Detailed Behavior', () => {
     beforeEach(() => {
         // Clear all mocks
         resetModules();
-        initializeTestLogging();
 
         // Create tracked arrays for behavior validation
         const clearedSources = [];
