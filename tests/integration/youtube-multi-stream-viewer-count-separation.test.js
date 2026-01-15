@@ -1,4 +1,7 @@
+const { describe, test, beforeEach, afterEach, expect } = require('bun:test');
 
+const { createMockFn, restoreAllMocks } = require('../helpers/bun-mock-utils');
+const { mockModule, restoreAllModuleMocks } = require('../helpers/bun-module-mocks');
 const { initializeTestLogging } = require('../helpers/test-setup');
 const { createMockLogger, createMockNotificationManager, setupAutomatedCleanup } = require('../helpers/mock-factories');
 const { expectNoTechnicalArtifacts } = require('../helpers/behavior-validation');
@@ -7,22 +10,26 @@ const { expectNoTechnicalArtifacts } = require('../helpers/behavior-validation')
 initializeTestLogging();
 
 // Mock YouTube.js to control test behavior
-jest.mock('youtubei.js', () => ({
+mockModule('youtubei.js', () => ({
     Innertube: {
-        create: jest.fn()
+        create: createMockFn()
     }
 }));
 
 // Mock dependencies to focus on behavior
-jest.mock('../../src/services/innertube-instance-manager', () => ({
-    getInstance: jest.fn()
+mockModule('../../src/services/innertube-instance-manager', () => ({
+    getInstance: createMockFn()
 }));
 
-// Unmock to test actual implementation behavior
-jest.unmock('../../src/platforms/youtube');
-jest.unmock('../../src/utils/youtube-connection-manager');
-
 describe('YouTube Multi-Stream Viewer Count Separation', () => {
+    afterEach(async () => {
+        restoreAllMocks();
+        restoreAllModuleMocks();
+        if (cleanup && typeof cleanup === 'function') {
+            await cleanup();
+        }
+    });
+
     let mockLogger, mockNotificationManager, cleanup;
 
     // ============================================================================================
@@ -69,7 +76,7 @@ describe('YouTube Multi-Stream Viewer Count Separation', () => {
         
         // Mock Innertube instance
         const mockInnertube = {
-            getInfo: jest.fn().mockImplementation((videoId) => {
+            getInfo: createMockFn().mockImplementation((videoId) => {
                 const response = streamResponses[videoId];
                 if (!response) {
                     throw new Error(`Stream not available: ${videoId}`);
@@ -77,16 +84,16 @@ describe('YouTube Multi-Stream Viewer Count Separation', () => {
                 return Promise.resolve(response);
             })
         };
-        
+
         // Mock InnertubeInstanceManager
         const mockManager = {
-            getInstance: jest.fn().mockResolvedValue(mockInnertube)
+            getInstance: createMockFn().mockResolvedValue(mockInnertube)
         };
         InnertubeInstanceManager.getInstance.mockReturnValue(mockManager);
-        
+
         // Create mock viewer extraction service for testing
         const mockViewerExtractionService = {
-            getAggregatedViewerCount: jest.fn().mockImplementation(async (videoIds) => {
+            getAggregatedViewerCount: createMockFn().mockImplementation(async (videoIds) => {
                 let totalCount = 0;
                 let successfulStreams = 0;
                 
@@ -104,7 +111,7 @@ describe('YouTube Multi-Stream Viewer Count Separation', () => {
                     successfulStreams
                 };
             }),
-            extractViewerCount: jest.fn().mockImplementation(async (videoId) => {
+            extractViewerCount: createMockFn().mockImplementation(async (videoId) => {
                 const stream = scenario.streams.find(s => s.videoId === videoId);
                 if (stream && stream.isLive !== false) {
                     return {
@@ -130,24 +137,24 @@ describe('YouTube Multi-Stream Viewer Count Separation', () => {
             notificationManager: mockNotificationManager,
             viewerExtractionService: mockViewerExtractionService,
             streamDetectionService: {
-                detectLiveStreams: jest.fn().mockResolvedValue({ success: true, videoIds: [] })
+                detectLiveStreams: createMockFn().mockResolvedValue({ success: true, videoIds: [] })
             }
         });
-        
+
         // Mock connection manager behavior
         const originalGetActiveVideoIds = platform.connectionManager.getActiveVideoIds;
         const originalIsConnectionReady = platform.connectionManager.isConnectionReady;
-        
+
         // Mock getActiveVideoIds to return ALL detected streams (not just chat-ready)
         // This is what SHOULD happen for viewer count aggregation
-        platform.connectionManager.getActiveVideoIds = jest.fn().mockReturnValue(
+        platform.connectionManager.getActiveVideoIds = createMockFn().mockReturnValue(
             scenario.streams
                 .filter(stream => stream.isLive !== false)
                 .map(stream => stream.videoId)
         );
-        
+
         // Mock isConnectionReady to respect chatReady state
-        platform.connectionManager.isConnectionReady = jest.fn().mockImplementation((videoId) => {
+        platform.connectionManager.isConnectionReady = createMockFn().mockImplementation((videoId) => {
             const stream = scenario.streams.find(s => s.videoId === videoId);
             return stream ? stream.chatReady : false;
         });
@@ -164,13 +171,6 @@ describe('YouTube Multi-Stream Viewer Count Separation', () => {
         cleanup = setupAutomatedCleanup();
         mockLogger = createMockLogger();
         mockNotificationManager = createMockNotificationManager();
-        jest.clearAllMocks();
-    });
-
-    afterEach(async () => {
-        if (cleanup && typeof cleanup === 'function') {
-            await cleanup();
-        }
     });
 
     // ============================================================================================
@@ -259,7 +259,7 @@ describe('YouTube Multi-Stream Viewer Count Separation', () => {
             expect(initialCount).toBe(3000);
             
             // When: Unstable stream chat comes online (viewer count stays same)
-            platform.connectionManager.isConnectionReady = jest.fn().mockImplementation((videoId) => {
+            platform.connectionManager.isConnectionReady = createMockFn().mockImplementation((videoId) => {
                 return true; // Both connections now ready
             });
             
@@ -307,8 +307,8 @@ describe('YouTube Multi-Stream Viewer Count Separation', () => {
             const platform = await createYouTubePlatformWithMixedStates(scenario);
             
             // When: Chat service is completely unavailable
-            platform.connectionManager.isConnectionReady = jest.fn().mockReturnValue(false);
-            platform.connectionManager.isAnyConnectionReady = jest.fn().mockReturnValue(false);
+            platform.connectionManager.isConnectionReady = createMockFn().mockReturnValue(false);
+            platform.connectionManager.isAnyConnectionReady = createMockFn().mockReturnValue(false);
             
             const viewerCount = await platform.getViewerCount();
             
@@ -355,7 +355,7 @@ describe('YouTube Multi-Stream Viewer Count Separation', () => {
             expect(beforeInterruption).toBe(5000);
             
             // When: Chat connections get interrupted
-            platform.connectionManager.isConnectionReady = jest.fn().mockReturnValue(false);
+            platform.connectionManager.isConnectionReady = createMockFn().mockReturnValue(false);
             
             const duringInterruption = await platform.getViewerCount();
             

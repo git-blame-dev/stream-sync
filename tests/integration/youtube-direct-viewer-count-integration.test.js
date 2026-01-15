@@ -1,4 +1,7 @@
+const { describe, test, beforeEach, afterEach, expect } = require('bun:test');
 
+const { createMockFn, restoreAllMocks } = require('../helpers/bun-mock-utils');
+const { mockModule, restoreAllModuleMocks } = require('../helpers/bun-module-mocks');
 const { initializeTestLogging } = require('../helpers/test-setup');
 const { createMockLogger } = require('../helpers/mock-factories');
 const testClock = require('../helpers/test-clock');
@@ -7,31 +10,33 @@ const testClock = require('../helpers/test-clock');
 initializeTestLogging();
 
 // Mock YouTube.js v16 and dependencies
-jest.mock('youtubei.js', () => ({
+mockModule('youtubei.js', () => ({
     Innertube: {
-        create: jest.fn()
+        create: createMockFn()
     }
 }));
 
 // Mock InnertubeInstanceManager to avoid complex prototype mocking
-jest.mock('../../src/services/innertube-instance-manager', () => ({
-    getInstance: jest.fn()
+mockModule('../../src/services/innertube-instance-manager', () => ({
+    getInstance: createMockFn()
 }));
 
 // Create universal test factory for viewer count provider mocking
 const createMockViewerCountProvider = (overrides = {}) => ({
-    getViewerCount: jest.fn().mockResolvedValue(100),
-    isReady: jest.fn().mockReturnValue(true),
-    getProviderStatus: jest.fn().mockReturnValue({ healthy: true }),
-    cleanup: jest.fn(),
-    getViewerCountForVideo: jest.fn().mockResolvedValue(100),
+    getViewerCount: createMockFn().mockResolvedValue(100),
+    isReady: createMockFn().mockReturnValue(true),
+    getProviderStatus: createMockFn().mockReturnValue({ healthy: true }),
+    cleanup: createMockFn(),
+    getViewerCountForVideo: createMockFn().mockResolvedValue(100),
     ...overrides
 });
 
-// Bypass the global jest mock to test actual implementation
-jest.unmock('../../src/platforms/youtube');
-
 describe('YouTube Direct getViewerCount() Integration', () => {
+    afterEach(() => {
+        restoreAllMocks();
+        restoreAllModuleMocks();
+    });
+
     let mockYouTubePlatform;
     let mockLogger;
     let mockInnertube;
@@ -42,14 +47,14 @@ describe('YouTube Direct getViewerCount() Integration', () => {
         
         // Create mock notification manager (required dependency)
         const mockNotificationManager = {
-            emit: jest.fn(),
-            on: jest.fn(),
-            removeListener: jest.fn()
+            emit: createMockFn(),
+            on: createMockFn(),
+            removeListener: createMockFn()
         };
-        
+
         // Create mock provider with expected viewer count
         const mockProvider = createMockViewerCountProvider({
-            getViewerCount: jest.fn().mockResolvedValue(expectedViewerCount),
+            getViewerCount: createMockFn().mockResolvedValue(expectedViewerCount),
             ...providerOverrides
         });
         
@@ -62,7 +67,7 @@ describe('YouTube Direct getViewerCount() Integration', () => {
             notificationManager: mockNotificationManager,
             viewerCountProvider: mockProvider,
             streamDetectionService: {
-                detectLiveStreams: jest.fn().mockResolvedValue({ success: true, videoIds: [] })
+                detectLiveStreams: createMockFn().mockResolvedValue({ success: true, videoIds: [] })
             }
         });
         
@@ -83,10 +88,9 @@ describe('YouTube Direct getViewerCount() Integration', () => {
 
     beforeEach(() => {
         testClock.reset();
-        jest.clearAllMocks();
         mockLogger = createMockLogger();
         mockInnertube = {
-            getInfo: jest.fn()
+            getInfo: createMockFn()
         };
     });
 

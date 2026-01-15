@@ -1,28 +1,34 @@
+const { describe, test, beforeEach, afterEach, expect } = require('bun:test');
 
+const { createMockFn, restoreAllMocks } = require('../helpers/bun-mock-utils');
+const { mockModule, restoreAllModuleMocks, resetModules } = require('../helpers/bun-module-mocks');
 const { YouTubeStreamDetectionService } = require('../../src/services/youtube-stream-detection-service');
 const { createMockConfig, createMockLogger } = require('../helpers/mock-factories');
 const { expectNoTechnicalArtifacts } = require('../helpers/assertion-helpers');
 const testClock = require('../helpers/test-clock');
 
 describe('YouTube YouTubei Stream Detection Integration - Regression', () => {
+    afterEach(() => {
+        restoreAllMocks();
+        restoreAllModuleMocks();
+    });
+
     let mockLogger;
     let mockConfig;
     let streamDetector;
     let mockYouTubeService;
-    
+
     beforeEach(() => {
-        // Clear all mocks first
-        jest.clearAllMocks();
-        jest.resetModules();
+        resetModules();
         testClock.reset();
-        
+
         mockLogger = createMockLogger();
         mockConfig = createMockConfig();
-        
+
         // Mock YouTube service behavior
         mockYouTubeService = {
-            detectLiveStreams: jest.fn(),
-            getUsageMetrics: jest.fn().mockReturnValue({
+            detectLiveStreams: createMockFn(),
+            getUsageMetrics: createMockFn().mockReturnValue({
                 totalRequests: 0,
                 successfulRequests: 0,
                 averageResponseTime: 0
@@ -30,12 +36,12 @@ describe('YouTube YouTubei Stream Detection Integration - Regression', () => {
         };
 
         // Mock the logging module to return our mock logger
-        jest.doMock('../../src/core/logging', () => ({
+        mockModule('../../src/core/logging', () => ({
             getUnifiedLogger: () => mockLogger
         }));
-        
+
         // Mock the dependency factory to return our mock service
-        jest.doMock('../../src/utils/dependency-factory', () => ({
+        mockModule('../../src/utils/dependency-factory', () => ({
             DependencyFactory: class MockDependencyFactory {
                 createYoutubeDependencies(config, options) {
                     console.log('createYoutubeDependencies called with:', config, options);
@@ -48,9 +54,9 @@ describe('YouTube YouTubei Stream Detection Integration - Regression', () => {
                 }
             }
         }));
-        
+
         // Mock youtubei.js import in StreamDetector
-        jest.doMock('youtubei.js', () => ({
+        mockModule('youtubei.js', () => ({
             Innertube: class MockInnertube {
                 constructor() {}
             }
@@ -66,13 +72,9 @@ describe('YouTube YouTubei Stream Detection Integration - Regression', () => {
         });
     });
 
-    afterEach(() => {
-        jest.clearAllMocks();
-        jest.resetModules();
-    });
 
     describe('Configuration Acceptance', () => {
-        it('should accept youtubei as valid streamDetectionMethod configuration option', () => {
+        test('should accept youtubei as valid streamDetectionMethod configuration option', () => {
             // Given: Config with youtubei stream detection method
             const youtubeConfig = {
                 streamDetectionMethod: 'youtubei',
@@ -89,7 +91,7 @@ describe('YouTube YouTubei Stream Detection Integration - Regression', () => {
             expectNoTechnicalArtifacts(result.userMessage || '');
         });
 
-        it('should provide user-friendly error when youtubei method configured but service unavailable', () => {
+        test('should provide user-friendly error when youtubei method configured but service unavailable', () => {
             // Given: Config with youtubei but no service available
             const youtubeConfig = {
                 streamDetectionMethod: 'youtubei',
@@ -111,7 +113,7 @@ describe('YouTube YouTubei Stream Detection Integration - Regression', () => {
             expect(result.userMessage).not.toContain('dependency');
         });
 
-        it('should surface failure when youtubei service is unavailable', () => {
+        test('should surface failure when youtubei service is unavailable', () => {
             // Given: Config with youtubei method
             const youtubeConfig = {
                 streamDetectionMethod: 'youtubei',
@@ -133,7 +135,7 @@ describe('YouTube YouTubei Stream Detection Integration - Regression', () => {
     });
 
     describe('Stream Detector Routing', () => {
-        it('should route to YouTubeStreamDetectionService when youtubei method configured', async () => {
+        test('should route to YouTubeStreamDetectionService when youtubei method configured', async () => {
             // Given: Stream detector with youtubei configuration
             const platformConfig = {
                 streamDetectionMethod: 'youtubei',
@@ -159,7 +161,7 @@ describe('YouTube YouTubei Stream Detection Integration - Regression', () => {
             expect(result).toBe(true);
         });
 
-        it('should not fall back when youtubei service unavailable at runtime', async () => {
+        test('should not fall back when youtubei service unavailable at runtime', async () => {
             // Given: Stream detector configured for youtubei but service fails
             const platformConfig = {
                 streamDetectionMethod: 'youtubei',
@@ -184,7 +186,7 @@ describe('YouTube YouTubei Stream Detection Integration - Regression', () => {
             );
         });
 
-        it('should meet performance targets for youtubei stream detection', async () => {
+        test('should meet performance targets for youtubei stream detection', async () => {
             // Given: Stream detector with youtubei configuration
             const platformConfig = {
                 streamDetectionMethod: 'youtubei',
@@ -225,15 +227,15 @@ describe('YouTube YouTubei Stream Detection Integration - Regression', () => {
                     streamDetectionMethod: 'youtubei',
                     username: 'testchannel'
                 },
-                getStreamDetectionService: jest.fn(),
-                connect: jest.fn(),
-                isConnected: jest.fn(),
-                detectLiveStreams: jest.fn(),
-                startStreamDetection: jest.fn()
+                getStreamDetectionService: createMockFn(),
+                connect: createMockFn(),
+                isConnected: createMockFn(),
+                detectLiveStreams: createMockFn(),
+                startStreamDetection: createMockFn()
             };
         });
 
-        it('should use youtubei service when platform configured with youtubei method', async () => {
+        test('should use youtubei service when platform configured with youtubei method', async () => {
             // Given: YouTube platform configured for youtubei
             mockYouTubePlatform.getStreamDetectionService.mockReturnValue(mockYouTubeService);
             mockYouTubeService.detectLiveStreams.mockResolvedValue({
@@ -258,7 +260,7 @@ describe('YouTube YouTubei Stream Detection Integration - Regression', () => {
             expectNoTechnicalArtifacts(result.message);
         });
 
-        it('should provide clear user feedback during youtubei stream detection', async () => {
+        test('should provide clear user feedback during youtubei stream detection', async () => {
             // Given: YouTube platform with youtubei detection
             const statusUpdates = [];
             const statusCallback = (status, message) => {
@@ -298,7 +300,7 @@ describe('YouTube YouTubei Stream Detection Integration - Regression', () => {
             expect(finalStatus.message).not.toContain('service');
         });
 
-        it('should handle youtubei service errors without exposing technical details', async () => {
+        test('should handle youtubei service errors without exposing technical details', async () => {
             // Given: YouTube platform with youtubei service that fails
             mockYouTubeService.detectLiveStreams.mockRejectedValue(
                 new Error('Innertube client initialization failed')
@@ -333,7 +335,7 @@ describe('YouTube YouTubei Stream Detection Integration - Regression', () => {
     });
 
     describe('Error Handling and Recovery', () => {
-        it('should surface missing youtubei dependency at startup', () => {
+        test('should surface missing youtubei dependency at startup', () => {
             // Given: System startup without youtubei service available
             const initializationResult = initializeYouTubeStreamDetection({
                 streamDetectionMethod: 'youtubei',
@@ -351,7 +353,7 @@ describe('YouTube YouTubei Stream Detection Integration - Regression', () => {
             expect(initializationResult.userMessage).not.toContain('youtubei');
         });
 
-        it('should provide meaningful error when youtubei configuration is invalid', () => {
+        test('should provide meaningful error when youtubei configuration is invalid', () => {
             // Given: Invalid youtubei configuration
             const invalidConfig = {
                 streamDetectionMethod: 'youtubei',
@@ -369,7 +371,7 @@ describe('YouTube YouTubei Stream Detection Integration - Regression', () => {
             expect(result.userMessage).not.toContain('validation');
         });
 
-        it('should maintain system stability when youtubei service becomes unavailable', async () => {
+        test('should maintain system stability when youtubei service becomes unavailable', async () => {
             // Given: System running with youtubei that becomes unavailable
             const platformConfig = {
                 streamDetectionMethod: 'youtubei',
@@ -404,7 +406,7 @@ describe('YouTube YouTubei Stream Detection Integration - Regression', () => {
     });
 
     describe('Configuration Migration and Compatibility', () => {
-        it('should handle existing scraping configurations alongside new youtubei option', () => {
+        test('should handle existing scraping configurations alongside new youtubei option', () => {
             // Given: Mix of old and new configuration formats
             const configs = [
                 { streamDetectionMethod: 'scraping', username: 'channel1' },
@@ -426,7 +428,7 @@ describe('YouTube YouTubei Stream Detection Integration - Regression', () => {
             });
         });
 
-        it('should provide clear migration guidance when upgrading to youtubei', () => {
+        test('should provide clear migration guidance when upgrading to youtubei', () => {
             // Given: User upgrading from old configuration
             const oldConfig = {
                 viewerCountMethod: 'youtubei', // User already using youtubei for viewer count

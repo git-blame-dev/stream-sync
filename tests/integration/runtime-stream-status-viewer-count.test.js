@@ -1,3 +1,6 @@
+const { describe, test, afterEach, expect } = require('bun:test');
+
+const { createMockFn, restoreAllMocks } = require('../helpers/bun-mock-utils');
 const { AppRuntime } = require('../../src/main');
 const { createAppRuntimeTestDependencies } = require('../helpers/runtime-test-harness');
 
@@ -39,15 +42,15 @@ const buildAppRuntimeDependencies = (options = {}) => (
 );
 
 describe('AppRuntime stream-status viewer count routing', () => {
-    let runtime;
-
     afterEach(async () => {
+        restoreAllMocks();
         if (runtime && typeof runtime.stop === 'function') {
             await runtime.stop();
         }
         runtime = null;
-        jest.clearAllMocks();
     });
+
+    let runtime;
 
     test('updates viewer count system when stream-status platform:event arrives', async () => {
         const harness = buildAppRuntimeDependencies();

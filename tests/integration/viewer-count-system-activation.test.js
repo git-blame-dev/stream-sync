@@ -1,35 +1,39 @@
+const { describe, test, beforeEach, afterEach, expect } = require('bun:test');
 
-jest.mock('../../src/obs/connection', () => ({
-    initializeOBSConnection: jest.fn().mockResolvedValue(),
-    getOBSConnectionManager: jest.fn()
+const { createMockFn, restoreAllMocks } = require('../helpers/bun-mock-utils');
+const { mockModule, restoreAllModuleMocks, resetModules } = require('../helpers/bun-module-mocks');
+
+mockModule('../../src/obs/connection', () => ({
+    initializeOBSConnection: createMockFn().mockResolvedValue(),
+    getOBSConnectionManager: createMockFn()
 }));
 
-jest.mock('../../src/obs/startup', () => ({
-    clearStartupDisplays: jest.fn().mockResolvedValue()
+mockModule('../../src/obs/startup', () => ({
+    clearStartupDisplays: createMockFn().mockResolvedValue()
 }));
 
-jest.mock('../../src/core/logging', () => {
+mockModule('../../src/core/logging', () => {
     const logger = {
-        debug: jest.fn(),
-        info: jest.fn(),
-        warn: jest.fn(),
-        error: jest.fn()
+        debug: createMockFn(),
+        info: createMockFn(),
+        warn: createMockFn(),
+        error: createMockFn()
     };
     return {
         logger,
-        getLogger: jest.fn(() => logger),
-        getUnifiedLogger: jest.fn(() => logger),
-        initializeLoggingConfig: jest.fn(),
-        initializeConsoleOverride: jest.fn(),
-        setConfigValidator: jest.fn(),
-        setDebugMode: jest.fn()
+        getLogger: createMockFn(() => logger),
+        getUnifiedLogger: createMockFn(() => logger),
+        initializeLoggingConfig: createMockFn(),
+        initializeConsoleOverride: createMockFn(),
+        setConfigValidator: createMockFn(),
+        setDebugMode: createMockFn()
     };
 });
 
-jest.mock('../../src/obs/goals', () => {
+mockModule('../../src/obs/goals', () => {
     const goalsManager = {
-        initializeGoalDisplay: jest.fn().mockResolvedValue(),
-        processDonationGoal: jest.fn()
+        initializeGoalDisplay: createMockFn().mockResolvedValue(),
+        processDonationGoal: createMockFn()
     };
     return {
         OBSGoalsManager: class {},
@@ -65,15 +69,15 @@ const testClock = require('../helpers/test-clock');
 const createMockPlatformLifecycleService = () => {
     const service = {
         platforms: {},
-        initializeAllPlatforms: jest.fn().mockResolvedValue({}),
-        getAllPlatforms: jest.fn(() => ({})),
-        getPlatforms: jest.fn(() => ({})),
-        getPlatform: jest.fn(() => null),
-        isPlatformAvailable: jest.fn(() => false),
-        getPlatformConnectionTime: jest.fn(() => testClock.now()),
-        recordPlatformConnection: jest.fn(),
-        disconnectAll: jest.fn().mockResolvedValue(),
-        waitForBackgroundInits: jest.fn().mockResolvedValue()
+        initializeAllPlatforms: createMockFn().mockResolvedValue({}),
+        getAllPlatforms: createMockFn(() => ({})),
+        getPlatforms: createMockFn(() => ({})),
+        getPlatform: createMockFn(() => null),
+        isPlatformAvailable: createMockFn(() => false),
+        getPlatformConnectionTime: createMockFn(() => testClock.now()),
+        recordPlatformConnection: createMockFn(),
+        disconnectAll: createMockFn().mockResolvedValue(),
+        waitForBackgroundInits: createMockFn().mockResolvedValue()
     };
     return service;
 };
@@ -88,6 +92,11 @@ setupAutomatedCleanup({
 });
 
 describe('ViewerCount System Activation Integration', () => {
+    afterEach(() => {
+        restoreAllMocks();
+        restoreAllModuleMocks();
+    });
+
     let AppRuntime;
     let ViewerCountSystem;
     let mockConfig;
@@ -117,7 +126,7 @@ describe('ViewerCount System Activation Integration', () => {
     beforeEach(() => {
         testClock.reset();
         // Reset modules to get fresh instances
-        jest.resetModules();
+        resetModules();
         
         // Create mock config with YouTube enabled
         mockConfig = createMockConfig({
@@ -156,13 +165,13 @@ describe('ViewerCount System Activation Integration', () => {
         
         // Create mock platforms with getViewerCount functionality
         mockYouTubePlatform = createMockYouTubePlatform();
-        mockYouTubePlatform.getViewerCount = jest.fn().mockResolvedValue(150);
-        
+        mockYouTubePlatform.getViewerCount = createMockFn().mockResolvedValue(150);
+
         mockTwitchPlatform = createMockTwitchPlatform();
-        mockTwitchPlatform.getViewerCount = jest.fn().mockResolvedValue(75);
-        
+        mockTwitchPlatform.getViewerCount = createMockFn().mockResolvedValue(75);
+
         mockTikTokPlatform = createMockTikTokPlatform();
-        mockTikTokPlatform.getViewerCount = jest.fn().mockResolvedValue(200);
+        mockTikTokPlatform.getViewerCount = createMockFn().mockResolvedValue(200);
         
         // Create mock DisplayQueue
         mockDisplayQueue = createMockDisplayQueue();
@@ -199,7 +208,7 @@ describe('ViewerCount System Activation Integration', () => {
     });
 
     describe('when system starts with YouTube enabled and live', () => {
-        it('should activate ViewerCount polling system', async () => {
+        test('should activate ViewerCount polling system', async () => {
             // Arrange
             const app = new AppRuntime(mockConfig, buildAppRuntimeDependencies());
             
@@ -227,7 +236,7 @@ describe('ViewerCount System Activation Integration', () => {
             expect(app.viewerCountSystem.counts.youtube).toBe(150);
         }, TEST_TIMEOUTS.FAST);
         
-        it('should poll viewer counts for all live platforms', async () => {
+        test('should poll viewer counts for all live platforms', async () => {
             // Arrange
             const app = new AppRuntime(mockConfig, buildAppRuntimeDependencies());
             
@@ -257,7 +266,7 @@ describe('ViewerCount System Activation Integration', () => {
             expect(app.viewerCountSystem.counts.tiktok).toBe(200);
         }, TEST_TIMEOUTS.FAST);
         
-        it('should not poll platforms that are offline', async () => {
+        test('should not poll platforms that are offline', async () => {
             // Arrange
             const app = new AppRuntime(mockConfig, buildAppRuntimeDependencies());
             
@@ -289,13 +298,13 @@ describe('ViewerCount System Activation Integration', () => {
     });
     
     describe('when ViewerCount system activation is driven by app.start()', () => {
-        it('should demonstrate the integration flow that should work', async () => {
+        test('should demonstrate the integration flow that should work', async () => {
             const app = new AppRuntime(mockConfig, buildAppRuntimeDependencies());
-            
+
             app.viewerCountSystem = new ViewerCountSystem(app);
 
             // Skip heavy platform initialization for this integration-style test
-            app.initializePlatforms = jest.fn().mockResolvedValue();
+            app.initializePlatforms = createMockFn().mockResolvedValue();
             
             app.viewerCountSystem.updateStreamStatus('youtube', true);
             
@@ -312,7 +321,7 @@ describe('ViewerCount System Activation Integration', () => {
     });
     
     describe('when stream status changes after startup', () => {
-        it('should start polling when stream goes live', async () => {
+        test('should start polling when stream goes live', async () => {
             // Arrange
             const app = new AppRuntime(mockConfig, buildAppRuntimeDependencies());
             
@@ -338,7 +347,7 @@ describe('ViewerCount System Activation Integration', () => {
             expect(mockYouTubePlatform.getViewerCount).toHaveBeenCalled();
         }, TEST_TIMEOUTS.FAST);
         
-        it('should stop polling when stream goes offline', async () => {
+        test('should stop polling when stream goes offline', async () => {
             // Arrange
             const app = new AppRuntime(mockConfig, buildAppRuntimeDependencies());
             

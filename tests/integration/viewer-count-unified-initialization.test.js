@@ -1,4 +1,6 @@
+const { describe, test, afterEach, expect } = require('bun:test');
 
+const { createMockFn, restoreAllMocks } = require('../helpers/bun-mock-utils');
 const { initializeTestLogging } = require('../helpers/test-setup');
 const { createMockPlatform, createMockNotificationManager, createMockLogger } = require('../helpers/mock-factories');
 const { setupAutomatedCleanup } = require('../helpers/mock-lifecycle');
@@ -22,15 +24,15 @@ const createViewerCountSystemWithBehaviors = (platformBehaviors = {}, systemBeha
         youtube: { viewerCount: 200 },
         ...platformBehaviors
     };
-    
+
     // Create platforms using mock pattern for compatibility
     const platforms = {};
     Object.entries(defaultPlatformBehaviors).forEach(([name, behavior]) => {
         platforms[name] = createMockPlatform(name, {
-            getViewerCount: jest.fn().mockReturnValue(behavior.viewerCount),
-            initialize: jest.fn().mockResolvedValue(true),
-            destroy: jest.fn().mockResolvedValue(true),
-            isConnected: jest.fn().mockReturnValue(true)
+            getViewerCount: createMockFn().mockReturnValue(behavior.viewerCount),
+            initialize: createMockFn().mockResolvedValue(true),
+            destroy: createMockFn().mockResolvedValue(true),
+            isConnected: createMockFn().mockReturnValue(true)
         });
     });
     
@@ -81,6 +83,10 @@ const expectUserSeesViewerCount = (system, platform, expectedCount) => {
 };
 
 describe('ViewerCount Unified Initialization Behavior', () => {
+    afterEach(() => {
+        restoreAllMocks();
+    });
+
     describe('Unified Initialization Behavior', () => {
         test('should eliminate dual initialization paths completely', async () => {
             // Given: ViewerCount system (simulating real app usage)
