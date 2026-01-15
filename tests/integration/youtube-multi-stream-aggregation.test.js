@@ -1,4 +1,7 @@
+const { describe, test, beforeEach, afterEach, expect } = require('bun:test');
 
+const { createMockFn, restoreAllMocks } = require('../helpers/bun-mock-utils');
+const { mockModule, restoreAllModuleMocks } = require('../helpers/bun-module-mocks');
 const { initializeTestLogging } = require('../helpers/test-setup');
 const { createMockLogger } = require('../helpers/mock-factories');
 
@@ -6,21 +9,23 @@ const { createMockLogger } = require('../helpers/mock-factories');
 initializeTestLogging();
 
 // Mock YouTube.js v16 and dependencies
-jest.mock('youtubei.js', () => ({
+mockModule('youtubei.js', () => ({
     Innertube: {
-        create: jest.fn()
+        create: createMockFn()
     }
 }));
 
 // Mock InnertubeInstanceManager to avoid complex prototype mocking
-jest.mock('../../src/services/innertube-instance-manager', () => ({
-    getInstance: jest.fn()
+mockModule('../../src/services/innertube-instance-manager', () => ({
+    getInstance: createMockFn()
 }));
 
-// Bypass the global jest mock to test actual implementation
-jest.unmock('../../src/platforms/youtube');
-
 describe('YouTube Multi-Stream Aggregation', () => {
+    afterEach(() => {
+        restoreAllMocks();
+        restoreAllModuleMocks();
+    });
+
     let mockYouTubePlatform;
     let mockLogger;
     let mockInnertube;
@@ -60,7 +65,7 @@ describe('YouTube Multi-Stream Aggregation', () => {
         
         // Mock Innertube to return appropriate responses
         mockInnertube = {
-            getInfo: jest.fn().mockImplementation((videoId) => {
+            getInfo: createMockFn().mockImplementation((videoId) => {
                 const response = streamResponses[videoId];
                 if (!response) {
                     throw new Error(`No mock response for video ${videoId}`);
@@ -68,23 +73,23 @@ describe('YouTube Multi-Stream Aggregation', () => {
                 return Promise.resolve(response);
             })
         };
-        
+
         // Mock InnertubeInstanceManager.getInstance to return a mock manager
         const mockManager = {
-            getInstance: jest.fn().mockResolvedValue(mockInnertube)
+            getInstance: createMockFn().mockResolvedValue(mockInnertube)
         };
         InnertubeInstanceManager.getInstance.mockReturnValue(mockManager);
-        
+
         // Create mock notification manager (required dependency)
         const mockNotificationManager = {
-            emit: jest.fn(),
-            on: jest.fn(),
-            removeListener: jest.fn()
+            emit: createMockFn(),
+            on: createMockFn(),
+            removeListener: createMockFn()
         };
 
         // Create mock viewer extraction service (required for provider)
         const mockViewerExtractionService = {
-            getAggregatedViewerCount: jest.fn().mockImplementation(async (videoIds) => {
+            getAggregatedViewerCount: createMockFn().mockImplementation(async (videoIds) => {
                 let totalCount = 0;
                 let successfulStreams = 0;
                 
@@ -120,19 +125,18 @@ describe('YouTube Multi-Stream Aggregation', () => {
             notificationManager: mockNotificationManager,
             viewerExtractionService: mockViewerExtractionService,
             streamDetectionService: {
-                detectLiveStreams: jest.fn().mockResolvedValue({ success: true, videoIds: [] })
+                detectLiveStreams: createMockFn().mockResolvedValue({ success: true, videoIds: [] })
             }
         });
 
         // Mock the getDetectedStreamIds method (used by viewer count provider)
-        platform.getDetectedStreamIds = jest.fn().mockReturnValue(activeVideoIds);
-        platform.Innertube = { create: jest.fn() };
+        platform.getDetectedStreamIds = createMockFn().mockReturnValue(activeVideoIds);
+        platform.Innertube = { create: createMockFn() };
         
         return platform;
     };
 
     beforeEach(() => {
-        jest.clearAllMocks();
         mockLogger = createMockLogger();
     });
 
@@ -215,7 +219,7 @@ describe('YouTube Multi-Stream Aggregation', () => {
             ]);
             
             // Mock one additional stream that will fail
-            platform.getDetectedStreamIds = jest.fn().mockReturnValue([
+            platform.getDetectedStreamIds = createMockFn().mockReturnValue([
                 'working-stream-1', 'failing-stream', 'working-stream-2'
             ]);
             
@@ -253,7 +257,7 @@ describe('YouTube Multi-Stream Aggregation', () => {
         test('should handle scenario where all streams fail to load', async () => {
             // Given: Platform with streams that all fail
             const platform = await createYouTubePlatformWithStreams([]);
-            platform.getDetectedStreamIds = jest.fn().mockReturnValue(['failing-1', 'failing-2']);
+            platform.getDetectedStreamIds = createMockFn().mockReturnValue(['failing-1', 'failing-2']);
             
             mockInnertube.getInfo.mockRejectedValue(new Error('All streams unavailable'));
             

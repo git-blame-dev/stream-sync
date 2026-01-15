@@ -1,4 +1,6 @@
+const { describe, test, beforeEach, afterEach, expect } = require('bun:test');
 
+const { createMockFn, restoreAllMocks } = require('../helpers/bun-mock-utils');
 const wireStreamStatusHandlers = require('../../src/viewer-count/stream-status-handler');
 const { ViewerCountSystem } = require('../../src/utils/viewer-count');
 
@@ -21,16 +23,22 @@ const createEventBus = () => {
 };
 
 describe('YouTube stream-status viewer count integration (smoke)', () => {
+    afterEach(async () => {
+        restoreAllMocks();
+        if (viewerCountSystem) {
+            viewerCountSystem.stopPolling();
+            await viewerCountSystem.cleanup();
+        }
+    });
+
     let viewerCountSystem;
     let eventBus;
     let platforms;
 
     beforeEach(async () => {
-        jest.useFakeTimers();
-
         platforms = {
             youtube: {
-                getViewerCount: jest.fn().mockResolvedValue(42)
+                getViewerCount: createMockFn().mockResolvedValue(42)
             }
         };
 
@@ -48,15 +56,7 @@ describe('YouTube stream-status viewer count integration (smoke)', () => {
         });
     });
 
-    afterEach(async () => {
-        jest.useRealTimers();
-        if (viewerCountSystem) {
-            viewerCountSystem.stopPolling();
-            await viewerCountSystem.cleanup();
-        }
-    });
-
-    it('starts polling YouTube when stream status is live and records viewer count', async () => {
+    test('starts polling YouTube when stream status is live and records viewer count', async () => {
         await eventBus.emit('platform:event', {
             platform: 'youtube',
             type: 'platform:stream-status',

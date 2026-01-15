@@ -1,4 +1,6 @@
+const { describe, test, beforeEach, afterEach, expect } = require('bun:test');
 
+const { createMockFn, restoreAllMocks } = require('../helpers/bun-mock-utils');
 const { initializeTestLogging } = require('../helpers/test-setup');
 
 // Initialize logging for tests
@@ -18,15 +20,23 @@ const { createRuntimeConstantsFixture } = require('../helpers/runtime-constants-
 const testClock = require('../helpers/test-clock');
 
 describe('YouTube Viewer Count System - End-to-End Integration', () => {
+    afterEach(async () => {
+        restoreAllMocks();
+        if (viewerCountSystem) {
+            viewerCountSystem.stopPolling();
+            await viewerCountSystem.cleanup();
+        }
+    });
+
     let platforms, obsManager, viewerCountSystem, logger, runtimeConstants;
-    
+
     beforeEach(async () => {
         testClock.reset();
         logger = createSilentLogger();
         runtimeConstants = createRuntimeConstantsFixture();
         platforms = {
             youtube: {
-                getViewerCount: jest.fn().mockResolvedValue(1234),
+                getViewerCount: createMockFn().mockResolvedValue(1234),
                 isEnabled: () => true
             }
         };
@@ -53,21 +63,12 @@ describe('YouTube Viewer Count System - End-to-End Integration', () => {
         await viewerCountSystem.initialize();
     });
     
-    afterEach(async () => {
-        if (viewerCountSystem) {
-            viewerCountSystem.stopPolling();
-            await viewerCountSystem.cleanup();
-        }
-        // Clear mock calls
-        jest.clearAllMocks();
-    });
-
     describe('Dependency Injection', () => {
         test('should resolve updated platform maps when dependencies change', async () => {
             const originalPlatform = platforms.youtube;
             const replacementPlatforms = {
                 youtube: {
-                    getViewerCount: jest.fn().mockResolvedValue(777),
+                    getViewerCount: createMockFn().mockResolvedValue(777),
                     isEnabled: () => true
                 }
             };
@@ -111,11 +112,11 @@ describe('YouTube Viewer Count System - End-to-End Integration', () => {
         test('should handle multiple platform viewer counts simultaneously', async () => {
             // Given: Multiple platforms with viewer counts
             platforms.twitch = {
-                getViewerCount: jest.fn().mockResolvedValue(567),
+                getViewerCount: createMockFn().mockResolvedValue(567),
                 isEnabled: () => true
             };
             platforms.tiktok = {
-                getViewerCount: jest.fn().mockResolvedValue(890),
+                getViewerCount: createMockFn().mockResolvedValue(890),
                 isEnabled: () => true
             };
             
@@ -185,10 +186,10 @@ describe('YouTube Viewer Count System - End-to-End Integration', () => {
         test('should provide instance manager functionality', async () => {
             // Given: Instance manager with mock logger to avoid import issues
             const mockLogger = {
-                debug: jest.fn(),
-                info: jest.fn(),
-                warn: jest.fn(),
-                error: jest.fn()
+                debug: createMockFn(),
+                info: createMockFn(),
+                warn: createMockFn(),
+                error: createMockFn()
             };
             const manager = require('../../src/services/innertube-instance-manager').getInstance({ logger: mockLogger });
             
@@ -258,10 +259,10 @@ describe('YouTube Viewer Count System - End-to-End Integration', () => {
             // Given: Additional mock observer
             const mockObserver = {
                 getObserverId: () => 'test-observer',
-                onViewerCountUpdate: jest.fn(),
-                onStreamStatusChange: jest.fn(),
-                initialize: jest.fn(),
-                cleanup: jest.fn()
+                onViewerCountUpdate: createMockFn(),
+                onStreamStatusChange: createMockFn(),
+                initialize: createMockFn(),
+                cleanup: createMockFn()
             };
             
             viewerCountSystem.addObserver(mockObserver);
@@ -285,8 +286,8 @@ describe('YouTube Viewer Count System - End-to-End Integration', () => {
             // Given: Observer that throws errors
             const faultyObserver = {
                 getObserverId: () => 'faulty-observer',
-                onViewerCountUpdate: jest.fn().mockRejectedValue(new Error('Observer error')),
-                onStreamStatusChange: jest.fn()
+                onViewerCountUpdate: createMockFn().mockRejectedValue(new Error('Observer error')),
+                onStreamStatusChange: createMockFn()
             };
             
             viewerCountSystem.addObserver(faultyObserver);
