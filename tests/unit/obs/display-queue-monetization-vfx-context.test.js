@@ -1,17 +1,8 @@
 
 const { describe, test, expect, beforeEach, it, afterEach } = require('bun:test');
 const { createMockFn, spyOn, restoreAllMocks } = require('../../helpers/bun-mock-utils');
-const { mockModule, restoreAllModuleMocks } = require('../../helpers/bun-module-mocks');
+const { restoreAllModuleMocks } = require('../../helpers/bun-module-mocks');
 const { useFakeTimers, useRealTimers, advanceTimersByTime } = require('../../helpers/bun-timers');
-
-mockModule('../../../src/core/logging', () => ({
-    logger: {
-        debug: createMockFn(),
-        info: createMockFn(),
-        warn: createMockFn(),
-        error: createMockFn()
-    }
-}));
 
 const { EventEmitter } = require('events');
 const { DisplayQueue } = require('../../../src/obs/display-queue');

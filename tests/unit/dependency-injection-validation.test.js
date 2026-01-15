@@ -3,23 +3,13 @@ const { describe, test, expect, beforeEach, it, afterEach } = require('bun:test'
 const { createMockFn, restoreAllMocks } = require('../helpers/bun-mock-utils');
 const { unmockModule, restoreAllModuleMocks } = require('../helpers/bun-module-mocks');
 
-const { initializeTestLogging } = require('../helpers/test-setup');
 const { createMockLogger } = require('../helpers/mock-factories');
 const { setupAutomatedCleanup } = require('../helpers/mock-lifecycle');
 
-// Unmock the YouTube platform for dependency validation tests
 unmockModule('../../src/platforms/youtube');
-
-// Unmock logger-utils to allow real logger initialization in tests
 unmockModule('../../src/utils/logger-utils');
-
-// Unmock core logging to allow real logger initialization in tests
 unmockModule('../../src/core/logging');
 
-// Initialize logging system for tests
-initializeTestLogging();
-
-// Setup automated cleanup
 setupAutomatedCleanup({
     clearCallsBeforeEach: true,
     validateAfterCleanup: true,

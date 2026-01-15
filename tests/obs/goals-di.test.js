@@ -2,15 +2,9 @@
 const { describe, test, expect, beforeEach, it, afterEach } = require('bun:test');
 const { createMockFn, restoreAllMocks } = require('../helpers/bun-mock-utils');
 const { mockModule, resetModules, restoreAllModuleMocks } = require('../helpers/bun-module-mocks');
+const { initializeTestLogging } = require('../helpers/test-setup');
 
-mockModule('../../src/core/logging', () => ({
-    logger: {
-        debug: () => {},
-        info: () => {},
-        warn: () => {},
-        error: () => {}
-    }
-}));
+initializeTestLogging();
 
 describe('OBSGoalsManager DI requirements', () => {
     afterEach(() => {
@@ -20,6 +14,7 @@ describe('OBSGoalsManager DI requirements', () => {
 
     beforeEach(() => {
         resetModules();
+        initializeTestLogging(); // Re-init after resetModules clears state
     });
 
     it('exposes only DI-focused exports (no wrapper functions)', () => {
@@ -37,15 +32,7 @@ describe('OBSGoalsManager DI requirements', () => {
         expect(() => new OBSGoalsManager()).toThrow(/OBSGoalsManager requires OBSConnectionManager/);
     });
 
-    it('initializes with provided obsManager without calling getOBSConnectionManager', () => {
-        const getOBSConnectionManager = createMockFn(() => {
-            throw new Error('getOBSConnectionManager should not be called');
-        });
-
-        mockModule('../../src/obs/connection', () => ({
-            getOBSConnectionManager
-        }));
-
+    it('uses injected dependencies for operations', async () => {
         const mockObsManager = {
             isConnected: createMockFn().mockReturnValue(true),
             ensureConnected: createMockFn(),
@@ -54,20 +41,26 @@ describe('OBSGoalsManager DI requirements', () => {
             removeEventListener: createMockFn()
         };
 
-        const { createOBSGoalsManager } = require('../../src/obs/goals');
+        const mockGoalTracker = {
+            initializeGoalTracker: createMockFn().mockResolvedValue(),
+            addDonationToGoal: createMockFn(),
+            addPaypiggyToGoal: createMockFn(),
+            getGoalState: createMockFn().mockReturnValue({ current: 100, target: 500, formatted: '100/500' }),
+            getAllGoalStates: createMockFn().mockReturnValue({})
+        };
 
-        expect(() => createOBSGoalsManager(mockObsManager, {
+        const { createOBSGoalsManager } = require('../../src/obs/goals');
+        const goalsManager = createOBSGoalsManager(mockObsManager, {
             logger: require('../../src/core/logging').logger,
-            configManager: { getBoolean: () => false, getString: () => '', getNumber: () => 0 },
+            configManager: { getBoolean: () => true, getString: () => 'goal-source', getNumber: () => 0 },
             updateTextSource: createMockFn(),
-            goalTracker: {
-                initializeGoalTracker: createMockFn(),
-                addDonationToGoal: createMockFn(),
-                addPaypiggyToGoal: createMockFn(),
-                getGoalState: createMockFn(),
-                getAllGoalStates: createMockFn()
-            }
-        })).not.toThrow();
-        expect(getOBSConnectionManager).not.toHaveBeenCalled();
+            goalTracker: mockGoalTracker
+        });
+
+        // Call a method and verify the injected mock was used
+        const status = await goalsManager.getCurrentGoalStatus('tiktok');
+
+        expect(mockGoalTracker.getGoalState).toHaveBeenCalledWith('tiktok');
+        expect(status).toEqual({ current: 100, target: 500, formatted: '100/500' });
     });
 });

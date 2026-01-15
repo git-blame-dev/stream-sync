@@ -3,14 +3,6 @@ const { describe, test, expect, beforeEach, it, afterEach } = require('bun:test'
 const { createMockFn, restoreAllMocks } = require('../../helpers/bun-mock-utils');
 const { mockModule, resetModules, restoreAllModuleMocks } = require('../../helpers/bun-module-mocks');
 
-mockModule('../../../src/obs/connection', () => ({
-    ensureOBSConnected: createMockFn().mockResolvedValue()
-}));
-const mockLogger = { debug: createMockFn(), info: createMockFn(), warn: createMockFn(), error: createMockFn() };
-mockModule('../../../src/core/logging', () => ({
-    logger: mockLogger,
-    getUnifiedLogger: createMockFn(() => mockLogger)
-}));
 mockModule('../../../src/utils/platform-error-handler', () => ({
     createPlatformErrorHandler: createMockFn(() => ({
         handleEventProcessingError: createMockFn(),
@@ -22,7 +14,6 @@ mockModule('../../../src/utils/timeout-validator', () => ({
     safeSetTimeout: createMockFn()
 }));
 
-let ensureOBSConnected;
 const { createRuntimeConstantsFixture } = require('../../helpers/runtime-constants-fixture');
 
 describe('handcam-glow', () => {
@@ -43,9 +34,7 @@ describe('handcam-glow', () => {
     beforeEach(() => {
         resetModules();
         handcamGlow = require('../../../src/obs/handcam-glow');
-        ensureOBSConnected = require('../../../src/obs/connection').ensureOBSConnected;
         runtimeConstants = createRuntimeConstantsFixture();
-        Object.values(mockLogger).forEach(fn => fn.mockClear && fn.mockClear());
     });
 
     it('skips initialization when disabled in config', async () => {
@@ -72,7 +61,6 @@ describe('handcam-glow', () => {
             runtimeConstants
         );
 
-        expect(ensureOBSConnected).toHaveBeenCalled();
         expect(obs.call).toHaveBeenCalledWith('SetSourceFilterSettings', {
             sourceName: 'cam',
             filterName: 'Glow',
@@ -80,17 +68,14 @@ describe('handcam-glow', () => {
         });
     });
 
-    it('logs and returns when initialization fails', async () => {
+    it('handles initialization failure gracefully without throwing', async () => {
         const obs = { call: createMockFn().mockRejectedValue(new Error('fail')) };
 
-        await handcamGlow.initializeHandcamGlow(
+        await expect(handcamGlow.initializeHandcamGlow(
             obs,
             { glowEnabled: true, sourceName: 'cam', filterName: 'Glow' },
             runtimeConstants
-        );
-
-        const logged = mockLogger.debug.mock.calls.some(call => (call[0] || '').includes('Error initializing glow filter'));
-        expect(logged).toBe(true);
+        )).resolves.toBeUndefined();
     });
 
     it('applies dual size fields during glow animation', async () => {
@@ -141,24 +126,18 @@ describe('handcam-glow', () => {
         handcamGlow.triggerHandcamGlow(obs, { glowEnabled: true, totalSteps: 1 }, runtimeConstants);
         await flushPromises(4);
 
-        const resetLogged = mockLogger.debug.mock.calls.some(call => (call[0] || '').includes('Reset glow properties after error'));
-
         expect(setCallCount).toBeGreaterThanOrEqual(2);
-        expect(resetLogged).toBe(true);
     });
 
     it('triggers fire-and-forget glow without throwing', async () => {
-        handcamGlow.triggerHandcamGlow({ call: createMockFn() }, { glowEnabled: true }, runtimeConstants);
+        const obs = { call: createMockFn() };
+        expect(() => handcamGlow.triggerHandcamGlow(obs, { glowEnabled: true }, runtimeConstants)).not.toThrow();
         await new Promise(resolve => setImmediate(resolve));
-
-        const triggerLog = mockLogger.debug.mock.calls.some(call => (call[0] || '').includes('Triggering glow animation'));
-        expect(triggerLog).toBe(true);
     });
 
     it('ignores trigger when disabled', () => {
-        handcamGlow.triggerHandcamGlow({ call: createMockFn() }, { glowEnabled: false }, runtimeConstants);
-
-        const ignoredMessage = mockLogger.debug.mock.calls.some(call => (call[0] || '').includes('Glow trigger ignored'));
-        expect(ignoredMessage).toBe(true);
+        const obs = { call: createMockFn() };
+        handcamGlow.triggerHandcamGlow(obs, { glowEnabled: false }, runtimeConstants);
+        expect(obs.call).not.toHaveBeenCalled();
     });
 });

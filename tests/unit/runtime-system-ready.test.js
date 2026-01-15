@@ -1,26 +1,7 @@
 const { describe, test, expect, it, afterEach } = require('bun:test');
 const { createMockFn, spyOn, restoreAllMocks } = require('../helpers/bun-mock-utils');
-const { mockModule, restoreAllModuleMocks } = require('../helpers/bun-module-mocks');
+const { restoreAllModuleMocks } = require('../helpers/bun-module-mocks');
 const { useFakeTimers, useRealTimers, runOnlyPendingTimers } = require('../helpers/bun-timers');
-
-mockModule('../../src/core/logging', () => ({
-    setConfigValidator: createMockFn(),
-    setDebugMode: createMockFn(),
-    initializeLoggingConfig: createMockFn(),
-    initializeConsoleOverride: createMockFn(),
-    logger: {
-        info: createMockFn(),
-        warn: createMockFn(),
-        error: createMockFn(),
-        debug: createMockFn()
-    },
-    getLogger: createMockFn(() => ({
-        info: createMockFn(),
-        warn: createMockFn(),
-        error: createMockFn(),
-        debug: createMockFn()
-    }))
-}));
 
 const { AppRuntime } = require('../../src/main');
 

@@ -1,18 +1,6 @@
-
 const { describe, test, expect, beforeEach, it, afterEach } = require('bun:test');
-const { createMockFn, clearAllMocks, restoreAllMocks } = require('../../helpers/bun-mock-utils');
-const { mockModule, restoreAllModuleMocks } = require('../../helpers/bun-module-mocks');
+const { createMockFn, restoreAllMocks } = require('../../helpers/bun-mock-utils');
 
-mockModule('../../../src/core/logging', () => ({
-    logger: {
-        warn: createMockFn(),
-        console: createMockFn(),
-        debug: createMockFn(),
-        info: createMockFn()
-    }
-}));
-
-const { logger } = require('../../../src/core/logging');
 const {
     logChatMessage,
     logChatMessageDebug,
@@ -23,82 +11,85 @@ const {
 } = require('../../../src/utils/chat-logger');
 
 describe('chat-logger', () => {
-    afterEach(() => {
-        restoreAllMocks();
-        restoreAllModuleMocks();
-    });
+    let mockLogger;
 
     beforeEach(() => {
-        logger.warn = logger.warn || createMockFn();
-        logger.console = logger.console || createMockFn();
-        logger.debug = logger.debug || createMockFn();
-        logger.info = logger.info || createMockFn();
-        });
+        mockLogger = {
+            warn: createMockFn(),
+            console: createMockFn(),
+            debug: createMockFn(),
+            info: createMockFn()
+        };
+    });
+
+    afterEach(() => {
+        restoreAllMocks();
+    });
 
     describe('logChatMessage', () => {
         it('warns and returns when platform or data missing', () => {
-            logChatMessage(null, null);
+            logChatMessage(null, null, {}, { logger: mockLogger });
 
-            expect(logger.warn).toHaveBeenCalled();
-            expect(logger.console).not.toHaveBeenCalled();
+            expect(mockLogger.warn).toHaveBeenCalled();
+            expect(mockLogger.console).not.toHaveBeenCalled();
         });
 
         it('uses username and truncates long messages', () => {
             const longMessage = 'x'.repeat(210);
 
-            logChatMessage('twitch', { username: 'User', userId: 'u1', message: longMessage }, { maxMessageLength: 50 });
+            logChatMessage('twitch', { username: 'User', userId: 'u1', message: longMessage }, { maxMessageLength: 50 }, { logger: mockLogger });
 
-            expect(logger.console).toHaveBeenCalledWith(expect.stringContaining('[twitch] User:'), 'chat-logger');
-            const logged = logger.console.mock.calls[0][0];
+            expect(mockLogger.console).toHaveBeenCalledWith(expect.stringContaining('[twitch] User:'), 'chat-logger');
+            const logged = mockLogger.console.mock.calls[0][0];
             expect(logged.endsWith('...')).toBe(true);
         });
 
         it('includes userId when configured', () => {
-            logChatMessage('youtube', { username: 'User', userId: '123', message: 'hi' }, { includeUserId: true, truncateMessage: false });
+            logChatMessage('youtube', { username: 'User', userId: '123', message: 'hi' }, { includeUserId: true, truncateMessage: false }, { logger: mockLogger });
 
-            expect(logger.console).toHaveBeenCalledWith('[youtube] User (123): hi', 'chat-logger');
+            expect(mockLogger.console).toHaveBeenCalledWith('[youtube] User (123): hi', 'chat-logger');
         });
     });
 
     describe('logChatMessageDebug', () => {
         it('skips when platform or data missing', () => {
-            logChatMessageDebug(null, null);
+            logChatMessageDebug(null, null, '', { logger: mockLogger });
 
-            expect(logger.debug).not.toHaveBeenCalled();
+            expect(mockLogger.debug).not.toHaveBeenCalled();
         });
 
         it('logs debug message with context when provided', () => {
-            logChatMessageDebug('tiktok', { username: 'User', userId: 'abc', message: 'hello' }, 'context');
+            logChatMessageDebug('tiktok', { username: 'User', userId: 'abc', message: 'hello' }, 'context', { logger: mockLogger });
 
-            expect(logger.debug).toHaveBeenCalledWith('[tiktok Debug] context: User (abc) - hello', 'chat-logger');
+            expect(mockLogger.debug).toHaveBeenCalledWith('[tiktok Debug] context: User (abc) - hello', 'chat-logger');
         });
     });
 
     describe('logChatMessageSkipped', () => {
         it('logs skip reason when all params present', () => {
-            logChatMessageSkipped('twitch', { username: 'User', userId: 'u1' }, 'empty');
+            logChatMessageSkipped('twitch', { username: 'User', userId: 'u1' }, 'empty', { logger: mockLogger });
 
-            expect(logger.debug).toHaveBeenCalledWith('[twitch] Skipping message from User (u1): empty', 'chat-logger');
+            expect(mockLogger.debug).toHaveBeenCalledWith('[twitch] Skipping message from User (u1): empty', 'chat-logger');
         });
 
         it('returns when required params missing', () => {
-            logChatMessageSkipped(null, null, null);
+            logChatMessageSkipped(null, null, null, { logger: mockLogger });
 
-            expect(logger.debug).not.toHaveBeenCalled();
+            expect(mockLogger.debug).not.toHaveBeenCalled();
         });
     });
 
     describe('logChatMessageStats', () => {
         it('logs stats when platform and stats provided', () => {
-            logChatMessageStats('youtube', { total: 10, processed: 8, skipped: 2, commands: 1 });
+            logChatMessageStats('youtube', { total: 10, processed: 8, skipped: 2, commands: 1 }, { logger: mockLogger });
 
-            expect(logger.info).toHaveBeenCalledWith('[youtube] Chat Stats - Total: 10, Processed: 8, Skipped: 2, Commands: 1', 'chat-logger');
+            expect(mockLogger.info).toHaveBeenCalledWith('[youtube] Chat Stats - Total: 10, Processed: 8, Skipped: 2, Commands: 1', 'chat-logger');
         });
 
         it('returns when platform or stats missing', () => {
-            logChatMessageStats(null, null);
+            logChatMessageStats(null, null, { logger: mockLogger });
 
-            expect(logger.info).not.toHaveBeenCalled();
+            expect(mockLogger.info).not.toHaveBeenCalled();
         });
     });
 
@@ -119,17 +110,17 @@ describe('chat-logger', () => {
 
     describe('logChatMessageWithConfig', () => {
         it('logs to console when config permits', () => {
-            logChatMessageWithConfig('twitch', { username: 'User', userId: 'u1', message: 'hello' }, { general: { logChatMessages: true } });
+            logChatMessageWithConfig('twitch', { username: 'User', userId: 'u1', message: 'hello' }, { general: { logChatMessages: true } }, {}, { logger: mockLogger });
 
-            expect(logger.console).toHaveBeenCalled();
-            expect(logger.debug).toHaveBeenCalledWith(expect.stringContaining('Chat message logged from twitch'), 'chat-logger', expect.any(Object));
+            expect(mockLogger.console).toHaveBeenCalled();
+            expect(mockLogger.debug).toHaveBeenCalledWith(expect.stringContaining('Chat message logged from twitch'), 'chat-logger', expect.any(Object));
         });
 
         it('logs debug when console logging disabled', () => {
-            logChatMessageWithConfig('twitch', { username: 'User', userId: 'u1', message: 'hello' }, { general: { logChatMessages: false } });
+            logChatMessageWithConfig('twitch', { username: 'User', userId: 'u1', message: 'hello' }, { general: { logChatMessages: false } }, {}, { logger: mockLogger });
 
-            expect(logger.console).not.toHaveBeenCalled();
-            expect(logger.debug).toHaveBeenCalledWith('[twitch Debug] console logging disabled: User (u1) - hello', 'chat-logger');
+            expect(mockLogger.console).not.toHaveBeenCalled();
+            expect(mockLogger.debug).toHaveBeenCalledWith('[twitch Debug] console logging disabled: User (u1) - hello', 'chat-logger');
         });
     });
 });

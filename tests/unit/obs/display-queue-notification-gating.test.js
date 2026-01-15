@@ -3,15 +3,6 @@ const { describe, test, expect, it, afterEach } = require('bun:test');
 const { createMockFn, restoreAllMocks } = require('../../helpers/bun-mock-utils');
 const { mockModule, requireActual, restoreAllModuleMocks } = require('../../helpers/bun-module-mocks');
 
-mockModule('../../../src/core/logging', () => ({
-    logger: {
-        debug: createMockFn(),
-        info: createMockFn(),
-        warn: createMockFn(),
-        error: createMockFn()
-    }
-}));
-
 const sources = require('../../../src/obs/sources');
 mockModule('../../../src/obs/sources', () => {
     const instance = {

@@ -1,13 +1,14 @@
 
-const { logger } = require('../core/logging');
+const { logger: defaultLogger } = require('../core/logging');
 
-function logChatMessage(platform, normalizedData, options = {}) {
+function logChatMessage(platform, normalizedData, options = {}, deps = {}) {
+    const logger = deps.logger || defaultLogger;
     const {
         includeUserId = false,
         truncateMessage = true,
         maxMessageLength = 200
     } = options;
-    
+
     if (!platform || !normalizedData) {
         logger.warn('Invalid parameters provided to logChatMessage', 'chat-logger');
         return;
@@ -51,44 +52,47 @@ function logChatMessage(platform, normalizedData, options = {}) {
     });
 }
 
-function logChatMessageDebug(platform, normalizedData, context = '') {
+function logChatMessageDebug(platform, normalizedData, context = '', deps = {}) {
+    const logger = deps.logger || defaultLogger;
     if (!platform || !normalizedData) {
         return;
     }
-    
+
     const username = typeof normalizedData.username === 'string' ? normalizedData.username.trim() : '';
     const userId = typeof normalizedData.userId === 'string' ? normalizedData.userId.trim() : '';
     if (!username || !userId) {
         return;
     }
     const message = normalizedData.message || '';
-    
-    const debugMessage = context 
+
+    const debugMessage = context
         ? `[${platform} Debug] ${context}: ${username} (${userId}) - ${message}`
         : `[${platform} Debug] ${username} (${userId}) - ${message}`;
-    
+
     logger.debug(debugMessage, 'chat-logger');
 }
 
-function logChatMessageSkipped(platform, normalizedData, reason) {
+function logChatMessageSkipped(platform, normalizedData, reason, deps = {}) {
+    const logger = deps.logger || defaultLogger;
     if (!platform || !normalizedData || !reason) {
         return;
     }
-    
+
     const username = typeof normalizedData.username === 'string' ? normalizedData.username.trim() : '';
     const userId = typeof normalizedData.userId === 'string' ? normalizedData.userId.trim() : '';
     if (!username || !userId) {
         return;
     }
-    
+
     logger.debug(`[${platform}] Skipping message from ${username} (${userId}): ${reason}`, 'chat-logger');
 }
 
-function logChatMessageStats(platform, stats) {
+function logChatMessageStats(platform, stats, deps = {}) {
+    const logger = deps.logger || defaultLogger;
     if (!platform || !stats) {
         return;
     }
-    
+
     logger.info(`[${platform}] Chat Stats - Total: ${stats.total}, Processed: ${stats.processed}, Skipped: ${stats.skipped}, Commands: ${stats.commands}`, 'chat-logger');
 }
 
@@ -109,13 +113,13 @@ function getChatLogLevel(config, platform) {
     return 'console';
 }
 
-function logChatMessageWithConfig(platform, normalizedData, config, options = {}) {
+function logChatMessageWithConfig(platform, normalizedData, config, options = {}, deps = {}) {
     const logLevel = getChatLogLevel(config, platform);
-    
+
     if (logLevel === 'console') {
-        logChatMessage(platform, normalizedData, options);
+        logChatMessage(platform, normalizedData, options, deps);
     } else {
-        logChatMessageDebug(platform, normalizedData, 'console logging disabled');
+        logChatMessageDebug(platform, normalizedData, 'console logging disabled', deps);
     }
 }
 

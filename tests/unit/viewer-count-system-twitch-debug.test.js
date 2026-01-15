@@ -46,10 +46,6 @@ describe('Twitch Viewer Count System Debug', () => {
             tiktok: { getViewerCount: createMockFn().mockResolvedValue(25) }
         };
 
-        mockModule('../../src/core/logging', () => ({
-            logger: logger
-        }));
-        
         mockTextProcessing = {
             formatViewerCount: createMockFn((count) => count.toString())
         };

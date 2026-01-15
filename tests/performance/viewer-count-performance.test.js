@@ -14,15 +14,6 @@ mockModule('../../src/core/config', () => ({
     config: { general: { fallbackUsername: 'Unknown User' } }
 }));
 
-mockModule('../../src/core/logging', () => ({
-    logger: {
-        debug: createMockFn(),
-        info: createMockFn(),
-        warn: createMockFn(),
-        error: createMockFn()
-    }
-}));
-
 const mockTextProcessing = {
     formatViewerCount: createMockFn().mockImplementation(count => {
         if (count >= 1000000) return `${Math.floor(count / 1000000)}M`;
