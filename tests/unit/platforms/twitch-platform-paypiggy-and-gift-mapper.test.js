@@ -1,9 +1,8 @@
 
 const { describe, it, expect, beforeEach, afterEach } = require('bun:test');
 const { createMockFn, restoreAllMocks } = require('../../helpers/bun-mock-utils');
-const { mockModule, restoreAllModuleMocks, resetModules } = require('../../helpers/bun-module-mocks');
 
-mockModule('../../../src/platforms/twitch-eventsub', () => createMockFn());
+// TwitchEventSub passed via DI - no module mock needed
 
 const EventEmitter = require('events');
 const { TwitchPlatform } = require('../../../src/platforms/twitch');
@@ -23,8 +22,6 @@ const createMockEventSub = () => {
 describe('TwitchPlatform monetisation mapping', () => {
     afterEach(() => {
         restoreAllMocks();
-        restoreAllModuleMocks();
-        resetModules();
     });
 
     let twitch;

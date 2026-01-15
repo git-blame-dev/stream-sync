@@ -1,18 +1,5 @@
 const { describe, it, beforeEach, afterAll, expect } = require('bun:test');
 const { createMockFn, clearAllMocks } = require('../../helpers/bun-mock-utils');
-const { mockModule, restoreAllModuleMocks } = require('../../helpers/bun-module-mocks');
-
-mockModule('../../../src/utils/timeout-validator', () => ({
-    validateTimeout: createMockFn((v) => v),
-    safeSetInterval: createMockFn(() => null)
-}));
-
-mockModule('../../../src/utils/platform-error-handler', () => ({
-    createPlatformErrorHandler: createMockFn(() => ({
-        handleEventProcessingError: createMockFn(),
-        logOperationalError: createMockFn()
-    }))
-}));
 
 const { createRuntimeConstantsFixture } = require('../../helpers/runtime-constants-fixture');
 const ManagerModule = require('../../../src/services/innertube-instance-manager');
@@ -35,7 +22,6 @@ describe('InnertubeInstanceManager behavior', () => {
 
     afterAll(async () => {
         await resetManager();
-        restoreAllModuleMocks();
     });
 
     it('caches healthy instances and reuses them', async () => {
