@@ -53,8 +53,6 @@ describe('Twitch Token Refresh Implementation', () => {
             EnhancedHttpClient: createMockFn()
         }));
 
-        mockModule('fs', () => mockFs);
-
         // Mock auth constants to prevent import issues
         mockModule('../../../src/utils/auth-constants', () => ({
             TOKEN_REFRESH_CONFIG: {
@@ -412,28 +410,15 @@ describe('Twitch Token Refresh Implementation', () => {
         });
 
         test('should handle refresh timer execution', async () => {
-            // Given: Mock timer to avoid infinite loops
-            let timerCallback = null;
-            spyOn(global, 'setTimeout').mockImplementation((callback, delay) => {
-                timerCallback = callback;
-                return 'mock-timer-id';
-            });
-            // Set token to expire in the future
-            authService.tokenExpiresAt = testClock.now() + (10 * 60 * 1000);
+            authService.tokenExpiresAt = testClock.now() + (60 * 60 * 1000);
 
-            // When: Scheduling refresh
             const timer = authInitializer.scheduleTokenRefresh(authService);
 
-            // Then: Timer should be created
             expect(timer).toBeDefined();
-            expect(timer.timeoutId).toBe('mock-timer-id');
-            expect(timerCallback).toBeDefined();
-            
-            // Verify the timer would trigger the performAutomaticRefresh method
-            expect(typeof timerCallback).toBe('function');
-            
-            // Restore setTimeout
-            global.setTimeout.mockRestore();
+            expect(timer.refreshTime).toBeGreaterThan(testClock.now());
+            expect(typeof timer.cancel).toBe('function');
+
+            timer.cancel();
         });
 
         test('should reschedule refresh after successful automatic refresh', async () => {

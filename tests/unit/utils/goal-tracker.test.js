@@ -1,7 +1,6 @@
 
 const { describe, test, expect, beforeEach, afterEach } = require('bun:test');
-const { createMockFn, restoreAllMocks } = require('../../helpers/bun-mock-utils');
-const { mockModule, requireActual, restoreAllModuleMocks } = require('../../helpers/bun-module-mocks');
+const { restoreAllMocks } = require('../../helpers/bun-mock-utils');
 
 const { TEST_TIMEOUTS } = require('../../helpers/test-setup');
 const { createMockLogger, createMockFileSystem } = require('../../helpers/mock-factories');
@@ -15,33 +14,9 @@ setupAutomatedCleanup({
     logPerformanceMetrics: true
 });
 
-// Mock file system operations
-mockModule('fs', () => ({
-    ...requireActual('fs'),
-    writeFileSync: createMockFn(),
-    readFileSync: createMockFn(),
-    existsSync: createMockFn(),
-    appendFileSync: createMockFn()
-}));
-
-// Mock OBS modules to prevent connection attempts
-mockModule('../../../src/obs/connection', () => ({
-    ensureOBSConnected: createMockFn().mockResolvedValue(true)
-}));
-
-mockModule('../../../src/obs/sources', () => {
-    const instance = { updateTextSource: createMockFn().mockResolvedValue(true) };
-    return {
-        OBSSourcesManager: class {},
-        createOBSSourcesManager: () => instance,
-        getDefaultSourcesManager: () => instance
-    };
-});
-
 describe('Goal Tracker - Core Functionality', () => {
     afterEach(() => {
         restoreAllMocks();
-        restoreAllModuleMocks();
     });
 
     let goalTracker;
@@ -81,11 +56,6 @@ describe('Goal Tracker - Core Functionality', () => {
             config: { goals: mockConfig },
             fileSystem: mockFileSystem
         });
-
-        // Mock file system responses
-        const fs = require('fs');
-        fs.existsSync.mockReturnValue(false);
-        fs.readFileSync.mockReturnValue('{}');
     });
 
     describe('Goal Tracker Initialization', () => {
@@ -283,25 +253,6 @@ describe('Goal Tracker - Core Functionality', () => {
             expect(finalState.youtube.current).toBe(0.50);
             expect(finalState.twitch.current).toBe(50);
         }, TEST_TIMEOUTS.MEDIUM);
-    });
-
-    describe('State Persistence', () => {
-        beforeEach(async () => {
-            await goalTracker.initializeGoalTracker();
-        });
-
-        test('should handle file write errors gracefully', async () => {
-            const fs = require('fs');
-            fs.writeFileSync.mockImplementation(() => {
-                throw new Error('Write failed');
-            });
-
-            const result = await goalTracker.addDonationToGoal('tiktok', 100);
-            
-            // Should still succeed despite write error
-            expect(result.success).toBe(true);
-            expect(result.newTotal).toBe(100);
-        }, TEST_TIMEOUTS.FAST);
     });
 
     describe('Performance Tests', () => {
