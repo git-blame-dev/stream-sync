@@ -1,6 +1,6 @@
 
 // Mock the logger before requiring CommandParser
-const { describe, test, expect, beforeEach } = require('bun:test');
+const { describe, test, expect, beforeEach, afterEach } = require('bun:test');
 const { createMockFn, restoreAllMocks } = require('../../helpers/bun-mock-utils');
 const { mockModule, restoreAllModuleMocks } = require('../../helpers/bun-module-mocks');
 

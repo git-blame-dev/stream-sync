@@ -1,34 +1,6 @@
 // Test harness for building integration dependency bundles.
 const EventEmitter = require('events');
 const { createMockFn } = require('./bun-mock-utils');
-const { mockModule } = require('./bun-module-mocks');
-
-mockModule('../../src/core/logging', () => ({
-    initializeLoggingConfig: createMockFn(),
-    setConfigValidator: createMockFn(),
-    setDebugMode: createMockFn(),
-    initializeConsoleOverride: createMockFn(),
-    logger: {
-        info: createMockFn(),
-        warn: createMockFn(),
-        error: createMockFn(),
-        debug: createMockFn()
-    },
-    getLogger: createMockFn(() => ({
-        info: createMockFn(),
-        warn: createMockFn(),
-        error: createMockFn(),
-        debug: createMockFn()
-    })),
-    createPlatformErrorHandler: createMockFn(() => ({
-        handleEventProcessingError: createMockFn(),
-        logOperationalError: createMockFn(),
-        logConfigError: createMockFn(),
-        logError: createMockFn()
-    })),
-    setLoggerImplementation: createMockFn(),
-    resetLoggingConfig: createMockFn()
-}));
 const {
     createMockDisplayQueue,
     createMockNotificationManager,

@@ -1,5 +1,5 @@
 
-const { describe, test, expect, beforeEach } = require('bun:test');
+const { describe, test, expect, beforeEach, afterEach } = require('bun:test');
 const { createMockFn, clearAllMocks, restoreAllMocks } = require('../../helpers/bun-mock-utils');
 
 describe('HTTP Client Axios Response Behavior', () => {
