@@ -5,6 +5,8 @@ const { mockModule, unmockModule, requireActual, resetModules, restoreAllModuleM
 const { initializeTestLogging } = require('../helpers/test-setup');
 const { createMockLogger } = require('../helpers/mock-factories');
 
+const actualMessageNormalization = require('../../src/utils/message-normalization');
+
 initializeTestLogging();
 
 const createAuthManager = (overrides = {}) => {
@@ -100,6 +102,7 @@ describe('Twitch platform refactor behaviors', () => {
 
     it('warns but still emits chat events when normalization validation fails', async () => {
         mockModule('../../src/utils/message-normalization', () => ({
+            ...actualMessageNormalization,
             normalizeTwitchMessage: createMockFn(() => ({
                 userId: 'chat-1',
                 username: 'chatter',

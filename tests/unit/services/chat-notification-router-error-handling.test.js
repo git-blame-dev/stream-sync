@@ -2,6 +2,8 @@ const { describe, it, afterEach, expect } = require('bun:test');
 const { createMockFn, clearAllMocks } = require('../../helpers/bun-mock-utils');
 const { mockModule, resetModules, restoreAllModuleMocks } = require('../../helpers/bun-module-mocks');
 
+const actualMessageNormalization = require('../../../src/utils/message-normalization');
+
 describe('ChatNotificationRouter error handling', () => {
     const baseMessage = {
         message: 'Hello world',
@@ -37,6 +39,7 @@ describe('ChatNotificationRouter error handling', () => {
         }));
 
         mockModule('../../../src/utils/message-normalization', () => ({
+            ...actualMessageNormalization,
             validateNormalizedMessage: createMockFn().mockReturnValue({ isValid: true })
         }));
 

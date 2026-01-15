@@ -2,7 +2,9 @@ const { describe, it, expect, afterEach } = require('bun:test');
 const { createMockFn, restoreAllMocks } = require('../../helpers/bun-mock-utils');
 const { mockModule, restoreAllModuleMocks, resetModules } = require('../../helpers/bun-module-mocks');
 
+const actualMessageNormalization = require('../../../src/utils/message-normalization');
 mockModule('../../../src/utils/message-normalization', () => ({
+    ...actualMessageNormalization,
     normalizeYouTubeMessage: createMockFn().mockReturnValue({
         userId: 'user-id',
         authorChannelId: 'author-channel',

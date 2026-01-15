@@ -15,7 +15,9 @@ const testClock = require('../helpers/test-clock');
 const isChatMessageEvent = createMockFn();
 
 // Mock message normalization
+const actualMessageNormalization = require('../../src/utils/message-normalization');
 mockModule('../../src/utils/message-normalization', () => ({
+    ...actualMessageNormalization,
     normalizeYouTubeMessage: createMockFn()
 }));
 
