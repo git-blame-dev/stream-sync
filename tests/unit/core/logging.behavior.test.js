@@ -18,8 +18,11 @@ describe('core/logging behavior', () => {
         restoreAllMocks();
     });
 
-    it('requires a config validator before reading config', () => {
-        expect(() => logging.getLoggingConfig()).toThrow('Logging config validator not set');
+    it('auto-initializes with default test config in test environment', () => {
+        const config = logging.getLoggingConfig();
+        expect(config).toBeDefined();
+        expect(config.console).toBeDefined();
+        expect(config.file).toBeDefined();
     });
 
     it('initializes configuration through injected validator', () => {

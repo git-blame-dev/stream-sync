@@ -1,7 +1,6 @@
 
 const { describe, test, beforeEach, afterEach, expect } = require('bun:test');
 const { clearAllMocks, createMockFn, restoreAllMocks } = require('../helpers/bun-mock-utils');
-const { mockModule, resetModules, restoreAllModuleMocks } = require('../helpers/bun-module-mocks');
 
 const { TEST_TIMEOUTS } = require('../helpers/test-setup');
 const { setupAutomatedCleanup } = require('../helpers/mock-lifecycle');
@@ -17,19 +16,7 @@ setupAutomatedCleanup({
     logPerformanceMetrics: true
 });
 
-// Mock OBS connection
-const mockOBSConnection = {
-    isConnected: createMockFn(() => true),
-    isReady: createMockFn(() => Promise.resolve(true)),
-    call: createMockFn(() => Promise.resolve({ success: true }))
-};
-
-mockModule('../../src/obs/connection', () => ({
-    ensureOBSConnected: createMockFn().mockResolvedValue(),
-    initializeOBSConnection: createMockFn().mockResolvedValue({ success: true, connected: true }),
-    obsCall: createMockFn().mockResolvedValue({ success: true }),
-    getOBSConnectionManager: createMockFn(() => mockOBSConnection)
-}));
+// OBS auto-mocks in test environment (see src/obs/connection.js line 45-56)
 
 describe('AppRuntime VFXCommandService Lifecycle Management', () => {
     let runtime;
@@ -61,8 +48,6 @@ describe('AppRuntime VFXCommandService Lifecycle Management', () => {
             await runtime.stop();
         }
         restoreAllMocks();
-        restoreAllModuleMocks();
-        resetModules();
     });
 
     describe('VFXCommandService Initialization', () => {
