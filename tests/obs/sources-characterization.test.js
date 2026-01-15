@@ -48,7 +48,9 @@ mockModule('../../src/utils/retry-system', () => ({
 }));
 
 // Mock validation utilities
+const actualValidation = require('../../src/utils/validation');
 mockModule('../../src/utils/validation', () => ({
+    ...actualValidation,
     sanitizeDisplayName: createMockFn((name, limit) => name.substring(0, limit))
 }));
 

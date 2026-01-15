@@ -46,9 +46,6 @@ const resetModules = () => {
             delete require.cache[cacheKey];
         }
     });
-    for (const entry of activeMocks.values()) {
-        mock.module(entry.moduleName, entry.factory);
-    }
 };
 
 const restoreAllModuleMocks = () => {

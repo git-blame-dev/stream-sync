@@ -49,7 +49,9 @@ mockModule('../../src/utils/logger-utils', () => ({
 }));
 
 // Mock message normalization module
+const actualMessageNormalization = require('../../src/utils/message-normalization');
 mockModule('../../src/utils/message-normalization', () => ({
+  ...actualMessageNormalization,
   normalizeTikTokMessage: createMockFn(() => ({
     message: 'test message',
     username: 'testuser',

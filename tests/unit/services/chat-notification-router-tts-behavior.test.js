@@ -11,7 +11,9 @@ mockModule('../../../src/utils/monetization-detector', () => ({
     detectMonetization: createMockFn().mockReturnValue({ detected: false, timingMs: 1 })
 }));
 
+const actualMessageNormalization = require('../../../src/utils/message-normalization');
 mockModule('../../../src/utils/message-normalization', () => ({
+    ...actualMessageNormalization,
     validateNormalizedMessage: createMockFn().mockReturnValue({ isValid: true })
 }));
 
