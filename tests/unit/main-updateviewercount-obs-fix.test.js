@@ -1,4 +1,8 @@
 
+const { describe, test, expect, beforeEach, afterEach, it } = require('bun:test');
+const { createMockFn, clearAllMocks, restoreAllMocks } = require('../helpers/bun-mock-utils');
+const { mockModule, resetModules, restoreAllModuleMocks } = require('../helpers/bun-module-mocks');
+
 const { 
   initializeTestLogging,
   TEST_TIMEOUTS 
@@ -13,8 +17,8 @@ const {
 } = require('../helpers/mock-factories');
 
 const mockLogger = createMockLogger('debug');
-const mockGetDebugLog = jest.fn(() => jest.fn());
-jest.doMock('../../src/core/logging', () => ({
+const mockGetDebugLog = createMockFn(() => createMockFn());
+mockModule('../../src/core/logging', () => ({
   logger: mockLogger,
   getDebugLog: mockGetDebugLog
 }));
@@ -36,7 +40,7 @@ describe('Main App updateViewerCount OBS Integration', () => {
   
   beforeEach(() => {
     // Create mocks
-    debugLogSpy = jest.fn();
+    debugLogSpy = createMockFn();
     mockGetDebugLog.mockReturnValue(debugLogSpy);
     
     mockViewerCountSystem = {
@@ -45,7 +49,7 @@ describe('Main App updateViewerCount OBS Integration', () => {
         twitch: 0,
         youtube: 0
       },
-      notifyObservers: jest.fn().mockResolvedValue(true)
+      notifyObservers: createMockFn().mockResolvedValue(true)
     };
     
     // Create a simple test object that mimics the AppRuntime's updateViewerCount method
@@ -76,9 +80,9 @@ describe('Main App updateViewerCount OBS Integration', () => {
   });
   
   afterEach(() => {
-    jest.clearAllMocks();
-    jest.resetModules();
-  });
+        restoreAllMocks();
+    clearAllMocks();
+restoreAllModuleMocks();});
 
   describe('when updateViewerCount is called', () => {
     describe('and ViewerCountSystem is available', () => {

@@ -1,4 +1,7 @@
 
+const { describe, test, expect, beforeEach, afterEach, it } = require('bun:test');
+const { createMockFn, clearAllMocks, restoreAllMocks } = require('../../helpers/bun-mock-utils');
+
 const { createMockPlatform, setupAutomatedCleanup } = require('../../helpers/mock-factories');
 const { 
     expectValidNotification, 
@@ -15,15 +18,15 @@ describe('YouTube Connection Manager - Behavior Excellence', () => {
     beforeEach(() => {
         // Create behavior-focused mock logger
         mockLogger = {
-            info: jest.fn(),
-            warn: jest.fn(), 
-            error: jest.fn(),
-            debug: jest.fn(),
+            info: createMockFn(),
+            warn: createMockFn(), 
+            error: createMockFn(),
+            debug: createMockFn(),
             _mockType: 'Logger'
         };
 
         // Create behavior-focused connection factory
-        mockConnectionFactory = jest.fn().mockImplementation(async (videoId) => ({
+        mockConnectionFactory = createMockFn().mockImplementation(async (videoId) => ({
             videoId,
             state: 'connected',
             metadata: { connectedAt: new Date().toISOString() },
@@ -34,12 +37,13 @@ describe('YouTube Connection Manager - Behavior Excellence', () => {
     });
 
     afterEach(() => {
+        restoreAllMocks();
         // Clean up any connections
         if (connectionManager && connectionManager.connections) {
             connectionManager.connections.clear();
         }
         // Clear all mocks
-        jest.clearAllMocks();
+        clearAllMocks();
     });
 
     describe('Connection Lifecycle Management', () => {
@@ -113,7 +117,7 @@ describe('YouTube Connection Manager - Behavior Excellence', () => {
     describe('Atomic Operations and Race Condition Prevention', () => {
         it('should prevent duplicate connections to same stream through atomic locking', async () => {
             // Given: Slow connection factory to simulate race condition
-            const slowConnectionFactory = jest.fn().mockImplementation(async (videoId) => {
+            const slowConnectionFactory = createMockFn().mockImplementation(async (videoId) => {
                 await waitForDelay(50);
                 return {
                     videoId,
@@ -246,7 +250,7 @@ describe('YouTube Connection Manager - Behavior Excellence', () => {
     describe('Error Recovery and Resilience', () => {
         it('should handle connection factory failures gracefully without corrupting state', async () => {
             // Given: Failing connection factory
-            const failingFactory = jest.fn().mockRejectedValue(new Error('Connection failed'));
+            const failingFactory = createMockFn().mockRejectedValue(new Error('Connection failed'));
             
             // When: Attempting to connect with failing factory
             const result = await connectionManager.connectToStream('failing-stream', failingFactory);
@@ -277,7 +281,7 @@ describe('YouTube Connection Manager - Behavior Excellence', () => {
             expect(connectionManager.hasConnection('stable-stream')).toBe(true);
             
             // When: Another connection fails
-            const failingFactory = jest.fn().mockRejectedValue(new Error('Network error'));
+            const failingFactory = createMockFn().mockRejectedValue(new Error('Network error'));
             const failResult = await connectionManager.connectToStream('unstable-stream', failingFactory);
             
             // Then: Failed connection doesn't affect existing connection
@@ -302,7 +306,7 @@ describe('YouTube Connection Manager - Behavior Excellence', () => {
             // When: Processing mixed scenarios
             for (const scenario of scenarios) {
                 const factory = scenario.shouldFail 
-                    ? jest.fn().mockRejectedValue(new Error('Simulated failure'))
+                    ? createMockFn().mockRejectedValue(new Error('Simulated failure'))
                     : mockConnectionFactory;
                     
                 await connectionManager.connectToStream(scenario.videoId, factory);
@@ -329,8 +333,8 @@ describe('YouTube Connection Manager - Behavior Excellence', () => {
             expect(mockLogger.debug).toHaveBeenCalledWith('No connections to cleanup', 'youtube');
 
             await connectionManager.connectToStream('to-clean', mockConnectionFactory);
-            const stop = jest.fn().mockRejectedValue(new Error('stop failed'));
-            const disconnect = jest.fn().mockResolvedValue();
+            const stop = createMockFn().mockRejectedValue(new Error('stop failed'));
+            const disconnect = createMockFn().mockResolvedValue();
             connectionManager.connections.set('to-clean', { connection: { stop, disconnect }, state: 'connected', metadata: {} });
 
             connectionManager.cleanupAllConnections();
@@ -339,8 +343,8 @@ describe('YouTube Connection Manager - Behavior Excellence', () => {
 
         it('handles shutdown errors gracefully', async () => {
             const connection = {
-                stop: jest.fn().mockRejectedValue(new Error('stop error')),
-                disconnect: jest.fn().mockRejectedValue(new Error('disconnect error'))
+                stop: createMockFn().mockRejectedValue(new Error('stop error')),
+                disconnect: createMockFn().mockRejectedValue(new Error('disconnect error'))
             };
             connectionManager.connections.set('err-video', { connection, state: 'connected', metadata: {} });
 
@@ -488,7 +492,7 @@ describe('YouTube Connection Manager - Behavior Excellence', () => {
 
     describe('Error handling and resilience', () => {
         it('normalizes non-Error failures during connection attempts', async () => {
-            const handler = { handleEventProcessingError: jest.fn() };
+            const handler = { handleEventProcessingError: createMockFn() };
             connectionManager.errorHandler = handler;
 
             const result = await connectionManager.connectToStream('broken', async () => {
@@ -512,12 +516,12 @@ describe('YouTube Connection Manager - Behavior Excellence', () => {
         });
 
         it('removes connections even when stop fails and routes errors', async () => {
-            const handler = { handleEventProcessingError: jest.fn() };
+            const handler = { handleEventProcessingError: createMockFn() };
             connectionManager.errorHandler = handler;
             connectionManager.connections.set('vid', {
                 connection: {
-                    stop: jest.fn().mockRejectedValue('stop fail'),
-                    disconnect: jest.fn().mockResolvedValue()
+                    stop: createMockFn().mockRejectedValue('stop fail'),
+                    disconnect: createMockFn().mockResolvedValue()
                 },
                 state: connectionManager.CONNECTION_STATES.CONNECTED,
                 metadata: {}

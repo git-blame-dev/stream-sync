@@ -1,25 +1,32 @@
 
+const { describe, test, expect } = require('bun:test');
+const { createMockFn, restoreAllMocks } = require('../../helpers/bun-mock-utils');
+
 const EventEmitter = require('events');
 const NotificationManager = require('../../../src/notifications/NotificationManager');
 
 describe('NotificationManager raid viewer count fallback', () => {
+    afterEach(() => {
+        restoreAllMocks();
+    });
+
     const createManager = () => {
         const logger = {
-            debug: jest.fn(),
-            info: jest.fn(),
-            warn: jest.fn(),
-            error: jest.fn()
+            debug: createMockFn(),
+            info: createMockFn(),
+            warn: createMockFn(),
+            error: createMockFn()
         };
 
         const displayQueue = {
-            addToQueue: jest.fn(),
-            processQueue: jest.fn(),
-            isQueueEmpty: jest.fn().mockReturnValue(true),
-            clearQueue: jest.fn()
+            addToQueue: createMockFn(),
+            processQueue: createMockFn(),
+            isQueueEmpty: createMockFn().mockReturnValue(true),
+            clearQueue: createMockFn()
         };
 
         const configService = {
-            get: jest.fn((section) => {
+            get: createMockFn((section) => {
                 if (section !== 'general') {
                     return {};
                 }
@@ -31,8 +38,8 @@ describe('NotificationManager raid viewer count fallback', () => {
                     suppressionCleanupIntervalMs: 300000
                 };
             }),
-            areNotificationsEnabled: jest.fn().mockReturnValue(true),
-            isDebugEnabled: jest.fn().mockReturnValue(false)
+            areNotificationsEnabled: createMockFn().mockReturnValue(true),
+            isDebugEnabled: createMockFn().mockReturnValue(false)
         };
 
         return new NotificationManager({
@@ -41,11 +48,11 @@ describe('NotificationManager raid viewer count fallback', () => {
             eventBus: new EventEmitter(),
             configService,
             constants: require('../../../src/core/constants'),
-            textProcessing: { formatChatMessage: jest.fn() },
-            obsGoals: { processDonationGoal: jest.fn() },
-            vfxCommandService: { executeCommand: jest.fn().mockResolvedValue({ success: true }) },
-            ttsService: { speak: jest.fn().mockResolvedValue({ success: true }) },
-            userTrackingService: { isFirstMessage: jest.fn().mockResolvedValue(false) }
+            textProcessing: { formatChatMessage: createMockFn() },
+            obsGoals: { processDonationGoal: createMockFn() },
+            vfxCommandService: { executeCommand: createMockFn().mockResolvedValue({ success: true }) },
+            ttsService: { speak: createMockFn().mockResolvedValue({ success: true }) },
+            userTrackingService: { isFirstMessage: createMockFn().mockResolvedValue(false) }
         });
     };
 

@@ -1,4 +1,7 @@
 
+const { describe, test, expect, beforeEach, it } = require('bun:test');
+const { createMockFn, restoreAllMocks } = require('../helpers/bun-mock-utils');
+
 const { initializeTestLogging } = require('../helpers/test-setup');
 
 // Initialize logging for tests
@@ -7,16 +10,20 @@ initializeTestLogging();
 const { YouTubeUserAgentManager } = require('../../src/utils/youtube-user-agent-manager');
 
 describe('YouTube User-Agent Utility', () => {
+    afterEach(() => {
+        restoreAllMocks();
+    });
+
     let userAgentManager;
     let mockLogger;
 
     beforeEach(() => {
         // Create mock logger
         mockLogger = {
-            debug: jest.fn(),
-            info: jest.fn(),
-            warn: jest.fn(),
-            error: jest.fn()
+            debug: createMockFn(),
+            info: createMockFn(),
+            warn: createMockFn(),
+            error: createMockFn()
         };
 
         // Create user agent manager instance

@@ -1,12 +1,16 @@
-jest.mock('../../../src/utils/timeout-validator', () => ({
-    safeDelay: jest.fn(async () => {}),
-    safeSetTimeout: jest.fn()
+const { describe, test, expect, beforeEach, it } = require('bun:test');
+const { createMockFn, clearAllMocks, restoreAllMocks } = require('../../helpers/bun-mock-utils');
+const { mockModule, restoreAllModuleMocks } = require('../../helpers/bun-module-mocks');
+
+mockModule('../../../src/utils/timeout-validator', () => ({
+    safeDelay: createMockFn(async () => {}),
+    safeSetTimeout: createMockFn()
 }));
 
-jest.mock('../../../src/utils/platform-error-handler', () => ({
-    createPlatformErrorHandler: jest.fn(() => ({
-        handleEventProcessingError: jest.fn(),
-        logOperationalError: jest.fn()
+mockModule('../../../src/utils/platform-error-handler', () => ({
+    createPlatformErrorHandler: createMockFn(() => ({
+        handleEventProcessingError: createMockFn(),
+        logOperationalError: createMockFn()
     }))
 }));
 
@@ -19,19 +23,23 @@ const {
 } = require('../../helpers/e2e-testing-infrastructure');
 
 const fakePlatform = (result = 'ok') => ({
-    handleWebSocketMessage: jest.fn(async () => result)
+    handleWebSocketMessage: createMockFn(async () => result)
 });
 
 describe('e2e-testing-infrastructure behavior', () => {
-    beforeEach(() => {
-        jest.clearAllMocks();
+    afterEach(() => {
+        restoreAllMocks();
+        restoreAllModuleMocks();
     });
+
+    beforeEach(() => {
+        });
 
     describe('WebSocketMessageSimulator', () => {
         it('processes messages through platform handler and emits success event', async () => {
-            const simulator = new WebSocketMessageSimulator({ platform: 'twitch', logger: { debug: jest.fn() } });
+            const simulator = new WebSocketMessageSimulator({ platform: 'twitch', logger: { debug: createMockFn() } });
             const platform = fakePlatform({ processed: true });
-            const processedSpy = jest.fn();
+            const processedSpy = createMockFn();
             simulator.on('messageProcessed', processedSpy);
 
             const result = await simulator.injectRawWebSocketMessage({ data: 1 }, platform);
@@ -43,12 +51,12 @@ describe('e2e-testing-infrastructure behavior', () => {
         });
 
         it('routes errors through platform error handler and emits error event', async () => {
-            const logger = { debug: jest.fn() };
-            const handler = { handleEventProcessingError: jest.fn(), logOperationalError: jest.fn() };
+            const logger = { debug: createMockFn() };
+            const handler = { handleEventProcessingError: createMockFn(), logOperationalError: createMockFn() };
             createPlatformErrorHandler.mockReturnValue(handler);
             const simulator = new WebSocketMessageSimulator({ platform: 'yt', logger });
-            const platform = { handleWebSocketMessage: jest.fn(async () => { throw new Error('boom'); }) };
-            const errorSpy = jest.fn();
+            const platform = { handleWebSocketMessage: createMockFn(async () => { throw new Error('boom'); }) };
+            const errorSpy = createMockFn();
             simulator.on('messageProcessingError', errorSpy);
 
             await expect(simulator.injectRawWebSocketMessage({ bad: true }, platform)).rejects.toThrow('boom');
@@ -66,7 +74,7 @@ describe('e2e-testing-infrastructure behavior', () => {
 
     describe('CrossPlatformIntegrationTester', () => {
         it('processes simultaneous events across platforms and returns per-platform results', async () => {
-            const tester = new CrossPlatformIntegrationTester({ twitch: fakePlatform('t-ok') }, { logger: { debug: jest.fn() } });
+            const tester = new CrossPlatformIntegrationTester({ twitch: fakePlatform('t-ok') }, { logger: { debug: createMockFn() } });
 
             const outcome = await tester.processSimultaneousEvents({ twitch: { foo: 'bar' } });
 
@@ -76,9 +84,9 @@ describe('e2e-testing-infrastructure behavior', () => {
         });
 
         it('captures tester errors via platform error handler when platform missing', async () => {
-            const handler = { handleEventProcessingError: jest.fn(), logOperationalError: jest.fn() };
+            const handler = { handleEventProcessingError: createMockFn(), logOperationalError: createMockFn() };
             createPlatformErrorHandler.mockReturnValue(handler);
-            const tester = new CrossPlatformIntegrationTester({}, { logger: { debug: jest.fn() } });
+            const tester = new CrossPlatformIntegrationTester({}, { logger: { debug: createMockFn() } });
 
             await expect(tester.processSimultaneousEvents({ twitch: { foo: 'bar' } })).rejects.toThrow();
 
@@ -88,7 +96,7 @@ describe('e2e-testing-infrastructure behavior', () => {
 
     describe('UserJourneyValidator', () => {
         it('validates journey success through all stages', async () => {
-            const validator = new UserJourneyValidator({ logger: { debug: jest.fn() } });
+            const validator = new UserJourneyValidator({ logger: { debug: createMockFn() } });
             const journey = await validator.validateCompleteUserJourney(
                 { platform: 'twitch', rawWebSocketData: { subscription_type: 'chat', event: {} } },
                 { obsDisplay: true, ttsOutput: true, logOutput: true }
@@ -100,7 +108,7 @@ describe('e2e-testing-infrastructure behavior', () => {
         });
 
         it('flags content quality failures for missing content and malicious links', async () => {
-            const validator = new UserJourneyValidator({ logger: { debug: jest.fn() } });
+            const validator = new UserJourneyValidator({ logger: { debug: createMockFn() } });
             const result = await validator.validateContentQualityInFlow({ message: 'visit https://malicious-site.example.invalid' });
 
             expect(result.passed).toBe(false);

@@ -1,14 +1,21 @@
+const { describe, test, expect, it } = require('bun:test');
+const { createMockFn, restoreAllMocks } = require('../helpers/bun-mock-utils');
+
 const logging = require('../../src/core/logging');
 logging.setConfigValidator(() => ({ logging: {} }));
 
 const { YouTubeNotificationDispatcher } = require('../../src/utils/youtube-notification-dispatcher');
 
 describe('YouTubeNotificationDispatcher membership routing', () => {
+    afterEach(() => {
+        restoreAllMocks();
+    });
+
     it('dispatches membership notifications to onMembership with months/level preserved', async () => {
         const dispatcher = new YouTubeNotificationDispatcher({
             logger: { debug: () => {}, info: () => {}, warn: () => {}, error: () => {} }
         });
-        const onMembership = jest.fn();
+        const onMembership = createMockFn();
         const chatItem = {
             item: {
                 id: 'LCC.test-membership-001',

@@ -1,17 +1,21 @@
 
-jest.mock('../../../src/core/logging', () => ({
+const { describe, test, expect, afterEach, it } = require('bun:test');
+const { createMockFn, clearAllMocks, restoreAllMocks } = require('../../helpers/bun-mock-utils');
+const { mockModule, resetModules, restoreAllModuleMocks } = require('../../helpers/bun-module-mocks');
+
+mockModule('../../../src/core/logging', () => ({
     logger: {
-        debug: jest.fn(),
-        info: jest.fn(),
-        warn: jest.fn(),
-        error: jest.fn()
+        debug: createMockFn(),
+        info: createMockFn(),
+        warn: createMockFn(),
+        error: createMockFn()
     }
 }));
 
-jest.mock('../../../src/chat/commands', () => {
-    const runCommand = jest.fn().mockResolvedValue();
-    const CommandParser = jest.fn().mockImplementation(() => ({
-        getVFXConfig: jest.fn().mockReturnValue(null)
+mockModule('../../../src/chat/commands', () => {
+    const runCommand = createMockFn().mockResolvedValue();
+    const CommandParser = createMockFn().mockImplementation(() => ({
+        getVFXConfig: createMockFn().mockReturnValue(null)
     }));
 
     return {
@@ -25,7 +29,7 @@ const { runCommand } = require('../../../src/chat/commands');
 
 describe('VFXCommandService failure paths', () => {
     const createConfigService = (commandValue = '!hello') => ({
-        get: jest.fn((section, key) => {
+        get: createMockFn((section, key) => {
             if (section === 'commands') return { greetings: commandValue };
             if (section === 'farewell') return {};
             if (section === 'vfx' && key === 'filePath') return '/tmp';
@@ -34,12 +38,14 @@ describe('VFXCommandService failure paths', () => {
             if (section === 'general' && key === 'globalCmdCooldownMs') return 60000;
             return undefined;
         }),
-        getCommand: jest.fn(() => commandValue)
+        getCommand: createMockFn(() => commandValue)
     });
 
     afterEach(() => {
-        jest.clearAllMocks();
-    });
+        restoreAllMocks();
+        clearAllMocks();
+    
+        restoreAllModuleMocks();});
 
     it('returns friendly error when parser is missing', async () => {
         const service = new VFXCommandService(createConfigService(), null);
@@ -61,11 +67,11 @@ describe('VFXCommandService failure paths', () => {
         const configService = createConfigService();
 
         const commandParser = {
-            getVFXConfig: jest.fn().mockReturnValue(null)
+            getVFXConfig: createMockFn().mockReturnValue(null)
         };
 
-        jest.doMock('../../../src/chat/commands', () => ({
-            CommandParser: jest.fn(() => commandParser),
+        mockModule('../../../src/chat/commands', () => ({
+            CommandParser: createMockFn(() => commandParser),
             runCommand
         }));
 
@@ -88,24 +94,23 @@ describe('VFXCommandService failure paths', () => {
     });
 
     it('returns friendly error when parser throws while selecting command', async () => {
-        jest.resetModules();
-        const errorHandler = {
-            handleEventProcessingError: jest.fn(),
-            logOperationalError: jest.fn()
+const errorHandler = {
+            handleEventProcessingError: createMockFn(),
+            logOperationalError: createMockFn()
         };
 
-        jest.doMock('../../../src/utils/platform-error-handler', () => ({
-            createPlatformErrorHandler: jest.fn(() => errorHandler)
+        mockModule('../../../src/utils/platform-error-handler', () => ({
+            createPlatformErrorHandler: createMockFn(() => errorHandler)
         }));
 
         const configService = createConfigService();
 
         const commandParser = {
-            getVFXConfig: jest.fn(() => { throw new Error('parser explode'); })
+            getVFXConfig: createMockFn(() => { throw new Error('parser explode'); })
         };
 
-        jest.doMock('../../../src/chat/commands', () => ({
-            CommandParser: jest.fn(() => commandParser),
+        mockModule('../../../src/chat/commands', () => ({
+            CommandParser: createMockFn(() => commandParser),
             runCommand
         }));
 
@@ -144,7 +149,7 @@ describe('VFXCommandService failure paths', () => {
 
     it('returns friendly error when command is whitespace only', async () => {
         const service = new VFXCommandService(createConfigService(), null);
-        service.commandParser = { getVFXConfig: jest.fn().mockReturnValue(null) };
+        service.commandParser = { getVFXConfig: createMockFn().mockReturnValue(null) };
 
         const result = await service.executeCommand('   ', {
             username: 'user1',
@@ -198,20 +203,19 @@ describe('VFXCommandService failure paths', () => {
     });
 
     it('returns friendly error when ConfigService throws for commandKey lookup', async () => {
-        jest.resetModules();
-        const errorHandler = {
-            handleEventProcessingError: jest.fn(),
-            logOperationalError: jest.fn()
+const errorHandler = {
+            handleEventProcessingError: createMockFn(),
+            logOperationalError: createMockFn()
         };
 
-        jest.doMock('../../../src/utils/platform-error-handler', () => ({
-            createPlatformErrorHandler: jest.fn(() => errorHandler)
+        mockModule('../../../src/utils/platform-error-handler', () => ({
+            createPlatformErrorHandler: createMockFn(() => errorHandler)
         }));
 
-        const runCommandMock = jest.fn();
+        const runCommandMock = createMockFn();
         const throwingConfigService = {
-            getCommand: jest.fn(() => { throw new Error('config crash'); }),
-            get: jest.fn((section, key) => {
+            getCommand: createMockFn(() => { throw new Error('config crash'); }),
+            get: createMockFn((section, key) => {
                 if (section === 'commands') return { gifts: '!gift' };
                 if (section === 'farewell') return {};
                 if (section === 'vfx' && key === 'filePath') return '/tmp';
@@ -222,9 +226,9 @@ describe('VFXCommandService failure paths', () => {
             })
         };
 
-        jest.doMock('../../../src/chat/commands', () => ({
-            CommandParser: jest.fn().mockImplementation(() => ({
-                getVFXConfig: jest.fn(() => null)
+        mockModule('../../../src/chat/commands', () => ({
+            CommandParser: createMockFn().mockImplementation(() => ({
+                getVFXConfig: createMockFn(() => null)
             })),
             runCommand: runCommandMock
         }));

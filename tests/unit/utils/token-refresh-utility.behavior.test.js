@@ -1,8 +1,12 @@
 
-jest.mock('../../../src/utils/platform-error-handler', () => ({
-    createPlatformErrorHandler: jest.fn(() => ({
-        handleEventProcessingError: jest.fn(),
-        logOperationalError: jest.fn()
+const { describe, test, expect, beforeEach, it } = require('bun:test');
+const { createMockFn, clearAllMocks, restoreAllMocks } = require('../../helpers/bun-mock-utils');
+const { mockModule, restoreAllModuleMocks } = require('../../helpers/bun-module-mocks');
+
+mockModule('../../../src/utils/platform-error-handler', () => ({
+    createPlatformErrorHandler: createMockFn(() => ({
+        handleEventProcessingError: createMockFn(),
+        logOperationalError: createMockFn()
     }))
 }));
 
@@ -10,21 +14,25 @@ const { createPlatformErrorHandler } = require('../../../src/utils/platform-erro
 const TokenRefreshUtility = require('../../../src/utils/token-refresh-utility');
 
 describe('TokenRefreshUtility', () => {
+    afterEach(() => {
+        restoreAllMocks();
+        restoreAllModuleMocks();
+    });
+
     const logger = {
-        debug: jest.fn(),
-        info: jest.fn(),
-        warn: jest.fn(),
-        error: jest.fn()
+        debug: createMockFn(),
+        info: createMockFn(),
+        warn: createMockFn(),
+        error: createMockFn()
     };
 
     beforeEach(() => {
-        jest.clearAllMocks();
-    });
+        });
 
     describe('executeTokenRefresh', () => {
         it('returns success with tokens using enhanced client', async () => {
             const enhancedHttpClient = {
-                post: jest.fn().mockResolvedValue({
+                post: createMockFn().mockResolvedValue({
                     data: { access_token: 'new', refresh_token: 'new-refresh', expires_in: 3600 }
                 })
             };
@@ -43,14 +51,14 @@ describe('TokenRefreshUtility', () => {
 
         it('logs and returns failure when token response missing fields', async () => {
         const enhancedHttpClient = {
-            post: jest.fn().mockResolvedValue({
+            post: createMockFn().mockResolvedValue({
                 data: { access_token: 'only-access' }
             })
         };
         const util = new TokenRefreshUtility({ enhancedHttpClient, logger });
         util.platformErrorHandler = {
-            handleEventProcessingError: jest.fn(),
-            logOperationalError: jest.fn()
+            handleEventProcessingError: createMockFn(),
+            logOperationalError: createMockFn()
         };
 
         const result = await util.executeTokenRefresh({

@@ -2,6 +2,7 @@
 const { validateMockContract } = require('./mock-validation');
 const testClock = require('./test-clock');
 const { nextTestId } = require('./test-id');
+const { isMockFunction } = require('./bun-mock-utils');
 
 // ================================================================================================
 // MOCK LIFECYCLE MANAGER
@@ -128,7 +129,7 @@ class MockLifecycleManager {
 
     _clearMockCalls(mockObject) {
         Object.keys(mockObject).forEach(key => {
-            if (jest.isMockFunction(mockObject[key])) {
+            if (isMockFunction(mockObject[key])) {
                 mockObject[key].mockClear();
             }
         });
@@ -136,7 +137,7 @@ class MockLifecycleManager {
 
     _resetMockImplementations(mockObject) {
         Object.keys(mockObject).forEach(key => {
-            if (jest.isMockFunction(mockObject[key])) {
+            if (isMockFunction(mockObject[key])) {
                 mockObject[key].mockReset();
             }
         });
@@ -190,7 +191,7 @@ class MockLifecycleManager {
         this.activeMocks.forEach(mockData => {
             totalMocks++;
             Object.keys(mockData.mock).forEach(key => {
-                if (jest.isMockFunction(mockData.mock[key])) {
+                if (isMockFunction(mockData.mock[key])) {
                     totalFunctions++;
                 }
             });
@@ -300,7 +301,7 @@ const checkMockIsolation = (mocksToCheck) => {
 
     mocksToCheck.forEach((mock, index) => {
         Object.keys(mock).forEach(key => {
-            if (jest.isMockFunction(mock[key])) {
+            if (isMockFunction(mock[key])) {
                 const mockFn = mock[key];
                 
                 // Check for unexpected call history

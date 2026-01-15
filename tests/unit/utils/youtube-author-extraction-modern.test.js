@@ -1,4 +1,7 @@
 
+const { describe, test, expect, beforeEach, it } = require('bun:test');
+const { resetModules, restoreAllModuleMocks } = require('../../helpers/bun-module-mocks');
+
 const { getSyntheticFixture } = require('../../helpers/platform-test-data');
 
 const realChatMessage = getSyntheticFixture('youtube', 'chat-message');
@@ -8,11 +11,15 @@ const realSuperChat = getSyntheticFixture('youtube', 'superchat');
 const giftPurchaseHeaderOnly = getSyntheticFixture('youtube', 'gift-purchase-header');
 
 describe('YouTube Author Extraction - Modern (Production Data)', () => {
+    afterEach(() => {
+        restoreAllModuleMocks();
+    });
+
     let YouTubeAuthorExtractor;
 
     beforeEach(() => {
         // Fresh require each test to avoid state pollution
-        jest.resetModules();
+        resetModules();
         YouTubeAuthorExtractor = require('../../../src/utils/youtube-author-extractor');
     });
 

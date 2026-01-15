@@ -1,35 +1,39 @@
+const { describe, test, expect, beforeEach, it } = require('bun:test');
+const { createMockFn, clearAllMocks, restoreAllMocks } = require('../../helpers/bun-mock-utils');
+const { mockModule, restoreAllModuleMocks } = require('../../helpers/bun-module-mocks');
+
 const { EventEmitter } = require('events');
 
-jest.mock('../../../src/utils/logger-utils', () => ({
+mockModule('../../../src/utils/logger-utils', () => ({
     getLazyUnifiedLogger: () => ({
-        debug: jest.fn(),
-        info: jest.fn(),
-        warn: jest.fn(),
-        error: jest.fn()
+        debug: createMockFn(),
+        info: createMockFn(),
+        warn: createMockFn(),
+        error: createMockFn()
     }),
     createNoopLogger: () => ({
-        debug: jest.fn(),
-        info: jest.fn(),
-        warn: jest.fn(),
-        error: jest.fn()
+        debug: createMockFn(),
+        info: createMockFn(),
+        warn: createMockFn(),
+        error: createMockFn()
     }),
     getLoggerOrNoop: (logger) => logger || ({
-        debug: jest.fn(),
-        info: jest.fn(),
-        warn: jest.fn(),
-        error: jest.fn()
+        debug: createMockFn(),
+        info: createMockFn(),
+        warn: createMockFn(),
+        error: createMockFn()
     })
 }));
 
-jest.mock('../../../src/utils/platform-error-handler', () => ({
-    createPlatformErrorHandler: jest.fn(() => ({
-        handleEventProcessingError: jest.fn(),
-        logOperationalError: jest.fn()
+mockModule('../../../src/utils/platform-error-handler', () => ({
+    createPlatformErrorHandler: createMockFn(() => ({
+        handleEventProcessingError: createMockFn(),
+        logOperationalError: createMockFn()
     }))
 }));
 
-jest.mock('../../../src/utils/dependency-validator', () => ({
-    validateLoggerInterface: jest.fn(() => true)
+mockModule('../../../src/utils/dependency-validator', () => ({
+    validateLoggerInterface: createMockFn(() => true)
 }));
 
 const { createPlatformErrorHandler } = require('../../../src/utils/platform-error-handler');
@@ -37,7 +41,12 @@ const { validateLoggerInterface } = require('../../../src/utils/dependency-valid
 const { PlatformConnectionFactory } = require('../../../src/utils/platform-connection-factory');
 
 describe('platform-connection-factory behavior', () => {
-    const logger = { debug: jest.fn(), info: jest.fn(), warn: jest.fn(), error: jest.fn() };
+    afterEach(() => {
+        restoreAllMocks();
+        restoreAllModuleMocks();
+    });
+
+    const logger = { debug: createMockFn(), info: createMockFn(), warn: createMockFn(), error: createMockFn() };
     const createLogCollector = () => {
         const entries = [];
         const collect = (level) => (message) => entries.push({ level, message });
@@ -51,14 +60,13 @@ describe('platform-connection-factory behavior', () => {
     };
 
     beforeEach(() => {
-        jest.clearAllMocks();
-    });
+        });
 
     it('wraps non-emitter connections returned by TikTok constructor', () => {
         const factory = new PlatformConnectionFactory(logger);
         const deps = {
             logger,
-            TikTokWebSocketClient: jest.fn(() => ({ connect: jest.fn() }))
+            TikTokWebSocketClient: createMockFn(() => ({ connect: createMockFn() }))
         };
 
         const conn = factory.createConnection('tiktok', { username: 'user' }, deps);
@@ -79,7 +87,7 @@ describe('platform-connection-factory behavior', () => {
         const factory = new PlatformConnectionFactory(logger);
         const deps = {
             logger,
-            TikTokWebSocketClient: jest.fn(() => {
+            TikTokWebSocketClient: createMockFn(() => {
                 throw new Error('construct fail');
             })
         };

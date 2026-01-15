@@ -1,3 +1,6 @@
+const { describe, test, expect, it } = require('bun:test');
+const { resetModules, restoreAllModuleMocks } = require('../../helpers/bun-module-mocks');
+
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
@@ -12,9 +15,7 @@ function writeTempConfig(content) {
 function loadConfigWithPath(configPath) {
     const previousPath = process.env.CHAT_BOT_CONFIG_PATH;
     process.env.CHAT_BOT_CONFIG_PATH = configPath;
-
-    jest.resetModules();
-    const { configManager, config } = require('../../../src/core/config');
+const { configManager, config } = require('../../../src/core/config');
     configManager.load();
 
     return {
@@ -129,6 +130,10 @@ function buildMinimalConfig(overrides = {}) {
 }
 
 describe('Config path override', () => {
+    afterEach(() => {
+        restoreAllModuleMocks();
+    });
+
     it('loads config from CHAT_BOT_CONFIG_PATH when set', () => {
         const uniqueScene = '__smoke_scene_override__';
         const configContent = buildMinimalConfig({

@@ -1,15 +1,19 @@
 
-jest.mock('../../../src/utils/platform-error-handler', () => ({
-    createPlatformErrorHandler: jest.fn(() => ({
-        handleEventProcessingError: jest.fn(),
-        logOperationalError: jest.fn()
+const { describe, test, expect, beforeEach, it } = require('bun:test');
+const { createMockFn, clearAllMocks, restoreAllMocks } = require('../../helpers/bun-mock-utils');
+const { mockModule, restoreAllModuleMocks } = require('../../helpers/bun-module-mocks');
+
+mockModule('../../../src/utils/platform-error-handler', () => ({
+    createPlatformErrorHandler: createMockFn(() => ({
+        handleEventProcessingError: createMockFn(),
+        logOperationalError: createMockFn()
     }))
 }));
 
-const mockHandleError = jest.fn(async (error) => { throw error; });
-const mockCategorizeError = jest.fn((error) => error);
+const mockHandleError = createMockFn(async (error) => { throw error; });
+const mockCategorizeError = createMockFn((error) => error);
 
-jest.mock('../../../src/utils/auth-errors', () => {
+mockModule('../../../src/utils/auth-errors', () => {
     const TokenRefreshError = class extends Error {
         constructor(message, options = {}) {
             super(message);
@@ -33,7 +37,7 @@ jest.mock('../../../src/utils/auth-errors', () => {
 
     const AuthErrorFactory = {
         categorizeError: mockCategorizeError,
-        createTokenRefreshError: jest.fn((error) => new TokenRefreshError(error.message, {
+        createTokenRefreshError: createMockFn((error) => new TokenRefreshError(error.message, {
             category: 'refresh_error',
             code: error.code,
             recoverable: false
@@ -62,14 +66,18 @@ const ReactiveTokenRefresh = require('../../../src/utils/reactive-token-refresh'
 const { createPlatformErrorHandler } = require('../../../src/utils/platform-error-handler');
 
 describe('ReactiveTokenRefresh', () => {
+    afterEach(() => {
+        restoreAllMocks();
+        restoreAllModuleMocks();
+    });
+
     const logger = {
-        debug: jest.fn(),
-        info: jest.fn(),
-        warn: jest.fn()
+        debug: createMockFn(),
+        info: createMockFn(),
+        warn: createMockFn()
     };
 
     beforeEach(() => {
-        jest.clearAllMocks();
         mockHandleError.mockImplementation(async (error) => { throw error; });
         mockCategorizeError.mockImplementation((error) => error);
         AuthErrorFactory.createTokenRefreshError.mockImplementation((error) => new TokenRefreshError(error.message, {
@@ -78,16 +86,16 @@ describe('ReactiveTokenRefresh', () => {
             recoverable: false
         }));
         createPlatformErrorHandler.mockImplementation(() => ({
-            handleEventProcessingError: jest.fn(),
-            logOperationalError: jest.fn()
+            handleEventProcessingError: createMockFn(),
+            logOperationalError: createMockFn()
         }));
     });
 
     it('returns successful response without refresh when API call succeeds', async () => {
         const config = { accessToken: 'old', refreshToken: 'refresh' };
-        const TwitchTokenRefresh = jest.fn();
+        const TwitchTokenRefresh = createMockFn();
         const reactive = new ReactiveTokenRefresh(config, { logger, TwitchTokenRefresh });
-        const apiCall = jest.fn().mockResolvedValue({ ok: true });
+        const apiCall = createMockFn().mockResolvedValue({ ok: true });
 
         const result = await reactive.wrapApiCall(apiCall, 'fetch-data');
 
@@ -98,16 +106,16 @@ describe('ReactiveTokenRefresh', () => {
 
     it('attempts refresh on 401 and retries successfully with updated tokens', async () => {
         const refreshInstance = {
-            refreshToken: jest.fn().mockResolvedValue({
+            refreshToken: createMockFn().mockResolvedValue({
                 access_token: 'new-token',
                 refresh_token: 'new-refresh'
             }),
-            updateConfig: jest.fn().mockResolvedValue(true)
+            updateConfig: createMockFn().mockResolvedValue(true)
         };
-        const TwitchTokenRefresh = jest.fn(() => refreshInstance);
+        const TwitchTokenRefresh = createMockFn(() => refreshInstance);
         const config = { accessToken: 'old-token', refreshToken: 'refresh-token' };
         const reactive = new ReactiveTokenRefresh(config, { logger, TwitchTokenRefresh });
-        const apiCall = jest.fn()
+        const apiCall = createMockFn()
             .mockRejectedValueOnce({ response: { status: 401 } })
             .mockResolvedValueOnce({ ok: true });
 
@@ -124,13 +132,13 @@ describe('ReactiveTokenRefresh', () => {
 
     it('fails gracefully when refresh API returns null', async () => {
         const refreshInstance = {
-            refreshToken: jest.fn().mockResolvedValue(null),
-            updateConfig: jest.fn()
+            refreshToken: createMockFn().mockResolvedValue(null),
+            updateConfig: createMockFn()
         };
-        const TwitchTokenRefresh = jest.fn(() => refreshInstance);
+        const TwitchTokenRefresh = createMockFn(() => refreshInstance);
         const config = { accessToken: 'old-token', refreshToken: 'refresh-token' };
         const reactive = new ReactiveTokenRefresh(config, { logger, TwitchTokenRefresh });
-        const apiCall = jest.fn().mockRejectedValue({ response: { status: 401 } });
+        const apiCall = createMockFn().mockRejectedValue({ response: { status: 401 } });
 
         await expect(reactive.wrapApiCall(apiCall, 'null-refresh')).rejects.toBeInstanceOf(TokenRefreshError);
         expect(refreshInstance.refreshToken).toHaveBeenCalled();
@@ -139,16 +147,16 @@ describe('ReactiveTokenRefresh', () => {
 
     it('fails when refresh returns identical token or config update fails', async () => {
         const refreshInstance = {
-            refreshToken: jest.fn().mockResolvedValue({
+            refreshToken: createMockFn().mockResolvedValue({
                 access_token: 'same-token',
                 refresh_token: 'refresh-token'
             }),
-            updateConfig: jest.fn().mockResolvedValue(false)
+            updateConfig: createMockFn().mockResolvedValue(false)
         };
-        const TwitchTokenRefresh = jest.fn(() => refreshInstance);
+        const TwitchTokenRefresh = createMockFn(() => refreshInstance);
         const config = { accessToken: 'same-token', refreshToken: 'refresh-token' };
         const reactive = new ReactiveTokenRefresh(config, { logger, TwitchTokenRefresh });
-        const apiCall = jest.fn().mockRejectedValue({ response: { status: 401 } });
+        const apiCall = createMockFn().mockRejectedValue({ response: { status: 401 } });
 
         await expect(reactive.wrapApiCall(apiCall, 'same-token')).rejects.toBeInstanceOf(TokenRefreshError);
         expect(reactive.metrics.failedRefreshes).toBeGreaterThanOrEqual(1);
@@ -156,16 +164,16 @@ describe('ReactiveTokenRefresh', () => {
 
     it('does not retry refresh more than once on repeated 401', async () => {
         const refreshInstance = {
-            refreshToken: jest.fn().mockResolvedValue({
+            refreshToken: createMockFn().mockResolvedValue({
                 access_token: 'new-token',
                 refresh_token: 'new-refresh'
             }),
-            updateConfig: jest.fn().mockResolvedValue(true)
+            updateConfig: createMockFn().mockResolvedValue(true)
         };
-        const TwitchTokenRefresh = jest.fn(() => refreshInstance);
+        const TwitchTokenRefresh = createMockFn(() => refreshInstance);
         const config = { accessToken: 'old-token', refreshToken: 'refresh-token' };
         const reactive = new ReactiveTokenRefresh(config, { logger, TwitchTokenRefresh });
-        const apiCall = jest.fn()
+        const apiCall = createMockFn()
             .mockRejectedValueOnce({ response: { status: 401 } })
             .mockRejectedValueOnce({ response: { status: 401 } });
 
@@ -177,12 +185,12 @@ describe('ReactiveTokenRefresh', () => {
 
     it('surfaces friendly error when no refresh token is available', async () => {
         const config = { accessToken: 'old', refreshToken: null };
-        const reactive = new ReactiveTokenRefresh(config, { logger, TwitchTokenRefresh: jest.fn() });
+        const reactive = new ReactiveTokenRefresh(config, { logger, TwitchTokenRefresh: createMockFn() });
         reactive.platformErrorHandler = {
-            handleEventProcessingError: jest.fn(),
-            logOperationalError: jest.fn()
+            handleEventProcessingError: createMockFn(),
+            logOperationalError: createMockFn()
         };
-        const apiCall = jest.fn().mockRejectedValue({ response: { status: 401 } });
+        const apiCall = createMockFn().mockRejectedValue({ response: { status: 401 } });
 
         await expect(reactive.wrapApiCall(apiCall, 'missing-refresh')).rejects.toBeInstanceOf(TokenRefreshError);
         expect(reactive.metrics.refreshAttempts).toBe(0);
@@ -193,12 +201,12 @@ describe('ReactiveTokenRefresh', () => {
         const config = { accessToken: 'old', refreshToken: 'refresh' };
         const networkError = new NetworkError('network down', { code: 'ECONNRESET' });
         AuthErrorFactory.categorizeError.mockImplementation(() => networkError);
-        const reactive = new ReactiveTokenRefresh(config, { logger, TwitchTokenRefresh: jest.fn() });
+        const reactive = new ReactiveTokenRefresh(config, { logger, TwitchTokenRefresh: createMockFn() });
         reactive.platformErrorHandler = {
-            handleEventProcessingError: jest.fn(),
-            logOperationalError: jest.fn()
+            handleEventProcessingError: createMockFn(),
+            logOperationalError: createMockFn()
         };
-        const apiCall = jest.fn().mockRejectedValue(networkError);
+        const apiCall = createMockFn().mockRejectedValue(networkError);
 
         await expect(reactive.wrapApiCall(apiCall, 'network-call')).rejects.toBe(networkError);
         expect(reactive.metrics.refreshAttempts).toBe(0);
@@ -207,15 +215,15 @@ describe('ReactiveTokenRefresh', () => {
 
     it('throws when retry after refresh still returns 401', async () => {
         const refreshInstance = {
-            refreshToken: jest.fn().mockResolvedValue({
+            refreshToken: createMockFn().mockResolvedValue({
                 access_token: 'new-token',
                 refresh_token: 'new-refresh'
             }),
-            updateConfig: jest.fn().mockResolvedValue(true)
+            updateConfig: createMockFn().mockResolvedValue(true)
         };
-        const TwitchTokenRefresh = jest.fn(() => refreshInstance);
+        const TwitchTokenRefresh = createMockFn(() => refreshInstance);
         const reactive = new ReactiveTokenRefresh({ accessToken: 'old', refreshToken: 'refresh' }, { logger, TwitchTokenRefresh });
-        const apiCall = jest.fn()
+        const apiCall = createMockFn()
             .mockRejectedValueOnce({ response: { status: 401 } })
             .mockRejectedValueOnce({ response: { status: 401 } });
 
@@ -225,20 +233,20 @@ describe('ReactiveTokenRefresh', () => {
 
     it('logs and throws when retry after refresh fails with non-401 error', async () => {
         const refreshInstance = {
-            refreshToken: jest.fn().mockResolvedValue({
+            refreshToken: createMockFn().mockResolvedValue({
                 access_token: 'new-token',
                 refresh_token: 'new-refresh'
             }),
-            updateConfig: jest.fn().mockResolvedValue(true)
+            updateConfig: createMockFn().mockResolvedValue(true)
         };
-        const TwitchTokenRefresh = jest.fn(() => refreshInstance);
+        const TwitchTokenRefresh = createMockFn(() => refreshInstance);
         const reactive = new ReactiveTokenRefresh({ accessToken: 'old', refreshToken: 'refresh' }, { logger, TwitchTokenRefresh });
         reactive.platformErrorHandler = {
-            handleEventProcessingError: jest.fn(),
-            logOperationalError: jest.fn()
+            handleEventProcessingError: createMockFn(),
+            logOperationalError: createMockFn()
         };
         const retryError = new Error('upstream 500');
-        const apiCall = jest.fn()
+        const apiCall = createMockFn()
             .mockRejectedValueOnce({ response: { status: 401 } })
             .mockRejectedValueOnce(retryError);
 
@@ -249,8 +257,8 @@ describe('ReactiveTokenRefresh', () => {
 
     it('returns handled result when error handler resolves', async () => {
         mockHandleError.mockImplementation(async () => ({ handled: true }));
-        const reactive = new ReactiveTokenRefresh({ accessToken: 'old', refreshToken: 'refresh' }, { logger, TwitchTokenRefresh: jest.fn() });
-        const apiCall = jest.fn().mockRejectedValue(new Error('boom'));
+        const reactive = new ReactiveTokenRefresh({ accessToken: 'old', refreshToken: 'refresh' }, { logger, TwitchTokenRefresh: createMockFn() });
+        const apiCall = createMockFn().mockRejectedValue(new Error('boom'));
 
         const result = await reactive.wrapApiCall(apiCall, 'handled-error');
 
@@ -259,18 +267,18 @@ describe('ReactiveTokenRefresh', () => {
 
     it('routes refresh failures through platform error handler and metrics', async () => {
         const errorHandler = {
-            handleEventProcessingError: jest.fn(),
-            logOperationalError: jest.fn()
+            handleEventProcessingError: createMockFn(),
+            logOperationalError: createMockFn()
         };
         createPlatformErrorHandler.mockReturnValueOnce(errorHandler);
-        const TwitchTokenRefresh = jest.fn(() => ({
-            refreshToken: jest.fn().mockRejectedValue(new Error('refresh failed'))
+        const TwitchTokenRefresh = createMockFn(() => ({
+            refreshToken: createMockFn().mockRejectedValue(new Error('refresh failed'))
         }));
         const reactive = new ReactiveTokenRefresh(
             { accessToken: 'old', refreshToken: 'refresh' },
             { logger, TwitchTokenRefresh }
         );
-        const apiCall = jest.fn().mockRejectedValue({ response: { status: 401 } });
+        const apiCall = createMockFn().mockRejectedValue({ response: { status: 401 } });
 
         const caught = await reactive.wrapApiCall(apiCall, 'refresh-failure').catch(err => err);
         expect(caught).toBeInstanceOf(TokenRefreshError);
@@ -280,13 +288,13 @@ describe('ReactiveTokenRefresh', () => {
 
     it('logs operational errors for non-Error refresh issues', () => {
         const errorHandler = {
-            handleEventProcessingError: jest.fn(),
-            logOperationalError: jest.fn()
+            handleEventProcessingError: createMockFn(),
+            logOperationalError: createMockFn()
         };
         createPlatformErrorHandler.mockReturnValueOnce(errorHandler);
         const reactive = new ReactiveTokenRefresh(
             { accessToken: 'old', refreshToken: 'refresh' },
-            { logger, TwitchTokenRefresh: jest.fn() }
+            { logger, TwitchTokenRefresh: createMockFn() }
         );
 
         reactive._logReactiveRefreshError('op-error', null, { context: true }, 'reactive-token-refresh', 'token-refresh');
@@ -295,9 +303,9 @@ describe('ReactiveTokenRefresh', () => {
     });
 
     it('reports metrics and resets cleanly', () => {
-        const reactive = new ReactiveTokenRefresh({ accessToken: 'old', refreshToken: 'refresh' }, { logger, TwitchTokenRefresh: jest.fn() });
+        const reactive = new ReactiveTokenRefresh({ accessToken: 'old', refreshToken: 'refresh' }, { logger, TwitchTokenRefresh: createMockFn() });
         reactive.metrics = { totalCalls: 5, refreshAttempts: 2, successfulRefreshes: 1, failedRefreshes: 1 };
-        reactive.errorHandler.cleanup = jest.fn();
+        reactive.errorHandler.cleanup = createMockFn();
 
         const metrics = reactive.getMetrics();
         expect(metrics.refreshSuccessRate).toBeGreaterThan(0);
@@ -309,11 +317,11 @@ describe('ReactiveTokenRefresh', () => {
 
     it('creates platform error handler when logging refresh errors without existing handler', () => {
         const handler = {
-            handleEventProcessingError: jest.fn(),
-            logOperationalError: jest.fn()
+            handleEventProcessingError: createMockFn(),
+            logOperationalError: createMockFn()
         };
         createPlatformErrorHandler.mockReturnValueOnce(handler);
-        const reactive = new ReactiveTokenRefresh({ accessToken: 'old', refreshToken: 'refresh' }, { logger, TwitchTokenRefresh: jest.fn() });
+        const reactive = new ReactiveTokenRefresh({ accessToken: 'old', refreshToken: 'refresh' }, { logger, TwitchTokenRefresh: createMockFn() });
         reactive.platformErrorHandler = null;
         const error = new Error('refresh boom');
 

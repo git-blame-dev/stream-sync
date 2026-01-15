@@ -1,4 +1,7 @@
 
+const { describe, test, expect, beforeEach, afterEach } = require('bun:test');
+const { createMockFn, restoreAllMocks } = require('../../helpers/bun-mock-utils');
+
 const { createEventBus } = require('../../../src/core/EventBus');
 const testClock = require('../../helpers/test-clock');
 
@@ -14,16 +17,16 @@ describe('OBSEventService', () => {
 
         // Mock OBS connection
         mockOBSConnection = {
-            connect: jest.fn().mockResolvedValue(true),
-            disconnect: jest.fn().mockResolvedValue(undefined),
-            isConnected: jest.fn().mockReturnValue(true),
-            isReady: jest.fn().mockResolvedValue(true),
-            call: jest.fn().mockResolvedValue({}),
-            addEventListener: jest.fn((event, handler) => {
+            connect: createMockFn().mockResolvedValue(true),
+            disconnect: createMockFn().mockResolvedValue(undefined),
+            isConnected: createMockFn().mockReturnValue(true),
+            isReady: createMockFn().mockResolvedValue(true),
+            call: createMockFn().mockResolvedValue({}),
+            addEventListener: createMockFn((event, handler) => {
                 return handler;
             }),
-            removeEventListener: jest.fn(),
-            getConnectionState: jest.fn().mockReturnValue({
+            removeEventListener: createMockFn(),
+            getConnectionState: createMockFn().mockReturnValue({
                 isConnected: true,
                 isConnecting: false
             })
@@ -31,9 +34,9 @@ describe('OBSEventService', () => {
 
         // Mock OBS sources
         mockObsSources = {
-            updateTextSource: jest.fn().mockResolvedValue(undefined),
-            setSourceVisibility: jest.fn().mockResolvedValue(undefined),
-            clearTextSource: jest.fn().mockResolvedValue(undefined)
+            updateTextSource: createMockFn().mockResolvedValue(undefined),
+            setSourceVisibility: createMockFn().mockResolvedValue(undefined),
+            clearTextSource: createMockFn().mockResolvedValue(undefined)
         };
 
         // Import OBSEventService after mocks are set up
@@ -43,10 +46,10 @@ describe('OBSEventService', () => {
             obsConnection: mockOBSConnection,
             obsSources: mockObsSources,
             logger: {
-                debug: jest.fn(),
-                info: jest.fn(),
-                warn: jest.fn(),
-                error: jest.fn()
+                debug: createMockFn(),
+                info: createMockFn(),
+                warn: createMockFn(),
+                error: createMockFn()
             },
             reconnectConfig: {
                 maxAttempts: 3,
@@ -58,6 +61,7 @@ describe('OBSEventService', () => {
     });
 
     afterEach(() => {
+        restoreAllMocks();
         if (obsEventService) {
             obsEventService.destroy();
             obsEventService = null;

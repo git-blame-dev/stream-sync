@@ -1,4 +1,8 @@
 
+const { describe, test, expect, beforeEach, afterEach, it } = require('bun:test');
+const { createMockFn, spyOn, restoreAllMocks } = require('../../helpers/bun-mock-utils');
+const { mockModule, restoreAllModuleMocks } = require('../../helpers/bun-module-mocks');
+
 const { initializeTestLogging } = require('../../helpers/test-setup');
 const { createMockLogger } = require('../../helpers/mock-factories');
 const { setupAutomatedCleanup } = require('../../helpers/mock-lifecycle');
@@ -14,7 +18,7 @@ setupAutomatedCleanup({
 });
 
 // Mock axios before importing TokenValidator
-jest.mock('axios');
+mockModule('axios');
 const axios = require('axios');
 
 const { TokenValidator } = require('../../../src/auth/token-validator');
@@ -30,17 +34,17 @@ describe('Token Validator Scope Reauth', () => {
         mockLogger = createMockLogger('debug');
         
         // Mock process.exit to prevent test termination
-        mockProcessExit = jest.spyOn(process, 'exit').mockImplementation(() => {});
+        mockProcessExit = spyOn(process, 'exit').mockImplementation(() => {});
         
         // Mock Twitch API for token validation
         mockTwitchAPI = {
-            validateToken: jest.fn(),
-            getTokenScopes: jest.fn()
+            validateToken: createMockFn(),
+            getTokenScopes: createMockFn()
         };
         
         // Mock OAuth handler for reauth flow
         mockOAuthHandler = {
-            runOAuthFlow: jest.fn()
+            runOAuthFlow: createMockFn()
         };
         
         validator = new TokenValidator();
@@ -48,8 +52,10 @@ describe('Token Validator Scope Reauth', () => {
     });
     
     afterEach(() => {
+        restoreAllMocks();
         mockProcessExit.mockRestore();
-    });
+    
+        restoreAllModuleMocks();});
 
     describe('when tokens have scope mismatch', () => {
         it('should detect missing user:read:chat scope and trigger reauth', async () => {
@@ -96,7 +102,7 @@ describe('Token Validator Scope Reauth', () => {
             });
             
             // Spy on OAuth flow trigger
-            const runOAuthFlowSpy = jest.spyOn(validator, 'runOAuthFlow').mockResolvedValue({
+            const runOAuthFlowSpy = spyOn(validator, 'runOAuthFlow').mockResolvedValue({
                 access_token: 'oauth_access_token',
                 refresh_token: 'oauth_refresh_token'
             });
@@ -127,7 +133,7 @@ describe('Token Validator Scope Reauth', () => {
                 }
             };
 
-            const runOAuthFlowSpy = jest.spyOn(validator, 'runOAuthFlow').mockResolvedValue({
+            const runOAuthFlowSpy = spyOn(validator, 'runOAuthFlow').mockResolvedValue({
                 access_token: 'new-token',
                 refresh_token: 'new-refresh'
             });
@@ -136,7 +142,7 @@ describe('Token Validator Scope Reauth', () => {
                 needsNewTokens: false,
                 authManager: { getState: () => 'READY' }
             };
-            const validateSpy = jest.spyOn(validator, 'validateTwitchTokens').mockResolvedValue(revalidation);
+            const validateSpy = spyOn(validator, 'validateTwitchTokens').mockResolvedValue(revalidation);
 
             const outcome = await validator.handleAuthenticationFlow(results, { twitch: { ...twitchConfig } });
 

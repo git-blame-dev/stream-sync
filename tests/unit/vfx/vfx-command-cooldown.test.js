@@ -1,17 +1,22 @@
 
-jest.mock('../../../src/core/logging', () => ({
+const { describe, test, expect, beforeEach, it, jest } = require('bun:test');
+const { createMockFn, clearAllMocks, restoreAllMocks } = require('../../helpers/bun-mock-utils');
+const { mockModule, restoreAllModuleMocks } = require('../../helpers/bun-module-mocks');
+const { useFakeTimers, useRealTimers, advanceTimersByTime } = require('../../helpers/bun-timers');
+
+mockModule('../../../src/core/logging', () => ({
     logger: {
-        debug: jest.fn(),
-        info: jest.fn(),
-        warn: jest.fn(),
-        error: jest.fn()
+        debug: createMockFn(),
+        info: createMockFn(),
+        warn: createMockFn(),
+        error: createMockFn()
     }
 }));
 
-jest.mock('../../../src/chat/commands', () => {
-    const runCommand = jest.fn().mockResolvedValue();
-    const CommandParser = jest.fn().mockImplementation(() => ({
-        getVFXConfig: jest.fn((message) => ({
+mockModule('../../../src/chat/commands', () => {
+    const runCommand = createMockFn().mockResolvedValue();
+    const CommandParser = createMockFn().mockImplementation(() => ({
+        getVFXConfig: createMockFn((message) => ({
             command: message,
             commandKey: message,
             primaryCommand: message,
@@ -29,9 +34,15 @@ const { VFXCommandService } = require('../../../src/services/VFXCommandService')
 const { runCommand } = require('../../../src/chat/commands');
 
 describe('VFXCommandService cooldown handling', () => {
+    afterEach(() => {
+        restoreAllMocks();
+        restoreAllModuleMocks();
+        useRealTimers();
+    });
+
     const createConfigService = (commandValue, overrides = {}) => ({
-        getCommand: jest.fn().mockReturnValue(commandValue),
-        get: jest.fn((section, key) => {
+        getCommand: createMockFn().mockReturnValue(commandValue),
+        get: createMockFn((section, key) => {
             if (section === 'commands') return { gifts: commandValue };
             if (section === 'farewell') return {};
             if (section === 'vfx' && key === 'filePath') return '/tmp';
@@ -46,13 +57,12 @@ describe('VFXCommandService cooldown handling', () => {
     });
 
     beforeEach(() => {
-        jest.clearAllMocks();
-    });
+        });
 
     it('blocks repeat VFX command for same user during cooldown window', async () => {
         const service = new VFXCommandService(createConfigService('!one | !two'), null);
         service.commandParser = {
-            getVFXConfig: jest.fn((message) => ({
+            getVFXConfig: createMockFn((message) => ({
                 command: message,
                 commandKey: message,
                 filename: `${message}.mp4`,
@@ -87,7 +97,7 @@ describe('VFXCommandService cooldown handling', () => {
     it('honors skipCooldown flag for notification-triggered executions', async () => {
         const service = new VFXCommandService(createConfigService('!one | !two'), null);
         service.commandParser = {
-            getVFXConfig: jest.fn((message) => ({
+            getVFXConfig: createMockFn((message) => ({
                 command: message,
                 commandKey: message,
                 filename: `${message}.mp4`,
@@ -119,7 +129,7 @@ describe('VFXCommandService cooldown handling', () => {
     it('returns failure when VFX execution throws', async () => {
         const service = new VFXCommandService(createConfigService('!one | !two'), null);
         service.commandParser = {
-            getVFXConfig: jest.fn((message) => ({
+            getVFXConfig: createMockFn((message) => ({
                 command: message,
                 commandKey: message,
                 filename: `${message}.mp4`,
@@ -149,7 +159,7 @@ describe('VFXCommandService cooldown handling', () => {
             globalCmdCooldownMs: 0
         }), null);
         service.commandParser = {
-            getVFXConfig: jest.fn((message) => ({
+            getVFXConfig: createMockFn((message) => ({
                 command: message,
                 commandKey: message,
                 filename: `${message}.mp4`,
@@ -178,7 +188,7 @@ describe('VFXCommandService cooldown handling', () => {
     });
 
     it('applies global cooldown across users using configured duration', async () => {
-        jest.useFakeTimers();
+        useFakeTimers();
         jest.setSystemTime(new Date(0));
         try {
             const service = new VFXCommandService(createConfigService('!spark', {
@@ -186,7 +196,7 @@ describe('VFXCommandService cooldown handling', () => {
                 globalCmdCooldownMs: 2000
             }), null);
             service.commandParser = {
-                getVFXConfig: jest.fn((message) => ({
+                getVFXConfig: createMockFn((message) => ({
                     command: message,
                     commandKey: message,
                     filename: `${message}.mp4`,
@@ -213,7 +223,7 @@ describe('VFXCommandService cooldown handling', () => {
             expect(second.success).toBe(false);
             expect(second.error).toBe('Command on cooldown');
 
-            jest.advanceTimersByTime(2100);
+            advanceTimersByTime(2100);
 
             const third = await service.executeCommand('!spark', {
                 username: 'user2',
@@ -225,19 +235,19 @@ describe('VFXCommandService cooldown handling', () => {
             expect(third.success).toBe(true);
             expect(runCommand).toHaveBeenCalledTimes(2);
         } finally {
-            jest.useRealTimers();
+            useRealTimers();
         }
     });
 
     it('honors configured cooldown duration from config service', async () => {
-        jest.useFakeTimers();
+        useFakeTimers();
         jest.setSystemTime(new Date(1000)); // ensure cooldown timestamps are truthy
         try {
             const service = new VFXCommandService(createConfigService('!one', {
                 cmdCoolDown: 1,
                 globalCmdCooldownMs: 1
             }), null);
-            service.selectVFXCommand = jest.fn().mockResolvedValue({
+            service.selectVFXCommand = createMockFn().mockResolvedValue({
                 command: '!one',
                 commandKey: '!one',
                 filename: '!one.mp4',
@@ -266,7 +276,7 @@ describe('VFXCommandService cooldown handling', () => {
             expect(second.success).toBe(false);
             expect(second.error).toBe('Command on cooldown');
 
-            jest.advanceTimersByTime(1500);
+            advanceTimersByTime(1500);
             expect(service.checkCommandCooldown('123', '!one').allowed).toBe(true);
 
             const third = await service.executeCommandForKey('gifts', {
@@ -279,7 +289,7 @@ describe('VFXCommandService cooldown handling', () => {
             expect(third.success).toBe(true);
             expect(runCommand).toHaveBeenCalledTimes(2);
         } finally {
-            jest.useRealTimers();
+            useRealTimers();
         }
     });
 });

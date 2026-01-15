@@ -1,9 +1,16 @@
 
+const { describe, test, expect, beforeEach } = require('bun:test');
+const { createMockFn, restoreAllMocks } = require('../../helpers/bun-mock-utils');
+
 const NotificationManager = require('../../../src/notifications/NotificationManager');
 const constants = require('../../../src/core/constants');
 const { createMockLogger } = require('../../helpers/mock-factories');
 
 describe('NotificationManager follow/raid/share behavior', () => {
+    afterEach(() => {
+        restoreAllMocks();
+    });
+
     let queuedItems;
     let displayQueue;
     let configService;
@@ -14,17 +21,17 @@ describe('NotificationManager follow/raid/share behavior', () => {
     beforeEach(() => {
         queuedItems = [];
         displayQueue = {
-            addItem: jest.fn((item) => queuedItems.push(item)),
-            getQueueLength: jest.fn(() => queuedItems.length)
+            addItem: createMockFn((item) => queuedItems.push(item)),
+            getQueueLength: createMockFn(() => queuedItems.length)
         };
 
         configService = {
-            areNotificationsEnabled: jest.fn().mockReturnValue(true),
-            getNotificationSettings: jest.fn().mockReturnValue({ enabled: true }),
-            getTTSConfig: jest.fn().mockReturnValue({ enabled: true }),
-            getPlatformConfig: jest.fn().mockReturnValue({}),
-            getCLIOverrides: jest.fn().mockReturnValue({}),
-            get: jest.fn((section) => {
+            areNotificationsEnabled: createMockFn().mockReturnValue(true),
+            getNotificationSettings: createMockFn().mockReturnValue({ enabled: true }),
+            getTTSConfig: createMockFn().mockReturnValue({ enabled: true }),
+            getPlatformConfig: createMockFn().mockReturnValue({}),
+            getCLIOverrides: createMockFn().mockReturnValue({}),
+            get: createMockFn((section) => {
                 if (section !== 'general') {
                     return {};
                 }
@@ -36,22 +43,22 @@ describe('NotificationManager follow/raid/share behavior', () => {
                     suppressionCleanupIntervalMs: 300000
                 };
             }),
-            isDebugEnabled: jest.fn().mockReturnValue(false)
+            isDebugEnabled: createMockFn().mockReturnValue(false)
         };
 
         vfxCommandService = {
-            getVFXConfig: jest.fn().mockImplementation(async (commandKey) => ({
+            getVFXConfig: createMockFn().mockImplementation(async (commandKey) => ({
                 commandKey,
                 filename: `${commandKey}.mp4`
             })),
-            executeCommand: jest.fn().mockResolvedValue({ success: true }),
-            executeCommandForKey: jest.fn().mockResolvedValue({ success: true })
+            executeCommand: createMockFn().mockResolvedValue({ success: true }),
+            executeCommandForKey: createMockFn().mockResolvedValue({ success: true })
         };
 
         eventBus = {
-            emit: jest.fn(),
-            on: jest.fn(),
-            off: jest.fn()
+            emit: createMockFn(),
+            on: createMockFn(),
+            off: createMockFn()
         };
 
         manager = new NotificationManager({
@@ -60,8 +67,8 @@ describe('NotificationManager follow/raid/share behavior', () => {
             configService,
             eventBus,
             constants,
-            textProcessing: { formatChatMessage: jest.fn() },
-            obsGoals: { processDonationGoal: jest.fn() },
+            textProcessing: { formatChatMessage: createMockFn() },
+            obsGoals: { processDonationGoal: createMockFn() },
             vfxCommandService
         });
     });

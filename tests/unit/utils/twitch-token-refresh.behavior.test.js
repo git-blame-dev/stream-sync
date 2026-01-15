@@ -1,24 +1,28 @@
 
-jest.mock('../../../src/utils/platform-error-handler', () => ({
-    createPlatformErrorHandler: jest.fn(() => ({
-        handleEventProcessingError: jest.fn(),
-        logOperationalError: jest.fn()
+const { describe, test, expect, beforeEach, afterEach, it } = require('bun:test');
+const { createMockFn, spyOn, clearAllMocks, restoreAllMocks } = require('../../helpers/bun-mock-utils');
+const { mockModule, restoreAllModuleMocks } = require('../../helpers/bun-module-mocks');
+
+mockModule('../../../src/utils/platform-error-handler', () => ({
+    createPlatformErrorHandler: createMockFn(() => ({
+        handleEventProcessingError: createMockFn(),
+        logOperationalError: createMockFn()
     }))
 }));
 
-jest.mock('../../../src/core/logging', () => ({
-    getUnifiedLogger: jest.fn(() => ({
-        debug: jest.fn(),
-        info: jest.fn(),
-        warn: jest.fn(),
-        error: jest.fn()
+mockModule('../../../src/core/logging', () => ({
+    getUnifiedLogger: createMockFn(() => ({
+        debug: createMockFn(),
+        info: createMockFn(),
+        warn: createMockFn(),
+        error: createMockFn()
     }))
 }));
 
 const testClock = require('../../helpers/test-clock');
 let dateNowSpy;
 
-jest.mock('../../../src/utils/auth-errors', () => {
+mockModule('../../../src/utils/auth-errors', () => {
     class TokenRefreshError extends Error {
         constructor(message, options = {}) {
             super(message);
@@ -31,13 +35,13 @@ jest.mock('../../../src/utils/auth-errors', () => {
 
     class ErrorHandler {
         constructor() {
-            this.handleError = jest.fn(async (e) => { throw e; });
+            this.handleError = createMockFn(async (e) => { throw e; });
         }
         getStats() { return {}; }
         cleanup() {}
     }
 
-    const createTokenRefreshError = jest.fn((err) => new TokenRefreshError(err.message, {
+    const createTokenRefreshError = createMockFn((err) => new TokenRefreshError(err.message, {
         recoverable: false,
         needsNewTokens: true,
         code: 'MOCK_ERROR'
@@ -45,7 +49,7 @@ jest.mock('../../../src/utils/auth-errors', () => {
 
     return {
         AuthErrorFactory: {
-            categorizeError: jest.fn((err) => new TokenRefreshError(err.message || 'categorized', {
+            categorizeError: createMockFn((err) => new TokenRefreshError(err.message || 'categorized', {
                 recoverable: false,
                 needsNewTokens: true,
                 code: 'MOCK_ERROR'
@@ -71,11 +75,10 @@ describe('TwitchTokenRefresh behavior edges', () => {
     };
 
     beforeEach(() => {
-        jest.clearAllMocks();
-        dateNowSpy = jest.spyOn(Date, 'now').mockImplementation(() => testClock.now());
+        dateNowSpy = spyOn(Date, 'now').mockImplementation(() => testClock.now());
         createPlatformErrorHandler.mockImplementation(() => ({
-            handleEventProcessingError: jest.fn(),
-            logOperationalError: jest.fn()
+            handleEventProcessingError: createMockFn(),
+            logOperationalError: createMockFn()
         }));
         const { AuthErrorFactory, TokenRefreshError } = require('../../../src/utils/auth-errors');
         AuthErrorFactory.createTokenRefreshError.mockImplementation((err) => new TokenRefreshError(err.message || 'refresh error', {
@@ -91,9 +94,11 @@ describe('TwitchTokenRefresh behavior edges', () => {
     });
 
     afterEach(() => {
+        restoreAllMocks();
         if (dateNowSpy) {
             dateNowSpy.mockRestore();
-        }
+        
+        restoreAllModuleMocks();}
     });
 
     it('returns null when refresh token is missing and logs operational error', async () => {
@@ -109,7 +114,7 @@ describe('TwitchTokenRefresh behavior edges', () => {
     it('routes non-200 refresh response through platform error handler', async () => {
         const refresh = new TwitchTokenRefresh(baseConfig);
         refresh.platformErrorHandler = createPlatformErrorHandler();
-        refresh.makeRequest = jest.fn().mockResolvedValue({
+        refresh.makeRequest = createMockFn().mockResolvedValue({
             statusCode: 500,
             body: 'bad'
         });
@@ -134,8 +139,8 @@ describe('TwitchTokenRefresh behavior edges', () => {
     it('returns null and routes errors when refresh request throws', async () => {
         const refresh = new TwitchTokenRefresh(baseConfig);
         refresh.platformErrorHandler = createPlatformErrorHandler();
-        refresh.makeRequest = jest.fn().mockRejectedValue(new Error('network boom'));
-        refresh.logger = { debug: jest.fn(), info: jest.fn(), warn: jest.fn(), error: jest.fn() };
+        refresh.makeRequest = createMockFn().mockRejectedValue(new Error('network boom'));
+        refresh.logger = { debug: createMockFn(), info: createMockFn(), warn: createMockFn(), error: createMockFn() };
 
         const result = await refresh.refreshToken(baseConfig.refreshToken);
 
@@ -148,8 +153,8 @@ describe('TwitchTokenRefresh behavior edges', () => {
         refresh.platformErrorHandler = createPlatformErrorHandler();
         refresh._retryAttempts = 2;
         refresh._retryDelay = 0;
-        refresh.persistTokens = jest.fn().mockRejectedValue(new Error('fs fail'));
-        refresh.logger = { warn: jest.fn(), debug: jest.fn() };
+        refresh.persistTokens = createMockFn().mockRejectedValue(new Error('fs fail'));
+        refresh.logger = { warn: createMockFn(), debug: createMockFn() };
 
         await expect(refresh._persistTokensWithRetry({ access_token: 'tok' })).rejects.toThrow('fs fail');
         expect(refresh.persistTokens).toHaveBeenCalledTimes(2);
@@ -159,9 +164,9 @@ describe('TwitchTokenRefresh behavior edges', () => {
     it('returns true from ensureValidToken when refresh fails and logs', async () => {
         const refresh = new TwitchTokenRefresh({ ...baseConfig, accessToken: 'old', refreshToken: 'missing' });
         refresh.platformErrorHandler = createPlatformErrorHandler();
-        refresh.needsRefresh = jest.fn().mockResolvedValue(true);
-        refresh.refreshToken = jest.fn().mockResolvedValue(null);
-        refresh.logger = { debug: jest.fn(), info: jest.fn(), warn: jest.fn(), error: jest.fn() };
+        refresh.needsRefresh = createMockFn().mockResolvedValue(true);
+        refresh.refreshToken = createMockFn().mockResolvedValue(null);
+        refresh.logger = { debug: createMockFn(), info: createMockFn(), warn: createMockFn(), error: createMockFn() };
 
         const result = await refresh.ensureValidToken();
 
@@ -172,11 +177,11 @@ describe('TwitchTokenRefresh behavior edges', () => {
     it('routes malformed refresh responses through error handler', async () => {
         const refresh = new TwitchTokenRefresh(baseConfig);
         refresh.platformErrorHandler = createPlatformErrorHandler();
-        refresh.makeRequest = jest.fn().mockResolvedValue({
+        refresh.makeRequest = createMockFn().mockResolvedValue({
             statusCode: 200,
             body: '{invalid-json'
         });
-        refresh.logger = { debug: jest.fn(), info: jest.fn(), warn: jest.fn(), error: jest.fn() };
+        refresh.logger = { debug: createMockFn(), info: createMockFn(), warn: createMockFn(), error: createMockFn() };
 
         const result = await refresh.refreshToken(baseConfig.refreshToken);
 
@@ -187,13 +192,13 @@ describe('TwitchTokenRefresh behavior edges', () => {
     it('returns true when config update throws during ensureValidToken', async () => {
         const refresh = new TwitchTokenRefresh(baseConfig);
         refresh.platformErrorHandler = createPlatformErrorHandler();
-        refresh.needsRefresh = jest.fn().mockResolvedValue(true);
-        refresh.refreshToken = jest.fn().mockResolvedValue({
+        refresh.needsRefresh = createMockFn().mockResolvedValue(true);
+        refresh.refreshToken = createMockFn().mockResolvedValue({
             access_token: 'new-access',
             refresh_token: 'new-refresh'
         });
-        refresh.updateConfig = jest.fn().mockRejectedValue(new Error('persist fail'));
-        refresh.logger = { debug: jest.fn(), info: jest.fn(), warn: jest.fn(), error: jest.fn() };
+        refresh.updateConfig = createMockFn().mockRejectedValue(new Error('persist fail'));
+        refresh.logger = { debug: createMockFn(), info: createMockFn(), warn: createMockFn(), error: createMockFn() };
 
         const result = await refresh.ensureValidToken();
 
@@ -205,7 +210,7 @@ describe('TwitchTokenRefresh behavior edges', () => {
     it('returns true when refresh token missing and handles gracefully', async () => {
         const refresh = new TwitchTokenRefresh({ ...baseConfig, refreshToken: null });
         refresh.platformErrorHandler = createPlatformErrorHandler();
-        refresh.logger = { debug: jest.fn(), info: jest.fn(), warn: jest.fn(), error: jest.fn() };
+        refresh.logger = { debug: createMockFn(), info: createMockFn(), warn: createMockFn(), error: createMockFn() };
 
         const result = await refresh.ensureValidToken();
 
@@ -216,12 +221,12 @@ describe('TwitchTokenRefresh behavior edges', () => {
     it('handles rate limit response with backoff and logs warning', async () => {
         const refresh = new TwitchTokenRefresh(baseConfig);
         refresh.platformErrorHandler = createPlatformErrorHandler();
-        refresh.makeRequest = jest.fn().mockResolvedValue({
+        refresh.makeRequest = createMockFn().mockResolvedValue({
             statusCode: 429,
             body: JSON.stringify({ message: 'rate limited' })
         });
-        refresh.logger = { debug: jest.fn(), info: jest.fn(), warn: jest.fn(), error: jest.fn() };
-        refresh._sleep = jest.fn().mockResolvedValue();
+        refresh.logger = { debug: createMockFn(), info: createMockFn(), warn: createMockFn(), error: createMockFn() };
+        refresh._sleep = createMockFn().mockResolvedValue();
 
         const result = await refresh.refreshToken(baseConfig.refreshToken);
 
@@ -233,11 +238,11 @@ describe('TwitchTokenRefresh behavior edges', () => {
     it('parses malformed JSON refresh response and routes through error handler', async () => {
         const refresh = new TwitchTokenRefresh(baseConfig);
         refresh.platformErrorHandler = createPlatformErrorHandler();
-        refresh.makeRequest = jest.fn().mockResolvedValue({
+        refresh.makeRequest = createMockFn().mockResolvedValue({
             statusCode: 200,
             body: '{invalid'
         });
-        refresh.logger = { debug: jest.fn(), info: jest.fn(), warn: jest.fn(), error: jest.fn() };
+        refresh.logger = { debug: createMockFn(), info: createMockFn(), warn: createMockFn(), error: createMockFn() };
 
         const result = await refresh.refreshToken(baseConfig.refreshToken);
 
@@ -248,10 +253,10 @@ describe('TwitchTokenRefresh behavior edges', () => {
     it('logs when refresh token is missing during ensureValidToken and returns true', async () => {
         const refresh = new TwitchTokenRefresh({ ...baseConfig, refreshToken: null });
         refresh.platformErrorHandler = createPlatformErrorHandler();
-        refresh.logger = { debug: jest.fn(), info: jest.fn(), warn: jest.fn(), error: jest.fn() };
-        refresh.refreshToken = jest.fn().mockResolvedValue(null);
-        refresh.needsRefresh = jest.fn().mockResolvedValue(true);
-        refresh._handleTokenRefreshError = jest.fn();
+        refresh.logger = { debug: createMockFn(), info: createMockFn(), warn: createMockFn(), error: createMockFn() };
+        refresh.refreshToken = createMockFn().mockResolvedValue(null);
+        refresh.needsRefresh = createMockFn().mockResolvedValue(true);
+        refresh._handleTokenRefreshError = createMockFn();
 
         const result = await refresh.ensureValidToken();
 
@@ -261,8 +266,8 @@ describe('TwitchTokenRefresh behavior edges', () => {
 
     it('cleans up refresh timers and resets stats on cleanup', () => {
         const refresh = new TwitchTokenRefresh(baseConfig);
-        refresh.errorHandler = { cleanup: jest.fn() };
-        refresh.logger = { debug: jest.fn(), info: jest.fn(), warn: jest.fn(), error: jest.fn() };
+        refresh.errorHandler = { cleanup: createMockFn() };
+        refresh.logger = { debug: createMockFn(), info: createMockFn(), warn: createMockFn(), error: createMockFn() };
         refresh.refreshTimer = null;
         refresh.refreshSuccessCount = 3;
         refresh.refreshFailureCount = 2;
@@ -279,8 +284,8 @@ describe('TwitchTokenRefresh behavior edges', () => {
 
     it('cleanup resets state and calls errorHandler cleanup when present', () => {
         const refresh = new TwitchTokenRefresh(baseConfig);
-        refresh.errorHandler = { cleanup: jest.fn() };
-        refresh.logger = { debug: jest.fn(), info: jest.fn(), warn: jest.fn(), error: jest.fn() };
+        refresh.errorHandler = { cleanup: createMockFn() };
+        refresh.logger = { debug: createMockFn(), info: createMockFn(), warn: createMockFn(), error: createMockFn() };
         refresh.isRefreshing = true;
         refresh.refreshSuccessCount = 5;
         refresh.refreshFailureCount = 3;
@@ -313,7 +318,7 @@ describe('TwitchTokenRefresh behavior edges', () => {
         refresh.refreshSuccessCount = 2;
         refresh.refreshFailureCount = 1;
         refresh.lastRefreshTime = 12345;
-        refresh.errorHandler = { getStats: jest.fn(() => ({ handled: 1 })) };
+        refresh.errorHandler = { getStats: createMockFn(() => ({ handled: 1 })) };
 
         const stats = refresh.getRefreshStats();
 
@@ -328,11 +333,11 @@ describe('TwitchTokenRefresh behavior edges', () => {
         const refresh = new TwitchTokenRefresh(baseConfig);
         refresh._retryAttempts = 2;
         refresh._retryDelay = 10;
-        refresh.persistTokens = jest.fn()
+        refresh.persistTokens = createMockFn()
             .mockRejectedValueOnce(new Error('fs fail'))
             .mockResolvedValueOnce();
-        refresh._sleep = jest.fn().mockResolvedValue();
-        refresh.logger = { warn: jest.fn(), debug: jest.fn(), info: jest.fn(), error: jest.fn() };
+        refresh._sleep = createMockFn().mockResolvedValue();
+        refresh.logger = { warn: createMockFn(), debug: createMockFn(), info: createMockFn(), error: createMockFn() };
 
         await refresh._persistTokensWithRetry({ access_token: 'tok' });
 
@@ -344,7 +349,7 @@ describe('TwitchTokenRefresh behavior edges', () => {
     describe('needsRefresh validation behavior', () => {
         it('returns true when access token is missing', async () => {
             const refresh = new TwitchTokenRefresh({ ...baseConfig, accessToken: null });
-            refresh.logger = { debug: jest.fn(), info: jest.fn(), warn: jest.fn(), error: jest.fn() };
+            refresh.logger = { debug: createMockFn(), info: createMockFn(), warn: createMockFn(), error: createMockFn() };
 
             const needs = await refresh.needsRefresh(null);
 
@@ -353,9 +358,9 @@ describe('TwitchTokenRefresh behavior edges', () => {
 
         it('returns false when token expiry is far in the future without remote validate', async () => {
             const refresh = new TwitchTokenRefresh(baseConfig);
-            refresh.logger = { debug: jest.fn(), info: jest.fn(), warn: jest.fn(), error: jest.fn() };
+            refresh.logger = { debug: createMockFn(), info: createMockFn(), warn: createMockFn(), error: createMockFn() };
             refresh.config.tokenExpiresAt = testClock.now() + (2 * 60 * 60 * 1000);
-            refresh.makeRequest = jest.fn();
+            refresh.makeRequest = createMockFn();
 
             const needs = await refresh.needsRefresh('token');
 
@@ -365,9 +370,9 @@ describe('TwitchTokenRefresh behavior edges', () => {
 
         it('returns true when token expiry is within threshold without remote validate', async () => {
             const refresh = new TwitchTokenRefresh(baseConfig);
-            refresh.logger = { debug: jest.fn(), info: jest.fn(), warn: jest.fn(), error: jest.fn() };
+            refresh.logger = { debug: createMockFn(), info: createMockFn(), warn: createMockFn(), error: createMockFn() };
             refresh.config.tokenExpiresAt = testClock.now() + (5 * 60 * 1000);
-            refresh.makeRequest = jest.fn();
+            refresh.makeRequest = createMockFn();
 
             const needs = await refresh.needsRefresh('token');
 
@@ -377,9 +382,9 @@ describe('TwitchTokenRefresh behavior edges', () => {
 
         it('returns true and logs when expiration metadata is missing', async () => {
             const refresh = new TwitchTokenRefresh(baseConfig);
-            refresh.logger = { debug: jest.fn(), info: jest.fn(), warn: jest.fn(), error: jest.fn() };
+            refresh.logger = { debug: createMockFn(), info: createMockFn(), warn: createMockFn(), error: createMockFn() };
             refresh.config.tokenExpiresAt = null;
-            refresh.makeRequest = jest.fn();
+            refresh.makeRequest = createMockFn();
 
             const needs = await refresh.needsRefresh('token');
 
@@ -390,9 +395,9 @@ describe('TwitchTokenRefresh behavior edges', () => {
 
     it('routes errors from ensureValidToken when needsRefresh throws but returns true', async () => {
         const refresh = new TwitchTokenRefresh(baseConfig);
-        refresh.logger = { debug: jest.fn(), info: jest.fn(), warn: jest.fn(), error: jest.fn() };
-        refresh.needsRefresh = jest.fn().mockRejectedValue(new Error('boom'));
-        refresh._handleTokenRefreshError = jest.fn();
+        refresh.logger = { debug: createMockFn(), info: createMockFn(), warn: createMockFn(), error: createMockFn() };
+        refresh.needsRefresh = createMockFn().mockRejectedValue(new Error('boom'));
+        refresh._handleTokenRefreshError = createMockFn();
 
         const result = await refresh.ensureValidToken();
 

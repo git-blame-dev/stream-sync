@@ -1,18 +1,22 @@
+const { describe, test, expect, afterEach, it } = require('bun:test');
+const { createMockFn, clearAllMocks, restoreAllMocks } = require('../../helpers/bun-mock-utils');
+
 const TwitchAuthInitializer = require('../../../src/auth/TwitchAuthInitializer');
 
 describe('TwitchAuthInitializer behavior', () => {
-    const logger = { debug: jest.fn(), info: jest.fn(), warn: jest.fn(), error: jest.fn() };
+    const logger = { debug: createMockFn(), info: createMockFn(), warn: createMockFn(), error: createMockFn() };
 
     const buildAuthService = (overrides = {}) => ({
         isInitialized: false,
         config: {},
-        validateCredentials: jest.fn().mockReturnValue({ hasToken: true, isExpired: false, isValid: true, issues: [] }),
-        setAuthenticationState: jest.fn(),
+        validateCredentials: createMockFn().mockReturnValue({ hasToken: true, isExpired: false, isValid: true, issues: [] }),
+        setAuthenticationState: createMockFn(),
         ...overrides
     });
 
     afterEach(() => {
-        jest.clearAllMocks();
+        restoreAllMocks();
+        clearAllMocks();
     });
 
     it('short-circuits initialization when already initialized', async () => {
@@ -26,10 +30,10 @@ describe('TwitchAuthInitializer behavior', () => {
 
     it('triggers OAuth flow when token is missing', async () => {
         const authService = buildAuthService({
-            validateCredentials: jest.fn().mockReturnValue({ hasToken: false })
+            validateCredentials: createMockFn().mockReturnValue({ hasToken: false })
         });
         const initializer = new TwitchAuthInitializer({ logger });
-        initializer.triggerOAuthFlow = jest.fn().mockResolvedValue({ accessToken: 'new', refreshToken: 'refresh' });
+        initializer.triggerOAuthFlow = createMockFn().mockResolvedValue({ accessToken: 'new', refreshToken: 'refresh' });
 
         const result = await initializer.initializeAuthentication(authService);
         expect(initializer.triggerOAuthFlow).toHaveBeenCalledWith(authService);
@@ -38,10 +42,10 @@ describe('TwitchAuthInitializer behavior', () => {
 
     it('logs initializer error and returns false when credentials are invalid', async () => {
         const authService = buildAuthService({
-            validateCredentials: jest.fn().mockReturnValue({ hasToken: true, isExpired: false, isValid: false, issues: ['bad'] })
+            validateCredentials: createMockFn().mockReturnValue({ hasToken: true, isExpired: false, isValid: false, issues: ['bad'] })
         });
         const initializer = new TwitchAuthInitializer({ logger });
-        initializer._logInitializerError = jest.fn();
+        initializer._logInitializerError = createMockFn();
 
         const result = await initializer.initializeAuthentication(authService);
         expect(initializer._logInitializerError).toHaveBeenCalledWith(

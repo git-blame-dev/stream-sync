@@ -1,4 +1,7 @@
 
+const { describe, test, expect, beforeEach, afterEach } = require('bun:test');
+const { createMockFn, restoreAllMocks } = require('../../helpers/bun-mock-utils');
+
 const {
     validateTimeout,
     validateExponentialBackoff,
@@ -34,6 +37,7 @@ describe('Timeout Validator', () => {
     });
 
     afterEach(() => {
+        restoreAllMocks();
         __resetTimerImplementations();
     });
 
@@ -124,7 +128,7 @@ describe('Timeout Validator', () => {
 
     describe('safeSetTimeout', () => {
         test('should call setTimeout with validated delay', () => {
-            const mockCallback = jest.fn();
+            const mockCallback = createMockFn();
             
             safeSetTimeout(mockCallback, 2000);
             expect(timeoutCalls).toHaveLength(1);
@@ -132,7 +136,7 @@ describe('Timeout Validator', () => {
         });
 
         test('should fix invalid delays', () => {
-            const mockCallback = jest.fn();
+            const mockCallback = createMockFn();
             
             safeSetTimeout(mockCallback, NaN);
             expect(timeoutCalls).toHaveLength(1);
@@ -141,7 +145,7 @@ describe('Timeout Validator', () => {
         });
 
         test('should pass through additional arguments', () => {
-            const mockCallback = jest.fn();
+            const mockCallback = createMockFn();
             
             safeSetTimeout(mockCallback, 1000, 'arg1', 'arg2');
             expect(timeoutCalls).toHaveLength(1);
@@ -151,7 +155,7 @@ describe('Timeout Validator', () => {
 
     describe('safeSetInterval', () => {
         test('should call setInterval with validated interval', () => {
-            const mockCallback = jest.fn();
+            const mockCallback = createMockFn();
             
             safeSetInterval(mockCallback, 1500);
             expect(intervalCalls).toHaveLength(1);
@@ -159,7 +163,7 @@ describe('Timeout Validator', () => {
         });
 
         test('should fix invalid intervals', () => {
-            const mockCallback = jest.fn();
+            const mockCallback = createMockFn();
             
             safeSetInterval(mockCallback, undefined);
             expect(intervalCalls).toHaveLength(1);

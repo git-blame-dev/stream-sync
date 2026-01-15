@@ -1,38 +1,45 @@
 
+const { describe, test, expect, beforeEach, it } = require('bun:test');
+const { createMockFn, restoreAllMocks } = require('../../helpers/bun-mock-utils');
+
 const EventEmitter = require('events');
 const NotificationManager = require('../../../src/notifications/NotificationManager');
 
 describe('NotificationManager Twitch monetisation behavior', () => {
+    afterEach(() => {
+        restoreAllMocks();
+    });
+
     let displayQueue;
     let notificationManager;
     let configService;
 
     const baseDependencies = () => ({
         logger: {
-            info: jest.fn(),
-            debug: jest.fn(),
-            warn: jest.fn(),
-            error: jest.fn()
+            info: createMockFn(),
+            debug: createMockFn(),
+            warn: createMockFn(),
+            error: createMockFn()
         },
         displayQueue,
         eventBus: new EventEmitter(),
         constants: require('../../../src/core/constants'),
-        textProcessing: { formatChatMessage: jest.fn() },
-        obsGoals: { processDonationGoal: jest.fn() },
+        textProcessing: { formatChatMessage: createMockFn() },
+        obsGoals: { processDonationGoal: createMockFn() },
         configService,
-        vfxCommandService: { getVFXConfig: jest.fn().mockResolvedValue(null) },
-        ttsService: { speak: jest.fn() },
-        userTrackingService: { isFirstMessage: jest.fn().mockResolvedValue(false) }
+        vfxCommandService: { getVFXConfig: createMockFn().mockResolvedValue(null) },
+        ttsService: { speak: createMockFn() },
+        userTrackingService: { isFirstMessage: createMockFn().mockResolvedValue(false) }
     });
 
     beforeEach(() => {
-        displayQueue = { addItem: jest.fn() };
+        displayQueue = { addItem: createMockFn() };
         configService = {
-            areNotificationsEnabled: jest.fn().mockReturnValue(true),
-            isEnabled: jest.fn().mockReturnValue(true),
-            getNotificationSettings: jest.fn().mockReturnValue({ enabled: true, duration: 5000 }),
-            getPlatformConfig: jest.fn().mockReturnValue({ notificationsEnabled: true }),
-            get: jest.fn((section) => {
+            areNotificationsEnabled: createMockFn().mockReturnValue(true),
+            isEnabled: createMockFn().mockReturnValue(true),
+            getNotificationSettings: createMockFn().mockReturnValue({ enabled: true, duration: 5000 }),
+            getPlatformConfig: createMockFn().mockReturnValue({ notificationsEnabled: true }),
+            get: createMockFn((section) => {
                 if (section !== 'general') {
                     return {};
                 }
@@ -44,8 +51,8 @@ describe('NotificationManager Twitch monetisation behavior', () => {
                     suppressionCleanupIntervalMs: 300000
                 };
             }),
-            isDebugEnabled: jest.fn().mockReturnValue(false),
-            getTTSConfig: jest.fn().mockReturnValue({ enabled: false })
+            isDebugEnabled: createMockFn().mockReturnValue(false),
+            getTTSConfig: createMockFn().mockReturnValue({ enabled: false })
         };
         notificationManager = new NotificationManager(baseDependencies());
     });

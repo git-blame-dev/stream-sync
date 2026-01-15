@@ -1,4 +1,7 @@
 
+const { describe, test, expect, beforeEach, it } = require('bun:test');
+const { createMockFn, clearAllMocks, restoreAllMocks } = require('../helpers/bun-mock-utils');
+
 const { initializeTestLogging } = require('../helpers/test-setup');
 const { createMockLogger } = require('../helpers/mock-factories');
 const { setupAutomatedCleanup } = require('../helpers/mock-lifecycle');
@@ -15,26 +18,28 @@ setupAutomatedCleanup({
 
 // Mock the enhanced HTTP client before any imports
 const mockEnhancedHttpClient = {
-    get: jest.fn()
+    get: createMockFn()
 };
 
 const { TwitchApiClient } = require('../../src/utils/api-clients/twitch-api-client');
 
 describe('TwitchApiClient Authentication Integration', () => {
+    afterEach(() => {
+        restoreAllMocks();
+    });
+
     let mockAuthManager;
     let mockConfig;
     let mockLogger;
     let apiClient;
 
     beforeEach(() => {
-        jest.clearAllMocks();
-        
         mockLogger = createMockLogger('debug');
         
         // Create mock auth manager with correct method
         mockAuthManager = {
-            getAccessToken: jest.fn().mockResolvedValue('test-access-token'),
-            getState: jest.fn().mockReturnValue('READY')
+            getAccessToken: createMockFn().mockResolvedValue('test-access-token'),
+            getState: createMockFn().mockReturnValue('READY')
         };
 
         mockConfig = {

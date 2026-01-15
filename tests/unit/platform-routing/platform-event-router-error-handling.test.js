@@ -1,5 +1,14 @@
 
+const { describe, test, expect, it } = require('bun:test');
+const { createMockFn, restoreAllMocks } = require('../../helpers/bun-mock-utils');
+const { mockModule, resetModules, restoreAllModuleMocks } = require('../../helpers/bun-module-mocks');
+
 describe('PlatformEventRouter error handling', () => {
+    afterEach(() => {
+        restoreAllMocks();
+        restoreAllModuleMocks();
+    });
+
     const baseEvent = {
         platform: 'twitch',
         type: 'platform:chat-message',
@@ -13,26 +22,24 @@ describe('PlatformEventRouter error handling', () => {
     };
 
     const buildRouter = (thrownValue) => {
-        jest.resetModules();
-
-        const errorHandler = {
-            handleEventProcessingError: jest.fn(),
-            logOperationalError: jest.fn()
+const errorHandler = {
+            handleEventProcessingError: createMockFn(),
+            logOperationalError: createMockFn()
         };
 
-        jest.doMock('../../../src/utils/platform-error-handler', () => ({
-            createPlatformErrorHandler: jest.fn(() => errorHandler)
+        mockModule('../../../src/utils/platform-error-handler', () => ({
+            createPlatformErrorHandler: createMockFn(() => errorHandler)
         }));
 
         const PlatformEventRouter = require('../../../src/services/PlatformEventRouter');
 
         const mockAppRuntime = {
-            handleChatMessage: jest.fn(() => Promise.reject(thrownValue))
+            handleChatMessage: createMockFn(() => Promise.reject(thrownValue))
         };
 
         let subscriber;
         const eventBus = {
-            subscribe: jest.fn((event, handler) => {
+            subscribe: createMockFn((event, handler) => {
                 subscriber = handler;
                 return () => {};
             }),
@@ -44,17 +51,17 @@ describe('PlatformEventRouter error handling', () => {
         };
 
         const logger = {
-            debug: jest.fn(),
-            info: jest.fn(),
-            warn: jest.fn(),
-            error: jest.fn()
+            debug: createMockFn(),
+            info: createMockFn(),
+            warn: createMockFn(),
+            error: createMockFn()
         };
 
         const router = new PlatformEventRouter({
             eventBus,
             runtime: mockAppRuntime,
-            notificationManager: { handleNotification: jest.fn() },
-            configService: { areNotificationsEnabled: jest.fn(() => true) },
+            notificationManager: { handleNotification: createMockFn() },
+            configService: { areNotificationsEnabled: createMockFn(() => true) },
             logger
         });
 

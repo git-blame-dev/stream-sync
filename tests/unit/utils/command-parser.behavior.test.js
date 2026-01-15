@@ -1,27 +1,31 @@
-jest.mock('../../../src/core/logging', () => ({
+const { describe, test, expect, beforeEach, afterEach, it, jest } = require('bun:test');
+const { createMockFn, restoreAllMocks } = require('../../helpers/bun-mock-utils');
+const { mockModule, resetModules, restoreAllModuleMocks } = require('../../helpers/bun-module-mocks');
+const { useFakeTimers, useRealTimers } = require('../../helpers/bun-timers');
+
+mockModule('../../../src/core/logging', () => ({
     logger: {
-        debug: jest.fn(),
-        info: jest.fn(),
-        warn: jest.fn(),
-        error: jest.fn()
+        debug: createMockFn(),
+        info: createMockFn(),
+        warn: createMockFn(),
+        error: createMockFn()
     }
 }));
 
 describe('command-parser behavior', () => {
     const loadModule = () => {
-        jest.resetModules();
-        return require('../../../src/utils/command-parser');
+return require('../../../src/utils/command-parser');
     };
 
     beforeEach(() => {
-        jest.useFakeTimers();
+        useFakeTimers();
         jest.setSystemTime(new Date('2024-01-01T00:00:00Z'));
     });
 
     afterEach(() => {
-        jest.useRealTimers();
-        jest.resetModules();
-    });
+        restoreAllMocks();
+        useRealTimers();
+restoreAllModuleMocks();});
 
     it('applies per-user cooldowns and heavy limit escalation', () => {
         const parser = loadModule();

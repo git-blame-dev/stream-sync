@@ -1,22 +1,27 @@
 
+const { describe, test, expect, afterEach, it } = require('bun:test');
+const { createMockFn, restoreAllMocks } = require('../../helpers/bun-mock-utils');
+const { mockModule, resetModules, restoreAllModuleMocks } = require('../../helpers/bun-module-mocks');
+
 const originalEnv = process.env.NODE_ENV;
 
 describe('YouTubeiCurrencyParser unknown currency handling', () => {
     afterEach(() => {
-        jest.resetModules();
-        process.env.NODE_ENV = originalEnv;
-    });
+        restoreAllMocks();
+process.env.NODE_ENV = originalEnv;
+    
+        restoreAllModuleMocks();});
 
     it('logs unknown currency and attempts file write in non-test env', () => {
         process.env.NODE_ENV = 'production';
 
         const fsMock = {
-            existsSync: jest.fn(() => true),
-            appendFileSync: jest.fn()
+            existsSync: createMockFn(() => true),
+            appendFileSync: createMockFn()
         };
-        jest.doMock('fs', () => fsMock);
+        mockModule('fs', () => fsMock);
         const { YouTubeiCurrencyParser } = require('../../../src/utils/youtubei-currency-parser');
-        const logger = { warn: jest.fn(), error: jest.fn() };
+        const logger = { warn: createMockFn(), error: createMockFn() };
         const parser = new YouTubeiCurrencyParser({
             logger,
             unknownCurrencyLoggingEnabled: true,
@@ -33,19 +38,19 @@ describe('YouTubeiCurrencyParser unknown currency handling', () => {
         process.env.NODE_ENV = 'production';
 
         const fsMock = {
-            existsSync: jest.fn(() => true),
-            appendFileSync: jest.fn(() => { throw new Error('disk full'); }),
-            mkdirSync: jest.fn()
+            existsSync: createMockFn(() => true),
+            appendFileSync: createMockFn(() => { throw new Error('disk full'); }),
+            mkdirSync: createMockFn()
         };
-        jest.doMock('fs', () => fsMock);
+        mockModule('fs', () => fsMock);
         const { YouTubeiCurrencyParser } = require('../../../src/utils/youtubei-currency-parser');
-        const logger = { warn: jest.fn(), error: jest.fn() };
+        const logger = { warn: createMockFn(), error: createMockFn() };
         const parser = new YouTubeiCurrencyParser({
             logger,
             unknownCurrencyLoggingEnabled: true,
             logsDirectory: '/tmp/logs'
         });
-        parser._handleCurrencyParserError = jest.fn();
+        parser._handleCurrencyParserError = createMockFn();
 
         parser._logUnknownCurrency('@@@');
 
@@ -56,19 +61,19 @@ describe('YouTubeiCurrencyParser unknown currency handling', () => {
         process.env.NODE_ENV = 'production';
 
         const fsMock = {
-            existsSync: jest.fn(() => false),
-            mkdirSync: jest.fn(() => { throw new Error('no perms'); }),
-            appendFileSync: jest.fn()
+            existsSync: createMockFn(() => false),
+            mkdirSync: createMockFn(() => { throw new Error('no perms'); }),
+            appendFileSync: createMockFn()
         };
-        jest.doMock('fs', () => fsMock);
+        mockModule('fs', () => fsMock);
         const { YouTubeiCurrencyParser } = require('../../../src/utils/youtubei-currency-parser');
-        const logger = { warn: jest.fn(), error: jest.fn() };
+        const logger = { warn: createMockFn(), error: createMockFn() };
         const parser = new YouTubeiCurrencyParser({
             logger,
             unknownCurrencyLoggingEnabled: true,
             logsDirectory: '/tmp/logs'
         });
-        parser._handleCurrencyParserError = jest.fn();
+        parser._handleCurrencyParserError = createMockFn();
 
         parser._logUnknownCurrency('@@@');
 

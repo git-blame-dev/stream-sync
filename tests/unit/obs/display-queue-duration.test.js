@@ -1,19 +1,24 @@
+const { describe, test, expect, afterEach, it } = require('bun:test');
+const { createMockFn, clearAllMocks, restoreAllMocks } = require('../../helpers/bun-mock-utils');
+const { mockModule, resetModules, restoreAllModuleMocks } = require('../../helpers/bun-module-mocks');
+
 describe('DisplayQueue TTS-driven durations', () => {
     const originalEnv = process.env.NODE_ENV;
     let ttsStages;
     const { createRuntimeConstantsFixture } = require('../../helpers/runtime-constants-fixture');
 
     afterEach(() => {
+        restoreAllMocks();
         process.env.NODE_ENV = originalEnv;
-        jest.resetModules();
-        jest.clearAllMocks();
-    });
+clearAllMocks();
+    
+        restoreAllModuleMocks();});
 
     function createQueue() {
         process.env.NODE_ENV = 'test';
 
-        jest.doMock('../../../src/utils/message-tts-handler', () => ({
-            createTTSStages: jest.fn(() => ttsStages)
+        mockModule('../../../src/utils/message-tts-handler', () => ({
+            createTTSStages: createMockFn(() => ttsStages)
         }));
 
         const { DisplayQueue } = require('../../../src/obs/display-queue');

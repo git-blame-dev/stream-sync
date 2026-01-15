@@ -1,4 +1,8 @@
 
+const { describe, test, expect, beforeEach, afterEach } = require('bun:test');
+const { createMockFn, spyOn, clearAllMocks, restoreAllMocks } = require('../helpers/bun-mock-utils');
+const { mockModule, resetModules, restoreAllModuleMocks } = require('../helpers/bun-module-mocks');
+
 const { VIEWER_COUNT_CONSTANTS } = require('../../src/core/constants');
 const { createRuntimeConstantsFixture } = require('../helpers/runtime-constants-fixture');
 
@@ -14,10 +18,10 @@ describe('Twitch Viewer Count System Debug', () => {
     beforeEach(() => {
         // Mock logger
         logger = {
-            debug: jest.fn(),
-            info: jest.fn(),
-            warn: jest.fn(),
-            error: jest.fn()
+            debug: createMockFn(),
+            info: createMockFn(),
+            warn: createMockFn(),
+            error: createMockFn()
         };
         
         runtimeConstants = createRuntimeConstantsFixture({
@@ -26,34 +30,34 @@ describe('Twitch Viewer Count System Debug', () => {
 
         // Mock OBS manager
         mockObsManager = {
-            isConnected: jest.fn(() => true),
-            call: jest.fn().mockResolvedValue({})
+            isConnected: createMockFn(() => true),
+            call: createMockFn().mockResolvedValue({})
         };
 
         // Mock Twitch platform with getViewerCount method
         mockTwitchPlatform = {
-            getViewerCount: jest.fn().mockResolvedValue(42)
+            getViewerCount: createMockFn().mockResolvedValue(42)
         };
 
         // Platform map used by ViewerCountSystem
         mockPlatforms = {
             twitch: mockTwitchPlatform,
-            youtube: { getViewerCount: jest.fn().mockResolvedValue(100) },
-            tiktok: { getViewerCount: jest.fn().mockResolvedValue(25) }
+            youtube: { getViewerCount: createMockFn().mockResolvedValue(100) },
+            tiktok: { getViewerCount: createMockFn().mockResolvedValue(25) }
         };
 
-        jest.doMock('../../src/core/logging', () => ({
+        mockModule('../../src/core/logging', () => ({
             logger: logger
         }));
         
         mockTextProcessing = {
-            formatViewerCount: jest.fn((count) => count.toString())
+            formatViewerCount: createMockFn((count) => count.toString())
         };
 
-        jest.doMock('../../src/utils/text-processing', () => ({
-            createTextProcessingManager: jest.fn(() => mockTextProcessing),
-            TextProcessingManager: jest.fn(),
-            formatTimestampCompact: jest.fn()
+        mockModule('../../src/utils/text-processing', () => ({
+            createTextProcessingManager: createMockFn(() => mockTextProcessing),
+            TextProcessingManager: createMockFn(),
+            formatTimestampCompact: createMockFn()
         }));
         
         const { ViewerCountSystem: VCS } = require('../../src/utils/viewer-count');
@@ -61,9 +65,9 @@ describe('Twitch Viewer Count System Debug', () => {
     });
 
     afterEach(() => {
-        jest.clearAllMocks();
-        jest.resetModules();
-    });
+        restoreAllMocks();
+        clearAllMocks();
+restoreAllModuleMocks();});
 
     test('should initialize ViewerCountSystem with Twitch set to always live', () => {
         // Act
@@ -81,8 +85,8 @@ describe('Twitch Viewer Count System Debug', () => {
         const viewerSystem = createViewerSystem();
         
         // Spy on startPlatformPolling to verify it's called for Twitch
-        const startPlatformPollingSpy = jest.spyOn(viewerSystem, 'startPlatformPolling');
-        const pollPlatformSpy = jest.spyOn(viewerSystem, 'pollPlatform');
+        const startPlatformPollingSpy = spyOn(viewerSystem, 'startPlatformPolling');
+        const pollPlatformSpy = spyOn(viewerSystem, 'pollPlatform');
 
         // Act
         viewerSystem.startPolling();
@@ -100,8 +104,8 @@ describe('Twitch Viewer Count System Debug', () => {
         
         // Create a mock observer to verify notifications
         const mockObserver = {
-            getObserverId: jest.fn().mockReturnValue('test-observer'),
-            onViewerCountUpdate: jest.fn().mockResolvedValue()
+            getObserverId: createMockFn().mockReturnValue('test-observer'),
+            onViewerCountUpdate: createMockFn().mockResolvedValue()
         };
         viewerSystem.addObserver(mockObserver);
 

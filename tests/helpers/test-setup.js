@@ -1,5 +1,6 @@
 
 const testClock = require('./test-clock');
+const { createMockFn, isMockFunction, clearAllMocks } = require('./bun-mock-utils');
 const BASE_TIMESTAMP_MS = Date.parse('2024-01-01T00:00:00.000Z');
 let sequence = 0;
 const nextSequence = () => {
@@ -104,22 +105,22 @@ const createMockPlatformDependencies = (platformType = 'tiktok', overrides = {})
 
     const baseMocks = {
         logger: { 
-            debug: jest.fn(), 
-            info: jest.fn(), 
-            warn: jest.fn(), 
-            error: jest.fn() 
+            debug: createMockFn(), 
+            info: createMockFn(), 
+            warn: createMockFn(), 
+            error: createMockFn() 
         },
         notificationManager: {
-            emit: jest.fn().mockImplementation((event, data) => true),
-            on: jest.fn().mockImplementation((event, handler) => true),
-            removeListener: jest.fn().mockImplementation((event, handler) => true)
+            emit: createMockFn().mockImplementation((event, data) => true),
+            on: createMockFn().mockImplementation((event, handler) => true),
+            removeListener: createMockFn().mockImplementation((event, handler) => true)
         },
         retrySystem: { 
-            resetRetryCount: jest.fn(),
-            handleConnectionError: jest.fn(),
-            handleConnectionSuccess: jest.fn(),
-            incrementRetryCount: jest.fn(),
-            executeWithRetry: jest.fn()
+            resetRetryCount: createMockFn(),
+            handleConnectionError: createMockFn(),
+            handleConnectionSuccess: createMockFn(),
+            incrementRetryCount: createMockFn(),
+            executeWithRetry: createMockFn()
         },
         constants: { 
             GRACE_PERIODS: { TIKTOK: 5000, TWITCH: 3000, YOUTUBE: 3000 } 
@@ -133,52 +134,52 @@ const createMockPlatformDependencies = (platformType = 'tiktok', overrides = {})
         case 'tiktok':
             return {
                 ...baseMocks,
-                TikTokWebSocketClient: jest.fn().mockImplementation(() => ({
-                    connect: jest.fn().mockResolvedValue(true),
-                    disconnect: jest.fn().mockResolvedValue(true),
-                    on: jest.fn(),
-                    removeAllListeners: jest.fn()
+                TikTokWebSocketClient: createMockFn().mockImplementation(() => ({
+                    connect: createMockFn().mockResolvedValue(true),
+                    disconnect: createMockFn().mockResolvedValue(true),
+                    on: createMockFn(),
+                    removeAllListeners: createMockFn()
                 })),
                 WebcastEvent: {},
                 ControlEvent: {},
-                WebcastPushConnection: jest.fn(),
+                WebcastPushConnection: createMockFn(),
                 ...restOverrides
             };
         
         case 'twitch':
             return {
                 ...baseMocks,
-                tmi: jest.fn(),
-                TwitchEventSub: jest.fn(),
-                ApiClient: jest.fn(),
-                RefreshingAuthProvider: jest.fn(),
-                EventSubWsListener: jest.fn(),
+                tmi: createMockFn(),
+                TwitchEventSub: createMockFn(),
+                ApiClient: createMockFn(),
+                RefreshingAuthProvider: createMockFn(),
+                EventSubWsListener: createMockFn(),
                 ...restOverrides
             };
         
         case 'youtube':
             return {
                 ...baseMocks,
-                google: { youtube: jest.fn() },
+                google: { youtube: createMockFn() },
                 Innertube: {
-                    create: jest.fn(() => Promise.resolve({
-                        getInfo: jest.fn(() => Promise.resolve({
-                            getLiveChat: jest.fn(() => Promise.resolve({
-                                start: jest.fn(),
-                                stop: jest.fn(),
-                                on: jest.fn(),
-                                sendMessage: jest.fn()
+                    create: createMockFn(() => Promise.resolve({
+                        getInfo: createMockFn(() => Promise.resolve({
+                            getLiveChat: createMockFn(() => Promise.resolve({
+                                start: createMockFn(),
+                                stop: createMockFn(),
+                                on: createMockFn(),
+                                sendMessage: createMockFn()
                             }))
                         }))
                     }))
                 },
                 streamDetectionService: {
-                    detectLiveStreams: jest.fn().mockResolvedValue({
+                    detectLiveStreams: createMockFn().mockResolvedValue({
                         success: true,
                         videoIds: []
                     })
                 },
-                axios: jest.fn(),
+                axios: createMockFn(),
                 ...restOverrides
             };
         
@@ -188,28 +189,28 @@ const createMockPlatformDependencies = (platformType = 'tiktok', overrides = {})
 };
 
 const createTestApp = (overrides = {}) => ({
-    handleChatMessage: jest.fn(),
-    handleGiftNotification: jest.fn(),
-    handleFollowNotification: jest.fn(),
-    handlePaypiggyNotification: jest.fn(),
-    handleRaidNotification: jest.fn(),
-    updateViewerCount: jest.fn(),
+    handleChatMessage: createMockFn(),
+    handleGiftNotification: createMockFn(),
+    handleFollowNotification: createMockFn(),
+    handlePaypiggyNotification: createMockFn(),
+    handleRaidNotification: createMockFn(),
+    updateViewerCount: createMockFn(),
     notificationManager: {
-        handleNotification: jest.fn()
+        handleNotification: createMockFn()
     },
     ...overrides
 });
 
 const createTestRetrySystem = (overrides = {}) => ({
-    executeWithRetry: jest.fn().mockImplementation(async (platform, fn) => {
+    executeWithRetry: createMockFn().mockImplementation(async (platform, fn) => {
         // Default behavior: just execute the function
         return await fn();
     }),
-    resetRetryCount: jest.fn(),
-    handleConnectionError: jest.fn(),
-    handleConnectionSuccess: jest.fn(),
-    incrementRetryCount: jest.fn().mockReturnValue(5000),
-    getRetryCount: jest.fn().mockReturnValue(0),
+    resetRetryCount: createMockFn(),
+    handleConnectionError: createMockFn(),
+    handleConnectionSuccess: createMockFn(),
+    incrementRetryCount: createMockFn().mockReturnValue(5000),
+    getRetryCount: createMockFn().mockReturnValue(0),
     ...overrides
 });
 
@@ -258,10 +259,10 @@ const createMockConfig = (platform = 'tiktok', overrides = {}) => {
 
 const createTestSetup = (overrides = {}) => ({
     logger: { 
-        debug: jest.fn(), 
-        info: jest.fn(), 
-        warn: jest.fn(), 
-        error: jest.fn() 
+        debug: createMockFn(), 
+        info: createMockFn(), 
+        warn: createMockFn(), 
+        error: createMockFn() 
     },
     config: createMockConfig(),
     app: createTestApp(),
@@ -447,7 +448,7 @@ const setupAutomatedCleanup = (options = {}) => {
             try {
                 if (mockObject && typeof mockObject === 'object') {
                     Object.keys(mockObject).forEach(key => {
-                        if (jest.isMockFunction(mockObject[key])) {
+                        if (isMockFunction(mockObject[key])) {
                             mockObject[key].mockReset();
                         } else if (mockObject[key] && typeof mockObject[key] === 'object' && typeof mockObject[key].mockReset === 'function') {
                             // Handle objects that have mockReset methods (like our test case)
@@ -523,7 +524,7 @@ const validateMockUsage = (mockObject, options = {}) => {
     // Detect unused methods
     if (defaultOptions.detectUnusedMocks) {
         const methods = Object.keys(mockObject).filter(key => 
-            typeof mockObject[key] === 'function' && jest.isMockFunction(mockObject[key])
+            typeof mockObject[key] === 'function' && isMockFunction(mockObject[key])
         );
 
         validation.unusedMethods = methods.filter(method => {
@@ -565,7 +566,7 @@ const validateMockUsage = (mockObject, options = {}) => {
 // Helper functions for cleanup
 const clearAllActiveMocks = () => {
     let clearedCount = 0;
-    jest.clearAllMocks();
+    clearAllMocks();
     clearedCount++; // Jest's clearAllMocks counts as one operation
     return clearedCount;
 };

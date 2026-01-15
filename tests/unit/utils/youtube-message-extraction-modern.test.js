@@ -1,4 +1,7 @@
 
+const { describe, test, expect, beforeEach, it } = require('bun:test');
+const { resetModules, restoreAllModuleMocks } = require('../../helpers/bun-module-mocks');
+
 const { getSyntheticFixture } = require('../../helpers/platform-test-data');
 const testClock = require('../../helpers/test-clock');
 
@@ -7,10 +10,14 @@ const realSuperChat = getSyntheticFixture('youtube', 'superchat');
 const realSuperSticker = getSyntheticFixture('youtube', 'supersticker');
 
 describe('YouTube Message Extraction - Modern (Production Data)', () => {
+    afterEach(() => {
+        restoreAllModuleMocks();
+    });
+
     let YouTubeMessageExtractor;
 
     beforeEach(() => {
-        jest.resetModules();
+        resetModules();
         YouTubeMessageExtractor = require('../../../src/utils/youtube-message-extractor');
     });
 

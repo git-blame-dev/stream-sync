@@ -1,10 +1,15 @@
 
-jest.mock('../../../src/core/logging', () => ({
+const { describe, test, expect, beforeEach, it } = require('bun:test');
+const { createMockFn, spyOn, restoreAllMocks } = require('../../helpers/bun-mock-utils');
+const { mockModule, restoreAllModuleMocks } = require('../../helpers/bun-module-mocks');
+const { useFakeTimers, useRealTimers, advanceTimersByTime } = require('../../helpers/bun-timers');
+
+mockModule('../../../src/core/logging', () => ({
     logger: {
-        debug: jest.fn(),
-        info: jest.fn(),
-        warn: jest.fn(),
-        error: jest.fn()
+        debug: createMockFn(),
+        info: createMockFn(),
+        warn: createMockFn(),
+        error: createMockFn()
     }
 }));
 
@@ -23,23 +28,29 @@ const baseConfig = {
 
 const createQueue = (eventBus) => {
     const obsManager = {
-        isReady: jest.fn().mockResolvedValue(true),
-        call: jest.fn().mockResolvedValue({ success: true })
+        isReady: createMockFn().mockResolvedValue(true),
+        call: createMockFn().mockResolvedValue({ success: true })
     };
     const queue = new DisplayQueue(obsManager, baseConfig, constants, eventBus);
     // Skip OBS side effects and TTS for these unit assertions
-    queue.playGiftVideoAndAudio = jest.fn().mockResolvedValue();
-    queue.isTTSEnabled = jest.fn().mockReturnValue(false);
+    queue.playGiftVideoAndAudio = createMockFn().mockResolvedValue();
+    queue.isTTSEnabled = createMockFn().mockReturnValue(false);
     return queue;
 };
 
 describe('DisplayQueue monetization VFX context', () => {
+    afterEach(() => {
+        restoreAllMocks();
+        restoreAllModuleMocks();
+        useRealTimers();
+    });
+
     let eventBus;
     let emitSpy;
 
     beforeEach(() => {
         eventBus = new EventEmitter();
-        emitSpy = jest.spyOn(eventBus, 'emit');
+        emitSpy = spyOn(eventBus, 'emit');
     });
 
     it('emits VFX with userId for gift notifications', async () => {
@@ -103,7 +114,7 @@ describe('DisplayQueue monetization VFX context', () => {
     });
 
     it('emits gift VFX with standard delay metadata', async () => {
-        jest.useFakeTimers();
+        useFakeTimers();
         try {
             const queue = createQueue(eventBus);
             const item = {
@@ -130,7 +141,7 @@ describe('DisplayQueue monetization VFX context', () => {
 
             const pending = queue.handleGiftEffects(item, []);
 
-            jest.advanceTimersByTime(2000);
+            advanceTimersByTime(2000);
             await Promise.resolve();
             await pending;
 
@@ -143,7 +154,7 @@ describe('DisplayQueue monetization VFX context', () => {
             }));
             expect(payload.commandKey).toBe('gifts');
         } finally {
-            jest.useRealTimers();
+            useRealTimers();
         }
     });
 

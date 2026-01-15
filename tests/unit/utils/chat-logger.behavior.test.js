@@ -1,10 +1,14 @@
 
-jest.mock('../../../src/core/logging', () => ({
+const { describe, test, expect, beforeEach, it } = require('bun:test');
+const { createMockFn, clearAllMocks, restoreAllMocks } = require('../../helpers/bun-mock-utils');
+const { mockModule, restoreAllModuleMocks } = require('../../helpers/bun-module-mocks');
+
+mockModule('../../../src/core/logging', () => ({
     logger: {
-        warn: jest.fn(),
-        console: jest.fn(),
-        debug: jest.fn(),
-        info: jest.fn()
+        warn: createMockFn(),
+        console: createMockFn(),
+        debug: createMockFn(),
+        info: createMockFn()
     }
 }));
 
@@ -19,13 +23,17 @@ const {
 } = require('../../../src/utils/chat-logger');
 
 describe('chat-logger', () => {
-    beforeEach(() => {
-        logger.warn = logger.warn || jest.fn();
-        logger.console = logger.console || jest.fn();
-        logger.debug = logger.debug || jest.fn();
-        logger.info = logger.info || jest.fn();
-        jest.clearAllMocks();
+    afterEach(() => {
+        restoreAllMocks();
+        restoreAllModuleMocks();
     });
+
+    beforeEach(() => {
+        logger.warn = logger.warn || createMockFn();
+        logger.console = logger.console || createMockFn();
+        logger.debug = logger.debug || createMockFn();
+        logger.info = logger.info || createMockFn();
+        });
 
     describe('logChatMessage', () => {
         it('warns and returns when platform or data missing', () => {

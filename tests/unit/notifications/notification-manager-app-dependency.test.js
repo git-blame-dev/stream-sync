@@ -1,4 +1,7 @@
 
+const { describe, test, expect, beforeEach, afterEach, it } = require('bun:test');
+const { createMockFn, restoreAllMocks } = require('../../helpers/bun-mock-utils');
+
 const { expectNoTechnicalArtifacts } = require('../../helpers/assertion-helpers');
 
 const { initializeTestLogging, createMockConfig } = require('../../helpers/test-setup');
@@ -21,21 +24,21 @@ describe('NotificationManager Service Dependency Injection - Modernized', () => 
     beforeEach(() => {
         // Mock display queue
         mockDisplayQueue = {
-            addItem: jest.fn(),
-            getQueueLength: jest.fn().mockReturnValue(0)
+            addItem: createMockFn(),
+            getQueueLength: createMockFn().mockReturnValue(0)
         };
 
         // Mock logger
         mockLogger = {
-            debug: jest.fn(),
-            info: jest.fn(),
-            warn: jest.fn(),
-            error: jest.fn()
+            debug: createMockFn(),
+            info: createMockFn(),
+            warn: createMockFn(),
+            error: createMockFn()
         };
 
         // Mock ConfigService
         mockConfigService = {
-            get: jest.fn((section) => {
+            get: createMockFn((section) => {
                 if (section !== 'general') {
                     return {};
                 }
@@ -47,41 +50,42 @@ describe('NotificationManager Service Dependency Injection - Modernized', () => 
                     suppressionCleanupIntervalMs: 300000
                 };
             }),
-            isEnabled: jest.fn().mockReturnValue(true),
-            getNotificationSettings: jest.fn().mockReturnValue({ enabled: true }),
-            getTTSConfig: jest.fn().mockReturnValue({ enabled: true }),
-            isDebugEnabled: jest.fn().mockReturnValue(false),
-            areNotificationsEnabled: jest.fn().mockReturnValue(true),
-            getPlatformConfig: jest.fn().mockReturnValue(true),
-            getCLIOverrides: jest.fn().mockReturnValue({})
+            isEnabled: createMockFn().mockReturnValue(true),
+            getNotificationSettings: createMockFn().mockReturnValue({ enabled: true }),
+            getTTSConfig: createMockFn().mockReturnValue({ enabled: true }),
+            isDebugEnabled: createMockFn().mockReturnValue(false),
+            areNotificationsEnabled: createMockFn().mockReturnValue(true),
+            getPlatformConfig: createMockFn().mockReturnValue(true),
+            getCLIOverrides: createMockFn().mockReturnValue({})
         };
 
         // Mock VFX Command Service
         mockVFXCommandService = {
-            executeCommand: jest.fn().mockResolvedValue({ success: true }),
-            getVFXConfig: jest.fn().mockResolvedValue({ filename: 'test.mp4' })
+            executeCommand: createMockFn().mockResolvedValue({ success: true }),
+            getVFXConfig: createMockFn().mockResolvedValue({ filename: 'test.mp4' })
         };
 
         // Mock TTS Service
         mockTTSService = {
-            speak: jest.fn().mockResolvedValue({ success: true })
+            speak: createMockFn().mockResolvedValue({ success: true })
         };
 
         // Mock User Tracking Service
         mockUserTrackingService = {
-            isFirstMessage: jest.fn().mockResolvedValue(false),
-            trackUser: jest.fn()
+            isFirstMessage: createMockFn().mockResolvedValue(false),
+            trackUser: createMockFn()
         };
 
         // Mock EventBus
         mockEventBus = {
-            emit: jest.fn(),
-            on: jest.fn(),
-            off: jest.fn()
+            emit: createMockFn(),
+            on: createMockFn(),
+            off: createMockFn()
         };
     });
 
     afterEach(() => {
+        restoreAllMocks();
         // Clean up any notification manager instances to prevent hanging tests
         if (notificationManager) {
             if (notificationManager.stopSuppressionCleanup) {
@@ -97,14 +101,14 @@ describe('NotificationManager Service Dependency Injection - Modernized', () => 
     describe('Constructor Service Injection', () => {
         it('should initialize with minimal required dependencies', () => {
             // BEHAVIOR: NotificationManager works with just displayQueue
-            const mockEventBus = { emit: jest.fn(), on: jest.fn(), off: jest.fn() };
+            const mockEventBus = { emit: createMockFn(), on: createMockFn(), off: createMockFn() };
             notificationManager = new NotificationManager({
                 displayQueue: mockDisplayQueue,
                 logger: mockLogger,
                 eventBus: mockEventBus,
                 constants: require('../../../src/core/constants'),
-                textProcessing: { formatChatMessage: jest.fn() },
-                obsGoals: { processDonationGoal: jest.fn() },
+                textProcessing: { formatChatMessage: createMockFn() },
+                obsGoals: { processDonationGoal: createMockFn() },
                 configService: mockConfigService
             });
 
@@ -120,8 +124,8 @@ describe('NotificationManager Service Dependency Injection - Modernized', () => 
                 logger: mockLogger,
                 eventBus: mockEventBus,
                 constants: require('../../../src/core/constants'),
-                textProcessing: { formatChatMessage: jest.fn() },
-                obsGoals: { processDonationGoal: jest.fn() },
+                textProcessing: { formatChatMessage: createMockFn() },
+                obsGoals: { processDonationGoal: createMockFn() },
                 configService: mockConfigService,
                 vfxCommandService: mockVFXCommandService,
                 ttsService: mockTTSService,
@@ -143,8 +147,8 @@ describe('NotificationManager Service Dependency Injection - Modernized', () => 
                     logger: mockLogger,
                     eventBus: mockEventBus,
                     constants: require('../../../src/core/constants'),
-                    textProcessing: { formatChatMessage: jest.fn() },
-                    obsGoals: { processDonationGoal: jest.fn() },
+                    textProcessing: { formatChatMessage: createMockFn() },
+                    obsGoals: { processDonationGoal: createMockFn() },
                     configService: mockConfigService
                     // No displayQueue
                 });
@@ -158,8 +162,8 @@ describe('NotificationManager Service Dependency Injection - Modernized', () => 
                 logger: mockLogger,
                 eventBus: mockEventBus,
                 constants: require('../../../src/core/constants'),
-                textProcessing: { formatChatMessage: jest.fn() },
-                obsGoals: { processDonationGoal: jest.fn() },
+                textProcessing: { formatChatMessage: createMockFn() },
+                obsGoals: { processDonationGoal: createMockFn() },
                 configService: mockConfigService
             });
 
@@ -177,8 +181,8 @@ describe('NotificationManager Service Dependency Injection - Modernized', () => 
                     displayQueue: mockDisplayQueue,
                     logger: mockLogger,
                     constants: require('../../../src/core/constants'),
-                    textProcessing: { formatChatMessage: jest.fn() },
-                    obsGoals: { processDonationGoal: jest.fn() },
+                    textProcessing: { formatChatMessage: createMockFn() },
+                    obsGoals: { processDonationGoal: createMockFn() },
                     configService: mockConfigService
                     // No EventBus - should throw
                 });
@@ -186,29 +190,29 @@ describe('NotificationManager Service Dependency Injection - Modernized', () => 
         });
 
         it('should require ConfigService for notification setup', () => {
-            const mockEventBus = { emit: jest.fn(), on: jest.fn(), off: jest.fn() };
+            const mockEventBus = { emit: createMockFn(), on: createMockFn(), off: createMockFn() };
             expect(() => {
                 new NotificationManager({
                     displayQueue: mockDisplayQueue,
                     logger: mockLogger,
                     eventBus: mockEventBus,
                     constants: require('../../../src/core/constants'),
-                    textProcessing: { formatChatMessage: jest.fn() },
-                    obsGoals: { processDonationGoal: jest.fn() }
+                    textProcessing: { formatChatMessage: createMockFn() },
+                    obsGoals: { processDonationGoal: createMockFn() }
                 });
             }).toThrow('NotificationManager requires ConfigService dependency');
         });
 
         it('should work without spam detector gracefully', () => {
             // BEHAVIOR: Spam detector is optional
-            const mockEventBus = { emit: jest.fn(), on: jest.fn(), off: jest.fn() };
+            const mockEventBus = { emit: createMockFn(), on: createMockFn(), off: createMockFn() };
             notificationManager = new NotificationManager({
                 displayQueue: mockDisplayQueue,
                 logger: mockLogger,
                 eventBus: mockEventBus,
                 constants: require('../../../src/core/constants'),
-                textProcessing: { formatChatMessage: jest.fn() },
-                obsGoals: { processDonationGoal: jest.fn() },
+                textProcessing: { formatChatMessage: createMockFn() },
+                obsGoals: { processDonationGoal: createMockFn() },
                 configService: mockConfigService
                 // No donationSpamDetector
             });
@@ -219,14 +223,14 @@ describe('NotificationManager Service Dependency Injection - Modernized', () => 
 
         it('should reject notifications without VFX services', async () => {
             // BEHAVIOR: VFX services are required for notification processing
-            const mockEventBus = { emit: jest.fn(), on: jest.fn(), off: jest.fn() };
+            const mockEventBus = { emit: createMockFn(), on: createMockFn(), off: createMockFn() };
             notificationManager = new NotificationManager({
                 displayQueue: mockDisplayQueue,
                 logger: mockLogger,
                 eventBus: mockEventBus,
                 constants: require('../../../src/core/constants'),
-                textProcessing: { formatChatMessage: jest.fn() },
-                obsGoals: { processDonationGoal: jest.fn() },
+                textProcessing: { formatChatMessage: createMockFn() },
+                obsGoals: { processDonationGoal: createMockFn() },
                 configService: mockConfigService
                 // No VFX services
             });
@@ -251,8 +255,8 @@ describe('NotificationManager Service Dependency Injection - Modernized', () => 
                 logger: mockLogger,
                 eventBus: mockEventBus,
                 constants: require('../../../src/core/constants'),
-                textProcessing: { formatChatMessage: jest.fn() },
-                obsGoals: { processDonationGoal: jest.fn() },
+                textProcessing: { formatChatMessage: createMockFn() },
+                obsGoals: { processDonationGoal: createMockFn() },
                 configService: mockConfigService,
                 vfxCommandService: mockVFXCommandService,
                 ttsService: mockTTSService,
@@ -280,14 +284,14 @@ describe('NotificationManager Service Dependency Injection - Modernized', () => 
 
         it('should display notifications with minimal services', async () => {
             // BEHAVIOR: Core functionality works with minimal services
-            const mockEventBus = { emit: jest.fn(), on: jest.fn(), off: jest.fn() };
+            const mockEventBus = { emit: createMockFn(), on: createMockFn(), off: createMockFn() };
             notificationManager = new NotificationManager({
                 displayQueue: mockDisplayQueue,
                 logger: mockLogger,
                 eventBus: mockEventBus,
                 constants: require('../../../src/core/constants'),
-                textProcessing: { formatChatMessage: jest.fn() },
-                obsGoals: { processDonationGoal: jest.fn() },
+                textProcessing: { formatChatMessage: createMockFn() },
+                obsGoals: { processDonationGoal: createMockFn() },
                 configService: mockConfigService,
                 vfxCommandService: mockVFXCommandService,
                 ttsService: mockTTSService,
@@ -314,7 +318,7 @@ describe('NotificationManager Service Dependency Injection - Modernized', () => 
             // BEHAVIOR: ConfigService provides notification settings
             const customConfigService = {
                 ...mockConfigService,
-                get: jest.fn((section, key, defaultValue) => {
+                get: createMockFn((section, key, defaultValue) => {
                     if (section === 'general' && key === undefined) {
                         return {
                             userSuppressionEnabled: false,
@@ -332,14 +336,14 @@ describe('NotificationManager Service Dependency Injection - Modernized', () => 
             };
 
             // When: NotificationManager initializes with custom config
-            const mockEventBus = { emit: jest.fn(), on: jest.fn(), off: jest.fn() };
+            const mockEventBus = { emit: createMockFn(), on: createMockFn(), off: createMockFn() };
             notificationManager = new NotificationManager({
                 displayQueue: mockDisplayQueue,
                 logger: mockLogger,
                 eventBus: mockEventBus,
                 constants: require('../../../src/core/constants'),
-                textProcessing: { formatChatMessage: jest.fn() },
-                obsGoals: { processDonationGoal: jest.fn() },
+                textProcessing: { formatChatMessage: createMockFn() },
+                obsGoals: { processDonationGoal: createMockFn() },
                 configService: customConfigService
             });
 
@@ -348,15 +352,15 @@ describe('NotificationManager Service Dependency Injection - Modernized', () => 
         });
 
         it('should require ConfigService instead of relying on defaults', () => {
-            const mockEventBus = { emit: jest.fn(), on: jest.fn(), off: jest.fn() };
+            const mockEventBus = { emit: createMockFn(), on: createMockFn(), off: createMockFn() };
             expect(() => {
                 new NotificationManager({
                     displayQueue: mockDisplayQueue,
                     logger: mockLogger,
                     eventBus: mockEventBus,
                     constants: require('../../../src/core/constants'),
-                    textProcessing: { formatChatMessage: jest.fn() },
-                    obsGoals: { processDonationGoal: jest.fn() }
+                    textProcessing: { formatChatMessage: createMockFn() },
+                    obsGoals: { processDonationGoal: createMockFn() }
                 });
             }).toThrow('NotificationManager requires ConfigService dependency');
         });
@@ -366,17 +370,17 @@ describe('NotificationManager Service Dependency Injection - Modernized', () => 
         it('should use spam detector when provided', async () => {
             // BEHAVIOR: Spam detector filters notifications
             const mockSpamDetector = {
-                handleDonationSpam: jest.fn().mockReturnValue({ shouldShow: true })
+                handleDonationSpam: createMockFn().mockReturnValue({ shouldShow: true })
             };
 
-            const mockEventBus = { emit: jest.fn(), on: jest.fn(), off: jest.fn() };
+            const mockEventBus = { emit: createMockFn(), on: createMockFn(), off: createMockFn() };
             notificationManager = new NotificationManager({
                 displayQueue: mockDisplayQueue,
                 logger: mockLogger,
                 eventBus: mockEventBus,
                 constants: require('../../../src/core/constants'),
-                textProcessing: { formatChatMessage: jest.fn() },
-                obsGoals: { processDonationGoal: jest.fn() },
+                textProcessing: { formatChatMessage: createMockFn() },
+                obsGoals: { processDonationGoal: createMockFn() },
                 configService: mockConfigService,
                 vfxCommandService: mockVFXCommandService,
                 ttsService: mockTTSService,
@@ -400,14 +404,14 @@ describe('NotificationManager Service Dependency Injection - Modernized', () => 
 
         it('should work without spam detector', async () => {
             // BEHAVIOR: Spam detection is optional
-            const mockEventBus = { emit: jest.fn(), on: jest.fn(), off: jest.fn() };
+            const mockEventBus = { emit: createMockFn(), on: createMockFn(), off: createMockFn() };
             notificationManager = new NotificationManager({
                 displayQueue: mockDisplayQueue,
                 logger: mockLogger,
                 eventBus: mockEventBus,
                 constants: require('../../../src/core/constants'),
-                textProcessing: { formatChatMessage: jest.fn() },
-                obsGoals: { processDonationGoal: jest.fn() },
+                textProcessing: { formatChatMessage: createMockFn() },
+                obsGoals: { processDonationGoal: createMockFn() },
                 configService: mockConfigService,
                 vfxCommandService: mockVFXCommandService,
                 ttsService: mockTTSService,
@@ -433,14 +437,14 @@ describe('NotificationManager Service Dependency Injection - Modernized', () => 
     describe('Graceful Degradation', () => {
         it('should handle missing services gracefully during notification processing', async () => {
             // BEHAVIOR: Missing optional services don't break notifications
-            const mockEventBus = { emit: jest.fn(), on: jest.fn(), off: jest.fn() };
+            const mockEventBus = { emit: createMockFn(), on: createMockFn(), off: createMockFn() };
             notificationManager = new NotificationManager({
                 displayQueue: mockDisplayQueue,
                 logger: mockLogger,
                 eventBus: mockEventBus,
                 constants: require('../../../src/core/constants'),
-                textProcessing: { formatChatMessage: jest.fn() },
-                obsGoals: { processDonationGoal: jest.fn() },
+                textProcessing: { formatChatMessage: createMockFn() },
+                obsGoals: { processDonationGoal: createMockFn() },
                 configService: mockConfigService,
                 vfxCommandService: mockVFXCommandService,
                 ttsService: mockTTSService,
@@ -464,15 +468,15 @@ describe('NotificationManager Service Dependency Injection - Modernized', () => 
         });
 
         it('should reject null ConfigService dependency', () => {
-            const mockEventBus = { emit: jest.fn(), on: jest.fn(), off: jest.fn() };
+            const mockEventBus = { emit: createMockFn(), on: createMockFn(), off: createMockFn() };
             expect(() => {
                 new NotificationManager({
                     displayQueue: mockDisplayQueue,
                     logger: mockLogger,
                     eventBus: mockEventBus,
                     constants: require('../../../src/core/constants'),
-                    textProcessing: { formatChatMessage: jest.fn() },
-                    obsGoals: { processDonationGoal: jest.fn() },
+                    textProcessing: { formatChatMessage: createMockFn() },
+                    obsGoals: { processDonationGoal: createMockFn() },
                     configService: null,
                     vfxCommandService: null,
                     ttsService: null,

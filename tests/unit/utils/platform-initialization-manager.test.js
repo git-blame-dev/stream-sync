@@ -1,26 +1,34 @@
 
+const { describe, test, expect, beforeEach, it } = require('bun:test');
+const { createMockFn, clearAllMocks, restoreAllMocks } = require('../../helpers/bun-mock-utils');
+const { mockModule, restoreAllModuleMocks } = require('../../helpers/bun-module-mocks');
+
 const mockHandler = {
-    handleEventProcessingError: jest.fn(),
-    logOperationalError: jest.fn()
+    handleEventProcessingError: createMockFn(),
+    logOperationalError: createMockFn()
 };
 
-jest.mock('../../../src/utils/platform-error-handler', () => ({
-    createPlatformErrorHandler: jest.fn(() => mockHandler)
+mockModule('../../../src/utils/platform-error-handler', () => ({
+    createPlatformErrorHandler: createMockFn(() => mockHandler)
 }));
 
 const { createPlatformErrorHandler } = require('../../../src/utils/platform-error-handler');
 const { PlatformInitializationManager } = require('../../../src/utils/platform-initialization-manager');
 
 describe('PlatformInitializationManager', () => {
+    afterEach(() => {
+        restoreAllMocks();
+        restoreAllModuleMocks();
+    });
+
     const logger = {
-        debug: jest.fn(),
-        info: jest.fn(),
-        warn: jest.fn(),
-        error: jest.fn()
+        debug: createMockFn(),
+        info: createMockFn(),
+        warn: createMockFn(),
+        error: createMockFn()
     };
 
     beforeEach(() => {
-        jest.clearAllMocks();
         mockHandler.handleEventProcessingError.mockClear();
         mockHandler.logOperationalError.mockClear();
     });

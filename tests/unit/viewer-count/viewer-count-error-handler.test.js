@@ -1,39 +1,44 @@
+const { describe, test, expect, afterEach, it } = require('bun:test');
+const { createMockFn, restoreAllMocks } = require('../../helpers/bun-mock-utils');
+const { mockModule, resetModules, restoreAllModuleMocks } = require('../../helpers/bun-module-mocks');
+
 describe('ViewerCountSystem observer error handling', () => {
     const originalEnv = process.env.NODE_ENV;
 
     afterEach(() => {
-        jest.resetModules();
-        process.env.NODE_ENV = originalEnv;
-    });
+        restoreAllMocks();
+process.env.NODE_ENV = originalEnv;
+    
+        restoreAllModuleMocks();});
 
     function createSystemWithFailingObserver(handlerMock) {
         process.env.NODE_ENV = 'test';
 
-        jest.doMock('../../../src/core/config', () => ({
+        mockModule('../../../src/core/config', () => ({
             configManager: {
-                getNumber: jest.fn().mockReturnValue(15)
+                getNumber: createMockFn().mockReturnValue(15)
             }
         }));
 
-        jest.doMock('../../../src/utils/timeout-validator', () => ({
-            safeSetInterval: jest.fn(),
-            safeDelay: jest.fn()
+        mockModule('../../../src/utils/timeout-validator', () => ({
+            safeSetInterval: createMockFn(),
+            safeDelay: createMockFn()
         }));
 
-        jest.doMock('../../../src/core/logging', () => ({
+        mockModule('../../../src/core/logging', () => ({
             logger: {
-                debug: jest.fn(),
-                info: jest.fn(),
-                warn: jest.fn(),
-                error: jest.fn()
+                debug: createMockFn(),
+                info: createMockFn(),
+                warn: createMockFn(),
+                error: createMockFn()
             }
         }));
 
-        jest.doMock('../../../src/utils/platform-error-handler', () => ({
-            createPlatformErrorHandler: jest.fn(() => handlerMock)
+        mockModule('../../../src/utils/platform-error-handler', () => ({
+            createPlatformErrorHandler: createMockFn(() => handlerMock)
         }));
 
-        const platform = { getViewerCount: jest.fn().mockResolvedValue(5) };
+        const platform = { getViewerCount: createMockFn().mockResolvedValue(5) };
         const { ViewerCountSystem } = require('../../../src/utils/viewer-count');
         const system = new ViewerCountSystem({ platforms: { youtube: platform } });
 
@@ -49,8 +54,8 @@ describe('ViewerCountSystem observer error handling', () => {
 
     it('routes observer failures through platform error handler without crashing polling', async () => {
         const handlerMock = {
-            handleEventProcessingError: jest.fn(),
-            logOperationalError: jest.fn()
+            handleEventProcessingError: createMockFn(),
+            logOperationalError: createMockFn()
         };
         const { system, platform } = createSystemWithFailingObserver(handlerMock);
 

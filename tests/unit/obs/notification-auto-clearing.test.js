@@ -1,4 +1,7 @@
 
+const { describe, test, expect, beforeEach } = require('bun:test');
+const { spyOn, restoreAllMocks } = require('../../helpers/bun-mock-utils');
+
 const { initializeTestLogging } = require('../../helpers/test-setup');
 const { createMockOBSManager } = require('../../helpers/mock-factories');
 const { setupAutomatedCleanup } = require('../../helpers/mock-lifecycle');
@@ -15,6 +18,10 @@ setupAutomatedCleanup({
 const { DisplayQueue } = require('../../../src/obs/display-queue');
 
 describe('Notification Auto-Clearing Behavior', () => {
+    afterEach(() => {
+        restoreAllMocks();
+    });
+
     let displayQueue;
     let mockObsManager;
     let mockConstants;
@@ -98,7 +105,7 @@ describe('Notification Auto-Clearing Behavior', () => {
         };
 
         // Spy on hideCurrentDisplay to verify it's called
-        const hideDisplaySpy = jest.spyOn(displayQueue, 'hideCurrentDisplay');
+        const hideDisplaySpy = spyOn(displayQueue, 'hideCurrentDisplay');
         hideDisplaySpy.mockResolvedValue();
 
         // Add chat item and process it
@@ -135,9 +142,9 @@ describe('Notification Auto-Clearing Behavior', () => {
         };
 
         // Spy on hideCurrentDisplay and displayLingeringChat to ensure they run
-        const hideDisplaySpy = jest.spyOn(displayQueue, 'hideCurrentDisplay').mockResolvedValue();
-        const lingeringChatSpy = jest.spyOn(displayQueue, 'displayLingeringChat');
-        const obsReadySpy = jest.spyOn(mockObsManager, 'isReady').mockResolvedValue(false);
+        const hideDisplaySpy = spyOn(displayQueue, 'hideCurrentDisplay').mockResolvedValue();
+        const lingeringChatSpy = spyOn(displayQueue, 'displayLingeringChat');
+        const obsReadySpy = spyOn(mockObsManager, 'isReady').mockResolvedValue(false);
 
         // Act: Add chat item and process queue
         displayQueue.addItem(chatItem);
@@ -182,7 +189,7 @@ describe('Notification Auto-Clearing Behavior', () => {
         };
 
         // Spy on hideCurrentDisplay
-        const hideDisplaySpy = jest.spyOn(displayQueue, 'hideCurrentDisplay');
+        const hideDisplaySpy = spyOn(displayQueue, 'hideCurrentDisplay');
         hideDisplaySpy.mockResolvedValue();
 
         // Act: Process notification first

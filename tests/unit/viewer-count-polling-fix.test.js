@@ -1,4 +1,8 @@
 
+const { describe, test, expect, beforeEach, afterEach, afterAll } = require('bun:test');
+const { createMockFn, restoreAllMocks } = require('../helpers/bun-mock-utils');
+const { mockModule, restoreAllModuleMocks } = require('../helpers/bun-module-mocks');
+
 const { initializeTestLogging } = require('../helpers/test-setup');
 const { createMockOBSManager, createMockPlatform } = require('../helpers/mock-factories');
 const { setupAutomatedCleanup } = require('../helpers/mock-lifecycle');
@@ -15,16 +19,16 @@ const cleanupConfig = {
 };
 
 // Mock the config manager
-jest.mock('../../src/core/config', () => ({
+mockModule('../../src/core/config', () => ({
     configManager: {
-        getNumber: jest.fn().mockImplementation((section, key, defaultValue) => {
+        getNumber: createMockFn().mockImplementation((section, key, defaultValue) => {
             console.log(`Config requested: ${section}.${key} (default: ${defaultValue})`);
             if (section === 'general' && key === 'viewerCountPollingInterval') {
                 return 60; // 60 second polling interval
             }
             return defaultValue !== undefined ? defaultValue : 0;
         }),
-        getSection: jest.fn((section) => {
+        getSection: createMockFn((section) => {
             // Mock platform configs with viewer count enabled
             return {
                 viewerCountEnabled: true,
@@ -36,14 +40,14 @@ jest.mock('../../src/core/config', () => ({
 }));
 
 const mockTextProcessing = {
-    formatViewerCount: jest.fn((count) => count.toString())
+    formatViewerCount: createMockFn((count) => count.toString())
 };
 
 // Mock the text processing utilities
-jest.mock('../../src/utils/text-processing', () => ({
-    createTextProcessingManager: jest.fn(() => mockTextProcessing),
-    TextProcessingManager: jest.fn(),
-    formatTimestampCompact: jest.fn()
+mockModule('../../src/utils/text-processing', () => ({
+    createTextProcessingManager: createMockFn(() => mockTextProcessing),
+    TextProcessingManager: createMockFn(),
+    formatTimestampCompact: createMockFn()
 }));
 
 const { ViewerCountSystem } = require('../../src/utils/viewer-count');
@@ -110,9 +114,11 @@ describe('Viewer Count Polling System Fix', () => {
     });
 
     afterEach(() => {
+        restoreAllMocks();
         if (cleanupFunctions) {
             cleanupFunctions.afterEach();
-        }
+        
+        restoreAllModuleMocks();}
     });
 
     afterAll(() => {

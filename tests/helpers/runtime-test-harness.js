@@ -1,31 +1,33 @@
 // Test harness for building integration dependency bundles.
 const EventEmitter = require('events');
-jest.mock('../../src/core/logging', () => ({
-    initializeLoggingConfig: jest.fn(),
-    setConfigValidator: jest.fn(),
-    setDebugMode: jest.fn(),
-    initializeConsoleOverride: jest.fn(),
+const { createMockFn } = require('./bun-mock-utils');
+const { mockModule } = require('./bun-module-mocks');
+
+mockModule('../../src/core/logging', () => ({
+    initializeLoggingConfig: createMockFn(),
+    setConfigValidator: createMockFn(),
+    setDebugMode: createMockFn(),
+    initializeConsoleOverride: createMockFn(),
     logger: {
-        info: jest.fn(),
-        warn: jest.fn(),
-        error: jest.fn(),
-        debug: jest.fn()
+        info: createMockFn(),
+        warn: createMockFn(),
+        error: createMockFn(),
+        debug: createMockFn()
     },
-    getLogger: jest.fn(() => ({
-        info: jest.fn(),
-        warn: jest.fn(),
-        error: jest.fn(),
-        debug: jest.fn()
+    getLogger: createMockFn(() => ({
+        info: createMockFn(),
+        warn: createMockFn(),
+        error: createMockFn(),
+        debug: createMockFn()
     })),
-    createPlatformErrorHandler: jest.fn(() => ({
-        handleEventProcessingError: jest.fn(),
-        logOperationalError: jest.fn(),
-        logConfigError: jest.fn(),
-        logError: jest.fn()
+    createPlatformErrorHandler: createMockFn(() => ({
+        handleEventProcessingError: createMockFn(),
+        logOperationalError: createMockFn(),
+        logConfigError: createMockFn(),
+        logError: createMockFn()
     })),
-    setConfigValidator: jest.fn(),
-    setLoggerImplementation: jest.fn(),
-    resetLoggingConfig: jest.fn()
+    setLoggerImplementation: createMockFn(),
+    resetLoggingConfig: createMockFn()
 }));
 const {
     createMockDisplayQueue,
@@ -39,12 +41,12 @@ const createEventBusStub = () => {
     const emitter = new EventEmitter();
 
     return {
-        subscribe: jest.fn((event, handler) => {
+        subscribe: createMockFn((event, handler) => {
             emitter.on(event, handler);
             return () => emitter.removeListener(event, handler);
         }),
-        emit: jest.fn((event, payload) => emitter.emit(event, payload)),
-        reset: jest.fn(() => emitter.removeAllListeners())
+        emit: createMockFn((event, payload) => emitter.emit(event, payload)),
+        reset: createMockFn(() => emitter.removeAllListeners())
     };
 };
 
@@ -52,7 +54,7 @@ const createConfigServiceStub = (configSnapshot = {}) => {
     const snapshot = configSnapshot || {};
 
     return {
-        get: jest.fn((path) => {
+        get: createMockFn((path) => {
             if (!path) {
                 if (!snapshot) {
                     throw new Error('Config snapshot required');
@@ -71,14 +73,14 @@ const createConfigServiceStub = (configSnapshot = {}) => {
             }
             return resolved;
         }),
-        getPlatformConfig: jest.fn((platform, key) => {
+        getPlatformConfig: createMockFn((platform, key) => {
             const platformConfig = snapshot[platform];
             if (!platformConfig || platformConfig[key] === undefined) {
                 throw new Error(`Missing platform config: ${platform}.${key}`);
             }
             return platformConfig[key];
         }),
-        areNotificationsEnabled: jest.fn((settingKey, platform) => {
+        areNotificationsEnabled: createMockFn((settingKey, platform) => {
             const platformConfig = platform ? snapshot[platform] : null;
             if (platformConfig && platformConfig[settingKey] !== undefined) {
                 return !!platformConfig[settingKey];
@@ -88,37 +90,37 @@ const createConfigServiceStub = (configSnapshot = {}) => {
             }
             throw new Error(`Missing notification config: ${settingKey}`);
         }),
-        getTTSConfig: jest.fn(() => {
+        getTTSConfig: createMockFn(() => {
             if (!snapshot.tts) {
                 throw new Error('Missing tts config');
             }
             return snapshot.tts;
         }),
-        isDebugEnabled: jest.fn(() => {
+        isDebugEnabled: createMockFn(() => {
             if (!snapshot.general || snapshot.general.debugEnabled === undefined) {
                 throw new Error('Missing general.debugEnabled config');
             }
             return !!snapshot.general.debugEnabled;
         }),
-        getCLIOverrides: jest.fn().mockReturnValue({})
+        getCLIOverrides: createMockFn().mockReturnValue({})
     };
 };
 
 const createPlatformLifecycleStub = (overrides = {}) => ({
-    initializePlatforms: jest.fn().mockResolvedValue({}),
-    initializeAllPlatforms: jest.fn().mockResolvedValue({}),
-    initializePlatform: jest.fn().mockResolvedValue(true),
-    waitForBackgroundInits: jest.fn().mockResolvedValue(true),
-    shutdownPlatforms: jest.fn().mockResolvedValue(true),
-    disconnectAll: jest.fn().mockResolvedValue(true),
-    getAllPlatforms: jest.fn().mockReturnValue({}),
-    getPlatforms: jest.fn().mockReturnValue({}),
-    getPlatform: jest.fn().mockReturnValue(null),
-    isPlatformAvailable: jest.fn().mockReturnValue(false),
-    recordPlatformConnection: jest.fn(),
-    startPlatform: jest.fn().mockResolvedValue(true),
-    stopPlatform: jest.fn().mockResolvedValue(true),
-    refreshPlatform: jest.fn().mockResolvedValue(true),
+    initializePlatforms: createMockFn().mockResolvedValue({}),
+    initializeAllPlatforms: createMockFn().mockResolvedValue({}),
+    initializePlatform: createMockFn().mockResolvedValue(true),
+    waitForBackgroundInits: createMockFn().mockResolvedValue(true),
+    shutdownPlatforms: createMockFn().mockResolvedValue(true),
+    disconnectAll: createMockFn().mockResolvedValue(true),
+    getAllPlatforms: createMockFn().mockReturnValue({}),
+    getPlatforms: createMockFn().mockReturnValue({}),
+    getPlatform: createMockFn().mockReturnValue(null),
+    isPlatformAvailable: createMockFn().mockReturnValue(false),
+    recordPlatformConnection: createMockFn(),
+    startPlatform: createMockFn().mockResolvedValue(true),
+    stopPlatform: createMockFn().mockResolvedValue(true),
+    refreshPlatform: createMockFn().mockResolvedValue(true),
     ...overrides
 });
 
@@ -188,29 +190,29 @@ function createAppRuntimeTestDependencies(options = {}) {
     const eventBus = options.eventBus || createEventBusStub();
     const configService = options.configService || createConfigServiceStub(mergedConfigSnapshot);
     const vfxCommandService = options.vfxCommandService || {
-        executeCommand: jest.fn().mockResolvedValue({ success: true }),
-        executeCommandForKey: jest.fn().mockResolvedValue({ success: true }),
-        getVFXConfig: jest.fn().mockResolvedValue({})
+        executeCommand: createMockFn().mockResolvedValue({ success: true }),
+        executeCommandForKey: createMockFn().mockResolvedValue({ success: true }),
+        getVFXConfig: createMockFn().mockResolvedValue({})
     };
     const ttsService = options.ttsService || {
-        speak: jest.fn().mockResolvedValue(true),
-        stop: jest.fn().mockResolvedValue(true)
+        speak: createMockFn().mockResolvedValue(true),
+        stop: createMockFn().mockResolvedValue(true)
     };
     const userTrackingService = options.userTrackingService || {
-        isFirstMessage: jest.fn().mockReturnValue(true)
+        isFirstMessage: createMockFn().mockReturnValue(true)
     };
     const commandCooldownService = options.commandCooldownService || {
-        loadCooldownConfig: jest.fn(),
-        registerConfigListeners: jest.fn(),
-        getStatus: jest.fn().mockReturnValue({ commands: {} }),
-        checkCooldown: jest.fn().mockReturnValue({ allowed: true }),
-        recordCommand: jest.fn()
+        loadCooldownConfig: createMockFn(),
+        registerConfigListeners: createMockFn(),
+        getStatus: createMockFn().mockReturnValue({ commands: {} }),
+        checkCooldown: createMockFn().mockReturnValue({ allowed: true }),
+        recordCommand: createMockFn()
     };
     const platformLifecycleService = options.platformLifecycleService ||
         createPlatformLifecycleStub();
     const dependencyFactory = options.dependencyFactory || {
-        createYoutubeDependencies: jest.fn().mockReturnValue({
-            streamDetectionService: { isLive: jest.fn() }
+        createYoutubeDependencies: createMockFn().mockReturnValue({
+            streamDetectionService: { isLive: createMockFn() }
         })
     };
 
@@ -229,16 +231,16 @@ function createAppRuntimeTestDependencies(options = {}) {
         commandCooldownService,
         platformLifecycleService,
         dependencyFactory,
-        timestampService: options.timestampService || { now: jest.fn(() => testClock.now()) },
+        timestampService: options.timestampService || { now: createMockFn(() => testClock.now()) },
         obsManager: options.obsManager || null,
         authManager: options.authManager || null,
         authFactory: options.authFactory || null,
         obs: options.obs || {},
-        obsEventService: options.obsEventService || { start: jest.fn(), stop: jest.fn() },
-        sceneManagementService: options.sceneManagementService || { start: jest.fn(), stop: jest.fn() },
+        obsEventService: options.obsEventService || { start: createMockFn(), stop: createMockFn() },
+        sceneManagementService: options.sceneManagementService || { start: createMockFn(), stop: createMockFn() },
         gracefulExitService: options.gracefulExitService || {
-            isEnabled: jest.fn().mockReturnValue(false),
-            getTargetMessageCount: jest.fn().mockReturnValue(0)
+            isEnabled: createMockFn().mockReturnValue(false),
+            getTargetMessageCount: createMockFn().mockReturnValue(0)
         },
         ...overrides
     };

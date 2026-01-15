@@ -1,4 +1,7 @@
 
+const { describe, test, expect, it } = require('bun:test');
+const { createMockFn, restoreAllMocks } = require('../../helpers/bun-mock-utils');
+
 const { withTimeout, withTimeoutAll, createTimeoutWrapper, createTimeoutPromise, createTimeoutController } = require('../../../src/utils/timeout-wrapper');
 const { expectNoTechnicalArtifacts } = require('../../helpers/assertion-helpers');
 const { waitForDelay } = require('../../helpers/time-utils');
@@ -8,6 +11,10 @@ const fail = (message) => {
 };
 
 describe('Timeout Wrapper Utility - User Experience', () => {
+    afterEach(() => {
+        restoreAllMocks();
+    });
+
     describe('Operation Completion Within Timeout', () => {
         it('should allow successful operations to complete normally', async () => {
             // Given: A quick operation that completes within timeout
@@ -188,7 +195,7 @@ describe('Timeout Wrapper Utility - User Experience', () => {
     describe('Timeout Controller Integration', () => {
         it('should clear scheduled timeout when protected operations resolve early', async () => {
             const controller = createTimeoutController(25, { operationName: 'instant operation' });
-            const timeoutSpy = jest.fn();
+            const timeoutSpy = createMockFn();
             controller.timeoutPromise.catch(timeoutSpy);
             await expect(controller.wrap(Promise.resolve('ready'))).resolves.toBe('ready');
             await waitForDelay(50);

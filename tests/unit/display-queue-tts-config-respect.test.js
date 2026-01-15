@@ -1,8 +1,15 @@
 
+const { describe, test, expect, beforeEach, it } = require('bun:test');
+const { createMockFn, restoreAllMocks } = require('../helpers/bun-mock-utils');
+
 const { DisplayQueue } = require('../../src/obs/display-queue');
 const { createRuntimeConstantsFixture } = require('../helpers/runtime-constants-fixture');
 
 describe('DisplayQueue TTS Configuration Respect', () => {
+    afterEach(() => {
+        restoreAllMocks();
+    });
+
   let mockOBSManager;
   let displayQueue;
   let runtimeConstants;
@@ -11,8 +18,8 @@ describe('DisplayQueue TTS Configuration Respect', () => {
   beforeEach(() => {
     // Create simple mock OBS manager
     mockOBSManager = {
-      isReady: jest.fn().mockResolvedValue(true),
-      call: jest.fn().mockResolvedValue({ inputSettings: {} })
+      isReady: createMockFn().mockResolvedValue(true),
+      call: createMockFn().mockResolvedValue({ inputSettings: {} })
     };
     runtimeConstants = createRuntimeConstantsFixture();
   });

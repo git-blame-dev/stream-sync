@@ -1,7 +1,11 @@
-jest.mock('../../../src/utils/platform-error-handler', () => ({
-    createPlatformErrorHandler: jest.fn(() => ({
-        handleEventProcessingError: jest.fn(),
-        logOperationalError: jest.fn()
+const { describe, test, expect, beforeEach, it } = require('bun:test');
+const { createMockFn, clearAllMocks, restoreAllMocks } = require('../../helpers/bun-mock-utils');
+const { mockModule, restoreAllModuleMocks } = require('../../helpers/bun-module-mocks');
+
+mockModule('../../../src/utils/platform-error-handler', () => ({
+    createPlatformErrorHandler: createMockFn(() => ({
+        handleEventProcessingError: createMockFn(),
+        logOperationalError: createMockFn()
     }))
 }));
 
@@ -9,18 +13,22 @@ const { createPlatformErrorHandler } = require('../../../src/utils/platform-erro
 const { OBSEffectsManager } = require('../../../src/obs/effects');
 
 describe('obs effects behavior', () => {
-    const logger = { debug: jest.fn(), info: jest.fn(), warn: jest.fn() };
+    afterEach(() => {
+        restoreAllMocks();
+        restoreAllModuleMocks();
+    });
+
+    const logger = { debug: createMockFn(), info: createMockFn(), warn: createMockFn() };
 
     const createObsManager = () => ({
-        ensureConnected: jest.fn(async () => {}),
-        call: jest.fn(async () => {}),
-        addEventListener: jest.fn(),
-        removeEventListener: jest.fn()
+        ensureConnected: createMockFn(async () => {}),
+        call: createMockFn(async () => {}),
+        addEventListener: createMockFn(),
+        removeEventListener: createMockFn()
     });
 
     beforeEach(() => {
-        jest.clearAllMocks();
-    });
+        });
 
     it('plays media and triggers OBS calls with fire-and-forget mode', async () => {
         const obsManager = createObsManager();
@@ -34,7 +42,7 @@ describe('obs effects behavior', () => {
     });
 
     it('routes errors through platform error handler when OBS calls fail', async () => {
-        const handler = { handleEventProcessingError: jest.fn(), logOperationalError: jest.fn() };
+        const handler = { handleEventProcessingError: createMockFn(), logOperationalError: createMockFn() };
         createPlatformErrorHandler.mockReturnValue(handler);
         const obsManager = createObsManager();
         obsManager.call.mockRejectedValueOnce(new Error('fail'));

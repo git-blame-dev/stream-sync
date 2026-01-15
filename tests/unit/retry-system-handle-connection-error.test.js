@@ -1,36 +1,41 @@
+const { describe, test, expect, afterEach, it } = require('bun:test');
+const { createMockFn, clearAllMocks, restoreAllMocks } = require('../helpers/bun-mock-utils');
+const { useFakeTimers, useRealTimers, runOnlyPendingTimers } = require('../helpers/bun-timers');
+
 const { RetrySystem } = require('../../src/utils/retry-system');
 const { safeSetTimeout, safeDelay } = require('../../src/utils/timeout-validator');
 
 describe('RetrySystem.handleConnectionError', () => {
     const createLogger = () => ({
-        debug: jest.fn(),
-        info: jest.fn(),
-        warn: jest.fn(),
-        error: jest.fn()
+        debug: createMockFn(),
+        info: createMockFn(),
+        warn: createMockFn(),
+        error: createMockFn()
     });
 
     afterEach(() => {
-        jest.clearAllMocks();
+        restoreAllMocks();
+        clearAllMocks();
     });
 
     it('awaits cleanup before scheduling reconnect attempts', async () => {
         const retrySystem = new RetrySystem({ logger: createLogger() });
         retrySystem.isConnected = () => false;
         let retryCount = 0;
-        retrySystem.incrementRetryCount = jest.fn().mockImplementation(() => {
+        retrySystem.incrementRetryCount = createMockFn().mockImplementation(() => {
             retryCount += 1;
             return 1;
         });
-        retrySystem.getRetryCount = jest.fn().mockImplementation(() => retryCount);
+        retrySystem.getRetryCount = createMockFn().mockImplementation(() => retryCount);
 
         let cleanupResolved = false;
-        const cleanupFn = jest.fn(() => new Promise((resolve) => {
+        const cleanupFn = createMockFn(() => new Promise((resolve) => {
             safeSetTimeout(() => {
                 cleanupResolved = true;
                 resolve();
             }, 1);
         }));
-        const reconnectFn = jest.fn();
+        const reconnectFn = createMockFn();
 
         retrySystem.handleConnectionError('tiktok', new Error('room-id'), reconnectFn, cleanupFn);
 
@@ -43,27 +48,27 @@ describe('RetrySystem.handleConnectionError', () => {
     });
 
     it('cancels an in-flight retry timer when a newer error arrives', async () => {
-        jest.useFakeTimers();
+        useFakeTimers();
         try {
             const retrySystem = new RetrySystem({ logger: createLogger() });
             retrySystem.isConnected = () => false;
-            retrySystem.incrementRetryCount = jest.fn().mockReturnValue(5);
-            retrySystem.getRetryCount = jest.fn().mockReturnValue(1);
+            retrySystem.incrementRetryCount = createMockFn().mockReturnValue(5);
+            retrySystem.getRetryCount = createMockFn().mockReturnValue(1);
 
-            const cleanupFn = jest.fn().mockResolvedValue();
-            const reconnectFn = jest.fn();
+            const cleanupFn = createMockFn().mockResolvedValue();
+            const reconnectFn = createMockFn();
 
             retrySystem.handleConnectionError('tiktok', new Error('first'), reconnectFn, cleanupFn);
             retrySystem.handleConnectionError('tiktok', new Error('second'), reconnectFn, cleanupFn);
 
             await Promise.resolve();
             await Promise.resolve();
-            await jest.runOnlyPendingTimersAsync();
+            await runOnlyPendingTimers();
 
             expect(reconnectFn).toHaveBeenCalledTimes(1);
             expect(cleanupFn).toHaveBeenCalledTimes(2);
         } finally {
-            jest.useRealTimers();
+            useRealTimers();
         }
     });
 
@@ -71,16 +76,16 @@ describe('RetrySystem.handleConnectionError', () => {
         const retrySystem = new RetrySystem({ logger: createLogger() });
         retrySystem.isConnected = () => false;
         let retryCount = 0;
-        retrySystem.incrementRetryCount = jest.fn().mockImplementation(() => {
+        retrySystem.incrementRetryCount = createMockFn().mockImplementation(() => {
             retryCount += 1;
             return 1;
         });
-        retrySystem.getRetryCount = jest.fn().mockImplementation(() => retryCount);
+        retrySystem.getRetryCount = createMockFn().mockImplementation(() => retryCount);
 
-        const reconnectFn = jest.fn()
+        const reconnectFn = createMockFn()
             .mockImplementationOnce(() => { throw new Error('scheduled boom'); })
             .mockResolvedValueOnce();
-        const cleanupFn = jest.fn().mockResolvedValue();
+        const cleanupFn = createMockFn().mockResolvedValue();
 
         retrySystem.handleConnectionError('tiktok', new Error('initial failure'), reconnectFn, cleanupFn);
 

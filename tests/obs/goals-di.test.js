@@ -1,5 +1,9 @@
 
-jest.mock('../../src/core/logging', () => ({
+const { describe, test, expect, beforeEach, it } = require('bun:test');
+const { createMockFn, restoreAllMocks } = require('../helpers/bun-mock-utils');
+const { mockModule, resetModules, restoreAllModuleMocks } = require('../helpers/bun-module-mocks');
+
+mockModule('../../src/core/logging', () => ({
     logger: {
         debug: () => {},
         info: () => {},
@@ -9,8 +13,13 @@ jest.mock('../../src/core/logging', () => ({
 }));
 
 describe('OBSGoalsManager DI requirements', () => {
+    afterEach(() => {
+        restoreAllMocks();
+        restoreAllModuleMocks();
+    });
+
     beforeEach(() => {
-        jest.resetModules();
+        resetModules();
     });
 
     it('exposes only DI-focused exports (no wrapper functions)', () => {
@@ -29,20 +38,20 @@ describe('OBSGoalsManager DI requirements', () => {
     });
 
     it('initializes with provided obsManager without calling getOBSConnectionManager', () => {
-        const getOBSConnectionManager = jest.fn(() => {
+        const getOBSConnectionManager = createMockFn(() => {
             throw new Error('getOBSConnectionManager should not be called');
         });
 
-        jest.doMock('../../src/obs/connection', () => ({
+        mockModule('../../src/obs/connection', () => ({
             getOBSConnectionManager
         }));
 
         const mockObsManager = {
-            isConnected: jest.fn().mockReturnValue(true),
-            ensureConnected: jest.fn(),
-            call: jest.fn(),
-            addEventListener: jest.fn(),
-            removeEventListener: jest.fn()
+            isConnected: createMockFn().mockReturnValue(true),
+            ensureConnected: createMockFn(),
+            call: createMockFn(),
+            addEventListener: createMockFn(),
+            removeEventListener: createMockFn()
         };
 
         const { createOBSGoalsManager } = require('../../src/obs/goals');
@@ -50,13 +59,13 @@ describe('OBSGoalsManager DI requirements', () => {
         expect(() => createOBSGoalsManager(mockObsManager, {
             logger: require('../../src/core/logging').logger,
             configManager: { getBoolean: () => false, getString: () => '', getNumber: () => 0 },
-            updateTextSource: jest.fn(),
+            updateTextSource: createMockFn(),
             goalTracker: {
-                initializeGoalTracker: jest.fn(),
-                addDonationToGoal: jest.fn(),
-                addPaypiggyToGoal: jest.fn(),
-                getGoalState: jest.fn(),
-                getAllGoalStates: jest.fn()
+                initializeGoalTracker: createMockFn(),
+                addDonationToGoal: createMockFn(),
+                addPaypiggyToGoal: createMockFn(),
+                getGoalState: createMockFn(),
+                getAllGoalStates: createMockFn()
             }
         })).not.toThrow();
         expect(getOBSConnectionManager).not.toHaveBeenCalled();

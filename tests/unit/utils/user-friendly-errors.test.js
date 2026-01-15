@@ -1,5 +1,8 @@
 
 // Initialize logging first
+const { describe, test, expect, beforeEach, afterEach, it } = require('bun:test');
+const { spyOn, restoreAllMocks } = require('../../helpers/bun-mock-utils');
+
 const { 
     initializeTestLogging, 
     createTestUser, 
@@ -364,10 +367,11 @@ describe('User-Friendly Error System', () => {
             let mockProcessExit;
 
             beforeEach(() => {
-                mockProcessExit = jest.spyOn(process, 'exit').mockImplementation(() => {});
+                mockProcessExit = spyOn(process, 'exit').mockImplementation(() => {});
             });
 
             afterEach(() => {
+        restoreAllMocks();
                 mockProcessExit.mockRestore();
             });
 

@@ -135,7 +135,7 @@ describe('YouTube Direct getViewerCount() Integration', () => {
         test('should handle provider errors gracefully', async () => {
             // Given: Platform with provider that throws errors
             const { platform } = await createProviderYouTubePlatform(0, {
-                getViewerCount: jest.fn().mockRejectedValue(new Error('Provider error'))
+                getViewerCount: createMockFn().mockRejectedValue(new Error('Provider error'))
             });
             
             // When: Attempting to get viewer count with failing provider
@@ -151,7 +151,7 @@ describe('YouTube Direct getViewerCount() Integration', () => {
         test('should return 0 when provider fails completely', async () => {
             // Given: Platform with failing provider
             const { platform } = await createProviderYouTubePlatform(0, {
-                getViewerCount: jest.fn().mockRejectedValue(new Error('Provider API unavailable'))
+                getViewerCount: createMockFn().mockRejectedValue(new Error('Provider API unavailable'))
             });
             
             // When: Getting viewer count during provider failure

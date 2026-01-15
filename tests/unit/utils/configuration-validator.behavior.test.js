@@ -1,7 +1,11 @@
-jest.mock('../../../src/core/logging', () => {
+const { describe, test, expect, beforeEach, it } = require('bun:test');
+const { createMockFn, restoreAllMocks } = require('../../helpers/bun-mock-utils');
+const { mockModule, restoreAllModuleMocks } = require('../../helpers/bun-module-mocks');
+
+mockModule('../../../src/core/logging', () => {
     const mockLogger = {
-        warn: jest.fn(),
-        debug: jest.fn()
+        warn: createMockFn(),
+        debug: createMockFn()
     };
     return { logger: mockLogger };
 });
@@ -15,6 +19,11 @@ const {
 } = require('../../../src/utils/configuration-validator');
 
 describe('configuration-validator behavior', () => {
+    afterEach(() => {
+        restoreAllMocks();
+        restoreAllModuleMocks();
+    });
+
     beforeEach(() => {
         logger.warn.mockClear();
         logger.debug.mockClear();

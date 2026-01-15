@@ -1,36 +1,41 @@
+const { describe, test, expect, afterEach, it } = require('bun:test');
+const { createMockFn, restoreAllMocks } = require('../../helpers/bun-mock-utils');
+const { mockModule, resetModules, restoreAllModuleMocks } = require('../../helpers/bun-module-mocks');
+
 describe('NotificationManager error handling with createPlatformErrorHandler', () => {
     const originalEnv = process.env.NODE_ENV;
 
     afterEach(() => {
-        jest.resetModules();
-        process.env.NODE_ENV = originalEnv;
-    });
+        restoreAllMocks();
+process.env.NODE_ENV = originalEnv;
+    
+        restoreAllModuleMocks();});
 
     function createManagerWithFailingDisplayQueue() {
         process.env.NODE_ENV = 'test';
 
         const errorHandler = {
-            handleEventProcessingError: jest.fn(),
-            logOperationalError: jest.fn()
+            handleEventProcessingError: createMockFn(),
+            logOperationalError: createMockFn()
         };
 
-        jest.doMock('../../../src/utils/platform-error-handler', () => ({
-            createPlatformErrorHandler: jest.fn(() => errorHandler)
+        mockModule('../../../src/utils/platform-error-handler', () => ({
+            createPlatformErrorHandler: createMockFn(() => errorHandler)
         }));
 
         const mockDisplayQueue = {
-            addItem: jest.fn(() => { throw new Error('queue fail'); }),
-            addToQueue: jest.fn(),
-            processQueue: jest.fn(),
-            isQueueEmpty: jest.fn().mockReturnValue(true),
-            clearQueue: jest.fn()
+            addItem: createMockFn(() => { throw new Error('queue fail'); }),
+            addToQueue: createMockFn(),
+            processQueue: createMockFn(),
+            isQueueEmpty: createMockFn().mockReturnValue(true),
+            clearQueue: createMockFn()
         };
 
         const mockConfigService = {
-            areNotificationsEnabled: jest.fn().mockReturnValue(true),
-            getNotificationSettings: jest.fn().mockReturnValue({ enabled: true }),
-            getTTSConfig: jest.fn().mockReturnValue({ enabled: false }),
-            get: jest.fn((section) => {
+            areNotificationsEnabled: createMockFn().mockReturnValue(true),
+            getNotificationSettings: createMockFn().mockReturnValue({ enabled: true }),
+            getTTSConfig: createMockFn().mockReturnValue({ enabled: false }),
+            get: createMockFn((section) => {
                 if (section !== 'general') {
                     return {};
                 }
@@ -42,22 +47,22 @@ describe('NotificationManager error handling with createPlatformErrorHandler', (
                     suppressionCleanupIntervalMs: 300000
                 };
             }),
-            isDebugEnabled: jest.fn().mockReturnValue(false)
+            isDebugEnabled: createMockFn().mockReturnValue(false)
         };
 
-        const mockEventBus = { emit: jest.fn() };
+        const mockEventBus = { emit: createMockFn() };
 
         const NotificationManager = require('../../../src/notifications/NotificationManager');
 
         const manager = new NotificationManager({
-            logger: { info: jest.fn(), debug: jest.fn(), warn: jest.fn(), error: jest.fn() },
+            logger: { info: createMockFn(), debug: createMockFn(), warn: createMockFn(), error: createMockFn() },
             displayQueue: mockDisplayQueue,
             eventBus: mockEventBus,
             constants: require('../../../src/core/constants'),
-            textProcessing: { formatChatMessage: jest.fn() },
-            obsGoals: { processDonationGoal: jest.fn() },
+            textProcessing: { formatChatMessage: createMockFn() },
+            obsGoals: { processDonationGoal: createMockFn() },
             configService: mockConfigService,
-            vfxCommandService: { getVFXConfig: jest.fn().mockResolvedValue(null) }
+            vfxCommandService: { getVFXConfig: createMockFn().mockResolvedValue(null) }
         });
 
         return { manager, errorHandler, mockEventBus };

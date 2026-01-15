@@ -1,5 +1,9 @@
-jest.mock('../../../src/utils/timeout-wrapper', () => ({
-    withTimeout: jest.fn((promise) => promise)
+const { describe, test, expect, beforeEach, afterEach, it } = require('bun:test');
+const { createMockFn, spyOn, clearAllMocks, restoreAllMocks } = require('../../helpers/bun-mock-utils');
+const { mockModule, restoreAllModuleMocks } = require('../../helpers/bun-module-mocks');
+
+mockModule('../../../src/utils/timeout-wrapper', () => ({
+    withTimeout: createMockFn((promise) => promise)
 }));
 
 const { withTimeout } = require('../../../src/utils/timeout-wrapper');
@@ -13,23 +17,24 @@ describe('InnertubeFactory behavior', () => {
 
     beforeEach(() => {
         restoreCache();
-        jest.clearAllMocks();
-    });
+        });
 
     afterEach(() => {
+        restoreAllMocks();
         restoreCache();
-    });
+    
+        restoreAllModuleMocks();});
 
     it('creates an instance via cached class and surfaces contextual errors', async () => {
-        const create = jest.fn().mockResolvedValue({ instance: true });
-        const getSpy = jest.spyOn(InnertubeFactory, '_getInnertubeClass').mockResolvedValue({ create });
+        const create = createMockFn().mockResolvedValue({ instance: true });
+        const getSpy = spyOn(InnertubeFactory, '_getInnertubeClass').mockResolvedValue({ create });
 
         const result = await InnertubeFactory.createInstance();
 
         expect(result).toEqual({ instance: true });
         expect(create).toHaveBeenCalled();
 
-        const failingCreate = jest.fn().mockRejectedValue(new Error('boom'));
+        const failingCreate = createMockFn().mockRejectedValue(new Error('boom'));
         getSpy.mockResolvedValueOnce({ create: failingCreate });
         InnertubeFactory._innertubeClassCache = null;
 
@@ -37,7 +42,7 @@ describe('InnertubeFactory behavior', () => {
     });
 
     it('passes config through and respects timeout wrapper when provided', async () => {
-        jest.spyOn(InnertubeFactory, 'createWithConfig').mockResolvedValue(Promise.resolve('configured'));
+        spyOn(InnertubeFactory, 'createWithConfig').mockResolvedValue(Promise.resolve('configured'));
         withTimeout.mockImplementation(async (promise, timeout, options) => {
             expect(options.operationName).toBe('Innertube creation');
             expect(options.errorMessage).toContain('500');
@@ -56,7 +61,7 @@ describe('InnertubeFactory behavior', () => {
     });
 
     it('provides lazy class references and stats reflecting cache usage', async () => {
-        InnertubeFactory._innertubeClassCache = { create: jest.fn() };
+        InnertubeFactory._innertubeClassCache = { create: createMockFn() };
         const lazy = InnertubeFactory.createLazyReference();
 
         const resolved = await lazy();

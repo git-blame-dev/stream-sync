@@ -1,4 +1,8 @@
 
+const { describe, test, expect, beforeEach, it } = require('bun:test');
+const { createMockFn, restoreAllMocks } = require('../../helpers/bun-mock-utils');
+const { resetModules, restoreAllModuleMocks } = require('../../helpers/bun-module-mocks');
+
 const { getSyntheticFixture, INTERNATIONAL_USERNAMES } = require('../../helpers/platform-test-data');
 
 const fixtureSuperChat = getSyntheticFixture('youtube', 'superchat');
@@ -22,24 +26,29 @@ const resolveTimestampIso = (chatItem) => {
 };
 
 describe('YouTube Notification Dispatcher - Modern (Production Data)', () => {
+    afterEach(() => {
+        restoreAllMocks();
+        restoreAllModuleMocks();
+    });
+
     let YouTubeNotificationDispatcher;
     let mockHandlers;
     let mockLogger;
 
     beforeEach(() => {
-        jest.resetModules();
+        resetModules();
 
         mockLogger = {
-            debug: jest.fn(),
-            info: jest.fn(),
-            warn: jest.fn(),
-            error: jest.fn()
+            debug: createMockFn(),
+            info: createMockFn(),
+            warn: createMockFn(),
+            error: createMockFn()
         };
 
         mockHandlers = {
-            onGift: jest.fn(),
-            onGiftPaypiggy: jest.fn(),
-            onMembership: jest.fn()
+            onGift: createMockFn(),
+            onGiftPaypiggy: createMockFn(),
+            onMembership: createMockFn()
         };
 
         const DispatcherModule = require('../../../src/utils/youtube-notification-dispatcher');
@@ -266,8 +275,8 @@ describe('YouTube Notification Dispatcher - Modern (Production Data)', () => {
                 logger: mockLogger
             });
             dispatcher.errorHandler = {
-                handleEventProcessingError: jest.fn(),
-                logOperationalError: jest.fn()
+                handleEventProcessingError: createMockFn(),
+                logOperationalError: createMockFn()
             };
 
             mockHandlers.onGift.mockImplementation(() => {

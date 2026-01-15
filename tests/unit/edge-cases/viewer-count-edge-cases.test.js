@@ -1,4 +1,8 @@
 
+const { describe, test, expect, beforeEach, afterEach } = require('bun:test');
+const { createMockFn, restoreAllMocks } = require('../../helpers/bun-mock-utils');
+const { useFakeTimers, useRealTimers } = require('../../helpers/bun-timers');
+
 const { ViewerCountSystem } = require('../../../src/utils/viewer-count');
 const { OBSViewerCountObserver } = require('../../../src/observers/obs-viewer-count-observer');
 
@@ -81,21 +85,21 @@ const createEdgeCaseTestEnvironment = (config = {}) => {
     };
     
     const mockConfigManager = {
-        getNumber: jest.fn((section, key, defaultValue) => {
+        getNumber: createMockFn((section, key, defaultValue) => {
             if (section === 'general' && key === 'viewerCountPollingInterval') {
                 return defaultConfig.viewerCountPollingInterval ?? defaultValue;
             }
             return defaultValue;
         }),
         
-        getBoolean: jest.fn((section, key, defaultValue) => {
+        getBoolean: createMockFn((section, key, defaultValue) => {
             if (section === 'general' && key === 'enableViewerCount') {
                 return defaultConfig.enableViewerCount ?? defaultValue;
             }
             return defaultValue;
         }),
         
-        getSection: jest.fn((platform) => ({
+        getSection: createMockFn((platform) => ({
             viewerCountEnabled: true,
             viewerCountSource: `${platform} viewer count`
         }))
@@ -200,11 +204,12 @@ describe('Viewer Count & OBS Observer Edge Case Tests', () => {
     setupAutomatedCleanup();
     
     beforeEach(() => {
-        jest.useFakeTimers();
+        useFakeTimers();
     });
     
     afterEach(async () => {
-        jest.useRealTimers();
+        restoreAllMocks();
+        useRealTimers();
     });
 
     // ============================================================================================
@@ -938,7 +943,7 @@ describe('Viewer Count & OBS Observer Edge Case Tests', () => {
         test('should handle missing OBS sources gracefully', async () => {
             // Given: OBS manager that fails when sources don\'t exist
             const obsManager = createMockOBSManager('connected', {
-                call: jest.fn().mockRejectedValue(new Error('Source "youtube viewer count" not found'))
+                call: createMockFn().mockRejectedValue(new Error('Source "youtube viewer count" not found'))
             });
             
             const obsObserver = new OBSViewerCountObserver(obsManager, createSilentLogger());
@@ -958,7 +963,7 @@ describe('Viewer Count & OBS Observer Edge Case Tests', () => {
         test('should handle OBS source type mismatches appropriately', async () => {
             // Given: OBS source exists but is wrong type (e.g., image instead of text)
             const obsManager = createMockOBSManager('connected', {
-                call: jest.fn().mockRejectedValue(new Error('Source is not a text source'))
+                call: createMockFn().mockRejectedValue(new Error('Source is not a text source'))
             });
             
             const obsObserver = new OBSViewerCountObserver(obsManager, createSilentLogger());
@@ -978,7 +983,7 @@ describe('Viewer Count & OBS Observer Edge Case Tests', () => {
         test('should handle OBS WebSocket protocol errors without system crash', async () => {
             // Given: OBS WebSocket with protocol-level errors
             const obsManager = createMockOBSManager('connected', {
-                call: jest.fn().mockRejectedValue(new Error('WebSocket protocol error'))
+                call: createMockFn().mockRejectedValue(new Error('WebSocket protocol error'))
             });
             
             const obsObserver = new OBSViewerCountObserver(obsManager, createSilentLogger());
@@ -998,7 +1003,7 @@ describe('Viewer Count & OBS Observer Edge Case Tests', () => {
         test('should handle very slow OBS connections without blocking system', async () => {
             // Given: OBS connection with extreme latency
             const obsManager = createMockOBSManager('connected', {
-                call: jest.fn().mockImplementation(() => 
+                call: createMockFn().mockImplementation(() => 
                     new Promise(resolve => scheduleTestTimeout(() => resolve({ status: 'success' }), 5000))
                 )
             });
@@ -1031,7 +1036,7 @@ describe('Viewer Count & OBS Observer Edge Case Tests', () => {
             const obsManager = createMockOBSManager('connected');
             let sourceExists = true;
             
-            obsManager.call = jest.fn().mockImplementation(() => {
+            obsManager.call = createMockFn().mockImplementation(() => {
                 if (!sourceExists) {
                     throw new Error('Source not found in current scene');
                 }

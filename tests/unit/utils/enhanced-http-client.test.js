@@ -1,4 +1,7 @@
 
+const { describe, test, expect, beforeEach, afterEach } = require('bun:test');
+const { createMockFn, clearAllMocks, restoreAllMocks } = require('../../helpers/bun-mock-utils');
+
 const { createTestRetrySystem, initializeTestLogging } = require('../../helpers/test-setup');
 
 // Initialize logging before tests
@@ -14,19 +17,19 @@ describe('Enhanced HTTP Client', () => {
     beforeEach(() => {
         // Create clean mocks for dependencies
         mockAxios = {
-            get: jest.fn(),
-            post: jest.fn(),
-            put: jest.fn(),
-            delete: jest.fn()
+            get: createMockFn(),
+            post: createMockFn(),
+            put: createMockFn(),
+            delete: createMockFn()
         };
 
         mockRetrySystem = createTestRetrySystem();
         
         mockLogger = {
-            debug: jest.fn(),
-            info: jest.fn(),
-            warn: jest.fn(),
-            error: jest.fn()
+            debug: createMockFn(),
+            info: createMockFn(),
+            warn: createMockFn(),
+            error: createMockFn()
         };
 
         // Import EnhancedHttpClient fresh for each test
@@ -43,7 +46,8 @@ describe('Enhanced HTTP Client', () => {
     });
 
     afterEach(() => {
-        jest.clearAllMocks();
+        restoreAllMocks();
+        clearAllMocks();
     });
 
     describe('Authentication Header Abstraction', () => {

@@ -1,9 +1,13 @@
+const { describe, test, expect, beforeEach, afterAll, it } = require('bun:test');
+const { createMockFn, spyOn, clearAllMocks, restoreAllMocks } = require('../../helpers/bun-mock-utils');
+const { mockModule, restoreAllModuleMocks } = require('../../helpers/bun-module-mocks');
+
 let intervalId = 0;
 
-jest.mock('../../../src/utils/timeout-validator', () => {
+mockModule('../../../src/utils/timeout-validator', () => {
     let intervalId = 0;
     return {
-        safeSetInterval: jest.fn((callback) => {
+        safeSetInterval: createMockFn((callback) => {
             intervalId += 1;
             return { id: `interval-${intervalId}`, callback };
         })
@@ -15,12 +19,16 @@ const { IntervalManager } = require('../../../src/utils/interval-manager');
 const testClock = require('../../helpers/test-clock');
 
 describe('IntervalManager behavior', () => {
+    afterEach(() => {
+        restoreAllMocks();
+        restoreAllModuleMocks();
+    });
+
     let logger;
-    const clearIntervalSpy = jest.spyOn(global, 'clearInterval').mockImplementation(() => {});
+    const clearIntervalSpy = spyOn(global, 'clearInterval').mockImplementation(() => {});
 
     beforeEach(() => {
-        jest.clearAllMocks();
-        logger = { debug: jest.fn(), info: jest.fn(), warn: jest.fn() };
+        logger = { debug: createMockFn(), info: createMockFn(), warn: createMockFn() };
     });
 
     afterAll(() => {
@@ -29,7 +37,7 @@ describe('IntervalManager behavior', () => {
 
     it('creates intervals with tracking and warns on out-of-range durations', () => {
         const manager = new IntervalManager('platform', logger);
-        const callback = jest.fn();
+        const callback = createMockFn();
 
         expect(() => manager.createInterval('poll', callback, 50)).not.toThrow();
         expect(logger.warn).toHaveBeenCalledWith(

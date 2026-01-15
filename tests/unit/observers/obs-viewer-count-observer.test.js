@@ -1,15 +1,19 @@
 
-jest.mock('../../../src/core/logging', () => ({
+const { describe, test, expect, beforeEach } = require('bun:test');
+const { createMockFn, clearAllMocks, restoreAllMocks } = require('../../helpers/bun-mock-utils');
+const { mockModule, restoreAllModuleMocks } = require('../../helpers/bun-module-mocks');
+
+mockModule('../../../src/core/logging', () => ({
     logger: { debug: () => {}, info: () => {}, warn: () => {}, error: () => {} },
     getUnifiedLogger: () => ({ debug: () => {}, info: () => {}, warn: () => {}, error: () => {} })
 }));
-jest.mock('../../../src/core/config', () => ({
+mockModule('../../../src/core/config', () => ({
     configManager: {
-        getSection: jest.fn().mockImplementation((platform) => ({
+        getSection: createMockFn().mockImplementation((platform) => ({
             viewerCountEnabled: true,
             viewerCountSource: `${platform} viewer count`
         })),
-        getPlatforms: jest.fn(() => ['twitch', 'youtube', 'tiktok'])
+        getPlatforms: createMockFn(() => ['twitch', 'youtube', 'tiktok'])
     },
     config: { general: { fallbackUsername: 'Unknown User' } }
 }));
@@ -28,28 +32,32 @@ const { createSilentLogger } = require('../../helpers/test-logger');
 
 const defaultPlatforms = ['twitch', 'youtube', 'tiktok'];
 const setDefaultConfig = () => {
-    configManager.getSection = jest.fn().mockImplementation((platform) => ({
+    configManager.getSection = createMockFn().mockImplementation((platform) => ({
         viewerCountEnabled: true,
         viewerCountSource: `${platform} viewer count`
     }));
-    configManager.getPlatforms = jest.fn().mockReturnValue(defaultPlatforms);
+    configManager.getPlatforms = createMockFn().mockReturnValue(defaultPlatforms);
 };
 
 describe('OBSViewerCountObserver - Behavior-Focused Testing', () => {
+    afterEach(() => {
+        restoreAllMocks();
+        restoreAllModuleMocks();
+    });
+
     let obsManager, observer, logger;
     
     // Setup automated cleanup for all tests
     setupAutomatedCleanup();
     
     beforeEach(() => {
-        jest.clearAllMocks();
         setDefaultConfig();
         logger = createSilentLogger();
 
         // Create behavior-focused mock infrastructure
         obsManager = createMockOBSManager('connected', {
-            call: jest.fn().mockResolvedValue({ status: 'success' }),
-            isConnected: jest.fn().mockReturnValue(true)
+            call: createMockFn().mockResolvedValue({ status: 'success' }),
+            isConnected: createMockFn().mockReturnValue(true)
         });
         
         observer = new OBSViewerCountObserver(obsManager, logger);

@@ -1,7 +1,11 @@
-jest.mock('../../../src/utils/platform-error-handler', () => ({
-    createPlatformErrorHandler: jest.fn(() => ({
-        handleEventProcessingError: jest.fn(),
-        logOperationalError: jest.fn()
+const { describe, test, expect, beforeEach, it } = require('bun:test');
+const { createMockFn, clearAllMocks, restoreAllMocks } = require('../../helpers/bun-mock-utils');
+const { mockModule, restoreAllModuleMocks } = require('../../helpers/bun-module-mocks');
+
+mockModule('../../../src/utils/platform-error-handler', () => ({
+    createPlatformErrorHandler: createMockFn(() => ({
+        handleEventProcessingError: createMockFn(),
+        logOperationalError: createMockFn()
     }))
 }));
 
@@ -9,11 +13,15 @@ const AuthErrorHandler = require('../../../src/utils/auth-error-handler');
 const { createPlatformErrorHandler } = require('../../../src/utils/platform-error-handler');
 
 describe('auth-error-handler behavior', () => {
+    afterEach(() => {
+        restoreAllMocks();
+        restoreAllModuleMocks();
+    });
+
     let handler;
 
     beforeEach(() => {
-        jest.clearAllMocks();
-        handler = new AuthErrorHandler({ debug: jest.fn(), info: jest.fn(), warn: jest.fn(), error: jest.fn() });
+        handler = new AuthErrorHandler({ debug: createMockFn(), info: createMockFn(), warn: createMockFn(), error: createMockFn() });
     });
 
     it('categorizes errors and determines refreshability', () => {
@@ -33,7 +41,7 @@ describe('auth-error-handler behavior', () => {
     });
 
     it('logs user-facing errors and delegates event processing errors', () => {
-        handler.errorHandler = { handleEventProcessingError: jest.fn(), logOperationalError: jest.fn() };
+        handler.errorHandler = { handleEventProcessingError: createMockFn(), logOperationalError: createMockFn() };
         handler.logUserFacingError('network_error', { stage: 'refresh' });
         handler.handleEventProcessingError(new Error('boom'), 'auth');
         const platformHandler = handler.errorHandler;

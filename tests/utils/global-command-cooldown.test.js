@@ -1,4 +1,7 @@
 
+const { describe, test, expect, beforeEach, afterEach, it } = require('bun:test');
+const { spyOn, restoreAllMocks } = require('../helpers/bun-mock-utils');
+
 const { 
   initializeTestLogging,
   createTestUser, 
@@ -30,7 +33,7 @@ describe('GlobalCommandCooldownManager', () => {
 
   beforeEach(() => {
     mockLogger = createMockLogger('debug', { captureConsole: true });
-    jest.spyOn(Date, 'now').mockImplementation(() => testClock.now());
+    spyOn(Date, 'now').mockImplementation(() => testClock.now());
     
     // Import and create fresh instance for each test
     delete require.cache[require.resolve('../../src/utils/global-command-cooldown')];
@@ -39,6 +42,7 @@ describe('GlobalCommandCooldownManager', () => {
   });
 
   afterEach(() => {
+        restoreAllMocks();
     global.Date.now.mockRestore();
   });
 

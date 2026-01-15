@@ -1,4 +1,8 @@
 
+const { describe, test, expect, beforeEach, afterEach } = require('bun:test');
+const { createMockFn, restoreAllMocks } = require('../../helpers/bun-mock-utils');
+const { mockModule, resetModules, restoreAllModuleMocks } = require('../../helpers/bun-module-mocks');
+
 const path = require('path');
 const { initializeTestLogging } = require('../../helpers/test-setup');
 
@@ -12,25 +16,23 @@ describe('Timeout NaN Warning Fix', () => {
         initializeTestLogging();
         
         // Mock logging for StreamDetector and RetrySystem
-        jest.doMock('../../../src/core/logging', () => ({
-            getUnifiedLogger: jest.fn(() => ({
-                debug: jest.fn(),
-                info: jest.fn(),
-                warn: jest.fn(),
-                error: jest.fn()
+        mockModule('../../../src/core/logging', () => ({
+            getUnifiedLogger: createMockFn(() => ({
+                debug: createMockFn(),
+                info: createMockFn(),
+                warn: createMockFn(),
+                error: createMockFn()
             })),
             logger: {
-                debug: jest.fn(),
-                info: jest.fn(),
-                warn: jest.fn(),
-                error: jest.fn()
+                debug: createMockFn(),
+                info: createMockFn(),
+                warn: createMockFn(),
+                error: createMockFn()
             }
         }));
         
         // Clear require cache to ensure fresh modules
-        jest.resetModules();
-        
-        // Capture console warnings
+// Capture console warnings
         consoleWarnings = [];
         originalConsoleWarn = console.warn;
         console.warn = (message) => {
@@ -48,6 +50,7 @@ describe('Timeout NaN Warning Fix', () => {
     });
 
     afterEach(() => {
+        restoreAllMocks();
         // Restore original functions
         console.warn = originalConsoleWarn;
         global.setTimeout = originalSetTimeout;
@@ -57,7 +60,8 @@ describe('Timeout NaN Warning Fix', () => {
             timeoutCalls.forEach(call => {
                 if (call.timeoutId) {
                     clearTimeout(call.timeoutId);
-                }
+                
+        restoreAllModuleMocks();}
             });
         }
     });
@@ -147,7 +151,7 @@ describe('Timeout NaN Warning Fix', () => {
             const { RetrySystem } = require('../../../src/utils/retry-system');
             
             const retrySystem = new RetrySystem();
-            const mockReconnectFn = jest.fn();
+            const mockReconnectFn = createMockFn();
             const mockError = new Error('Connection failed');
             
             // This should schedule a retry without NaN timeout
@@ -174,10 +178,10 @@ describe('Timeout NaN Warning Fix', () => {
                 continuousMonitoringInterval: 60
             };
             const logger = { 
-                debug: jest.fn(), 
-                info: jest.fn(), 
-                warn: jest.fn(), 
-                error: jest.fn() 
+                debug: createMockFn(), 
+                info: createMockFn(), 
+                warn: createMockFn(), 
+                error: createMockFn() 
             };
             
             const streamDetector = new StreamDetector(config, logger);

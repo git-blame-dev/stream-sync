@@ -1,5 +1,8 @@
 
-const { describe, test, expect, beforeEach, afterEach } = require('@jest/globals');
+const { describe, test, expect, beforeEach, afterEach } = require('bun:test');
+const { createMockFn, spyOn, clearAllMocks, restoreAllMocks } = require('../../helpers/bun-mock-utils');
+const { mockModule, resetModules, restoreAllModuleMocks } = require('../../helpers/bun-module-mocks');
+
 const testClock = require('../../helpers/test-clock');
 const mockTestClock = testClock;
 
@@ -14,47 +17,46 @@ describe('Twitch Token Refresh Implementation', () => {
 
     beforeEach(() => {
         // Reset modules
-        jest.resetModules();
-        jest.clearAllMocks();
-        jest.spyOn(Date, 'now').mockImplementation(() => testClock.now());
+        resetModules();
+        spyOn(Date, 'now').mockImplementation(() => testClock.now());
 
         // Mock enhanced HTTP client
         mockHttpClient = {
-            post: jest.fn()
+            post: createMockFn()
         };
 
         // Mock logger
         mockLogger = {
-            info: jest.fn(),
-            debug: jest.fn(),
-            error: jest.fn(),
-            warn: jest.fn()
+            info: createMockFn(),
+            debug: createMockFn(),
+            error: createMockFn(),
+            warn: createMockFn()
         };
 
         // Mock fs for config file updates
         mockFs = {
-            existsSync: jest.fn(() => true),
-            readFileSync: jest.fn(),
-            writeFileSync: jest.fn(),
+            existsSync: createMockFn(() => true),
+            readFileSync: createMockFn(),
+            writeFileSync: createMockFn(),
             promises: {
-                readFile: jest.fn().mockResolvedValue(JSON.stringify({
+                readFile: createMockFn().mockResolvedValue(JSON.stringify({
                     twitch: { accessToken: 'old-access-token', refreshToken: 'valid-refresh-token' }
                 })),
-                writeFile: jest.fn().mockResolvedValue(),
-                rename: jest.fn().mockResolvedValue()
+                writeFile: createMockFn().mockResolvedValue(),
+                rename: createMockFn().mockResolvedValue()
             }
         };
 
         // Mock dependencies
-        jest.mock('../../../src/utils/enhanced-http-client', () => ({
-            createEnhancedHttpClient: jest.fn(() => mockHttpClient),
-            EnhancedHttpClient: jest.fn()
+        mockModule('../../../src/utils/enhanced-http-client', () => ({
+            createEnhancedHttpClient: createMockFn(() => mockHttpClient),
+            EnhancedHttpClient: createMockFn()
         }));
 
-        jest.mock('fs', () => mockFs);
+        mockModule('fs', () => mockFs);
 
         // Mock auth constants to prevent import issues
-        jest.mock('../../../src/utils/auth-constants', () => ({
+        mockModule('../../../src/utils/auth-constants', () => ({
             TOKEN_REFRESH_CONFIG: {
                 MAX_RETRY_ATTEMPTS: 3,
                 REFRESH_THRESHOLD_SECONDS: 3600,
@@ -67,27 +69,27 @@ describe('Twitch Token Refresh Implementation', () => {
                 }
             },
             AuthConstants: {
-                exceedsPerformanceThreshold: jest.fn(() => false),
-                calculateRefreshTiming: jest.fn((expiresAt) => ({
+                exceedsPerformanceThreshold: createMockFn(() => false),
+                calculateRefreshTiming: createMockFn((expiresAt) => ({
                     timeUntilExpiration: 3600000,
                     timeUntilRefresh: 3300000,
                     refreshAt: mockTestClock.now() + 3300000,
                     actualDelay: 3300000,
                     shouldRefreshImmediately: false
                 })),
-                isPlaceholderToken: jest.fn(() => false),
-                determineOperationCriticality: jest.fn(() => 'normal'),
-                getStreamingOptimizedTimeout: jest.fn(() => 5000),
-                calculateBackoffDelay: jest.fn(() => 1000)
+                isPlaceholderToken: createMockFn(() => false),
+                determineOperationCriticality: createMockFn(() => 'normal'),
+                getStreamingOptimizedTimeout: createMockFn(() => 5000),
+                calculateBackoffDelay: createMockFn(() => 1000)
             }
         }));
 
         // Mock auth error handler
-        jest.mock('../../../src/utils/auth-error-handler', () => {
-            return jest.fn().mockImplementation(() => ({
-                isRefreshableError: jest.fn(() => false),
-                getStats: jest.fn(() => ({})),
-                cleanup: jest.fn()
+        mockModule('../../../src/utils/auth-error-handler', () => {
+            return createMockFn().mockImplementation(() => ({
+                isRefreshableError: createMockFn(() => false),
+                getStats: createMockFn(() => ({})),
+                cleanup: createMockFn()
             }));
         });
 
@@ -116,8 +118,9 @@ describe('Twitch Token Refresh Implementation', () => {
     });
 
     afterEach(() => {
-        jest.restoreAllMocks();
-    });
+        restoreAllMocks();
+    
+        restoreAllModuleMocks();});
 
     describe('refreshToken Method Implementation', () => {
         test('should successfully refresh token using Twitch OAuth endpoint', async () => {
@@ -395,7 +398,7 @@ describe('Twitch Token Refresh Implementation', () => {
                 return;
             }
             
-            const cancelSpy = jest.spyOn(firstTimer, 'cancel');
+            const cancelSpy = spyOn(firstTimer, 'cancel');
 
             // When: Scheduling another refresh
             const secondTimer = authInitializer.scheduleTokenRefresh(authService);
@@ -411,7 +414,7 @@ describe('Twitch Token Refresh Implementation', () => {
         test('should handle refresh timer execution', async () => {
             // Given: Mock timer to avoid infinite loops
             let timerCallback = null;
-            jest.spyOn(global, 'setTimeout').mockImplementation((callback, delay) => {
+            spyOn(global, 'setTimeout').mockImplementation((callback, delay) => {
                 timerCallback = callback;
                 return 'mock-timer-id';
             });
@@ -542,7 +545,7 @@ describe('Twitch Token Refresh Implementation', () => {
 
         test('should handle rate limiting with exponential backoff', async () => {
             // Mock setTimeout to avoid actual delays
-            jest.spyOn(global, 'setTimeout').mockImplementation((callback, delay) => {
+            spyOn(global, 'setTimeout').mockImplementation((callback, delay) => {
                 // Call callback immediately for testing
                 setImmediate(callback);
                 return 'mock-timeout-id';
@@ -592,7 +595,7 @@ describe('Twitch Token Refresh Implementation', () => {
             // Given: Active refresh timer
             authService.tokenExpiresAt = testClock.now() + 3600000;
             const timer = authInitializer.scheduleTokenRefresh(authService);
-            const cancelSpy = jest.fn();
+            const cancelSpy = createMockFn();
             timer.cancel = cancelSpy;
             authInitializer.refreshTimer = timer;
 

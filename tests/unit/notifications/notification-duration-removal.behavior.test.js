@@ -1,8 +1,15 @@
+const { describe, test, expect, beforeEach, it } = require('bun:test');
+const { createMockFn, restoreAllMocks } = require('../../helpers/bun-mock-utils');
+
 const EventEmitter = require('events');
 const NotificationManager = require('../../../src/notifications/NotificationManager');
 const ChatNotificationRouter = require('../../../src/services/ChatNotificationRouter');
 
 describe('Display items avoid hardcoded durations', () => {
+    afterEach(() => {
+        restoreAllMocks();
+    });
+
     describe('NotificationManager items', () => {
         let queuedItems;
         let notificationManager;
@@ -10,24 +17,24 @@ describe('Display items avoid hardcoded durations', () => {
         beforeEach(() => {
             queuedItems = [];
             notificationManager = new NotificationManager({
-                logger: { info: jest.fn(), debug: jest.fn(), warn: jest.fn(), error: jest.fn() },
+                logger: { info: createMockFn(), debug: createMockFn(), warn: createMockFn(), error: createMockFn() },
                 displayQueue: {
                     addItem: (item) => queuedItems.push(item),
-                    addToQueue: jest.fn(),
-                    processQueue: jest.fn(),
-                    isQueueEmpty: jest.fn().mockReturnValue(true),
-                    clearQueue: jest.fn()
+                    addToQueue: createMockFn(),
+                    processQueue: createMockFn(),
+                    isQueueEmpty: createMockFn().mockReturnValue(true),
+                    clearQueue: createMockFn()
                 },
                 eventBus: new EventEmitter(),
                 constants: require('../../../src/core/constants'),
-                textProcessing: { formatChatMessage: jest.fn() },
-                obsGoals: { processDonationGoal: jest.fn() },
+                textProcessing: { formatChatMessage: createMockFn() },
+                obsGoals: { processDonationGoal: createMockFn() },
                 configService: {
-                    areNotificationsEnabled: jest.fn().mockReturnValue(true),
-                    isEnabled: jest.fn().mockReturnValue(true),
-                    getNotificationSettings: jest.fn().mockReturnValue({ enabled: true, greetingsEnabled: true }),
-                    getPlatformConfig: jest.fn().mockReturnValue(true),
-                    get: jest.fn((section) => {
+                    areNotificationsEnabled: createMockFn().mockReturnValue(true),
+                    isEnabled: createMockFn().mockReturnValue(true),
+                    getNotificationSettings: createMockFn().mockReturnValue({ enabled: true, greetingsEnabled: true }),
+                    getPlatformConfig: createMockFn().mockReturnValue(true),
+                    get: createMockFn((section) => {
                         if (section !== 'general') {
                             return {};
                         }
@@ -39,15 +46,15 @@ describe('Display items avoid hardcoded durations', () => {
                             suppressionCleanupIntervalMs: 300000
                         };
                     }),
-                    isDebugEnabled: jest.fn().mockReturnValue(false),
-                    getTTSConfig: jest.fn().mockReturnValue({ enabled: true })
+                    isDebugEnabled: createMockFn().mockReturnValue(false),
+                    getTTSConfig: createMockFn().mockReturnValue({ enabled: true })
                 },
                 vfxCommandService: {
-                    executeCommand: jest.fn().mockResolvedValue({ success: true }),
-                    getVFXConfig: jest.fn().mockResolvedValue(null)
+                    executeCommand: createMockFn().mockResolvedValue({ success: true }),
+                    getVFXConfig: createMockFn().mockResolvedValue(null)
                 },
-                ttsService: { speak: jest.fn().mockResolvedValue({ success: true }) },
-                userTrackingService: { isFirstMessage: jest.fn().mockResolvedValue(true) }
+                ttsService: { speak: createMockFn().mockResolvedValue({ success: true }) },
+                userTrackingService: { isFirstMessage: createMockFn().mockResolvedValue(true) }
             });
         });
 
@@ -72,16 +79,16 @@ describe('Display items avoid hardcoded durations', () => {
                 },
                 config: { general: {} },
                 commandCooldownService: {
-                    checkUserCooldown: jest.fn().mockReturnValue(true),
-                    updateUserCooldown: jest.fn(),
-                    checkGlobalCooldown: jest.fn().mockReturnValue(true)
+                    checkUserCooldown: createMockFn().mockReturnValue(true),
+                    updateUserCooldown: createMockFn(),
+                    checkGlobalCooldown: createMockFn().mockReturnValue(true)
                 },
-                vfxCommandService: { getVFXConfig: jest.fn().mockResolvedValue(null) }
+                vfxCommandService: { getVFXConfig: createMockFn().mockResolvedValue(null) }
             };
 
             router = new ChatNotificationRouter({
                 runtime,
-                logger: { info: jest.fn(), debug: jest.fn(), warn: jest.fn(), error: jest.fn() }
+                logger: { info: createMockFn(), debug: createMockFn(), warn: createMockFn(), error: createMockFn() }
             });
         });
 

@@ -1,4 +1,7 @@
 
+const { describe, test, expect, beforeEach, afterEach } = require('bun:test');
+const { createMockFn, restoreAllMocks } = require('../../helpers/bun-mock-utils');
+
 const { createEventBus } = require('../../../src/core/EventBus');
 const testClock = require('../../helpers/test-clock');
 
@@ -14,17 +17,17 @@ describe('SceneManagementService', () => {
 
         // Mock OBS connection
         mockOBSConnection = {
-            call: jest.fn().mockResolvedValue({}),
-            isConnected: jest.fn().mockReturnValue(true),
-            isReady: jest.fn().mockResolvedValue(true)
+            call: createMockFn().mockResolvedValue({}),
+            isConnected: createMockFn().mockReturnValue(true),
+            isReady: createMockFn().mockResolvedValue(true)
         };
 
         // Mock logger
         mockLogger = {
-            debug: jest.fn(),
-            info: jest.fn(),
-            warn: jest.fn(),
-            error: jest.fn()
+            debug: createMockFn(),
+            info: createMockFn(),
+            warn: createMockFn(),
+            error: createMockFn()
         };
 
         // Import SceneManagementService after mocks are set up
@@ -37,6 +40,7 @@ describe('SceneManagementService', () => {
     });
 
     afterEach(() => {
+        restoreAllMocks();
         sceneService.destroy();
         eventBus.reset();
     });

@@ -1,4 +1,7 @@
 
+const { describe, test, expect, beforeEach, afterEach, it } = require('bun:test');
+const { createMockFn, clearAllMocks, restoreAllMocks } = require('../helpers/bun-mock-utils');
+
 const { OBSConnectionManager } = require('../../src/obs/connection');
 
 describe('OBS Connection Race Condition - User Experience Validation', () => {
@@ -14,24 +17,24 @@ describe('OBS Connection Race Condition - User Experience Validation', () => {
         
         // Create a properly mocked OBS WebSocket
         mockOBS = {
-            connect: jest.fn(),
-            disconnect: jest.fn().mockResolvedValue(),
-            call: jest.fn(),
-            on: jest.fn().mockImplementation((event, callback) => {
+            connect: createMockFn(),
+            disconnect: createMockFn().mockResolvedValue(),
+            call: createMockFn(),
+            on: createMockFn().mockImplementation((event, callback) => {
                 if (event === 'Identified') {
                     identifiedCallback = callback;
                 } else if (event === 'ConnectionOpened') {
                     connectionOpenedCallback = callback;
                 }
             }),
-            once: jest.fn().mockImplementation((event, callback) => {
+            once: createMockFn().mockImplementation((event, callback) => {
                 if (event === 'Identified') {
                     identifiedCallback = callback;
                 } else if (event === 'ConnectionOpened') {
                     connectionOpenedCallback = callback;
                 }
             }),
-            off: jest.fn()
+            off: createMockFn()
         };
 
         // Create the connection manager with mock
@@ -48,7 +51,8 @@ describe('OBS Connection Race Condition - User Experience Validation', () => {
     });
 
     afterEach(() => {
-        jest.clearAllMocks();
+        restoreAllMocks();
+        clearAllMocks();
     });
 
     describe('Connection Readiness Behavior', () => {

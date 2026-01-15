@@ -1,5 +1,9 @@
 
-const { describe, test, expect, beforeEach, afterEach } = require('@jest/globals');
+const { describe, test, expect, beforeEach, afterEach } = require('bun:test');
+const { createMockFn, spyOn, clearAllMocks, restoreAllMocks } = require('../../helpers/bun-mock-utils');
+const { mockModule, resetModules, restoreAllModuleMocks } = require('../../helpers/bun-module-mocks');
+const { useFakeTimers, useRealTimers, runAllTimers } = require('../../helpers/bun-timers');
+
 const { setupAutomatedCleanup } = require('../../helpers/mock-lifecycle');
 const { createMockLogger } = require('../../helpers/mock-factories');
 const testClock = require('../../helpers/test-clock');
@@ -22,9 +26,7 @@ describe('Token Refresh Integration - Preventing Daily Re-authentication', () =>
     beforeEach(() => {
         
         // Reset modules
-        jest.resetModules();
-        jest.clearAllMocks();
-        
+        resetModules();
         // Store original time functions
         systemTime = {
             originalNow: global.Date.now,
@@ -32,44 +34,44 @@ describe('Token Refresh Integration - Preventing Daily Re-authentication', () =>
             originalClearTimeout: global.clearTimeout,
             currentTime: testClock.now()
         };
-        jest.spyOn(Date, 'now').mockImplementation(() => testClock.now());
+        spyOn(Date, 'now').mockImplementation(() => testClock.now());
         
         // Mock axios for token validation
         mockAxios = {
-            get: jest.fn(),
-            post: jest.fn()
+            get: createMockFn(),
+            post: createMockFn()
         };
         
         // Mock file system for config updates
         mockFs = {
-            existsSync: jest.fn(() => true),
-            readFileSync: jest.fn().mockReturnValue(JSON.stringify({
+            existsSync: createMockFn(() => true),
+            readFileSync: createMockFn().mockReturnValue(JSON.stringify({
                 twitch: { accessToken: 'old-token', refreshToken: 'valid-refresh' }
             })),
-            writeFileSync: jest.fn(),
+            writeFileSync: createMockFn(),
             promises: {
-                readFile: jest.fn().mockResolvedValue(JSON.stringify({
+                readFile: createMockFn().mockResolvedValue(JSON.stringify({
                     twitch: { accessToken: 'old-token', refreshToken: 'valid-refresh' }
                 })),
-                writeFile: jest.fn().mockResolvedValue(undefined),
-                rename: jest.fn().mockResolvedValue(undefined)
+                writeFile: createMockFn().mockResolvedValue(undefined),
+                rename: createMockFn().mockResolvedValue(undefined)
             }
         };
         
         // Mock enhanced HTTP client for token refresh
         mockEnhancedHttpClient = {
-            get: jest.fn(),
-            post: jest.fn()
+            get: createMockFn(),
+            post: createMockFn()
         };
         
         // Mock dependencies
-        jest.doMock('axios', () => mockAxios);
-        jest.doMock('fs', () => mockFs);
-        jest.doMock('../../../src/utils/enhanced-http-client', () => ({
-            createEnhancedHttpClient: jest.fn(() => mockEnhancedHttpClient),
-            EnhancedHttpClient: jest.fn()
+        mockModule('axios', () => mockAxios);
+        mockModule('fs', () => mockFs);
+        mockModule('../../../src/utils/enhanced-http-client', () => ({
+            createEnhancedHttpClient: createMockFn(() => mockEnhancedHttpClient),
+            EnhancedHttpClient: createMockFn()
         }));
-        jest.doMock('../../../src/core/logging', () => ({
+        mockModule('../../../src/core/logging', () => ({
             getUnifiedLogger: () => createMockLogger()
         }));
         
@@ -92,7 +94,7 @@ describe('Token Refresh Integration - Preventing Daily Re-authentication', () =>
         
         // Mock OAuth handler for tests that need OAuth fallback
         mockOAuthHandler = {
-            runOAuthFlow: jest.fn().mockResolvedValue({
+            runOAuthFlow: createMockFn().mockResolvedValue({
                 access_token: 'new-oauth-token',
                 refresh_token: 'new-oauth-refresh'
             })
@@ -103,6 +105,7 @@ describe('Token Refresh Integration - Preventing Daily Re-authentication', () =>
     });
 
     afterEach(() => {
+        restoreAllMocks();
         // Restore time functions
         global.Date.now = systemTime.originalNow;
         global.setTimeout = systemTime.originalSetTimeout;
@@ -111,10 +114,11 @@ describe('Token Refresh Integration - Preventing Daily Re-authentication', () =>
         // Clean up singleton
         if (authManager) {
             authManager.cleanup();
-        }
+        
+        restoreAllModuleMocks();}
         TwitchAuthManager.resetInstance();
         
-        jest.restoreAllMocks();
+        restoreAllMocks();
     });
 
     describe('Automatic Token Refresh Before Expiration', () => {
@@ -322,13 +326,13 @@ describe('Token Refresh Integration - Preventing Daily Re-authentication', () =>
 
             // Mock OAuth handler to prevent actual browser opening
             const mockOAuthHandler = {
-                runOAuthFlow: jest.fn().mockResolvedValue({
+                runOAuthFlow: createMockFn().mockResolvedValue({
                     access_token: 'oauth-new-token',
                     refresh_token: 'oauth-new-refresh'
                 })
             };
-            jest.doMock('../../../src/auth/oauth-handler', () => ({
-                TwitchOAuthHandler: jest.fn(() => mockOAuthHandler)
+            mockModule('../../../src/auth/oauth-handler', () => ({
+                TwitchOAuthHandler: createMockFn(() => mockOAuthHandler)
             }));
 
             // When: Attempting to initialize with invalid refresh token
@@ -520,8 +524,8 @@ describe('Token Refresh Integration - Preventing Daily Re-authentication', () =>
     describe('Token Refresh Scheduling and Timing', () => {
         test('should schedule automatic token refresh 15 minutes before expiration', async () => {
             // Mock timers
-            jest.useFakeTimers();
-            const mockSetTimeout = jest.spyOn(global, 'setTimeout');
+            useFakeTimers();
+            const mockSetTimeout = spyOn(global, 'setTimeout');
             
             // Given: Token with known expiration
             mockAxios.get.mockImplementation((url) => {
@@ -549,13 +553,13 @@ describe('Token Refresh Integration - Preventing Daily Re-authentication', () =>
             expect(scheduledDelay).toBeLessThanOrEqual(expectedDelay);
             
             // User experience: Token refreshes automatically without intervention
-            jest.useRealTimers();
+            useRealTimers();
         });
 
         test('should handle scheduled refresh and reschedule for next refresh', async () => {
             // Mock timers (following the pattern of the working test)
-            jest.useFakeTimers();
-            const mockSetTimeout = jest.spyOn(global, 'setTimeout');
+            useFakeTimers();
+            const mockSetTimeout = spyOn(global, 'setTimeout');
             
             // Given: Token with known expiration
             mockAxios.get.mockImplementation((url) => {
@@ -594,7 +598,7 @@ describe('Token Refresh Integration - Preventing Daily Re-authentication', () =>
             expect(mockSetTimeout.mock.calls.length).toBeGreaterThan(initialCallCount);
             
             // User experience: Continuous automatic refresh without manual intervention
-            jest.useRealTimers();
+            useRealTimers();
         });
     });
 
@@ -838,18 +842,18 @@ describe('Token Refresh Integration - Preventing Daily Re-authentication', () =>
             authManager = TwitchAuthManager.getInstance(testConfig);
             
             // Use fake timers to control retry timing
-            jest.useFakeTimers();
+            useFakeTimers();
             
             // Start initialization asynchronously
             const initPromise = authManager.initialize();
             
             // Run all immediate timers and advance time for retries
-            await jest.runAllTimersAsync();
+            await runAllTimers();
             
             // Complete initialization
             await initPromise;
             
-            jest.useRealTimers();
+            useRealTimers();
 
             // Then: User experience - rate limiting is handled transparently
             const state = authManager.getState();
@@ -899,13 +903,13 @@ describe('Token Refresh Integration - Preventing Daily Re-authentication', () =>
 
             // Mock OAuth handler
             const mockOAuthHandler = {
-                runOAuthFlow: jest.fn().mockResolvedValue({
+                runOAuthFlow: createMockFn().mockResolvedValue({
                     access_token: 'new-oauth-token',
                     refresh_token: 'new-oauth-refresh'
                 })
             };
-            jest.doMock('../../../src/auth/oauth-handler', () => ({
-                TwitchOAuthHandler: jest.fn(() => mockOAuthHandler)
+            mockModule('../../../src/auth/oauth-handler', () => ({
+                TwitchOAuthHandler: createMockFn(() => mockOAuthHandler)
             }));
 
             // When: Attempting initialization with bad tokens

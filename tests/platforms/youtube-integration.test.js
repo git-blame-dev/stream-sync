@@ -1,4 +1,8 @@
 
+const { describe, test, expect, beforeEach, it } = require('bun:test');
+const { createMockFn, clearAllMocks, restoreAllMocks } = require('../helpers/bun-mock-utils');
+const { mockModule, restoreAllModuleMocks } = require('../helpers/bun-module-mocks');
+
 const { initializeTestLogging } = require('../helpers/test-setup');
 
 // Initialize logging for tests
@@ -8,14 +12,19 @@ const { YouTubePlatform } = require('../../src/platforms/youtube');
 const testClock = require('../helpers/test-clock');
 
 // Mock isChatMessageEvent for testing
-const isChatMessageEvent = jest.fn();
+const isChatMessageEvent = createMockFn();
 
 // Mock message normalization
-jest.mock('../../src/utils/message-normalization', () => ({
-    normalizeYouTubeMessage: jest.fn()
+mockModule('../../src/utils/message-normalization', () => ({
+    normalizeYouTubeMessage: createMockFn()
 }));
 
 describe('YouTubePlatform handleChatMessage Integration', () => {
+    afterEach(() => {
+        restoreAllMocks();
+        restoreAllModuleMocks();
+    });
+
     let youtubePlatform;
     let mockConfig;
     let mockLogger;
@@ -23,19 +32,17 @@ describe('YouTubePlatform handleChatMessage Integration', () => {
 
     beforeEach(() => {
         // Clear all mocks
-        jest.clearAllMocks();
-
         // Create mock logger
         mockLogger = {
-            debug: jest.fn(),
-            info: jest.fn(),
-            warn: jest.fn(),
-            error: jest.fn()
+            debug: createMockFn(),
+            info: createMockFn(),
+            warn: createMockFn(),
+            error: createMockFn()
         };
 
         // Create mock app
         mockApp = {
-            handleChatMessage: jest.fn()
+            handleChatMessage: createMockFn()
         };
 
         // Create minimal config for YouTube platform
@@ -53,7 +60,7 @@ describe('YouTubePlatform handleChatMessage Integration', () => {
             youtubeConnectionStatus: new Map(),
             
             // Mock the handleChatMessage method with the actual integration logic
-            handleChatMessage: jest.fn((chatItem) => {
+            handleChatMessage: createMockFn((chatItem) => {
                 // Mock the actual integration logic from the real platform
                 mockLogger.debug(`handleChatMessage called: ${chatItem.author?.name} - videoId: ${chatItem.videoId}`, 'youtube');
                 
@@ -91,13 +98,13 @@ describe('YouTubePlatform handleChatMessage Integration', () => {
             }),
             
             // Mock all specialized handler methods
-            handleSuperChat: jest.fn(),
-            handleSuperSticker: jest.fn(),
-            handleMembership: jest.fn(),
-            handleGiftMembershipPurchase: jest.fn(),
-            handleLowPriorityEvent: jest.fn(),
-            _processRegularChatMessage: jest.fn(),
-            logUnknownEvent: jest.fn(),
+            handleSuperChat: createMockFn(),
+            handleSuperSticker: createMockFn(),
+            handleMembership: createMockFn(),
+            handleGiftMembershipPurchase: createMockFn(),
+            handleLowPriorityEvent: createMockFn(),
+            _processRegularChatMessage: createMockFn(),
+            logUnknownEvent: createMockFn(),
             eventDispatchTable: {
                 LiveChatPaidMessage: (chatItem) => youtubePlatform.handleSuperChat(chatItem),
                 LiveChatMembershipItem: (chatItem) => youtubePlatform.handleMembership(chatItem),
@@ -306,7 +313,7 @@ describe('YouTubePlatform handleChatMessage Integration', () => {
 
             // Wrap handleChatMessage to catch internal error
             const originalHandler = youtubePlatform.handleChatMessage;
-            youtubePlatform.handleChatMessage = jest.fn((item) => {
+            youtubePlatform.handleChatMessage = createMockFn((item) => {
                 try {
                     originalHandler.call(youtubePlatform, item);
                 } catch (error) {
@@ -417,7 +424,7 @@ describe('YouTubePlatform handleChatMessage Integration', () => {
             ];
 
             testCases.forEach(({ name, item, connectionTime, shouldFilter }) => {
-                jest.clearAllMocks();
+                clearAllMocks();
                 
                 const chatItem = {
                     ...item,
@@ -464,7 +471,7 @@ describe('YouTubePlatform handleChatMessage Integration', () => {
             ];
 
             eventMappings.forEach(({ type, itemType, handler }) => {
-                jest.clearAllMocks();
+                clearAllMocks();
                 
                 const chatItem = {
                     type,

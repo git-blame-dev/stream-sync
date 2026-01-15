@@ -1,4 +1,8 @@
 
+const { describe, test, expect, beforeEach } = require('bun:test');
+const { createMockFn, clearAllMocks, restoreAllMocks } = require('../../helpers/bun-mock-utils');
+const { mockModule, restoreAllModuleMocks } = require('../../helpers/bun-module-mocks');
+
 const { initializeTestLogging } = require('../../helpers/test-setup');
 const { createMockLogger } = require('../../helpers/mock-factories');
 const { setupAutomatedCleanup } = require('../../helpers/mock-lifecycle');
@@ -14,13 +18,13 @@ setupAutomatedCleanup({
 });
 
 // Mock fs module for file operations
-jest.mock('fs', () => ({
+mockModule('fs', () => ({
     promises: {
-        readFile: jest.fn(),
-        writeFile: jest.fn(),
-        rename: jest.fn()
+        readFile: createMockFn(),
+        writeFile: createMockFn(),
+        rename: createMockFn()
     },
-    existsSync: jest.fn(() => true)
+    existsSync: createMockFn(() => true)
 }));
 
 let fs;
@@ -28,9 +32,12 @@ let fsPromises;
 const TwitchTokenRefresh = require('../../../src/utils/twitch-token-refresh');
 const TwitchAuthService = require('../../../src/auth/TwitchAuthService');
 
-const { describe, test, expect, beforeEach, afterEach } = require('@jest/globals');
-
 describe('Refresh Token Storage and Update Handling (Twitch Best Practices)', () => {
+    afterEach(() => {
+        restoreAllMocks();
+        restoreAllModuleMocks();
+    });
+
     let mockLogger;
     let mockConfig;
     let tokenRefresh;
@@ -39,14 +46,12 @@ describe('Refresh Token Storage and Update Handling (Twitch Best Practices)', ()
     let tokenStorePath;
 
     beforeEach(() => {
-        jest.clearAllMocks();
-
         fs = {
-            existsSync: jest.fn(() => true),
+            existsSync: createMockFn(() => true),
             promises: {
-                readFile: jest.fn(),
-                writeFile: jest.fn(),
-                rename: jest.fn()
+                readFile: createMockFn(),
+                writeFile: createMockFn(),
+                rename: createMockFn()
             }
         };
         fsPromises = fs.promises;

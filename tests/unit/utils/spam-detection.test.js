@@ -1,4 +1,7 @@
 
+const { describe, test, expect, beforeEach, afterEach, it } = require('bun:test');
+const { spyOn, restoreAllMocks } = require('../../helpers/bun-mock-utils');
+
 const { initializeTestLogging } = require('../../helpers/test-setup');
 const { createMockLogger } = require('../../helpers/mock-factories');
 const { setupAutomatedCleanup } = require('../../helpers/mock-lifecycle');
@@ -27,7 +30,7 @@ describe('Spam Detection', () => {
     beforeEach(() => {
         // Create mocks using factory functions
         mockLogger = createMockLogger('debug');
-        jest.spyOn(Date, 'now').mockImplementation(() => testClock.now());
+        spyOn(Date, 'now').mockImplementation(() => testClock.now());
         mockConstants = {
             SPAM_DETECTION: {
                 DEFAULT_THRESHOLD: 10,
@@ -70,6 +73,7 @@ describe('Spam Detection', () => {
     });
 
     afterEach(() => {
+        restoreAllMocks();
         global.Date.now.mockRestore();
     });
 

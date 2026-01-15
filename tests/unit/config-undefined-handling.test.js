@@ -1,4 +1,7 @@
 
+const { describe, test, expect, jest } = require('bun:test');
+const { createMockFn, restoreAllMocks } = require('../helpers/bun-mock-utils');
+
 const { initializeTestLogging, TEST_TIMEOUTS } = require('../helpers/test-setup');
 const { createMockLogger, createMockNotificationManager } = require('../helpers/mock-factories');
 const { setupAutomatedCleanup } = require('../helpers/mock-lifecycle');
@@ -13,12 +16,16 @@ setupAutomatedCleanup({
 });
 
 describe('Gift Notification Config Resiliency', () => {
+    afterEach(() => {
+        restoreAllMocks();
+    });
+
     jest.setTimeout(TEST_TIMEOUTS.UNIT);
 
     const buildAppRuntime = (overrides = {}) => {
         const mockLogger = overrides.logger || createMockLogger('debug', { captureConsole: true });
         const notificationManager = overrides.notificationManager || createMockNotificationManager({
-            handleNotification: jest.fn().mockResolvedValue(true)
+            handleNotification: createMockFn().mockResolvedValue(true)
         });
 
         const { runtime } = createTestAppRuntime({
@@ -54,7 +61,7 @@ describe('Gift Notification Config Resiliency', () => {
 
     test('gift notifications require complete gift payloads', async () => {
         const notificationManager = createMockNotificationManager({
-            handleNotification: jest.fn().mockResolvedValue(true)
+            handleNotification: createMockFn().mockResolvedValue(true)
         });
         const { runtime } = buildAppRuntime({ notificationManager });
 

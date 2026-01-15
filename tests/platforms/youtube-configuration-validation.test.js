@@ -1,4 +1,7 @@
 
+const { describe, test, expect, beforeEach } = require('bun:test');
+const { createMockFn, spyOn, restoreAllMocks } = require('../helpers/bun-mock-utils');
+
 const { initializeTestLogging, createMockPlatformDependencies, createMockConfig } = require('../helpers/test-setup');
 
 // Initialize logging for tests
@@ -7,6 +10,10 @@ initializeTestLogging();
 const { YouTubePlatform } = require('../../src/platforms/youtube');
 
 describe('YouTube Platform Configuration Validation', () => {
+    afterEach(() => {
+        restoreAllMocks();
+    });
+
     let mockDependencies;
     
     beforeEach(() => {
@@ -103,10 +110,10 @@ describe('YouTube Platform Configuration Validation', () => {
             );
 
             const errorHandler = {
-                handleConfigurationError: jest.fn(),
-                handleEventProcessingError: jest.fn(),
-                handleConnectionError: jest.fn(),
-                handleCleanupError: jest.fn()
+                handleConfigurationError: createMockFn(),
+                handleEventProcessingError: createMockFn(),
+                handleConnectionError: createMockFn(),
+                handleCleanupError: createMockFn()
             };
 
             platform.errorHandler = errorHandler;
@@ -122,10 +129,10 @@ describe('YouTube Platform Configuration Validation', () => {
 
         test('initializes disabled platform without errors', async () => {
             const logger = {
-                debug: jest.fn(),
-                info: jest.fn(),
-                warn: jest.fn(),
-                error: jest.fn()
+                debug: createMockFn(),
+                info: createMockFn(),
+                warn: createMockFn(),
+                error: createMockFn()
             };
 
             const platform = new YouTubePlatform(
@@ -164,7 +171,7 @@ describe('YouTube Platform Configuration Validation', () => {
             const detectionResult = ['live-stream-123'];
             const dependenciesWithDetection = createMockPlatformDependencies('youtube', {
                 streamDetectionService: {
-                    detectLiveStreams: jest.fn().mockResolvedValue({
+                    detectLiveStreams: createMockFn().mockResolvedValue({
                         success: true,
                         videoIds: detectionResult
                     })
@@ -178,18 +185,18 @@ describe('YouTube Platform Configuration Validation', () => {
         });
 
         test('should surface data logging path errors via error handler', () => {
-            const mkdirMock = jest.spyOn(require('fs'), 'mkdirSync').mockImplementation(() => {
+            const mkdirMock = spyOn(require('fs'), 'mkdirSync').mockImplementation(() => {
                 throw new Error('disk full');
             });
 
             const dependencies = createMockPlatformDependencies('youtube', {
                 streamDetectionService: {
-                    detectLiveStreams: jest.fn().mockResolvedValue({ success: true, videoIds: [] })
+                    detectLiveStreams: createMockFn().mockResolvedValue({ success: true, videoIds: [] })
                 }
             });
 
             const platform = new YouTubePlatform(baseConfig, dependencies);
-            const errorSpy = jest.fn();
+            const errorSpy = createMockFn();
             platform.errorHandler = {
                 handleConfigurationError: errorSpy
             };

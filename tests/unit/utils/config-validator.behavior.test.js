@@ -1,13 +1,19 @@
+const { describe, test, expect, beforeEach, it } = require('bun:test');
+const { createMockFn, clearAllMocks, restoreAllMocks } = require('../../helpers/bun-mock-utils');
+
 const { ConfigValidator, ConfigValidatorStatic } = require('../../../src/utils/config-validator');
 
 describe('config-validator (utility) behavior', () => {
-    const logger = { warn: jest.fn(), debug: jest.fn() };
+    afterEach(() => {
+        restoreAllMocks();
+    });
+
+    const logger = { warn: createMockFn(), debug: createMockFn() };
     let validator;
 
     beforeEach(() => {
         validator = new ConfigValidator(logger);
-        jest.clearAllMocks();
-    });
+        });
 
     it('parses booleans, strings, and numbers with defaults and bounds', () => {
         expect(validator.parseBoolean('true', false)).toBe(true);

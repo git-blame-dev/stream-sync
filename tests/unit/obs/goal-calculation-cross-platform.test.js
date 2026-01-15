@@ -1,10 +1,14 @@
 
+const { describe, test, expect, beforeEach, afterEach, it } = require('bun:test');
+const { createMockFn, clearAllMocks, restoreAllMocks } = require('../../helpers/bun-mock-utils');
+const { mockModule, restoreAllModuleMocks } = require('../../helpers/bun-module-mocks');
+
 const { DisplayQueue } = require('../../../src/obs/display-queue');
 const EventEmitter = require('events');
 
 // Mock the goals module
-jest.mock('../../../src/obs/goals', () => {
-    const processDonationGoal = jest.fn();
+mockModule('../../../src/obs/goals', () => {
+    const processDonationGoal = createMockFn();
     return {
         OBSGoalsManager: class {},
         createOBSGoalsManager: () => ({ processDonationGoal }),
@@ -19,12 +23,10 @@ describe('Cross-Platform Goal Calculation', () => {
     let mockConstants;
     
     beforeEach(() => {
-        jest.clearAllMocks();
-
         mockOBSManager = new EventEmitter();
-        mockOBSManager.call = jest.fn().mockResolvedValue({});
-        mockOBSManager.isConnected = jest.fn().mockReturnValue(true);
-        mockOBSManager.isReady = jest.fn().mockResolvedValue(true);
+        mockOBSManager.call = createMockFn().mockResolvedValue({});
+        mockOBSManager.isConnected = createMockFn().mockReturnValue(true);
+        mockOBSManager.isReady = createMockFn().mockResolvedValue(true);
 
         mockConfig = {
             autoProcess: false,
@@ -66,7 +68,7 @@ describe('Cross-Platform Goal Calculation', () => {
         displayQueue = new DisplayQueue(mockOBSManager, mockConfig, mockConstants);
         const goalTotals = {};
         displayQueue.goalsManager = {
-            processDonationGoal: jest.fn(async (platform, amount) => {
+            processDonationGoal: createMockFn(async (platform, amount) => {
                 goalTotals[platform] = (goalTotals[platform] || 0) + amount;
             })
         };
@@ -74,9 +76,11 @@ describe('Cross-Platform Goal Calculation', () => {
     });
     
     afterEach(() => {
+        restoreAllMocks();
         if (displayQueue) {
             displayQueue.stop();
-        }
+        
+        restoreAllModuleMocks();}
     });
     
     describe('TikTok gifts should use total amount correctly', () => {

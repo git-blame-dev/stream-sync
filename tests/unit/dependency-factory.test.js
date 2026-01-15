@@ -1,8 +1,15 @@
 
+const { describe, test, expect, beforeEach, it } = require('bun:test');
+const { createMockFn, spyOn, restoreAllMocks } = require('../helpers/bun-mock-utils');
+
 const { DependencyFactory } = require('../../src/utils/dependency-factory');
 const { PlatformConnectionFactory } = require('../../src/utils/platform-connection-factory');
 
 describe('DependencyFactory', () => {
+    afterEach(() => {
+        restoreAllMocks();
+    });
+
     let factory;
     let mockConfig;
     let mockLogger;
@@ -32,18 +39,18 @@ describe('DependencyFactory', () => {
         };
 
         mockLogger = {
-            debug: jest.fn(),
-            info: jest.fn(),
-            warn: jest.fn(),
-            error: jest.fn()
+            debug: createMockFn(),
+            info: createMockFn(),
+            warn: createMockFn(),
+            error: createMockFn()
         };
     });
 
     describe('createYoutubeDependencies', () => {
         it('should create complete YouTube dependencies with all required services', () => {
             const options = {
-                notificationManager: { emit: jest.fn() },
-                streamDetectionService: { isLive: jest.fn() }
+                notificationManager: { emit: createMockFn() },
+                streamDetectionService: { isLive: createMockFn() }
             };
 
             const result = factory.createYoutubeDependencies(mockConfig.youtube, options);
@@ -80,7 +87,7 @@ describe('DependencyFactory', () => {
 
         it('should pass options through to created dependencies', () => {
             const customOptions = {
-                notificationManager: { emit: jest.fn() },
+                notificationManager: { emit: createMockFn() },
                 retryAttempts: 5,
                 timeout: 30000
             };
@@ -104,8 +111,8 @@ describe('DependencyFactory', () => {
         });
 
         it('should reuse injected stream detection service without recreating it', () => {
-            const injectedService = { detectLiveStreams: jest.fn() };
-            const spy = jest.spyOn(DependencyFactory.prototype, '_createYouTubeStreamDetectionService');
+            const injectedService = { detectLiveStreams: createMockFn() };
+            const spy = spyOn(DependencyFactory.prototype, '_createYouTubeStreamDetectionService');
 
             const result = factory.createYoutubeDependencies(mockConfig.youtube, {
                 streamDetectionService: injectedService
@@ -120,13 +127,13 @@ describe('DependencyFactory', () => {
     describe('createTiktokDependencies', () => {
         it('should create complete TikTok dependencies with all required services', () => {
             const options = {
-                notificationManager: { emit: jest.fn() },
-                WebcastPushConnection: jest.fn(),
-                TikTokWebSocketClient: jest.fn().mockImplementation(() => ({
-                    connect: jest.fn().mockResolvedValue(true),
-                    disconnect: jest.fn().mockResolvedValue(true),
-                    on: jest.fn(),
-                    removeAllListeners: jest.fn()
+                notificationManager: { emit: createMockFn() },
+                WebcastPushConnection: createMockFn(),
+                TikTokWebSocketClient: createMockFn().mockImplementation(() => ({
+                    connect: createMockFn().mockResolvedValue(true),
+                    disconnect: createMockFn().mockResolvedValue(true),
+                    on: createMockFn(),
+                    removeAllListeners: createMockFn()
                 }))
             };
 
@@ -164,14 +171,14 @@ describe('DependencyFactory', () => {
         });
 
         it('should provide WebcastPushConnection from options', () => {
-            const MockWebcastPushConnection = jest.fn();
+            const MockWebcastPushConnection = createMockFn();
             const options = {
                 WebcastPushConnection: MockWebcastPushConnection,
-                TikTokWebSocketClient: jest.fn().mockImplementation(() => ({
-                    connect: jest.fn(),
-                    disconnect: jest.fn(),
-                    on: jest.fn(),
-                    removeAllListeners: jest.fn()
+                TikTokWebSocketClient: createMockFn().mockImplementation(() => ({
+                    connect: createMockFn(),
+                    disconnect: createMockFn(),
+                    on: createMockFn(),
+                    removeAllListeners: createMockFn()
                 }))
             };
 
@@ -181,11 +188,11 @@ describe('DependencyFactory', () => {
         });
 
         it('should expose TikTokWebSocketClient so PlatformConnectionFactory can create connections', () => {
-            const TikTokWebSocketClient = jest.fn().mockImplementation(() => ({
-                connect: jest.fn().mockResolvedValue(true),
-                disconnect: jest.fn().mockResolvedValue(true),
-                on: jest.fn(),
-                removeAllListeners: jest.fn()
+            const TikTokWebSocketClient = createMockFn().mockImplementation(() => ({
+                connect: createMockFn().mockResolvedValue(true),
+                disconnect: createMockFn().mockResolvedValue(true),
+                on: createMockFn(),
+                removeAllListeners: createMockFn()
             }));
 
             const result = factory.createTiktokDependencies(mockConfig.tiktok, { TikTokWebSocketClient });
@@ -207,8 +214,8 @@ describe('DependencyFactory', () => {
     describe('createTwitchDependencies', () => {
         it('should create complete Twitch dependencies with all required services', () => {
             const options = {
-                notificationManager: { emit: jest.fn() },
-                tmiClient: { connect: jest.fn() }
+                notificationManager: { emit: createMockFn() },
+                tmiClient: { connect: createMockFn() }
             };
 
             const result = factory.createTwitchDependencies(mockConfig.twitch, options);
@@ -253,8 +260,8 @@ describe('DependencyFactory', () => {
         });
 
         it('should retain injected authManager even when authFactory is also provided', () => {
-            const injectedAuthManager = { initialize: jest.fn(), getState: jest.fn() };
-            const injectedAuthFactory = { createAuthManager: jest.fn() };
+            const injectedAuthManager = { initialize: createMockFn(), getState: createMockFn() };
+            const injectedAuthFactory = { createAuthManager: createMockFn() };
 
             const result = factory.createTwitchDependencies(mockConfig.twitch, {
                 authManager: injectedAuthManager,
@@ -267,9 +274,9 @@ describe('DependencyFactory', () => {
         });
 
         it('should build authManager from provided authFactory when authManager is missing', () => {
-            const builtAuthManager = { initialize: jest.fn(), getState: jest.fn() };
+            const builtAuthManager = { initialize: createMockFn(), getState: createMockFn() };
             const providedFactory = {
-                createAuthManager: jest.fn().mockReturnValue(builtAuthManager)
+                createAuthManager: createMockFn().mockReturnValue(builtAuthManager)
             };
 
             const result = factory.createTwitchDependencies(mockConfig.twitch, {
@@ -328,10 +335,10 @@ describe('DependencyFactory', () => {
     describe('validateDependencyInterface', () => {
         it('should validate logger interface correctly', () => {
             const validLogger = {
-                debug: jest.fn(),
-                info: jest.fn(),
-                warn: jest.fn(),
-                error: jest.fn()
+                debug: createMockFn(),
+                info: createMockFn(),
+                warn: createMockFn(),
+                error: createMockFn()
             };
 
             expect(() => {
@@ -341,8 +348,8 @@ describe('DependencyFactory', () => {
 
         it('should reject invalid logger interface', () => {
             const invalidLogger = {
-                debug: jest.fn(),
-                info: jest.fn()
+                debug: createMockFn(),
+                info: createMockFn()
                 // Missing warn and error methods
             };
 
@@ -353,9 +360,9 @@ describe('DependencyFactory', () => {
 
         it('should validate notification manager interface', () => {
             const validNotificationManager = {
-                emit: jest.fn(),
-                on: jest.fn(),
-                removeListener: jest.fn()
+                emit: createMockFn(),
+                on: createMockFn(),
+                removeListener: createMockFn()
             };
 
             expect(() => {
@@ -365,7 +372,7 @@ describe('DependencyFactory', () => {
 
         it('should reject invalid notification manager interface', () => {
             const invalidNotificationManager = {
-                emit: jest.fn()
+                emit: createMockFn()
                 // Missing on and removeListener methods
             };
 

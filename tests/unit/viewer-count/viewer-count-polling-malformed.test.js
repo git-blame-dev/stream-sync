@@ -1,36 +1,41 @@
+const { describe, test, expect, afterEach, it } = require('bun:test');
+const { createMockFn, spyOn, restoreAllMocks } = require('../../helpers/bun-mock-utils');
+const { mockModule, resetModules, restoreAllModuleMocks } = require('../../helpers/bun-module-mocks');
+
 describe('ViewerCountSystem polling with malformed payloads', () => {
     const originalEnv = process.env.NODE_ENV;
 
     afterEach(() => {
-        jest.resetModules();
-        process.env.NODE_ENV = originalEnv;
-    });
+        restoreAllMocks();
+process.env.NODE_ENV = originalEnv;
+    
+        restoreAllModuleMocks();});
 
     function createSystemReturning(value, warnSpy = null) {
         process.env.NODE_ENV = 'test';
 
-        jest.doMock('../../../src/core/config', () => ({
+        mockModule('../../../src/core/config', () => ({
             configManager: {
-                getNumber: jest.fn().mockReturnValue(15)
+                getNumber: createMockFn().mockReturnValue(15)
             }
         }));
 
-        jest.doMock('../../../src/utils/timeout-validator', () => ({
-            safeSetInterval: jest.fn(),
-            safeDelay: jest.fn()
+        mockModule('../../../src/utils/timeout-validator', () => ({
+            safeSetInterval: createMockFn(),
+            safeDelay: createMockFn()
         }));
 
-        jest.doMock('../../../src/core/logging', () => ({
+        mockModule('../../../src/core/logging', () => ({
             logger: {
-                debug: jest.fn(),
-                info: jest.fn(),
-                warn: warnSpy || jest.fn(),
-                error: jest.fn()
+                debug: createMockFn(),
+                info: createMockFn(),
+                warn: warnSpy || createMockFn(),
+                error: createMockFn()
             }
         }));
 
         const platform = {
-            getViewerCount: jest.fn().mockResolvedValue(value)
+            getViewerCount: createMockFn().mockResolvedValue(value)
         };
 
         const { ViewerCountSystem } = require('../../../src/utils/viewer-count');
@@ -44,9 +49,9 @@ describe('ViewerCountSystem polling with malformed payloads', () => {
 
     it('warns and preserves previous count when platform returns non-numeric value', async () => {
         const { system } = createSystemReturning('not-a-number');
-        const warnSpy = jest.spyOn(system.logger, 'warn');
+        const warnSpy = spyOn(system.logger, 'warn');
 
-        const observer = { getObserverId: () => 'obs', onViewerCountUpdate: jest.fn() };
+        const observer = { getObserverId: () => 'obs', onViewerCountUpdate: createMockFn() };
         system.addObserver(observer);
 
         await system.pollPlatform('youtube');
@@ -58,9 +63,9 @@ describe('ViewerCountSystem polling with malformed payloads', () => {
 
     it('warns and skips update when platform returns object payload without numeric count', async () => {
         const { system } = createSystemReturning({ count: 'unknown' });
-        const warnSpy = jest.spyOn(system.logger, 'warn');
+        const warnSpy = spyOn(system.logger, 'warn');
 
-        const observer = { getObserverId: () => 'obs2', onViewerCountUpdate: jest.fn() };
+        const observer = { getObserverId: () => 'obs2', onViewerCountUpdate: createMockFn() };
         system.addObserver(observer);
 
         await system.pollPlatform('youtube');

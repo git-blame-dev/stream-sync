@@ -1,21 +1,26 @@
+const { describe, test, expect, afterEach, it } = require('bun:test');
+const { createMockFn, restoreAllMocks } = require('../../helpers/bun-mock-utils');
+const { mockModule, resetModules, restoreAllModuleMocks } = require('../../helpers/bun-module-mocks');
+
 describe('ViewerCountSystem stream status observer notifications', () => {
     const originalEnv = process.env.NODE_ENV;
 
     afterEach(() => {
-        jest.resetModules();
-        process.env.NODE_ENV = originalEnv;
-    });
+        restoreAllMocks();
+process.env.NODE_ENV = originalEnv;
+    
+        restoreAllModuleMocks();});
 
     function createSystem() {
         process.env.NODE_ENV = 'test';
-        jest.doMock('../../../src/core/config', () => ({
+        mockModule('../../../src/core/config', () => ({
             configManager: {
-                getNumber: jest.fn().mockReturnValue(30)
+                getNumber: createMockFn().mockReturnValue(30)
             }
         }));
-        jest.doMock('../../../src/utils/timeout-validator', () => ({
-            safeSetInterval: jest.fn(),
-            safeDelay: jest.fn()
+        mockModule('../../../src/utils/timeout-validator', () => ({
+            safeSetInterval: createMockFn(),
+            safeDelay: createMockFn()
         }));
 
         const { ViewerCountSystem } = require('../../../src/utils/viewer-count');
@@ -27,7 +32,7 @@ describe('ViewerCountSystem stream status observer notifications', () => {
         const statusEvents = [];
         const observer = {
             getObserverId: () => 'obs-1',
-            onStreamStatusChange: jest.fn((payload) => statusEvents.push(payload))
+            onStreamStatusChange: createMockFn((payload) => statusEvents.push(payload))
         };
 
         system.addObserver(observer);
@@ -44,7 +49,7 @@ describe('ViewerCountSystem stream status observer notifications', () => {
         const system = createSystem();
         const observer = {
             getObserverId: () => 'obs-2',
-            onStreamStatusChange: jest.fn()
+            onStreamStatusChange: createMockFn()
         };
 
         system.addObserver(observer);
@@ -60,8 +65,8 @@ describe('ViewerCountSystem stream status observer notifications', () => {
         const countEvents = [];
         const observer = {
             getObserverId: () => 'obs-3',
-            onStreamStatusChange: jest.fn((payload) => statusEvents.push(payload)),
-            onViewerCountUpdate: jest.fn((payload) => countEvents.push(payload))
+            onStreamStatusChange: createMockFn((payload) => statusEvents.push(payload)),
+            onViewerCountUpdate: createMockFn((payload) => countEvents.push(payload))
         };
 
         system.addObserver(observer);
@@ -82,8 +87,8 @@ describe('ViewerCountSystem stream status observer notifications', () => {
         const system = createSystem();
         const observer = {
             getObserverId: () => 'obs-4',
-            onStreamStatusChange: jest.fn(),
-            onViewerCountUpdate: jest.fn()
+            onStreamStatusChange: createMockFn(),
+            onViewerCountUpdate: createMockFn()
         };
 
         system.addObserver(observer);

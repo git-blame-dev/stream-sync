@@ -2,6 +2,7 @@
 const { EventEmitter } = require('events');
 const { scheduleTimeout } = require('./time-utils');
 const testClock = require('./test-clock');
+const { createMockFn } = require('./bun-mock-utils');
 
 class MockWebSocket extends EventEmitter {
     constructor(url) {
@@ -167,8 +168,8 @@ function createMockTwitchAuth() {
     return {
         userId: 123456,
         isInitialized: true,
-        getAuthProvider: jest.fn().mockResolvedValue({
-            getAccessTokenForUser: jest.fn().mockResolvedValue({
+        getAuthProvider: createMockFn().mockResolvedValue({
+            getAccessTokenForUser: createMockFn().mockResolvedValue({
                 accessToken: 'test-access-token',
                 expiresAt: new Date(testClock.now() + 3600000)
             })
@@ -178,10 +179,10 @@ function createMockTwitchAuth() {
 
 function createMockLogger() {
     return {
-        info: jest.fn(),
-        debug: jest.fn(),
-        warn: jest.fn(),
-        error: jest.fn()
+        info: createMockFn(),
+        debug: createMockFn(),
+        warn: createMockFn(),
+        error: createMockFn()
     };
 }
 

@@ -1,11 +1,18 @@
+const { describe, test, expect, it } = require('bun:test');
+const { createMockFn, restoreAllMocks } = require('../../helpers/bun-mock-utils');
+
 const TwitchAuthFactory = require('../../../src/auth/TwitchAuthFactory');
 
 describe('TwitchAuthFactory behavior', () => {
+    afterEach(() => {
+        restoreAllMocks();
+    });
+
     const logger = {
-        debug: jest.fn(),
-        info: jest.fn(),
-        warn: jest.fn(),
-        error: jest.fn()
+        debug: createMockFn(),
+        info: createMockFn(),
+        warn: createMockFn(),
+        error: createMockFn()
     };
 
     it('allows OAuth flow when tokens are missing', () => {

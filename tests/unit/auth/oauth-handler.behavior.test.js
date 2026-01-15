@@ -1,5 +1,9 @@
 
-jest.mock('../../../src/utils/auth-constants', () => ({
+const { describe, test, expect, beforeEach, afterEach, it } = require('bun:test');
+const { createMockFn, spyOn, clearAllMocks, restoreAllMocks } = require('../../helpers/bun-mock-utils');
+const { mockModule, resetModules, restoreAllModuleMocks } = require('../../helpers/bun-module-mocks');
+
+mockModule('../../../src/utils/auth-constants', () => ({
     TWITCH_OAUTH_SCOPES: ['scope1', 'scope2'],
     OAUTH_SERVER_CONFIG: {
         DEFAULT_PORT: 3000,
@@ -12,14 +16,14 @@ jest.mock('../../../src/utils/auth-constants', () => ({
     TOKEN_REFRESH_CONFIG: {}
 }));
 
-jest.mock('selfsigned', () => ({
-    generate: jest.fn(() => ({ private: 'key', cert: 'cert' }))
+mockModule('selfsigned', () => ({
+    generate: createMockFn(() => ({ private: 'key', cert: 'cert' }))
 }));
 
-jest.mock('../../../src/utils/platform-error-handler', () => ({
-    createPlatformErrorHandler: jest.fn(() => ({
-        handleEventProcessingError: jest.fn(),
-        logOperationalError: jest.fn()
+mockModule('../../../src/utils/platform-error-handler', () => ({
+    createPlatformErrorHandler: createMockFn(() => ({
+        handleEventProcessingError: createMockFn(),
+        logOperationalError: createMockFn()
     }))
 }));
 
@@ -32,23 +36,25 @@ describe('TwitchOAuthHandler behavior', () => {
     const originalEnv = { ...process.env };
 
     beforeEach(() => {
-        jest.resetModules();
-        createServerMock = jest.fn();
-        jest.doMock('net', () => ({
+        resetModules();
+        createServerMock = createMockFn();
+        mockModule('net', () => ({
             createServer: createServerMock
         }));
-        execMock = jest.fn();
-        jest.doMock('child_process', () => ({
+        execMock = createMockFn();
+        mockModule('child_process', () => ({
             exec: execMock
         }));
-        logger = { info: jest.fn(), warn: jest.fn(), error: jest.fn(), debug: jest.fn(), console: jest.fn() };
+        logger = { info: createMockFn(), warn: createMockFn(), error: createMockFn(), debug: createMockFn(), console: createMockFn() };
         ({ createPlatformErrorHandler } = require('../../../src/utils/platform-error-handler'));
         ({ TwitchOAuthHandler } = require('../../../src/auth/oauth-handler'));
     });
 
     afterEach(() => {
+        restoreAllMocks();
+        restoreAllModuleMocks();
         process.env = { ...originalEnv };
-        jest.clearAllMocks();
+        clearAllMocks();
     });
 
     it('generates auth URL with configured client and scopes', () => {
@@ -72,19 +78,19 @@ describe('TwitchOAuthHandler behavior', () => {
 
     it('finds next available port after EADDRINUSE', async () => {
         const server1 = {
-            on: jest.fn(),
-            listen: jest.fn((port, cb) => {
+            on: createMockFn(),
+            listen: createMockFn((port, cb) => {
                 const errHandler = server1.on.mock.calls.find(c => c[0] === 'error')?.[1];
                 errHandler && errHandler(Object.assign(new Error('in use'), { code: 'EADDRINUSE' }));
             }),
-            close: jest.fn(),
-            address: jest.fn(() => ({ port: 3000 }))
+            close: createMockFn(),
+            address: createMockFn(() => ({ port: 3000 }))
         };
         const server2 = {
-            on: jest.fn(),
-            listen: jest.fn((port, cb) => { server2._port = port; cb(); }),
-            close: jest.fn((cb) => cb && cb()),
-            address: jest.fn(() => ({ port: server2._port || 3001 }))
+            on: createMockFn(),
+            listen: createMockFn((port, cb) => { server2._port = port; cb(); }),
+            close: createMockFn((cb) => cb && cb()),
+            address: createMockFn(() => ({ port: server2._port || 3001 }))
         };
         createServerMock
             .mockReturnValueOnce(server1)
@@ -98,8 +104,8 @@ describe('TwitchOAuthHandler behavior', () => {
     });
 
     it('rejects when findAvailablePort receives non-EADDRINUSE error', async () => {
-        jest.resetModules();
-        jest.doMock('net', () => ({
+        resetModules();
+        mockModule('net', () => ({
             createServer: () => ({
                 on: (event, handler) => {
                     if (event === 'error') {
@@ -116,7 +122,7 @@ describe('TwitchOAuthHandler behavior', () => {
     });
 
     it('initializes platform error handler with provided logger', () => {
-        const mockLogger = { info: jest.fn(), warn: jest.fn(), error: jest.fn(), debug: jest.fn() };
+        const mockLogger = { info: createMockFn(), warn: createMockFn(), error: createMockFn(), debug: createMockFn() };
 
         const handler = new TwitchOAuthHandler({ clientId: 'abc' }, { logger: mockLogger });
 
@@ -126,8 +132,8 @@ describe('TwitchOAuthHandler behavior', () => {
 
     it('serves successful callback response and resolves tokens', async () => {
         const handler = new TwitchOAuthHandler({ clientId: 'abc' }, { logger });
-        handler.server = { close: jest.fn() };
-        jest.spyOn(handler, 'exchangeCodeForTokens').mockResolvedValue({ access_token: 'x', refresh_token: 'y' });
+        handler.server = { close: createMockFn() };
+        spyOn(handler, 'exchangeCodeForTokens').mockResolvedValue({ access_token: 'x', refresh_token: 'y' });
         const res = { statusCode: null, body: null, writeHead: function (status) { this.statusCode = status; }, end: function (body) { this.body = body; } };
 
         const tokens = await new Promise((resolve, reject) => handler.handleCallback({}, res, { code: 'ok' }, resolve, reject));
@@ -140,7 +146,7 @@ describe('TwitchOAuthHandler behavior', () => {
 
     it('returns user-friendly OAuth error response and rejects with context', async () => {
         const handler = new TwitchOAuthHandler({ clientId: 'abc' }, { logger });
-        handler.server = { close: jest.fn() };
+        handler.server = { close: createMockFn() };
         const res = { statusCode: null, body: null, writeHead: function (status) { this.statusCode = status; }, end: function (body) { this.body = body; } };
 
         await expect(new Promise((resolve, reject) => handler.handleCallback({}, res, { error: 'access_denied', error_description: 'declined' }, resolve, reject))).rejects.toThrow('access_denied');
@@ -152,7 +158,7 @@ describe('TwitchOAuthHandler behavior', () => {
 
     it('returns invalid callback messaging when no code or error present', async () => {
         const handler = new TwitchOAuthHandler({ clientId: 'abc' }, { logger });
-        handler.server = { close: jest.fn() };
+        handler.server = { close: createMockFn() };
         const res = { statusCode: null, body: null, writeHead: function (status) { this.statusCode = status; }, end: function (body) { this.body = body; } };
 
         await expect(new Promise((resolve, reject) => handler.handleCallback({}, res, {}, resolve, reject))).rejects.toThrow('Invalid callback');
@@ -165,7 +171,7 @@ describe('TwitchOAuthHandler behavior', () => {
     it('skips browser opening in test or disabled environments', () => {
         process.env.NODE_ENV = 'test';
         process.env.TWITCH_DISABLE_AUTH = 'true';
-        const logger = { info: jest.fn(), warn: jest.fn(), error: jest.fn(), debug: jest.fn() };
+        const logger = { info: createMockFn(), warn: createMockFn(), error: createMockFn(), debug: createMockFn() };
         const handler = new TwitchOAuthHandler({ clientId: 'abc' }, { logger });
 
         handler.openBrowser('https://example.com');
@@ -176,28 +182,28 @@ describe('TwitchOAuthHandler behavior', () => {
 
     it('closes callback server and returns null when OAuth flow fails after start', async () => {
         const handler = new TwitchOAuthHandler({ clientId: 'abc' }, { logger });
-        handler.server = { close: jest.fn() };
-        jest.spyOn(handler, 'startCallbackServer').mockRejectedValue(new Error('server failed'));
-        handler.displayOAuthInstructions = jest.fn();
+        handler.server = { close: createMockFn() };
+        spyOn(handler, 'startCallbackServer').mockRejectedValue(new Error('server failed'));
+        handler.displayOAuthInstructions = createMockFn();
 
         await expect(handler.runOAuthFlow()).resolves.toBeNull();
         expect(handler.server.close).toHaveBeenCalled();
     });
 
     it('persists tokens to the token store', async () => {
-        jest.resetModules();
+        resetModules();
         const tokenStorePath = '/tmp/token-store.json';
-        const readFile = jest.fn().mockRejectedValue(Object.assign(new Error('missing'), { code: 'ENOENT' }));
-        const writeFile = jest.fn().mockResolvedValue();
-        const rename = jest.fn().mockResolvedValue();
+        const readFile = createMockFn().mockRejectedValue(Object.assign(new Error('missing'), { code: 'ENOENT' }));
+        const writeFile = createMockFn().mockResolvedValue();
+        const rename = createMockFn().mockResolvedValue();
 
-        jest.doMock('fs', () => ({
+        mockModule('fs', () => ({
             promises: { readFile, writeFile, rename },
-            existsSync: jest.fn(() => true),
-            readFileSync: jest.fn()
+            existsSync: createMockFn(() => true),
+            readFileSync: createMockFn()
         }));
-        jest.doMock('net', () => ({ createServer: jest.fn() }));
-        jest.doMock('child_process', () => ({ exec: jest.fn() }));
+        mockModule('net', () => ({ createServer: createMockFn() }));
+        mockModule('child_process', () => ({ exec: createMockFn() }));
 
         let updatePromise;
         jest.isolateModules(() => {
@@ -231,7 +237,7 @@ describe('TwitchOAuthHandler behavior', () => {
                 }
             }
         );
-        jest.spyOn(handler, 'openBrowser').mockImplementation(() => {});
+        spyOn(handler, 'openBrowser').mockImplementation(() => {});
 
         handler.displayOAuthInstructions('https://auth.example/authorize');
 

@@ -1,4 +1,7 @@
 
+const { describe, test, expect, beforeEach, it } = require('bun:test');
+const { resetModules, restoreAllModuleMocks } = require('../../helpers/bun-module-mocks');
+
 const { initializeTestLogging } = require('../../helpers/test-setup');
 const { setupAutomatedCleanup } = require('../../helpers/mock-lifecycle');
 
@@ -13,11 +16,15 @@ setupAutomatedCleanup({
 });
 
 describe('Config Boolean Parser Utility', () => {
+    afterEach(() => {
+        restoreAllModuleMocks();
+    });
+
     let parseConfigBoolean;
     let parseConfigBooleanDefaultTrue;
     
     beforeEach(() => {
-        jest.resetModules();
+        resetModules();
         const parser = require('../../../src/utils/config-boolean-parser');
         parseConfigBoolean = parser.parseConfigBoolean;
         parseConfigBooleanDefaultTrue = parser.parseConfigBooleanDefaultTrue;

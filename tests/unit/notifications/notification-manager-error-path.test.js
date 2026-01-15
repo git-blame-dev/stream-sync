@@ -1,3 +1,6 @@
+const { describe, test, expect, it } = require('bun:test');
+const { createMockFn, restoreAllMocks } = require('../../helpers/bun-mock-utils');
+
 const NotificationManager = require('../../../src/notifications/NotificationManager');
 const constants = require('../../../src/core/constants');
 
@@ -33,24 +36,28 @@ const createConfigServiceStub = () => ({
 });
 
 const createLoggerStub = () => ({
-    debug: jest.fn(),
-    info: jest.fn(),
-    warn: jest.fn(),
-    error: jest.fn()
+    debug: createMockFn(),
+    info: createMockFn(),
+    warn: createMockFn(),
+    error: createMockFn()
 });
 
 describe('NotificationManager monetization error path', () => {
+    afterEach(() => {
+        restoreAllMocks();
+    });
+
     it('queues gift error notifications with placeholder values', async () => {
         const displayQueue = createDisplayQueueStub();
         const manager = new NotificationManager({
             displayQueue,
-            eventBus: { emit: jest.fn(), subscribe: jest.fn() },
+            eventBus: { emit: createMockFn(), subscribe: createMockFn() },
             configService: createConfigServiceStub(),
-            vfxCommandService: { getVFXConfig: jest.fn().mockResolvedValue(null) },
+            vfxCommandService: { getVFXConfig: createMockFn().mockResolvedValue(null) },
             logger: createLoggerStub(),
             constants,
-            textProcessing: { formatChatMessage: jest.fn() },
-            obsGoals: { processDonationGoal: jest.fn() }
+            textProcessing: { formatChatMessage: createMockFn() },
+            obsGoals: { processDonationGoal: createMockFn() }
         });
 
         const result = await manager.handleNotification('platform:gift', 'twitch', {

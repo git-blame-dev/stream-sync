@@ -1,4 +1,8 @@
-jest.unmock('../../src/platforms/tiktok');
+const { describe, test, expect, beforeEach, afterEach, it } = require('bun:test');
+const { createMockFn, spyOn, clearAllMocks, restoreAllMocks } = require('../helpers/bun-mock-utils');
+const { mockModule, unmockModule, restoreAllModuleMocks } = require('../helpers/bun-module-mocks');
+
+unmockModule('../../src/platforms/tiktok');
 
 const EventEmitter = require('events');
 const {
@@ -8,16 +12,16 @@ const {
 } = require('../helpers/test-setup');
 
 // Mock ConnectionStateManager to control connection lifecycle
-jest.mock('../../src/utils/connection-state-manager', () => ({
-    ConnectionStateManager: jest.fn()
+mockModule('../../src/utils/connection-state-manager', () => ({
+    ConnectionStateManager: createMockFn()
 }));
 
 // Minimal ChatFileLoggingService stub to avoid filesystem usage
 class MockChatFileLoggingService {
     constructor() {
-        this.logChatData = jest.fn();
-        this.logMemberData = jest.fn();
-        this.logGiftData = jest.fn();
+        this.logChatData = createMockFn();
+        this.logMemberData = createMockFn();
+        this.logGiftData = createMockFn();
     }
 }
 
@@ -25,17 +29,17 @@ const { TikTokPlatform } = require('../../src/platforms/tiktok');
 const { ConnectionStateManager } = require('../../src/utils/connection-state-manager');
 
 const createLogger = () => ({
-    debug: jest.fn(),
-    info: jest.fn(),
-    warn: jest.fn(),
-    error: jest.fn()
+    debug: createMockFn(),
+    info: createMockFn(),
+    warn: createMockFn(),
+    error: createMockFn()
 });
 
 const createConnectionStub = () => {
     const emitter = new EventEmitter();
     return {
-        connect: jest.fn().mockResolvedValue({ roomId: 'room123' }),
-        disconnect: jest.fn().mockResolvedValue(true),
+        connect: createMockFn().mockResolvedValue({ roomId: 'room123' }),
+        disconnect: createMockFn().mockResolvedValue(true),
         on: emitter.on.bind(emitter),
         emit: emitter.emit.bind(emitter),
         isConnected: false,
@@ -51,25 +55,25 @@ describe('TikTokPlatform initialize flow', () => {
     let connectionStateManager;
 
     beforeEach(() => {
-        jest.clearAllMocks();
         initializeTestLogging();
         connectionStub = createConnectionStub();
 
         // Provide the stub via the mocked ConnectionStateManager
         connectionStateManager = {
-            initialize: jest.fn(),
-            markDisconnected: jest.fn(),
-            markConnecting: jest.fn(),
-            markConnected: jest.fn(),
-            markError: jest.fn(),
-            ensureConnection: jest.fn().mockReturnValue(connectionStub)
+            initialize: createMockFn(),
+            markDisconnected: createMockFn(),
+            markConnecting: createMockFn(),
+            markConnected: createMockFn(),
+            markError: createMockFn(),
+            ensureConnection: createMockFn().mockReturnValue(connectionStub)
         };
         ConnectionStateManager.mockImplementation(() => connectionStateManager);
     });
 
     afterEach(() => {
-        jest.restoreAllMocks();
-    });
+        restoreAllMocks();
+    
+        restoreAllModuleMocks();});
 
     const buildPlatform = () => {
         const config = createMockConfig('tiktok', {
@@ -80,7 +84,7 @@ describe('TikTokPlatform initialize flow', () => {
         });
 
         const connectionFactory = {
-            createConnection: jest.fn().mockReturnValue(connectionStub)
+            createConnection: createMockFn().mockReturnValue(connectionStub)
         };
 
         const deps = createMockPlatformDependencies('tiktok', {
@@ -96,7 +100,7 @@ describe('TikTokPlatform initialize flow', () => {
     };
 
     it('calls handleConnectionSuccess once when connect promise resolves', async () => {
-        const successSpy = jest.spyOn(TikTokPlatform.prototype, 'handleConnectionSuccess');
+        const successSpy = spyOn(TikTokPlatform.prototype, 'handleConnectionSuccess');
         const { platform } = buildPlatform();
 
         await expect(platform.initialize({})).resolves.toBeUndefined();
@@ -106,7 +110,7 @@ describe('TikTokPlatform initialize flow', () => {
     });
 
     it('does not call handleConnectionSuccess again when CONNECTED event fires after initial success', async () => {
-        const successSpy = jest.spyOn(TikTokPlatform.prototype, 'handleConnectionSuccess');
+        const successSpy = spyOn(TikTokPlatform.prototype, 'handleConnectionSuccess');
         const { platform } = buildPlatform();
 
         await expect(platform.initialize({})).resolves.toBeUndefined();
@@ -117,7 +121,7 @@ describe('TikTokPlatform initialize flow', () => {
     });
 
     it('succeeds even when ControlEvent.CONNECTED never fires', async () => {
-        const successSpy = jest.spyOn(TikTokPlatform.prototype, 'handleConnectionSuccess');
+        const successSpy = spyOn(TikTokPlatform.prototype, 'handleConnectionSuccess');
         const { platform } = buildPlatform();
 
         await expect(platform.initialize({})).resolves.toBeUndefined();
@@ -128,16 +132,16 @@ describe('TikTokPlatform initialize flow', () => {
 
     it('schedules reconnect checks on stream end', async () => {
         const intervalManager = {
-            createInterval: jest.fn(),
-            hasInterval: jest.fn().mockReturnValue(false),
-            clearInterval: jest.fn(),
-            clearAllIntervals: jest.fn()
+            createInterval: createMockFn(),
+            hasInterval: createMockFn().mockReturnValue(false),
+            clearInterval: createMockFn(),
+            clearAllIntervals: createMockFn()
         };
 
         const { platform } = buildPlatform();
         platform.intervalManager = intervalManager;
-        platform.connection = { removeAllListeners: jest.fn() };
-        platform.connectionStateManager.markDisconnected = jest.fn();
+        platform.connection = { removeAllListeners: createMockFn() };
+        platform.connectionStateManager.markDisconnected = createMockFn();
 
         await platform._handleStreamEnd();
 

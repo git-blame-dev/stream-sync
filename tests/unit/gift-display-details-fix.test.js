@@ -1,4 +1,6 @@
 
+const { describe, test, expect, jest } = require('bun:test');
+
 const { initializeTestLogging, TEST_TIMEOUTS } = require('../helpers/test-setup');
 const NotificationBuilder = require('../../src/utils/notification-builder');
 const { generateLogMessage } = require('../helpers/notification-test-utils');

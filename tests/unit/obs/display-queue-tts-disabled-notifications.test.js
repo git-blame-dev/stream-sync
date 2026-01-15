@@ -1,33 +1,38 @@
+const { describe, test, expect, afterEach, it } = require('bun:test');
+const { createMockFn, restoreAllMocks } = require('../../helpers/bun-mock-utils');
+const { mockModule, requireActual, resetModules, restoreAllModuleMocks } = require('../../helpers/bun-module-mocks');
+
 describe('DisplayQueue notification TTS disabled', () => {
     const originalEnv = process.env.NODE_ENV;
 
     afterEach(() => {
-        jest.resetModules();
-        process.env.NODE_ENV = originalEnv;
-    });
+        restoreAllMocks();
+process.env.NODE_ENV = originalEnv;
+    
+        restoreAllModuleMocks();});
 
     function setupQueue() {
         process.env.NODE_ENV = 'test';
 
         const updateCalls = [];
 
-        jest.doMock('../../../src/obs/sources', () => {
+        mockModule('../../../src/obs/sources', () => {
             const instance = {
-                updateTextSource: jest.fn((_, text) => {
+                updateTextSource: createMockFn((_, text) => {
                     updateCalls.push(text);
                     return Promise.resolve();
                 }),
-                setSourceVisibility: jest.fn(),
-                setPlatformLogoVisibility: jest.fn(),
-                hideAllDisplays: jest.fn(),
-                updateChatMsgText: jest.fn(),
-                setNotificationPlatformLogoVisibility: jest.fn(),
-                setGroupSourceVisibility: jest.fn(),
-                setSourceFilterVisibility: jest.fn(),
-                getGroupSceneItemId: jest.fn(),
-                setChatDisplayVisibility: jest.fn(),
-                setNotificationDisplayVisibility: jest.fn(),
-                getSceneItemId: jest.fn()
+                setSourceVisibility: createMockFn(),
+                setPlatformLogoVisibility: createMockFn(),
+                hideAllDisplays: createMockFn(),
+                updateChatMsgText: createMockFn(),
+                setNotificationPlatformLogoVisibility: createMockFn(),
+                setGroupSourceVisibility: createMockFn(),
+                setSourceFilterVisibility: createMockFn(),
+                getGroupSceneItemId: createMockFn(),
+                setChatDisplayVisibility: createMockFn(),
+                setNotificationDisplayVisibility: createMockFn(),
+                getSceneItemId: createMockFn()
             };
             return {
                 OBSSourcesManager: class {},
@@ -36,16 +41,16 @@ describe('DisplayQueue notification TTS disabled', () => {
             };
         });
 
-        jest.doMock('../../../src/utils/timeout-validator', () => {
-            const actual = jest.requireActual('../../../src/utils/timeout-validator');
+        mockModule('../../../src/utils/timeout-validator', () => {
+            const actual = requireActual('../../../src/utils/timeout-validator');
             return {
                 ...actual,
-                safeDelay: jest.fn().mockResolvedValue()
+                safeDelay: createMockFn().mockResolvedValue()
             };
         });
 
-        jest.doMock('../../../src/utils/message-tts-handler', () => ({
-            createTTSStages: jest.fn(() => [
+        mockModule('../../../src/utils/message-tts-handler', () => ({
+            createTTSStages: createMockFn(() => [
                 { type: 'primary', text: 'Primary TTS', delay: 0 }
             ])
         }));

@@ -1,4 +1,7 @@
 
+const { describe, test, expect, beforeEach, it } = require('bun:test');
+const { createMockFn, restoreAllMocks } = require('../helpers/bun-mock-utils');
+
 const { 
   initializeTestLogging,
   createTestUser, 
@@ -15,6 +18,10 @@ const { TwitchViewerCountProvider } = require('../../src/utils/viewer-count-prov
 initializeTestLogging();
 
 describe('Twitch Viewer Count with Invalid Authentication', () => {
+    afterEach(() => {
+        restoreAllMocks();
+    });
+
   let mockApiClient;
   let mockConnectionStateFactory;
   let mockConfig;
@@ -24,12 +31,12 @@ describe('Twitch Viewer Count with Invalid Authentication', () => {
   beforeEach(() => {
     // Mock API client that simulates auth failure
     mockApiClient = {
-      getStreamInfo: jest.fn()
+      getStreamInfo: createMockFn()
     };
     
     // Mock connection state factory
     mockConnectionStateFactory = {
-      createTwitchState: jest.fn()
+      createTwitchState: createMockFn()
     };
     
     // Mock config with invalid tokens (like in the issue)
@@ -108,7 +115,7 @@ describe('Twitch Viewer Count with Invalid Authentication', () => {
     beforeEach(() => {
       // Mock connection state that reports ready (auth OK)
       const mockState = {
-        isApiReady: jest.fn().mockReturnValue(true), // Auth OK
+        isApiReady: createMockFn().mockReturnValue(true), // Auth OK
         isConnected: true,
         channel: 'hero_stream', 
         username: 'hero_stream'
@@ -147,7 +154,7 @@ describe('Twitch Viewer Count with Invalid Authentication', () => {
     beforeEach(() => {
       // Mock connection state that reports ready
       const mockState = {
-        isApiReady: jest.fn().mockReturnValue(true),
+        isApiReady: createMockFn().mockReturnValue(true),
         isConnected: true,
         channel: 'hero_stream',
         username: 'hero_stream'

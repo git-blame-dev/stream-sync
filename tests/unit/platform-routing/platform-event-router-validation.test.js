@@ -1,35 +1,42 @@
+const { describe, test, expect, it } = require('bun:test');
+const { createMockFn, restoreAllMocks } = require('../../helpers/bun-mock-utils');
+
 const PlatformEventRouter = require('../../../src/services/PlatformEventRouter');
 
 describe('PlatformEventRouter validation', () => {
+    afterEach(() => {
+        restoreAllMocks();
+    });
+
     const buildRouter = (overrides = {}) => {
         const runtime = {
-            handleChatMessage: jest.fn(),
-            handleGiftNotification: jest.fn(),
-            handlePaypiggyNotification: jest.fn(),
-            handleGiftPaypiggyNotification: jest.fn(),
-            handleRaidNotification: jest.fn(),
-            handleShareNotification: jest.fn(),
-            handleFollowNotification: jest.fn(),
-            updateViewerCount: jest.fn(),
+            handleChatMessage: createMockFn(),
+            handleGiftNotification: createMockFn(),
+            handlePaypiggyNotification: createMockFn(),
+            handleGiftPaypiggyNotification: createMockFn(),
+            handleRaidNotification: createMockFn(),
+            handleShareNotification: createMockFn(),
+            handleFollowNotification: createMockFn(),
+            updateViewerCount: createMockFn(),
             ...overrides.runtime
         };
         const configService = {
-            areNotificationsEnabled: jest.fn(() => true),
+            areNotificationsEnabled: createMockFn(() => true),
             ...overrides.configService
         };
         const notificationManager = {
-            handleNotification: jest.fn(),
+            handleNotification: createMockFn(),
             ...overrides.notificationManager
         };
         const eventBus = {
-            subscribe: jest.fn(() => jest.fn()),
-            emit: jest.fn()
+            subscribe: createMockFn(() => createMockFn()),
+            emit: createMockFn()
         };
         const logger = {
-            debug: jest.fn(),
-            info: jest.fn(),
-            warn: jest.fn(),
-            error: jest.fn()
+            debug: createMockFn(),
+            info: createMockFn(),
+            warn: createMockFn(),
+            error: createMockFn()
         };
 
         return {

@@ -1,6 +1,9 @@
 
+const { describe, test, expect, beforeEach, it } = require('bun:test');
+const { createMockFn, clearAllMocks, restoreAllMocks } = require('../../helpers/bun-mock-utils');
+
 const logger = {
-    debug: jest.fn(),
+    debug: createMockFn(),
     info: jest.fn?.() || (() => {}),
     warn: jest.fn?.() || (() => {})
 };
@@ -13,9 +16,12 @@ const {
 } = require('../../../src/utils/viewer-count-providers');
 
 describe('ViewerCountProvider base behavior', () => {
-    beforeEach(() => {
-        jest.clearAllMocks();
+    afterEach(() => {
+        restoreAllMocks();
     });
+
+    beforeEach(() => {
+        });
 
     it('tracks error stats and categorizes network errors', () => {
         const provider = new ViewerCountProvider('test', logger);
@@ -65,18 +71,18 @@ describe('ViewerCountProvider base behavior', () => {
 
 describe('TwitchViewerCountProvider', () => {
     beforeEach(() => {
-        jest.clearAllMocks();
+        clearAllMocks();
     });
 
     it('returns 0 when not ready', async () => {
-        const provider = new TwitchViewerCountProvider({ getStreamInfo: jest.fn() }, {}, {}, null, logger);
+        const provider = new TwitchViewerCountProvider({ getStreamInfo: createMockFn() }, {}, {}, null, logger);
 
         await expect(provider.getViewerCount()).resolves.toBe(0);
     });
 
     it('returns live viewer count and resets error counters', async () => {
         const provider = new TwitchViewerCountProvider(
-            { getStreamInfo: jest.fn().mockResolvedValue({ isLive: true, viewerCount: 42 }) },
+            { getStreamInfo: createMockFn().mockResolvedValue({ isLive: true, viewerCount: 42 }) },
             {},
             { channel: 'streamer' },
             null,
@@ -92,7 +98,7 @@ describe('TwitchViewerCountProvider', () => {
 
 describe('YouTubeViewerCountProvider', () => {
     beforeEach(() => {
-        jest.clearAllMocks();
+        clearAllMocks();
     });
 
     it('returns 0 when required dependencies are missing', async () => {
@@ -103,7 +109,7 @@ describe('YouTubeViewerCountProvider', () => {
 
     it('aggregates counts across active streams via service layer', async () => {
         const viewerExtractionService = {
-            getAggregatedViewerCount: jest.fn().mockResolvedValue({
+            getAggregatedViewerCount: createMockFn().mockResolvedValue({
                 success: true,
                 totalCount: 75,
                 successfulStreams: 1
@@ -126,7 +132,7 @@ describe('YouTubeViewerCountProvider', () => {
 
     it('routes service failures through error handler and returns 0', async () => {
         const viewerExtractionService = {
-            getAggregatedViewerCount: jest.fn().mockResolvedValue({ success: false })
+            getAggregatedViewerCount: createMockFn().mockResolvedValue({ success: false })
         };
         const provider = new YouTubeViewerCountProvider(
             {},
@@ -147,7 +153,7 @@ describe('YouTubeViewerCountProvider', () => {
             { apiKey: 'abc' },
             () => [],
             null,
-            { viewerExtractionService: { getAggregatedViewerCount: jest.fn() }, logger }
+            { viewerExtractionService: { getAggregatedViewerCount: createMockFn() }, logger }
         );
 
         const count = await provider.getViewerCount();
@@ -158,7 +164,7 @@ describe('YouTubeViewerCountProvider', () => {
 
     it('resets consecutive errors after successful aggregation following a failure', async () => {
         const viewerExtractionService = {
-            getAggregatedViewerCount: jest.fn()
+            getAggregatedViewerCount: createMockFn()
                 .mockRejectedValueOnce(new Error('network down'))
                 .mockResolvedValueOnce({ success: true, totalCount: 5, successfulStreams: 1 })
         };
@@ -182,7 +188,7 @@ describe('YouTubeViewerCountProvider', () => {
 
 describe('TikTokViewerCountProvider', () => {
     beforeEach(() => {
-        jest.clearAllMocks();
+        clearAllMocks();
     });
 
     it('handles missing platform gracefully', async () => {
@@ -196,7 +202,7 @@ describe('TikTokViewerCountProvider', () => {
     it('returns platform viewer count when available', async () => {
         const platform = {
             connection: { isConnected: true },
-            getViewerCount: jest.fn().mockResolvedValue(33)
+            getViewerCount: createMockFn().mockResolvedValue(33)
         };
         const provider = new TikTokViewerCountProvider(platform, { logger });
 
@@ -208,7 +214,7 @@ describe('TikTokViewerCountProvider', () => {
     it('resets error count on success after previous failure', async () => {
         const platform = {
             connection: { isConnected: true },
-            getViewerCount: jest.fn()
+            getViewerCount: createMockFn()
                 .mockRejectedValueOnce(new Error('network'))
                 .mockResolvedValueOnce(10)
         };

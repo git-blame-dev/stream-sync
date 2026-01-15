@@ -1,8 +1,12 @@
 
-jest.mock('../../../src/chat/commands', () => {
-    const runCommand = jest.fn().mockResolvedValue();
-    const CommandParser = jest.fn().mockImplementation(() => ({
-        getVFXConfig: jest.fn((message) => ({
+const { describe, test, expect, afterEach, it } = require('bun:test');
+const { createMockFn, clearAllMocks, restoreAllMocks } = require('../../helpers/bun-mock-utils');
+const { mockModule, restoreAllModuleMocks } = require('../../helpers/bun-module-mocks');
+
+mockModule('../../../src/chat/commands', () => {
+    const runCommand = createMockFn().mockResolvedValue();
+    const CommandParser = createMockFn().mockImplementation(() => ({
+        getVFXConfig: createMockFn((message) => ({
             command: message,
             commandKey: message,
             filename: `${message}.mp4`,
@@ -26,13 +30,15 @@ describe('VFXCommandService random variant selection', () => {
     const originalRandomInt = crypto.randomInt;
 
     afterEach(() => {
-        jest.clearAllMocks();
+        restoreAllMocks();
+        clearAllMocks();
         crypto.randomInt = originalRandomInt;
-    });
+    
+        restoreAllModuleMocks();});
 
     const createConfigService = (commandValue) => ({
-        getCommand: jest.fn().mockReturnValue(commandValue),
-        get: jest.fn((section, key) => {
+        getCommand: createMockFn().mockReturnValue(commandValue),
+        get: createMockFn((section, key) => {
             if (section === 'commands') return { gifts: commandValue };
             if (section === 'farewell') return {};
             if (section === 'vfx' && key === 'filePath') return '/tmp';
@@ -45,11 +51,11 @@ describe('VFXCommandService random variant selection', () => {
 
     it('selects a single variant based on deterministic random value', async () => {
         const configService = createConfigService('!one | !two | !three');
-        crypto.randomInt = jest.fn().mockReturnValue(1); // picks index 1 => !two
+        crypto.randomInt = createMockFn().mockReturnValue(1); // picks index 1 => !two
 
         const service = new VFXCommandService(configService, null);
         service.commandParser = {
-            getVFXConfig: jest.fn((message) => ({
+            getVFXConfig: createMockFn((message) => ({
                 command: message,
                 commandKey: message,
                 filename: `${message}.mp4`,

@@ -1,15 +1,22 @@
+const { describe, test, expect, it } = require('bun:test');
+const { createMockFn, restoreAllMocks } = require('../helpers/bun-mock-utils');
+
 const { YouTubePlatform } = require('../../src/platforms/youtube');
 
 describe('YouTubePlatform live validation (modern signals)', () => {
+    afterEach(() => {
+        restoreAllMocks();
+    });
+
     const logger = {
-        debug: jest.fn(),
-        info: jest.fn(),
-        warn: jest.fn(),
-        error: jest.fn()
+        debug: createMockFn(),
+        info: createMockFn(),
+        warn: createMockFn(),
+        error: createMockFn()
     };
 
-    const streamDetectionService = { detectLiveStreams: jest.fn() };
-    const chatFileLoggingService = { logChatMessage: jest.fn(), close: jest.fn() };
+    const streamDetectionService = { detectLiveStreams: createMockFn() };
+    const chatFileLoggingService = { logChatMessage: createMockFn(), close: createMockFn() };
 
     const baseConfig = {
         enabled: true,

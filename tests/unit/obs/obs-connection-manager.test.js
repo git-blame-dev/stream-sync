@@ -1,8 +1,13 @@
 
-jest.mock('../../../src/utils/platform-error-handler', () => ({
-    createPlatformErrorHandler: jest.fn(() => ({
-        handleEventProcessingError: jest.fn(),
-        logOperationalError: jest.fn()
+const { describe, test, expect, beforeEach, afterEach, it } = require('bun:test');
+const { createMockFn, spyOn, clearAllMocks, restoreAllMocks } = require('../../helpers/bun-mock-utils');
+const { mockModule, restoreAllModuleMocks } = require('../../helpers/bun-module-mocks');
+const { useFakeTimers, useRealTimers, runOnlyPendingTimers } = require('../../helpers/bun-timers');
+
+mockModule('../../../src/utils/platform-error-handler', () => ({
+    createPlatformErrorHandler: createMockFn(() => ({
+        handleEventProcessingError: createMockFn(),
+        logOperationalError: createMockFn()
     }))
 }));
 
@@ -11,10 +16,10 @@ const { OBSConnectionManager } = require('../../../src/obs/connection');
 
 describe('OBSConnectionManager', () => {
     const logger = {
-        debug: jest.fn(),
-        info: jest.fn(),
-        warn: jest.fn(),
-        error: jest.fn()
+        debug: createMockFn(),
+        info: createMockFn(),
+        warn: createMockFn(),
+        error: createMockFn()
     };
 
     const createManager = (overrides = {}) => {
@@ -34,36 +39,37 @@ describe('OBSConnectionManager', () => {
 
     const runPendingTimers = async () => {
         if (typeof jest.runOnlyPendingTimersAsync === 'function') {
-            await jest.runOnlyPendingTimersAsync();
+            await runOnlyPendingTimers();
         } else {
-            jest.runOnlyPendingTimers();
+            runOnlyPendingTimers();
             await Promise.resolve();
         }
     };
 
     beforeEach(() => {
-        jest.clearAllMocks();
-        jest.useFakeTimers();
+        useFakeTimers();
     });
 
     afterEach(() => {
-        jest.useRealTimers();
-    });
+        restoreAllMocks();
+        useRealTimers();
+    
+        restoreAllModuleMocks();});
 
     it('skips connect when already connected or connecting', async () => {
-        const connectSpy = jest.fn().mockResolvedValue({
+        const connectSpy = createMockFn().mockResolvedValue({
             obsWebSocketVersion: '5',
             negotiatedRpcVersion: 1
         });
         const mockOBS = {
             connect: connectSpy,
-            disconnect: jest.fn(),
-            call: jest.fn(),
-            on: jest.fn(),
-            off: jest.fn(),
-            once: jest.fn(),
-            addEventListener: jest.fn(),
-            removeEventListener: jest.fn()
+            disconnect: createMockFn(),
+            call: createMockFn(),
+            on: createMockFn(),
+            off: createMockFn(),
+            once: createMockFn(),
+            addEventListener: createMockFn(),
+            removeEventListener: createMockFn()
         };
 
         const manager = createManager({ mockOBS });
@@ -84,16 +90,16 @@ describe('OBSConnectionManager', () => {
     });
 
     it('schedules reconnect once and skips when already connected/connecting', async () => {
-        jest.spyOn(global, 'setTimeout');
+        spyOn(global, 'setTimeout');
         const mockOBS = {
-            connect: jest.fn(),
-            disconnect: jest.fn(),
-            call: jest.fn(),
-            on: jest.fn(),
-            off: jest.fn(),
-            once: jest.fn(),
-            addEventListener: jest.fn(),
-            removeEventListener: jest.fn()
+            connect: createMockFn(),
+            disconnect: createMockFn(),
+            call: createMockFn(),
+            on: createMockFn(),
+            off: createMockFn(),
+            once: createMockFn(),
+            addEventListener: createMockFn(),
+            removeEventListener: createMockFn()
         };
         const manager = createManager({ mockOBS });
 
@@ -114,17 +120,17 @@ describe('OBSConnectionManager', () => {
     });
 
     it('routes connection errors through platform error handler', async () => {
-        const connectSpy = jest.fn().mockRejectedValue(new Error('connect failed'));
+        const connectSpy = createMockFn().mockRejectedValue(new Error('connect failed'));
         class FailingOBS {
             constructor() {
                 this.connect = connectSpy;
-                this.disconnect = jest.fn();
-                this.call = jest.fn();
-                this.on = jest.fn();
-                this.off = jest.fn();
-                this.once = jest.fn();
-                this.addEventListener = jest.fn();
-                this.removeEventListener = jest.fn();
+                this.disconnect = createMockFn();
+                this.call = createMockFn();
+                this.on = createMockFn();
+                this.off = createMockFn();
+                this.once = createMockFn();
+                this.addEventListener = createMockFn();
+                this.removeEventListener = createMockFn();
             }
         }
 
@@ -135,8 +141,8 @@ describe('OBSConnectionManager', () => {
         });
 
         const errorHandler = createPlatformErrorHandler(logger, 'obs-connection') || {
-            handleEventProcessingError: jest.fn(),
-            logOperationalError: jest.fn()
+            handleEventProcessingError: createMockFn(),
+            logOperationalError: createMockFn()
         };
         manager.errorHandler = errorHandler;
 
@@ -154,19 +160,19 @@ describe('OBSConnectionManager', () => {
     });
 
     it('clears reconnect timer on successful connect and completion handler', async () => {
-        const connectSpy = jest.fn().mockResolvedValue({});
+        const connectSpy = createMockFn().mockResolvedValue({});
         const handlers = {};
         const mockOBS = {
             connect: connectSpy,
-            disconnect: jest.fn(),
-            call: jest.fn(),
-            on: jest.fn((event, cb) => {
+            disconnect: createMockFn(),
+            call: createMockFn(),
+            on: createMockFn((event, cb) => {
                 handlers[event] = cb;
             }),
-            off: jest.fn(),
-            once: jest.fn(),
-            addEventListener: jest.fn(),
-            removeEventListener: jest.fn()
+            off: createMockFn(),
+            once: createMockFn(),
+            addEventListener: createMockFn(),
+            removeEventListener: createMockFn()
         };
 
         const manager = createManager({ mockOBS });

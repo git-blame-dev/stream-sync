@@ -1,3 +1,6 @@
+const { describe, test, expect, it } = require('bun:test');
+const { createMockFn, restoreAllMocks } = require('../../helpers/bun-mock-utils');
+
 const NotificationManager = require('../../../src/notifications/NotificationManager');
 const constants = require('../../../src/core/constants');
 
@@ -33,24 +36,28 @@ const createConfigServiceStub = () => ({
 });
 
 const createLoggerStub = () => ({
-    debug: jest.fn(),
-    info: jest.fn(),
-    warn: jest.fn(),
-    error: jest.fn()
+    debug: createMockFn(),
+    info: createMockFn(),
+    warn: createMockFn(),
+    error: createMockFn()
 });
 
 describe('NotificationManager paypiggy normalization', () => {
+    afterEach(() => {
+        restoreAllMocks();
+    });
+
     it('processes canonical paypiggy notifications with paypiggy priority and VFX command', async () => {
         const displayQueue = createDisplayQueueStub();
         const manager = new NotificationManager({
             displayQueue,
-            eventBus: { emit: jest.fn(), subscribe: jest.fn() },
+            eventBus: { emit: createMockFn(), subscribe: createMockFn() },
             configService: createConfigServiceStub(),
-            vfxCommandService: { getVFXConfig: jest.fn().mockResolvedValue({ commandKey: 'paypiggies' }) },
+            vfxCommandService: { getVFXConfig: createMockFn().mockResolvedValue({ commandKey: 'paypiggies' }) },
             logger: createLoggerStub(),
             constants,
-            textProcessing: { formatChatMessage: jest.fn() },
-            obsGoals: { processDonationGoal: jest.fn() }
+            textProcessing: { formatChatMessage: createMockFn() },
+            obsGoals: { processDonationGoal: createMockFn() }
         });
 
         await manager.handleNotification('platform:paypiggy', 'tiktok', {
@@ -72,13 +79,13 @@ describe('NotificationManager paypiggy normalization', () => {
         const displayQueue = createDisplayQueueStub();
         const manager = new NotificationManager({
             displayQueue,
-            eventBus: { emit: jest.fn(), subscribe: jest.fn() },
+            eventBus: { emit: createMockFn(), subscribe: createMockFn() },
             configService: createConfigServiceStub(),
-            vfxCommandService: { getVFXConfig: jest.fn().mockResolvedValue({ commandKey: 'paypiggies' }) },
+            vfxCommandService: { getVFXConfig: createMockFn().mockResolvedValue({ commandKey: 'paypiggies' }) },
             logger: createLoggerStub(),
             constants,
-            textProcessing: { formatChatMessage: jest.fn() },
-            obsGoals: { processDonationGoal: jest.fn() }
+            textProcessing: { formatChatMessage: createMockFn() },
+            obsGoals: { processDonationGoal: createMockFn() }
         });
 
         await manager.handleNotification('platform:paypiggy', 'tiktok', {
@@ -97,13 +104,13 @@ describe('NotificationManager paypiggy normalization', () => {
         const displayQueue = createDisplayQueueStub();
         const manager = new NotificationManager({
             displayQueue,
-            eventBus: { emit: jest.fn(), subscribe: jest.fn() },
+            eventBus: { emit: createMockFn(), subscribe: createMockFn() },
             configService: createConfigServiceStub(),
-            vfxCommandService: { getVFXConfig: jest.fn().mockResolvedValue({ commandKey: 'paypiggies' }) },
+            vfxCommandService: { getVFXConfig: createMockFn().mockResolvedValue({ commandKey: 'paypiggies' }) },
             logger: createLoggerStub(),
             constants,
-            textProcessing: { formatChatMessage: jest.fn() },
-            obsGoals: { processDonationGoal: jest.fn() }
+            textProcessing: { formatChatMessage: createMockFn() },
+            obsGoals: { processDonationGoal: createMockFn() }
         });
 
         const result = await manager.handleNotification('subscription', 'twitch', {
@@ -119,13 +126,13 @@ describe('NotificationManager paypiggy normalization', () => {
         const displayQueue = createDisplayQueueStub();
         const manager = new NotificationManager({
             displayQueue,
-            eventBus: { emit: jest.fn(), subscribe: jest.fn() },
+            eventBus: { emit: createMockFn(), subscribe: createMockFn() },
             configService: createConfigServiceStub(),
-            vfxCommandService: { getVFXConfig: jest.fn().mockResolvedValue({ commandKey: 'paypiggies' }) },
+            vfxCommandService: { getVFXConfig: createMockFn().mockResolvedValue({ commandKey: 'paypiggies' }) },
             logger: createLoggerStub(),
             constants,
-            textProcessing: { formatChatMessage: jest.fn() },
-            obsGoals: { processDonationGoal: jest.fn() }
+            textProcessing: { formatChatMessage: createMockFn() },
+            obsGoals: { processDonationGoal: createMockFn() }
         });
 
         const result = await manager.handleNotification('membership', 'youtube', {
@@ -141,13 +148,13 @@ describe('NotificationManager paypiggy normalization', () => {
         const displayQueue = createDisplayQueueStub();
         const manager = new NotificationManager({
             displayQueue,
-            eventBus: { emit: jest.fn(), subscribe: jest.fn() },
+            eventBus: { emit: createMockFn(), subscribe: createMockFn() },
             configService: createConfigServiceStub(),
-            vfxCommandService: { getVFXConfig: jest.fn().mockResolvedValue({ commandKey: 'paypiggies' }) },
+            vfxCommandService: { getVFXConfig: createMockFn().mockResolvedValue({ commandKey: 'paypiggies' }) },
             logger: createLoggerStub(),
             constants,
-            textProcessing: { formatChatMessage: jest.fn() },
-            obsGoals: { processDonationGoal: jest.fn() }
+            textProcessing: { formatChatMessage: createMockFn() },
+            obsGoals: { processDonationGoal: createMockFn() }
         });
 
         const result = await manager.handleNotification('subscribe', 'twitch', {
@@ -163,13 +170,13 @@ describe('NotificationManager paypiggy normalization', () => {
         const displayQueue = createDisplayQueueStub();
         const manager = new NotificationManager({
             displayQueue,
-            eventBus: { emit: jest.fn(), subscribe: jest.fn() },
+            eventBus: { emit: createMockFn(), subscribe: createMockFn() },
             configService: createConfigServiceStub(),
-            vfxCommandService: { getVFXConfig: jest.fn().mockResolvedValue({ commandKey: 'paypiggies' }) },
+            vfxCommandService: { getVFXConfig: createMockFn().mockResolvedValue({ commandKey: 'paypiggies' }) },
             logger: createLoggerStub(),
             constants,
-            textProcessing: { formatChatMessage: jest.fn() },
-            obsGoals: { processDonationGoal: jest.fn() }
+            textProcessing: { formatChatMessage: createMockFn() },
+            obsGoals: { processDonationGoal: createMockFn() }
         });
 
         const result = await manager.handleNotification('supporter', 'twitch', {
@@ -185,13 +192,13 @@ describe('NotificationManager paypiggy normalization', () => {
         const displayQueue = createDisplayQueueStub();
         const manager = new NotificationManager({
             displayQueue,
-            eventBus: { emit: jest.fn(), subscribe: jest.fn() },
+            eventBus: { emit: createMockFn(), subscribe: createMockFn() },
             configService: createConfigServiceStub(),
-            vfxCommandService: { getVFXConfig: jest.fn().mockResolvedValue({ commandKey: 'paypiggies' }) },
+            vfxCommandService: { getVFXConfig: createMockFn().mockResolvedValue({ commandKey: 'paypiggies' }) },
             logger: createLoggerStub(),
             constants,
-            textProcessing: { formatChatMessage: jest.fn() },
-            obsGoals: { processDonationGoal: jest.fn() }
+            textProcessing: { formatChatMessage: createMockFn() },
+            obsGoals: { processDonationGoal: createMockFn() }
         });
 
         const result = await manager.handleNotification('superfan', 'tiktok', {
@@ -219,12 +226,12 @@ describe('NotificationManager paypiggy normalization', () => {
         process.env.NODE_ENV = 'production';
         expect(() => new NotificationManager({
             displayQueue,
-            eventBus: { emit: jest.fn(), subscribe: jest.fn() },
-            vfxCommandService: { getVFXConfig: jest.fn().mockResolvedValue(null) },
+            eventBus: { emit: createMockFn(), subscribe: createMockFn() },
+            vfxCommandService: { getVFXConfig: createMockFn().mockResolvedValue(null) },
             logger: createLoggerStub(),
             constants,
-            textProcessing: { formatChatMessage: jest.fn() },
-            obsGoals: { processDonationGoal: jest.fn() }
+            textProcessing: { formatChatMessage: createMockFn() },
+            obsGoals: { processDonationGoal: createMockFn() }
         })).toThrow('NotificationManager requires ConfigService dependency');
         process.env.NODE_ENV = originalEnv;
     });
@@ -233,13 +240,13 @@ describe('NotificationManager paypiggy normalization', () => {
         const displayQueue = createDisplayQueueStub();
         const manager = new NotificationManager({
             displayQueue,
-            eventBus: { emit: jest.fn(), subscribe: jest.fn() },
+            eventBus: { emit: createMockFn(), subscribe: createMockFn() },
             configService: createConfigServiceStub(),
-            vfxCommandService: { getVFXConfig: jest.fn().mockResolvedValue(null) },
+            vfxCommandService: { getVFXConfig: createMockFn().mockResolvedValue(null) },
             logger: createLoggerStub(),
             constants,
-            textProcessing: { formatChatMessage: jest.fn() },
-            obsGoals: { processDonationGoal: jest.fn() }
+            textProcessing: { formatChatMessage: createMockFn() },
+            obsGoals: { processDonationGoal: createMockFn() }
         });
 
         const result = await manager.handleNotification('superchat', 'youtube', {

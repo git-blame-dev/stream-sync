@@ -4,6 +4,7 @@
 // ================================================================================================
 
 const testClock = require('./test-clock');
+const { isMockFunction } = require('./bun-mock-utils');
 
 const expectValidNotification = (notification, expectedType, expectedPlatform) => {
     // Required fields for all notifications
@@ -532,7 +533,7 @@ const expectOnlyMethodCalled = (mockObject, methodName, expectedArgs) => {
     }
     
     const mockMethod = mockObject[methodName];
-    if (!jest.isMockFunction(mockMethod)) {
+    if (!isMockFunction(mockMethod)) {
         throw new Error(`${methodName} is not a mock function`);
     }
     
@@ -555,7 +556,7 @@ const expectOnlyMethodCalled = (mockObject, methodName, expectedArgs) => {
     // Check that no other methods were called
     const validMethods = mockObject._validMethods || [];
     const calledMethods = validMethods.filter(method => {
-        return jest.isMockFunction(mockObject[method]) && mockObject[method].mock.calls.length > 0;
+        return isMockFunction(mockObject[method]) && mockObject[method].mock.calls.length > 0;
     });
     
     if (calledMethods.length > 1 || (calledMethods.length === 1 && calledMethods[0] !== methodName)) {
@@ -577,7 +578,7 @@ const expectMethodCallSequence = (mockObject, expectedSequence) => {
     
     validMethods.forEach(methodName => {
         const mockMethod = mockObject[methodName];
-        if (jest.isMockFunction(mockMethod)) {
+        if (isMockFunction(mockMethod)) {
             mockMethod.mock.calls.forEach((args, callIndex) => {
                 allCalls.push({
                     method: methodName,
@@ -620,7 +621,7 @@ const expectNoUnexpectedCalls = (mockObject, allowedMethods) => {
     
     const validMethods = mockObject._validMethods || [];
     const calledMethods = validMethods.filter(method => {
-        return jest.isMockFunction(mockObject[method]) && mockObject[method].mock.calls.length > 0;
+        return isMockFunction(mockObject[method]) && mockObject[method].mock.calls.length > 0;
     });
     
     const unexpectedMethods = calledMethods.filter(method => !allowedMethods.includes(method));
@@ -640,7 +641,7 @@ const expectMockCallPattern = (mockObject, pattern) => {
     
     Object.keys(pattern).forEach(methodName => {
         const mockMethod = mockObject[methodName];
-        if (!jest.isMockFunction(mockMethod)) {
+        if (!isMockFunction(mockMethod)) {
             throw new Error(`${methodName} is not a mock function`);
         }
         

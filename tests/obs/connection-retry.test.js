@@ -1,3 +1,7 @@
+const { describe, test, expect, beforeEach, afterEach, it } = require('bun:test');
+const { createMockFn, clearAllMocks, restoreAllMocks } = require('../helpers/bun-mock-utils');
+const { useFakeTimers, useRealTimers, runOnlyPendingTimers } = require('../helpers/bun-timers');
+
 const { OBSConnectionManager } = require('../../src/obs/connection');
 
 describe('OBSConnectionManager reconnection behavior', () => {
@@ -8,28 +12,28 @@ describe('OBSConnectionManager reconnection behavior', () => {
 
     const runPendingTimers = async () => {
         if (typeof jest.runOnlyPendingTimersAsync === 'function') {
-            await jest.runOnlyPendingTimersAsync();
+            await runOnlyPendingTimers();
         } else {
-            jest.runOnlyPendingTimers();
+            runOnlyPendingTimers();
             await Promise.resolve();
         }
     };
 
     beforeEach(() => {
-        jest.useFakeTimers();
+        useFakeTimers();
         identifiedCallback = null;
         connectionClosedCallback = null;
 
         mockOBS = {
-            connect: jest.fn(),
-            disconnect: jest.fn().mockResolvedValue(),
-            call: jest.fn(),
-            on: jest.fn((event, cb) => {
+            connect: createMockFn(),
+            disconnect: createMockFn().mockResolvedValue(),
+            call: createMockFn(),
+            on: createMockFn((event, cb) => {
                 if (event === 'Identified') identifiedCallback = cb;
                 if (event === 'ConnectionClosed') connectionClosedCallback = cb;
             }),
-            once: jest.fn(),
-            off: jest.fn()
+            once: createMockFn(),
+            off: createMockFn()
         };
 
         manager = new OBSConnectionManager({
@@ -45,8 +49,9 @@ describe('OBSConnectionManager reconnection behavior', () => {
     });
 
     afterEach(() => {
-        jest.useRealTimers();
-        jest.clearAllMocks();
+        restoreAllMocks();
+        useRealTimers();
+        clearAllMocks();
     });
 
     it('schedules a reconnect after a failed connect attempt', async () => {

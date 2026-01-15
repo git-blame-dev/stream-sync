@@ -1,4 +1,7 @@
 
+const { describe, test, expect, beforeEach } = require('bun:test');
+const { createMockFn, restoreAllMocks } = require('../helpers/bun-mock-utils');
+
 const { initializeTestLogging } = require('../helpers/test-setup');
 
 // Initialize logging for tests
@@ -7,15 +10,19 @@ initializeTestLogging();
 const { YouTubeConnectionManager } = require('../../src/utils/youtube-connection-manager');
 
 describe('YouTube Connection Manager - Missing Methods', () => {
+    afterEach(() => {
+        restoreAllMocks();
+    });
+
     let connectionManager;
     let mockLogger;
     
     beforeEach(() => {
         mockLogger = {
-            debug: jest.fn(),
-            info: jest.fn(),
-            warn: jest.fn(),
-            error: jest.fn()
+            debug: createMockFn(),
+            info: createMockFn(),
+            warn: createMockFn(),
+            error: createMockFn()
         };
         connectionManager = new YouTubeConnectionManager(mockLogger);
     });

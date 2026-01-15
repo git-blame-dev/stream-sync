@@ -1,45 +1,54 @@
 
+const { describe, test, expect, beforeEach, it } = require('bun:test');
+const { createMockFn, spyOn, clearAllMocks, restoreAllMocks } = require('../helpers/bun-mock-utils');
+const { mockModule, resetModules, restoreAllModuleMocks } = require('../helpers/bun-module-mocks');
+
 const mockErrorHandler = {
-    handleEventProcessingError: jest.fn(),
-    logOperationalError: jest.fn()
+    handleEventProcessingError: createMockFn(),
+    logOperationalError: createMockFn()
 };
 
-jest.mock('../../src/core/logging', () => {
+mockModule('../../src/core/logging', () => {
     const logger = {
-        debug: jest.fn(),
-        info: jest.fn(),
-        warn: jest.fn(),
-        error: jest.fn()
+        debug: createMockFn(),
+        info: createMockFn(),
+        warn: createMockFn(),
+        error: createMockFn()
     };
     return {
         logger,
-        getLogger: jest.fn(() => logger),
-        getUnifiedLogger: jest.fn(() => logger),
-        initializeLoggingConfig: jest.fn(),
-        initializeConsoleOverride: jest.fn(),
-        setConfigValidator: jest.fn(),
-        setDebugMode: jest.fn()
+        getLogger: createMockFn(() => logger),
+        getUnifiedLogger: createMockFn(() => logger),
+        initializeLoggingConfig: createMockFn(),
+        initializeConsoleOverride: createMockFn(),
+        setConfigValidator: createMockFn(),
+        setDebugMode: createMockFn()
     };
 });
 
-jest.mock('../../src/utils/platform-error-handler', () => ({
-    createPlatformErrorHandler: jest.fn(() => mockErrorHandler)
+mockModule('../../src/utils/platform-error-handler', () => ({
+    createPlatformErrorHandler: createMockFn(() => mockErrorHandler)
 }));
 
-const mockWireStreamStatusHandlers = jest.fn(() => jest.fn());
-jest.mock('../../src/viewer-count/stream-status-handler', () => mockWireStreamStatusHandlers);
+const mockWireStreamStatusHandlers = createMockFn(() => createMockFn());
+mockModule('../../src/viewer-count/stream-status-handler', () => mockWireStreamStatusHandlers);
 
 // Keep heavy dependencies lean for behavior tests
-jest.mock('../../src/services/PlatformEventRouter', () => jest.fn(() => ({})));
-jest.mock('../../src/services/ChatNotificationRouter', () => jest.fn(() => ({})));
-jest.mock('../../src/chat/commands', () => ({
-    CommandParser: jest.fn(() => ({}))
+mockModule('../../src/services/PlatformEventRouter', () => createMockFn(() => ({})));
+mockModule('../../src/services/ChatNotificationRouter', () => createMockFn(() => ({})));
+mockModule('../../src/chat/commands', () => ({
+    CommandParser: createMockFn(() => ({}))
 }));
 
 const { createRuntimeConstantsFixture } = require('../helpers/runtime-constants-fixture');
 const { PlatformEvents } = require('../../src/interfaces/PlatformEvents');
 
 describe('main.js event handler wiring', () => {
+    afterEach(() => {
+        restoreAllMocks();
+        restoreAllModuleMocks();
+    });
+
     const baseConfig = {
         general: {
             streamDetectionEnabled: false,
@@ -51,26 +60,26 @@ describe('main.js event handler wiring', () => {
 
     const createDeps = (overrides = {}) => ({
         logging: {
-            debug: jest.fn(),
-            info: jest.fn(),
-            warn: jest.fn(),
-            error: jest.fn(),
-            console: jest.fn()
+            debug: createMockFn(),
+            info: createMockFn(),
+            warn: createMockFn(),
+            error: createMockFn(),
+            console: createMockFn()
         },
-        notificationManager: overrides.notificationManager || { handleNotification: jest.fn() },
-        displayQueue: overrides.displayQueue || { addItem: jest.fn() },
+        notificationManager: overrides.notificationManager || { handleNotification: createMockFn() },
+        displayQueue: overrides.displayQueue || { addItem: createMockFn() },
         eventBus: overrides.eventBus !== undefined ? overrides.eventBus : {
-            subscribe: jest.fn(),
-            emit: jest.fn(),
-            unsubscribe: jest.fn()
+            subscribe: createMockFn(),
+            emit: createMockFn(),
+            unsubscribe: createMockFn()
         },
         configService: overrides.configService || {},
-        vfxCommandService: overrides.vfxCommandService || { executeCommandForKey: jest.fn().mockResolvedValue({ success: true }) },
-        ttsService: overrides.ttsService || { speak: jest.fn().mockResolvedValue({ success: true }) },
-        userTrackingService: overrides.userTrackingService || { isFirstMessage: jest.fn().mockResolvedValue(false) },
-        commandCooldownService: overrides.commandCooldownService || { updateCooldown: jest.fn() },
-        platformLifecycleService: overrides.platformLifecycleService || { getAllPlatforms: jest.fn(() => ({})) },
-        dependencyFactory: overrides.dependencyFactory || { createYoutubeDependencies: jest.fn(() => ({})) },
+        vfxCommandService: overrides.vfxCommandService || { executeCommandForKey: createMockFn().mockResolvedValue({ success: true }) },
+        ttsService: overrides.ttsService || { speak: createMockFn().mockResolvedValue({ success: true }) },
+        userTrackingService: overrides.userTrackingService || { isFirstMessage: createMockFn().mockResolvedValue(false) },
+        commandCooldownService: overrides.commandCooldownService || { updateCooldown: createMockFn() },
+        platformLifecycleService: overrides.platformLifecycleService || { getAllPlatforms: createMockFn(() => ({})) },
+        dependencyFactory: overrides.dependencyFactory || { createYoutubeDependencies: createMockFn(() => ({})) },
         runtimeConstants: overrides.runtimeConstants || createRuntimeConstantsFixture(),
         authManager: overrides.authManager || {},
         obsEventService: overrides.obsEventService || {},
@@ -78,13 +87,12 @@ describe('main.js event handler wiring', () => {
     });
 
     beforeEach(() => {
-        jest.resetModules();
-        jest.clearAllMocks();
-        mockWireStreamStatusHandlers.mockReturnValue(jest.fn());
+        resetModules();
+        mockWireStreamStatusHandlers.mockReturnValue(createMockFn());
     });
 
     it('rejects construction when EventBus is unavailable', () => {
-        const processOnSpy = jest.spyOn(process, 'on').mockImplementation(() => process);
+        const processOnSpy = spyOn(process, 'on').mockImplementation(() => process);
 
         const { AppRuntime } = require('../../src/main.js');
         expect(() => new AppRuntime(baseConfig, createDeps({ eventBus: null })))
@@ -94,12 +102,12 @@ describe('main.js event handler wiring', () => {
     });
 
     it('wires stream status handlers when EventBus is available', () => {
-        const processOnSpy = jest.spyOn(process, 'on').mockImplementation(() => process);
+        const processOnSpy = spyOn(process, 'on').mockImplementation(() => process);
 
-        const cleanupSpy = jest.fn();
+        const cleanupSpy = createMockFn();
         mockWireStreamStatusHandlers.mockReturnValue(cleanupSpy);
 
-        const eventBus = { subscribe: jest.fn() };
+        const eventBus = { subscribe: createMockFn() };
         const { AppRuntime } = require('../../src/main.js');
         const bot = new AppRuntime(baseConfig, createDeps({ eventBus }));
 
@@ -114,7 +122,7 @@ describe('main.js event handler wiring', () => {
     });
 
     it('constructs without event logging or error handling services', () => {
-        const processOnSpy = jest.spyOn(process, 'on').mockImplementation(() => process);
+        const processOnSpy = spyOn(process, 'on').mockImplementation(() => process);
 
         const { AppRuntime } = require('../../src/main.js');
         const deps = createDeps();
@@ -124,16 +132,16 @@ describe('main.js event handler wiring', () => {
     });
 
     it('routes event handler failures through platform error handler', async () => {
-        const processOnSpy = jest.spyOn(process, 'on').mockImplementation(() => process);
+        const processOnSpy = spyOn(process, 'on').mockImplementation(() => process);
 
         const handlers = {};
         const eventBus = {
-            subscribe: jest.fn((event, handler) => {
+            subscribe: createMockFn((event, handler) => {
                 handlers[event] = handler;
             })
         };
         const vfxCommandService = {
-            executeCommand: jest.fn(() => {
+            executeCommand: createMockFn(() => {
                 throw new Error('vfx failure');
             })
         };
@@ -163,12 +171,12 @@ describe('main.js event handler wiring', () => {
     });
 
     it('routes envelope handler failures without crashing', async () => {
-        const processOnSpy = jest.spyOn(process, 'on').mockImplementation(() => process);
+        const processOnSpy = spyOn(process, 'on').mockImplementation(() => process);
 
         const { AppRuntime } = require('../../src/main.js');
         const bot = new AppRuntime(baseConfig, createDeps());
 
-        bot.handleGiftNotification = jest.fn(() => {
+        bot.handleGiftNotification = createMockFn(() => {
             throw new Error('envelope failure');
         });
 

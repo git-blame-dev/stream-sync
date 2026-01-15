@@ -1,4 +1,8 @@
 
+const { describe, test, expect, beforeEach } = require('bun:test');
+const { createMockFn, restoreAllMocks } = require('../helpers/bun-mock-utils');
+const { mockModule, restoreAllModuleMocks } = require('../helpers/bun-module-mocks');
+
 const { initializeTestLogging, TEST_TIMEOUTS } = require('../helpers/test-setup');
 const { createMockLogger, createMockOBSConnection, createMockConfigManager } = require('../helpers/mock-factories');
 const { setupAutomatedCleanup } = require('../helpers/mock-lifecycle');
@@ -15,28 +19,28 @@ setupAutomatedCleanup({
 });
 
 // Mock all dependencies to capture current behavior
-jest.mock('../../src/core/logging', () => ({
-    debugLog: jest.fn(), // Keep for backward compatibility
+mockModule('../../src/core/logging', () => ({
+    debugLog: createMockFn(), // Keep for backward compatibility
     logger: {
-        error: jest.fn(),
-        warn: jest.fn(),
-        info: jest.fn(),
-        debug: jest.fn()
+        error: createMockFn(),
+        warn: createMockFn(),
+        info: createMockFn(),
+        debug: createMockFn()
     }
 }));
 
-jest.mock('../../src/core/config', () => ({
+mockModule('../../src/core/config', () => ({
     configManager: {
-        getBoolean: jest.fn(),
-        getString: jest.fn(),
-        getNumber: jest.fn()
+        getBoolean: createMockFn(),
+        getString: createMockFn(),
+        getNumber: createMockFn()
     },
     config: { general: { fallbackUsername: 'Unknown User' } }
 }));
 
-jest.mock('../../src/obs/sources', () => {
+mockModule('../../src/obs/sources', () => {
     const instance = {
-        updateTextSource: jest.fn().mockResolvedValue()
+        updateTextSource: createMockFn().mockResolvedValue()
     };
     return {
         OBSSourcesManager: class {},
@@ -45,46 +49,51 @@ jest.mock('../../src/obs/sources', () => {
     };
 });
 
-jest.mock('../../src/obs/connection', () => ({
-    getOBSConnectionManager: jest.fn()
+mockModule('../../src/obs/connection', () => ({
+    getOBSConnectionManager: createMockFn()
 }));
 
 const mockGoalTracker = {
-    initializeGoalTracker: jest.fn().mockResolvedValue(),
-    addDonationToGoal: jest.fn().mockResolvedValue({
+    initializeGoalTracker: createMockFn().mockResolvedValue(),
+    addDonationToGoal: createMockFn().mockResolvedValue({
         success: true,
         formatted: '500/1000 coins',
         current: 500,
         target: 1000,
         percentage: 50
     }),
-    addPaypiggyToGoal: jest.fn().mockResolvedValue({
+    addPaypiggyToGoal: createMockFn().mockResolvedValue({
         success: true,
         formatted: '550/1000 coins',
         current: 550,
         target: 1000,
         percentage: 55
     }),
-    getGoalState: jest.fn().mockReturnValue({
+    getGoalState: createMockFn().mockReturnValue({
         current: 500,
         target: 1000,
         formatted: '500/1000 coins',
         percentage: 50
     }),
-    getAllGoalStates: jest.fn().mockReturnValue({
+    getAllGoalStates: createMockFn().mockReturnValue({
         tiktok: { current: 500, target: 1000, formatted: '500/1000 coins' },
         youtube: { current: 0.50, target: 1.00, formatted: '$0.50/$1.00 USD' },
         twitch: { current: 50, target: 100, formatted: '050/100 bits' }
     }),
-    formatGoalDisplay: jest.fn().mockReturnValue('500/1000 coins')
+    formatGoalDisplay: createMockFn().mockReturnValue('500/1000 coins')
 };
 
-jest.mock('../../src/utils/goal-tracker', () => ({
-    createGoalTracker: jest.fn(() => mockGoalTracker),
-    GoalTracker: jest.fn()
+mockModule('../../src/utils/goal-tracker', () => ({
+    createGoalTracker: createMockFn(() => mockGoalTracker),
+    GoalTracker: createMockFn()
 }));
 
 describe('OBS Goals Module Characterization Tests', () => {
+    afterEach(() => {
+        restoreAllMocks();
+        restoreAllModuleMocks();
+    });
+
     let goalsModule;
     let mockObsManager;
     let mockLogger;
@@ -99,7 +108,7 @@ describe('OBS Goals Module Characterization Tests', () => {
         
         // Setup OBS manager mock
         mockObsManager = {
-            isConnected: jest.fn().mockReturnValue(true)
+            isConnected: createMockFn().mockReturnValue(true)
         };
         
         // Setup default config responses

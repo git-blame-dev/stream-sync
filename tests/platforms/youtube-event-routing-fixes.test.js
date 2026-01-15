@@ -1,5 +1,12 @@
 
+const { describe, test, expect, beforeEach } = require('bun:test');
+const { createMockFn, clearAllMocks, restoreAllMocks } = require('../helpers/bun-mock-utils');
+
 describe('YouTube Event Routing Fixes', () => {
+    afterEach(() => {
+        restoreAllMocks();
+    });
+
     let platform;
 
     beforeEach(() => {
@@ -9,20 +16,20 @@ describe('YouTube Event Routing Fixes', () => {
             // Mock the event dispatch table with corrected event names (no "Renderer" suffix)
             eventDispatchTable: {
                 // Membership events
-                'LiveChatMembershipItem': jest.fn(),
+                'LiveChatMembershipItem': createMockFn(),
                 
                 // Gift membership events  
-                'LiveChatSponsorshipsGiftPurchaseAnnouncement': jest.fn(),
+                'LiveChatSponsorshipsGiftPurchaseAnnouncement': createMockFn(),
                 
                 // Other events (for completeness)
-                'LiveChatPaidMessage': jest.fn(),
-                'LiveChatPaidSticker': jest.fn(),
-                'LiveChatTextMessage': jest.fn(),
+                'LiveChatPaidMessage': createMockFn(),
+                'LiveChatPaidSticker': createMockFn(),
+                'LiveChatTextMessage': createMockFn(),
                 
         },
             
             // Mock the main message handler
-            handleChatMessage: jest.fn((chatItem) => {
+            handleChatMessage: createMockFn((chatItem) => {
                 const eventType = chatItem.item?.type || chatItem.type || 'unknown';
                 const handler = platform.eventDispatchTable[eventType];
                 if (handler) {
@@ -34,9 +41,9 @@ describe('YouTube Event Routing Fixes', () => {
             }),
             
             // Mock the specific handler methods
-            handleMembership: jest.fn(),
-            handleGiftMembershipPurchase: jest.fn(),
-            logUnknownEvent: jest.fn()
+            handleMembership: createMockFn(),
+            handleGiftMembershipPurchase: createMockFn(),
+            logUnknownEvent: createMockFn()
         };
         
         // Set up the dispatch table to call the appropriate handler methods
@@ -126,7 +133,7 @@ describe('YouTube Event Routing Fixes', () => {
 
             testCases.forEach(({ chatItem, expectedHandler }) => {
                 // Reset mocks
-                jest.clearAllMocks();
+                clearAllMocks();
 
                 // Route through main handler
                 platform.handleChatMessage(chatItem);

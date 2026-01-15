@@ -1,21 +1,26 @@
+const { describe, test, expect, afterEach, it } = require('bun:test');
+const { createMockFn, restoreAllMocks } = require('../../helpers/bun-mock-utils');
+const { mockModule, resetModules, restoreAllModuleMocks } = require('../../helpers/bun-module-mocks');
+
 const { createRuntimeConstantsFixture } = require('../../helpers/runtime-constants-fixture');
 
 describe('ViewerCountSystem polling interval validation', () => {
     const originalEnv = process.env.NODE_ENV;
 
     afterEach(() => {
-        jest.resetModules();
-        process.env.NODE_ENV = originalEnv;
-    });
+        restoreAllMocks();
+process.env.NODE_ENV = originalEnv;
+    
+        restoreAllModuleMocks();});
 
     const loadViewerCountSystem = () => {
         process.env.NODE_ENV = 'test';
 
-        const safeSetInterval = jest.fn();
+        const safeSetInterval = createMockFn();
 
-        jest.doMock('../../../src/utils/timeout-validator', () => ({
+        mockModule('../../../src/utils/timeout-validator', () => ({
             safeSetInterval,
-            safeDelay: jest.fn()
+            safeDelay: createMockFn()
         }));
 
         const { ViewerCountSystem } = require('../../../src/utils/viewer-count');

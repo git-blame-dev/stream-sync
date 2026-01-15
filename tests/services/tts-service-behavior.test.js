@@ -1,3 +1,7 @@
+const { describe, test, expect, beforeEach, afterEach, it } = require('bun:test');
+const { createMockFn, restoreAllMocks } = require('../helpers/bun-mock-utils');
+const { useFakeTimers, useRealTimers, runOnlyPendingTimers } = require('../helpers/bun-timers');
+
 const { TTSService } = require('../../src/services/TTSService');
 const { EventBus } = require('../../src/core/EventBus');
 const { PlatformEvents } = require('../../src/interfaces/PlatformEvents');
@@ -13,7 +17,7 @@ describe('TTS Service behavior', () => {
     let logger;
 
     beforeEach(() => {
-        jest.useFakeTimers();
+        useFakeTimers();
         eventBus = new EventBus();
         mockConfigService = {
             getTTSConfig: () => ({
@@ -28,27 +32,28 @@ describe('TTS Service behavior', () => {
         primaryProvider = {
             name: 'PrimaryTTS',
             isAvailable: () => true,
-            speak: jest.fn(async () => ({ success: true, duration: 10 })),
-            stop: jest.fn(async () => true),
-            dispose: jest.fn(async () => true)
+            speak: createMockFn(async () => ({ success: true, duration: 10 })),
+            stop: createMockFn(async () => true),
+            dispose: createMockFn(async () => true)
         };
 
         fallbackProvider = {
             name: 'FallbackTTS',
             isAvailable: () => true,
-            speak: jest.fn(async () => ({ success: true, duration: 10 })),
-            stop: jest.fn(async () => true),
-            dispose: jest.fn(async () => true)
+            speak: createMockFn(async () => ({ success: true, duration: 10 })),
+            stop: createMockFn(async () => true),
+            dispose: createMockFn(async () => true)
         };
 
-        logger = { debug: jest.fn(), info: jest.fn(), warn: jest.fn(), error: jest.fn() };
+        logger = { debug: createMockFn(), info: createMockFn(), warn: createMockFn(), error: createMockFn() };
     });
 
     afterEach(async () => {
+        restoreAllMocks();
         if (ttsService) {
             await ttsService.dispose();
         }
-        jest.useRealTimers();
+        useRealTimers();
     });
 
     it('uses the primary provider when it is available', async () => {
@@ -58,7 +63,7 @@ describe('TTS Service behavior', () => {
 
         expect(result).toBeTruthy();
         await flushPromises();
-        jest.runOnlyPendingTimers();
+        runOnlyPendingTimers();
         await flushPromises();
 
         expect(primaryProvider.speak).toHaveBeenCalled();
@@ -66,7 +71,7 @@ describe('TTS Service behavior', () => {
     });
 
     it('switches to the fallback provider when the primary provider fails', async () => {
-        primaryProvider.speak = jest.fn().mockRejectedValue(new Error('primary down'));
+        primaryProvider.speak = createMockFn().mockRejectedValue(new Error('primary down'));
         ttsService = new TTSService(mockConfigService, eventBus, {
             logger,
             provider: primaryProvider,
@@ -75,7 +80,7 @@ describe('TTS Service behavior', () => {
 
         await ttsService.speak('Use fallback');
         await flushPromises();
-        jest.runOnlyPendingTimers();
+        runOnlyPendingTimers();
         await flushPromises();
 
         expect(primaryProvider.speak).toHaveBeenCalled();
@@ -84,8 +89,8 @@ describe('TTS Service behavior', () => {
     });
 
     it('attempts fallback when all providers fail', async () => {
-        primaryProvider.speak = jest.fn().mockRejectedValue(new Error('primary down'));
-        fallbackProvider.speak = jest.fn().mockRejectedValue(new Error('fallback down'));
+        primaryProvider.speak = createMockFn().mockRejectedValue(new Error('primary down'));
+        fallbackProvider.speak = createMockFn().mockRejectedValue(new Error('fallback down'));
         ttsService = new TTSService(mockConfigService, eventBus, {
             logger,
             provider: primaryProvider,
@@ -94,7 +99,7 @@ describe('TTS Service behavior', () => {
 
         await ttsService.speak('Total failure');
         await flushPromises();
-        jest.runOnlyPendingTimers();
+        runOnlyPendingTimers();
         await flushPromises();
 
         expect(primaryProvider.speak).toHaveBeenCalled();
@@ -124,7 +129,7 @@ describe('TTS Service behavior', () => {
         });
 
         await flushPromises();
-        jest.runOnlyPendingTimers();
+        runOnlyPendingTimers();
         await flushPromises();
 
         expect(primaryProvider.speak).toHaveBeenCalledTimes(1);

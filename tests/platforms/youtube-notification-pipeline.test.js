@@ -1,9 +1,16 @@
 
+const { describe, test, expect } = require('bun:test');
+const { createMockFn, restoreAllMocks } = require('../helpers/bun-mock-utils');
+
 const { YouTubePlatform } = require('../../src/platforms/youtube');
 const { createYouTubeSuperChatEvent } = require('../helpers/youtube-test-data');
 const { createMockPlatformDependencies, createMockConfig } = require('../helpers/test-setup');
 
 describe('YouTube monetized notification pipeline', () => {
+    afterEach(() => {
+        restoreAllMocks();
+    });
+
     const baseConfig = createMockConfig('youtube', {
         enabled: true,
         username: 'notification-test',
@@ -13,7 +20,7 @@ describe('YouTube monetized notification pipeline', () => {
     const createPlatform = () => new YouTubePlatform(baseConfig, {
         ...createMockPlatformDependencies('youtube'),
         streamDetectionService: {
-            detectLiveStreams: jest.fn().mockResolvedValue({ success: true, videoIds: [] })
+            detectLiveStreams: createMockFn().mockResolvedValue({ success: true, videoIds: [] })
         }
     });
 
