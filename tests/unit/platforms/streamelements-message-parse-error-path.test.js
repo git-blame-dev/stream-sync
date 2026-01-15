@@ -2,7 +2,7 @@ const { describe, it, expect, afterEach } = require('bun:test');
 const { unmockModule, restoreAllModuleMocks, resetModules } = require('../../helpers/bun-module-mocks');
 const { createMockFn, restoreAllMocks } = require('../../helpers/bun-mock-utils');
 
-// Use real implementation (jest.setup mocks the platform by default).
+// Use real implementation (bun.setup mocks the platform by default).
 unmockModule('../../../src/platforms/streamelements');
 
 afterEach(() => {

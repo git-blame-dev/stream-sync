@@ -1,7 +1,7 @@
 
-const { describe, test, expect, beforeEach, jest } = require('bun:test');
+const { describe, test, expect, beforeEach } = require('bun:test');
 
-const { initializeTestLogging, createTestUser, TEST_TIMEOUTS } = require('../helpers/test-setup');
+const { initializeTestLogging, createTestUser } = require('../helpers/test-setup');
 const { createMockLogger, createMockNotificationBuilder } = require('../helpers/mock-factories');
 const { setupAutomatedCleanup } = require('../helpers/mock-lifecycle');
 const { expectValidNotification } = require('../helpers/assertion-helpers');
@@ -20,9 +20,6 @@ setupAutomatedCleanup({
 const { CommandParser } = require('../../src/chat/commands');
 
 describe('Command Integration System', () => {
-    // Test timeout protection as per rules
-    jest.setTimeout(TEST_TIMEOUTS.UNIT);
-
     let commandParser;
     let mockConfig;
 

@@ -1,5 +1,5 @@
 
-const { describe, test, expect, beforeEach, jest } = require('bun:test');
+const { describe, test, expect, beforeEach } = require('bun:test');
 const { createMockFn, restoreAllMocks } = require('../helpers/bun-mock-utils');
 const { mockModule, restoreAllModuleMocks } = require('../helpers/bun-module-mocks');
 
@@ -10,7 +10,7 @@ mockModule('../../src/utils/chat-logger', () => ({
 
 const { logChatMessageWithConfig, logChatMessageSkipped } = require('../../src/utils/chat-logger');
 const ChatNotificationRouter = require('../../src/services/ChatNotificationRouter');
-const { initializeTestLogging, createTestUser, TEST_TIMEOUTS } = require('../helpers/test-setup');
+const { initializeTestLogging, createTestUser } = require('../helpers/test-setup');
 const { createMockLogger } = require('../helpers/mock-factories');
 const { setupAutomatedCleanup } = require('../helpers/mock-lifecycle');
 const testClock = require('../helpers/test-clock');
@@ -28,8 +28,6 @@ describe('Old Message Filter', () => {
         restoreAllMocks();
         restoreAllModuleMocks();
     });
-
-    jest.setTimeout(TEST_TIMEOUTS.UNIT);
 
     const buildRouter = (overrides = {}) => {
         const runtime = {

@@ -398,7 +398,7 @@ class TwitchAuthInitializer {
                 return null;
             }
             
-            // Try to use module-level mocked OAuth handler (for jest.doMock)
+            // Try to use module-level mocked OAuth handler (for test mocking)
             try {
                 const { TwitchOAuthHandler } = require('./oauth-handler');
                 if (!TwitchOAuthHandler || !TwitchOAuthHandler._isMockFunction) {

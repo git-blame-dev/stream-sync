@@ -4,8 +4,8 @@ const { createMockFn, clearAllMocks, restoreAllMocks } = require('../../helpers/
 
 const logger = {
     debug: createMockFn(),
-    info: jest.fn?.() || (() => {}),
-    warn: jest.fn?.() || (() => {})
+    info: createMockFn(),
+    warn: createMockFn()
 };
 
 const {

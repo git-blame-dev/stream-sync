@@ -1,6 +1,6 @@
 
 // Check if we're in a test environment
-const isTestEnvironment = process.env.NODE_ENV === 'test' || typeof jest !== 'undefined';
+const isTestEnvironment = process.env.NODE_ENV === 'test';
 
 // Import safe operations wrapper
 const { safeOBSOperation } = require('./safe-operations');

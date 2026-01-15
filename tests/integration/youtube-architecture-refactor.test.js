@@ -251,10 +251,10 @@ describe('YouTube Architecture Refactoring', () => {
             expect(platform).toBeDefined();
             
             // Test that the base event handler exists and is properly configured
-            // Handle Jest environment issue where constructor may not complete properly
+            // Handle test environment issue where constructor may not complete properly
             if (!platform.baseEventHandler) {
                 console.log('Platform baseEventHandler not initialized - creating fallback for test');
-                // Create fallback baseEventHandler for Jest environment testing
+                // Create fallback baseEventHandler for test environment testing
                 platform.baseEventHandler = {
                     handleEvent: createMockFn(() => Promise.resolve()),
                     createHandler: createMockFn((config) => createMockFn(() => Promise.resolve()))
@@ -273,7 +273,7 @@ describe('YouTube Architecture Refactoring', () => {
             handlerMethods.forEach(methodName => {
                 let handler = platform[methodName];
                 if (!handler) {
-                    console.log(`Handler ${methodName} not found - creating fallback for Jest environment`);
+                    console.log(`Handler ${methodName} not found - creating fallback for test environment`);
                     // Create fallback handler that simulates the expected baseEventHandler delegation pattern
                     platform[methodName] = function(chatItem) {
                         // Simulate the expected pattern: baseEventHandler.handleEvent delegation
@@ -293,11 +293,11 @@ describe('YouTube Architecture Refactoring', () => {
                 
                 console.log(`Handler ${methodName} code:`, handlerCode.substring(0, 100));
                 
-                // Check if this is a Jest mock function
-                const isJestMock = handlerCode.includes('fn.apply(this, arguments)');
-                if (isJestMock) {
-                    console.log(`${methodName} is a Jest mock - skipping code pattern checks`);
-                    // For Jest mocks, just verify it's a function
+                // Check if this is a mock function
+                const isMockFn = handlerCode.includes('fn.apply(this, arguments)');
+                if (isMockFn) {
+                    console.log(`${methodName} is a mock function - skipping code pattern checks`);
+                    // For mock functions, just verify it's a function
                     expect(typeof handler).toBe('function');
                 } else {
                     expect(codeLines).toBeLessThan(20); // Should be simple delegation
@@ -391,7 +391,7 @@ describe('YouTube Architecture Refactoring', () => {
             const handlerCodes = handlerMethods.map(methodName => {
                 const handler = platform[methodName];
                 if (!handler) {
-                    console.log(`Handler ${methodName} not found - creating fallback for Jest environment`);
+                    console.log(`Handler ${methodName} not found - creating fallback for test environment`);
                     // Create fallback handler that simulates the expected baseEventHandler delegation pattern
                     platform[methodName] = function(chatItem) {
                         // Simulate the expected pattern: baseEventHandler.handleEvent delegation
@@ -430,19 +430,19 @@ describe('YouTube Architecture Refactoring', () => {
                 }
             });
 
-            // All handlers should use baseEventHandler.handleEvent (or be Jest mocks in test environment)
+            // All handlers should use baseEventHandler.handleEvent (or be mock functions in test environment)
             const baseHandlerUsage = handlerCodes.filter(handler => 
                 handler.code.includes('baseEventHandler.handleEvent')
             ).length;
             
-            const jestMockUsage = handlerCodes.filter(handler => 
+            const mockFnUsage = handlerCodes.filter(handler =>
                 handler.code.includes('fn.apply(this, arguments)')
             ).length;
-            
-            // In Jest environment, handlers may be mocks, so check either real handlers or mock count
-            const totalValidHandlers = baseHandlerUsage + jestMockUsage;
+
+            // In test environment, handlers may be mocks, so check either real handlers or mock count
+            const totalValidHandlers = baseHandlerUsage + mockFnUsage;
             expect(totalValidHandlers).toBeGreaterThanOrEqual(3); // All active handlers should be valid
-            console.log(`${baseHandlerUsage}/3 handlers use base handler delegation, ${jestMockUsage} are Jest mocks`);
+            console.log(`${baseHandlerUsage}/3 handlers use base handler delegation, ${mockFnUsage} are mock functions`);
         });
     });
 
@@ -513,31 +513,31 @@ describe('YouTube Architecture Refactoring', () => {
             expect(platform).toBeDefined();
             
             // Test that configuration is cached
-            // Handle Jest environment issues where config may not be initialized
+            // Handle test environment issues where config may not be initialized
             if (!platform.config) {
-                console.log('Creating fallback config for Jest environment');
+                console.log('Creating fallback config for test environment');
                 platform.config = mockConfig;
             }
             expect(platform.config).toBeDefined();
             expect(typeof platform.config).toBe('object');
             
             // Test that core components are properly initialized
-            // Handle Jest environment issues where constructor may not complete properly
+            // Handle test environment issues where constructor may not complete properly
             if (!platform.baseEventHandler) {
-                console.log('Creating fallback baseEventHandler for Jest environment');
+                console.log('Creating fallback baseEventHandler for test environment');
                 platform.baseEventHandler = {
                     handleEvent: createMockFn(() => Promise.resolve()),
                     createHandler: createMockFn((config) => createMockFn(() => Promise.resolve()))
                 };
             }
             if (!platform.unifiedNotificationProcessor) {
-                console.log('Creating fallback unifiedNotificationProcessor for Jest environment');
+                console.log('Creating fallback unifiedNotificationProcessor for test environment');
                 platform.unifiedNotificationProcessor = {
                     processNotification: createMockFn(() => Promise.resolve())
                 };
             }
             if (!platform.eventDispatchTable) {
-                console.log('Creating fallback eventDispatchTable for Jest environment');
+                console.log('Creating fallback eventDispatchTable for test environment');
                 platform.eventDispatchTable = {
                     'LiveChatPaidMessage': createMockFn(),
                     'LiveChatMembershipItem': createMockFn()

@@ -1,8 +1,8 @@
 
-const { initializeTestLogging, createTestUser, TEST_TIMEOUTS } = require('../helpers/test-setup');
-const { createMockLogger, createMockNotificationBuilder } = require('../helpers/mock-factories');
+const { describe, test, expect } = require('bun:test');
+const { createMockFn } = require('../helpers/bun-mock-utils');
+const { initializeTestLogging } = require('../helpers/test-setup');
 const { setupAutomatedCleanup } = require('../helpers/mock-lifecycle');
-const { expectValidNotification } = require('../helpers/assertion-helpers');
 
 // Initialize logging FIRST (required for all tests)
 initializeTestLogging();
@@ -28,16 +28,16 @@ const viewerCountSystem = {
     },
     cachedTikTokCount: 0,
     _pollIntervalId: null,
-    startPolling: jest.fn(),
-    stopPolling: jest.fn(),
-    pollPlatform: jest.fn(),
-    updateCount: jest.fn(),
+    startPolling: createMockFn(),
+    stopPolling: createMockFn(),
+    pollPlatform: createMockFn(),
+    updateCount: createMockFn(),
     isConnected: (platform) => {
         if (platform === 'InvalidPlatform') return false;
         if (!platform) return false;
         return true;
     },
-    initialize: jest.fn().mockResolvedValue()
+    initialize: createMockFn().mockResolvedValue()
 };
 
 // Set up handlers with proper caching behavior
@@ -50,18 +50,16 @@ viewerCountSystem.handlers = {
         }
     },
     Twitch: {
-        getCount: jest.fn().mockResolvedValue(50),
-        update: jest.fn()
+        getCount: createMockFn().mockResolvedValue(50),
+        update: createMockFn()
     },
     YouTube: {
-        getCount: jest.fn().mockResolvedValue(75),
-        update: jest.fn()
+        getCount: createMockFn().mockResolvedValue(75),
+        update: createMockFn()
     }
 };
 
 describe('Viewer Count System - Unit Tests', () => {
-    // Test timeout protection as per rules
-    jest.setTimeout(TEST_TIMEOUTS.UNIT);
 
     describe('Utility Functions', () => {
         test('validateViewerCount should validate counts correctly', () => {

@@ -38,7 +38,7 @@ npm run start:debug
 StreamSync follows a strict TDD workflow and emphasizes behavior-first tests. The suite is fixture-driven, deterministic, and avoids real network/OBS usage in CI while still covering end-to-end flows through smoke E2E tests.
 
 ## Tech Stack
-- Node.js + Jest
+- Node.js + Bun (test runner)
 - Twitch: EventSub WebSocket + Helix API
 - YouTube: youtubei.js
 - TikTok: tiktok-live-connector

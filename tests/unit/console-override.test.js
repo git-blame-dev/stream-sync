@@ -1,12 +1,12 @@
 
 // Unmock the logging module for this test since we're testing the actual implementation
-const { describe, test, expect, beforeEach, afterEach, beforeAll, afterAll, jest } = require('bun:test');
+const { describe, test, expect, beforeEach, afterEach, beforeAll, afterAll } = require('bun:test');
 const { createMockFn, restoreAllMocks } = require('../helpers/bun-mock-utils');
 const { unmockModule, restoreAllModuleMocks } = require('../helpers/bun-module-mocks');
 
 unmockModule('../../src/core/logging');
 
-const { initializeTestLogging, createTestUser, TEST_TIMEOUTS } = require('../helpers/test-setup');
+const { initializeTestLogging } = require('../helpers/test-setup');
 const { createMockLogger, createMockNotificationBuilder } = require('../helpers/mock-factories');
 const { setupAutomatedCleanup } = require('../helpers/mock-lifecycle');
 const { expectValidNotification } = require('../helpers/assertion-helpers');
@@ -35,9 +35,6 @@ const {
 } = require('../../src/core/logging');
 
 describe('Console Override Pattern', () => {
-    // Test timeout protection as per rules
-    jest.setTimeout(TEST_TIMEOUTS.UNIT);
-
     let testLogDir;
     let originalConsoleLogFn;
     let originalConsoleErrorFn;
@@ -210,7 +207,7 @@ describe('Console Override Pattern', () => {
             expect(isConsoleOverrideEnabled()).toBe(false);
             
             // Console functions should be restored to some form of original function
-            // Note: Jest may mock console, so we check that they're not our override functions
+            // Note: Test framework may mock console, so we check that they're not our override functions
             expect(typeof console.log).toBe('function');
             expect(typeof console.error).toBe('function');
             // The functions should not be our override implementations
