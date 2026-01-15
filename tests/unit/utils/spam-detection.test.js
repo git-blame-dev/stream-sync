@@ -74,7 +74,6 @@ describe('Spam Detection', () => {
 
     afterEach(() => {
         restoreAllMocks();
-        global.Date.now.mockRestore();
     });
 
     describe('when initializing spam detection configuration', () => {
