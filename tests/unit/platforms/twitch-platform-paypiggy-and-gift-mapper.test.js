@@ -4,20 +4,6 @@ const { createMockFn, restoreAllMocks } = require('../../helpers/bun-mock-utils'
 const { mockModule, restoreAllModuleMocks, resetModules } = require('../../helpers/bun-module-mocks');
 
 mockModule('../../../src/platforms/twitch-eventsub', () => createMockFn());
-mockModule('../../../src/core/logging', () => ({
-    logger: {
-        debug: createMockFn(),
-        info: createMockFn(),
-        warn: createMockFn(),
-        error: createMockFn()
-    },
-    getUnifiedLogger: createMockFn(() => ({
-        debug: createMockFn(),
-        info: createMockFn(),
-        warn: createMockFn(),
-        error: createMockFn()
-    }))
-}));
 
 const EventEmitter = require('events');
 const { TwitchPlatform } = require('../../../src/platforms/twitch');

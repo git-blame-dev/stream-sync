@@ -1,16 +1,6 @@
 const { describe, it, beforeEach, afterEach, expect } = require('bun:test');
 const { createMockFn, clearAllMocks } = require('../../helpers/bun-mock-utils');
-const { mockModule, restoreAllModuleMocks } = require('../../helpers/bun-module-mocks');
-
-// Mock the logger before requiring the service
-mockModule('../../../src/core/logging', () => ({
-    logger: {
-        debug: createMockFn(),
-        info: createMockFn(),
-        warn: createMockFn(),
-        error: createMockFn()
-    }
-}));
+const { restoreAllModuleMocks } = require('../../helpers/bun-module-mocks');
 
 const { TTSService, createTTSService } = require('../../../src/services/TTSService');
 const testClock = require('../../helpers/test-clock');

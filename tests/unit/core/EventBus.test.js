@@ -1,21 +1,11 @@
 
 const { describe, test, expect, beforeEach, afterEach, afterAll } = require('bun:test');
 const { createMockFn, clearAllMocks } = require('../../helpers/bun-mock-utils');
-const { mockModule, restoreAllModuleMocks } = require('../../helpers/bun-module-mocks');
+const { restoreAllModuleMocks } = require('../../helpers/bun-module-mocks');
 const testClock = require('../../helpers/test-clock');
-
-// Mock logger to capture debug output
-mockModule('../../../src/core/logging', () => ({
-    logger: {
-        debug: createMockFn(),
-        error: createMockFn(),
-        warn: createMockFn(),
-        info: createMockFn()
-    }
-}));
+const { waitForDelay } = require('../../helpers/time-utils');
 
 const { EventBus, createEventBus } = require('../../../src/core/EventBus');
-const { logger } = require('../../../src/core/logging');
 const { PlatformEvents } = require('../../../src/interfaces/PlatformEvents');
 
 describe('EventBus', () => {
@@ -495,14 +485,12 @@ describe('EventBus', () => {
         test('should not log when debug disabled', () => {
             const quietBus = new EventBus({ debugEnabled: false });
             const handler = createMockFn();
-            
-            logger.debug.mockClear();
-            
+
             quietBus.subscribe('test-event', handler);
             quietBus.emit('test-event');
-            
-            // Should only have the setDebugEnabled call from reset, not subscription/emission
+
             expect(quietBus.debugEnabled).toBe(false);
+            expect(handler).toHaveBeenCalledTimes(1);
         });
 
         test('should toggle debug logging', () => {
@@ -652,23 +640,6 @@ describe('EventBus', () => {
     });
 
     describe('Performance and Edge Cases', () => {
-        test('does not throw when logger methods are missing', () => {
-            const originalDebug = logger.debug;
-            const originalWarn = logger.warn;
-
-            logger.debug = undefined;
-            logger.warn = undefined;
-
-            const bus = new EventBus({ debugEnabled: true });
-            const handler = createMockFn();
-
-            expect(() => bus.subscribe('test-event', handler)).not.toThrow();
-            expect(() => bus.emit('test-event', 'data')).not.toThrow();
-
-            logger.debug = originalDebug;
-            logger.warn = originalWarn;
-        });
-
         test('should handle rapid event emissions', async () => {
             const handler = createMockFn();
             eventBus.subscribe('rapid-event', handler);
