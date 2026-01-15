@@ -14,10 +14,6 @@ mockModule('../../../src/utils/platform-error-handler', () => ({
     }))
 }));
 
-mockModule('../../../src/core/logging', () => ({
-    logger: { debug: createMockFn(), info: createMockFn(), warn: createMockFn() }
-}));
-
 const { createRuntimeConstantsFixture } = require('../../helpers/runtime-constants-fixture');
 const ManagerModule = require('../../../src/services/innertube-instance-manager');
 

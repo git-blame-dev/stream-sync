@@ -1,18 +1,8 @@
 const { describe, it, beforeEach, afterEach, expect } = require('bun:test');
 const { createMockFn, clearAllMocks } = require('../../helpers/bun-mock-utils');
-const { mockModule, restoreAllModuleMocks } = require('../../helpers/bun-module-mocks');
+const { restoreAllModuleMocks } = require('../../helpers/bun-module-mocks');
 
 const { ConfigService, createConfigService } = require('../../../src/services/ConfigService');
-
-// Mock the logger
-mockModule('../../../src/core/logging', () => ({
-    logger: {
-        debug: createMockFn(),
-        info: createMockFn(),
-        warn: createMockFn(),
-        error: createMockFn()
-    }
-}));
 
 describe('ConfigService', () => {
     let configService;

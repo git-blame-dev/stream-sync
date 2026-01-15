@@ -1,12 +1,7 @@
 
 const { describe, it, expect, beforeEach, afterEach } = require('bun:test');
-const { mockModule, restoreAllModuleMocks, resetModules } = require('../helpers/bun-module-mocks');
-const { restoreAllMocks } = require('../helpers/bun-mock-utils');
-
-mockModule('../../../src/core/logging', () => ({
-    logger: { debug: () => {}, info: () => {}, warn: () => {}, error: () => {} },
-    getUnifiedLogger: () => ({ debug: () => {}, info: () => {}, warn: () => {}, error: () => {} })
-}));
+const { mockModule, restoreAllModuleMocks, resetModules } = require('../../helpers/bun-module-mocks');
+const { restoreAllMocks } = require('../../helpers/bun-mock-utils');
 
 const EventEmitter = require('events');
 const { TikTokPlatform } = require('../../../src/platforms/tiktok');
