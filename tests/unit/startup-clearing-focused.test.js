@@ -2,6 +2,9 @@
 const { describe, test, expect, beforeEach, it, afterEach } = require('bun:test');
 const { createMockFn, clearAllMocks, restoreAllMocks } = require('../helpers/bun-mock-utils');
 const { mockModule, resetModules, restoreAllModuleMocks } = require('../helpers/bun-module-mocks');
+const { initializeTestLogging } = require('../helpers/test-setup');
+
+initializeTestLogging();
 
 describe('OBS Startup Display Clearing - Detailed Behavior', () => {
     afterEach(() => {
@@ -18,6 +21,7 @@ describe('OBS Startup Display Clearing - Detailed Behavior', () => {
     beforeEach(() => {
         // Clear all mocks
         resetModules();
+        initializeTestLogging();
 
         // Create tracked arrays for behavior validation
         const clearedSources = [];
@@ -54,27 +58,6 @@ describe('OBS Startup Display Clearing - Detailed Behavior', () => {
                 getDefaultSourcesManager: () => instance
             };
         });
-
-        mockModule('../../src/core/logging', () => ({
-            logger: {
-                debug: createMockFn(),
-                info: createMockFn(),
-                warn: createMockFn(),
-                error: createMockFn(),
-                console: createMockFn()
-            },
-            setConfigValidator: createMockFn(),
-            setDebugMode: createMockFn(),
-            initializeLoggingConfig: createMockFn(),
-            getLogger: createMockFn(() => ({
-                debug: createMockFn(),
-                info: createMockFn(),
-                warn: createMockFn(),
-                error: createMockFn(),
-                console: createMockFn()
-            })),
-            initializeConsoleOverride: createMockFn()
-        }));
 
         // Create test config
         mockConfig = {
@@ -201,8 +184,8 @@ describe('OBS Startup Display Clearing - Detailed Behavior', () => {
             };
 
             // When: Running clearStartupDisplays
-            // Then: Should not throw error
-            await expect(clearStartupDisplays(config)).resolves.not.toThrow();
+            // Then: Should not throw error (resolves without exception)
+            await expect(clearStartupDisplays(config)).resolves.toBeUndefined();
         });
 
         it('should use provided runtime constants for platform logos', async () => {

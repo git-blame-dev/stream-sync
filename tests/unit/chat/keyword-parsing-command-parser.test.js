@@ -1,17 +1,7 @@
 
-// Mock the logger before requiring CommandParser
 const { describe, test, expect, beforeEach, afterEach } = require('bun:test');
-const { createMockFn, restoreAllMocks } = require('../../helpers/bun-mock-utils');
-const { mockModule, restoreAllModuleMocks } = require('../../helpers/bun-module-mocks');
-
-mockModule('../../../src/core/logging', () => ({
-    logger: {
-        debug: createMockFn(),
-        info: createMockFn(),
-        warn: createMockFn(),
-        error: createMockFn()
-    }
-}));
+const { restoreAllMocks } = require('../../helpers/bun-mock-utils');
+const { restoreAllModuleMocks } = require('../../helpers/bun-module-mocks');
 
 const { CommandParser } = require('../../../src/chat/commands');
 const testClock = require('../../helpers/test-clock');

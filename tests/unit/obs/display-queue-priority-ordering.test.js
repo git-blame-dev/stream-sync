@@ -1,16 +1,10 @@
 
 const { describe, test, expect, it, afterEach } = require('bun:test');
 const { createMockFn, restoreAllMocks } = require('../../helpers/bun-mock-utils');
-const { mockModule, restoreAllModuleMocks } = require('../../helpers/bun-module-mocks');
+const { restoreAllModuleMocks } = require('../../helpers/bun-module-mocks');
+const { initializeTestLogging } = require('../../helpers/test-setup');
 
-mockModule('../../../src/core/logging', () => ({
-    logger: {
-        debug: createMockFn(),
-        info: createMockFn(),
-        warn: createMockFn(),
-        error: createMockFn()
-    }
-}));
+initializeTestLogging();
 
 const { DisplayQueue } = require('../../../src/obs/display-queue');
 const { createMockOBSManager } = require('../../helpers/mock-factories');
@@ -44,6 +38,8 @@ describe('DisplayQueue priority ordering', () => {
         return queue;
     };
 
+    // Note: We mock displayItem to capture processing order. This is acceptable
+    // for queue ordering tests since the order IS the observable behavior.
     it('front-loads higher priority items even when added later', () => {
         const queue = createQueue();
         const processed = [];

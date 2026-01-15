@@ -3,10 +3,6 @@ const { describe, test, expect, beforeEach, afterEach } = require('bun:test');
 const { createMockFn, clearAllMocks, restoreAllMocks } = require('../../helpers/bun-mock-utils');
 const { mockModule, restoreAllModuleMocks } = require('../../helpers/bun-module-mocks');
 
-mockModule('../../../src/core/logging', () => ({
-    logger: { debug: () => {}, info: () => {}, warn: () => {}, error: () => {} },
-    getUnifiedLogger: () => ({ debug: () => {}, info: () => {}, warn: () => {}, error: () => {} })
-}));
 mockModule('../../../src/core/config', () => ({
     configManager: {
         getSection: createMockFn().mockImplementation((platform) => ({

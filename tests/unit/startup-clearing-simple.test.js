@@ -2,6 +2,9 @@
 const { describe, test, expect, beforeEach, it, afterEach } = require('bun:test');
 const { createMockFn, clearAllMocks, restoreAllMocks } = require('../helpers/bun-mock-utils');
 const { mockModule, resetModules, restoreAllModuleMocks } = require('../helpers/bun-module-mocks');
+const { initializeTestLogging } = require('../helpers/test-setup');
+
+initializeTestLogging();
 
 describe('OBS Startup Display Clearing - Regression Tests', () => {
     afterEach(() => {
@@ -18,6 +21,7 @@ describe('OBS Startup Display Clearing - Regression Tests', () => {
     beforeEach(() => {
         // Clear all mocks
         resetModules();
+        initializeTestLogging();
 
         // Create tracked arrays for behavior validation
         const clearedSources = [];
@@ -54,27 +58,6 @@ describe('OBS Startup Display Clearing - Regression Tests', () => {
                 getDefaultSourcesManager: () => instance
             };
         });
-
-        mockModule('../../src/core/logging', () => ({
-            logger: {
-                debug: createMockFn(),
-                info: createMockFn(),
-                warn: createMockFn(),
-                error: createMockFn(),
-                console: createMockFn()
-            },
-            setConfigValidator: createMockFn(),
-            setDebugMode: createMockFn(),
-            initializeLoggingConfig: createMockFn(),
-            getLogger: createMockFn(() => ({
-                debug: createMockFn(),
-                info: createMockFn(),
-                warn: createMockFn(),
-                error: createMockFn(),
-                console: createMockFn()
-            })),
-            initializeConsoleOverride: createMockFn()
-        }));
 
         // Create test config
         mockConfig = {
@@ -206,8 +189,8 @@ describe('OBS Startup Display Clearing - Regression Tests', () => {
             hideAllDisplays.mockRejectedValue(new Error('OBS connection lost'));
 
             // When: Clearing startup displays
-            // Then: Should not throw
-            await expect(clearStartupDisplays()).resolves.not.toThrow();
+            // Then: Should not throw (resolves without exception)
+            await expect(clearStartupDisplays()).resolves.toBeUndefined();
         });
 
         it('should continue when OBS manager is null', async () => {
@@ -218,11 +201,12 @@ describe('OBS Startup Display Clearing - Regression Tests', () => {
 
             // Reload the modules to use the mocked connection
             resetModules();
+            initializeTestLogging();
             const obsStartup = require('../../src/obs/startup');
 
             // When: Clearing startup displays
-            // Then: Should not throw
-            await expect(obsStartup.clearStartupDisplays(mockConfig)).resolves.not.toThrow();
+            // Then: Should not throw (resolves without exception)
+            await expect(obsStartup.clearStartupDisplays(mockConfig)).resolves.toBeUndefined();
         });
     });
 });

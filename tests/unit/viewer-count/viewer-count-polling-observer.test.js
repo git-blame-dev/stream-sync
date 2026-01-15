@@ -25,14 +25,12 @@ process.env.NODE_ENV = originalEnv;
             safeDelay: createMockFn()
         }));
 
-        mockModule('../../../src/core/logging', () => ({
-            logger: {
-                debug: createMockFn(),
-                info: createMockFn(),
-                warn: createMockFn(),
-                error: createMockFn()
-            }
-        }));
+        const mockLogger = {
+            debug: createMockFn(),
+            info: createMockFn(),
+            warn: warnSpy || createMockFn(),
+            error: errorSpy || createMockFn()
+        };
 
         const platform = {
             getViewerCount: createMockFn()
@@ -42,10 +40,9 @@ process.env.NODE_ENV = originalEnv;
 
         const { ViewerCountSystem } = require('../../../src/utils/viewer-count');
         const system = new ViewerCountSystem({
-            platforms: { ...platforms, youtube: platform }
+            platforms: { ...platforms, youtube: platform },
+            logger: mockLogger
         });
-        system.logger.warn = warnSpy || createMockFn();
-        system.logger.error = errorSpy || createMockFn();
 
         // Mark stream live so polling proceeds
         system.streamStatus.youtube = true;

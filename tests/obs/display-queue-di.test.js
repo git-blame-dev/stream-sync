@@ -1,40 +1,12 @@
 
 const { describe, test, expect, beforeEach, it, afterEach } = require('bun:test');
 const { createMockFn, restoreAllMocks } = require('../helpers/bun-mock-utils');
-const { mockModule, resetModules, restoreAllModuleMocks } = require('../helpers/bun-module-mocks');
-
-mockModule('../../src/core/logging', () => ({
-    logger: {
-        debug: () => {},
-        info: () => {},
-        warn: () => {},
-        error: () => {}
-    }
-}));
-
-mockModule('../../src/obs/sources', () => {
-    const instance = {
-        updateTextSource: createMockFn(),
-        setSourceVisibility: createMockFn(),
-        setPlatformLogoVisibility: createMockFn(),
-        hideAllDisplays: createMockFn(),
-        updateChatMsgText: createMockFn(),
-        setNotificationPlatformLogoVisibility: createMockFn(),
-        setGroupSourceVisibility: createMockFn(),
-        setSourceFilterVisibility: createMockFn(),
-        getGroupSceneItemId: createMockFn(),
-        setChatDisplayVisibility: createMockFn(),
-        setNotificationDisplayVisibility: createMockFn(),
-        getSceneItemId: createMockFn()
-    };
-    return {
-        OBSSourcesManager: class {},
-        createOBSSourcesManager: () => instance,
-        getDefaultSourcesManager: () => instance
-    };
-});
-
+const { resetModules, restoreAllModuleMocks } = require('../helpers/bun-module-mocks');
 const { createRuntimeConstantsFixture } = require('../helpers/runtime-constants-fixture');
+const { createMockOBSManager } = require('../helpers/mock-factories');
+const { initializeTestLogging } = require('../helpers/test-setup');
+
+initializeTestLogging();
 
 describe('DisplayQueue DI requirements', () => {
     afterEach(() => {
@@ -44,6 +16,7 @@ describe('DisplayQueue DI requirements', () => {
 
     beforeEach(() => {
         resetModules();
+        initializeTestLogging(); // Re-init after resetModules clears state
     });
 
     it('requires an OBS manager in the constructor', () => {
@@ -51,27 +24,27 @@ describe('DisplayQueue DI requirements', () => {
         expect(() => new DisplayQueue(null, {}, {}, null, createRuntimeConstantsFixture())).toThrow(/OBSConnectionManager/);
     });
 
-    it('initializes with provided obsManager and does not call getOBSConnectionManager', () => {
-        const getOBSConnectionManager = createMockFn(() => {
-            throw new Error('getOBSConnectionManager should not be called');
-        });
-
-        mockModule('../../src/obs/connection', () => ({
-            getOBSConnectionManager
-        }));
-
-        const mockObsManager = {
-            isReady: createMockFn().mockResolvedValue(true),
-            ensureConnected: createMockFn(),
-            call: createMockFn(),
-            addEventListener: createMockFn(),
-            removeEventListener: createMockFn()
-        };
+    it('accepts items when initialized with injected obsManager', () => {
+        const mockObsManager = createMockOBSManager('connected');
 
         const { initializeDisplayQueue } = require('../../src/obs/display-queue');
+        const queue = initializeDisplayQueue(mockObsManager, {
+            autoProcess: false,
+            chat: { sourceName: 'chat', sceneName: 'scene', groupName: 'group', platformLogos: {} },
+            notification: { sourceName: 'notification', sceneName: 'scene', groupName: 'group', platformLogos: {} }
+        }, {
+            PRIORITY_LEVELS: { CHAT: 1 },
+            CHAT_MESSAGE_DURATION: 4500
+        }, null, createRuntimeConstantsFixture());
 
-        expect(() => initializeDisplayQueue(mockObsManager, {}, {}, null, createRuntimeConstantsFixture())).not.toThrow();
-        expect(getOBSConnectionManager).not.toHaveBeenCalled();
+        // Verify the queue was created and can accept items
+        expect(() => queue.addItem({
+            type: 'chat',
+            platform: 'twitch',
+            data: { username: 'TestUser', message: 'Hello' }
+        })).not.toThrow();
+
+        // Verify item was added (queue.queue is internal but accessible for testing)
+        expect(queue.queue.length).toBe(1);
     });
-
 });

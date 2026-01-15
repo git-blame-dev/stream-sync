@@ -2,16 +2,6 @@
 const { describe, test, expect, beforeEach, it, afterEach } = require('bun:test');
 const { createMockFn, restoreAllMocks } = require('../helpers/bun-mock-utils');
 const { mockModule, resetModules, restoreAllModuleMocks } = require('../helpers/bun-module-mocks');
-
-mockModule('../../src/core/logging', () => ({
-    logger: {
-        debug: () => {},
-        info: () => {},
-        warn: () => {},
-        error: () => {}
-    }
-}));
-
 const { createRuntimeConstantsFixture } = require('../helpers/runtime-constants-fixture');
 
 describe('OBSSourcesManager DI requirements', () => {
@@ -39,29 +29,31 @@ describe('OBSSourcesManager DI requirements', () => {
         expect(() => new OBSSourcesManager()).toThrow(/OBSSourcesManager requires OBSConnectionManager/);
     });
 
-    it('initializes with provided obsManager without calling getOBSConnectionManager', () => {
-        const getOBSConnectionManager = createMockFn(() => {
-            throw new Error('getOBSConnectionManager should not be called');
-        });
-
-        mockModule('../../src/obs/connection', () => ({
-            getOBSConnectionManager
-        }));
-
+    it('uses injected obsManager for operations', async () => {
         const mockObsManager = {
             ensureConnected: createMockFn().mockResolvedValue(),
-            call: createMockFn().mockResolvedValue({}),
+            call: createMockFn().mockResolvedValue({ sceneItemId: 42 }),
             addEventListener: createMockFn(),
             removeEventListener: createMockFn(),
-            isConnected: createMockFn().mockReturnValue(true)
+            isConnected: createMockFn().mockReturnValue(true),
+            isReady: createMockFn().mockResolvedValue(true)
         };
 
         const { createOBSSourcesManager } = require('../../src/obs/sources');
+        const sourcesManager = createOBSSourcesManager(mockObsManager, {
+            runtimeConstants: createRuntimeConstantsFixture(),
+            ensureOBSConnected: mockObsManager.ensureConnected,
+            obsCall: mockObsManager.call
+        });
 
-        expect(() => createOBSSourcesManager(mockObsManager, {
-            runtimeConstants: createRuntimeConstantsFixture()
-        })).not.toThrow();
-        expect(getOBSConnectionManager).not.toHaveBeenCalled();
+        // Call a method and verify the injected mock was used
+        const result = await sourcesManager.getSceneItemId('test-scene', 'test-source');
+
+        expect(mockObsManager.call).toHaveBeenCalledWith('GetSceneItemId', {
+            sceneName: 'test-scene',
+            sourceName: 'test-source'
+        });
+        expect(result).toEqual({ sceneItemId: 42, sceneName: 'test-scene' });
     });
 
     it('marks the default sources manager as degraded when OBS manager is unavailable', () => {

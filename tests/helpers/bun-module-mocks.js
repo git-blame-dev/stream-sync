@@ -49,8 +49,12 @@ const resetModules = () => {
 };
 
 const restoreAllModuleMocks = () => {
-    for (const entry of activeMocks.values()) {
+    for (const [moduleId, entry] of activeMocks.entries()) {
         mock.restore(entry.moduleName);
+        // Also clear the require cache to ensure next require gets fresh module
+        if (path.isAbsolute(moduleId)) {
+            delete require.cache[moduleId];
+        }
     }
     activeMocks.clear();
 };

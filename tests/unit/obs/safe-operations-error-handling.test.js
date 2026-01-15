@@ -23,15 +23,6 @@ process.env.NODE_ENV = originalEnv;
             createPlatformErrorHandler: createMockFn(() => errorHandler)
         }));
 
-        mockModule('../../../src/core/logging', () => ({
-            logger: {
-                debug: createMockFn(),
-                info: createMockFn(),
-                warn: createMockFn(),
-                error: createMockFn()
-            }
-        }));
-
         const obsManager = {
             isReady: createMockFn().mockResolvedValue(true)
         };

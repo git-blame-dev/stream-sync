@@ -561,6 +561,32 @@ const createMockOBSManager = (connectionState = 'connected', overrides = {}) => 
     };
 };
 
+const createMockSourcesManager = (overrides = {}) => {
+    const baseMethods = {
+        updateTextSource: createMockFn().mockResolvedValue(),
+        clearTextSource: createMockFn().mockResolvedValue(),
+        updateChatMsgText: createMockFn().mockResolvedValue(),
+        getSceneItemId: createMockFn().mockResolvedValue({ sceneItemId: 1, sceneName: 'test-scene' }),
+        setSourceVisibility: createMockFn().mockResolvedValue(),
+        getGroupSceneItemId: createMockFn().mockResolvedValue({ sceneItemId: 1 }),
+        setGroupSourceVisibility: createMockFn().mockResolvedValue(),
+        setPlatformLogoVisibility: createMockFn().mockResolvedValue(),
+        setNotificationPlatformLogoVisibility: createMockFn().mockResolvedValue(),
+        hideAllPlatformLogos: createMockFn().mockResolvedValue(),
+        hideAllNotificationPlatformLogos: createMockFn().mockResolvedValue(),
+        setChatDisplayVisibility: createMockFn().mockResolvedValue(),
+        setNotificationDisplayVisibility: createMockFn().mockResolvedValue(),
+        hideAllDisplays: createMockFn().mockResolvedValue(),
+        setSourceFilterVisibility: createMockFn().mockResolvedValue()
+    };
+
+    return {
+        ...baseMethods,
+        ...overrides,
+        _mockType: 'SourcesManager'
+    };
+};
+
 const createMockRetrySystem = (behaviorConfig = {}) => {
     const defaultBehavior = {
         maxRetries: 3,
@@ -3147,6 +3173,7 @@ module.exports = {
     
     // Infrastructure Factories
     createMockOBSManager,
+    createMockSourcesManager,
     createMockRetrySystem,
     createMockFileSystem,
     createMockLogger,

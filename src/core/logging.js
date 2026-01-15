@@ -40,6 +40,15 @@ function safeObjectStringify(obj, maxDepth = 3) {
 // Config validation function - should be injected by the application
 let validateLoggingConfig = null;
 
+// Default test config - used when running in test environment without explicit initialization
+const DEFAULT_TEST_CONFIG = {
+    console: { enabled: false },
+    file: { enabled: false },
+    debug: { enabled: false },
+    platforms: { tiktok: { enabled: true }, twitch: { enabled: true }, youtube: { enabled: true } },
+    chat: { enabled: false }
+};
+
 function setConfigValidator(validator) {
     if (typeof validator === 'function') {
         validateLoggingConfig = validator;
@@ -50,6 +59,11 @@ function setConfigValidator(validator) {
 
 function getValidateLoggingConfig() {
     if (!validateLoggingConfig) {
+        // In test environment, auto-initialize with default test config
+        if (process.env.NODE_ENV === 'test') {
+            validateLoggingConfig = () => DEFAULT_TEST_CONFIG;
+            return validateLoggingConfig;
+        }
         throw new Error('Logging config validator not set. Call setConfigValidator() before using logging system.');
     }
     return validateLoggingConfig;
