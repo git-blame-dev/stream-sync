@@ -43,7 +43,6 @@ describe('GlobalCommandCooldownManager', () => {
 
   afterEach(() => {
         restoreAllMocks();
-    global.Date.now.mockRestore();
   });
 
   describe('when checking cooldown for new command', () => {
