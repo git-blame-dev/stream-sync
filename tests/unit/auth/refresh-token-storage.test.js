@@ -1,14 +1,9 @@
 
 const { describe, test, expect, beforeEach, afterEach } = require('bun:test');
-const { createMockFn, clearAllMocks, restoreAllMocks } = require('../../helpers/bun-mock-utils');
-const { mockModule, restoreAllModuleMocks } = require('../../helpers/bun-module-mocks');
+const { createMockFn, restoreAllMocks } = require('../../helpers/bun-mock-utils');
 
-const { initializeTestLogging } = require('../../helpers/test-setup');
 const { createMockLogger } = require('../../helpers/mock-factories');
 const { setupAutomatedCleanup } = require('../../helpers/mock-lifecycle');
-
-// Initialize logging FIRST
-initializeTestLogging();
 
 // Setup automated cleanup
 setupAutomatedCleanup({
@@ -16,16 +11,6 @@ setupAutomatedCleanup({
     validateAfterCleanup: true,
     logPerformanceMetrics: true
 });
-
-// Mock fs module for file operations
-mockModule('fs', () => ({
-    promises: {
-        readFile: createMockFn(),
-        writeFile: createMockFn(),
-        rename: createMockFn()
-    },
-    existsSync: createMockFn(() => true)
-}));
 
 let fs;
 let fsPromises;
@@ -35,7 +20,6 @@ const TwitchAuthService = require('../../../src/auth/TwitchAuthService');
 describe('Refresh Token Storage and Update Handling (Twitch Best Practices)', () => {
     afterEach(() => {
         restoreAllMocks();
-        restoreAllModuleMocks();
     });
 
     let mockLogger;

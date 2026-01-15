@@ -2,12 +2,9 @@ const { describe, it, expect, beforeEach, afterEach } = require('bun:test');
 const { createMockFn, restoreAllMocks } = require('../helpers/bun-mock-utils');
 const { mockModule, unmockModule, requireActual, resetModules, restoreAllModuleMocks } = require('../helpers/bun-module-mocks');
 
-const { initializeTestLogging } = require('../helpers/test-setup');
 const { createMockLogger } = require('../helpers/mock-factories');
 
 const actualMessageNormalization = require('../../src/utils/message-normalization');
-
-initializeTestLogging();
 
 const createAuthManager = (overrides = {}) => {
     const requiredScopes = overrides.scopes || [
@@ -53,9 +50,14 @@ describe('Twitch platform refactor behaviors', () => {
 
     it('accepts centralized auth for EventSub validation without raw tokens', async () => {
         const TwitchEventSub = requireActual('../../src/platforms/twitch-eventsub');
+        const MockWebSocket = class { constructor() {} };
         const eventSub = new TwitchEventSub(
             { enabled: true, eventsub_enabled: true },
-            { authManager: createAuthManager({ userId: TEST_USER_ID }), logger: createMockLogger('debug') }
+            {
+                authManager: createAuthManager({ userId: TEST_USER_ID }),
+                logger: createMockLogger('debug'),
+                WebSocketCtor: MockWebSocket
+            }
         );
 
         const validation = await eventSub._validateConfig();

@@ -3,10 +3,6 @@ const { describe, test, expect, beforeEach, afterEach } = require('bun:test');
 const { createMockFn, restoreAllMocks } = require('../helpers/bun-mock-utils');
 const { mockModule, resetModules, restoreAllModuleMocks } = require('../helpers/bun-module-mocks');
 
-// Initialize test logging FIRST
-const { initializeTestLogging, createMockConfig } = require('../helpers/test-setup');
-initializeTestLogging();
-
 // Mock TwitchAuthManager to prevent actual auth system initialization
 const registerAuthManagerMock = () => {
     mockModule('../../src/auth/TwitchAuthManager', () => {
@@ -58,10 +54,6 @@ describe('TwitchAuthFactory', () => {
         // Clear any existing singleton instances
         resetModules();
         registerAuthManagerMock();
-
-        // Re-initialize logging after module reset
-        const { initializeTestLogging } = require('../helpers/test-setup');
-        initializeTestLogging();
 
         mockConfig = {
             clientId: 'test-client-id',
@@ -355,9 +347,8 @@ describe('TwitchAuthFactory', () => {
 
         test('should handle cleanup when no manager exists', async () => {
             const factory = new TwitchAuthFactory(mockConfig);
-            
-            // Should not throw when cleaning up empty factory
-            await expect(factory.cleanup()).resolves.not.toThrow();
+
+            await factory.cleanup();
         });
     });
 });
