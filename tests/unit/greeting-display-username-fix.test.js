@@ -1,24 +1,18 @@
 
-// Initialize test logging FIRST
 const { describe, test, expect, beforeEach, it, afterEach } = require('bun:test');
 const { createMockFn, restoreAllMocks } = require('../helpers/bun-mock-utils');
 
-const { initializeTestLogging } = require('../helpers/test-setup');
-initializeTestLogging();
-
-const { 
+const {
     createMockLogger,
     createMockConfig,
-    createMockNotificationManager 
+    createMockNotificationManager
 } = require('../helpers/mock-factories');
 
-const { 
-    setupAutomatedCleanup 
-} = require('../helpers/mock-lifecycle');
+const { setupAutomatedCleanup } = require('../helpers/mock-lifecycle');
 
-const { 
+const {
     expectNoTechnicalArtifacts,
-    expectOnlyMethodCalled 
+    expectOnlyMethodCalled
 } = require('../helpers/assertion-helpers');
 
 // Setup automated cleanup

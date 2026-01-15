@@ -2,13 +2,9 @@
 const { describe, test, expect, beforeEach, afterEach } = require('bun:test');
 const { createMockFn, restoreAllMocks } = require('../helpers/bun-mock-utils');
 
-const { initializeTestLogging } = require('../helpers/test-setup');
 const { createMockLogger } = require('../helpers/mock-factories');
 const { setupAutomatedCleanup } = require('../helpers/mock-lifecycle');
 const NotificationBuilder = require('../../src/utils/notification-builder');
-
-// Initialize logging FIRST (required for all tests)
-initializeTestLogging();
 
 // Setup automated cleanup (no manual mock management)
 setupAutomatedCleanup({

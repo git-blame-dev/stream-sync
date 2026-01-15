@@ -2,17 +2,9 @@
 const { describe, test, expect, beforeEach, afterEach } = require('bun:test');
 const { resetModules, restoreAllModuleMocks } = require('../../helpers/bun-module-mocks');
 
-const { 
-    initializeTestLogging,
-    TEST_TIMEOUTS 
-} = require('../../helpers/test-setup');
+const { TEST_TIMEOUTS } = require('../../helpers/test-setup');
 
-const { 
-    setupAutomatedCleanup 
-} = require('../../helpers/mock-lifecycle');
-
-// Initialize logging FIRST
-initializeTestLogging();
+const { setupAutomatedCleanup } = require('../../helpers/mock-lifecycle');
 
 // Setup automated cleanup
 setupAutomatedCleanup({
@@ -29,11 +21,7 @@ describe('Template Interpolation Validation', () => {
 
     beforeEach(() => {
         resetModules();
-        
-        // Re-initialize logging after module reset
-        const { initializeTestLogging } = require('../../helpers/test-setup');
-        initializeTestLogging();
-        
+
         const notificationStrings = require('../../../src/utils/notification-strings');
         const testUtils = require('../../helpers/notification-test-utils');
         interpolateTemplate = notificationStrings.interpolateTemplate;

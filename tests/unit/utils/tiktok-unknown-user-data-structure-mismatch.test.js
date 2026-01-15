@@ -1,28 +1,16 @@
 
-// MANDATORY imports
 const { describe, test, expect, beforeEach, it, afterEach } = require('bun:test');
 const { createMockFn, restoreAllMocks } = require('../../helpers/bun-mock-utils');
 
-const { 
-  initializeTestLogging,
-  TEST_TIMEOUTS 
-} = require('../../helpers/test-setup');
+const { TEST_TIMEOUTS } = require('../../helpers/test-setup');
 
-const { 
-  setupAutomatedCleanup
-} = require('../../helpers/mock-lifecycle');
+const { setupAutomatedCleanup } = require('../../helpers/mock-lifecycle');
 
-const { 
-  expectNoTechnicalArtifacts
-} = require('../../helpers/assertion-helpers');
+const { expectNoTechnicalArtifacts } = require('../../helpers/assertion-helpers');
 const testClock = require('../../helpers/test-clock');
 
-// Import functions under test
 const { normalizeTikTokMessage } = require('../../../src/utils/message-normalization');
 const { extractTikTokUserData } = require('../../../src/utils/tiktok-data-extraction');
-
-// Initialize FIRST
-initializeTestLogging();
 
 // Setup automated cleanup
 setupAutomatedCleanup({

@@ -2,13 +2,10 @@
 const { describe, test, expect, beforeEach, afterEach } = require('bun:test');
 const { spyOn, restoreAllMocks } = require('../../helpers/bun-mock-utils');
 
-const { initializeTestLogging } = require('../../helpers/test-setup');
 const { createMockOBSManager } = require('../../helpers/mock-factories');
 const { setupAutomatedCleanup } = require('../../helpers/mock-lifecycle');
 const { createRuntimeConstantsFixture } = require('../../helpers/runtime-constants-fixture');
 
-// Initialize test infrastructure
-initializeTestLogging();
 setupAutomatedCleanup({
     clearCallsBeforeEach: true,
     validateAfterCleanup: true,

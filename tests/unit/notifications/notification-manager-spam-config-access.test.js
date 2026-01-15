@@ -4,21 +4,9 @@ const { createMockFn, restoreAllMocks } = require('../../helpers/bun-mock-utils'
 
 const { expectNoTechnicalArtifacts } = require('../../helpers/assertion-helpers');
 
-// MANDATORY imports
-const {
-    initializeTestLogging
-} = require('../../helpers/test-setup');
+const { createMockLogger } = require('../../helpers/mock-factories');
 
-const {
-    createMockLogger
-} = require('../../helpers/mock-factories');
-
-const {
-    setupAutomatedCleanup
-} = require('../../helpers/mock-lifecycle');
-
-// Initialize FIRST
-initializeTestLogging();
+const { setupAutomatedCleanup } = require('../../helpers/mock-lifecycle');
 
 // Setup automated cleanup
 setupAutomatedCleanup({

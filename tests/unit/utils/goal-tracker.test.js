@@ -3,13 +3,10 @@ const { describe, test, expect, beforeEach, afterEach } = require('bun:test');
 const { createMockFn, restoreAllMocks } = require('../../helpers/bun-mock-utils');
 const { mockModule, requireActual, restoreAllModuleMocks } = require('../../helpers/bun-module-mocks');
 
-const { initializeTestLogging, TEST_TIMEOUTS } = require('../../helpers/test-setup');
+const { TEST_TIMEOUTS } = require('../../helpers/test-setup');
 const { createMockLogger, createMockFileSystem } = require('../../helpers/mock-factories');
 const { setupAutomatedCleanup } = require('../../helpers/mock-lifecycle');
 const testClock = require('../../helpers/test-clock');
-
-// Initialize logging FIRST
-initializeTestLogging();
 
 // Setup automated cleanup
 setupAutomatedCleanup({

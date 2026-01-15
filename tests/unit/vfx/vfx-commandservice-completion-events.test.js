@@ -2,10 +2,7 @@ const { describe, test, expect, beforeEach, it, afterEach } = require('bun:test'
 const { createMockFn, restoreAllMocks } = require('../../helpers/bun-mock-utils');
 const { mockModule, resetModules, restoreAllModuleMocks } = require('../../helpers/bun-module-mocks');
 
-const { initializeTestLogging } = require('../../helpers/test-setup');
 const { PlatformEvents } = require('../../../src/interfaces/PlatformEvents');
-
-initializeTestLogging();
 
 mockModule('../../../src/chat/commands', () => ({
     CommandParser: createMockFn(),

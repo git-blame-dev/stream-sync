@@ -2,11 +2,6 @@
 const { describe, test, expect, beforeEach, afterEach } = require('bun:test');
 const { createMockFn, restoreAllMocks } = require('../helpers/bun-mock-utils');
 
-const { initializeTestLogging } = require('../helpers/test-setup');
-
-// Initialize logging for tests
-initializeTestLogging();
-
 const { YouTubeConnectionManager } = require('../../src/utils/youtube-connection-manager');
 
 describe('YouTube Connection Manager - Missing Methods', () => {

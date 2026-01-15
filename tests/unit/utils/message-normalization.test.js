@@ -2,7 +2,6 @@
 const { describe, test, expect, beforeEach, it, afterEach } = require('bun:test');
 const { createMockFn, restoreAllMocks } = require('../../helpers/bun-mock-utils');
 
-const { initializeTestLogging } = require('../../helpers/test-setup');
 const { createMockLogger } = require('../../helpers/mock-factories');
 const { setupAutomatedCleanup } = require('../../helpers/mock-lifecycle');
 const { createTwitchChatEvent, createYouTubeChatEvent, createTikTokChatEvent } = require('../../helpers/platform-test-data');
@@ -17,9 +16,6 @@ const {
     createFallbackMessage,
     validateNormalizedMessage
 } = require('../../../src/utils/message-normalization');
-
-// Initialize logging FIRST
-initializeTestLogging();
 
 // Setup automated cleanup
 setupAutomatedCleanup({

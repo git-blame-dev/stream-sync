@@ -2,11 +2,7 @@
 const { describe, test, expect, beforeEach, it, afterEach } = require('bun:test');
 const { resetModules, restoreAllModuleMocks } = require('../../helpers/bun-module-mocks');
 
-const { initializeTestLogging } = require('../../helpers/test-setup');
 const { setupAutomatedCleanup } = require('../../helpers/mock-lifecycle');
-
-// Initialize logging FIRST
-initializeTestLogging();
 
 // Setup automated cleanup
 setupAutomatedCleanup({
