@@ -1,16 +1,7 @@
 const { describe, test, expect, beforeEach, afterEach, it, jest } = require('bun:test');
-const { createMockFn, restoreAllMocks } = require('../../helpers/bun-mock-utils');
-const { mockModule, resetModules, restoreAllModuleMocks } = require('../../helpers/bun-module-mocks');
+const { restoreAllMocks } = require('../../helpers/bun-mock-utils');
+const { restoreAllModuleMocks } = require('../../helpers/bun-module-mocks');
 const { useFakeTimers, useRealTimers } = require('../../helpers/bun-timers');
-
-mockModule('../../../src/core/logging', () => ({
-    logger: {
-        debug: createMockFn(),
-        info: createMockFn(),
-        warn: createMockFn(),
-        error: createMockFn()
-    }
-}));
 
 describe('command-parser behavior', () => {
     const loadModule = () => {

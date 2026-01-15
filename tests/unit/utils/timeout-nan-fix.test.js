@@ -1,10 +1,7 @@
 
 const { describe, test, expect, beforeEach, afterEach } = require('bun:test');
 const { createMockFn, restoreAllMocks } = require('../../helpers/bun-mock-utils');
-const { mockModule, resetModules, restoreAllModuleMocks } = require('../../helpers/bun-module-mocks');
-
-const path = require('path');
-const { initializeTestLogging } = require('../../helpers/test-setup');
+const { restoreAllModuleMocks } = require('../../helpers/bun-module-mocks');
 
 describe('Timeout NaN Warning Fix', () => {
     let originalConsoleWarn;
@@ -13,26 +10,7 @@ describe('Timeout NaN Warning Fix', () => {
     let timeoutCalls;
 
     beforeEach(() => {
-        initializeTestLogging();
-        
-        // Mock logging for StreamDetector and RetrySystem
-        mockModule('../../../src/core/logging', () => ({
-            getUnifiedLogger: createMockFn(() => ({
-                debug: createMockFn(),
-                info: createMockFn(),
-                warn: createMockFn(),
-                error: createMockFn()
-            })),
-            logger: {
-                debug: createMockFn(),
-                info: createMockFn(),
-                warn: createMockFn(),
-                error: createMockFn()
-            }
-        }));
-        
-        // Clear require cache to ensure fresh modules
-// Capture console warnings
+        // Capture console warnings
         consoleWarnings = [];
         originalConsoleWarn = console.warn;
         console.warn = (message) => {
