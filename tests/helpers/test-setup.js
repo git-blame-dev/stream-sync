@@ -467,15 +467,6 @@ const setupAutomatedCleanup = (options = {}) => {
 
         getCleanupStats: () => ({ ...cleanupStats }),
 
-        attachToJest: (jestHooks) => {
-            if (jestHooks.beforeEach) {
-                jestHooks.beforeEach(cleanup.beforeEach);
-            }
-            if (jestHooks.afterEach) {
-                jestHooks.afterEach(cleanup.afterEach);
-            }
-        },
-
         isCompatible: true,
         preservesExistingSetup: true
     };
@@ -567,7 +558,7 @@ const validateMockUsage = (mockObject, options = {}) => {
 const clearAllActiveMocks = () => {
     let clearedCount = 0;
     clearAllMocks();
-    clearedCount++; // Jest's clearAllMocks counts as one operation
+    clearedCount++; // clearAllMocks counts as one operation
     return clearedCount;
 };
 

@@ -1,15 +1,13 @@
 
-const { describe, test, expect, jest } = require('bun:test');
+const { describe, test, expect } = require('bun:test');
 
-const { initializeTestLogging, TEST_TIMEOUTS } = require('../helpers/test-setup');
+const { initializeTestLogging } = require('../helpers/test-setup');
 const NotificationBuilder = require('../../src/utils/notification-builder');
 const { generateLogMessage } = require('../helpers/notification-test-utils');
 
 initializeTestLogging();
 
 describe('Gift Display Details', () => {
-    jest.setTimeout(TEST_TIMEOUTS.UNIT);
-
     const buildGift = (overrides = {}) => NotificationBuilder.build({
         type: 'platform:gift',
         platform: overrides.platform || 'tiktok',

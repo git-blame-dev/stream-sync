@@ -1,8 +1,8 @@
 
-const { describe, test, expect, jest } = require('bun:test');
+const { describe, test, expect } = require('bun:test');
 const { createMockFn, restoreAllMocks } = require('../helpers/bun-mock-utils');
 
-const { initializeTestLogging, TEST_TIMEOUTS } = require('../helpers/test-setup');
+const { initializeTestLogging } = require('../helpers/test-setup');
 const { createMockLogger, createMockNotificationManager } = require('../helpers/mock-factories');
 const { setupAutomatedCleanup } = require('../helpers/mock-lifecycle');
 const { createTestAppRuntime } = require('../helpers/runtime-test-harness');
@@ -19,8 +19,6 @@ describe('Gift Notification Config Resiliency', () => {
     afterEach(() => {
         restoreAllMocks();
     });
-
-    jest.setTimeout(TEST_TIMEOUTS.UNIT);
 
     const buildAppRuntime = (overrides = {}) => {
         const mockLogger = overrides.logger || createMockLogger('debug', { captureConsole: true });

@@ -1,7 +1,7 @@
 
-const { describe, test, expect, beforeEach, jest } = require('bun:test');
+const { describe, test, expect, beforeEach } = require('bun:test');
 
-const { initializeTestLogging, createTestUser, TEST_TIMEOUTS } = require('../helpers/test-setup');
+const { initializeTestLogging } = require('../helpers/test-setup');
 const { createMockLogger, createMockNotificationBuilder, createMockPlatform } = require('../helpers/mock-factories');
 const { setupAutomatedCleanup } = require('../helpers/mock-lifecycle');
 const { expectValidNotification } = require('../helpers/assertion-helpers');
@@ -20,8 +20,6 @@ setupAutomatedCleanup({
 const { RetrySystem, ADAPTIVE_RETRY_CONFIG } = require('../../src/utils/retry-system.js');
 
 describe('Unified Adaptive Retry System', () => {
-    // Test timeout protection as per rules
-    jest.setTimeout(TEST_TIMEOUTS.UNIT);
     let retrySystem;
     let platformRetryCount;
 

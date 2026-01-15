@@ -24,7 +24,7 @@ const IGNORE_DIRECTORIES = new Set([
 
 const VIOLATION_PATTERN = /\bset(?:Timeout|Interval)\s*\(/g;
 const SAFE_PREFIX = 'safe';
-const ALLOWED_PREFIXES = ['jest.'];
+const ALLOWED_PREFIXES = [];
 const PROMISE_TIMEOUT_PATTERN = /new\s+Promise\s*\([^)]*=>\s*(?:safeSetTimeout|setTimeout)\s*\(/;
 const PROMISE_TIMEOUT_ALLOWLIST = new Set([
   'src/utils/timeout-validator.js'
@@ -35,7 +35,7 @@ const PROMISE_RACE_ALLOWLIST = new Set([
 ]);
 const RAW_TIMER_ALLOWLIST = new Set([
   'src/utils/timeout-validator.js',
-  'tests/setup/jest.setup.js'
+  'tests/setup/bun.setup.js'
 ]);
 
 function normalizePath(filePath) {

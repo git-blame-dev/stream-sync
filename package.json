@@ -1,5 +1,5 @@
 {
-  "name": "chat-bot",
+  "name": "stream-sync",
   "private": true,
   "description": "Chat bot with viewer count system",
   "main": "src/bootstrap.js",
@@ -7,70 +7,12 @@
     "start": "node src/bootstrap.js",
     "start:debug": "node src/bootstrap.js --debug",
     "lint": "node scripts/lint/no-raw-timeouts.js && eslint \"src/**/*.js\" \"tests/**/*.js\" && knip --config knip.json --include files,unlisted,exports",
-    "test": "cross-env NODE_ENV=test jest",
-    "test:bun": "cross-env NODE_ENV=test bun test --preload ./tests/setup/bun.prerun.js --preload ./tests/setup/bun.setup.js"
+    "test": "cross-env NODE_ENV=test bun test"
   },
   "devDependencies": {
-    "@jest/globals": "^30.2.0",
     "cross-env": "^10.1.0",
     "eslint": "^9.39.1",
-    "jest": "^30.2.0",
     "knip": "^5.61.2"
-  },
-  "jest": {
-    "testEnvironment": "node",
-    "workerThreads": true,
-    "setupFiles": [
-      "<rootDir>/tests/setup/jest.prerun.js"
-    ],
-    "setupFilesAfterEnv": [
-      "<rootDir>/tests/setup/jest.setup.js"
-    ],
-    "testMatch": [
-      "**/tests/**/*.test.js",
-      "**/tests/**/*-test.js"
-    ],
-    "testPathIgnorePatterns": [
-      "/node_modules/"
-    ],
-    "collectCoverageFrom": [
-      "src/**/*.js",
-      "!src/**/*.test.js",
-      "!src/**/__mocks__/**"
-    ],
-    "coveragePathIgnorePatterns": [
-      "/node_modules/",
-      "/tests/"
-    ],
-    "coverageThreshold": {
-      "global": {
-        "branches": 80,
-        "functions": 80,
-        "lines": 80,
-        "statements": 80
-      }
-    },
-    "moduleNameMapper": {
-      "^youtubei\\.js$": "<rootDir>/tests/__mocks__/youtubei.js",
-      "^tiktok-live-connector$": "<rootDir>/tests/__mocks__/tiktok-live-connector.js",
-      "^ws$": "<rootDir>/tests/__mocks__/ws.js"
-    },
-    "testTimeout": 15000,
-    "verbose": true,
-    "silent": false,
-    "clearMocks": true,
-    "restoreMocks": true,
-    "resetMocks": true,
-    "collectCoverage": false,
-    "coverageReporters": [
-      "text",
-      "lcov",
-      "html"
-    ],
-    "coverageDirectory": "coverage",
-    "reporters": [
-      "default"
-    ]
   },
   "keywords": [],
   "author": "",

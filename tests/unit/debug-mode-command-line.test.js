@@ -1,7 +1,7 @@
 
-const { describe, test, expect, beforeEach, jest } = require('bun:test');
+const { describe, test, expect, beforeEach } = require('bun:test');
 
-const { initializeTestLogging, createTestUser, TEST_TIMEOUTS } = require('../helpers/test-setup');
+const { initializeTestLogging } = require('../helpers/test-setup');
 const { createMockLogger, createMockNotificationBuilder } = require('../helpers/mock-factories');
 const { setupAutomatedCleanup } = require('../helpers/mock-lifecycle');
 const { expectValidNotification } = require('../helpers/assertion-helpers');
@@ -20,9 +20,6 @@ const loggingModule = require('../../src/core/logging');
 const { setDebugMode, getDebugMode } = loggingModule;
 
 describe('Debug Mode Command Line Argument', () => {
-    // Test timeout protection as per rules
-    jest.setTimeout(TEST_TIMEOUTS.UNIT);
-    
     // Reset debug mode before each test to ensure isolation
     beforeEach(() => {
         // Reset mock implementations

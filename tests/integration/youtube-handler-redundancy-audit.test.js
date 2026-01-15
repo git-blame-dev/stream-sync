@@ -279,7 +279,7 @@ describe('YouTube Handler Redundancy Audit', () => {
 
             handlerMethods.forEach(methodName => {
                 expect(typeof platform[methodName]).toBe('function');
-                // Jest functions have length 0, so skip this check for mocked functions
+                // Mock functions have length 0, so skip this check for mocked functions
                 // expect(platform[methodName].length).toBeGreaterThanOrEqual(1);
                 
                 // Should not throw when called with standard chatItem

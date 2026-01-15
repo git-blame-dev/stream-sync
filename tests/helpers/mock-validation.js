@@ -146,7 +146,7 @@ const validateMockContract = (mockObject, contractName) => {
         if (!mockObject.hasOwnProperty(methodName)) {
             errors.push(`Missing required method: ${methodName}`);
         } else if (!isMockFunction(mockObject[methodName])) {
-            warnings.push(`Method ${methodName} is not a Jest mock function`);
+            warnings.push(`Method ${methodName} is not a mock function`);
         }
     });
 
@@ -338,7 +338,7 @@ const toMatchContract = function(mockObject, contractName) {
 };
 
 const setupMockValidation = () => {
-    // Extend Jest matchers
+    // Extend test matchers
     expect.extend({
         toMatchContract
     });
@@ -399,7 +399,7 @@ module.exports = {
     validateMockSuite,
     generateValidationSummary,
     
-    // Jest integration
+    // Test runner integration
     setupMockValidation,
     toMatchContract,
     

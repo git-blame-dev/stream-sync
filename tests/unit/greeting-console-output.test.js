@@ -1,7 +1,7 @@
 
-const { describe, test, expect, jest } = require('bun:test');
+const { describe, test, expect } = require('bun:test');
 
-const { initializeTestLogging, TEST_TIMEOUTS } = require('../helpers/test-setup');
+const { initializeTestLogging } = require('../helpers/test-setup');
 const { setupAutomatedCleanup } = require('../helpers/mock-lifecycle');
 const NotificationBuilder = require('../../src/utils/notification-builder');
 const { generateLogMessage, createNotificationData } = require('../helpers/notification-test-utils');
@@ -17,8 +17,6 @@ setupAutomatedCleanup({
 });
 
 describe('Greeting Notification Console Output', () => {
-    jest.setTimeout(TEST_TIMEOUTS.UNIT);
-
     test('generates console log text for greeting notifications using NotificationBuilder output', () => {
         const greetingData = NotificationBuilder.build({
             type: 'greeting',

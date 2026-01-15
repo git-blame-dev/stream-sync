@@ -50,7 +50,19 @@ module.exports = [
       ...languageOptions,
       globals: {
         ...globals.node,
-        ...globals.jest,
+        // Bun test globals (Jest-compatible)
+        describe: false,
+        test: false,
+        it: false,
+        expect: false,
+        beforeAll: false,
+        afterAll: false,
+        beforeEach: false,
+        afterEach: false,
+        mock: false,
+        spyOn: false,
+        jest: false,
+        // Custom test globals
         scheduleTestTimeout: false,
         scheduleTestInterval: false,
         waitForDelay: false,

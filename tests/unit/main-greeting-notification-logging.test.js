@@ -1,9 +1,9 @@
 
-const { describe, test, expect, beforeEach, jest } = require('bun:test');
+const { describe, test, expect, beforeEach } = require('bun:test');
 const { createMockFn, restoreAllMocks } = require('../helpers/bun-mock-utils');
 const { mockModule, restoreAllModuleMocks } = require('../helpers/bun-module-mocks');
 
-const { initializeTestLogging, createTestUser, TEST_TIMEOUTS } = require('../helpers/test-setup');
+const { initializeTestLogging } = require('../helpers/test-setup');
 const { createMockLogger } = require('../helpers/mock-factories');
 const { setupAutomatedCleanup } = require('../helpers/mock-lifecycle');
 const NotificationBuilder = require('../../src/utils/notification-builder');
@@ -30,9 +30,6 @@ describe('Main.js Greeting Notification Logging', () => {
         restoreAllMocks();
         restoreAllModuleMocks();
     });
-
-    // Test timeout protection as per rules
-    jest.setTimeout(TEST_TIMEOUTS.UNIT);
 
     let logNotificationToConsole;
     let mockLogger;

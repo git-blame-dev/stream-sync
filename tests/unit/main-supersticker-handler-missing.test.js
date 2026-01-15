@@ -1,5 +1,5 @@
 
-const { describe, test, expect, jest } = require('bun:test');
+const { describe, test, expect } = require('bun:test');
 const { createMockFn, restoreAllMocks } = require('../helpers/bun-mock-utils');
 const { mockModule, restoreAllModuleMocks } = require('../helpers/bun-module-mocks');
 
@@ -22,7 +22,7 @@ mockModule('../../src/core/logging', () => ({
     }))
 }));
 
-const { initializeTestLogging, TEST_TIMEOUTS } = require('../helpers/test-setup');
+const { initializeTestLogging } = require('../helpers/test-setup');
 const { createMockNotificationManager } = require('../helpers/mock-factories');
 const { setupAutomatedCleanup } = require('../helpers/mock-lifecycle');
 const { createTestAppRuntime } = require('../helpers/runtime-test-harness');
@@ -40,8 +40,6 @@ describe('SuperSticker Notification Handling', () => {
         restoreAllMocks();
         restoreAllModuleMocks();
     });
-
-    jest.setTimeout(TEST_TIMEOUTS.UNIT);
 
     test('routes SuperSticker payloads through handleGiftNotification', async () => {
         const notificationManager = createMockNotificationManager({

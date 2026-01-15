@@ -1,8 +1,8 @@
 
-const { describe, test, expect, jest } = require('bun:test');
+const { describe, test, expect } = require('bun:test');
 const { createMockFn, restoreAllMocks } = require('../helpers/bun-mock-utils');
 
-const { initializeTestLogging, TEST_TIMEOUTS } = require('../helpers/test-setup');
+const { initializeTestLogging } = require('../helpers/test-setup');
 const { setupAutomatedCleanup } = require('../helpers/mock-lifecycle');
 const { createMockLogger } = require('../helpers/mock-factories');
 const ChatNotificationRouter = require('../../src/services/ChatNotificationRouter');
@@ -19,8 +19,6 @@ describe('Greeting System Diagnosis', () => {
     afterEach(() => {
         restoreAllMocks();
     });
-
-    jest.setTimeout(TEST_TIMEOUTS.UNIT);
 
     const buildRouter = (overrides = {}) => {
         const logger = createMockLogger('debug');

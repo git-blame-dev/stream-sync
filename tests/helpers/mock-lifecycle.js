@@ -235,7 +235,7 @@ const setupAutomatedCleanup = (options = {}) => {
         ...options
     };
 
-    // Return cleanup functions that can be called manually in proper Jest lifecycle
+    // Return cleanup functions that can be called manually in proper test lifecycle
     const cleanup = {
         beforeEach: () => {
             if (defaultOptions.clearCallsBeforeEach) {

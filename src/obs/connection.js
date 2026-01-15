@@ -28,7 +28,7 @@ class OBSConnectionManager {
         // Test environment detection
         this.isTestEnvironment = dependencies.isTestEnvironment !== undefined ? 
             dependencies.isTestEnvironment : 
-            (process.env.NODE_ENV === 'test' || typeof jest !== 'undefined');
+            (process.env.NODE_ENV === 'test');
         
         // Test connection behavior flag - allows testing actual connection logic with mocks
         this.testConnectionBehavior = dependencies.testConnectionBehavior || false;
