@@ -2,9 +2,6 @@
 const { describe, test, expect, beforeEach, it, afterEach } = require('bun:test');
 const { createMockFn, clearAllMocks, restoreAllMocks } = require('../helpers/bun-mock-utils');
 const { mockModule, resetModules, restoreAllModuleMocks } = require('../helpers/bun-module-mocks');
-const { initializeTestLogging } = require('../helpers/test-setup');
-
-initializeTestLogging();
 
 describe('OBS Startup Display Clearing - Regression Tests', () => {
     afterEach(() => {
@@ -21,7 +18,6 @@ describe('OBS Startup Display Clearing - Regression Tests', () => {
     beforeEach(() => {
         // Clear all mocks
         resetModules();
-        initializeTestLogging();
 
         // Create tracked arrays for behavior validation
         const clearedSources = [];
@@ -201,7 +197,6 @@ describe('OBS Startup Display Clearing - Regression Tests', () => {
 
             // Reload the modules to use the mocked connection
             resetModules();
-            initializeTestLogging();
             const obsStartup = require('../../src/obs/startup');
 
             // When: Clearing startup displays

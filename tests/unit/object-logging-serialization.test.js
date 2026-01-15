@@ -2,16 +2,9 @@
 const { describe, test, expect, beforeEach, afterEach } = require('bun:test');
 const { createMockFn, restoreAllMocks } = require('../helpers/bun-mock-utils');
 
-const { initializeTestLogging } = require('../helpers/test-setup');
-const { createMockLogger, createMockNotificationBuilder } = require('../helpers/mock-factories');
+const { createMockLogger } = require('../helpers/mock-factories');
 const { setupAutomatedCleanup } = require('../helpers/mock-lifecycle');
-const { expectValidNotification } = require('../helpers/assertion-helpers');
 const testClock = require('../helpers/test-clock');
-
-// Initialize logging FIRST (required for all tests)
-initializeTestLogging();
-
-// Setup automated cleanup (no manual mock management)
 setupAutomatedCleanup({
     clearCallsBeforeEach: true,
     validateAfterCleanup: true,
@@ -72,12 +65,7 @@ describe('Object Logging Serialization Validation', () => {
 
     describe('when initializeGoalDisplay initializes correctly', () => {
         test('should initialize goal display system without errors', async () => {
-            // Test behavior outcome: goal display system should initialize successfully
-            await expect(goalsManager.initializeGoalDisplay()).resolves.not.toThrow();
-            
-            // Note: Removed debug logging assertions per test standards.
-            // Tests should validate user-observable behavior, not internal logging implementation.
-            // The fact that initializeGoalDisplay completes without error is the behavior we care about.
+            await goalsManager.initializeGoalDisplay();
         });
     });
 

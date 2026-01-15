@@ -2,31 +2,8 @@
 const { describe, test, expect, beforeEach, it, afterEach } = require('bun:test');
 const { createMockFn, restoreAllMocks } = require('../helpers/bun-mock-utils');
 
-const { 
-    initializeTestLogging,
-    createTestUser, 
-    TEST_TIMEOUTS 
-} = require('../helpers/test-setup');
-
-const { 
-    createMockNotificationDispatcher,
-    createMockLogger,
-    createMockAuthManager 
-} = require('../helpers/mock-factories');
-
-const { 
-    setupAutomatedCleanup 
-} = require('../helpers/mock-lifecycle');
-
-const { 
-    expectValidNotification,
-    expectOnlyMethodCalled 
-} = require('../helpers/assertion-helpers');
-
-// Initialize logging FIRST
-initializeTestLogging();
-
-// Setup automated cleanup
+const { createMockLogger, createMockAuthManager } = require('../helpers/mock-factories');
+const { setupAutomatedCleanup } = require('../helpers/mock-lifecycle');
 setupAutomatedCleanup({
     clearCallsBeforeEach: true,
     validateAfterCleanup: true,

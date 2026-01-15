@@ -1,21 +1,11 @@
 
 const { describe, test, expect, beforeEach, afterEach } = require('bun:test');
 const { createMockFn, restoreAllMocks } = require('../helpers/bun-mock-utils');
-const { mockModule, restoreAllModuleMocks } = require('../helpers/bun-module-mocks');
-
-mockModule('../../src/utils/chat-logger', () => ({
-    logChatMessageWithConfig: createMockFn(),
-    logChatMessageSkipped: createMockFn()
-}));
-
-const { logChatMessageWithConfig, logChatMessageSkipped } = require('../../src/utils/chat-logger');
-const ChatNotificationRouter = require('../../src/services/ChatNotificationRouter');
-const { initializeTestLogging, createTestUser } = require('../helpers/test-setup');
+const { mockModule, resetModules, restoreAllModuleMocks } = require('../helpers/bun-module-mocks');
+const { createTestUser } = require('../helpers/test-setup');
 const { createMockLogger } = require('../helpers/mock-factories');
 const { setupAutomatedCleanup } = require('../helpers/mock-lifecycle');
 const testClock = require('../helpers/test-clock');
-
-initializeTestLogging();
 
 setupAutomatedCleanup({
     clearCallsBeforeEach: true,
@@ -23,7 +13,29 @@ setupAutomatedCleanup({
     logPerformanceMetrics: true
 });
 
+const applyMocks = () => {
+    mockModule('../../src/utils/chat-logger', () => ({
+        logChatMessageWithConfig: createMockFn(),
+        logChatMessageSkipped: createMockFn()
+    }));
+};
+
+applyMocks();
+
 describe('Old Message Filter', () => {
+    let logChatMessageWithConfig;
+    let logChatMessageSkipped;
+    let ChatNotificationRouter;
+
+    beforeEach(() => {
+        resetModules();
+        applyMocks();
+        const chatLogger = require('../../src/utils/chat-logger');
+        logChatMessageWithConfig = chatLogger.logChatMessageWithConfig;
+        logChatMessageSkipped = chatLogger.logChatMessageSkipped;
+        ChatNotificationRouter = require('../../src/services/ChatNotificationRouter');
+    });
+
     afterEach(() => {
         restoreAllMocks();
         restoreAllModuleMocks();
@@ -61,11 +73,6 @@ describe('Old Message Filter', () => {
         userId: '12345',
         message: 'Hello world',
         timestamp
-    });
-
-    beforeEach(() => {
-        logChatMessageWithConfig.mockClear();
-        logChatMessageSkipped.mockClear();
     });
 
     test('skips messages sent before the latest platform connection', async () => {

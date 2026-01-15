@@ -4,11 +4,8 @@
 const { describe, test, expect, beforeEach, afterEach, beforeAll, afterAll } = require('bun:test');
 const { createMockFn, restoreAllMocks } = require('../helpers/bun-mock-utils');
 const { restoreAllModuleMocks } = require('../helpers/bun-module-mocks');
-const { initializeTestLogging } = require('../helpers/test-setup');
 const { setupAutomatedCleanup } = require('../helpers/mock-lifecycle');
 const testClock = require('../helpers/test-clock');
-
-initializeTestLogging();
 
 setupAutomatedCleanup({
     clearCallsBeforeEach: true,
