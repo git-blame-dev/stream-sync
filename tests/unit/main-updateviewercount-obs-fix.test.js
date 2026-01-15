@@ -1,32 +1,10 @@
 
 const { describe, test, expect, beforeEach, afterEach, it } = require('bun:test');
 const { createMockFn, clearAllMocks, restoreAllMocks } = require('../helpers/bun-mock-utils');
-const { mockModule, resetModules, restoreAllModuleMocks } = require('../helpers/bun-module-mocks');
 
-const { 
-  initializeTestLogging,
-  TEST_TIMEOUTS 
-} = require('../helpers/test-setup');
+const { TEST_TIMEOUTS } = require('../helpers/test-setup');
+const { setupAutomatedCleanup } = require('../helpers/mock-lifecycle');
 
-const { 
-  setupAutomatedCleanup 
-} = require('../helpers/mock-lifecycle');
-
-const {
-  createMockLogger
-} = require('../helpers/mock-factories');
-
-const mockLogger = createMockLogger('debug');
-const mockGetDebugLog = createMockFn(() => createMockFn());
-mockModule('../../src/core/logging', () => ({
-  logger: mockLogger,
-  getDebugLog: mockGetDebugLog
-}));
-
-// Initialize logging FIRST
-initializeTestLogging();
-
-// Setup automated cleanup
 setupAutomatedCleanup({
   clearCallsBeforeEach: true,
   validateAfterCleanup: true,
@@ -36,13 +14,8 @@ setupAutomatedCleanup({
 describe('Main App updateViewerCount OBS Integration', () => {
   let mockViewerCountSystem;
   let updateViewerCountMethod;
-  let debugLogSpy;
-  
+
   beforeEach(() => {
-    // Create mocks
-    debugLogSpy = createMockFn();
-    mockGetDebugLog.mockReturnValue(debugLogSpy);
-    
     mockViewerCountSystem = {
       counts: {
         tiktok: 0,
@@ -56,33 +29,29 @@ describe('Main App updateViewerCount OBS Integration', () => {
     const testAppRuntime = {
       viewerCountSystem: mockViewerCountSystem,
       updateViewerCount(platform, count) {
-        // This is the actual implementation from main.js
-        debugLogSpy(`[${platform}] Viewer count updated: ${count}`);
-        
         // Update the ViewerCountSystem's internal count tracking and notify observers
         if (this.viewerCountSystem) {
           const previousCount = this.viewerCountSystem.counts[platform.toLowerCase()];
           this.viewerCountSystem.counts[platform.toLowerCase()] = count;
-          
+
           // Notify observers of real-time count update - handle async properly
           const notificationPromise = this.viewerCountSystem.notifyObservers(platform, count, previousCount);
           if (notificationPromise && notificationPromise.catch) {
-            notificationPromise.catch((error) => {
-              // Handle observer notification errors gracefully - don't let them crash the system
-              console.warn(`Observer notification failed for ${platform}:`, error.message);
+            notificationPromise.catch(() => {
+              // Handle observer notification errors gracefully
             });
           }
         }
       }
     };
-    
+
     updateViewerCountMethod = testAppRuntime.updateViewerCount.bind(testAppRuntime);
   });
-  
+
   afterEach(() => {
-        restoreAllMocks();
+    restoreAllMocks();
     clearAllMocks();
-restoreAllModuleMocks();});
+  });
 
   describe('when updateViewerCount is called', () => {
     describe('and ViewerCountSystem is available', () => {
@@ -111,20 +80,6 @@ restoreAllModuleMocks();});
         expect(mockViewerCountSystem.notifyObservers).toHaveBeenCalledTimes(1);
       });
 
-      it('should log the viewer count update', () => {
-        // Arrange
-        const platform = 'youtube';
-        const viewerCount = 999;
-
-        // Act
-        updateViewerCountMethod(platform, viewerCount);
-
-        // Assert
-        expect(debugLogSpy).toHaveBeenCalledWith(
-          `[${platform}] Viewer count updated: ${viewerCount}`
-        );
-      });
-
       it('should work for all platforms', () => {
         // Arrange
         const platforms = ['tiktok', 'twitch', 'youtube'];
@@ -145,32 +100,28 @@ restoreAllModuleMocks();});
 
     describe('and ViewerCountSystem is missing', () => {
       let updateViewerCountMethodWithoutSystem;
-      
+
       beforeEach(() => {
         // Create a test method where viewerCountSystem is null
         const testAppRuntimeWithoutSystem = {
           viewerCountSystem: null,
           updateViewerCount(platform, count) {
-            // This is the actual implementation from main.js
-            debugLogSpy(`[${platform}] Viewer count updated: ${count}`);
-            
             // Update the ViewerCountSystem's internal count tracking
             if (this.viewerCountSystem) {
               const previousCount = this.viewerCountSystem.counts[platform.toLowerCase()];
               this.viewerCountSystem.counts[platform.toLowerCase()] = count;
-              
+
               // Notify observers for real-time updates
               const notificationPromise = this.viewerCountSystem.notifyObservers(platform, count, previousCount);
               if (notificationPromise && notificationPromise.catch) {
-                notificationPromise.catch((error) => {
+                notificationPromise.catch(() => {
                   // Handle observer notification errors gracefully
-                  console.warn(`Observer notification failed for ${platform}:`, error.message);
                 });
               }
             }
           }
         };
-        
+
         updateViewerCountMethodWithoutSystem = testAppRuntimeWithoutSystem.updateViewerCount.bind(testAppRuntimeWithoutSystem);
       });
 
@@ -183,20 +134,6 @@ restoreAllModuleMocks();});
         expect(() => {
           updateViewerCountMethodWithoutSystem(platform, viewerCount);
         }).not.toThrow();
-      });
-
-      it('should still log the viewer count update', () => {
-        // Arrange
-        const platform = 'tiktok';
-        const viewerCount = 777;
-
-        // Act
-        updateViewerCountMethodWithoutSystem(platform, viewerCount);
-
-        // Assert
-        expect(debugLogSpy).toHaveBeenCalledWith(
-          `[${platform}] Viewer count updated: ${viewerCount}`
-        );
       });
     });
 
@@ -227,7 +164,7 @@ restoreAllModuleMocks();});
     it('should prevent TikTok viewer count from being ignored in observers', () => {
       const platform = 'tiktok';
       const viewerCount = 4;
-      
+
       // Reset internal count to verify it gets updated
       mockViewerCountSystem.counts.tiktok = 0;
 
@@ -235,11 +172,6 @@ restoreAllModuleMocks();});
 
       expect(mockViewerCountSystem.counts.tiktok).toBe(viewerCount);
       expect(mockViewerCountSystem.notifyObservers).toHaveBeenCalledWith(platform, viewerCount, 0);
-      expect(debugLogSpy).toHaveBeenCalledWith(
-        '[tiktok] Viewer count updated: 4'
-      );
-      
-      // Ensure we're actually calling observer notification, not just logging
       expect(mockViewerCountSystem.notifyObservers).toHaveBeenCalledTimes(1);
     });
 

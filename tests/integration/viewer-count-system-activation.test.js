@@ -12,24 +12,6 @@ mockModule('../../src/obs/startup', () => ({
     clearStartupDisplays: createMockFn().mockResolvedValue()
 }));
 
-mockModule('../../src/core/logging', () => {
-    const logger = {
-        debug: createMockFn(),
-        info: createMockFn(),
-        warn: createMockFn(),
-        error: createMockFn()
-    };
-    return {
-        logger,
-        getLogger: createMockFn(() => logger),
-        getUnifiedLogger: createMockFn(() => logger),
-        initializeLoggingConfig: createMockFn(),
-        initializeConsoleOverride: createMockFn(),
-        setConfigValidator: createMockFn(),
-        setDebugMode: createMockFn()
-    };
-});
-
 mockModule('../../src/obs/goals', () => {
     const goalsManager = {
         initializeGoalDisplay: createMockFn().mockResolvedValue(),
@@ -42,12 +24,7 @@ mockModule('../../src/obs/goals', () => {
     };
 });
 
-// MANDATORY imports
-const { 
-    initializeTestLogging,
-    createTestUser, 
-    TEST_TIMEOUTS 
-} = require('../helpers/test-setup');
+const { TEST_TIMEOUTS } = require('../helpers/test-setup');
 
 const { 
     createMockNotificationDispatcher,
@@ -81,9 +58,6 @@ const createMockPlatformLifecycleService = () => {
     };
     return service;
 };
-
-// Initialize FIRST
-initializeTestLogging();
 
 // Setup automated cleanup
 setupAutomatedCleanup({

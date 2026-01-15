@@ -2,27 +2,23 @@
 const { describe, test, beforeEach, afterEach, expect } = require('bun:test');
 const { createMockFn, mockResolvedValue, clearAllMocks, restoreAllMocks } = require('../helpers/bun-mock-utils');
 const { mockModule, restoreAllModuleMocks } = require('../helpers/bun-module-mocks');
-const { initializeTestLogging, TEST_TIMEOUTS } = require('../helpers/test-setup');
-const { 
-    createMockLogger, 
-    createMockConfigManager, 
+const { TEST_TIMEOUTS } = require('../helpers/test-setup');
+const {
+    createMockLogger,
+    createMockConfigManager,
     createMockOBSConnection,
-    createMockDisplayQueue 
+    createMockDisplayQueue
 } = require('../helpers/mock-factories');
 const { setupAutomatedCleanup } = require('../helpers/mock-lifecycle');
 const testClock = require('../helpers/test-clock');
 
-// Initialize logging FIRST
-initializeTestLogging();
-
-// Setup automated cleanup
 setupAutomatedCleanup({
     clearCallsBeforeEach: true,
     validateAfterCleanup: true,
     logPerformanceMetrics: true
 });
 
-// Mock external dependencies
+// Mock external OBS dependencies
 mockModule('../../src/obs/connection', () => ({
     ensureOBSConnected: mockResolvedValue(createMockFn(), undefined),
     obsCall: createMockFn(),
@@ -38,51 +34,6 @@ mockModule('../../src/obs/display-queue', () => ({
         updateTextSource: mockResolvedValue(createMockFn(), undefined),
         playMediaInOBS: mockResolvedValue(createMockFn(), undefined),
         playGiftVideoAndAudio: mockResolvedValue(createMockFn(), undefined)
-    }))
-}));
-
-// Mock logger utilities
-mockModule('../../src/utils/logger-utils', () => {
-    const createLogger = () => ({
-        error: createMockFn(),
-        debug: createMockFn(),
-        info: createMockFn(),
-        warn: createMockFn()
-    });
-
-    return {
-        isDebugModeEnabled: createMockFn(() => false),
-        createNoopLogger: () => createLogger(),
-        getLoggerOrNoop: (logger) => logger || createLogger(),
-        getLazyLogger: createMockFn(() => createLogger()),
-        getLazyUnifiedLogger: createMockFn(() => ({
-            ...createLogger(),
-            log: createMockFn()
-        }))
-    };
-});
-
-mockModule('../../src/core/logging', () => ({
-    debugLog: createMockFn(),
-    logger: {
-        error: createMockFn(),
-        debug: createMockFn(),
-        info: createMockFn(),
-        warn: createMockFn()
-    },
-    getUnifiedLogger: createMockFn(() => ({
-        error: createMockFn(),
-        debug: createMockFn(),
-        info: createMockFn(),
-        warn: createMockFn(),
-        log: createMockFn()
-    })),
-    getLogger: createMockFn(() => ({
-        error: createMockFn(),
-        debug: createMockFn(),
-        info: createMockFn(),
-        warn: createMockFn(),
-        log: createMockFn()
     }))
 }));
 
