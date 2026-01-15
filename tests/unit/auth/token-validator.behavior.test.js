@@ -1,16 +1,20 @@
-jest.mock('../../../src/auth/TwitchAuthFactory');
-jest.mock('../../../src/utils/platform-error-handler', () => ({
-    createPlatformErrorHandler: jest.fn(() => ({
-        handleEventProcessingError: jest.fn(),
-        logOperationalError: jest.fn()
+const { describe, test, expect, beforeEach, it } = require('bun:test');
+const { createMockFn, spyOn, clearAllMocks, restoreAllMocks } = require('../../helpers/bun-mock-utils');
+const { mockModule, restoreAllModuleMocks } = require('../../helpers/bun-module-mocks');
+
+mockModule('../../../src/auth/TwitchAuthFactory');
+mockModule('../../../src/utils/platform-error-handler', () => ({
+    createPlatformErrorHandler: createMockFn(() => ({
+        handleEventProcessingError: createMockFn(),
+        logOperationalError: createMockFn()
     })),
-    ensurePlatformErrorHandler: jest.fn((existing, logger, name) => existing || ({
-        handleEventProcessingError: jest.fn(),
-        logOperationalError: jest.fn()
+    ensurePlatformErrorHandler: createMockFn((existing, logger, name) => existing || ({
+        handleEventProcessingError: createMockFn(),
+        logOperationalError: createMockFn()
     }))
 }));
-jest.mock('../../../src/utils/user-friendly-errors', () => ({
-    handleUserFacingError: jest.fn()
+mockModule('../../../src/utils/user-friendly-errors', () => ({
+    handleUserFacingError: createMockFn()
 }));
 
 const TwitchAuthFactory = require('../../../src/auth/TwitchAuthFactory');
@@ -18,6 +22,11 @@ const { handleUserFacingError } = require('../../../src/utils/user-friendly-erro
 const { TokenValidator } = require('../../../src/auth/token-validator');
 
 describe('token-validator behavior', () => {
+    afterEach(() => {
+        restoreAllMocks();
+        restoreAllModuleMocks();
+    });
+
     const baseConfig = {
         clientId: 'cid',
         clientSecret: 'secret',
@@ -27,16 +36,15 @@ describe('token-validator behavior', () => {
 
     const createAuthFactory = (managerImpl) => {
         const factory = {
-            getInitializedAuthManager: jest.fn(async () => managerImpl),
-            cleanup: jest.fn()
+            getInitializedAuthManager: createMockFn(async () => managerImpl),
+            cleanup: createMockFn()
         };
         TwitchAuthFactory.mockImplementation(() => factory);
         return factory;
     };
 
     beforeEach(() => {
-        jest.clearAllMocks();
-    });
+        });
 
     it('flags missing tokens and placeholders as needing new tokens', async () => {
         const validator = new TokenValidator();
@@ -60,7 +68,7 @@ describe('token-validator behavior', () => {
 
     it('prompts for missing client credentials and skips OAuth flow', async () => {
         const validator = new TokenValidator();
-        const oauthSpy = jest.spyOn(validator, 'runOAuthFlow').mockResolvedValue({
+        const oauthSpy = spyOn(validator, 'runOAuthFlow').mockResolvedValue({
             access_token: 'token',
             refresh_token: 'refresh'
         });
@@ -86,7 +94,7 @@ describe('token-validator behavior', () => {
 
     it('bubbles scope validation retryable errors without forcing new tokens', async () => {
         const validator = new TokenValidator();
-        jest.spyOn(validator, '_validateTokenScopes').mockResolvedValue({ valid: false, errors: ['Network'], retryable: true });
+        spyOn(validator, '_validateTokenScopes').mockResolvedValue({ valid: false, errors: ['Network'], retryable: true });
 
         const result = await validator.validateTwitchTokens(baseConfig);
 
@@ -96,13 +104,13 @@ describe('token-validator behavior', () => {
 
     it('returns validated auth manager on success', async () => {
         const authManager = {
-            getAccessToken: jest.fn(async () => 'token'),
-            getAuthProvider: jest.fn(() => ({})),
-            getUserId: jest.fn(() => 'user')
+            getAccessToken: createMockFn(async () => 'token'),
+            getAuthProvider: createMockFn(() => ({})),
+            getUserId: createMockFn(() => 'user')
         };
         const factory = createAuthFactory(authManager);
         const validator = new TokenValidator();
-        jest.spyOn(validator, '_validateTokenScopes').mockResolvedValue({ valid: true, errors: [] });
+        spyOn(validator, '_validateTokenScopes').mockResolvedValue({ valid: true, errors: [] });
 
         const result = await validator.validateTwitchTokens(baseConfig);
 
@@ -114,12 +122,12 @@ describe('token-validator behavior', () => {
 
     it('marks needsRefresh when auth manager throws token error', async () => {
         const factory = {
-            getInitializedAuthManager: jest.fn(async () => { throw new Error('Invalid refresh token'); }),
-            cleanup: jest.fn()
+            getInitializedAuthManager: createMockFn(async () => { throw new Error('Invalid refresh token'); }),
+            cleanup: createMockFn()
         };
         TwitchAuthFactory.mockImplementation(() => factory);
         const validator = new TokenValidator();
-        jest.spyOn(validator, '_validateTokenScopes').mockResolvedValue({ valid: true, errors: [] });
+        spyOn(validator, '_validateTokenScopes').mockResolvedValue({ valid: true, errors: [] });
 
         const result = await validator.validateTwitchTokens(baseConfig);
 

@@ -1,27 +1,34 @@
+const { describe, test, expect, beforeEach, it } = require('bun:test');
+const { createMockFn, spyOn, restoreAllMocks } = require('../../helpers/bun-mock-utils');
+
 const { DependencyFactory } = require('../../../src/utils/dependency-factory');
 
 describe('DependencyFactory behavior', () => {
+    afterEach(() => {
+        restoreAllMocks();
+    });
+
     let factory;
 
     beforeEach(() => {
         factory = new DependencyFactory();
-        jest.spyOn(factory, '_validateConfiguration').mockImplementation(() => {});
-        jest.spyOn(factory, '_validateOptions').mockImplementation(() => {});
-        jest.spyOn(factory, 'createValidatedLogger').mockReturnValue({
-            debug: jest.fn(),
-            info: jest.fn(),
-            warn: jest.fn(),
-            error: jest.fn()
+        spyOn(factory, '_validateConfiguration').mockImplementation(() => {});
+        spyOn(factory, '_validateOptions').mockImplementation(() => {});
+        spyOn(factory, 'createValidatedLogger').mockReturnValue({
+            debug: createMockFn(),
+            info: createMockFn(),
+            warn: createMockFn(),
+            error: createMockFn()
         });
 
-        factory._createInnertubeFactory = jest.fn().mockReturnValue('innertube-factory');
-        factory._createInnertubeService = jest.fn().mockReturnValue('innertube-service');
-        factory._createViewerExtractionService = jest.fn().mockReturnValue('viewer-extraction');
-        factory._createYouTubeStreamDetectionService = jest.fn().mockReturnValue('stream-detection');
-        factory._createYouTubeApiClient = jest.fn().mockReturnValue('api-client');
-        factory._createYouTubeConnectionManager = jest.fn().mockReturnValue('connection-manager');
-        factory._createTikTokConnectionFactory = jest.fn().mockReturnValue('tiktok-factory');
-        factory._createTikTokStateManager = jest.fn().mockReturnValue('tiktok-state');
+        factory._createInnertubeFactory = createMockFn().mockReturnValue('innertube-factory');
+        factory._createInnertubeService = createMockFn().mockReturnValue('innertube-service');
+        factory._createViewerExtractionService = createMockFn().mockReturnValue('viewer-extraction');
+        factory._createYouTubeStreamDetectionService = createMockFn().mockReturnValue('stream-detection');
+        factory._createYouTubeApiClient = createMockFn().mockReturnValue('api-client');
+        factory._createYouTubeConnectionManager = createMockFn().mockReturnValue('connection-manager');
+        factory._createTikTokConnectionFactory = createMockFn().mockReturnValue('tiktok-factory');
+        factory._createTikTokStateManager = createMockFn().mockReturnValue('tiktok-state');
     });
 
     it('requires API key when YouTube API is enabled', () => {

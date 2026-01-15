@@ -1,8 +1,12 @@
 
-jest.mock('../../../src/utils/platform-error-handler', () => ({
-    createPlatformErrorHandler: jest.fn(() => ({
-        handleEventProcessingError: jest.fn(),
-        logOperationalError: jest.fn()
+const { describe, test, expect, it } = require('bun:test');
+const { createMockFn, restoreAllMocks } = require('../../helpers/bun-mock-utils');
+const { mockModule, restoreAllModuleMocks } = require('../../helpers/bun-module-mocks');
+
+mockModule('../../../src/utils/platform-error-handler', () => ({
+    createPlatformErrorHandler: createMockFn(() => ({
+        handleEventProcessingError: createMockFn(),
+        logOperationalError: createMockFn()
     }))
 }));
 
@@ -19,6 +23,11 @@ const {
 } = require('../../../src/utils/auth-errors');
 
 describe('auth-errors behavior', () => {
+    afterEach(() => {
+        restoreAllMocks();
+        restoreAllModuleMocks();
+    });
+
     it('categorizes HTTP errors by status', () => {
         const error401 = { response: { status: 401 }, config: { url: '/x', method: 'GET' } };
         const error429 = { response: { status: 429 }, config: { url: '/y', method: 'POST' } };
@@ -84,7 +93,7 @@ describe('auth-errors behavior', () => {
     });
 
     it('routes errors through ErrorHandler for recoverable network errors', async () => {
-        const logger = { debug: jest.fn(), warn: jest.fn() };
+        const logger = { debug: createMockFn(), warn: createMockFn() };
         const handler = new ErrorHandler(logger);
         const err = new NetworkError('retryable', { retryable: true, recoverable: true });
 

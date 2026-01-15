@@ -1,27 +1,36 @@
 
-jest.mock('../../../src/obs/connection', () => ({
-    ensureOBSConnected: jest.fn().mockResolvedValue()
+const { describe, test, expect, beforeEach, it } = require('bun:test');
+const { createMockFn, restoreAllMocks } = require('../../helpers/bun-mock-utils');
+const { mockModule, resetModules, restoreAllModuleMocks } = require('../../helpers/bun-module-mocks');
+
+mockModule('../../../src/obs/connection', () => ({
+    ensureOBSConnected: createMockFn().mockResolvedValue()
 }));
-const mockLogger = { debug: jest.fn(), info: jest.fn(), warn: jest.fn(), error: jest.fn() };
-jest.mock('../../../src/core/logging', () => ({
+const mockLogger = { debug: createMockFn(), info: createMockFn(), warn: createMockFn(), error: createMockFn() };
+mockModule('../../../src/core/logging', () => ({
     logger: mockLogger,
-    getUnifiedLogger: jest.fn(() => mockLogger)
+    getUnifiedLogger: createMockFn(() => mockLogger)
 }));
-jest.mock('../../../src/utils/platform-error-handler', () => ({
-    createPlatformErrorHandler: jest.fn(() => ({
-        handleEventProcessingError: jest.fn(),
-        logOperationalError: jest.fn()
+mockModule('../../../src/utils/platform-error-handler', () => ({
+    createPlatformErrorHandler: createMockFn(() => ({
+        handleEventProcessingError: createMockFn(),
+        logOperationalError: createMockFn()
     }))
 }));
-jest.mock('../../../src/utils/timeout-validator', () => ({
-    safeDelay: jest.fn().mockResolvedValue(),
-    safeSetTimeout: jest.fn()
+mockModule('../../../src/utils/timeout-validator', () => ({
+    safeDelay: createMockFn().mockResolvedValue(),
+    safeSetTimeout: createMockFn()
 }));
 
 let ensureOBSConnected;
 const { createRuntimeConstantsFixture } = require('../../helpers/runtime-constants-fixture');
 
 describe('handcam-glow', () => {
+    afterEach(() => {
+        restoreAllMocks();
+        restoreAllModuleMocks();
+    });
+
     let handcamGlow;
     let runtimeConstants;
 
@@ -32,7 +41,7 @@ describe('handcam-glow', () => {
     };
 
     beforeEach(() => {
-        jest.resetModules();
+        resetModules();
         handcamGlow = require('../../../src/obs/handcam-glow');
         ensureOBSConnected = require('../../../src/obs/connection').ensureOBSConnected;
         runtimeConstants = createRuntimeConstantsFixture();
@@ -40,7 +49,7 @@ describe('handcam-glow', () => {
     });
 
     it('skips initialization when disabled in config', async () => {
-        const obs = { call: jest.fn() };
+        const obs = { call: createMockFn() };
 
         await handcamGlow.initializeHandcamGlow(obs, { glowEnabled: false }, runtimeConstants);
 
@@ -49,7 +58,7 @@ describe('handcam-glow', () => {
 
     it('initializes glow filter to zero when enabled', async () => {
         const obs = {
-            call: jest.fn(async (action) => {
+            call: createMockFn(async (action) => {
                 if (action === 'GetSourceFilter') {
                     return { filterSettings: { brightness: 10 } };
                 }
@@ -72,7 +81,7 @@ describe('handcam-glow', () => {
     });
 
     it('logs and returns when initialization fails', async () => {
-        const obs = { call: jest.fn().mockRejectedValue(new Error('fail')) };
+        const obs = { call: createMockFn().mockRejectedValue(new Error('fail')) };
 
         await handcamGlow.initializeHandcamGlow(
             obs,
@@ -87,7 +96,7 @@ describe('handcam-glow', () => {
     it('applies dual size fields during glow animation', async () => {
         const settingsCalls = [];
         const obs = {
-            call: jest.fn(async (action, payload) => {
+            call: createMockFn(async (action, payload) => {
                 if (action === 'GetSourceFilter') {
                     return { filterSettings: { brightness: 10 } };
                 }
@@ -114,7 +123,7 @@ describe('handcam-glow', () => {
     it('resets glow properties after animation error without throwing', async () => {
         let setCallCount = 0;
         const obs = {
-            call: jest.fn(async (action) => {
+            call: createMockFn(async (action) => {
                 if (action === 'GetSourceFilter') {
                     return { filterSettings: { brightness: 10 } };
                 }
@@ -139,7 +148,7 @@ describe('handcam-glow', () => {
     });
 
     it('triggers fire-and-forget glow without throwing', async () => {
-        handcamGlow.triggerHandcamGlow({ call: jest.fn() }, { glowEnabled: true }, runtimeConstants);
+        handcamGlow.triggerHandcamGlow({ call: createMockFn() }, { glowEnabled: true }, runtimeConstants);
         await new Promise(resolve => setImmediate(resolve));
 
         const triggerLog = mockLogger.debug.mock.calls.some(call => (call[0] || '').includes('Triggering glow animation'));
@@ -147,7 +156,7 @@ describe('handcam-glow', () => {
     });
 
     it('ignores trigger when disabled', () => {
-        handcamGlow.triggerHandcamGlow({ call: jest.fn() }, { glowEnabled: false }, runtimeConstants);
+        handcamGlow.triggerHandcamGlow({ call: createMockFn() }, { glowEnabled: false }, runtimeConstants);
 
         const ignoredMessage = mockLogger.debug.mock.calls.some(call => (call[0] || '').includes('Glow trigger ignored'));
         expect(ignoredMessage).toBe(true);

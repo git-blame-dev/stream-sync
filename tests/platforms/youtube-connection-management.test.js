@@ -1,13 +1,17 @@
 
+const { describe, test, expect, beforeEach, it } = require('bun:test');
+const { createMockFn, restoreAllMocks } = require('../helpers/bun-mock-utils');
+const { mockModule, restoreAllModuleMocks } = require('../helpers/bun-module-mocks');
+
 const { initializeTestLogging } = require('../helpers/test-setup');
 
 const mockErrorHandler = {
-    handleEventProcessingError: jest.fn(),
-    logOperationalError: jest.fn()
+    handleEventProcessingError: createMockFn(),
+    logOperationalError: createMockFn()
 };
 
-jest.mock('../../src/utils/platform-error-handler', () => ({
-    createPlatformErrorHandler: jest.fn(() => mockErrorHandler)
+mockModule('../../src/utils/platform-error-handler', () => ({
+    createPlatformErrorHandler: createMockFn(() => mockErrorHandler)
 }));
 
 const { createPlatformErrorHandler } = require('../../src/utils/platform-error-handler');
@@ -18,6 +22,11 @@ initializeTestLogging();
 const { YouTubeConnectionManager } = require('../../src/utils/youtube-connection-manager');
 
 describe('YouTube Connection Manager - Lifecycle Behavior', () => {
+    afterEach(() => {
+        restoreAllMocks();
+        restoreAllModuleMocks();
+    });
+
     let connectionManager;
     let mockLogger;
     let mockConnection;
@@ -30,10 +39,10 @@ describe('YouTube Connection Manager - Lifecycle Behavior', () => {
 
         // Create mock logger
         mockLogger = {
-            debug: jest.fn(),
-            info: jest.fn(),
-            warn: jest.fn(),
-            error: jest.fn()
+            debug: createMockFn(),
+            info: createMockFn(),
+            warn: createMockFn(),
+            error: createMockFn()
         };
 
         // Create mock connection
@@ -42,8 +51,8 @@ describe('YouTube Connection Manager - Lifecycle Behavior', () => {
             videoId: 'test-video-id',
             status: 'connecting',
             ready: false,
-            disconnect: jest.fn(),
-            isReady: jest.fn().mockReturnValue(false)
+            disconnect: createMockFn(),
+            isReady: createMockFn().mockReturnValue(false)
         };
 
         // Create connection manager instance
@@ -123,7 +132,7 @@ describe('YouTube Connection Manager - Lifecycle Behavior', () => {
 
         it('invokes connection disconnect hook when removal occurs', async () => {
             const videoId = 'test-video-id';
-            const connection = { ...mockConnection, disconnect: jest.fn() };
+            const connection = { ...mockConnection, disconnect: createMockFn() };
 
             await connectionManager.connectToStream(videoId, async () => connection);
             await connectionManager.removeConnection(videoId);
@@ -233,8 +242,8 @@ describe('YouTube Connection Manager - Lifecycle Behavior', () => {
 
     describe('Connection Cleanup', () => {
         it('should cleanup all connections', async () => {
-            const connection1 = { ...mockConnection, videoId: 'video-1', disconnect: jest.fn() };
-            const connection2 = { ...mockConnection, videoId: 'video-2', disconnect: jest.fn() };
+            const connection1 = { ...mockConnection, videoId: 'video-1', disconnect: createMockFn() };
+            const connection2 = { ...mockConnection, videoId: 'video-2', disconnect: createMockFn() };
 
             await connectionManager.connectToStream('video-1', async () => connection1);
             await connectionManager.connectToStream('video-2', async () => connection2);
@@ -312,7 +321,7 @@ describe('YouTube Connection Manager - Lifecycle Behavior', () => {
 
     describe('Error Handling', () => {
         it('routes disconnect failures through platform error handler', async () => {
-            const connection = { ...mockConnection, disconnect: jest.fn().mockRejectedValue(new Error('Disconnect failed')) };
+            const connection = { ...mockConnection, disconnect: createMockFn().mockRejectedValue(new Error('Disconnect failed')) };
 
             await connectionManager.connectToStream('test-video', async () => connection);
 

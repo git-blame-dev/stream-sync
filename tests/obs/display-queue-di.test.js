@@ -1,5 +1,9 @@
 
-jest.mock('../../src/core/logging', () => ({
+const { describe, test, expect, beforeEach, it } = require('bun:test');
+const { createMockFn, restoreAllMocks } = require('../helpers/bun-mock-utils');
+const { mockModule, resetModules, restoreAllModuleMocks } = require('../helpers/bun-module-mocks');
+
+mockModule('../../src/core/logging', () => ({
     logger: {
         debug: () => {},
         info: () => {},
@@ -8,20 +12,20 @@ jest.mock('../../src/core/logging', () => ({
     }
 }));
 
-jest.mock('../../src/obs/sources', () => {
+mockModule('../../src/obs/sources', () => {
     const instance = {
-        updateTextSource: jest.fn(),
-        setSourceVisibility: jest.fn(),
-        setPlatformLogoVisibility: jest.fn(),
-        hideAllDisplays: jest.fn(),
-        updateChatMsgText: jest.fn(),
-        setNotificationPlatformLogoVisibility: jest.fn(),
-        setGroupSourceVisibility: jest.fn(),
-        setSourceFilterVisibility: jest.fn(),
-        getGroupSceneItemId: jest.fn(),
-        setChatDisplayVisibility: jest.fn(),
-        setNotificationDisplayVisibility: jest.fn(),
-        getSceneItemId: jest.fn()
+        updateTextSource: createMockFn(),
+        setSourceVisibility: createMockFn(),
+        setPlatformLogoVisibility: createMockFn(),
+        hideAllDisplays: createMockFn(),
+        updateChatMsgText: createMockFn(),
+        setNotificationPlatformLogoVisibility: createMockFn(),
+        setGroupSourceVisibility: createMockFn(),
+        setSourceFilterVisibility: createMockFn(),
+        getGroupSceneItemId: createMockFn(),
+        setChatDisplayVisibility: createMockFn(),
+        setNotificationDisplayVisibility: createMockFn(),
+        getSceneItemId: createMockFn()
     };
     return {
         OBSSourcesManager: class {},
@@ -33,8 +37,13 @@ jest.mock('../../src/obs/sources', () => {
 const { createRuntimeConstantsFixture } = require('../helpers/runtime-constants-fixture');
 
 describe('DisplayQueue DI requirements', () => {
+    afterEach(() => {
+        restoreAllMocks();
+        restoreAllModuleMocks();
+    });
+
     beforeEach(() => {
-        jest.resetModules();
+        resetModules();
     });
 
     it('requires an OBS manager in the constructor', () => {
@@ -43,20 +52,20 @@ describe('DisplayQueue DI requirements', () => {
     });
 
     it('initializes with provided obsManager and does not call getOBSConnectionManager', () => {
-        const getOBSConnectionManager = jest.fn(() => {
+        const getOBSConnectionManager = createMockFn(() => {
             throw new Error('getOBSConnectionManager should not be called');
         });
 
-        jest.doMock('../../src/obs/connection', () => ({
+        mockModule('../../src/obs/connection', () => ({
             getOBSConnectionManager
         }));
 
         const mockObsManager = {
-            isReady: jest.fn().mockResolvedValue(true),
-            ensureConnected: jest.fn(),
-            call: jest.fn(),
-            addEventListener: jest.fn(),
-            removeEventListener: jest.fn()
+            isReady: createMockFn().mockResolvedValue(true),
+            ensureConnected: createMockFn(),
+            call: createMockFn(),
+            addEventListener: createMockFn(),
+            removeEventListener: createMockFn()
         };
 
         const { initializeDisplayQueue } = require('../../src/obs/display-queue');

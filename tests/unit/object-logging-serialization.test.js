@@ -1,4 +1,7 @@
 
+const { describe, test, expect, beforeEach, jest } = require('bun:test');
+const { createMockFn, restoreAllMocks } = require('../helpers/bun-mock-utils');
+
 const { initializeTestLogging, createTestUser, TEST_TIMEOUTS } = require('../helpers/test-setup');
 const { createMockLogger, createMockNotificationBuilder } = require('../helpers/mock-factories');
 const { setupAutomatedCleanup } = require('../helpers/mock-lifecycle');
@@ -18,6 +21,10 @@ setupAutomatedCleanup({
 const { createOBSGoalsManager } = require('../../src/obs/goals');
 
 describe('Object Logging Serialization Validation', () => {
+    afterEach(() => {
+        restoreAllMocks();
+    });
+
     // Test timeout protection as per rules
     jest.setTimeout(TEST_TIMEOUTS.UNIT);
 
@@ -32,11 +39,11 @@ describe('Object Logging Serialization Validation', () => {
         
         // Create mock config manager
         mockConfigManager = {
-            getBoolean: jest.fn((section, key, defaultValue) => {
+            getBoolean: createMockFn((section, key, defaultValue) => {
                 if (section === 'goals' && key === 'enabled') return true;
                 return defaultValue;
             }),
-            get: jest.fn((section, key, defaultValue) => defaultValue),
+            get: createMockFn((section, key, defaultValue) => defaultValue),
             config: {
                 goals: { enabled: true },
                 obs: { enabled: true }
@@ -45,23 +52,23 @@ describe('Object Logging Serialization Validation', () => {
 
         // Create mock OBS connection manager
         mockOBSConnectionManager = {
-            isConnected: jest.fn(() => true),
-            setTextSource: jest.fn().mockResolvedValue(true),
-            getOBSVersion: jest.fn(() => ({ version: '28.0.0' }))
+            isConnected: createMockFn(() => true),
+            setTextSource: createMockFn().mockResolvedValue(true),
+            getOBSVersion: createMockFn(() => ({ version: '28.0.0' }))
         };
 
         // Create goals manager with all required dependencies
         goalsManager = createOBSGoalsManager(mockOBSConnectionManager, {
             logger: mockLogger,
             configManager: mockConfigManager,
-            updateTextSource: jest.fn().mockResolvedValue(true),
+            updateTextSource: createMockFn().mockResolvedValue(true),
             goalTracker: {
-                initializeGoalTracker: jest.fn(),
-                addDonationToGoal: jest.fn(),
-                addPaypiggyToGoal: jest.fn(),
-                getGoalState: jest.fn(() => ({ current: 0, target: 100 })),
-                getAllGoalStates: jest.fn(() => ({})),
-                formatGoalDisplay: jest.fn(() => 'Goal: 0/100')
+                initializeGoalTracker: createMockFn(),
+                addDonationToGoal: createMockFn(),
+                addPaypiggyToGoal: createMockFn(),
+                getGoalState: createMockFn(() => ({ current: 0, target: 100 })),
+                getAllGoalStates: createMockFn(() => ({})),
+                formatGoalDisplay: createMockFn(() => 'Goal: 0/100')
             }
         });
     });

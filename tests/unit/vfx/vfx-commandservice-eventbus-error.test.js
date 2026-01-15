@@ -1,25 +1,30 @@
+const { describe, test, expect, afterEach, it } = require('bun:test');
+const { createMockFn, restoreAllMocks } = require('../../helpers/bun-mock-utils');
+const { mockModule, resetModules, restoreAllModuleMocks } = require('../../helpers/bun-module-mocks');
+
 describe('VFXCommandService event emission error handling', () => {
     const originalEnv = process.env.NODE_ENV;
 
     afterEach(() => {
-        jest.resetModules();
-        process.env.NODE_ENV = originalEnv;
-    });
+        restoreAllMocks();
+process.env.NODE_ENV = originalEnv;
+    
+        restoreAllModuleMocks();});
 
     function createServiceWithEventBusError() {
         process.env.NODE_ENV = 'test';
 
         const errorHandler = {
-            handleEventProcessingError: jest.fn(),
-            logOperationalError: jest.fn()
+            handleEventProcessingError: createMockFn(),
+            logOperationalError: createMockFn()
         };
 
-        jest.doMock('../../../src/utils/platform-error-handler', () => ({
-            createPlatformErrorHandler: jest.fn(() => errorHandler)
+        mockModule('../../../src/utils/platform-error-handler', () => ({
+            createPlatformErrorHandler: createMockFn(() => errorHandler)
         }));
 
         const mockParser = {
-            getVFXConfig: jest.fn(() => ({
+            getVFXConfig: createMockFn(() => ({
                 filename: 'clip',
                 mediaSource: 'vfx-source',
                 vfxFilePath: '/tmp/vfx',
@@ -29,27 +34,27 @@ describe('VFXCommandService event emission error handling', () => {
             }))
         };
 
-        const mockRunCommand = jest.fn().mockResolvedValue({ success: true });
+        const mockRunCommand = createMockFn().mockResolvedValue({ success: true });
 
-        jest.doMock('../../../src/chat/commands', () => ({
-            CommandParser: jest.fn(() => mockParser),
+        mockModule('../../../src/chat/commands', () => ({
+            CommandParser: createMockFn(() => mockParser),
             runCommand: mockRunCommand
         }));
 
-        jest.doMock('../../../src/core/logging', () => ({
+        mockModule('../../../src/core/logging', () => ({
             logger: {
-                debug: jest.fn(),
-                info: jest.fn(),
-                warn: jest.fn(),
-                error: jest.fn()
+                debug: createMockFn(),
+                info: createMockFn(),
+                warn: createMockFn(),
+                error: createMockFn()
             }
         }));
 
         const eventBus = {
-            emit: jest.fn(() => { throw new Error('eventbus fail'); })
+            emit: createMockFn(() => { throw new Error('eventbus fail'); })
         };
         const configService = {
-            get: jest.fn((section, key) => {
+            get: createMockFn((section, key) => {
                 if (section === 'commands') return { clip: '!clip' };
                 if (section === 'farewell') return {};
                 if (section === 'vfx' && key === 'filePath') return '/tmp/vfx';
@@ -58,9 +63,9 @@ describe('VFXCommandService event emission error handling', () => {
                 if (section === 'general' && key === 'globalCmdCooldownMs') return 60000;
                 return undefined;
             }),
-            getCommand: jest.fn(() => '!clip'),
-            getCLIOverrides: jest.fn().mockReturnValue({}),
-            getPlatformConfig: jest.fn().mockReturnValue({})
+            getCommand: createMockFn(() => '!clip'),
+            getCLIOverrides: createMockFn().mockReturnValue({}),
+            getPlatformConfig: createMockFn().mockReturnValue({})
         };
 
         const { VFXCommandService } = require('../../../src/services/VFXCommandService');
@@ -93,16 +98,16 @@ describe('VFXCommandService event emission error handling', () => {
         process.env.NODE_ENV = 'test';
 
         const errorHandler = {
-            handleEventProcessingError: jest.fn(),
-            logOperationalError: jest.fn()
+            handleEventProcessingError: createMockFn(),
+            logOperationalError: createMockFn()
         };
 
-        jest.doMock('../../../src/utils/platform-error-handler', () => ({
-            createPlatformErrorHandler: jest.fn(() => errorHandler)
+        mockModule('../../../src/utils/platform-error-handler', () => ({
+            createPlatformErrorHandler: createMockFn(() => errorHandler)
         }));
 
         const mockParser = {
-            getVFXConfig: jest.fn(() => ({
+            getVFXConfig: createMockFn(() => ({
                 filename: 'clip',
                 mediaSource: 'vfx-source',
                 vfxFilePath: '/tmp/vfx',
@@ -112,27 +117,27 @@ describe('VFXCommandService event emission error handling', () => {
             }))
         };
 
-        const mockRunCommand = jest.fn().mockRejectedValue(new Error('run fail'));
+        const mockRunCommand = createMockFn().mockRejectedValue(new Error('run fail'));
 
-        jest.doMock('../../../src/chat/commands', () => ({
-            CommandParser: jest.fn(() => mockParser),
+        mockModule('../../../src/chat/commands', () => ({
+            CommandParser: createMockFn(() => mockParser),
             runCommand: mockRunCommand
         }));
 
-        jest.doMock('../../../src/core/logging', () => ({
+        mockModule('../../../src/core/logging', () => ({
             logger: {
-                debug: jest.fn(),
-                info: jest.fn(),
-                warn: jest.fn(),
-                error: jest.fn()
+                debug: createMockFn(),
+                info: createMockFn(),
+                warn: createMockFn(),
+                error: createMockFn()
             }
         }));
 
         const eventBus = {
-            emit: jest.fn()
+            emit: createMockFn()
         };
         const configService = {
-            get: jest.fn((section, key) => {
+            get: createMockFn((section, key) => {
                 if (section === 'commands') return { clip: '!clip' };
                 if (section === 'farewell') return {};
                 if (section === 'vfx' && key === 'filePath') return '/tmp/vfx';
@@ -141,9 +146,9 @@ describe('VFXCommandService event emission error handling', () => {
                 if (section === 'general' && key === 'globalCmdCooldownMs') return 60000;
                 return undefined;
             }),
-            getCommand: jest.fn(() => '!clip'),
-            getCLIOverrides: jest.fn().mockReturnValue({}),
-            getPlatformConfig: jest.fn().mockReturnValue({})
+            getCommand: createMockFn(() => '!clip'),
+            getCLIOverrides: createMockFn().mockReturnValue({}),
+            getPlatformConfig: createMockFn().mockReturnValue({})
         };
 
         const { VFXCommandService } = require('../../../src/services/VFXCommandService');

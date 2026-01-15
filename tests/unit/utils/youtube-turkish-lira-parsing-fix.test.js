@@ -1,4 +1,7 @@
 
+const { describe, test, expect, beforeEach, it } = require('bun:test');
+const { createMockFn, restoreAllMocks } = require('../../helpers/bun-mock-utils');
+
 const { YouTubeiCurrencyParser } = require('../../../src/utils/youtubei-currency-parser');
 const NotificationManager = require('../../../src/notifications/NotificationManager');
 const { createTextProcessingManager } = require('../../../src/utils/text-processing');
@@ -19,9 +22,9 @@ setupAutomatedCleanup({
 });
 
 const createMockConfigService = () => ({
-    areNotificationsEnabled: jest.fn().mockReturnValue(true),
-    getPlatformConfig: jest.fn().mockReturnValue(true),
-    get: jest.fn((section) => {
+    areNotificationsEnabled: createMockFn().mockReturnValue(true),
+    getPlatformConfig: createMockFn().mockReturnValue(true),
+    get: createMockFn((section) => {
         if (section === 'general') {
             return {
                 enabled: true,
@@ -37,12 +40,16 @@ const createMockConfigService = () => ({
         }
         return {};
     }),
-    isDebugEnabled: jest.fn().mockReturnValue(false),
-    getTimingConfig: jest.fn().mockReturnValue({ greetingDuration: 5000 }),
-    getTTSConfig: jest.fn().mockReturnValue({ enabled: false })
+    isDebugEnabled: createMockFn().mockReturnValue(false),
+    getTimingConfig: createMockFn().mockReturnValue({ greetingDuration: 5000 }),
+    getTTSConfig: createMockFn().mockReturnValue({ enabled: false })
 });
 
 describe('YouTube Turkish Lira (TRY) Currency Parsing', () => {
+    afterEach(() => {
+        restoreAllMocks();
+    });
+
     describe('YouTubei Currency Parser - TRY Format Support', () => {
         let parser;
         let mockLogger;
@@ -264,17 +271,17 @@ describe('YouTube Turkish Lira (TRY) Currency Parsing', () => {
         beforeEach(() => {
             mockLogger = createMockLogger('debug');
             mockDisplayQueue = {
-                add: jest.fn().mockReturnValue(true),
-                addItem: jest.fn().mockReturnValue(true),
-                getQueueLength: jest.fn().mockReturnValue(0)
+                add: createMockFn().mockReturnValue(true),
+                addItem: createMockFn().mockReturnValue(true),
+                getQueueLength: createMockFn().mockReturnValue(0)
             };
             mockConfigService = createMockConfigService();
 
-            const mockEventBus = { emit: jest.fn(), on: jest.fn(), off: jest.fn() };
+            const mockEventBus = { emit: createMockFn(), on: createMockFn(), off: createMockFn() };
             const constants = require('../../../src/core/constants');
             const textProcessing = createTextProcessingManager({ logger: mockLogger });
             const obsGoals = require('../../../src/obs/goals').getDefaultGoalsManager();
-            const vfxCommandService = { getVFXConfig: jest.fn().mockResolvedValue(null) };
+            const vfxCommandService = { getVFXConfig: createMockFn().mockResolvedValue(null) };
             notificationManager = new NotificationManager({
                 displayQueue: mockDisplayQueue,
                 logger: mockLogger,
@@ -446,16 +453,16 @@ describe('YouTube Turkish Lira (TRY) Currency Parsing', () => {
 
             // Process through notification manager
             const mockDisplayQueue = { 
-                add: jest.fn().mockReturnValue(true),
-                addItem: jest.fn().mockReturnValue(true),
-                getQueueLength: jest.fn().mockReturnValue(0)
+                add: createMockFn().mockReturnValue(true),
+                addItem: createMockFn().mockReturnValue(true),
+                getQueueLength: createMockFn().mockReturnValue(0)
             };
-            const mockEventBus = { emit: jest.fn(), on: jest.fn(), off: jest.fn() };
+            const mockEventBus = { emit: createMockFn(), on: createMockFn(), off: createMockFn() };
             const constants = require('../../../src/core/constants');
             const logger = createMockLogger('debug');
             const textProcessing = createTextProcessingManager({ logger });
             const obsGoals = require('../../../src/obs/goals').getDefaultGoalsManager();
-            const vfxCommandService = { getVFXConfig: jest.fn().mockResolvedValue(null) };
+            const vfxCommandService = { getVFXConfig: createMockFn().mockResolvedValue(null) };
             const notificationManager = new NotificationManager({
                 displayQueue: mockDisplayQueue,
                 logger,

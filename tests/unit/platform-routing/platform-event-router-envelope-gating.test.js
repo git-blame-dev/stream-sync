@@ -1,20 +1,27 @@
 
+const { describe, test, expect, it } = require('bun:test');
+const { createMockFn, restoreAllMocks } = require('../../helpers/bun-mock-utils');
+
 const PlatformEventRouter = require('../../../src/services/PlatformEventRouter');
 
 describe('PlatformEventRouter envelope gating', () => {
+    afterEach(() => {
+        restoreAllMocks();
+    });
+
     const createRouter = (configService) => new PlatformEventRouter({
-        eventBus: { subscribe: jest.fn(() => jest.fn()), emit: jest.fn() },
+        eventBus: { subscribe: createMockFn(() => createMockFn()), emit: createMockFn() },
         runtime: {
-            handleEnvelopeNotification: jest.fn()
+            handleEnvelopeNotification: createMockFn()
         },
-        notificationManager: { handleNotification: jest.fn() },
+        notificationManager: { handleNotification: createMockFn() },
         configService,
         logger: { debug: () => {}, warn: () => {}, info: () => {} }
     });
 
     it('respects giftsEnabled config gating for envelope events', async () => {
         const configService = {
-            areNotificationsEnabled: jest.fn((settingKey) => {
+            areNotificationsEnabled: createMockFn((settingKey) => {
                 if (settingKey === 'giftsEnabled') return false;
                 return true;
             })

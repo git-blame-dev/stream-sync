@@ -1,8 +1,13 @@
 
-jest.mock('../../../src/utils/platform-error-handler', () => ({
-    createPlatformErrorHandler: jest.fn(() => ({
-        handleEventProcessingError: jest.fn(),
-        logOperationalError: jest.fn()
+const { describe, test, expect, beforeEach, afterEach, it } = require('bun:test');
+const { createMockFn, clearAllMocks, restoreAllMocks } = require('../../helpers/bun-mock-utils');
+const { mockModule, resetModules, restoreAllModuleMocks } = require('../../helpers/bun-module-mocks');
+const { useFakeTimers, useRealTimers, runOnlyPendingTimers } = require('../../helpers/bun-timers');
+
+mockModule('../../../src/utils/platform-error-handler', () => ({
+    createPlatformErrorHandler: createMockFn(() => ({
+        handleEventProcessingError: createMockFn(),
+        logOperationalError: createMockFn()
     }))
 }));
 
@@ -20,23 +25,24 @@ describe('StreamDetector behavior', () => {
     let StreamDetector;
 
     beforeEach(() => {
-        jest.resetModules();
-        jest.clearAllMocks();
-        jest.useFakeTimers();
+        resetModules();
+        useFakeTimers();
         StreamDetector = require('../../../src/utils/stream-detector').StreamDetector;
         mockHttpClient = require('../../../src/utils/http-client').createHttpClient();
     });
 
     afterEach(() => {
-        jest.useRealTimers();
-    });
+        restoreAllMocks();
+        useRealTimers();
+    
+        restoreAllModuleMocks();});
 
     it('connects immediately when detection is disabled', async () => {
         const detector = new StreamDetector(createDetectorConfig({
             streamDetectionEnabled: false
         }), { httpClient: mockHttpClient });
-        const connectCallback = jest.fn().mockResolvedValue(true);
-        const statusCallback = jest.fn();
+        const connectCallback = createMockFn().mockResolvedValue(true);
+        const statusCallback = createMockFn();
 
         const result = await detector.startStreamDetection('youtube', { username: 'channel' }, connectCallback, statusCallback);
 
@@ -53,9 +59,9 @@ describe('StreamDetector behavior', () => {
         }), { httpClient: mockHttpClient });
         const errorHandler = createPlatformErrorHandler.mock.results.at(-1)?.value;
 
-        detector.checkStreamStatus = jest.fn().mockRejectedValue(new Error('detect failed'));
-        const connectCallback = jest.fn();
-        const statusCallback = jest.fn();
+        detector.checkStreamStatus = createMockFn().mockRejectedValue(new Error('detect failed'));
+        const connectCallback = createMockFn();
+        const statusCallback = createMockFn();
 
         const startPromise = detector.startStreamDetection('youtube', { username: 'chan' }, connectCallback, statusCallback);
 
@@ -65,7 +71,7 @@ describe('StreamDetector behavior', () => {
         expect(statusCallback).toHaveBeenCalledWith('error', expect.stringContaining('detect failed'));
 
         // Run the scheduled retry
-        jest.runOnlyPendingTimers();
+        runOnlyPendingTimers();
         await Promise.resolve();
 
         expect(detector.checkStreamStatus).toHaveBeenCalledTimes(2);
@@ -76,28 +82,28 @@ describe('StreamDetector behavior', () => {
         const detector = new StreamDetector(createDetectorConfig({
             continuousMonitoringInterval: 1
         }), { httpClient: mockHttpClient });
-        const connectCallback = jest.fn().mockResolvedValue(true);
-        const statusCallback = jest.fn();
+        const connectCallback = createMockFn().mockResolvedValue(true);
+        const statusCallback = createMockFn();
 
         detector.platformConfigs.set('youtube', { username: 'chan', streamDetectionMethod: 'youtubei' });
         detector.platformCallbacks.set('youtube', { connectCallback, statusCallback });
         detector.platformStreamStatus.set('youtube', false);
 
-        detector.checkStreamStatus = jest.fn()
+        detector.checkStreamStatus = createMockFn()
             .mockResolvedValueOnce(true)
             .mockResolvedValueOnce(false);
 
         detector.startContinuousMonitoring('youtube');
 
         // First interval tick: goes live and connects
-        jest.runOnlyPendingTimers();
+        runOnlyPendingTimers();
         await Promise.resolve();
 
         expect(connectCallback).toHaveBeenCalledTimes(1);
         expect(statusCallback).toHaveBeenCalledWith('live', expect.stringContaining('Stream started'));
 
         // Second tick: offline
-        jest.runOnlyPendingTimers();
+        runOnlyPendingTimers();
         await Promise.resolve();
 
         expect(statusCallback).toHaveBeenCalledWith('offline', expect.stringContaining('Stream ended'));
@@ -106,7 +112,7 @@ describe('StreamDetector behavior', () => {
 
     it('does not fall back to scraping when youtubei detection fails', async () => {
         const detector = new StreamDetector(createDetectorConfig(), { httpClient: mockHttpClient });
-        detector._getYoutubeDetectionService = jest.fn().mockRejectedValue(new Error('youtubei boom'));
+        detector._getYoutubeDetectionService = createMockFn().mockRejectedValue(new Error('youtubei boom'));
         mockHttpClient.get.mockResolvedValue({ data: 'no live markers here' });
 
         const result = await detector._checkYouTubeStreamStatus({
@@ -134,8 +140,8 @@ describe('StreamDetector behavior', () => {
 
     it('skips continuous check when platform config is missing', async () => {
         const detector = new StreamDetector(createDetectorConfig(), { httpClient: mockHttpClient });
-        detector.logger = { warn: jest.fn(), info: jest.fn(), debug: jest.fn(), error: jest.fn() };
-        detector.checkStreamStatus = jest.fn();
+        detector.logger = { warn: createMockFn(), info: createMockFn(), debug: createMockFn(), error: createMockFn() };
+        detector.checkStreamStatus = createMockFn();
 
         await detector._performContinuousCheck('youtube');
 

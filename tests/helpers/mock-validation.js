@@ -4,6 +4,7 @@
 // ================================================================================================
 
 const testClock = require('./test-clock');
+const { isMockFunction } = require('./bun-mock-utils');
 
 const API_CONTRACTS = {
     NotificationDispatcher: {
@@ -144,7 +145,7 @@ const validateMockContract = (mockObject, contractName) => {
     contract.requiredMethods.forEach(methodName => {
         if (!mockObject.hasOwnProperty(methodName)) {
             errors.push(`Missing required method: ${methodName}`);
-        } else if (!jest.isMockFunction(mockObject[methodName])) {
+        } else if (!isMockFunction(mockObject[methodName])) {
             warnings.push(`Method ${methodName} is not a Jest mock function`);
         }
     });

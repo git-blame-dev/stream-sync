@@ -1,3 +1,6 @@
+const { describe, test, expect, it } = require('bun:test');
+const { createMockFn, restoreAllMocks } = require('../../helpers/bun-mock-utils');
+
 const {
     validateLoggerInterface,
     validateNotificationManagerInterface,
@@ -7,11 +10,15 @@ const {
 } = require('../../../src/utils/dependency-validator');
 
 describe('dependency-validator behavior', () => {
+    afterEach(() => {
+        restoreAllMocks();
+    });
+
     const validLogger = () => ({
-        debug: jest.fn(),
-        info: jest.fn(),
-        error: jest.fn(),
-        warn: jest.fn()
+        debug: createMockFn(),
+        info: createMockFn(),
+        error: createMockFn(),
+        warn: createMockFn()
     });
 
     it('validates logger interfaces and surfaces missing method guidance', () => {

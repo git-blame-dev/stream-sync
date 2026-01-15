@@ -1,4 +1,7 @@
 
+const { describe, test, expect, beforeEach } = require('bun:test');
+const { resetModules, restoreAllModuleMocks } = require('../../helpers/bun-module-mocks');
+
 const { 
     initializeTestLogging,
     TEST_TIMEOUTS 
@@ -18,10 +21,14 @@ setupAutomatedCleanup({
 });
 
 describe('Template Interpolation Validation', () => {
+    afterEach(() => {
+        restoreAllModuleMocks();
+    });
+
     let interpolateTemplate, createNotificationData;
 
     beforeEach(() => {
-        jest.resetModules();
+        resetModules();
         
         // Re-initialize logging after module reset
         const { initializeTestLogging } = require('../../helpers/test-setup');

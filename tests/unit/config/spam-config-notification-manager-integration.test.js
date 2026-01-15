@@ -1,14 +1,17 @@
 
+const { describe, test, expect, beforeEach, it } = require('bun:test');
+const { createMockFn, clearAllMocks, restoreAllMocks } = require('../../helpers/bun-mock-utils');
+
 const { config } = require('../../../src/core/config');
 const NotificationManager = require('../../../src/notifications/NotificationManager');
 const { createTextProcessingManager } = require('../../../src/utils/text-processing');
 
 // Mock logger to capture log messages
 const mockLogger = {
-    debug: jest.fn(),
-    info: jest.fn(),
-    warn: jest.fn(),
-    error: jest.fn()
+    debug: createMockFn(),
+    info: createMockFn(),
+    warn: createMockFn(),
+    error: createMockFn()
 };
 
 // Mock constants with required PRIORITY_LEVELS
@@ -32,29 +35,31 @@ const mockConstants = {
 };
 
 describe('Spam Detection Service Integration Tests - Modernized', () => {
+    afterEach(() => {
+        restoreAllMocks();
+    });
+
     let notificationManager;
     let mockDisplayQueue;
     let mockSpamDetector;
     let configService;
 
     beforeEach(() => {
-        jest.clearAllMocks();
-
         mockDisplayQueue = {
-            addItem: jest.fn(),
-            processQueue: jest.fn()
+            addItem: createMockFn(),
+            processQueue: createMockFn()
         };
 
         mockSpamDetector = {
-            handleDonationSpam: jest.fn().mockReturnValue({ shouldShow: true })
+            handleDonationSpam: createMockFn().mockReturnValue({ shouldShow: true })
         };
 
         configService = {
-            areNotificationsEnabled: jest.fn().mockReturnValue(true),
-            getPlatformConfig: jest.fn().mockReturnValue(true),
-            isDebugEnabled: jest.fn().mockReturnValue(false),
-            getTimingConfig: jest.fn().mockReturnValue({ greetingDuration: 5000 }),
-            get: jest.fn((section) => {
+            areNotificationsEnabled: createMockFn().mockReturnValue(true),
+            getPlatformConfig: createMockFn().mockReturnValue(true),
+            isDebugEnabled: createMockFn().mockReturnValue(false),
+            getTimingConfig: createMockFn().mockReturnValue({ greetingDuration: 5000 }),
+            get: createMockFn((section) => {
                 if (section === 'general') {
                     return {
                         enabled: true,
@@ -69,14 +74,14 @@ describe('Spam Detection Service Integration Tests - Modernized', () => {
                 }
                 return {};
             }),
-            getTTSConfig: jest.fn().mockReturnValue({ enabled: false })
+            getTTSConfig: createMockFn().mockReturnValue({ enabled: false })
         };
     });
 
     describe('when spam detection service is provided', () => {
         beforeEach(() => {
             // Create NotificationManager with spam detector dependency
-            const mockEventBus = { emit: jest.fn(), on: jest.fn(), off: jest.fn() };
+            const mockEventBus = { emit: createMockFn(), on: createMockFn(), off: createMockFn() };
             const textProcessing = createTextProcessingManager({ logger: mockLogger });
             notificationManager = new NotificationManager({
                 displayQueue: mockDisplayQueue,
@@ -86,8 +91,8 @@ describe('Spam Detection Service Integration Tests - Modernized', () => {
                 configService,
                 donationSpamDetector: mockSpamDetector,
                 textProcessing,
-                obsGoals: { processDonationGoal: jest.fn() },
-                vfxCommandService: { getVFXConfig: jest.fn().mockResolvedValue(null) }
+                obsGoals: { processDonationGoal: createMockFn() },
+                vfxCommandService: { getVFXConfig: createMockFn().mockResolvedValue(null) }
             });
         });
 
@@ -166,7 +171,7 @@ describe('Spam Detection Service Integration Tests - Modernized', () => {
     describe('when spam detection service is not provided', () => {
         beforeEach(() => {
             // Create NotificationManager WITHOUT spam detector
-            const mockEventBus = { emit: jest.fn(), on: jest.fn(), off: jest.fn() };
+            const mockEventBus = { emit: createMockFn(), on: createMockFn(), off: createMockFn() };
             notificationManager = new NotificationManager({
                 displayQueue: mockDisplayQueue,
                 logger: mockLogger,
@@ -174,8 +179,8 @@ describe('Spam Detection Service Integration Tests - Modernized', () => {
                 constants: mockConstants,
                 configService,
                 textProcessing: createTextProcessingManager({ logger: mockLogger }),
-                obsGoals: { processDonationGoal: jest.fn() },
-                vfxCommandService: { getVFXConfig: jest.fn().mockResolvedValue(null) }
+                obsGoals: { processDonationGoal: createMockFn() },
+                vfxCommandService: { getVFXConfig: createMockFn().mockResolvedValue(null) }
                 // donationSpamDetector: NOT PROVIDED
             });
         });
@@ -245,7 +250,7 @@ describe('Spam Detection Service Integration Tests - Modernized', () => {
 
     describe('when handling edge cases', () => {
         beforeEach(() => {
-            const mockEventBus = { emit: jest.fn(), on: jest.fn(), off: jest.fn() };
+            const mockEventBus = { emit: createMockFn(), on: createMockFn(), off: createMockFn() };
             notificationManager = new NotificationManager({
                 displayQueue: mockDisplayQueue,
                 logger: mockLogger,
@@ -254,8 +259,8 @@ describe('Spam Detection Service Integration Tests - Modernized', () => {
                 configService,
                 donationSpamDetector: mockSpamDetector,
                 textProcessing: createTextProcessingManager({ logger: mockLogger }),
-                obsGoals: { processDonationGoal: jest.fn() },
-                vfxCommandService: { getVFXConfig: jest.fn().mockResolvedValue(null) }
+                obsGoals: { processDonationGoal: createMockFn() },
+                vfxCommandService: { getVFXConfig: createMockFn().mockResolvedValue(null) }
             });
         });
 
@@ -308,7 +313,7 @@ describe('Spam Detection Service Integration Tests - Modernized', () => {
     describe('when verifying service injection pattern', () => {
         it('should accept spam detector via constructor dependency injection', () => {
             // BEHAVIOR: Constructor accepts spam detector as optional dependency
-            const mockEventBus = { emit: jest.fn(), on: jest.fn(), off: jest.fn() };
+            const mockEventBus = { emit: createMockFn(), on: createMockFn(), off: createMockFn() };
             const nm = new NotificationManager({
                 displayQueue: mockDisplayQueue,
                 logger: mockLogger,
@@ -317,8 +322,8 @@ describe('Spam Detection Service Integration Tests - Modernized', () => {
                 configService,
                 donationSpamDetector: mockSpamDetector,
                 textProcessing: createTextProcessingManager({ logger: mockLogger }),
-                obsGoals: { processDonationGoal: jest.fn() },
-                vfxCommandService: { getVFXConfig: jest.fn().mockResolvedValue(null) }
+                obsGoals: { processDonationGoal: createMockFn() },
+                vfxCommandService: { getVFXConfig: createMockFn().mockResolvedValue(null) }
             });
 
             // Should store the injected dependency
@@ -328,13 +333,13 @@ describe('Spam Detection Service Integration Tests - Modernized', () => {
         it('should handle missing spam detector gracefully', () => {
             // BEHAVIOR: Spam detector is optional, system works without it
             const localLogger = {
-                debug: jest.fn(),
-                info: jest.fn(),
-                warn: jest.fn(),
-                error: jest.fn()
+                debug: createMockFn(),
+                info: createMockFn(),
+                warn: createMockFn(),
+                error: createMockFn()
             };
 
-            const mockEventBus = { emit: jest.fn(), on: jest.fn(), off: jest.fn() };
+            const mockEventBus = { emit: createMockFn(), on: createMockFn(), off: createMockFn() };
             const nm = new NotificationManager({
                 displayQueue: mockDisplayQueue,
                 logger: localLogger,
@@ -342,8 +347,8 @@ describe('Spam Detection Service Integration Tests - Modernized', () => {
                 constants: mockConstants,
                 configService,
                 textProcessing: createTextProcessingManager({ logger: mockLogger }),
-                obsGoals: { processDonationGoal: jest.fn() },
-                vfxCommandService: { getVFXConfig: jest.fn().mockResolvedValue(null) }
+                obsGoals: { processDonationGoal: createMockFn() },
+                vfxCommandService: { getVFXConfig: createMockFn().mockResolvedValue(null) }
                 // donationSpamDetector: NOT PROVIDED
             });
 

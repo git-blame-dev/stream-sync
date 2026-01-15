@@ -1,18 +1,22 @@
-jest.mock('../../../src/utils/timeout-validator', () => ({
-    safeSetTimeout: jest.fn((fn) => fn())
+const { describe, test, expect, afterEach, it } = require('bun:test');
+const { createMockFn, clearAllMocks, restoreAllMocks } = require('../../helpers/bun-mock-utils');
+const { mockModule, restoreAllModuleMocks } = require('../../helpers/bun-module-mocks');
+
+mockModule('../../../src/utils/timeout-validator', () => ({
+    safeSetTimeout: createMockFn((fn) => fn())
 }));
 
-jest.mock('../../../src/utils/timeout-wrapper', () => ({
-    withTimeout: jest.fn((promise) => promise)
+mockModule('../../../src/utils/timeout-wrapper', () => ({
+    withTimeout: createMockFn((promise) => promise)
 }));
 
-jest.mock('../../../src/utils/platform-error-handler', () => {
+mockModule('../../../src/utils/platform-error-handler', () => {
     const handler = {
-        handleEventProcessingError: jest.fn(),
-        logOperationalError: jest.fn()
+        handleEventProcessingError: createMockFn(),
+        logOperationalError: createMockFn()
     };
     return {
-        createPlatformErrorHandler: jest.fn(() => handler)
+        createPlatformErrorHandler: createMockFn(() => handler)
     };
 });
 
@@ -22,21 +26,21 @@ const { createPlatformErrorHandler } = require('../../../src/utils/platform-erro
 const { OBSConnectionManager } = require('../../../src/obs/connection');
 
 const mockLogger = () => ({
-    debug: jest.fn(),
-    info: jest.fn(),
-    warn: jest.fn(),
-    error: jest.fn()
+    debug: createMockFn(),
+    info: createMockFn(),
+    warn: createMockFn(),
+    error: createMockFn()
 });
 
 const baseDependencies = () => ({
     config: { address: 'ws://localhost:4455', password: 'pass', enabled: true },
     mockOBS: {
-        connect: jest.fn().mockResolvedValue({ obsWebSocketVersion: '5', negotiatedRpcVersion: 1 }),
-        disconnect: jest.fn().mockResolvedValue(),
-        call: jest.fn().mockResolvedValue({}),
-        on: jest.fn(),
-        off: jest.fn(),
-        once: jest.fn()
+        connect: createMockFn().mockResolvedValue({ obsWebSocketVersion: '5', negotiatedRpcVersion: 1 }),
+        disconnect: createMockFn().mockResolvedValue(),
+        call: createMockFn().mockResolvedValue({}),
+        on: createMockFn(),
+        off: createMockFn(),
+        once: createMockFn()
     },
     constants: {
         OBS_CONNECTION_TIMEOUT: 50,
@@ -48,8 +52,10 @@ const baseDependencies = () => ({
 
 describe('OBSConnectionManager behavior', () => {
     afterEach(() => {
-        jest.clearAllMocks();
-    });
+        restoreAllMocks();
+        clearAllMocks();
+    
+        restoreAllModuleMocks();});
 
     it('skips connect when already connected or connecting', async () => {
         const deps = baseDependencies();
@@ -70,7 +76,7 @@ describe('OBSConnectionManager behavior', () => {
     it('uses withTimeout when ensuring connection readiness', async () => {
         const deps = baseDependencies();
         const manager = new OBSConnectionManager(deps);
-        manager.isConnected = jest.fn().mockReturnValue(false);
+        manager.isConnected = createMockFn().mockReturnValue(false);
         manager.connectionPromise = Promise.resolve(true);
 
         await manager.ensureConnected(123);
@@ -98,7 +104,7 @@ describe('OBSConnectionManager behavior', () => {
     it('routes errors through platform error handler', () => {
         const deps = baseDependencies();
         const manager = new OBSConnectionManager(deps);
-        const handler = { handleEventProcessingError: jest.fn(), logOperationalError: jest.fn() };
+        const handler = { handleEventProcessingError: createMockFn(), logOperationalError: createMockFn() };
         createPlatformErrorHandler.mockReturnValue(handler);
 
         manager._handleConnectionError('boom', new Error('err'), { ctx: true });

@@ -1,3 +1,6 @@
+const { describe, test, expect } = require('bun:test');
+const { createMockFn, restoreAllMocks } = require('../helpers/bun-mock-utils');
+
 const { YouTubePlatform } = require('../../src/platforms/youtube');
 const { getSyntheticFixture } = require('../helpers/platform-test-data');
 const {
@@ -11,6 +14,10 @@ initializeTestLogging();
 const flushPromises = () => new Promise((resolve) => setImmediate(resolve));
 
 describe('YouTubePlatform dispatch table behavior', () => {
+    afterEach(() => {
+        restoreAllMocks();
+    });
+
     const baseConfig = createMockConfig('youtube', {
         enabled: true,
         username: 'test-channel',
@@ -20,7 +27,7 @@ describe('YouTubePlatform dispatch table behavior', () => {
     const createPlatform = () => new YouTubePlatform(baseConfig, {
         ...createMockPlatformDependencies('youtube'),
         streamDetectionService: {
-            detectLiveStreams: jest.fn().mockResolvedValue({ success: true, videoIds: [] })
+            detectLiveStreams: createMockFn().mockResolvedValue({ success: true, videoIds: [] })
         }
     });
 

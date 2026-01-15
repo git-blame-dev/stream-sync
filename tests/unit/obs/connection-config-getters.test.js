@@ -1,4 +1,7 @@
 
+const { describe, test, expect, beforeEach, afterEach } = require('bun:test');
+const { createMockFn, clearAllMocks, restoreAllMocks } = require('../../helpers/bun-mock-utils');
+
 const { initializeTestLogging } = require('../../helpers/test-setup');
 const { OBSConnectionManager, initializeOBSConnection } = require('../../../src/obs/connection');
 
@@ -12,29 +15,30 @@ describe('OBS Connection Configuration with Getter Properties', () => {
 
     beforeEach(() => {
         // Create mock OBS WebSocket
-        mockOBSWebSocket = jest.fn().mockImplementation(() => ({
-            connect: jest.fn().mockResolvedValue({
+        mockOBSWebSocket = createMockFn().mockImplementation(() => ({
+            connect: createMockFn().mockResolvedValue({
                 obsWebSocketVersion: '5.0.0',
                 negotiatedRpcVersion: '1'
             }),
-            disconnect: jest.fn().mockResolvedValue(),
-            call: jest.fn().mockResolvedValue({}),
-            on: jest.fn(),
-            off: jest.fn(),
+            disconnect: createMockFn().mockResolvedValue(),
+            call: createMockFn().mockResolvedValue({}),
+            on: createMockFn(),
+            off: createMockFn(),
             identified: false
         }));
 
         // Create mock logger
         mockLogger = {
-            debug: jest.fn(),
-            info: jest.fn(),
-            error: jest.fn(),
-            warn: jest.fn()
+            debug: createMockFn(),
+            info: createMockFn(),
+            error: createMockFn(),
+            warn: createMockFn()
         };
     });
 
     afterEach(() => {
-        jest.clearAllMocks();
+        restoreAllMocks();
+        clearAllMocks();
     });
 
     describe('Configuration with Getter Properties', () => {
@@ -143,7 +147,7 @@ describe('OBS Connection Configuration with Getter Properties', () => {
             // Create mock OBS instance that properly simulates connection
             let identifiedHandler = null;
             const mockOBSInstance = {
-                connect: jest.fn().mockImplementation(async () => {
+                connect: createMockFn().mockImplementation(async () => {
                     // Simulate the 'Identified' event after successful connection
                     if (identifiedHandler) {
                         scheduleTestTimeout(() => identifiedHandler(), 10);
@@ -153,14 +157,14 @@ describe('OBS Connection Configuration with Getter Properties', () => {
                         negotiatedRpcVersion: '1'
                     };
                 }),
-                disconnect: jest.fn().mockResolvedValue(),
-                call: jest.fn().mockResolvedValue({}),
-                on: jest.fn().mockImplementation((event, callback) => {
+                disconnect: createMockFn().mockResolvedValue(),
+                call: createMockFn().mockResolvedValue({}),
+                on: createMockFn().mockImplementation((event, callback) => {
                     if (event === 'Identified') {
                         identifiedHandler = callback;
                     }
                 }),
-                off: jest.fn(),
+                off: createMockFn(),
                 identified: false
             };
 
@@ -243,7 +247,7 @@ describe('OBS Connection Configuration with Getter Properties', () => {
             // Create mock OBS instance that properly simulates connection
             let identifiedHandler = null;
             const mockOBSInstance = {
-                connect: jest.fn().mockImplementation(async () => {
+                connect: createMockFn().mockImplementation(async () => {
                     // Simulate the 'Identified' event after successful connection
                     if (identifiedHandler) {
                         scheduleTestTimeout(() => identifiedHandler(), 10);
@@ -253,14 +257,14 @@ describe('OBS Connection Configuration with Getter Properties', () => {
                         negotiatedRpcVersion: '1'
                     };
                 }),
-                disconnect: jest.fn().mockResolvedValue(),
-                call: jest.fn().mockResolvedValue({}),
-                on: jest.fn().mockImplementation((event, callback) => {
+                disconnect: createMockFn().mockResolvedValue(),
+                call: createMockFn().mockResolvedValue({}),
+                on: createMockFn().mockImplementation((event, callback) => {
                     if (event === 'Identified') {
                         identifiedHandler = callback;
                     }
                 }),
-                off: jest.fn(),
+                off: createMockFn(),
                 identified: false
             };
 
@@ -462,7 +466,7 @@ describe('OBS Connection Configuration with Getter Properties', () => {
             // Create mock OBS instance that properly simulates connection
             let identifiedHandler = null;
             const mockOBSInstance = {
-                connect: jest.fn().mockImplementation(async () => {
+                connect: createMockFn().mockImplementation(async () => {
                     // Simulate the 'Identified' event after successful connection
                     if (identifiedHandler) {
                         scheduleTestTimeout(() => identifiedHandler(), 10);
@@ -472,14 +476,14 @@ describe('OBS Connection Configuration with Getter Properties', () => {
                         negotiatedRpcVersion: '1'
                     };
                 }),
-                disconnect: jest.fn().mockResolvedValue(),
-                call: jest.fn().mockResolvedValue({}),
-                on: jest.fn().mockImplementation((event, callback) => {
+                disconnect: createMockFn().mockResolvedValue(),
+                call: createMockFn().mockResolvedValue({}),
+                on: createMockFn().mockImplementation((event, callback) => {
                     if (event === 'Identified') {
                         identifiedHandler = callback;
                     }
                 }),
-                off: jest.fn(),
+                off: createMockFn(),
                 identified: false
             };
 

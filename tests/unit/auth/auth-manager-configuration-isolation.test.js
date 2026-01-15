@@ -1,27 +1,29 @@
 
-const { describe, test, expect, beforeEach, afterEach } = require('@jest/globals');
-
 // Initialize test logging FIRST
+const { describe, test, expect, beforeEach, afterEach } = require('bun:test');
+const { createMockFn, restoreAllMocks } = require('../../helpers/bun-mock-utils');
+const { mockModule, resetModules, restoreAllModuleMocks } = require('../../helpers/bun-module-mocks');
+
 const { initializeTestLogging } = require('../../helpers/test-setup');
 initializeTestLogging();
 
 // Mock dependencies to prevent actual auth system access
-jest.mock('../../../src/auth/TwitchAuthService', () => {
-    return jest.fn().mockImplementation((config, dependencies) => ({
+mockModule('../../../src/auth/TwitchAuthService', () => {
+    return createMockFn().mockImplementation((config, dependencies) => ({
         config: { ...config },
         userId: 123456789,
-        initialize: jest.fn().mockResolvedValue(),
-        getAccessToken: jest.fn().mockReturnValue(config.accessToken || 'mock-access-token'),
-        cleanup: jest.fn().mockResolvedValue(),
-        isReady: jest.fn().mockReturnValue(true)
+        initialize: createMockFn().mockResolvedValue(),
+        getAccessToken: createMockFn().mockReturnValue(config.accessToken || 'mock-access-token'),
+        cleanup: createMockFn().mockResolvedValue(),
+        isReady: createMockFn().mockReturnValue(true)
     }));
 });
 
-jest.mock('../../../src/auth/TwitchAuthInitializer', () => {
-    return jest.fn().mockImplementation(() => ({
-        initializeAuthentication: jest.fn().mockResolvedValue(true),
-        ensureValidToken: jest.fn().mockResolvedValue(true),
-        cleanup: jest.fn().mockResolvedValue()
+mockModule('../../../src/auth/TwitchAuthInitializer', () => {
+    return createMockFn().mockImplementation(() => ({
+        initializeAuthentication: createMockFn().mockResolvedValue(true),
+        ensureValidToken: createMockFn().mockResolvedValue(true),
+        cleanup: createMockFn().mockResolvedValue()
     }));
 });
 
@@ -75,7 +77,7 @@ describe('TwitchAuthManager Configuration Isolation', () => {
 
     beforeEach(() => {
         // Clear module cache to ensure clean state
-        jest.resetModules();
+        resetModules();
         
         // Re-initialize logging after module reset
         const { initializeTestLogging } = require('../../helpers/test-setup');
@@ -85,10 +87,12 @@ describe('TwitchAuthManager Configuration Isolation', () => {
     });
 
     afterEach(() => {
+        restoreAllMocks();
         // Clean up any singleton instances
         if (TwitchAuthManager && TwitchAuthManager.resetInstance) {
             TwitchAuthManager.resetInstance();
-        }
+        
+        restoreAllModuleMocks();}
     });
 
     describe('Independent Configuration Management', () => {

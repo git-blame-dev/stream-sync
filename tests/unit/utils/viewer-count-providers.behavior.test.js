@@ -1,4 +1,7 @@
 
+const { describe, test, expect, it } = require('bun:test');
+const { createMockFn, restoreAllMocks } = require('../../helpers/bun-mock-utils');
+
 const {
     ViewerCountProvider,
     TwitchViewerCountProvider,
@@ -7,13 +10,17 @@ const {
 } = require('../../../src/utils/viewer-count-providers');
 
 const logger = {
-    debug: jest.fn(),
-    info: jest.fn(),
-    warn: jest.fn(),
-    error: jest.fn()
+    debug: createMockFn(),
+    info: createMockFn(),
+    warn: createMockFn(),
+    error: createMockFn()
 };
 
 describe('ViewerCountProvider error handling', () => {
+    afterEach(() => {
+        restoreAllMocks();
+    });
+
     it('categorizes unknown errors when message is missing', () => {
         const provider = new ViewerCountProvider('test', logger);
 
@@ -27,7 +34,7 @@ describe('ViewerCountProvider error handling', () => {
 describe('YouTubeViewerCountProvider readiness and error routes', () => {
     it('returns 0 and logs when active video ids missing', async () => {
         const viewerExtractionService = {
-            getAggregatedViewerCount: jest.fn()
+            getAggregatedViewerCount: createMockFn()
         };
         const provider = new YouTubeViewerCountProvider(
             {},
@@ -45,7 +52,7 @@ describe('YouTubeViewerCountProvider readiness and error routes', () => {
 
     it('categorizes errors from extraction service and increments error stats', async () => {
         const viewerExtractionService = {
-            getAggregatedViewerCount: jest.fn().mockRejectedValue(new Error('network down'))
+            getAggregatedViewerCount: createMockFn().mockRejectedValue(new Error('network down'))
         };
         const provider = new YouTubeViewerCountProvider(
             {},
@@ -78,7 +85,7 @@ describe('TikTokViewerCountProvider error recovery', () => {
 
 describe('TwitchViewerCountProvider readiness', () => {
     it('returns 0 when provider not ready (missing channel)', async () => {
-        const apiClient = { getStreamInfo: jest.fn() };
+        const apiClient = { getStreamInfo: createMockFn() };
         const provider = new TwitchViewerCountProvider(apiClient, {}, {}, null, logger);
 
         const count = await provider.getViewerCount();
@@ -89,7 +96,7 @@ describe('TwitchViewerCountProvider readiness', () => {
 
     it('resets consecutive errors after successful fetch', async () => {
         const apiClient = {
-            getStreamInfo: jest.fn()
+            getStreamInfo: createMockFn()
                 .mockRejectedValueOnce(new Error('network fail'))
                 .mockResolvedValueOnce({ isLive: true, viewerCount: 15 })
         };

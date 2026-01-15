@@ -1,21 +1,30 @@
-jest.unmock('../../src/platforms/tiktok');
-jest.unmock('../../src/core/logging');
+const { describe, test, expect, it } = require('bun:test');
+const { createMockFn, restoreAllMocks } = require('../helpers/bun-mock-utils');
+const { unmockModule, requireActual, restoreAllModuleMocks } = require('../helpers/bun-module-mocks');
 
-const logging = jest.requireActual('../../src/core/logging');
+unmockModule('../../src/platforms/tiktok');
+unmockModule('../../src/core/logging');
+
+const logging = requireActual('../../src/core/logging');
 logging.setConfigValidator(() => ({ logging: {} }));
 
-const { TikTokPlatform } = jest.requireActual('../../src/platforms/tiktok');
+const { TikTokPlatform } = requireActual('../../src/platforms/tiktok');
 const testClock = require('../helpers/test-clock');
 
 describe('TikTok eventFactory chat message behavior', () => {
+    afterEach(() => {
+        restoreAllMocks();
+        restoreAllModuleMocks();
+    });
+
     it('builds a normalized chat event from raw TikTok data', () => {
         const logger = { info: () => {}, debug: () => {}, warn: () => {}, error: () => {} };
         const connectionFactory = {
             createConnection: () => ({
-                connect: jest.fn(),
-                on: jest.fn(),
-                emit: jest.fn(),
-                removeAllListeners: jest.fn()
+                connect: createMockFn(),
+                on: createMockFn(),
+                emit: createMockFn(),
+                removeAllListeners: createMockFn()
             })
         };
         const platform = new TikTokPlatform(
@@ -26,7 +35,7 @@ describe('TikTok eventFactory chat message behavior', () => {
                 logger,
                 connectionFactory,
                 timestampService: {
-                    extractTimestamp: jest.fn(() => new Date(testClock.now()).toISOString())
+                    extractTimestamp: createMockFn(() => new Date(testClock.now()).toISOString())
                 }
             }
         );

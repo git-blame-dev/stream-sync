@@ -1,5 +1,10 @@
 
 // Testing Infrastructure (mandatory)
+const { describe, test, expect, beforeEach, afterEach, it } = require('bun:test');
+const { createMockFn, clearAllMocks, restoreAllMocks } = require('../helpers/bun-mock-utils');
+const { mockModule, restoreAllModuleMocks } = require('../helpers/bun-module-mocks');
+const { useRealTimers } = require('../helpers/bun-timers');
+
 const {
   initializeTestLogging,
   createTestUser,
@@ -26,10 +31,10 @@ const testClock = require('../helpers/test-clock');
 const { YouTubeLiveStreamService } = require('../../src/services/youtube-live-stream-service');
 
 // Mock the YouTubeLiveStreamService for deterministic performance testing
-jest.mock('../../src/services/youtube-live-stream-service', () => ({
+mockModule('../../src/services/youtube-live-stream-service', () => ({
   YouTubeLiveStreamService: {
-    getLiveStreams: jest.fn(),
-    isChannelId: jest.fn()
+    getLiveStreams: createMockFn(),
+    isChannelId: createMockFn()
   }
 }));
 
@@ -48,7 +53,7 @@ describe('YouTube Resolution Performance - User Experience Validation', () => {
   let performanceTiming;
 
   beforeEach(() => {
-    jest.useRealTimers();
+    useRealTimers();
     testClock.reset();
 
     // Initialize deterministic performance timing with larger difference for clearer testing
@@ -69,8 +74,8 @@ describe('YouTube Resolution Performance - User Experience Validation', () => {
     mockLogger = createMockLogger();
     
     mockInnertubeClient = {
-      getChannel: jest.fn(),
-      search: jest.fn()
+      getChannel: createMockFn(),
+      search: createMockFn()
     };
 
     // Define exact Channel IDs used in tests
@@ -126,9 +131,11 @@ describe('YouTube Resolution Performance - User Experience Validation', () => {
   });
 
   afterEach(() => {
-    jest.useRealTimers();
-    jest.clearAllMocks();
-  });
+        restoreAllMocks();
+    useRealTimers();
+    clearAllMocks();
+  
+        restoreAllModuleMocks();});
 
   describe('User Response Time Experience Improvements', () => {
     it('should provide faster user experience when using Channel ID directly', async () => {
@@ -270,7 +277,7 @@ describe('YouTube Resolution Performance - User Experience Validation', () => {
       // When: User experiences old behavior vs new optimized behavior
       const oldOperations = await oldBehaviorSimulation();
 
-      jest.clearAllMocks(); // Reset for new behavior test
+      clearAllMocks(); // Reset for new behavior test
 
       const newOperations = await newBehaviorSimulation();
 
@@ -516,7 +523,7 @@ describe('YouTube Resolution Performance - User Experience Validation', () => {
       
       // Mock complex international content
       const createComplexInternationalContent = () => ({
-        getLiveStreams: jest.fn().mockResolvedValue({
+        getLiveStreams: createMockFn().mockResolvedValue({
           videos: [{
             id: 'complex123',
             title: { text: '🎮 Live Gaming Stream 实时游戏直播 ライブゲーミング 라이브 게이밍 بث مباشر للألعاب 🎮' },

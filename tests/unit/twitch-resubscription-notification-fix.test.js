@@ -1,4 +1,8 @@
 
+const { describe, test, expect, beforeEach, afterEach, it } = require('bun:test');
+const { spyOn, restoreAllMocks } = require('../helpers/bun-mock-utils');
+const { unmockModule, requireActual, restoreAllModuleMocks } = require('../helpers/bun-module-mocks');
+
 const {
   initializeTestLogging,
   TEST_TIMEOUTS
@@ -14,8 +18,8 @@ const {
 
 const { EventEmitter } = require('events');
 
-jest.unmock('../../src/platforms/twitch-eventsub');
-const TwitchEventSub = jest.requireActual('../../src/platforms/twitch-eventsub');
+unmockModule('../../src/platforms/twitch-eventsub');
+const TwitchEventSub = requireActual('../../src/platforms/twitch-eventsub');
 
 // Initialize logging FIRST
 initializeTestLogging();
@@ -49,12 +53,13 @@ describe('TwitchEventSub Resubscription Notification Fix', () => {
       { logger: mockLogger, authManager: mockAuthManager, ChatFileLoggingService: MockChatFileLoggingService }
     );
 
-    emitSpy = jest.spyOn(EventEmitter.prototype, 'emit').mockImplementation(() => {});
+    emitSpy = spyOn(EventEmitter.prototype, 'emit').mockImplementation(() => {});
   });
 
   afterEach(() => {
-    jest.restoreAllMocks();
-  });
+    restoreAllMocks();
+  
+        restoreAllModuleMocks();});
 
   describe('when resubscription message received', () => {
     it('emits canonical paypiggyMessage payload with months and tier', () => {

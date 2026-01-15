@@ -1,4 +1,7 @@
 
+const { describe, test, expect, jest } = require('bun:test');
+const { createMockFn, restoreAllMocks } = require('../helpers/bun-mock-utils');
+
 const { initializeTestLogging, TEST_TIMEOUTS } = require('../helpers/test-setup');
 const { setupAutomatedCleanup } = require('../helpers/mock-lifecycle');
 const { createMockLogger } = require('../helpers/mock-factories');
@@ -13,11 +16,15 @@ setupAutomatedCleanup({
 });
 
 describe('Greeting System Diagnosis', () => {
+    afterEach(() => {
+        restoreAllMocks();
+    });
+
     jest.setTimeout(TEST_TIMEOUTS.UNIT);
 
     const buildRouter = (overrides = {}) => {
         const logger = createMockLogger('debug');
-        const displayQueue = overrides.displayQueue || { addItem: jest.fn() };
+        const displayQueue = overrides.displayQueue || { addItem: createMockFn() };
         const runtime = {
             config: { general: { greetingsEnabled: true } },
             displayQueue,
@@ -54,7 +61,7 @@ describe('Greeting System Diagnosis', () => {
         };
         const router = buildRouter({
             vfxCommandService: {
-                getVFXConfig: jest.fn().mockResolvedValue(vfxConfig)
+                getVFXConfig: createMockFn().mockResolvedValue(vfxConfig)
             }
         });
 

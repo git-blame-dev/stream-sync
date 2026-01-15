@@ -2,6 +2,7 @@
 // Import setupAutomatedCleanup for re-export
 const { setupAutomatedCleanup } = require('./mock-lifecycle');
 const { waitForDelay } = require('./time-utils');
+const { createMockFn, isMockFunction } = require('./bun-mock-utils');
 
 const BASE_TIMESTAMP_MS = Date.parse('2024-01-01T00:00:00.000Z');
 let sequence = 0;
@@ -84,13 +85,13 @@ const normalizeUserData = (userData) => {
 
 const createMockNotificationDispatcher = (methodOverrides = {}) => {
     const baseMethods = {
-        dispatchSuperChat: jest.fn().mockResolvedValue(true),
-        dispatchMembership: jest.fn().mockResolvedValue(true),
-        dispatchGiftMembership: jest.fn().mockResolvedValue(true),
-        dispatchSuperSticker: jest.fn().mockResolvedValue(true),
-        dispatchFollow: jest.fn().mockResolvedValue(true),
-        dispatchRaid: jest.fn().mockResolvedValue(true),
-        dispatchMessage: jest.fn().mockResolvedValue(true)
+        dispatchSuperChat: createMockFn().mockResolvedValue(true),
+        dispatchMembership: createMockFn().mockResolvedValue(true),
+        dispatchGiftMembership: createMockFn().mockResolvedValue(true),
+        dispatchSuperSticker: createMockFn().mockResolvedValue(true),
+        dispatchFollow: createMockFn().mockResolvedValue(true),
+        dispatchRaid: createMockFn().mockResolvedValue(true),
+        dispatchMessage: createMockFn().mockResolvedValue(true)
     };
 
     return {
@@ -104,7 +105,7 @@ const createMockNotificationDispatcher = (methodOverrides = {}) => {
 
 const createMockNotificationBuilder = (dataOverrides = {}) => {
     return {
-        build: jest.fn().mockImplementation((notificationData = {}) => {
+        build: createMockFn().mockImplementation((notificationData = {}) => {
             if (!notificationData || typeof notificationData !== 'object') {
                 throw new Error('notificationData is required');
             }
@@ -146,21 +147,21 @@ const createMockNotificationBuilder = (dataOverrides = {}) => {
 const createMockNotificationManager = (overrides = {}) => {
     const baseHandlers = {
         // Event management methods required by dependency validator
-        emit: jest.fn().mockImplementation((event, data) => true),
-        on: jest.fn().mockImplementation((event, handler) => true),
-        removeListener: jest.fn().mockImplementation((event, handler) => true),
-        handleNotification: jest.fn().mockResolvedValue(true),
-        processNotification: jest.fn().mockResolvedValue(true),
-        handleGiftNotification: jest.fn().mockResolvedValue(true),
-        handleFollowNotification: jest.fn().mockResolvedValue(true),
-        handlePaypiggyNotification: jest.fn().mockResolvedValue(true),
-        handleRaidNotification: jest.fn().mockResolvedValue(true),
-        handleChatMessage: jest.fn().mockResolvedValue(true)
+        emit: createMockFn().mockImplementation((event, data) => true),
+        on: createMockFn().mockImplementation((event, handler) => true),
+        removeListener: createMockFn().mockImplementation((event, handler) => true),
+        handleNotification: createMockFn().mockResolvedValue(true),
+        processNotification: createMockFn().mockResolvedValue(true),
+        handleGiftNotification: createMockFn().mockResolvedValue(true),
+        handleFollowNotification: createMockFn().mockResolvedValue(true),
+        handlePaypiggyNotification: createMockFn().mockResolvedValue(true),
+        handleRaidNotification: createMockFn().mockResolvedValue(true),
+        handleChatMessage: createMockFn().mockResolvedValue(true)
     };
 
     // Behavior-focused approach (3-5 core methods)
     const behaviorMethods = {
-        createNotification: jest.fn().mockImplementation((notificationData = {}) => {
+        createNotification: createMockFn().mockImplementation((notificationData = {}) => {
             if (!notificationData || typeof notificationData !== 'object') {
                 throw new Error('notificationData is required');
             }
@@ -193,7 +194,7 @@ const createMockNotificationManager = (overrides = {}) => {
                 username
             };
         }),
-        normalizeMessage: jest.fn().mockImplementation((message) => {
+        normalizeMessage: createMockFn().mockImplementation((message) => {
             // Handle case where displayMessage is missing - create it from content
             let displayMessage = message.displayMessage || message.content || 'No message content';
             
@@ -225,7 +226,7 @@ const createMockNotificationManager = (overrides = {}) => {
                     : (message.timestamp || timestamp.iso)
             };
         }),
-        processGift: jest.fn().mockImplementation(async (giftData = {}) => {
+        processGift: createMockFn().mockImplementation(async (giftData = {}) => {
             if (!giftData || typeof giftData !== 'object') {
                 throw new Error('giftData is required');
             }
@@ -257,7 +258,7 @@ const createMockNotificationManager = (overrides = {}) => {
                 obsUpdated: true
             };
         }),
-        processFollow: jest.fn().mockImplementation(async (followData = {}) => {
+        processFollow: createMockFn().mockImplementation(async (followData = {}) => {
             if (!followData || typeof followData !== 'object') {
                 throw new Error('followData is required');
             }
@@ -280,7 +281,7 @@ const createMockNotificationManager = (overrides = {}) => {
                 displayed: true
             };
         }),
-        processSubscription: jest.fn().mockImplementation(async (subData = {}) => {
+        processSubscription: createMockFn().mockImplementation(async (subData = {}) => {
             if (!subData || typeof subData !== 'object') {
                 throw new Error('subData is required');
             }
@@ -339,56 +340,56 @@ const createMockYouTubeServices = (configOverrides = {}) => {
     return {
         // YouTube API Mock
         google: {
-            youtube: jest.fn().mockReturnValue({
+            youtube: createMockFn().mockReturnValue({
                 v3: {
-                    search: { list: jest.fn().mockResolvedValue({ data: { items: [] } }) },
-                    videos: { list: jest.fn().mockResolvedValue({ data: { items: [{ liveStreamingDetails: { activeLiveChatId: 'test-chat-id' } }] } }) },
-                    liveChatMessages: { list: jest.fn().mockResolvedValue({ data: { items: [] } }) }
+                    search: { list: createMockFn().mockResolvedValue({ data: { items: [] } }) },
+                    videos: { list: createMockFn().mockResolvedValue({ data: { items: [{ liveStreamingDetails: { activeLiveChatId: 'test-chat-id' } }] } }) },
+                    liveChatMessages: { list: createMockFn().mockResolvedValue({ data: { items: [] } }) }
                 }
             })
         },
 
         // YouTube Innertube Mock (for scraping)
         Innertube: {
-            create: jest.fn().mockResolvedValue({
-                getInfo: jest.fn().mockResolvedValue({
-                    getLiveChat: jest.fn().mockResolvedValue({
-                        start: jest.fn(),
-                        stop: jest.fn(),
-                        on: jest.fn(),
-                        sendMessage: jest.fn()
+            create: createMockFn().mockResolvedValue({
+                getInfo: createMockFn().mockResolvedValue({
+                    getLiveChat: createMockFn().mockResolvedValue({
+                        start: createMockFn(),
+                        stop: createMockFn(),
+                        on: createMockFn(),
+                        sendMessage: createMockFn()
                     })
                 })
             })
         },
 
         // HTTP Client Mock
-        axios: jest.fn().mockResolvedValue({ data: { status: 'success' } }),
+        axios: createMockFn().mockResolvedValue({ data: { status: 'success' } }),
 
         // Service Mocks
-        ConnectionService: jest.fn().mockImplementation(() => ({
-            connect: jest.fn().mockResolvedValue(true),
-            disconnect: jest.fn().mockResolvedValue(true),
-            isConnected: jest.fn().mockReturnValue(true),
-            getActiveChatId: jest.fn().mockResolvedValue('test-chat-id')
+        ConnectionService: createMockFn().mockImplementation(() => ({
+            connect: createMockFn().mockResolvedValue(true),
+            disconnect: createMockFn().mockResolvedValue(true),
+            isConnected: createMockFn().mockReturnValue(true),
+            getActiveChatId: createMockFn().mockResolvedValue('test-chat-id')
         })),
 
-        EventRouter: jest.fn().mockImplementation(() => ({
-            routeEvent: jest.fn().mockResolvedValue(true),
-            registerHandler: jest.fn(),
-            unregisterHandler: jest.fn()
+        EventRouter: createMockFn().mockImplementation(() => ({
+            routeEvent: createMockFn().mockResolvedValue(true),
+            registerHandler: createMockFn(),
+            unregisterHandler: createMockFn()
         })),
 
-        StreamManager: jest.fn().mockImplementation(() => ({
-            detectActiveStreams: jest.fn().mockResolvedValue(['test-stream-id']),
-            getStreamDetails: jest.fn().mockResolvedValue({ title: 'Test Stream', viewerCount: 100 }),
-            monitorStreams: jest.fn()
+        StreamManager: createMockFn().mockImplementation(() => ({
+            detectActiveStreams: createMockFn().mockResolvedValue(['test-stream-id']),
+            getStreamDetails: createMockFn().mockResolvedValue({ title: 'Test Stream', viewerCount: 100 }),
+            monitorStreams: createMockFn()
         })),
 
-        ViewerService: jest.fn().mockImplementation(() => ({
-            getViewerCount: jest.fn().mockResolvedValue(100),
-            startMonitoring: jest.fn(),
-            stopMonitoring: jest.fn()
+        ViewerService: createMockFn().mockImplementation(() => ({
+            getViewerCount: createMockFn().mockResolvedValue(100),
+            startMonitoring: createMockFn(),
+            stopMonitoring: createMockFn()
         })),
 
         _mockType: 'YouTubeServices',
@@ -407,23 +408,23 @@ const createMockTikTokServices = (configOverrides = {}) => {
 
     return {
         // TikTok WebSocket client mock
-        TikTokWebSocketClient: jest.fn().mockImplementation(() => ({
-            connect: jest.fn().mockResolvedValue(true),
-            disconnect: jest.fn().mockResolvedValue(true),
-            on: jest.fn(),
-            off: jest.fn(),
-            getState: jest.fn().mockReturnValue({ isConnected: true }),
-            getRoomInfo: jest.fn().mockResolvedValue({ viewerCount: 50, title: 'Test TikTok Stream' })
+        TikTokWebSocketClient: createMockFn().mockImplementation(() => ({
+            connect: createMockFn().mockResolvedValue(true),
+            disconnect: createMockFn().mockResolvedValue(true),
+            on: createMockFn(),
+            off: createMockFn(),
+            getState: createMockFn().mockReturnValue({ isConnected: true }),
+            getRoomInfo: createMockFn().mockResolvedValue({ viewerCount: 50, title: 'Test TikTok Stream' })
         })),
 
         // Direct connection mock for connection stability tests
         mockConnection: {
-            connect: jest.fn().mockResolvedValue(true),
-            disconnect: jest.fn().mockResolvedValue(true),
-            on: jest.fn(),
-            off: jest.fn(),
-            getState: jest.fn().mockReturnValue({ isConnected: true }),
-            getRoomInfo: jest.fn().mockResolvedValue({ viewerCount: 50, title: 'Test TikTok Stream' })
+            connect: createMockFn().mockResolvedValue(true),
+            disconnect: createMockFn().mockResolvedValue(true),
+            on: createMockFn(),
+            off: createMockFn(),
+            getState: createMockFn().mockReturnValue({ isConnected: true }),
+            getRoomInfo: createMockFn().mockResolvedValue({ viewerCount: 50, title: 'Test TikTok Stream' })
         },
 
         // TikTok Event Types
@@ -444,11 +445,11 @@ const createMockTikTokServices = (configOverrides = {}) => {
         },
 
         // WebSocket Connection Mock
-        WebcastPushConnection: jest.fn().mockImplementation(() => ({
-            connect: jest.fn().mockResolvedValue(true),
-            disconnect: jest.fn().mockResolvedValue(true),
-            on: jest.fn(),
-            getState: jest.fn().mockReturnValue({ isConnected: true })
+        WebcastPushConnection: createMockFn().mockImplementation(() => ({
+            connect: createMockFn().mockResolvedValue(true),
+            disconnect: createMockFn().mockResolvedValue(true),
+            on: createMockFn(),
+            getState: createMockFn().mockReturnValue({ isConnected: true })
         })),
 
         _mockType: 'TikTokServices',
@@ -471,44 +472,44 @@ const createMockTwitchServices = (configOverrides = {}) => {
 
     return {
         // TMI (Chat) Mock
-        tmi: jest.fn().mockImplementation(() => ({
-            connect: jest.fn().mockResolvedValue(['#testchannel']),
-            disconnect: jest.fn().mockResolvedValue(['#testchannel']),
-            on: jest.fn(),
-            say: jest.fn().mockResolvedValue(['#testchannel', 'Test message']),
-            getChannels: jest.fn().mockReturnValue(['#testchannel'])
+        tmi: createMockFn().mockImplementation(() => ({
+            connect: createMockFn().mockResolvedValue(['#testchannel']),
+            disconnect: createMockFn().mockResolvedValue(['#testchannel']),
+            on: createMockFn(),
+            say: createMockFn().mockResolvedValue(['#testchannel', 'Test message']),
+            getChannels: createMockFn().mockReturnValue(['#testchannel'])
         })),
 
         // EventSub Mock
-        TwitchEventSub: jest.fn().mockImplementation(() => ({
-            initialize: jest.fn().mockResolvedValue(true),
-            shutdown: jest.fn().mockResolvedValue(true),
+        TwitchEventSub: createMockFn().mockImplementation(() => ({
+            initialize: createMockFn().mockResolvedValue(true),
+            shutdown: createMockFn().mockResolvedValue(true),
             isInitialized: true
         })),
 
         // API Client Mock
-        ApiClient: jest.fn().mockImplementation(() => ({
+        ApiClient: createMockFn().mockImplementation(() => ({
             users: {
-                getUserByName: jest.fn().mockResolvedValue({ id: 'test-user-id', displayName: 'TestUser' })
+                getUserByName: createMockFn().mockResolvedValue({ id: 'test-user-id', displayName: 'TestUser' })
             },
             channels: {
-                getChannelInfo: jest.fn().mockResolvedValue({ title: 'Test Stream', viewerCount: 75 })
+                getChannelInfo: createMockFn().mockResolvedValue({ title: 'Test Stream', viewerCount: 75 })
             }
         })),
 
         // Auth Provider Mock
-        RefreshingAuthProvider: jest.fn().mockImplementation(() => ({
-            getAccessToken: jest.fn().mockResolvedValue({ accessToken: 'test-token' }),
-            refresh: jest.fn().mockResolvedValue(true)
+        RefreshingAuthProvider: createMockFn().mockImplementation(() => ({
+            getAccessToken: createMockFn().mockResolvedValue({ accessToken: 'test-token' }),
+            refresh: createMockFn().mockResolvedValue(true)
         })),
 
         // EventSub WebSocket Mock
-        EventSubWsListener: jest.fn().mockImplementation(() => ({
-            start: jest.fn().mockResolvedValue(true),
-            stop: jest.fn().mockResolvedValue(true),
-            subscribeToChannelFollowEvents: jest.fn().mockResolvedValue(true),
-            subscribeToChannelSubscriptionEvents: jest.fn().mockResolvedValue(true),
-            subscribeToChannelRaidEvents: jest.fn().mockResolvedValue(true)
+        EventSubWsListener: createMockFn().mockImplementation(() => ({
+            start: createMockFn().mockResolvedValue(true),
+            stop: createMockFn().mockResolvedValue(true),
+            subscribeToChannelFollowEvents: createMockFn().mockResolvedValue(true),
+            subscribeToChannelSubscriptionEvents: createMockFn().mockResolvedValue(true),
+            subscribeToChannelRaidEvents: createMockFn().mockResolvedValue(true)
         })),
 
         _mockType: 'TwitchServices',
@@ -524,31 +525,31 @@ const createMockOBSManager = (connectionState = 'connected', overrides = {}) => 
     const isConnected = connectionState === 'connected';
     
     const baseMethods = {
-        isConnected: jest.fn().mockReturnValue(isConnected),
-        isReady: jest.fn().mockResolvedValue(isConnected),
-        connect: jest.fn().mockResolvedValue(isConnected),
-        disconnect: jest.fn().mockResolvedValue(true),
-        call: jest.fn().mockResolvedValue({ status: 'success' }),
-        addEventListener: jest.fn(),
-        removeEventListener: jest.fn(),
+        isConnected: createMockFn().mockReturnValue(isConnected),
+        isReady: createMockFn().mockResolvedValue(isConnected),
+        connect: createMockFn().mockResolvedValue(isConnected),
+        disconnect: createMockFn().mockResolvedValue(true),
+        call: createMockFn().mockResolvedValue({ status: 'success' }),
+        addEventListener: createMockFn(),
+        removeEventListener: createMockFn(),
         
         // Scene Management
-        setCurrentScene: jest.fn().mockResolvedValue(true),
-        getCurrentScene: jest.fn().mockResolvedValue({ sceneName: 'main_scene' }),
-        getSceneList: jest.fn().mockResolvedValue({ scenes: [{ sceneName: 'main_scene' }] }),
+        setCurrentScene: createMockFn().mockResolvedValue(true),
+        getCurrentScene: createMockFn().mockResolvedValue({ sceneName: 'main_scene' }),
+        getSceneList: createMockFn().mockResolvedValue({ scenes: [{ sceneName: 'main_scene' }] }),
         
         // Source Management
-        setTextSource: jest.fn().mockResolvedValue(true),
-        getSourceSettings: jest.fn().mockResolvedValue({ text: 'Test text' }),
-        setSourceVisibility: jest.fn().mockResolvedValue(true),
+        setTextSource: createMockFn().mockResolvedValue(true),
+        getSourceSettings: createMockFn().mockResolvedValue({ text: 'Test text' }),
+        setSourceVisibility: createMockFn().mockResolvedValue(true),
         
         // Media Control
-        triggerMediaSource: jest.fn().mockResolvedValue(true),
-        setMediaSource: jest.fn().mockResolvedValue(true),
+        triggerMediaSource: createMockFn().mockResolvedValue(true),
+        setMediaSource: createMockFn().mockResolvedValue(true),
         
         // Filter Management
-        setFilterEnabled: jest.fn().mockResolvedValue(true),
-        getFilterList: jest.fn().mockResolvedValue({ filters: [] })
+        setFilterEnabled: createMockFn().mockResolvedValue(true),
+        getFilterList: createMockFn().mockResolvedValue({ filters: [] })
     };
 
     return {
@@ -572,7 +573,7 @@ const createMockRetrySystem = (behaviorConfig = {}) => {
     let callCount = 0;
 
     return {
-        executeWithRetry: jest.fn().mockImplementation(async (platform, fn) => {
+        executeWithRetry: createMockFn().mockImplementation(async (platform, fn) => {
             callCount++;
             
             // Simulate failure based on success rate
@@ -583,14 +584,14 @@ const createMockRetrySystem = (behaviorConfig = {}) => {
             return await fn();
         }),
         
-        resetRetryCount: jest.fn().mockImplementation(() => { callCount = 0; }),
-        handleConnectionError: jest.fn(),
-        handleConnectionSuccess: jest.fn(),
-        incrementRetryCount: jest.fn().mockImplementation(() => {
+        resetRetryCount: createMockFn().mockImplementation(() => { callCount = 0; }),
+        handleConnectionError: createMockFn(),
+        handleConnectionSuccess: createMockFn(),
+        incrementRetryCount: createMockFn().mockImplementation(() => {
             callCount++;
             return defaultBehavior.baseDelay * (defaultBehavior.shouldExponentialBackoff ? Math.pow(2, callCount - 1) : 1);
         }),
-        getRetryCount: jest.fn().mockImplementation(() => callCount),
+        getRetryCount: createMockFn().mockImplementation(() => callCount),
         
         _mockType: 'RetrySystem',
         _behavior: defaultBehavior,
@@ -607,14 +608,14 @@ const createMockFileSystem = (behaviorConfig = {}) => {
     };
 
     const baseMethods = {
-        readFile: jest.fn().mockImplementation((path, callback) => {
+        readFile: createMockFn().mockImplementation((path, callback) => {
             if (callback) {
                 callback(null, defaultBehavior.readFileContent);
             }
             return Promise.resolve(defaultBehavior.readFileContent);
         }),
-        readFileSync: jest.fn().mockReturnValue(defaultBehavior.readFileContent),
-        writeFile: jest.fn().mockImplementation((path, data, callback) => {
+        readFileSync: createMockFn().mockReturnValue(defaultBehavior.readFileContent),
+        writeFile: createMockFn().mockImplementation((path, data, callback) => {
             if (defaultBehavior.writeSucceeds) {
                 if (callback) callback(null);
                 return Promise.resolve();
@@ -624,26 +625,26 @@ const createMockFileSystem = (behaviorConfig = {}) => {
                 return Promise.reject(error);
             }
         }),
-        writeFileSync: jest.fn().mockImplementation((path, data) => {
+        writeFileSync: createMockFn().mockImplementation((path, data) => {
             if (!defaultBehavior.writeSucceeds) {
                 throw new Error('Write failed');
             }
         }),
-        existsSync: jest.fn().mockReturnValue(defaultBehavior.fileExists),
-        access: jest.fn().mockImplementation((path, callback) => {
+        existsSync: createMockFn().mockReturnValue(defaultBehavior.fileExists),
+        access: createMockFn().mockImplementation((path, callback) => {
             if (callback) {
                 callback(defaultBehavior.fileExists ? null : new Error('File not found'));
             }
             return defaultBehavior.fileExists ? Promise.resolve() : Promise.reject(new Error('File not found'));
         }),
-        mkdir: jest.fn().mockImplementation((path, options, callback) => {
+        mkdir: createMockFn().mockImplementation((path, options, callback) => {
             const cb = typeof options === 'function' ? options : callback;
             if (cb) cb(null);
             return Promise.resolve();
         }),
-        mkdirSync: jest.fn(),
-        stat: jest.fn().mockResolvedValue({ isFile: () => true, isDirectory: () => false }),
-        statSync: jest.fn().mockReturnValue({ isFile: () => true, isDirectory: () => false })
+        mkdirSync: createMockFn(),
+        stat: createMockFn().mockResolvedValue({ isFile: () => true, isDirectory: () => false }),
+        statSync: createMockFn().mockReturnValue({ isFile: () => true, isDirectory: () => false })
     };
 
     return {
@@ -665,7 +666,7 @@ const createMockLogger = (logLevel = 'error', outputConfig = {}) => {
     const minLevel = logLevels[logLevel] || 3;
 
     const createLogMethod = (level) => {
-        return jest.fn().mockImplementation((message, platform, data) => {
+        return createMockFn().mockImplementation((message, platform, data) => {
             if (logLevels[level] >= minLevel && defaultOutputConfig.captureConsole) {
                 console.log(`[${level.toUpperCase()}] ${platform || 'system'}: ${message}`, data || '');
             }
@@ -686,17 +687,17 @@ const createMockLogger = (logLevel = 'error', outputConfig = {}) => {
 
 const createTestApp = (handlerOverrides = {}) => {
     const baseHandlers = {
-        handleChatMessage: jest.fn().mockResolvedValue(true),
-        handleGiftNotification: jest.fn().mockResolvedValue(true),
-        handleFollowNotification: jest.fn().mockResolvedValue(true),
-        handlePaypiggyNotification: jest.fn().mockResolvedValue(true),
-        handleRaidNotification: jest.fn().mockResolvedValue(true),
-        updateViewerCount: jest.fn().mockResolvedValue(true),
+        handleChatMessage: createMockFn().mockResolvedValue(true),
+        handleGiftNotification: createMockFn().mockResolvedValue(true),
+        handleFollowNotification: createMockFn().mockResolvedValue(true),
+        handlePaypiggyNotification: createMockFn().mockResolvedValue(true),
+        handleRaidNotification: createMockFn().mockResolvedValue(true),
+        updateViewerCount: createMockFn().mockResolvedValue(true),
         
         // System handlers
-        handlePlatformConnection: jest.fn().mockResolvedValue(true),
-        handlePlatformDisconnection: jest.fn().mockResolvedValue(true),
-        handleError: jest.fn().mockResolvedValue(true)
+        handlePlatformConnection: createMockFn().mockResolvedValue(true),
+        handlePlatformDisconnection: createMockFn().mockResolvedValue(true),
+        handleError: createMockFn().mockResolvedValue(true)
     };
 
     return {
@@ -717,45 +718,45 @@ const createTestApp = (handlerOverrides = {}) => {
 
 const createMockOBSConnection = (connectionState = 'connected', methodOverrides = {}) => {
     const baseMethods = {
-        connect: jest.fn().mockResolvedValue(true),
-        disconnect: jest.fn().mockResolvedValue(true),
-        isConnected: jest.fn().mockReturnValue(connectionState === 'connected'),
-        getConnectionState: jest.fn().mockReturnValue(connectionState),
-        sendRequest: jest.fn().mockResolvedValue({ status: 'ok' }),
-        sendCommand: jest.fn().mockResolvedValue({ status: 'ok' }),
-        updateTextSource: jest.fn().mockResolvedValue(true),
-        setSourceVisibility: jest.fn().mockResolvedValue(true),
-        playMediaSource: jest.fn().mockResolvedValue(true),
-        stopMediaSource: jest.fn().mockResolvedValue(true),
-        getSceneList: jest.fn().mockResolvedValue({ scenes: [] }),
-        getSourceList: jest.fn().mockResolvedValue({ sources: [] }),
-        setSceneItemEnabled: jest.fn().mockResolvedValue(true),
-        getSceneItemEnabled: jest.fn().mockResolvedValue(true),
-        setSourceFilterEnabled: jest.fn().mockResolvedValue(true),
-        getSourceFilterEnabled: jest.fn().mockResolvedValue(true),
-        setSourceSettings: jest.fn().mockResolvedValue(true),
-        getSourceSettings: jest.fn().mockResolvedValue({}),
-        setInputVolume: jest.fn().mockResolvedValue(true),
-        getInputVolume: jest.fn().mockResolvedValue({ inputVolume: 1.0 }),
-        setInputMute: jest.fn().mockResolvedValue(true),
-        getInputMute: jest.fn().mockResolvedValue({ inputMuted: false }),
-        triggerHotkeyBySequence: jest.fn().mockResolvedValue(true),
-        triggerHotkeyByName: jest.fn().mockResolvedValue(true),
-        triggerHotkeyByKeySequence: jest.fn().mockResolvedValue(true),
-        getStudioModeEnabled: jest.fn().mockResolvedValue({ studioModeEnabled: false }),
-        setStudioModeEnabled: jest.fn().mockResolvedValue(true),
-        getTransitionList: jest.fn().mockResolvedValue({ transitions: [] }),
-        setCurrentTransition: jest.fn().mockResolvedValue(true),
-        setTransitionDuration: jest.fn().mockResolvedValue(true),
-        triggerStudioModeTransition: jest.fn().mockResolvedValue(true),
-        executeBatch: jest.fn().mockResolvedValue({ results: [] }),
-        on: jest.fn(),
-        off: jest.fn(),
-        once: jest.fn(),
-        emit: jest.fn(),
+        connect: createMockFn().mockResolvedValue(true),
+        disconnect: createMockFn().mockResolvedValue(true),
+        isConnected: createMockFn().mockReturnValue(connectionState === 'connected'),
+        getConnectionState: createMockFn().mockReturnValue(connectionState),
+        sendRequest: createMockFn().mockResolvedValue({ status: 'ok' }),
+        sendCommand: createMockFn().mockResolvedValue({ status: 'ok' }),
+        updateTextSource: createMockFn().mockResolvedValue(true),
+        setSourceVisibility: createMockFn().mockResolvedValue(true),
+        playMediaSource: createMockFn().mockResolvedValue(true),
+        stopMediaSource: createMockFn().mockResolvedValue(true),
+        getSceneList: createMockFn().mockResolvedValue({ scenes: [] }),
+        getSourceList: createMockFn().mockResolvedValue({ sources: [] }),
+        setSceneItemEnabled: createMockFn().mockResolvedValue(true),
+        getSceneItemEnabled: createMockFn().mockResolvedValue(true),
+        setSourceFilterEnabled: createMockFn().mockResolvedValue(true),
+        getSourceFilterEnabled: createMockFn().mockResolvedValue(true),
+        setSourceSettings: createMockFn().mockResolvedValue(true),
+        getSourceSettings: createMockFn().mockResolvedValue({}),
+        setInputVolume: createMockFn().mockResolvedValue(true),
+        getInputVolume: createMockFn().mockResolvedValue({ inputVolume: 1.0 }),
+        setInputMute: createMockFn().mockResolvedValue(true),
+        getInputMute: createMockFn().mockResolvedValue({ inputMuted: false }),
+        triggerHotkeyBySequence: createMockFn().mockResolvedValue(true),
+        triggerHotkeyByName: createMockFn().mockResolvedValue(true),
+        triggerHotkeyByKeySequence: createMockFn().mockResolvedValue(true),
+        getStudioModeEnabled: createMockFn().mockResolvedValue({ studioModeEnabled: false }),
+        setStudioModeEnabled: createMockFn().mockResolvedValue(true),
+        getTransitionList: createMockFn().mockResolvedValue({ transitions: [] }),
+        setCurrentTransition: createMockFn().mockResolvedValue(true),
+        setTransitionDuration: createMockFn().mockResolvedValue(true),
+        triggerStudioModeTransition: createMockFn().mockResolvedValue(true),
+        executeBatch: createMockFn().mockResolvedValue({ results: [] }),
+        on: createMockFn(),
+        off: createMockFn(),
+        once: createMockFn(),
+        emit: createMockFn(),
         
         // Missing methods that are being called in integration tests
-        processSourceEvent: jest.fn().mockImplementation((sourceData) => {
+        processSourceEvent: createMockFn().mockImplementation((sourceData) => {
             const timestamp = createTimestamp();
             return {
                 eventType: sourceData.eventType || 'InputSettingsChanged',
@@ -773,7 +774,7 @@ const createMockOBSConnection = (connectionState = 'connected', methodOverrides 
                 timestamp: timestamp.iso
             };
         }),
-        processSceneEvent: jest.fn().mockImplementation((sceneData) => {
+        processSceneEvent: createMockFn().mockImplementation((sceneData) => {
             const timestamp = createTimestamp();
             return {
                 eventType: sceneData.eventType || 'SceneTransitionStarted',
@@ -794,7 +795,7 @@ const createMockOBSConnection = (connectionState = 'connected', methodOverrides 
         }),
         
         // Missing method used in integration tests for display flow
-        displayNotification: jest.fn().mockImplementation((notification) => {
+        displayNotification: createMockFn().mockImplementation((notification) => {
             const timestamp = createTimestamp();
             return {
                 displayed: true,
@@ -824,36 +825,36 @@ const createMockDisplayQueue = (queueState = {}, methodOverrides = {}) => {
     const throwOnAdd = methodOverrides.shouldThrowError ?? normalizedQueueState.shouldThrowError;
     const errorMessage = methodOverrides.errorMessage ?? normalizedQueueState.errorMessage;
     const addItemMock = throwOnAdd
-        ? jest.fn().mockImplementation(() => {
+        ? createMockFn().mockImplementation(() => {
             throw new Error(errorMessage || 'DisplayQueue error');
         })
-        : jest.fn().mockResolvedValue(true);
+        : createMockFn().mockResolvedValue(true);
     const baseMethods = {
         addItem: addItemMock,
-        addToQueue: jest.fn().mockResolvedValue(true),
-        processQueue: jest.fn().mockResolvedValue(true),
-        removeItem: jest.fn().mockResolvedValue(true),
-        clearQueue: jest.fn().mockResolvedValue(true),
-        getQueueLength: jest.fn().mockReturnValue(normalizedQueueState.length || 0),
-        getNextItem: jest.fn().mockReturnValue(normalizedQueueState.nextItem || null),
-        isProcessing: jest.fn().mockReturnValue(normalizedQueueState.isProcessing || false),
-        startProcessing: jest.fn().mockResolvedValue(true),
-        stopProcessing: jest.fn().mockResolvedValue(true),
-        pauseProcessing: jest.fn().mockResolvedValue(true),
-        resumeProcessing: jest.fn().mockResolvedValue(true),
-        getQueueItems: jest.fn().mockReturnValue(normalizedQueueState.items || []),
-        setMaxQueueSize: jest.fn().mockResolvedValue(true),
-        getMaxQueueSize: jest.fn().mockReturnValue(normalizedQueueState.maxSize || 100),
-        isQueueFull: jest.fn().mockReturnValue(normalizedQueueState.isFull || false),
-        getProcessingStats: jest.fn().mockReturnValue({
+        addToQueue: createMockFn().mockResolvedValue(true),
+        processQueue: createMockFn().mockResolvedValue(true),
+        removeItem: createMockFn().mockResolvedValue(true),
+        clearQueue: createMockFn().mockResolvedValue(true),
+        getQueueLength: createMockFn().mockReturnValue(normalizedQueueState.length || 0),
+        getNextItem: createMockFn().mockReturnValue(normalizedQueueState.nextItem || null),
+        isProcessing: createMockFn().mockReturnValue(normalizedQueueState.isProcessing || false),
+        startProcessing: createMockFn().mockResolvedValue(true),
+        stopProcessing: createMockFn().mockResolvedValue(true),
+        pauseProcessing: createMockFn().mockResolvedValue(true),
+        resumeProcessing: createMockFn().mockResolvedValue(true),
+        getQueueItems: createMockFn().mockReturnValue(normalizedQueueState.items || []),
+        setMaxQueueSize: createMockFn().mockResolvedValue(true),
+        getMaxQueueSize: createMockFn().mockReturnValue(normalizedQueueState.maxSize || 100),
+        isQueueFull: createMockFn().mockReturnValue(normalizedQueueState.isFull || false),
+        getProcessingStats: createMockFn().mockReturnValue({
             processed: normalizedQueueState.processed || 0,
             failed: normalizedQueueState.failed || 0,
             averageProcessingTime: normalizedQueueState.avgTime || 0
         }),
-        on: jest.fn(),
-        off: jest.fn(),
-        once: jest.fn(),
-        emit: jest.fn()
+        on: createMockFn(),
+        off: createMockFn(),
+        once: createMockFn(),
+        emit: createMockFn()
     };
 
     return {
@@ -867,7 +868,7 @@ const createMockDisplayQueue = (queueState = {}, methodOverrides = {}) => {
 
 const createMockConfigManager = (configData = {}, methodOverrides = {}) => {
     const baseMethods = {
-        get: jest.fn().mockImplementation((key, defaultValue) => {
+        get: createMockFn().mockImplementation((key, defaultValue) => {
             const keys = key.split('.');
             let value = configData;
             for (const k of keys) {
@@ -879,7 +880,7 @@ const createMockConfigManager = (configData = {}, methodOverrides = {}) => {
             }
             return value;
         }),
-        set: jest.fn().mockImplementation((key, value) => {
+        set: createMockFn().mockImplementation((key, value) => {
             const keys = key.split('.');
             let current = configData;
             for (let i = 0; i < keys.length - 1; i++) {
@@ -891,7 +892,7 @@ const createMockConfigManager = (configData = {}, methodOverrides = {}) => {
             current[keys[keys.length - 1]] = value;
             return true;
         }),
-        has: jest.fn().mockImplementation((key) => {
+        has: createMockFn().mockImplementation((key) => {
             const keys = key.split('.');
             let value = configData;
             for (const k of keys) {
@@ -903,7 +904,7 @@ const createMockConfigManager = (configData = {}, methodOverrides = {}) => {
             }
             return true;
         }),
-        delete: jest.fn().mockImplementation((key) => {
+        delete: createMockFn().mockImplementation((key) => {
             const keys = key.split('.');
             let current = configData;
             for (let i = 0; i < keys.length - 1; i++) {
@@ -915,23 +916,23 @@ const createMockConfigManager = (configData = {}, methodOverrides = {}) => {
             delete current[keys[keys.length - 1]];
             return true;
         }),
-        getAll: jest.fn().mockReturnValue(configData),
-        load: jest.fn().mockResolvedValue(true),
-        save: jest.fn().mockResolvedValue(true),
-        reload: jest.fn().mockResolvedValue(true),
-        validate: jest.fn().mockReturnValue({ valid: true, errors: [] }),
-        getSection: jest.fn().mockImplementation((section) => configData[section] || {}),
-        setSection: jest.fn().mockImplementation((section, data) => {
+        getAll: createMockFn().mockReturnValue(configData),
+        load: createMockFn().mockResolvedValue(true),
+        save: createMockFn().mockResolvedValue(true),
+        reload: createMockFn().mockResolvedValue(true),
+        validate: createMockFn().mockReturnValue({ valid: true, errors: [] }),
+        getSection: createMockFn().mockImplementation((section) => configData[section] || {}),
+        setSection: createMockFn().mockImplementation((section, data) => {
             configData[section] = data;
             return true;
         }),
-        on: jest.fn(),
-        off: jest.fn(),
-        once: jest.fn(),
-        emit: jest.fn(),
+        on: createMockFn(),
+        off: createMockFn(),
+        once: createMockFn(),
+        emit: createMockFn(),
         
         // Additional methods needed for config consistency tests
-        updateTokens: jest.fn().mockImplementation(async (tokenData) => {
+        updateTokens: createMockFn().mockImplementation(async (tokenData) => {
             const ConfigurationManager = require('../../src/auth/shared/ConfigurationManager');
             const configManager = new ConfigurationManager({
                 logger: configData.logger,
@@ -940,7 +941,7 @@ const createMockConfigManager = (configData = {}, methodOverrides = {}) => {
             return configManager.updateTokens(tokenData);
         }),
         
-        validateConfigData: jest.fn().mockImplementation(async (configDataToValidate) => {
+        validateConfigData: createMockFn().mockImplementation(async (configDataToValidate) => {
             const ConfigurationManager = require('../../src/auth/shared/ConfigurationManager');
             const configManager = new ConfigurationManager({
                 logger: configData.logger
@@ -948,7 +949,7 @@ const createMockConfigManager = (configData = {}, methodOverrides = {}) => {
             return configManager.validateConfigData(configDataToValidate);
         }),
         
-        updateWithBackup: jest.fn().mockImplementation(async (updates) => {
+        updateWithBackup: createMockFn().mockImplementation(async (updates) => {
             const ConfigurationManager = require('../../src/auth/shared/ConfigurationManager');
             const configManager = new ConfigurationManager({
                 logger: configData.logger,
@@ -957,7 +958,7 @@ const createMockConfigManager = (configData = {}, methodOverrides = {}) => {
             return configManager.updateWithBackup(updates);
         }),
         
-        handleConfigUpdateError: jest.fn().mockImplementation(async (errorType) => {
+        handleConfigUpdateError: createMockFn().mockImplementation(async (errorType) => {
             const ConfigurationManager = require('../../src/auth/shared/ConfigurationManager');
             const configManager = new ConfigurationManager({
                 logger: configData.logger
@@ -965,7 +966,7 @@ const createMockConfigManager = (configData = {}, methodOverrides = {}) => {
             return configManager.handleConfigUpdateError(errorType);
         }),
         
-        attemptUpdateWithRollback: jest.fn().mockImplementation(async (updates) => {
+        attemptUpdateWithRollback: createMockFn().mockImplementation(async (updates) => {
             const ConfigurationManager = require('../../src/auth/shared/ConfigurationManager');
             const configManager = new ConfigurationManager({
                 logger: configData.logger,
@@ -974,7 +975,7 @@ const createMockConfigManager = (configData = {}, methodOverrides = {}) => {
             return configManager.attemptUpdateWithRollback(updates);
         }),
         
-        getErrorRecoveryGuidance: jest.fn().mockImplementation(async (errorType) => {
+        getErrorRecoveryGuidance: createMockFn().mockImplementation(async (errorType) => {
             const ConfigurationManager = require('../../src/auth/shared/ConfigurationManager');
             const configManager = new ConfigurationManager({
                 logger: configData.logger
@@ -982,7 +983,7 @@ const createMockConfigManager = (configData = {}, methodOverrides = {}) => {
             return configManager.getErrorRecoveryGuidance(errorType);
         }),
         
-        performStateChange: jest.fn().mockImplementation(async (action, token) => {
+        performStateChange: createMockFn().mockImplementation(async (action, token) => {
             const ConfigurationManager = require('../../src/auth/shared/ConfigurationManager');
             const configManager = new ConfigurationManager({
                 logger: configData.logger
@@ -990,7 +991,7 @@ const createMockConfigManager = (configData = {}, methodOverrides = {}) => {
             return configManager.performStateChange(action, token);
         }),
         
-        getSynchronizedConfig: jest.fn().mockImplementation(async () => {
+        getSynchronizedConfig: createMockFn().mockImplementation(async () => {
             const ConfigurationManager = require('../../src/auth/shared/ConfigurationManager');
             const configManager = new ConfigurationManager({
                 logger: configData.logger
@@ -998,7 +999,7 @@ const createMockConfigManager = (configData = {}, methodOverrides = {}) => {
             return configManager.getSynchronizedConfig();
         }),
         
-        performConfigOperation: jest.fn().mockImplementation(async (operation) => {
+        performConfigOperation: createMockFn().mockImplementation(async (operation) => {
             const ConfigurationManager = require('../../src/auth/shared/ConfigurationManager');
             const configManager = new ConfigurationManager({
                 logger: configData.logger
@@ -1006,7 +1007,7 @@ const createMockConfigManager = (configData = {}, methodOverrides = {}) => {
             return configManager.performConfigOperation(operation);
         }),
         
-        performComprehensiveValidation: jest.fn().mockImplementation(async (config) => {
+        performComprehensiveValidation: createMockFn().mockImplementation(async (config) => {
             const ConfigurationManager = require('../../src/auth/shared/ConfigurationManager');
             const configManager = new ConfigurationManager({
                 logger: configData.logger
@@ -1014,7 +1015,7 @@ const createMockConfigManager = (configData = {}, methodOverrides = {}) => {
             return configManager.performComprehensiveValidation(config);
         }),
         
-        getCurrentState: jest.fn().mockImplementation(async () => {
+        getCurrentState: createMockFn().mockImplementation(async () => {
             const ConfigurationManager = require('../../src/auth/shared/ConfigurationManager');
             const configManager = new ConfigurationManager({
                 logger: configData.logger
@@ -1044,7 +1045,7 @@ const resetMock = (mockObject) => {
     }
 
     Object.keys(mockObject).forEach(key => {
-        if (jest.isMockFunction(mockObject[key])) {
+        if (isMockFunction(mockObject[key])) {
             mockObject[key].mockReset();
         }
     });
@@ -1057,7 +1058,7 @@ const clearMockCalls = (mockObject) => {
     }
 
     Object.keys(mockObject).forEach(key => {
-        if (jest.isMockFunction(mockObject[key])) {
+        if (isMockFunction(mockObject[key])) {
             mockObject[key].mockClear();
         }
     });
@@ -1093,7 +1094,7 @@ const createMockYouTubePlatform = (behaviorConfig = {}) => {
     };
     
     const youtubeMethods = {
-        processSuperChat: jest.fn().mockImplementation(async (superChatData) => {
+        processSuperChat: createMockFn().mockImplementation(async (superChatData) => {
             if (defaultBehavior.superChatProcessing === 'disabled') {
                 throw new Error('SuperChat processing disabled');
             }
@@ -1125,7 +1126,7 @@ const createMockYouTubePlatform = (behaviorConfig = {}) => {
                 notification: notification
             };
         }),
-        handleMembership: jest.fn().mockImplementation(async (membershipData) => {
+        handleMembership: createMockFn().mockImplementation(async (membershipData) => {
             const priority = defaultBehavior.membershipHandling === 'priority' ? 'high' : 'normal';
             const timestamp = createTimestamp();
             const username = requireNonEmptyString(membershipData?.username, 'username');
@@ -1144,7 +1145,7 @@ const createMockYouTubePlatform = (behaviorConfig = {}) => {
                 }
             };
         }),
-        processRegularMessage: jest.fn().mockImplementation(async (messageData) => {
+        processRegularMessage: createMockFn().mockImplementation(async (messageData) => {
             return {
                 processed: true,
                 message: messageData
@@ -1170,7 +1171,7 @@ const createMockTwitchPlatform = (behaviorConfig = {}) => {
     };
     
     const twitchMethods = {
-        processSubscription: jest.fn().mockImplementation(async (subData) => {
+        processSubscription: createMockFn().mockImplementation(async (subData) => {
             if (defaultBehavior.subscriptionProcessing === 'disabled') {
                 throw new Error('Subscription processing disabled');
             }
@@ -1190,7 +1191,7 @@ const createMockTwitchPlatform = (behaviorConfig = {}) => {
                 }
             };
         }),
-        handleRaid: jest.fn().mockImplementation(async (raidData) => {
+        handleRaid: createMockFn().mockImplementation(async (raidData) => {
             const priority = defaultBehavior.raidHandling === 'priority' ? 'high' : 'normal';
             const timestamp = createTimestamp();
             return {
@@ -1209,7 +1210,7 @@ const createMockTwitchPlatform = (behaviorConfig = {}) => {
                 }
             };
         }),
-        processFollow: jest.fn().mockImplementation(async (followData) => {
+        processFollow: createMockFn().mockImplementation(async (followData) => {
             const timestamp = createTimestamp();
             return {
                 processed: true,
@@ -1244,7 +1245,7 @@ const createMockTikTokPlatform = (behaviorConfig = {}) => {
     };
     
     const tiktokMethods = {
-        processGift: jest.fn().mockImplementation((giftData) => {
+        processGift: createMockFn().mockImplementation((giftData) => {
             const shouldAggregate = defaultBehavior.giftAggregation === 'enabled' && giftData.giftCount > 1;
             const normalizedUser = normalizeUserData(giftData);
             const giftType = giftData.giftType || 'Rose';
@@ -1278,7 +1279,7 @@ const createMockTikTokPlatform = (behaviorConfig = {}) => {
                 }
             };
         }),
-        aggregateGifts: jest.fn().mockImplementation(async (giftEvents) => {
+        aggregateGifts: createMockFn().mockImplementation(async (giftEvents) => {
             if (defaultBehavior.giftAggregation === 'disabled') {
                 return giftEvents; // No aggregation
             }
@@ -1607,13 +1608,13 @@ const createMockPlatform = (platformName, behaviorConfig = {}) => {
     
     // Behavior-focused methods (3-5 max)
     const behaviorMethods = {
-        connectToChat: jest.fn().mockImplementation(async () => {
+        connectToChat: createMockFn().mockImplementation(async () => {
             if (defaultBehavior.connectsBehavior === 'unstable' && nextPseudoRandom() < defaultBehavior.errorRate) {
                 throw new Error('Connection unstable');
             }
             return true;
         }),
-        processMessage: jest.fn().mockImplementation((message) => {
+        processMessage: createMockFn().mockImplementation((message) => {
             // Error handling for malformed input
             if (message === null) {
                 throw new Error('Message data is missing - unable to process chat message');
@@ -1719,7 +1720,7 @@ const createMockPlatform = (platformName, behaviorConfig = {}) => {
                 displayMessage: `${baseResult.username}: ${baseResult.messageContent}`
             };
         }),
-        processGift: jest.fn().mockImplementation((giftData) => {
+        processGift: createMockFn().mockImplementation((giftData) => {
             if (defaultBehavior.processingSpeed === 'slow') {
                 // Simulate slow processing without actual delay in tests
             }
@@ -1780,7 +1781,7 @@ const createMockPlatform = (platformName, behaviorConfig = {}) => {
                 obsUpdated: true
             };
         }),
-        processEvent: jest.fn().mockImplementation((event) => {
+        processEvent: createMockFn().mockImplementation((event) => {
             if (defaultBehavior.processingSpeed === 'slow') {
                 // Simulate slow processing without actual delay in tests
             }
@@ -1801,12 +1802,12 @@ const createMockPlatform = (platformName, behaviorConfig = {}) => {
                 timestamp: timestamp.iso
             };
         }),
-        handleNotification: jest.fn().mockImplementation((notification) => {
+        handleNotification: createMockFn().mockImplementation((notification) => {
             return { handled: true, notification };
         }),
         
         // TikTok-specific methods
-        processFollow: jest.fn().mockImplementation((followData) => {
+        processFollow: createMockFn().mockImplementation((followData) => {
             // For TikTok, follow data contains user info under the user field
             const normalizedUser = normalizeUserData(followData);
             const timestamp = createTimestamp();
@@ -1827,7 +1828,7 @@ const createMockPlatform = (platformName, behaviorConfig = {}) => {
             };
         }),
         
-        processMemberJoin: jest.fn().mockImplementation((memberData) => {
+        processMemberJoin: createMockFn().mockImplementation((memberData) => {
             // For TikTok, member data contains user info under the user field
             const normalizedUser = normalizeUserData(memberData);
             const timestamp = createTimestamp();
@@ -1849,7 +1850,7 @@ const createMockPlatform = (platformName, behaviorConfig = {}) => {
             };
         }),
         
-        processLike: jest.fn().mockImplementation((likeData) => {
+        processLike: createMockFn().mockImplementation((likeData) => {
             const username = likeData.user?.uniqueId || 'TestLiker';
             const userId = likeData.user?.userId;
             const timestamp = createTimestamp();
@@ -1869,7 +1870,7 @@ const createMockPlatform = (platformName, behaviorConfig = {}) => {
             };
         }),
         
-        processSocial: jest.fn().mockImplementation((socialData) => {
+        processSocial: createMockFn().mockImplementation((socialData) => {
             const username = socialData.user?.uniqueId || 'TestUser';
             const timestamp = createTimestamp();
             return {
@@ -1885,7 +1886,7 @@ const createMockPlatform = (platformName, behaviorConfig = {}) => {
             };
         }),
         
-        processEmote: jest.fn().mockImplementation((emoteData) => {
+        processEmote: createMockFn().mockImplementation((emoteData) => {
             const username = emoteData.user?.uniqueId || 'TestUser';
             const emoteName = emoteData.emoteName || emoteData.emote?.name || 'Fire';
             const timestamp = createTimestamp();
@@ -1903,7 +1904,7 @@ const createMockPlatform = (platformName, behaviorConfig = {}) => {
             };
         }),
         
-        processViewerCount: jest.fn().mockImplementation((viewerData) => {
+        processViewerCount: createMockFn().mockImplementation((viewerData) => {
             const timestamp = createTimestamp();
             return {
                 messageType: 'viewerCount',
@@ -1915,7 +1916,7 @@ const createMockPlatform = (platformName, behaviorConfig = {}) => {
             };
         }),
         
-        processRoomUser: jest.fn().mockImplementation((roomUserData) => {
+        processRoomUser: createMockFn().mockImplementation((roomUserData) => {
             const timestamp = createTimestamp();
             return {
                 eventType: 'viewer_count',
@@ -1929,7 +1930,7 @@ const createMockPlatform = (platformName, behaviorConfig = {}) => {
         }),
         
         // Twitch EventSub methods
-        processEventSubMessage: jest.fn().mockImplementation((messageData) => {
+        processEventSubMessage: createMockFn().mockImplementation((messageData) => {
             const timestamp = createTimestamp();
             return {
                 eventType: 'chat',
@@ -1948,7 +1949,7 @@ const createMockPlatform = (platformName, behaviorConfig = {}) => {
             };
         }),
         
-        processEventSubFollow: jest.fn().mockImplementation((followData) => {
+        processEventSubFollow: createMockFn().mockImplementation((followData) => {
             const username = followData.user_name || followData.user?.display_name || 'TestFollower';
             const userId = followData.user_id;
             const timestamp = createTimestamp();
@@ -1972,7 +1973,7 @@ const createMockPlatform = (platformName, behaviorConfig = {}) => {
             };
         }),
         
-        processEventSubRaid: jest.fn().mockImplementation((raidData) => {
+        processEventSubRaid: createMockFn().mockImplementation((raidData) => {
             const username = raidData.from_broadcaster_user_name || 'RaiderUser';
             const viewerCount = raidData.viewerCount || 42;
             const displayMessage = `${username} raided with ${viewerCount} viewers!`;
@@ -1998,7 +1999,7 @@ const createMockPlatform = (platformName, behaviorConfig = {}) => {
             };
         }),
         
-        processEventSubBits: jest.fn().mockImplementation((bitsData) => {
+        processEventSubBits: createMockFn().mockImplementation((bitsData) => {
             const username = bitsData.user_name || 'CheererUser';
             const bitsAmount = bitsData.bits || 0;
             const totalBits = bitsAmount;
@@ -2037,7 +2038,7 @@ const createMockPlatform = (platformName, behaviorConfig = {}) => {
         }),
         
         // YouTube-specific methods
-        processSuperSticker: jest.fn().mockImplementation((stickerData) => {
+        processSuperSticker: createMockFn().mockImplementation((stickerData) => {
             const item = stickerData.item || {};
             const author = item.author || {};
             const username = author.name || 'StickerSupporter';
@@ -2070,7 +2071,7 @@ const createMockPlatform = (platformName, behaviorConfig = {}) => {
             };
         }),
         
-        processViewerJoin: jest.fn().mockImplementation((viewerData) => {
+        processViewerJoin: createMockFn().mockImplementation((viewerData) => {
             const timestamp = createTimestamp();
             return {
                 messageType: 'viewerJoin',
@@ -2083,7 +2084,7 @@ const createMockPlatform = (platformName, behaviorConfig = {}) => {
             };
         }),
         
-        processViewerLeave: jest.fn().mockImplementation((viewerData) => {
+        processViewerLeave: createMockFn().mockImplementation((viewerData) => {
             const timestamp = createTimestamp();
             return {
                 messageType: 'viewerLeave',
@@ -2097,7 +2098,7 @@ const createMockPlatform = (platformName, behaviorConfig = {}) => {
         }),
         
         // StreamElements methods
-        processFollowWebhook: jest.fn().mockImplementation((followData) => {
+        processFollowWebhook: createMockFn().mockImplementation((followData) => {
             const resolvedUsername = followData.username || followData.data?.displayName || followData.data?.username || 'TestFollower';
             const resolvedUserId = followData.userId;
             const timestamp = createTimestamp();
@@ -2114,7 +2115,7 @@ const createMockPlatform = (platformName, behaviorConfig = {}) => {
             };
         }),
         
-        processSubscriberWebhook: jest.fn().mockImplementation((subData) => {
+        processSubscriberWebhook: createMockFn().mockImplementation((subData) => {
             const resolvedUsername = subData.username || subData.data?.displayName || 'TestSubscriber';
             const resolvedUserId = subData.userId;
             const timestamp = createTimestamp();
@@ -2131,7 +2132,7 @@ const createMockPlatform = (platformName, behaviorConfig = {}) => {
             };
         }),
         
-        processWebhook: jest.fn().mockImplementation((webhookData) => {
+        processWebhook: createMockFn().mockImplementation((webhookData) => {
             // Determine event type - StreamElements subscriber webhook has 'subscriber_' in eventId
             const isSubscriber = webhookData.eventId?.includes('subscriber_') || 
                                  webhookData.activity?.includes('subscriber_new') || 
@@ -2189,7 +2190,7 @@ const createMockPlatform = (platformName, behaviorConfig = {}) => {
         }),
         
         // OBS WebSocket methods
-        processSceneTransition: jest.fn().mockImplementation((sceneData) => {
+        processSceneTransition: createMockFn().mockImplementation((sceneData) => {
             const timestamp = createTimestamp();
             return {
                 messageType: 'sceneChange',
@@ -2201,7 +2202,7 @@ const createMockPlatform = (platformName, behaviorConfig = {}) => {
             };
         }),
         
-        processSourceUpdate: jest.fn().mockImplementation((sourceData) => {
+        processSourceUpdate: createMockFn().mockImplementation((sourceData) => {
             const timestamp = createTimestamp();
             return {
                 messageType: 'sourceUpdate',
@@ -2214,7 +2215,7 @@ const createMockPlatform = (platformName, behaviorConfig = {}) => {
             };
         }),
         
-        processConnectionEvent: jest.fn().mockImplementation((connectionData) => {
+        processConnectionEvent: createMockFn().mockImplementation((connectionData) => {
             const timestamp = createTimestamp();
             return {
                 eventType: connectionData.eventType || 'ConnectionClosed',
@@ -2228,7 +2229,7 @@ const createMockPlatform = (platformName, behaviorConfig = {}) => {
             };
         }),
         
-        processSceneEvent: jest.fn().mockImplementation((sceneData) => {
+        processSceneEvent: createMockFn().mockImplementation((sceneData) => {
             const timestamp = createTimestamp();
             return {
                 eventType: sceneData.eventType || 'SceneTransitionStarted',
@@ -2248,7 +2249,7 @@ const createMockPlatform = (platformName, behaviorConfig = {}) => {
             };
         }),
         
-        processSourceEvent: jest.fn().mockImplementation((sourceData) => {
+        processSourceEvent: createMockFn().mockImplementation((sourceData) => {
             const timestamp = createTimestamp();
             return {
                 eventType: sourceData.eventType || 'InputSettingsChanged',
@@ -2275,7 +2276,7 @@ const createMockPlatform = (platformName, behaviorConfig = {}) => {
             };
         }),
         
-        processViewerEvent: jest.fn().mockImplementation((viewerData) => {
+        processViewerEvent: createMockFn().mockImplementation((viewerData) => {
             // Normalize event type from PascalCase to snake_case
             let eventType = viewerData.type || 'viewer_join';
             if (eventType === 'ViewerJoin') eventType = 'viewer_join';
@@ -2295,7 +2296,7 @@ const createMockPlatform = (platformName, behaviorConfig = {}) => {
             };
         }),
 
-        handleWebSocketMessage: jest.fn().mockImplementation(async (message) => {
+        handleWebSocketMessage: createMockFn().mockImplementation(async (message) => {
             const timestamp = createTimestamp();
             return {
                 success: true,
@@ -2305,7 +2306,7 @@ const createMockPlatform = (platformName, behaviorConfig = {}) => {
             };
         }),
 
-        handleNotificationEvent: jest.fn().mockImplementation((subscriptionType, event) => {
+        handleNotificationEvent: createMockFn().mockImplementation((subscriptionType, event) => {
             const timestamp = createTimestamp();
             return {
                 success: true,
@@ -2316,7 +2317,7 @@ const createMockPlatform = (platformName, behaviorConfig = {}) => {
             };
         }),
 
-        handleNotificationEventWithDispatcher: jest.fn().mockImplementation(async (subscriptionType, event) => {
+        handleNotificationEventWithDispatcher: createMockFn().mockImplementation(async (subscriptionType, event) => {
             const timestamp = createTimestamp();
             return {
                 success: true,
@@ -2329,7 +2330,7 @@ const createMockPlatform = (platformName, behaviorConfig = {}) => {
         }),
 
         // Platform-specific handlers that are expected by E2E tests
-        handleChatMessage: jest.fn().mockImplementation(async (message) => {
+        handleChatMessage: createMockFn().mockImplementation(async (message) => {
             const timestamp = createTimestamp();
             return {
                 success: true,
@@ -2339,7 +2340,7 @@ const createMockPlatform = (platformName, behaviorConfig = {}) => {
             };
         }),
 
-        handleSuperChat: jest.fn().mockImplementation(async (message) => {
+        handleSuperChat: createMockFn().mockImplementation(async (message) => {
             const timestamp = createTimestamp();
             return {
                 success: true,
@@ -2349,7 +2350,7 @@ const createMockPlatform = (platformName, behaviorConfig = {}) => {
             };
         }),
 
-        handleMembershipGift: jest.fn().mockImplementation(async (message) => {
+        handleMembershipGift: createMockFn().mockImplementation(async (message) => {
             const timestamp = createTimestamp();
             return {
                 success: true,
@@ -2359,7 +2360,7 @@ const createMockPlatform = (platformName, behaviorConfig = {}) => {
             };
         }),
 
-        handleNewSponsor: jest.fn().mockImplementation(async (message) => {
+        handleNewSponsor: createMockFn().mockImplementation(async (message) => {
             const timestamp = createTimestamp();
             return {
                 success: true,
@@ -2369,7 +2370,7 @@ const createMockPlatform = (platformName, behaviorConfig = {}) => {
             };
         }),
 
-        handleGift: jest.fn().mockImplementation(async (event) => {
+        handleGift: createMockFn().mockImplementation(async (event) => {
             const timestamp = createTimestamp();
             return {
                 success: true,
@@ -2379,7 +2380,7 @@ const createMockPlatform = (platformName, behaviorConfig = {}) => {
             };
         }),
 
-        handleFollow: jest.fn().mockImplementation(async (event) => {
+        handleFollow: createMockFn().mockImplementation(async (event) => {
             const timestamp = createTimestamp();
             return {
                 success: true,
@@ -2389,7 +2390,7 @@ const createMockPlatform = (platformName, behaviorConfig = {}) => {
             };
         }),
 
-        handleViewerCount: jest.fn().mockImplementation(async (event) => {
+        handleViewerCount: createMockFn().mockImplementation(async (event) => {
             const timestamp = createTimestamp();
             return {
                 success: true,
@@ -2399,7 +2400,7 @@ const createMockPlatform = (platformName, behaviorConfig = {}) => {
             };
         }),
 
-        handleWebcastEvent: jest.fn().mockImplementation(async (event) => {
+        handleWebcastEvent: createMockFn().mockImplementation(async (event) => {
             const timestamp = createTimestamp();
             return {
                 success: true,
@@ -2410,15 +2411,15 @@ const createMockPlatform = (platformName, behaviorConfig = {}) => {
         }),
 
         // Connection status methods
-        isConnected: jest.fn().mockImplementation(() => {
+        isConnected: createMockFn().mockImplementation(() => {
             return defaultBehavior.connectsBehavior !== 'disconnected';
         }),
 
-        isActive: jest.fn().mockImplementation(() => {
+        isActive: createMockFn().mockImplementation(() => {
             return defaultBehavior.connectsBehavior !== 'disconnected';
         }),
 
-        getViewerCount: jest.fn().mockImplementation(() => {
+        getViewerCount: createMockFn().mockImplementation(() => {
             return 1000;
         }),
 
@@ -2433,7 +2434,7 @@ const createMockPlatform = (platformName, behaviorConfig = {}) => {
     
     if (platformName === 'youtube') {
         platformSpecificMethods = {
-            processSuperChat: jest.fn().mockImplementation((superChatData) => {
+            processSuperChat: createMockFn().mockImplementation((superChatData) => {
                 const item = superChatData.item || {};
                 const author = item.author || {};
                 const userName = author.name || 'TestUser';
@@ -2464,12 +2465,12 @@ const createMockPlatform = (platformName, behaviorConfig = {}) => {
             }),
             
             // Add missing methods for Innertube tests
-            searchLiveStreams: jest.fn().mockResolvedValue(['testvideoid1', 'testvideoid2']),
-            connectToStream: jest.fn().mockResolvedValue(true),
-            getInnertubeInstanceCount: jest.fn().mockReturnValue(1),
+            searchLiveStreams: createMockFn().mockResolvedValue(['testvideoid1', 'testvideoid2']),
+            connectToStream: createMockFn().mockResolvedValue(true),
+            getInnertubeInstanceCount: createMockFn().mockReturnValue(1),
             innertubeInstanceManager: {
-                getInstance: jest.fn().mockResolvedValue({}),
-                cleanup: jest.fn().mockResolvedValue(true)
+                getInstance: createMockFn().mockResolvedValue({}),
+                cleanup: createMockFn().mockResolvedValue(true)
             }
         };
     } else if (platformName === 'tiktok') {
@@ -2477,9 +2478,9 @@ const createMockPlatform = (platformName, behaviorConfig = {}) => {
         let cachedViewerCount = 100;
         
         platformSpecificMethods = {
-            getCachedViewerCount: jest.fn().mockImplementation(() => cachedViewerCount),
+            getCachedViewerCount: createMockFn().mockImplementation(() => cachedViewerCount),
             // Override processRoomUser to update cache
-            processRoomUser: jest.fn().mockImplementation((roomUserData) => {
+            processRoomUser: createMockFn().mockImplementation((roomUserData) => {
                 cachedViewerCount = roomUserData.viewerCount || 1847;
                 const timestamp = createTimestamp();
                 return {
@@ -2493,7 +2494,7 @@ const createMockPlatform = (platformName, behaviorConfig = {}) => {
                 };
             }),
             // Override processGift to return notification directly (not nested)
-            processGift: jest.fn().mockImplementation((giftData) => {
+            processGift: createMockFn().mockImplementation((giftData) => {
                 const normalizedUser = normalizeUserData(giftData);
                 const giftDetails = giftData.giftDetails || {};
                 const giftType = giftData.giftType || giftDetails.giftName || 'Rose';
@@ -2551,18 +2552,18 @@ const createMockSpamDetector = (behaviorOverrides = {}) => {
     };
 
     const baseMethods = {
-        handleDonationSpam: jest.fn().mockReturnValue({
+        handleDonationSpam: createMockFn().mockReturnValue({
             shouldShow: defaultBehavior.shouldShow,
             aggregatedMessage: defaultBehavior.aggregatedMessage
         }),
-        isLowValueDonation: jest.fn().mockReturnValue(defaultBehavior.isLowValue),
-        getStatistics: jest.fn().mockReturnValue({
+        isLowValueDonation: createMockFn().mockReturnValue(defaultBehavior.isLowValue),
+        getStatistics: createMockFn().mockReturnValue({
             totalMessages: 0,
             duplicates: 0,
             spamDetected: 0
         }),
-        resetTracking: jest.fn(),
-        destroy: jest.fn()
+        resetTracking: createMockFn(),
+        destroy: createMockFn()
     };
 
     return {
@@ -2584,34 +2585,34 @@ const createMockAuthManager = (state = 'READY', authOverrides = {}) => {
     };
 
     const baseMethods = {
-        getState: jest.fn().mockReturnValue(state),
-        getUserId: jest.fn().mockImplementation(() => {
+        getState: createMockFn().mockReturnValue(state),
+        getUserId: createMockFn().mockImplementation(() => {
             if (state !== 'READY') {
                 throw new Error('Authentication not initialized. Call initialize() first.');
             }
             return defaultAuthData.userId;
         }),
-        getAccessToken: jest.fn().mockImplementation(() => {
+        getAccessToken: createMockFn().mockImplementation(() => {
             if (state !== 'READY') {
                 return Promise.reject(new Error('Authentication not initialized. Call initialize() first.'));
             }
             return Promise.resolve(defaultAuthData.accessToken);
         }),
-        getScopes: jest.fn().mockImplementation(() => {
+        getScopes: createMockFn().mockImplementation(() => {
             if (state !== 'READY') {
                 return Promise.reject(new Error('Authentication not initialized. Call initialize() first.'));
             }
             return Promise.resolve(defaultAuthData.scopes);
         }),
-        initialize: jest.fn().mockImplementation(async () => {
+        initialize: createMockFn().mockImplementation(async () => {
             if (state === 'ERROR') {
                 throw new Error('Mock authentication initialization failed');
             }
             return state === 'READY';
         }),
-        updateConfig: jest.fn(),
-        getLastError: jest.fn().mockReturnValue(state === 'ERROR' ? new Error('Mock auth error') : null),
-        isReady: jest.fn().mockReturnValue(state === 'READY')
+        updateConfig: createMockFn(),
+        getLastError: createMockFn().mockReturnValue(state === 'ERROR' ? new Error('Mock auth error') : null),
+        isReady: createMockFn().mockReturnValue(state === 'READY')
     };
 
     return {
@@ -2628,14 +2629,14 @@ const createMockAuthManager = (state = 'READY', authOverrides = {}) => {
 
 const createMockTikTokPlatformDependencies = (behaviorOverrides = {}) => {
     // Mock TikTok WebSocket client with controlled behavior
-    const mockTikTokWebSocketClient = jest.fn().mockImplementation(() => {
+    const mockTikTokWebSocketClient = createMockFn().mockImplementation(() => {
         const mockConnection = {
-            connect: jest.fn().mockResolvedValue(true),
-            disconnect: jest.fn().mockResolvedValue(true),
-            on: jest.fn(),
-            off: jest.fn(),
-            removeAllListeners: jest.fn(),
-            getRoomInfo: jest.fn().mockResolvedValue({
+            connect: createMockFn().mockResolvedValue(true),
+            disconnect: createMockFn().mockResolvedValue(true),
+            on: createMockFn(),
+            off: createMockFn(),
+            removeAllListeners: createMockFn(),
+            getRoomInfo: createMockFn().mockResolvedValue({
                 room_id: '12345',
                 title: 'Test Room',
                 user_count: 100
@@ -2671,12 +2672,12 @@ const createMockTikTokPlatformDependencies = (behaviorOverrides = {}) => {
     };
 
     // Mock WebcastPushConnection with connection management
-    const mockWebcastPushConnection = jest.fn().mockImplementation(() => ({
-        connect: jest.fn().mockResolvedValue(true),
-        disconnect: jest.fn().mockResolvedValue(true),
-        getState: jest.fn().mockReturnValue('CONNECTED'),
-        on: jest.fn(),
-        off: jest.fn(),
+    const mockWebcastPushConnection = createMockFn().mockImplementation(() => ({
+        connect: createMockFn().mockResolvedValue(true),
+        disconnect: createMockFn().mockResolvedValue(true),
+        getState: createMockFn().mockReturnValue('CONNECTED'),
+        on: createMockFn(),
+        off: createMockFn(),
         ...behaviorOverrides.pushConnection
     }));
 
@@ -2700,37 +2701,37 @@ const createMockTikTokPlatformDependencies = (behaviorOverrides = {}) => {
 const createMockPlatformConnection = (handlerOverrides = {}) => {
     const baseHandlers = {
         // Chat handlers
-        processChatMessage: jest.fn().mockResolvedValue(true),
-        sendChatMessage: jest.fn().mockResolvedValue(true),
+        processChatMessage: createMockFn().mockResolvedValue(true),
+        sendChatMessage: createMockFn().mockResolvedValue(true),
         
         // Notification handlers
-        processGiftNotification: jest.fn().mockResolvedValue(true),
-        processFollowNotification: jest.fn().mockResolvedValue(true),
-        processSubscriptionNotification: jest.fn().mockResolvedValue(true),
+        processGiftNotification: createMockFn().mockResolvedValue(true),
+        processFollowNotification: createMockFn().mockResolvedValue(true),
+        processSubscriptionNotification: createMockFn().mockResolvedValue(true),
         
         // Viewer count handlers
-        getViewerCount: jest.fn().mockResolvedValue(100),
-        updateViewerCount: jest.fn().mockResolvedValue(true),
+        getViewerCount: createMockFn().mockResolvedValue(100),
+        updateViewerCount: createMockFn().mockResolvedValue(true),
         
         // Connection handlers
-        connect: jest.fn().mockResolvedValue(true),
-        disconnect: jest.fn().mockResolvedValue(true),
-        isConnected: jest.fn().mockReturnValue(true),
-        getConnectionState: jest.fn().mockReturnValue('connected'),
+        connect: createMockFn().mockResolvedValue(true),
+        disconnect: createMockFn().mockResolvedValue(true),
+        isConnected: createMockFn().mockReturnValue(true),
+        getConnectionState: createMockFn().mockReturnValue('connected'),
         
         // Platform-specific handlers
-        handleTikTokMessage: jest.fn().mockResolvedValue(true),
-        handleTwitchMessage: jest.fn().mockResolvedValue(true),
-        handleYouTubeMessage: jest.fn().mockResolvedValue(true),
+        handleTikTokMessage: createMockFn().mockResolvedValue(true),
+        handleTwitchMessage: createMockFn().mockResolvedValue(true),
+        handleYouTubeMessage: createMockFn().mockResolvedValue(true),
         
         // Permission and validation
-        checkPermissions: jest.fn().mockReturnValue(true),
-        validateMessage: jest.fn().mockReturnValue(true),
-        normalizeMessage: jest.fn().mockImplementation(msg => msg),
+        checkPermissions: createMockFn().mockReturnValue(true),
+        validateMessage: createMockFn().mockReturnValue(true),
+        normalizeMessage: createMockFn().mockImplementation(msg => msg),
         
         // Performance and optimization
-        handleRapidMessages: jest.fn().mockResolvedValue(true),
-        handleConcurrentOperations: jest.fn().mockResolvedValue(true)
+        handleRapidMessages: createMockFn().mockResolvedValue(true),
+        handleConcurrentOperations: createMockFn().mockResolvedValue(true)
     };
 
     return {
@@ -2762,31 +2763,31 @@ const createMockAuthService = (options = {}) => {
         logger: options.logger || createMockLogger(),
         
         // Delegate to centralized TokenValidationService
-        validateToken: jest.fn().mockImplementation(async (token) => {
+        validateToken: createMockFn().mockImplementation(async (token) => {
             return TokenValidationService.validateToken(token);
         }),
         
-        isPlaceholderToken: jest.fn().mockImplementation(async (token) => {
+        isPlaceholderToken: createMockFn().mockImplementation(async (token) => {
             return TokenValidationService.isPlaceholderToken(token);
         }),
         
-        validateTokenFormat: jest.fn().mockImplementation(async (token) => {
+        validateTokenFormat: createMockFn().mockImplementation(async (token) => {
             return TokenValidationService.validateTokenFormat(token);
         }),
         
-        checkTokenExpiration: jest.fn().mockImplementation(async (token) => {
+        checkTokenExpiration: createMockFn().mockImplementation(async (token) => {
             return TokenValidationService.checkTokenExpiration(token);
         }),
         
-        getValidationCriteria: jest.fn().mockImplementation(async (token) => {
+        getValidationCriteria: createMockFn().mockImplementation(async (token) => {
             return TokenValidationService.getValidationCriteria(token);
         }),
         
-        performComprehensiveValidation: jest.fn().mockImplementation(async (token) => {
+        performComprehensiveValidation: createMockFn().mockImplementation(async (token) => {
             return TokenValidationService.performComprehensiveValidation(token);
         }),
         
-        getValidationImplementationInfo: jest.fn().mockImplementation(async () => {
+        getValidationImplementationInfo: createMockFn().mockImplementation(async () => {
             return TokenValidationService.getValidationImplementationInfo();
         }),
         
@@ -2808,7 +2809,7 @@ const createHttpMethods = (options = {}) => {
     
     return {
         // HTTP Request Headers - Consistent across all components
-        getRequestHeaders: jest.fn().mockImplementation(async (endpoint, operation) => {
+        getRequestHeaders: createMockFn().mockImplementation(async (endpoint, operation) => {
             return {
                 standardHeaders,
                 authHeaders: operation !== 'token_refresh' ? authHeaders : {},
@@ -2817,7 +2818,7 @@ const createHttpMethods = (options = {}) => {
         }),
         
         // HTTP Timeout Configuration - Unified across components
-        getTimeoutConfig: jest.fn().mockImplementation(async (operation) => {
+        getTimeoutConfig: createMockFn().mockImplementation(async (operation) => {
             const timeoutMap = {
                 'token_validation': { requestTimeout: 10000, retryTimeout: 15000 },
                 'token_refresh': { requestTimeout: 30000, retryTimeout: 45000 },
@@ -2828,7 +2829,7 @@ const createHttpMethods = (options = {}) => {
         }),
         
         // HTTP Retry Configuration - Consistent across components
-        getRetryConfig: jest.fn().mockImplementation(async (errorType) => {
+        getRetryConfig: createMockFn().mockImplementation(async (errorType) => {
             const retryMap = {
                 'network_timeout': { maxRetries: 3, backoffMultiplier: 2 },
                 'rate_limit': { maxRetries: 5, backoffMultiplier: 1.5 },
@@ -2839,7 +2840,7 @@ const createHttpMethods = (options = {}) => {
         }),
         
         // HTTP Response Status Handling - Unified behavior
-        handleResponseStatus: jest.fn().mockImplementation(async (response) => {
+        handleResponseStatus: createMockFn().mockImplementation(async (response) => {
             const statusCategories = {
                 200: { category: 'success', shouldRetry: false },
                 401: { category: 'auth_error', shouldRetry: false },
@@ -2852,7 +2853,7 @@ const createHttpMethods = (options = {}) => {
         }),
         
         // HTTP Response Data Parsing - Consistent patterns
-        parseResponseData: jest.fn().mockImplementation(async (response, format) => {
+        parseResponseData: createMockFn().mockImplementation(async (response, format) => {
             const formatMappings = {
                 'token_response': {
                     parsedFields: ['access_token', 'expires_in'],
@@ -2881,7 +2882,7 @@ const createHttpMethods = (options = {}) => {
         }),
         
         // Network Error Handling - Unified across components
-        handleNetworkError: jest.fn().mockImplementation(async (error) => {
+        handleNetworkError: createMockFn().mockImplementation(async (error) => {
             const errorMappings = {
                 'ECONNREFUSED': {
                     category: 'connection_refused',
@@ -2904,7 +2905,7 @@ const createHttpMethods = (options = {}) => {
         }),
         
         // Request Cancellation Handling - Consistent behavior
-        handleRequestCancellation: jest.fn().mockImplementation(async (reason) => {
+        handleRequestCancellation: createMockFn().mockImplementation(async (reason) => {
             const cancellationMessages = {
                 'user_initiated': 'Request cancelled by user',
                 'timeout_exceeded': 'Request cancelled due to timeout',
@@ -2918,7 +2919,7 @@ const createHttpMethods = (options = {}) => {
         }),
         
         // Request Lifecycle Management - Unified patterns
-        handleLifecycleEvent: jest.fn().mockImplementation(async (event) => {
+        handleLifecycleEvent: createMockFn().mockImplementation(async (event) => {
             // Use a shared timing mechanism for consistency across all mock components
             const mockTime = options._sharedTiming ?? createTimestamp().ms;
             
@@ -2941,7 +2942,7 @@ const createHttpMethods = (options = {}) => {
         }),
         
         // Request Priority and Queuing - Consistent across components
-        queueRequest: jest.fn().mockImplementation(async (requestType) => {
+        queueRequest: createMockFn().mockImplementation(async (requestType) => {
             const priorityMappings = {
                 'token_validation': { priority: 'high', queuePosition: 1 },
                 'user_data_fetch': { priority: 'medium', queuePosition: 2 },
@@ -2952,7 +2953,7 @@ const createHttpMethods = (options = {}) => {
         }),
         
         // Centralized HTTP Operations - Single source of truth
-        performHttpOperation: jest.fn().mockImplementation(async (operation) => {
+        performHttpOperation: createMockFn().mockImplementation(async (operation) => {
             return {
                 operationSource: 'centralized_http_client',
                 hasDuplicateLogic: false,
@@ -2962,7 +2963,7 @@ const createHttpMethods = (options = {}) => {
         }),
         
         // Unified Request Builder - Consistent request building
-        buildRequest: jest.fn().mockImplementation(async (requestSpec) => {
+        buildRequest: createMockFn().mockImplementation(async (requestSpec) => {
             const builtRequest = {
                 url: `https://api.twitch.tv${requestSpec.endpoint}`,
                 headers: { ...standardHeaders, ...(requestSpec.authentication ? authHeaders : {}) },
@@ -2991,33 +2992,33 @@ const createMockTokenRefresh = (options = {}) => {
         fileSystem: options.fileSystem || createMockFileSystem(),
 
         // Mock validation methods
-        validateToken: jest.fn().mockResolvedValue(true),
-        isPlaceholderToken: jest.fn().mockResolvedValue(false),
-        validateTokenFormat: jest.fn().mockResolvedValue(true),
-        checkTokenExpiration: jest.fn().mockResolvedValue(false),
-        getValidationCriteria: jest.fn().mockResolvedValue({}),
-        performComprehensiveValidation: jest.fn().mockResolvedValue({ valid: true }),
-        getValidationImplementationInfo: jest.fn().mockResolvedValue({ type: 'mock' }),
+        validateToken: createMockFn().mockResolvedValue(true),
+        isPlaceholderToken: createMockFn().mockResolvedValue(false),
+        validateTokenFormat: createMockFn().mockResolvedValue(true),
+        checkTokenExpiration: createMockFn().mockResolvedValue(false),
+        getValidationCriteria: createMockFn().mockResolvedValue({}),
+        performComprehensiveValidation: createMockFn().mockResolvedValue({ valid: true }),
+        getValidationImplementationInfo: createMockFn().mockResolvedValue({ type: 'mock' }),
 
         // Mock configuration methods
-        updateConfig: jest.fn().mockResolvedValue({
+        updateConfig: createMockFn().mockResolvedValue({
             success: true,
             updatePattern: 'unified_token_update',
             updateSteps: ['validate_input', 'backup_current_config', 'apply_updates', 'verify_changes'],
             userExperience: 'consistent_update_flow',
             implementationType: 'delegated_to_central'
         }),
-        validateConfiguration: jest.fn().mockResolvedValue(true),
-        updateTokens: jest.fn().mockResolvedValue(true),
-        validateConfigData: jest.fn().mockResolvedValue(true),
-        updateWithBackup: jest.fn().mockResolvedValue(true),
-        handleConfigUpdateError: jest.fn().mockResolvedValue({ handled: true }),
-        attemptUpdateWithRollback: jest.fn().mockResolvedValue(true),
-        getErrorRecoveryGuidance: jest.fn().mockResolvedValue({ guidance: 'retry' }),
-        performStateChange: jest.fn().mockResolvedValue(true),
-        getSynchronizedConfig: jest.fn().mockResolvedValue({}),
-        performConfigOperation: jest.fn().mockResolvedValue(true),
-        getCurrentState: jest.fn().mockResolvedValue({}),
+        validateConfiguration: createMockFn().mockResolvedValue(true),
+        updateTokens: createMockFn().mockResolvedValue(true),
+        validateConfigData: createMockFn().mockResolvedValue(true),
+        updateWithBackup: createMockFn().mockResolvedValue(true),
+        handleConfigUpdateError: createMockFn().mockResolvedValue({ handled: true }),
+        attemptUpdateWithRollback: createMockFn().mockResolvedValue(true),
+        getErrorRecoveryGuidance: createMockFn().mockResolvedValue({ guidance: 'retry' }),
+        performStateChange: createMockFn().mockResolvedValue(true),
+        getSynchronizedConfig: createMockFn().mockResolvedValue({}),
+        performConfigOperation: createMockFn().mockResolvedValue(true),
+        getCurrentState: createMockFn().mockResolvedValue({}),
 
         // HTTP Request Methods - Consistent across all auth components
         ...createHttpMethods(options),
@@ -3036,13 +3037,13 @@ const createMockAuthInitializer = (options = {}) => {
         logger: options.logger || createMockLogger(),
 
         // Mock validation methods
-        validateToken: jest.fn().mockResolvedValue(true),
-        isPlaceholderToken: jest.fn().mockResolvedValue(false),
-        validateTokenFormat: jest.fn().mockResolvedValue(true),
-        checkTokenExpiration: jest.fn().mockResolvedValue(false),
-        getValidationCriteria: jest.fn().mockResolvedValue({}),
-        performComprehensiveValidation: jest.fn().mockResolvedValue({ valid: true }),
-        getValidationImplementationInfo: jest.fn().mockResolvedValue({ type: 'mock' }),
+        validateToken: createMockFn().mockResolvedValue(true),
+        isPlaceholderToken: createMockFn().mockResolvedValue(false),
+        validateTokenFormat: createMockFn().mockResolvedValue(true),
+        checkTokenExpiration: createMockFn().mockResolvedValue(false),
+        getValidationCriteria: createMockFn().mockResolvedValue({}),
+        performComprehensiveValidation: createMockFn().mockResolvedValue({ valid: true }),
+        getValidationImplementationInfo: createMockFn().mockResolvedValue({ type: 'mock' }),
 
         // HTTP Request Methods - Consistent across all auth components
         ...createHttpMethods(options),
@@ -3062,43 +3063,43 @@ const createMockOAuthHandler = (options = {}) => {
         fileSystem: options.fileSystem || createMockFileSystem(),
 
         // Mock configuration methods
-        updateConfig: jest.fn().mockResolvedValue({
+        updateConfig: createMockFn().mockResolvedValue({
             success: true,
             updatePattern: 'unified_token_update',
             updateSteps: ['validate_input', 'backup_current_config', 'apply_updates', 'verify_changes'],
             userExperience: 'consistent_update_flow',
             implementationType: 'delegated_to_central'
         }),
-        validateConfiguration: jest.fn().mockResolvedValue(true),
-        updateConfiguration: jest.fn().mockResolvedValue({
+        validateConfiguration: createMockFn().mockResolvedValue(true),
+        updateConfiguration: createMockFn().mockResolvedValue({
             success: true,
             updatePattern: 'unified_token_update',
             updateSteps: ['validate_input', 'backup_current_config', 'apply_updates', 'verify_changes'],
             userExperience: 'consistent_update_flow',
             implementationType: 'delegated_to_central'
         }),
-        createBackup: jest.fn().mockResolvedValue(true),
-        rollbackConfiguration: jest.fn().mockResolvedValue(true),
-        handleFileSystemError: jest.fn().mockReturnValue({ handled: true }),
-        maintainConfigurationState: jest.fn().mockResolvedValue(true),
-        synchronizeConfigurationChanges: jest.fn().mockResolvedValue(true),
+        createBackup: createMockFn().mockResolvedValue(true),
+        rollbackConfiguration: createMockFn().mockResolvedValue(true),
+        handleFileSystemError: createMockFn().mockReturnValue({ handled: true }),
+        maintainConfigurationState: createMockFn().mockResolvedValue(true),
+        synchronizeConfigurationChanges: createMockFn().mockResolvedValue(true),
 
         // Mock error handling methods
-        categorizeError: jest.fn().mockReturnValue({ category: 'recoverable' }),
-        attemptRecovery: jest.fn().mockResolvedValue({ recovered: true }),
-        getImplementationInfo: jest.fn().mockReturnValue({ type: 'mock' }),
+        categorizeError: createMockFn().mockReturnValue({ category: 'recoverable' }),
+        attemptRecovery: createMockFn().mockResolvedValue({ recovered: true }),
+        getImplementationInfo: createMockFn().mockReturnValue({ type: 'mock' }),
 
         // Mock additional methods
-        validateConfigData: jest.fn().mockResolvedValue(true),
-        updateWithBackup: jest.fn().mockResolvedValue(true),
-        handleConfigUpdateError: jest.fn().mockResolvedValue({ handled: true }),
-        attemptUpdateWithRollback: jest.fn().mockResolvedValue(true),
-        getErrorRecoveryGuidance: jest.fn().mockResolvedValue({ guidance: 'retry' }),
-        performStateChange: jest.fn().mockResolvedValue(true),
-        getSynchronizedConfig: jest.fn().mockResolvedValue({}),
-        performConfigOperation: jest.fn().mockResolvedValue(true),
-        performComprehensiveValidation: jest.fn().mockResolvedValue({ valid: true }),
-        getCurrentState: jest.fn().mockResolvedValue({}),
+        validateConfigData: createMockFn().mockResolvedValue(true),
+        updateWithBackup: createMockFn().mockResolvedValue(true),
+        handleConfigUpdateError: createMockFn().mockResolvedValue({ handled: true }),
+        attemptUpdateWithRollback: createMockFn().mockResolvedValue(true),
+        getErrorRecoveryGuidance: createMockFn().mockResolvedValue({ guidance: 'retry' }),
+        performStateChange: createMockFn().mockResolvedValue(true),
+        getSynchronizedConfig: createMockFn().mockResolvedValue({}),
+        performConfigOperation: createMockFn().mockResolvedValue(true),
+        performComprehensiveValidation: createMockFn().mockResolvedValue({ valid: true }),
+        getCurrentState: createMockFn().mockResolvedValue({}),
 
         // HTTP Request Methods - Consistent across all auth components
         ...createHttpMethods(options),
@@ -3116,7 +3117,7 @@ const createMockHttpClient = (options = {}) => {
             clientSecret: 'test-client-secret'
         },
         logger: options.logger || createMockLogger(),
-        axios: options.axios || { request: jest.fn(), get: jest.fn(), post: jest.fn() },
+        axios: options.axios || { request: createMockFn(), get: createMockFn(), post: createMockFn() },
         
         // HTTP Request Methods - Consistent across all auth components
         ...createHttpMethods(options),

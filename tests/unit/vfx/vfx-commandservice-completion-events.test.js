@@ -1,20 +1,29 @@
+const { describe, test, expect, beforeEach, it } = require('bun:test');
+const { createMockFn, restoreAllMocks } = require('../../helpers/bun-mock-utils');
+const { mockModule, resetModules, restoreAllModuleMocks } = require('../../helpers/bun-module-mocks');
+
 const { initializeTestLogging } = require('../../helpers/test-setup');
 const { PlatformEvents } = require('../../../src/interfaces/PlatformEvents');
 
 initializeTestLogging();
 
-jest.mock('../../../src/chat/commands', () => ({
-    CommandParser: jest.fn(),
-    runCommand: jest.fn().mockResolvedValue()
+mockModule('../../../src/chat/commands', () => ({
+    CommandParser: createMockFn(),
+    runCommand: createMockFn().mockResolvedValue()
 }));
 
 describe('VFXCommandService completion events', () => {
+    afterEach(() => {
+        restoreAllMocks();
+        restoreAllModuleMocks();
+    });
+
     let VFXCommandService;
     let eventBus;
     let recordedEvents;
 
     beforeEach(() => {
-        jest.resetModules();
+        resetModules();
         recordedEvents = [];
         eventBus = {
             emit: (name, payload) => recordedEvents.push({ name, payload })
@@ -25,7 +34,7 @@ describe('VFXCommandService completion events', () => {
 
     it('emits both executed and effect-completed with enriched payload', async () => {
         const configService = {
-            get: jest.fn((section, key) => {
+            get: createMockFn((section, key) => {
                 if (section === 'commands') return { greetings: '!hello' };
                 if (section === 'farewell') return {};
                 if (section === 'vfx' && key === 'filePath') return '/tmp';
@@ -34,7 +43,7 @@ describe('VFXCommandService completion events', () => {
                 if (section === 'general' && key === 'globalCmdCooldownMs') return 60000;
                 return undefined;
             }),
-            getCommand: jest.fn(() => '!hello')
+            getCommand: createMockFn(() => '!hello')
         };
         const service = new VFXCommandService(configService, eventBus);
 
@@ -47,7 +56,7 @@ describe('VFXCommandService completion events', () => {
             duration: 5000
         };
 
-        service.selectVFXCommand = jest.fn().mockResolvedValue(vfxConfig);
+        service.selectVFXCommand = createMockFn().mockResolvedValue(vfxConfig);
 
         await service.executeCommand('!hello', {
             username: 'Viewer',

@@ -1,20 +1,24 @@
 
-jest.mock('../../src/core/logging', () => ({
-    setConfigValidator: jest.fn(),
-    setDebugMode: jest.fn(),
-    initializeLoggingConfig: jest.fn(),
-    initializeConsoleOverride: jest.fn(),
+const { describe, test, expect, jest } = require('bun:test');
+const { createMockFn, restoreAllMocks } = require('../helpers/bun-mock-utils');
+const { mockModule, restoreAllModuleMocks } = require('../helpers/bun-module-mocks');
+
+mockModule('../../src/core/logging', () => ({
+    setConfigValidator: createMockFn(),
+    setDebugMode: createMockFn(),
+    initializeLoggingConfig: createMockFn(),
+    initializeConsoleOverride: createMockFn(),
     logger: {
-        info: jest.fn(),
-        warn: jest.fn(),
-        error: jest.fn(),
-        debug: jest.fn()
+        info: createMockFn(),
+        warn: createMockFn(),
+        error: createMockFn(),
+        debug: createMockFn()
     },
-    getLogger: jest.fn(() => ({
-        info: jest.fn(),
-        warn: jest.fn(),
-        error: jest.fn(),
-        debug: jest.fn()
+    getLogger: createMockFn(() => ({
+        info: createMockFn(),
+        warn: createMockFn(),
+        error: createMockFn(),
+        debug: createMockFn()
     }))
 }));
 
@@ -32,11 +36,16 @@ setupAutomatedCleanup({
 });
 
 describe('SuperSticker Notification Handling', () => {
+    afterEach(() => {
+        restoreAllMocks();
+        restoreAllModuleMocks();
+    });
+
     jest.setTimeout(TEST_TIMEOUTS.UNIT);
 
     test('routes SuperSticker payloads through handleGiftNotification', async () => {
         const notificationManager = createMockNotificationManager({
-            handleNotification: jest.fn().mockResolvedValue(true)
+            handleNotification: createMockFn().mockResolvedValue(true)
         });
 
         const { runtime } = createTestAppRuntime({

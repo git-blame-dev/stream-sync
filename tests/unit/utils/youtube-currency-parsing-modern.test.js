@@ -1,4 +1,8 @@
 
+const { describe, test, expect, beforeEach, it } = require('bun:test');
+const { createMockFn, restoreAllMocks } = require('../../helpers/bun-mock-utils');
+const { resetModules, restoreAllModuleMocks } = require('../../helpers/bun-module-mocks');
+
 const { getSyntheticFixture } = require('../../helpers/platform-test-data');
 const testClock = require('../../helpers/test-clock');
 
@@ -7,17 +11,22 @@ const realSuperChat = getSyntheticFixture('youtube', 'superchat');
 const realSuperChatINR = getSyntheticFixture('youtube', 'superchat-international');
 
 describe('YouTube Currency Parsing - Modern (Production Data)', () => {
+    afterEach(() => {
+        restoreAllMocks();
+        restoreAllModuleMocks();
+    });
+
     let YouTubeCurrencyParser;
 
     beforeEach(() => {
-        jest.resetModules();
+        resetModules();
         YouTubeCurrencyParser = require('../../../src/utils/youtubei-currency-parser');
     });
 
     describe('Real Production Formats', () => {
         it('parses Australian dollar from SuperSticker', () => {
             const parser = new YouTubeCurrencyParser.YouTubeiCurrencyParser({
-                logger: { debug: jest.fn(), warn: jest.fn(), error: jest.fn() }
+                logger: { debug: createMockFn(), warn: createMockFn(), error: createMockFn() }
             });
 
             // Real production data: "A$7.99"
@@ -31,7 +40,7 @@ describe('YouTube Currency Parsing - Modern (Production Data)', () => {
 
         it('parses US dollar from SuperChat', () => {
             const parser = new YouTubeCurrencyParser.YouTubeiCurrencyParser({
-                logger: { debug: jest.fn(), warn: jest.fn(), error: jest.fn() }
+                logger: { debug: createMockFn(), warn: createMockFn(), error: createMockFn() }
             });
 
             // Real production data: "$25.00"
@@ -45,7 +54,7 @@ describe('YouTube Currency Parsing - Modern (Production Data)', () => {
 
         it('parses Indian rupee from SuperChat', () => {
             const parser = new YouTubeCurrencyParser.YouTubeiCurrencyParser({
-                logger: { debug: jest.fn(), warn: jest.fn(), error: jest.fn() }
+                logger: { debug: createMockFn(), warn: createMockFn(), error: createMockFn() }
             });
 
             // Real production data: "₹199"
@@ -63,7 +72,7 @@ describe('YouTube Currency Parsing - Modern (Production Data)', () => {
 
         beforeEach(() => {
             parser = new YouTubeCurrencyParser.YouTubeiCurrencyParser({
-                logger: { debug: jest.fn(), warn: jest.fn(), error: jest.fn() }
+                logger: { debug: createMockFn(), warn: createMockFn(), error: createMockFn() }
             });
         });
 
@@ -117,7 +126,7 @@ describe('YouTube Currency Parsing - Modern (Production Data)', () => {
 
         beforeEach(() => {
             parser = new YouTubeCurrencyParser.YouTubeiCurrencyParser({
-                logger: { debug: jest.fn(), warn: jest.fn(), error: jest.fn() }
+                logger: { debug: createMockFn(), warn: createMockFn(), error: createMockFn() }
             });
         });
 
@@ -157,7 +166,7 @@ describe('YouTube Currency Parsing - Modern (Production Data)', () => {
         });
 
         it('fails gracefully on negative amounts', () => {
-            const logger = { debug: jest.fn(), warn: jest.fn(), error: jest.fn() };
+            const logger = { debug: createMockFn(), warn: createMockFn(), error: createMockFn() };
             const negativeParser = new YouTubeCurrencyParser.YouTubeiCurrencyParser({ logger });
 
             const result = negativeParser.parse('-$5.00');
@@ -167,7 +176,7 @@ describe('YouTube Currency Parsing - Modern (Production Data)', () => {
         });
 
         it('logs and rejects trailing-symbol formats', () => {
-            const logger = { debug: jest.fn(), warn: jest.fn(), error: jest.fn() };
+            const logger = { debug: createMockFn(), warn: createMockFn(), error: createMockFn() };
             const trailingParser = new YouTubeCurrencyParser.YouTubeiCurrencyParser({ logger });
 
             const result = trailingParser.parse('10€');
@@ -181,7 +190,7 @@ describe('YouTube Currency Parsing - Modern (Production Data)', () => {
     describe('Performance', () => {
         it('parses currency in under 50ms for 1000 iterations', () => {
             const parser = new YouTubeCurrencyParser.YouTubeiCurrencyParser({
-                logger: { debug: jest.fn(), warn: jest.fn(), error: jest.fn() }
+                logger: { debug: createMockFn(), warn: createMockFn(), error: createMockFn() }
             });
 
             const start = testClock.now();

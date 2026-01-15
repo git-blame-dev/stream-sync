@@ -1,25 +1,29 @@
+const { describe, test, expect, afterEach } = require('bun:test');
+const { createMockFn, restoreAllMocks } = require('../../helpers/bun-mock-utils');
+const { mockModule, resetModules, restoreAllModuleMocks } = require('../../helpers/bun-module-mocks');
+
 describe('EnhancedHttpClient behavior', () => {
     const createLogger = () => ({
-        debug: jest.fn(),
-        info: jest.fn(),
-        warn: jest.fn(),
-        error: jest.fn()
+        debug: createMockFn(),
+        info: createMockFn(),
+        warn: createMockFn(),
+        error: createMockFn()
     });
 
     afterEach(() => {
-        jest.resetModules();
-        jest.restoreAllMocks();
-    });
+restoreAllMocks();
+    
+        restoreAllModuleMocks();});
 
     test('rotates user agents and uses streaming timeout when auth constants are available', () => {
-        jest.doMock('../../../src/utils/auth-constants', () => ({
+        mockModule('../../../src/utils/auth-constants', () => ({
             AuthConstants: {
-                determineOperationCriticality: jest.fn(() => 'critical'),
-                getStreamingOptimizedTimeout: jest.fn(() => 1234)
+                determineOperationCriticality: createMockFn(() => 'critical'),
+                getStreamingOptimizedTimeout: createMockFn(() => 1234)
             }
         }));
 
-        const axios = { get: jest.fn().mockResolvedValue({ status: 200 }) };
+        const axios = { get: createMockFn().mockResolvedValue({ status: 200 }) };
         const logger = createLogger();
 
         let EnhancedHttpClient;
@@ -39,11 +43,11 @@ describe('EnhancedHttpClient behavior', () => {
     });
 
     test('falls back to default timeout when auth constants cannot be loaded', () => {
-        jest.doMock('../../../src/utils/auth-constants', () => {
+        mockModule('../../../src/utils/auth-constants', () => {
             throw new Error('auth constants missing');
         });
 
-        const axios = { get: jest.fn().mockResolvedValue({ status: 200 }) };
+        const axios = { get: createMockFn().mockResolvedValue({ status: 200 }) };
         const logger = createLogger();
 
         let EnhancedHttpClient;
@@ -59,12 +63,12 @@ describe('EnhancedHttpClient behavior', () => {
     });
 
     test('wraps requests with retry system when platform is provided', async () => {
-        const axios = { get: jest.fn().mockResolvedValue({ status: 204 }) };
+        const axios = { get: createMockFn().mockResolvedValue({ status: 204 }) };
         const logger = createLogger();
         let executedThroughRetry = false;
 
         const retrySystem = {
-            executeWithRetry: jest.fn(async (_platform, handler) => {
+            executeWithRetry: createMockFn(async (_platform, handler) => {
                 executedThroughRetry = true;
                 return handler();
             })
@@ -80,10 +84,10 @@ describe('EnhancedHttpClient behavior', () => {
     });
 
     test('respects disableRetry and surfaces request errors with logging', async () => {
-        const axios = { get: jest.fn().mockRejectedValue(new Error('boom')) };
+        const axios = { get: createMockFn().mockRejectedValue(new Error('boom')) };
         const logger = createLogger();
         const retrySystem = {
-            executeWithRetry: jest.fn(async (_platform, handler) => handler())
+            executeWithRetry: createMockFn(async (_platform, handler) => handler())
         };
 
         const { EnhancedHttpClient } = require('../../../src/utils/enhanced-http-client');
@@ -99,7 +103,7 @@ describe('EnhancedHttpClient behavior', () => {
         let postedBody;
         let postedConfig;
         const axios = {
-            post: jest.fn(async (_url, body, config) => {
+            post: createMockFn(async (_url, body, config) => {
                 postedBody = body;
                 postedConfig = config;
                 return { status: 201 };
@@ -121,7 +125,7 @@ describe('EnhancedHttpClient behavior', () => {
     });
 
     test('returns false when reachability check fails', async () => {
-        const axios = { get: jest.fn().mockRejectedValue(new Error('network')) };
+        const axios = { get: createMockFn().mockRejectedValue(new Error('network')) };
         const logger = createLogger();
         const { EnhancedHttpClient } = require('../../../src/utils/enhanced-http-client');
         const client = new EnhancedHttpClient({ axios, logger });

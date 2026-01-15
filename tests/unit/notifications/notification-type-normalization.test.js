@@ -1,6 +1,13 @@
+const { describe, test, expect, beforeEach, it } = require('bun:test');
+const { createMockFn, restoreAllMocks } = require('../../helpers/bun-mock-utils');
+
 const NotificationManager = require('../../../src/notifications/NotificationManager');
 
 describe('Notification type normalization', () => {
+    afterEach(() => {
+        restoreAllMocks();
+    });
+
     let items;
     let notificationManager;
 
@@ -15,8 +22,8 @@ describe('Notification type normalization', () => {
         };
 
         const eventBus = {
-            emit: jest.fn(),
-            subscribe: jest.fn(() => () => {})
+            emit: createMockFn(),
+            subscribe: createMockFn(() => () => {})
         };
 
         const configService = {
@@ -39,15 +46,15 @@ describe('Notification type normalization', () => {
         };
 
         notificationManager = new NotificationManager({
-            logger: { debug: jest.fn(), info: jest.fn(), warn: jest.fn(), error: jest.fn() },
+            logger: { debug: createMockFn(), info: createMockFn(), warn: createMockFn(), error: createMockFn() },
             displayQueue,
             eventBus,
             constants: require('../../../src/core/constants'),
-            textProcessing: { formatChatMessage: jest.fn() },
-            obsGoals: { processDonationGoal: jest.fn() },
+            textProcessing: { formatChatMessage: createMockFn() },
+            obsGoals: { processDonationGoal: createMockFn() },
             configService,
-            vfxCommandService: { getVFXConfig: jest.fn().mockResolvedValue(null) },
-            ttsService: { speak: jest.fn() }
+            vfxCommandService: { getVFXConfig: createMockFn().mockResolvedValue(null) },
+            ttsService: { speak: createMockFn() }
         });
     });
 

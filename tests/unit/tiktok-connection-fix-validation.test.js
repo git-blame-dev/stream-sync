@@ -1,4 +1,8 @@
 
+const { describe, test, expect, beforeEach, afterEach, it } = require('bun:test');
+const { createMockFn, restoreAllMocks } = require('../helpers/bun-mock-utils');
+const { mockModule, unmockModule, restoreAllModuleMocks } = require('../helpers/bun-module-mocks');
+
 const { initializeTestLogging, createTestUser, TEST_TIMEOUTS } = require('../helpers/test-setup');
 const { createMockLogger, createMockConfig } = require('../helpers/mock-factories');
 const { setupAutomatedCleanup } = require('../helpers/mock-lifecycle');
@@ -13,23 +17,23 @@ setupAutomatedCleanup({
 });
 
 // Unmock the TikTok platform to test the real implementation
-jest.unmock('../../src/platforms/tiktok');
+unmockModule('../../src/platforms/tiktok');
 
 // Mock logger utils to return our mock logger
-jest.mock('../../src/utils/logger-utils', () => ({
-    getLazyLogger: jest.fn(),
-    getLazyUnifiedLogger: jest.fn(),
+mockModule('../../src/utils/logger-utils', () => ({
+    getLazyLogger: createMockFn(),
+    getLazyUnifiedLogger: createMockFn(),
     createNoopLogger: () => ({
-        error: jest.fn(),
-        debug: jest.fn(),
-        info: jest.fn(),
-        warn: jest.fn()
+        error: createMockFn(),
+        debug: createMockFn(),
+        info: createMockFn(),
+        warn: createMockFn()
     }),
     getLoggerOrNoop: (logger) => logger || ({
-        error: jest.fn(),
-        debug: jest.fn(),
-        info: jest.fn(),
-        warn: jest.fn()
+        error: createMockFn(),
+        debug: createMockFn(),
+        info: createMockFn(),
+        warn: createMockFn()
     })
 }));
 
@@ -47,13 +51,13 @@ describe('TikTok Connection Fix Validation - Solution C', () => {
 
         // Mock TikTok Live Connector with proper connection state simulation
         mockConnection = {
-            fetchIsLive: jest.fn().mockResolvedValue(true),
-            waitUntilLive: jest.fn().mockResolvedValue(),
-            connect: jest.fn().mockResolvedValue(),
-            disconnect: jest.fn().mockResolvedValue(),
-            removeAllListeners: jest.fn(),
-            on: jest.fn(),
-            getState: jest.fn().mockReturnValue({ isConnected: false })
+            fetchIsLive: createMockFn().mockResolvedValue(true),
+            waitUntilLive: createMockFn().mockResolvedValue(),
+            connect: createMockFn().mockResolvedValue(),
+            disconnect: createMockFn().mockResolvedValue(),
+            removeAllListeners: createMockFn(),
+            on: createMockFn(),
+            getState: createMockFn().mockReturnValue({ isConnected: false })
         };
 
         // Import the actual TikTok platform for testing
@@ -61,8 +65,8 @@ describe('TikTok Connection Fix Validation - Solution C', () => {
         
         // Mock dependencies
         mockDependencies = {
-            TikTokWebSocketClient: jest.fn().mockImplementation(() => mockConnection),
-            WebcastPushConnection: jest.fn(),
+            TikTokWebSocketClient: createMockFn().mockImplementation(() => mockConnection),
+            WebcastPushConnection: createMockFn(),
             WebcastEvent: {
                 CHAT: 'chat',
                 GIFT: 'gift',
@@ -73,12 +77,12 @@ describe('TikTok Connection Fix Validation - Solution C', () => {
             },
             ControlEvent: {},
             retrySystem: {
-                executeWithRetry: jest.fn().mockImplementation(async (fn) => await fn()),
-                handleConnectionError: jest.fn(),
-                handleConnectionSuccess: jest.fn(),
-                resetRetryCount: jest.fn(),
-                incrementRetryCount: jest.fn(),
-                extractErrorMessage: jest.fn().mockImplementation(err => err?.message || 'Unknown error')
+                executeWithRetry: createMockFn().mockImplementation(async (fn) => await fn()),
+                handleConnectionError: createMockFn(),
+                handleConnectionSuccess: createMockFn(),
+                resetRetryCount: createMockFn(),
+                incrementRetryCount: createMockFn(),
+                extractErrorMessage: createMockFn().mockImplementation(err => err?.message || 'Unknown error')
             },
             constants: {
                 GRACE_PERIODS: { TIKTOK: 5000 }
@@ -94,14 +98,15 @@ describe('TikTok Connection Fix Validation - Solution C', () => {
     });
 
     afterEach(() => {
-        jest.restoreAllMocks();
-    });
+        restoreAllMocks();
+    
+        restoreAllModuleMocks();});
 
     describe('Solution C Implementation Validation', () => {
         it('should prevent null pointer exceptions when connection is null', async () => {
             const platform = new TikTokPlatform(mockConfig, mockDependencies);
             
-            platform.checkConnectionPrerequisites = jest.fn().mockReturnValue({
+            platform.checkConnectionPrerequisites = createMockFn().mockReturnValue({
                 canConnect: true,
                 reason: 'All prerequisites met'
             });
@@ -119,7 +124,7 @@ describe('TikTok Connection Fix Validation - Solution C', () => {
         it('should handle connection cleanup and recreation gracefully', async () => {
             const platform = new TikTokPlatform(mockConfig, mockDependencies);
             
-            platform.checkConnectionPrerequisites = jest.fn().mockReturnValue({
+            platform.checkConnectionPrerequisites = createMockFn().mockReturnValue({
                 canConnect: true,
                 reason: 'All prerequisites met'
             });

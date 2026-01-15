@@ -1,5 +1,14 @@
 
+const { describe, test, expect, beforeEach, it } = require('bun:test');
+const { createMockFn, clearAllMocks, restoreAllMocks } = require('../helpers/bun-mock-utils');
+const { mockModule, resetModules, restoreAllModuleMocks } = require('../helpers/bun-module-mocks');
+
 describe('OBS Startup Display Clearing - Detailed Behavior', () => {
+    afterEach(() => {
+        restoreAllMocks();
+        restoreAllModuleMocks();
+    });
+
     let mockOBSManager;
     let mockConfig;
     let clearStartupDisplays;
@@ -8,8 +17,7 @@ describe('OBS Startup Display Clearing - Detailed Behavior', () => {
 
     beforeEach(() => {
         // Clear all mocks
-        jest.clearAllMocks();
-        jest.resetModules();
+        resetModules();
 
         // Create tracked arrays for behavior validation
         const clearedSources = [];
@@ -17,28 +25,28 @@ describe('OBS Startup Display Clearing - Detailed Behavior', () => {
 
         // Mock OBS Manager
         mockOBSManager = {
-            isConnected: jest.fn(() => true),
+            isConnected: createMockFn(() => true),
             connected: true
         };
 
         // Mock hideAllDisplays function
-        hideAllDisplays = jest.fn().mockImplementation((...args) => {
+        hideAllDisplays = createMockFn().mockImplementation((...args) => {
             hideAllDisplaysCalls.push(args);
             return Promise.resolve();
         });
 
         // Mock clearTextSource function
-        clearTextSource = jest.fn().mockImplementation((sourceName) => {
+        clearTextSource = createMockFn().mockImplementation((sourceName) => {
             clearedSources.push(sourceName);
             return Promise.resolve();
         });
 
         // Mock dependencies
-        jest.doMock('../../src/obs/connection', () => ({
+        mockModule('../../src/obs/connection', () => ({
             getOBSConnectionManager: () => mockOBSManager
         }));
 
-        jest.doMock('../../src/obs/sources', () => {
+        mockModule('../../src/obs/sources', () => {
             const instance = { hideAllDisplays, clearTextSource };
             return {
                 OBSSourcesManager: class {},
@@ -47,25 +55,25 @@ describe('OBS Startup Display Clearing - Detailed Behavior', () => {
             };
         });
 
-        jest.doMock('../../src/core/logging', () => ({
+        mockModule('../../src/core/logging', () => ({
             logger: {
-                debug: jest.fn(),
-                info: jest.fn(),
-                warn: jest.fn(),
-                error: jest.fn(),
-                console: jest.fn()
+                debug: createMockFn(),
+                info: createMockFn(),
+                warn: createMockFn(),
+                error: createMockFn(),
+                console: createMockFn()
             },
-            setConfigValidator: jest.fn(),
-            setDebugMode: jest.fn(),
-            initializeLoggingConfig: jest.fn(),
-            getLogger: jest.fn(() => ({
-                debug: jest.fn(),
-                info: jest.fn(),
-                warn: jest.fn(),
-                error: jest.fn(),
-                console: jest.fn()
+            setConfigValidator: createMockFn(),
+            setDebugMode: createMockFn(),
+            initializeLoggingConfig: createMockFn(),
+            getLogger: createMockFn(() => ({
+                debug: createMockFn(),
+                info: createMockFn(),
+                warn: createMockFn(),
+                error: createMockFn(),
+                console: createMockFn()
             })),
-            initializeConsoleOverride: jest.fn()
+            initializeConsoleOverride: createMockFn()
         }));
 
         // Create test config
@@ -168,7 +176,7 @@ describe('OBS Startup Display Clearing - Detailed Behavior', () => {
 
         it('should skip operations when OBS is not connected', async () => {
             // Given: OBS is not connected
-            mockOBSManager.isConnected = jest.fn(() => false);
+            mockOBSManager.isConnected = createMockFn(() => false);
 
             const config = {
                 general: { chatMsgScene: 'stream pkmn switch' },

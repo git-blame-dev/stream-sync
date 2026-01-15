@@ -1,37 +1,42 @@
 
+const { describe, test, expect, afterEach, it } = require('bun:test');
+const { createMockFn, restoreAllMocks } = require('../../helpers/bun-mock-utils');
+const { mockModule, resetModules, restoreAllModuleMocks } = require('../../helpers/bun-module-mocks');
+
 const originalEnv = process.env.NODE_ENV;
 
 describe('ViewerCountSystem polling resilience', () => {
     afterEach(() => {
-        jest.resetModules();
-        process.env.NODE_ENV = originalEnv;
-    });
+        restoreAllMocks();
+process.env.NODE_ENV = originalEnv;
+    
+        restoreAllModuleMocks();});
 
     function createSystem({ platformReady = true } = {}) {
         process.env.NODE_ENV = 'test';
-        jest.doMock('../../../src/core/config', () => ({
+        mockModule('../../../src/core/config', () => ({
             configManager: {
-                getNumber: jest.fn().mockReturnValue(15)
+                getNumber: createMockFn().mockReturnValue(15)
             }
         }));
-        jest.doMock('../../../src/utils/timeout-validator', () => ({
-            safeSetInterval: jest.fn((fn) => { fn(); return 1; }),
-            safeDelay: jest.fn()
+        mockModule('../../../src/utils/timeout-validator', () => ({
+            safeSetInterval: createMockFn((fn) => { fn(); return 1; }),
+            safeDelay: createMockFn()
         }));
-        jest.doMock('../../../src/utils/platform-error-handler', () => ({
-            createPlatformErrorHandler: jest.fn(() => ({
-                handleEventProcessingError: jest.fn(),
-                logOperationalError: jest.fn()
+        mockModule('../../../src/utils/platform-error-handler', () => ({
+            createPlatformErrorHandler: createMockFn(() => ({
+                handleEventProcessingError: createMockFn(),
+                logOperationalError: createMockFn()
             }))
         }));
         const platform = {
-            isReady: jest.fn().mockReturnValue(platformReady),
-            getViewerCount: jest.fn().mockRejectedValue(new Error('fetch failed'))
+            isReady: createMockFn().mockReturnValue(platformReady),
+            getViewerCount: createMockFn().mockRejectedValue(new Error('fetch failed'))
         };
-        jest.doMock('../../../src/utils/viewer-count-providers', () => ({
-            TwitchViewerCountProvider: jest.fn(() => platform),
-            YouTubeViewerCountProvider: jest.fn(() => platform),
-            TikTokViewerCountProvider: jest.fn(() => platform)
+        mockModule('../../../src/utils/viewer-count-providers', () => ({
+            TwitchViewerCountProvider: createMockFn(() => platform),
+            YouTubeViewerCountProvider: createMockFn(() => platform),
+            TikTokViewerCountProvider: createMockFn(() => platform)
         }));
 
         const { ViewerCountSystem } = require('../../../src/utils/viewer-count');

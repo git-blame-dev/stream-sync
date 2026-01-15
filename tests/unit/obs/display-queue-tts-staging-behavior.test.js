@@ -1,3 +1,7 @@
+const { describe, test, expect, afterEach, it } = require('bun:test');
+const { createMockFn, restoreAllMocks } = require('../../helpers/bun-mock-utils');
+const { mockModule, requireActual, resetModules, restoreAllModuleMocks } = require('../../helpers/bun-module-mocks');
+
 const { createRuntimeConstantsFixture } = require('../../helpers/runtime-constants-fixture');
 const { PlatformEvents } = require('../../../src/interfaces/PlatformEvents');
 
@@ -5,31 +9,32 @@ describe('DisplayQueue notification TTS staging', () => {
     const originalEnv = process.env.NODE_ENV;
 
     afterEach(() => {
-        jest.resetModules();
-        process.env.NODE_ENV = originalEnv;
-    });
+        restoreAllMocks();
+process.env.NODE_ENV = originalEnv;
+    
+        restoreAllModuleMocks();});
 
     function setupDisplayQueue({ ttsStages, recordedTexts, recordedDelays }) {
         process.env.NODE_ENV = 'development';
         const runtimeConstants = createRuntimeConstantsFixture();
 
-        jest.doMock('../../../src/obs/sources', () => {
+        mockModule('../../../src/obs/sources', () => {
             const instance = {
-                updateTextSource: jest.fn((_, text) => {
+                updateTextSource: createMockFn((_, text) => {
                     recordedTexts.push(text);
                     return Promise.resolve();
                 }),
-                setSourceVisibility: jest.fn(),
-                setPlatformLogoVisibility: jest.fn(),
-                hideAllDisplays: jest.fn(),
-                updateChatMsgText: jest.fn(),
-                setNotificationPlatformLogoVisibility: jest.fn(),
-                setGroupSourceVisibility: jest.fn(),
-                setSourceFilterVisibility: jest.fn(),
-                getGroupSceneItemId: jest.fn(),
-                setChatDisplayVisibility: jest.fn(),
-                setNotificationDisplayVisibility: jest.fn(),
-                getSceneItemId: jest.fn()
+                setSourceVisibility: createMockFn(),
+                setPlatformLogoVisibility: createMockFn(),
+                hideAllDisplays: createMockFn(),
+                updateChatMsgText: createMockFn(),
+                setNotificationPlatformLogoVisibility: createMockFn(),
+                setGroupSourceVisibility: createMockFn(),
+                setSourceFilterVisibility: createMockFn(),
+                getGroupSceneItemId: createMockFn(),
+                setChatDisplayVisibility: createMockFn(),
+                setNotificationDisplayVisibility: createMockFn(),
+                getSceneItemId: createMockFn()
             };
             return {
                 OBSSourcesManager: class {},
@@ -38,19 +43,19 @@ describe('DisplayQueue notification TTS staging', () => {
             };
         });
 
-        jest.doMock('../../../src/utils/timeout-validator', () => {
-            const actual = jest.requireActual('../../../src/utils/timeout-validator');
+        mockModule('../../../src/utils/timeout-validator', () => {
+            const actual = requireActual('../../../src/utils/timeout-validator');
             return {
                 ...actual,
-                safeDelay: jest.fn((ms) => {
+                safeDelay: createMockFn((ms) => {
                     recordedDelays.push(ms);
                     return Promise.resolve();
                 })
             };
         });
 
-        jest.doMock('../../../src/utils/message-tts-handler', () => ({
-            createTTSStages: jest.fn(() => ttsStages)
+        mockModule('../../../src/utils/message-tts-handler', () => ({
+            createTTSStages: createMockFn(() => ttsStages)
         }));
 
         const { DisplayQueue } = require('../../../src/obs/display-queue');
@@ -62,10 +67,10 @@ describe('DisplayQueue notification TTS staging', () => {
             return () => eventBus.off(event, handler);
         };
         const obsManager = {
-            isReady: jest.fn().mockResolvedValue(true),
-            call: jest.fn().mockResolvedValue({}),
-            addEventListener: jest.fn(),
-            removeEventListener: jest.fn()
+            isReady: createMockFn().mockResolvedValue(true),
+            call: createMockFn().mockResolvedValue({}),
+            addEventListener: createMockFn(),
+            removeEventListener: createMockFn()
         };
 
         const queue = new DisplayQueue(

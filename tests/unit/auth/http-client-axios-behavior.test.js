@@ -1,7 +1,12 @@
 
-const { describe, test, expect, beforeEach, afterEach } = require('@jest/globals');
+const { describe, test, expect, beforeEach } = require('bun:test');
+const { createMockFn, clearAllMocks, restoreAllMocks } = require('../../helpers/bun-mock-utils');
 
 describe('HTTP Client Axios Response Behavior', () => {
+    afterEach(() => {
+        restoreAllMocks();
+    });
+
     let TwitchAuthInitializer;
     let mockAuthService;
     let mockLogger;
@@ -9,23 +14,21 @@ describe('HTTP Client Axios Response Behavior', () => {
     let mockAxios;
     
     beforeEach(() => {
-        jest.clearAllMocks();
-        
         mockLogger = {
-            debug: jest.fn(),
-            info: jest.fn(),
-            error: jest.fn(),
-            warn: jest.fn()
+            debug: createMockFn(),
+            info: createMockFn(),
+            error: createMockFn(),
+            warn: createMockFn()
         };
         
         // Mock enhanced HTTP client with axios-compatible responses
         mockEnhancedHttpClient = {
-            post: jest.fn()
+            post: createMockFn()
         };
         
         // Mock axios for token validation
         mockAxios = {
-            get: jest.fn()
+            get: createMockFn()
         };
         
         mockAuthService = {
@@ -37,14 +40,14 @@ describe('HTTP Client Axios Response Behavior', () => {
                 channel: 'testchannel'
             },
             isInitialized: false,
-            validateCredentials: jest.fn().mockReturnValue({
+            validateCredentials: createMockFn().mockReturnValue({
                 hasToken: true,
                 isValid: true,
                 isExpired: false,
                 issues: []
             }),
-            setAuthenticationState: jest.fn(),
-            updateAccessToken: jest.fn(),
+            setAuthenticationState: createMockFn(),
+            updateAccessToken: createMockFn(),
             tokenExpiresAt: null
         };
         
@@ -251,7 +254,7 @@ describe('HTTP Client Axios Response Behavior', () => {
         test('should use injected enhanced HTTP client for requests', async () => {
             // Given: Custom enhanced HTTP client with tracking
             const customHttpClient = {
-                post: jest.fn().mockResolvedValue({
+                post: createMockFn().mockResolvedValue({
                     data: {
                         access_token: 'custom_token',
                         refresh_token: 'custom_refresh',
@@ -283,7 +286,7 @@ describe('HTTP Client Axios Response Behavior', () => {
         test('should use injected axios for token validation', async () => {
             // Given: Custom axios instance with tracking
             const customAxios = {
-                get: jest.fn().mockResolvedValue({
+                get: createMockFn().mockResolvedValue({
                     data: {
                         user_id: '987654321',
                         login: 'testchannel', // Must match authService.config.channel

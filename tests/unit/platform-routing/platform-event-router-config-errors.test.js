@@ -1,27 +1,34 @@
 
+const { describe, test, expect, it } = require('bun:test');
+const { createMockFn, restoreAllMocks } = require('../../helpers/bun-mock-utils');
+
 const PlatformEventRouter = require('../../../src/services/PlatformEventRouter');
 
 describe('PlatformEventRouter config gating error handling', () => {
+    afterEach(() => {
+        restoreAllMocks();
+    });
+
     const buildRouter = ({ configService, runtime, notificationManager, logger }) => new PlatformEventRouter({
         runtime,
         notificationManager,
         configService,
         logger,
         eventBus: {
-            subscribe: jest.fn(() => () => {}),
-            emit: jest.fn()
+            subscribe: createMockFn(() => () => {}),
+            emit: createMockFn()
         }
     });
 
     it('throws when config toggle checks fail for follow notifications', async () => {
-        const logger = { debug: jest.fn(), info: jest.fn(), warn: jest.fn(), error: jest.fn() };
+        const logger = { debug: createMockFn(), info: createMockFn(), warn: createMockFn(), error: createMockFn() };
         const configService = {
-            areNotificationsEnabled: jest.fn(() => {
+            areNotificationsEnabled: createMockFn(() => {
                 throw new Error('toggle fail');
             })
         };
         const runtime = {
-            handleFollowNotification: jest.fn().mockResolvedValue(true)
+            handleFollowNotification: createMockFn().mockResolvedValue(true)
         };
 
         const router = buildRouter({ configService, runtime, notificationManager: {}, logger });
@@ -40,14 +47,14 @@ describe('PlatformEventRouter config gating error handling', () => {
     });
 
     it('routes unknown types without notification gating', async () => {
-        const logger = { debug: jest.fn(), info: jest.fn(), warn: jest.fn(), error: jest.fn() };
+        const logger = { debug: createMockFn(), info: createMockFn(), warn: createMockFn(), error: createMockFn() };
         const configService = {
-            areNotificationsEnabled: jest.fn(() => {
+            areNotificationsEnabled: createMockFn(() => {
                 throw new Error('toggle fail');
             })
         };
         const notificationManager = {
-            handleNotification: jest.fn().mockResolvedValue({ success: true })
+            handleNotification: createMockFn().mockResolvedValue({ success: true })
         };
 
         const router = buildRouter({ configService, runtime: {}, notificationManager, logger });
@@ -62,12 +69,12 @@ describe('PlatformEventRouter config gating error handling', () => {
     });
 
     it('routes unknown types even when config service is present', async () => {
-        const logger = { debug: jest.fn(), info: jest.fn(), warn: jest.fn(), error: jest.fn() };
+        const logger = { debug: createMockFn(), info: createMockFn(), warn: createMockFn(), error: createMockFn() };
         const configService = {
-            areNotificationsEnabled: jest.fn(() => false)
+            areNotificationsEnabled: createMockFn(() => false)
         };
         const notificationManager = {
-            handleNotification: jest.fn().mockResolvedValue({ success: true })
+            handleNotification: createMockFn().mockResolvedValue({ success: true })
         };
 
         const router = buildRouter({ configService, runtime: {}, notificationManager, logger });
@@ -82,12 +89,12 @@ describe('PlatformEventRouter config gating error handling', () => {
     });
 
     it('consults config service for chat events and routes when enabled', async () => {
-        const logger = { debug: jest.fn(), info: jest.fn(), warn: jest.fn(), error: jest.fn() };
+        const logger = { debug: createMockFn(), info: createMockFn(), warn: createMockFn(), error: createMockFn() };
         const configService = {
-            areNotificationsEnabled: jest.fn(() => true)
+            areNotificationsEnabled: createMockFn(() => true)
         };
         const runtime = {
-            handleChatMessage: jest.fn().mockResolvedValue(true)
+            handleChatMessage: createMockFn().mockResolvedValue(true)
         };
 
         const router = buildRouter({ configService, runtime, notificationManager: {}, logger });
@@ -110,14 +117,14 @@ describe('PlatformEventRouter config gating error handling', () => {
     });
 
     it('continues chat routing when config toggle check throws', async () => {
-        const logger = { debug: jest.fn(), info: jest.fn(), warn: jest.fn(), error: jest.fn() };
+        const logger = { debug: createMockFn(), info: createMockFn(), warn: createMockFn(), error: createMockFn() };
         const configService = {
-            areNotificationsEnabled: jest.fn(() => {
+            areNotificationsEnabled: createMockFn(() => {
                 throw new Error('toggle fail');
             })
         };
         const runtime = {
-            handleChatMessage: jest.fn().mockResolvedValue(true)
+            handleChatMessage: createMockFn().mockResolvedValue(true)
         };
 
         const router = buildRouter({ configService, runtime, notificationManager: {}, logger });
@@ -137,15 +144,15 @@ describe('PlatformEventRouter config gating error handling', () => {
     });
 
     it('continues follow/raid routing when config toggle check throws', async () => {
-        const logger = { debug: jest.fn(), info: jest.fn(), warn: jest.fn(), error: jest.fn() };
+        const logger = { debug: createMockFn(), info: createMockFn(), warn: createMockFn(), error: createMockFn() };
         const configService = {
-            areNotificationsEnabled: jest.fn(() => {
+            areNotificationsEnabled: createMockFn(() => {
                 throw new Error('toggle fail');
             })
         };
         const runtime = {
-            handleFollowNotification: jest.fn().mockResolvedValue(true),
-            handleRaidNotification: jest.fn().mockResolvedValue(true)
+            handleFollowNotification: createMockFn().mockResolvedValue(true),
+            handleRaidNotification: createMockFn().mockResolvedValue(true)
         };
 
         const router = buildRouter({ configService, runtime, notificationManager: {}, logger });
@@ -165,14 +172,14 @@ describe('PlatformEventRouter config gating error handling', () => {
     });
 
     it('throws when config toggle check fails for gifts', async () => {
-        const logger = { debug: jest.fn(), info: jest.fn(), warn: jest.fn(), error: jest.fn() };
+        const logger = { debug: createMockFn(), info: createMockFn(), warn: createMockFn(), error: createMockFn() };
         const configService = {
-            areNotificationsEnabled: jest.fn(() => {
+            areNotificationsEnabled: createMockFn(() => {
                 throw new Error('toggle fail');
             })
         };
         const runtime = {
-            handleGiftNotification: jest.fn().mockResolvedValue(true)
+            handleGiftNotification: createMockFn().mockResolvedValue(true)
         };
 
         const router = buildRouter({ configService, runtime, notificationManager: {}, logger });
@@ -186,14 +193,14 @@ describe('PlatformEventRouter config gating error handling', () => {
     });
 
     it('throws when config toggle check fails for envelopes', async () => {
-        const logger = { debug: jest.fn(), info: jest.fn(), warn: jest.fn(), error: jest.fn() };
+        const logger = { debug: createMockFn(), info: createMockFn(), warn: createMockFn(), error: createMockFn() };
         const configService = {
-            areNotificationsEnabled: jest.fn(() => {
+            areNotificationsEnabled: createMockFn(() => {
                 throw new Error('toggle fail');
             })
         };
         const runtime = {
-            handleEnvelopeNotification: jest.fn().mockResolvedValue(true)
+            handleEnvelopeNotification: createMockFn().mockResolvedValue(true)
         };
 
         const router = buildRouter({ configService, runtime, notificationManager: {}, logger });
@@ -207,12 +214,12 @@ describe('PlatformEventRouter config gating error handling', () => {
     });
 
     it('routes unknown types without gating even when config service exists', async () => {
-        const logger = { debug: jest.fn(), info: jest.fn(), warn: jest.fn(), error: jest.fn() };
+        const logger = { debug: createMockFn(), info: createMockFn(), warn: createMockFn(), error: createMockFn() };
         const configService = {
-            areNotificationsEnabled: jest.fn()
+            areNotificationsEnabled: createMockFn()
         };
         const notificationManager = {
-            handleNotification: jest.fn().mockResolvedValue({ success: true })
+            handleNotification: createMockFn().mockResolvedValue({ success: true })
         };
 
         const router = buildRouter({ configService, runtime: {}, notificationManager, logger });
@@ -227,27 +234,27 @@ describe('PlatformEventRouter config gating error handling', () => {
     });
 
     it('requires config service for gift routing', async () => {
-        const logger = { debug: jest.fn(), info: jest.fn(), warn: jest.fn(), error: jest.fn() };
+        const logger = { debug: createMockFn(), info: createMockFn(), warn: createMockFn(), error: createMockFn() };
         const runtime = {
-            handleGiftNotification: jest.fn().mockResolvedValue(true)
+            handleGiftNotification: createMockFn().mockResolvedValue(true)
         };
         expect(() => buildRouter({ configService: null, runtime, notificationManager: {}, logger }))
             .toThrow('PlatformEventRouter requires eventBus, runtime, notificationManager, configService, and logger');
     });
 
     it('requires notification manager for routed events', async () => {
-        const logger = { debug: jest.fn(), info: jest.fn(), warn: jest.fn(), error: jest.fn() };
+        const logger = { debug: createMockFn(), info: createMockFn(), warn: createMockFn(), error: createMockFn() };
         const configService = {
-            areNotificationsEnabled: jest.fn(() => true)
+            areNotificationsEnabled: createMockFn(() => true)
         };
         expect(() => buildRouter({ configService, runtime: {}, notificationManager: null, logger }))
             .toThrow('PlatformEventRouter requires eventBus, runtime, notificationManager, configService, and logger');
     });
 
     it('logs unsubscribe errors during dispose without throwing', () => {
-        const logger = { debug: jest.fn(), info: jest.fn(), warn: jest.fn(), error: jest.fn() };
+        const logger = { debug: createMockFn(), info: createMockFn(), warn: createMockFn(), error: createMockFn() };
         const configService = {
-            areNotificationsEnabled: jest.fn(() => true)
+            areNotificationsEnabled: createMockFn(() => true)
         };
         const router = new PlatformEventRouter({
             runtime: {},
@@ -255,7 +262,7 @@ describe('PlatformEventRouter config gating error handling', () => {
             configService,
             logger,
             eventBus: {
-                subscribe: jest.fn(() => () => {
+                subscribe: createMockFn(() => () => {
                     throw new Error('unsubscribe boom');
                 })
             }

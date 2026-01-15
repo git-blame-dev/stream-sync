@@ -1,5 +1,6 @@
 
 const NotificationBuilder = require('../../src/utils/notification-builder');
+const { createMockFn } = require('./bun-mock-utils');
 
 const BASE_TIMESTAMP_MS = Date.parse('2024-01-01T00:00:00.000Z');
 let sequence = 0;
@@ -119,16 +120,16 @@ class OptimizedTestFactory {
     static createBusinessLogicMocks() {
         return {
             logger: {
-                info: jest.fn(),
-                error: jest.fn(),
-                warn: jest.fn(),
-                debug: jest.fn()
+                info: createMockFn(),
+                error: createMockFn(),
+                warn: createMockFn(),
+                debug: createMockFn()
             },
             notificationBuilder: {
-                build: jest.fn().mockImplementation((payload) => NotificationBuilder.build(payload))
+                build: createMockFn().mockImplementation((payload) => NotificationBuilder.build(payload))
             },
             configManager: {
-                getConfig: jest.fn().mockReturnValue(this.createMockConfig())
+                getConfig: createMockFn().mockReturnValue(this.createMockConfig())
             }
         };
     }
@@ -184,15 +185,15 @@ class OptimizedTestFactory {
     static createServiceMocks() {
         return {
             notificationDispatcher: {
-                dispatchSuperChat: jest.fn().mockResolvedValue(true),
-                dispatchMembership: jest.fn().mockResolvedValue(true),
-                dispatchGiftMembership: jest.fn().mockResolvedValue(true),
-                dispatchSuperSticker: jest.fn().mockResolvedValue(true)
+                dispatchSuperChat: createMockFn().mockResolvedValue(true),
+                dispatchMembership: createMockFn().mockResolvedValue(true),
+                dispatchGiftMembership: createMockFn().mockResolvedValue(true),
+                dispatchSuperSticker: createMockFn().mockResolvedValue(true)
             },
             viewerService: {
-                getViewerCount: jest.fn().mockResolvedValue(1500),
-                setActiveStream: jest.fn().mockResolvedValue(),
-                clearActiveStream: jest.fn()
+                getViewerCount: createMockFn().mockResolvedValue(1500),
+                setActiveStream: createMockFn().mockResolvedValue(),
+                clearActiveStream: createMockFn()
             }
         };
     }
@@ -201,11 +202,11 @@ class OptimizedTestFactory {
         const harness = {};
 
         harness.displayQueue = overrides.displayQueue || {
-            addToQueue: jest.fn().mockResolvedValue(true),
-            addItem: jest.fn().mockResolvedValue(true),
-            processQueue: jest.fn().mockResolvedValue(true),
-            clear: jest.fn(),
-            size: jest.fn().mockReturnValue(0)
+            addToQueue: createMockFn().mockResolvedValue(true),
+            addItem: createMockFn().mockResolvedValue(true),
+            processQueue: createMockFn().mockResolvedValue(true),
+            clear: createMockFn(),
+            size: createMockFn().mockReturnValue(0)
         };
 
         harness.configService = overrides.configService || this.createMockConfig();

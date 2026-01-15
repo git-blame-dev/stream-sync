@@ -1,18 +1,25 @@
 
-const { describe, test, expect, beforeEach, afterEach } = require('@jest/globals');
-
 // Mock axios globally for all tests
-jest.mock('axios');
+const { describe, test, expect, beforeEach } = require('bun:test');
+const { createMockFn, clearAllMocks, restoreAllMocks } = require('../../helpers/bun-mock-utils');
+const { mockModule, restoreAllModuleMocks } = require('../../helpers/bun-module-mocks');
+
+mockModule('axios');
 const axios = require('axios');
 
 // Mock the OAuth handler to prevent server startup
-jest.mock('../../../src/auth/oauth-handler', () => ({
-    TwitchOAuthHandler: jest.fn().mockImplementation(() => ({
-        runOAuthFlow: jest.fn().mockRejectedValue(new Error('OAuth not available in test environment'))
+mockModule('../../../src/auth/oauth-handler', () => ({
+    TwitchOAuthHandler: createMockFn().mockImplementation(() => ({
+        runOAuthFlow: createMockFn().mockRejectedValue(new Error('OAuth not available in test environment'))
     }))
 }));
 
 describe('Authentication Integration Behavior', () => {
+    afterEach(() => {
+        restoreAllMocks();
+        restoreAllModuleMocks();
+    });
+
     let TwitchAuthInitializer;
     let TwitchAuthService;
     let mockLogger;
@@ -20,27 +27,25 @@ describe('Authentication Integration Behavior', () => {
     let mockFileSystem;
     
     beforeEach(() => {
-        jest.clearAllMocks();
-        
         mockLogger = {
-            debug: jest.fn(),
-            info: jest.fn(),
-            error: jest.fn(),
-            warn: jest.fn()
+            debug: createMockFn(),
+            info: createMockFn(),
+            error: createMockFn(),
+            warn: createMockFn()
         };
         
         // Mock enhanced HTTP client
         mockEnhancedHttpClient = {
-            post: jest.fn()
+            post: createMockFn()
         };
         
         // Use the globally mocked axios
-        jest.clearAllMocks();
+        clearAllMocks();
         
         // Mock file system
         mockFileSystem = {
-            readFileSync: jest.fn().mockReturnValue('[twitch]\naccessToken=old_token\nrefreshToken=old_refresh'),
-            writeFileSync: jest.fn()
+            readFileSync: createMockFn().mockReturnValue('[twitch]\naccessToken=old_token\nrefreshToken=old_refresh'),
+            writeFileSync: createMockFn()
         };
         
         TwitchAuthInitializer = require('../../../src/auth/TwitchAuthInitializer');

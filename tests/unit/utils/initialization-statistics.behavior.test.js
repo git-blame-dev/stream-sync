@@ -1,7 +1,11 @@
-jest.mock('../../../src/utils/platform-error-handler', () => ({
-    createPlatformErrorHandler: jest.fn(() => ({
-        handleEventProcessingError: jest.fn(),
-        logOperationalError: jest.fn()
+const { describe, test, expect, beforeEach, it } = require('bun:test');
+const { createMockFn, spyOn, clearAllMocks, restoreAllMocks } = require('../../helpers/bun-mock-utils');
+const { mockModule, restoreAllModuleMocks } = require('../../helpers/bun-module-mocks');
+
+mockModule('../../../src/utils/platform-error-handler', () => ({
+    createPlatformErrorHandler: createMockFn(() => ({
+        handleEventProcessingError: createMockFn(),
+        logOperationalError: createMockFn()
     }))
 }));
 
@@ -9,20 +13,24 @@ const { createPlatformErrorHandler } = require('../../../src/utils/platform-erro
 const { InitializationStatistics } = require('../../../src/utils/initialization-statistics');
 
 describe('InitializationStatistics behavior', () => {
+    afterEach(() => {
+        restoreAllMocks();
+        restoreAllModuleMocks();
+    });
+
     let logger;
     let handler;
 
     beforeEach(() => {
-        jest.clearAllMocks();
-        logger = { debug: jest.fn(), info: jest.fn(), warn: jest.fn() };
-        handler = { handleEventProcessingError: jest.fn(), logOperationalError: jest.fn() };
+        logger = { debug: createMockFn(), info: createMockFn(), warn: createMockFn() };
+        handler = { handleEventProcessingError: createMockFn(), logOperationalError: createMockFn() };
         createPlatformErrorHandler.mockReturnValue(handler);
     });
 
     it('tracks successful initialization timing and metrics', () => {
         const stats = new InitializationStatistics('twitch', logger);
         const times = [1000, 2000];
-        const nowSpy = jest.spyOn(Date, 'now').mockImplementation(() => times.shift());
+        const nowSpy = spyOn(Date, 'now').mockImplementation(() => times.shift());
 
         const attemptId = stats.startInitializationAttempt({ reason: 'boot' });
         stats.recordSuccess(attemptId, { connectionTime: 50, serviceInitTime: 30 });
@@ -44,7 +52,7 @@ describe('InitializationStatistics behavior', () => {
     it('records failures with error handler routing and error tracking', () => {
         const stats = new InitializationStatistics('youtube', logger);
         const times = [0, 0, 50];
-        const nowSpy = jest.spyOn(Date, 'now').mockImplementation(() => times.shift());
+        const nowSpy = spyOn(Date, 'now').mockImplementation(() => times.shift());
 
         const attemptId = stats.startInitializationAttempt();
         const error = new Error('connect failed');
@@ -67,7 +75,7 @@ describe('InitializationStatistics behavior', () => {
 
     it('identifies unhealthy state after repeated failures', () => {
         const stats = new InitializationStatistics('platform', logger);
-        const nowSpy = jest.spyOn(Date, 'now');
+        const nowSpy = spyOn(Date, 'now');
         let current = 0;
         nowSpy.mockImplementation(() => {
             current += 10;
@@ -92,7 +100,7 @@ describe('InitializationStatistics behavior', () => {
     it('resets statistics to defaults', () => {
         const stats = new InitializationStatistics('platform', logger);
         const times = [0, 0, 20, 20];
-        const nowSpy = jest.spyOn(Date, 'now').mockImplementation(() => times.shift());
+        const nowSpy = spyOn(Date, 'now').mockImplementation(() => times.shift());
 
         const attemptId = stats.startInitializationAttempt();
         stats.recordSuccess(attemptId);

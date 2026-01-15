@@ -1,39 +1,50 @@
-jest.mock('../../src/core/logging', () => ({
-    setConfigValidator: jest.fn(),
-    setDebugMode: jest.fn(),
-    initializeLoggingConfig: jest.fn(),
-    initializeConsoleOverride: jest.fn(),
+const { describe, test, expect, it } = require('bun:test');
+const { createMockFn, spyOn, restoreAllMocks } = require('../helpers/bun-mock-utils');
+const { mockModule, restoreAllModuleMocks } = require('../helpers/bun-module-mocks');
+const { useFakeTimers, useRealTimers, runOnlyPendingTimers } = require('../helpers/bun-timers');
+
+mockModule('../../src/core/logging', () => ({
+    setConfigValidator: createMockFn(),
+    setDebugMode: createMockFn(),
+    initializeLoggingConfig: createMockFn(),
+    initializeConsoleOverride: createMockFn(),
     logger: {
-        info: jest.fn(),
-        warn: jest.fn(),
-        error: jest.fn(),
-        debug: jest.fn()
+        info: createMockFn(),
+        warn: createMockFn(),
+        error: createMockFn(),
+        debug: createMockFn()
     },
-    getLogger: jest.fn(() => ({
-        info: jest.fn(),
-        warn: jest.fn(),
-        error: jest.fn(),
-        debug: jest.fn()
+    getLogger: createMockFn(() => ({
+        info: createMockFn(),
+        warn: createMockFn(),
+        error: createMockFn(),
+        debug: createMockFn()
     }))
 }));
 
 const { AppRuntime } = require('../../src/main');
 
 describe('AppRuntime system readiness payload', () => {
+    afterEach(() => {
+        restoreAllMocks();
+        restoreAllModuleMocks();
+        useRealTimers();
+    });
+
     const createAppRuntimeDouble = () => {
         const bot = Object.create(AppRuntime.prototype);
         bot.eventBus = null;
-        bot.getReadyServices = jest.fn().mockReturnValue(['notificationManager', 'platformLifecycleService']);
+        bot.getReadyServices = createMockFn().mockReturnValue(['notificationManager', 'platformLifecycleService']);
         return bot;
     };
 
     it('omits monitoring metrics when building system readiness payload', () => {
         const runtime = createAppRuntimeDouble();
         runtime.platformLifecycleService = {
-            getStatus: jest.fn().mockReturnValue({ initializedPlatforms: ['twitch'] })
+            getStatus: createMockFn().mockReturnValue({ initializedPlatforms: ['twitch'] })
         };
         runtime.commandCooldownService = {
-            getStatus: jest.fn().mockReturnValue({ activeUsers: 3 })
+            getStatus: createMockFn().mockReturnValue({ activeUsers: 3 })
         };
 
         const payload = runtime.emitSystemReady({ correlationId: 'startup-1' });
@@ -63,40 +74,40 @@ describe('AppRuntime shutdown lifecycle', () => {
     const createAppRuntimeDouble = () => {
         const bot = Object.create(AppRuntime.prototype);
         bot.eventBus = {
-            emit: jest.fn()
+            emit: createMockFn()
         };
         bot.logger = {
-            info: jest.fn(),
-            error: jest.fn(),
-            debug: jest.fn(),
-            warn: jest.fn()
+            info: createMockFn(),
+            error: createMockFn(),
+            debug: createMockFn(),
+            warn: createMockFn()
         };
         return bot;
     };
 
     it('does not emit telemetry events when restart is requested', () => {
         const runtime = createAppRuntimeDouble();
-        jest.useFakeTimers();
-        jest.spyOn(process, 'exit').mockImplementation(() => {});
+        useFakeTimers();
+        spyOn(process, 'exit').mockImplementation(() => {});
         runtime.emitSystemShutdown({ reason: 'test', restartRequested: true });
 
         expect(runtime.eventBus.emit).not.toHaveBeenCalled();
-        jest.runOnlyPendingTimers();
-        jest.useRealTimers();
+        runOnlyPendingTimers();
+        useRealTimers();
         process.exit.mockRestore();
     });
 
     it('invokes viewer count status cleanup during shutdown', async () => {
         const runtime = createAppRuntimeDouble();
-        runtime.platformLifecycleService = { disconnectAll: jest.fn().mockResolvedValue() };
-        runtime.obsEventService = { disconnect: jest.fn().mockResolvedValue() };
-        runtime.platformEventRouter = { dispose: jest.fn() };
-        runtime.viewerCountSystem = { stopPolling: jest.fn() };
-        runtime.streamDetector = { cleanup: jest.fn() };
-        runtime.notificationManager = { stopSuppressionCleanup: jest.fn() };
-        runtime.viewerCountStatusCleanup = jest.fn();
-        runtime.emitSystemShutdown = jest.fn();
-        runtime._handleAppRuntimeError = jest.fn();
+        runtime.platformLifecycleService = { disconnectAll: createMockFn().mockResolvedValue() };
+        runtime.obsEventService = { disconnect: createMockFn().mockResolvedValue() };
+        runtime.platformEventRouter = { dispose: createMockFn() };
+        runtime.viewerCountSystem = { stopPolling: createMockFn() };
+        runtime.streamDetector = { cleanup: createMockFn() };
+        runtime.notificationManager = { stopSuppressionCleanup: createMockFn() };
+        runtime.viewerCountStatusCleanup = createMockFn();
+        runtime.emitSystemShutdown = createMockFn();
+        runtime._handleAppRuntimeError = createMockFn();
 
         await runtime.shutdown();
 

@@ -1,16 +1,20 @@
 
+const { describe, test, expect, beforeEach, it } = require('bun:test');
+const { createMockFn, restoreAllMocks } = require('../helpers/bun-mock-utils');
+const { unmockModule, restoreAllModuleMocks } = require('../helpers/bun-module-mocks');
+
 const { initializeTestLogging } = require('../helpers/test-setup');
 const { createMockLogger } = require('../helpers/mock-factories');
 const { setupAutomatedCleanup } = require('../helpers/mock-lifecycle');
 
 // Unmock the YouTube platform for dependency validation tests
-jest.unmock('../../src/platforms/youtube');
+unmockModule('../../src/platforms/youtube');
 
 // Unmock logger-utils to allow real logger initialization in tests
-jest.unmock('../../src/utils/logger-utils');
+unmockModule('../../src/utils/logger-utils');
 
 // Unmock core logging to allow real logger initialization in tests
-jest.unmock('../../src/core/logging');
+unmockModule('../../src/core/logging');
 
 // Initialize logging system for tests
 initializeTestLogging();
@@ -23,6 +27,11 @@ setupAutomatedCleanup({
 });
 
 describe('Dependency Injection Validation', () => {
+    afterEach(() => {
+        restoreAllMocks();
+        restoreAllModuleMocks();
+    });
+
     let mockLogger;
     
     beforeEach(() => {
@@ -33,7 +42,7 @@ describe('Dependency Injection Validation', () => {
         it('should validate logger has required interface methods before platform initialization', () => {
             // Given: An incomplete logger interface (missing required methods)
             const incompleteLogger = {
-                info: jest.fn(),
+                info: createMockFn(),
                 // Missing: debug, error, warn methods
             };
 
@@ -54,7 +63,7 @@ describe('Dependency Injection Validation', () => {
         it('should validate logger methods are callable functions', () => {
             // Given: Logger with non-function properties
             const invalidLogger = {
-                info: jest.fn(),
+                info: createMockFn(),
                 debug: 'not-a-function',  // Invalid: should be function
                 error: null,              // Invalid: should be function
                 warn: undefined           // Invalid: should be function
@@ -75,10 +84,10 @@ describe('Dependency Injection Validation', () => {
         it('should accept valid logger interface and proceed with initialization', () => {
             // Given: Complete and valid logger interface
             const validLogger = {
-                info: jest.fn(),
-                debug: jest.fn(),
-                error: jest.fn(),
-                warn: jest.fn()
+                info: createMockFn(),
+                debug: createMockFn(),
+                error: createMockFn(),
+                warn: createMockFn()
             };
 
             // When: Initializing with valid logger
@@ -141,9 +150,9 @@ describe('Dependency Injection Validation', () => {
             // Given: Dependencies with wrong types/interfaces
             const invalidTypeDependencies = {
                 logger: "string-instead-of-object",
-                notificationManager: { emit: jest.fn(), on: jest.fn(), removeListener: jest.fn() },
+                notificationManager: { emit: createMockFn(), on: createMockFn(), removeListener: createMockFn() },
                 streamDetectionService: {
-                    detectLiveStreams: jest.fn().mockResolvedValue({ success: true, videoIds: [] })
+                    detectLiveStreams: createMockFn().mockResolvedValue({ success: true, videoIds: [] })
                 }
             };
 
@@ -179,7 +188,7 @@ describe('Dependency Injection Validation', () => {
             // Given: ConnectionStateManager with invalid factory
             const invalidFactory = {
                 // Missing createConnection method
-                someOtherMethod: jest.fn()
+                someOtherMethod: createMockFn()
             };
 
             // When: Creating manager with invalid factory
@@ -196,7 +205,7 @@ describe('Dependency Injection Validation', () => {
         it('should ensure connection factory can create valid connections', () => {
             // Given: Factory that returns invalid connections
             const factoryReturningNull = {
-                createConnection: jest.fn().mockReturnValue(null)
+                createConnection: createMockFn().mockReturnValue(null)
             };
 
             // When: Using manager with factory that returns null
@@ -261,8 +270,8 @@ describe('Dependency Injection Validation', () => {
         it('should provide actionable error messages for missing logger methods', () => {
             // Given: Logger missing specific methods
             const partialLogger = {
-                info: jest.fn(),
-                error: jest.fn()
+                info: createMockFn(),
+                error: createMockFn()
                 // Missing: debug, warn
             };
 
@@ -314,10 +323,10 @@ describe('Dependency Injection Validation', () => {
                 // Simulate how main.js creates and passes dependencies
                 const dependencies = {
                     logger: mockLogger,
-                    notificationManager: { emit: jest.fn(), on: jest.fn(), removeListener: jest.fn() },
-                    app: { handleChatMessage: jest.fn() },
+                    notificationManager: { emit: createMockFn(), on: createMockFn(), removeListener: createMockFn() },
+                    app: { handleChatMessage: createMockFn() },
                     streamDetectionService: {
-                        detectLiveStreams: jest.fn().mockResolvedValue({ success: true, videoIds: [] })
+                        detectLiveStreams: createMockFn().mockResolvedValue({ success: true, videoIds: [] })
                     }
                 };
 
@@ -337,10 +346,10 @@ describe('Dependency Injection Validation', () => {
             // Given: Dependencies that should work for any platform
             const universalDependencies = {
                 logger: mockLogger,
-                notificationManager: { emit: jest.fn(), on: jest.fn(), removeListener: jest.fn() },
-                app: { handleChatMessage: jest.fn() },
+                notificationManager: { emit: createMockFn(), on: createMockFn(), removeListener: createMockFn() },
+                app: { handleChatMessage: createMockFn() },
                 streamDetectionService: {
-                    detectLiveStreams: jest.fn().mockResolvedValue({ success: true, videoIds: [] })
+                    detectLiveStreams: createMockFn().mockResolvedValue({ success: true, videoIds: [] })
                 }
             };
 

@@ -1,36 +1,40 @@
 
+const { describe, test, expect, beforeEach, it } = require('bun:test');
+const { createMockFn, clearAllMocks, restoreAllMocks } = require('../../helpers/bun-mock-utils');
+const { mockModule, resetModules, restoreAllModuleMocks } = require('../../helpers/bun-module-mocks');
+
 const mockErrorHandler = {
-    handleEventProcessingError: jest.fn(),
-    logOperationalError: jest.fn()
+    handleEventProcessingError: createMockFn(),
+    logOperationalError: createMockFn()
 };
 
-jest.mock('../../../src/utils/platform-error-handler', () => ({
-    createPlatformErrorHandler: jest.fn(() => mockErrorHandler)
+mockModule('../../../src/utils/platform-error-handler', () => ({
+    createPlatformErrorHandler: createMockFn(() => mockErrorHandler)
 }));
 
 const mockFs = {
-    existsSync: jest.fn(),
-    readFileSync: jest.fn(),
-    writeFileSync: jest.fn()
+    existsSync: createMockFn(),
+    readFileSync: createMockFn(),
+    writeFileSync: createMockFn()
 };
 
-jest.mock('fs', () => mockFs);
+mockModule('fs', () => mockFs);
 
-const mockResolveUrl = jest.fn();
+const mockResolveUrl = createMockFn();
 const mockYoutubeInstance = {
     resolveURL: mockResolveUrl
 };
-const mockManagerInstanceGet = jest.fn(async () => mockYoutubeInstance);
+const mockManagerInstanceGet = createMockFn(async () => mockYoutubeInstance);
 const mockInnertubeManager = {
-    getInstance: jest.fn(() => ({
+    getInstance: createMockFn(() => ({
         getInstance: mockManagerInstanceGet
     }))
 };
 
-jest.mock('../../../src/services/innertube-instance-manager', () => mockInnertubeManager);
-jest.mock('../../../src/factories/innertube-factory', () => ({
+mockModule('../../../src/services/innertube-instance-manager', () => mockInnertubeManager);
+mockModule('../../../src/factories/innertube-factory', () => ({
     InnertubeFactory: {
-        createWithTimeout: jest.fn(() => ({}))
+        createWithTimeout: createMockFn(() => ({}))
     }
 }));
 
@@ -55,9 +59,13 @@ let formatSuperChatAmount = initialFormatSuperChatAmount;
 const CACHE_PATH = '/path/to/cache.json';
 
 describe('youtube-data-extraction', () => {
+    afterEach(() => {
+        restoreAllMocks();
+        restoreAllModuleMocks();
+    });
+
     beforeEach(() => {
-        jest.resetModules();
-        jest.clearAllMocks();
+        resetModules();
         mockResolveUrl.mockReset();
         mockManagerInstanceGet.mockReset();
         mockManagerInstanceGet.mockImplementation(async () => mockYoutubeInstance);

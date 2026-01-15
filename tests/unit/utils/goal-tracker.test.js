@@ -1,4 +1,8 @@
 
+const { describe, test, expect, beforeEach } = require('bun:test');
+const { createMockFn, restoreAllMocks } = require('../../helpers/bun-mock-utils');
+const { mockModule, requireActual, restoreAllModuleMocks } = require('../../helpers/bun-module-mocks');
+
 const { initializeTestLogging, TEST_TIMEOUTS } = require('../../helpers/test-setup');
 const { createMockLogger, createMockFileSystem } = require('../../helpers/mock-factories');
 const { setupAutomatedCleanup } = require('../../helpers/mock-lifecycle');
@@ -15,21 +19,21 @@ setupAutomatedCleanup({
 });
 
 // Mock file system operations
-jest.mock('fs', () => ({
-    ...jest.requireActual('fs'),
-    writeFileSync: jest.fn(),
-    readFileSync: jest.fn(),
-    existsSync: jest.fn(),
-    appendFileSync: jest.fn()
+mockModule('fs', () => ({
+    ...requireActual('fs'),
+    writeFileSync: createMockFn(),
+    readFileSync: createMockFn(),
+    existsSync: createMockFn(),
+    appendFileSync: createMockFn()
 }));
 
 // Mock OBS modules to prevent connection attempts
-jest.mock('../../../src/obs/connection', () => ({
-    ensureOBSConnected: jest.fn().mockResolvedValue(true)
+mockModule('../../../src/obs/connection', () => ({
+    ensureOBSConnected: createMockFn().mockResolvedValue(true)
 }));
 
-jest.mock('../../../src/obs/sources', () => {
-    const instance = { updateTextSource: jest.fn().mockResolvedValue(true) };
+mockModule('../../../src/obs/sources', () => {
+    const instance = { updateTextSource: createMockFn().mockResolvedValue(true) };
     return {
         OBSSourcesManager: class {},
         createOBSSourcesManager: () => instance,
@@ -38,6 +42,11 @@ jest.mock('../../../src/obs/sources', () => {
 });
 
 describe('Goal Tracker - Core Functionality', () => {
+    afterEach(() => {
+        restoreAllMocks();
+        restoreAllModuleMocks();
+    });
+
     let goalTracker;
     let mockConfig;
     let mockLogger;

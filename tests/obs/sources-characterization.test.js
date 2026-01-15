@@ -1,18 +1,22 @@
 
+const { describe, test, expect, beforeEach, afterEach } = require('bun:test');
+const { createMockFn, restoreAllMocks } = require('../helpers/bun-mock-utils');
+const { mockModule, resetModules, restoreAllModuleMocks } = require('../helpers/bun-module-mocks');
+
 const { initializeTestLogging, TEST_TIMEOUTS } = require('../helpers/test-setup');
 const { createMockLogger, createMockOBSConnection, createMockOBSManager } = require('../helpers/mock-factories');
 const { setupAutomatedCleanup } = require('../helpers/mock-lifecycle');
 const testClock = require('../helpers/test-clock');
 
 // Mock the connection module with proper factory-created mocks
-jest.mock('../../src/obs/connection', () => {
+mockModule('../../src/obs/connection', () => {
     const { createMockOBSManager } = require('../helpers/mock-factories');
     const mockOBSManager = createMockOBSManager('connected');
     
     return {
-        ensureOBSConnected: jest.fn().mockResolvedValue(),
-        obsCall: jest.fn(),
-        getOBSConnectionManager: jest.fn(() => mockOBSManager)
+        ensureOBSConnected: createMockFn().mockResolvedValue(),
+        obsCall: createMockFn(),
+        getOBSConnectionManager: createMockFn(() => mockOBSManager)
     };
 });
 
@@ -27,25 +31,25 @@ setupAutomatedCleanup({
 });
 
 // Mock logging to capture debug output
-jest.mock('../../src/core/logging', () => ({
+mockModule('../../src/core/logging', () => ({
     logger: { 
-        error: jest.fn(),
-        debug: jest.fn(),
-        info: jest.fn(),
-        warn: jest.fn()
+        error: createMockFn(),
+        debug: createMockFn(),
+        info: createMockFn(),
+        warn: createMockFn()
     }
 }));
 
 // Mock retry system
-jest.mock('../../src/utils/retry-system', () => ({
-    createRetrySystem: jest.fn(() => ({ delay: jest.fn().mockResolvedValue() })),
-    RetrySystem: jest.fn(),
+mockModule('../../src/utils/retry-system', () => ({
+    createRetrySystem: createMockFn(() => ({ delay: createMockFn().mockResolvedValue() })),
+    RetrySystem: createMockFn(),
     ADAPTIVE_RETRY_CONFIG: { BASE_DELAY: 2000, MAX_DELAY: 60000, BACKOFF_MULTIPLIER: 1.3 }
 }));
 
 // Mock validation utilities
-jest.mock('../../src/utils/validation', () => ({
-    sanitizeDisplayName: jest.fn((name, limit) => name.substring(0, limit))
+mockModule('../../src/utils/validation', () => ({
+    sanitizeDisplayName: createMockFn((name, limit) => name.substring(0, limit))
 }));
 
 describe('OBS Sources Module Characterization Tests', () => {
@@ -62,15 +66,17 @@ describe('OBS Sources Module Characterization Tests', () => {
         process.env.NODE_ENV = 'test';
 
         // Clear module cache to ensure fresh imports with mocks
-        jest.resetModules();
+        resetModules();
         
         // Import the module after mocking and clearing cache
         sourcesModule = require('../../src/obs/sources').getDefaultSourcesManager();
     });
 
     afterEach(() => {
+        restoreAllMocks();
         delete process.env.NODE_ENV;
-    });
+    
+        restoreAllModuleMocks();});
 
     describe('Text Source Management', () => {
         test('updateTextSource should use mock OBS in test environment', async () => {

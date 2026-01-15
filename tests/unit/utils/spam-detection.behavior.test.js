@@ -1,4 +1,8 @@
 
+const { describe, test, expect, afterEach, it } = require('bun:test');
+const { createMockFn, restoreAllMocks } = require('../../helpers/bun-mock-utils');
+const { useFakeTimers, useRealTimers, advanceTimersByTime } = require('../../helpers/bun-timers');
+
 const {
     createSpamDetectionConfig,
     createDonationSpamDetection
@@ -6,19 +10,20 @@ const {
 
 describe('SpamDetection behavior', () => {
     const logger = {
-        debug: jest.fn(),
-        info: jest.fn(),
-        warn: jest.fn(),
-        error: jest.fn()
+        debug: createMockFn(),
+        info: createMockFn(),
+        warn: createMockFn(),
+        error: createMockFn()
     };
     let detection;
 
     afterEach(() => {
+        restoreAllMocks();
         if (detection) {
             detection.destroy();
             detection = null;
         }
-        jest.useRealTimers();
+        useRealTimers();
     });
 
     it('gracefully allows when platform spam detection disabled', () => {
@@ -47,7 +52,7 @@ describe('SpamDetection behavior', () => {
     });
 
     it('suppresses notifications after threshold and resets after window', () => {
-        jest.useFakeTimers();
+        useFakeTimers();
         const config = createSpamDetectionConfig({
             spamDetectionEnabled: true,
             spamDetectionWindow: 0.2,
@@ -59,7 +64,7 @@ describe('SpamDetection behavior', () => {
         expect(detection.handleDonationSpam('u', 'User', 1, 'Rose', 1, 'tiktok').shouldShow).toBe(true);
         expect(detection.handleDonationSpam('u', 'User', 1, 'Rose', 1, 'tiktok').shouldShow).toBe(false);
 
-        jest.advanceTimersByTime(250);
+        advanceTimersByTime(250);
         expect(detection.handleDonationSpam('u', 'User', 1, 'Rose', 1, 'tiktok').shouldShow).toBe(true);
     });
 

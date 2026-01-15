@@ -1,9 +1,13 @@
-jest.mock('../../../src/core/logging', () => ({
-    logger: { debug: jest.fn() },
-    getUnifiedLogger: jest.fn(() => ({ unified: true }))
+const { describe, test, expect, beforeEach, afterEach, it } = require('bun:test');
+const { createMockFn, clearAllMocks, restoreAllMocks } = require('../../helpers/bun-mock-utils');
+const { mockModule, unmockModule, resetModules, restoreAllModuleMocks } = require('../../helpers/bun-module-mocks');
+
+mockModule('../../../src/core/logging', () => ({
+    logger: { debug: createMockFn() },
+    getUnifiedLogger: createMockFn(() => ({ unified: true }))
 }));
 
-jest.unmock('../../../src/utils/logger-utils');
+unmockModule('../../../src/utils/logger-utils');
 
 let logging = require('../../../src/core/logging');
 const {
@@ -29,7 +33,7 @@ describe('logger-utils behavior', () => {
     const originalEnv = { ...process.env };
 
     beforeEach(() => {
-        jest.resetModules();
+        resetModules();
         logging = require('../../../src/core/logging');
         ({
             isDebugModeEnabled,
@@ -40,10 +44,12 @@ describe('logger-utils behavior', () => {
             createNoopLogger,
             getLoggerOrNoop
         } = require('../../../src/utils/logger-utils'));
-        jest.clearAllMocks();
+        clearAllMocks();
     });
 
     afterEach(() => {
+        restoreAllMocks();
+        restoreAllModuleMocks();
         process.argv = [...originalArgv];
         process.env = { ...originalEnv };
     });
@@ -82,7 +88,7 @@ describe('logger-utils behavior', () => {
     });
 
     it('returns the provided logger when available', () => {
-        const logger = { debug: jest.fn(), info: jest.fn(), warn: jest.fn(), error: jest.fn() };
+        const logger = { debug: createMockFn(), info: createMockFn(), warn: createMockFn(), error: createMockFn() };
         expect(getLoggerOrNoop(logger)).toBe(logger);
     });
 

@@ -1,10 +1,17 @@
-jest.unmock('../../src/platforms/tiktok');
+const { describe, test, expect, it } = require('bun:test');
+const { unmockModule, restoreAllModuleMocks } = require('../helpers/bun-module-mocks');
+
+unmockModule('../../src/platforms/tiktok');
 
 const { EventEmitter } = require('events');
 const { DependencyFactory } = require('../../src/utils/dependency-factory');
 const { TikTokPlatform } = require('../../src/platforms/tiktok');
 
 describe('TikTokPlatform connection factory integration', () => {
+    afterEach(() => {
+        restoreAllModuleMocks();
+    });
+
     const config = { enabled: true, username: 'factory_tester' };
 
     const createPlatform = () => {

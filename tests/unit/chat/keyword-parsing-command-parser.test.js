@@ -1,11 +1,15 @@
 
 // Mock the logger before requiring CommandParser
-jest.mock('../../../src/core/logging', () => ({
+const { describe, test, expect, beforeEach } = require('bun:test');
+const { createMockFn, restoreAllMocks } = require('../../helpers/bun-mock-utils');
+const { mockModule, restoreAllModuleMocks } = require('../../helpers/bun-module-mocks');
+
+mockModule('../../../src/core/logging', () => ({
     logger: {
-        debug: jest.fn(),
-        info: jest.fn(),
-        warn: jest.fn(),
-        error: jest.fn()
+        debug: createMockFn(),
+        info: createMockFn(),
+        warn: createMockFn(),
+        error: createMockFn()
     }
 }));
 
@@ -13,6 +17,11 @@ const { CommandParser } = require('../../../src/chat/commands');
 const testClock = require('../../helpers/test-clock');
 
 describe('CommandParser Keyword Parsing', () => {
+    afterEach(() => {
+        restoreAllMocks();
+        restoreAllModuleMocks();
+    });
+
     let commandParser;
     let mockConfig;
 

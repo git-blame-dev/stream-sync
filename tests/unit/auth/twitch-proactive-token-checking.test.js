@@ -1,5 +1,8 @@
 
-const { describe, test, expect, beforeEach, afterEach } = require('@jest/globals');
+const { describe, test, expect, beforeEach, afterEach } = require('bun:test');
+const { createMockFn, spyOn, clearAllMocks, restoreAllMocks } = require('../../helpers/bun-mock-utils');
+const { resetModules, restoreAllModuleMocks } = require('../../helpers/bun-module-mocks');
+
 const testClock = require('../../helpers/test-clock');
 
 describe('Twitch Proactive Token Checking', () => {
@@ -11,21 +14,20 @@ describe('Twitch Proactive Token Checking', () => {
     let authService;
 
     beforeEach(() => {
-        jest.resetModules();
-        jest.clearAllMocks();
-        jest.spyOn(Date, 'now').mockImplementation(() => testClock.now());
+        resetModules();
+        spyOn(Date, 'now').mockImplementation(() => testClock.now());
 
         // Mock logger
         mockLogger = {
-            info: jest.fn(),
-            debug: jest.fn(),
-            error: jest.fn(),
-            warn: jest.fn()
+            info: createMockFn(),
+            debug: createMockFn(),
+            error: createMockFn(),
+            warn: createMockFn()
         };
 
         // Mock axios
         mockAxios = {
-            get: jest.fn()
+            get: createMockFn()
         };
 
         // Load modules
@@ -49,14 +51,15 @@ describe('Twitch Proactive Token Checking', () => {
     });
 
     afterEach(() => {
-        jest.restoreAllMocks();
-    });
+        restoreAllMocks();
+    
+        restoreAllModuleMocks();});
 
     describe('ensureValidToken (timestamp guard)', () => {
         test('refreshes when token is within near-expiry threshold without calling validate', async () => {
             authService.tokenExpiresAt = testClock.now() + (10 * 60 * 1000); // 10 minutes left
 
-            const mockRefreshToken = jest.spyOn(authInitializer, 'refreshToken').mockResolvedValue(true);
+            const mockRefreshToken = spyOn(authInitializer, 'refreshToken').mockResolvedValue(true);
 
             const result = await authInitializer.ensureValidToken(authService);
 
@@ -68,7 +71,7 @@ describe('Twitch Proactive Token Checking', () => {
         test('skips refresh when token is healthy and avoids validate calls', async () => {
             authService.tokenExpiresAt = testClock.now() + (2 * 60 * 60 * 1000); // 2 hours left
 
-            const mockRefreshToken = jest.spyOn(authInitializer, 'refreshToken').mockResolvedValue(true);
+            const mockRefreshToken = spyOn(authInitializer, 'refreshToken').mockResolvedValue(true);
 
             const result = await authInitializer.ensureValidToken(authService);
 
@@ -81,7 +84,7 @@ describe('Twitch Proactive Token Checking', () => {
             authService.config.refreshToken = null;
             authService.tokenExpiresAt = testClock.now() + (30 * 60 * 1000);
 
-            const mockRefreshToken = jest.spyOn(authInitializer, 'refreshToken').mockResolvedValue(true);
+            const mockRefreshToken = spyOn(authInitializer, 'refreshToken').mockResolvedValue(true);
 
             const result = await authInitializer.ensureValidToken(authService);
 
@@ -93,7 +96,7 @@ describe('Twitch Proactive Token Checking', () => {
         test('continues with current token when no expiration metadata is present', async () => {
             authService.tokenExpiresAt = null;
 
-            const mockRefreshToken = jest.spyOn(authInitializer, 'refreshToken').mockResolvedValue(true);
+            const mockRefreshToken = spyOn(authInitializer, 'refreshToken').mockResolvedValue(true);
 
             const result = await authInitializer.ensureValidToken(authService);
 

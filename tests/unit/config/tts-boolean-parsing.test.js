@@ -1,4 +1,8 @@
 
+const { describe, test, expect, beforeEach, afterEach, it } = require('bun:test');
+const { createMockFn, clearAllMocks, restoreAllMocks } = require('../../helpers/bun-mock-utils');
+const { mockModule, resetModules, restoreAllModuleMocks } = require('../../helpers/bun-module-mocks');
+
 const { initializeTestLogging } = require('../../helpers/test-setup');
 const { createMockLogger } = require('../../helpers/mock-factories');
 const { setupAutomatedCleanup } = require('../../helpers/mock-lifecycle');
@@ -19,13 +23,11 @@ describe('TTS Configuration Boolean Parsing', () => {
     let DisplayQueue;
     
     beforeEach(() => {
-        jest.clearAllMocks();
-        
         // Create mock logger
         mockLogger = createMockLogger('debug', { captureConsole: true });
         
         // Mock the logging module
-        jest.doMock('../../../src/core/logging', () => ({
+        mockModule('../../../src/core/logging', () => ({
             logger: mockLogger,
             platformLogger: mockLogger
         }));
@@ -35,8 +37,8 @@ describe('TTS Configuration Boolean Parsing', () => {
     });
     
     afterEach(() => {
-        jest.resetModules();
-    });
+        restoreAllMocks();
+restoreAllModuleMocks();});
     
     describe('when ttsEnabled is configured with different values', () => {
         const createDisplayQueueWithTTS = (ttsValue) => {
@@ -53,7 +55,7 @@ describe('TTS Configuration Boolean Parsing', () => {
             
             const mockOBS = {
                 isConnected: () => true,
-                updateTextSource: jest.fn().mockResolvedValue(true)
+                updateTextSource: createMockFn().mockResolvedValue(true)
             };
             
             return new DisplayQueue(mockOBS, config, baseConstants, null, runtimeConstants);

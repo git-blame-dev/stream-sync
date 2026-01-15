@@ -1,10 +1,14 @@
 
-jest.mock('../../../src/core/logging', () => ({
+const { describe, test, expect, it } = require('bun:test');
+const { createMockFn, restoreAllMocks } = require('../../helpers/bun-mock-utils');
+const { mockModule, restoreAllModuleMocks } = require('../../helpers/bun-module-mocks');
+
+mockModule('../../../src/core/logging', () => ({
     logger: {
-        debug: jest.fn(),
-        info: jest.fn(),
-        warn: jest.fn(),
-        error: jest.fn()
+        debug: createMockFn(),
+        info: createMockFn(),
+        warn: createMockFn(),
+        error: createMockFn()
     }
 }));
 
@@ -12,6 +16,11 @@ const { DisplayQueue } = require('../../../src/obs/display-queue');
 const { createMockOBSManager } = require('../../helpers/mock-factories');
 
 describe('DisplayQueue priority ordering', () => {
+    afterEach(() => {
+        restoreAllMocks();
+        restoreAllModuleMocks();
+    });
+
     const constants = {
         PRIORITY_LEVELS: {
             CHAT: 1,
@@ -31,14 +40,14 @@ describe('DisplayQueue priority ordering', () => {
 
     const createQueue = () => {
         const queue = new DisplayQueue(createMockOBSManager('connected'), config, constants);
-        queue.getDuration = jest.fn().mockReturnValue(0);
+        queue.getDuration = createMockFn().mockReturnValue(0);
         return queue;
     };
 
     it('front-loads higher priority items even when added later', () => {
         const queue = createQueue();
         const processed = [];
-        queue.displayItem = jest.fn(async (item) => {
+        queue.displayItem = createMockFn(async (item) => {
             processed.push(item.type);
         });
 
@@ -62,7 +71,7 @@ describe('DisplayQueue priority ordering', () => {
     it('preserves FIFO ordering for same-priority items', () => {
         const queue = createQueue();
         const processedUsers = [];
-        queue.displayItem = jest.fn(async (item) => {
+        queue.displayItem = createMockFn(async (item) => {
             processedUsers.push(item.data.username);
         });
 

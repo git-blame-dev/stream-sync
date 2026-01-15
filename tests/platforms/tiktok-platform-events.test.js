@@ -1,8 +1,17 @@
-jest.unmock('../../src/platforms/tiktok');
+const { describe, test, expect, it } = require('bun:test');
+const { createMockFn, restoreAllMocks } = require('../helpers/bun-mock-utils');
+const { unmockModule, restoreAllModuleMocks } = require('../helpers/bun-module-mocks');
+
+unmockModule('../../src/platforms/tiktok');
 const { TikTokPlatform } = require('../../src/platforms/tiktok');
 const { createMockTikTokPlatformDependencies } = require('../helpers/mock-factories');
 
 describe('TikTokPlatform event emissions', () => {
+    afterEach(() => {
+        restoreAllMocks();
+        restoreAllModuleMocks();
+    });
+
     const baseConfig = { enabled: true, username: 'event_tester' };
 
     const createPlatformUnderTest = () => {
@@ -21,21 +30,21 @@ describe('TikTokPlatform event emissions', () => {
 
         const dependencies = createMockTikTokPlatformDependencies({ webcastEvent });
         dependencies.connectionFactory = {
-            createConnection: jest.fn().mockReturnValue({
-                on: jest.fn(),
-                removeAllListeners: jest.fn()
+            createConnection: createMockFn().mockReturnValue({
+                on: createMockFn(),
+                removeAllListeners: createMockFn()
             }),
-            cleanup: jest.fn()
+            cleanup: createMockFn()
         };
         const platform = new TikTokPlatform(baseConfig, dependencies);
 
         const eventHandlers = {};
         platform.connection = {
-            on: jest.fn((event, handler) => {
+            on: createMockFn((event, handler) => {
                 eventHandlers[event] = handler;
                 return platform.connection;
             }),
-            removeAllListeners: jest.fn()
+            removeAllListeners: createMockFn()
         };
 
         const envelopes = [];

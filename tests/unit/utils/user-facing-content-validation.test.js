@@ -1,4 +1,7 @@
 
+const { describe, test, expect, beforeEach } = require('bun:test');
+const { resetModules, restoreAllModuleMocks } = require('../../helpers/bun-module-mocks');
+
 const { 
     initializeTestLogging,
     TEST_TIMEOUTS 
@@ -22,10 +25,14 @@ setupAutomatedCleanup({
 });
 
 describe('User-Facing Content Validation', () => {
+    afterEach(() => {
+        restoreAllModuleMocks();
+    });
+
     let createNotificationData;
 
     beforeEach(() => {
-        jest.resetModules();
+        resetModules();
         
         // Re-initialize logging after module reset (shared reset pattern)
         const { initializeTestLogging } = require('../../helpers/test-setup');

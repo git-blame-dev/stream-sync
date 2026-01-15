@@ -1,24 +1,31 @@
 
+const { describe, test, expect, beforeEach, it } = require('bun:test');
+const { createMockFn, restoreAllMocks } = require('../../helpers/bun-mock-utils');
+
 const PlatformEventRouter = require('../../../src/services/PlatformEventRouter');
 
 describe('PlatformEventRouter paypiggy months handling', () => {
+    afterEach(() => {
+        restoreAllMocks();
+    });
+
     let runtime;
     let configService;
 
     const buildRouter = () => new PlatformEventRouter({
-        eventBus: { subscribe: jest.fn(() => jest.fn()), emit: jest.fn() },
+        eventBus: { subscribe: createMockFn(() => createMockFn()), emit: createMockFn() },
         runtime,
-        notificationManager: { handleNotification: jest.fn() },
+        notificationManager: { handleNotification: createMockFn() },
         configService,
         logger: { debug: () => {}, info: () => {}, warn: () => {}, error: () => {} }
     });
 
     beforeEach(() => {
         runtime = {
-            handlePaypiggyNotification: jest.fn()
+            handlePaypiggyNotification: createMockFn()
         };
         configService = {
-            areNotificationsEnabled: jest.fn().mockReturnValue(true)
+            areNotificationsEnabled: createMockFn().mockReturnValue(true)
         };
     });
 

@@ -1,34 +1,39 @@
+const { describe, test, expect, afterEach, it } = require('bun:test');
+const { createMockFn, restoreAllMocks } = require('../../helpers/bun-mock-utils');
+const { mockModule, resetModules, restoreAllModuleMocks } = require('../../helpers/bun-module-mocks');
+
 describe('safeOBSOperation error handling', () => {
     const originalEnv = process.env.NODE_ENV;
 
     afterEach(() => {
-        jest.resetModules();
-        process.env.NODE_ENV = originalEnv;
-    });
+        restoreAllMocks();
+process.env.NODE_ENV = originalEnv;
+    
+        restoreAllModuleMocks();});
 
     it('routes operation failures through createPlatformErrorHandler and rethrows', async () => {
         process.env.NODE_ENV = 'test';
 
         const errorHandler = {
-            handleEventProcessingError: jest.fn(),
-            logOperationalError: jest.fn()
+            handleEventProcessingError: createMockFn(),
+            logOperationalError: createMockFn()
         };
 
-        jest.doMock('../../../src/utils/platform-error-handler', () => ({
-            createPlatformErrorHandler: jest.fn(() => errorHandler)
+        mockModule('../../../src/utils/platform-error-handler', () => ({
+            createPlatformErrorHandler: createMockFn(() => errorHandler)
         }));
 
-        jest.doMock('../../../src/core/logging', () => ({
+        mockModule('../../../src/core/logging', () => ({
             logger: {
-                debug: jest.fn(),
-                info: jest.fn(),
-                warn: jest.fn(),
-                error: jest.fn()
+                debug: createMockFn(),
+                info: createMockFn(),
+                warn: createMockFn(),
+                error: createMockFn()
             }
         }));
 
         const obsManager = {
-            isReady: jest.fn().mockResolvedValue(true)
+            isReady: createMockFn().mockResolvedValue(true)
         };
 
         const { safeOBSOperation } = require('../../../src/obs/safe-operations');
@@ -49,10 +54,10 @@ describe('safeOBSOperation error handling', () => {
 
     it('skips operation entirely when OBS is not ready', async () => {
         const obsManager = {
-            isReady: jest.fn().mockResolvedValue(false)
+            isReady: createMockFn().mockResolvedValue(false)
         };
 
-        const operation = jest.fn();
+        const operation = createMockFn();
         const { safeOBSOperation } = require('../../../src/obs/safe-operations');
 
         const result = await safeOBSOperation(obsManager, operation, 'Not ready test');

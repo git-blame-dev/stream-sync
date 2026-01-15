@@ -1,11 +1,18 @@
+const { describe, test, expect, it } = require('bun:test');
+const { unmockModule, restoreAllModuleMocks } = require('../../helpers/bun-module-mocks');
+
 const { initializeTestLogging } = require('../../helpers/test-setup');
 
 initializeTestLogging();
 
-jest.unmock('../../../src/utils/http-client');
+unmockModule('../../../src/utils/http-client');
 const { HttpClient } = require('../../../src/utils/http-client');
 
 describe('HttpClient user agent configuration', () => {
+    afterEach(() => {
+        restoreAllModuleMocks();
+    });
+
     it('uses configured user agent list for rotation', () => {
         const client = new HttpClient({
             userAgents: ['ExampleAgent/1.0', 'ExampleAgent/2.0'],

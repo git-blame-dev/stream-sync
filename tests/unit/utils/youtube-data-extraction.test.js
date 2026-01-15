@@ -1,4 +1,8 @@
 
+const { describe, test, expect, beforeEach } = require('bun:test');
+const { createMockFn, restoreAllMocks } = require('../../helpers/bun-mock-utils');
+const { mockModule, restoreAllModuleMocks } = require('../../helpers/bun-module-mocks');
+
 const { initializeTestLogging, TEST_TIMEOUTS } = require('../../helpers/test-setup');
 const { createMockLogger, createMockFileSystem } = require('../../helpers/mock-factories');
 const { setupAutomatedCleanup } = require('../../helpers/mock-lifecycle');
@@ -15,10 +19,10 @@ setupAutomatedCleanup({
 });
 
 // Mock fs to control file system operations
-jest.mock('fs');
+mockModule('fs');
 // Mock innertube factory and instance manager
-jest.mock('../../../src/factories/innertube-factory');
-jest.mock('../../../src/services/innertube-instance-manager');
+mockModule('../../../src/factories/innertube-factory');
+mockModule('../../../src/services/innertube-instance-manager');
 const {
     getChannelId,
     configureChannelCache,
@@ -34,7 +38,7 @@ function createMockInnertubeInstance(resolveConfig = {}) {
     };
 
     return {
-        resolveURL: jest.fn().mockImplementation(async () => {
+        resolveURL: createMockFn().mockImplementation(async () => {
             if (defaultConfig.shouldError) {
                 throw new Error(defaultConfig.errorMessage);
             }
@@ -54,6 +58,11 @@ function createResolveResponse(resultConfig = {}) {
 }
 
 describe('YouTube Data Extraction', () => {
+    afterEach(() => {
+        restoreAllMocks();
+        restoreAllModuleMocks();
+    });
+
     let mockCache;
     let mockLogger;
     let mockFileSystem;
@@ -90,14 +99,14 @@ describe('YouTube Data Extraction', () => {
         // Mock InnertubeFactory
         const { InnertubeFactory } = require('../../../src/factories/innertube-factory');
         mockInnertubeFactory = InnertubeFactory;
-        mockInnertubeFactory.createWithTimeout = jest.fn();
+        mockInnertubeFactory.createWithTimeout = createMockFn();
 
         // Mock instance manager
         const innertubeInstanceManager = require('../../../src/services/innertube-instance-manager');
         mockInstanceManager = {
-            getInstance: jest.fn()
+            getInstance: createMockFn()
         };
-        innertubeInstanceManager.getInstance = jest.fn().mockReturnValue(mockInstanceManager);
+        innertubeInstanceManager.getInstance = createMockFn().mockReturnValue(mockInstanceManager);
 
         // Import the module after mocking
         configureChannelCache({ enabled: true, filePath: CACHE_PATH });

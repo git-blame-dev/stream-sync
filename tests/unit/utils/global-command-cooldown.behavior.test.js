@@ -1,11 +1,15 @@
+const { describe, test, expect, afterEach, it } = require('bun:test');
+const { createMockFn, spyOn, clearAllMocks, restoreAllMocks } = require('../../helpers/bun-mock-utils');
+const { mockModule, restoreAllModuleMocks } = require('../../helpers/bun-module-mocks');
+
 let mockHandler;
-jest.mock('../../../src/utils/platform-error-handler', () => {
+mockModule('../../../src/utils/platform-error-handler', () => {
     mockHandler = {
-        handleEventProcessingError: jest.fn(),
-        logOperationalError: jest.fn()
+        handleEventProcessingError: createMockFn(),
+        logOperationalError: createMockFn()
     };
     return {
-        createPlatformErrorHandler: jest.fn(() => mockHandler)
+        createPlatformErrorHandler: createMockFn(() => mockHandler)
     };
 });
 
@@ -14,16 +18,18 @@ const { GlobalCommandCooldownManager } = require('../../../src/utils/global-comm
 
 describe('GlobalCommandCooldownManager behavior', () => {
     const buildLogger = (overrides = {}) => ({
-        debug: jest.fn(),
-        info: jest.fn(),
-        warn: jest.fn(),
-        error: jest.fn(),
+        debug: createMockFn(),
+        info: createMockFn(),
+        warn: createMockFn(),
+        error: createMockFn(),
         ...overrides
     });
 
     afterEach(() => {
-        jest.clearAllMocks();
-    });
+        restoreAllMocks();
+        clearAllMocks();
+    
+        restoreAllModuleMocks();});
 
     it('allows execution on invalid inputs and tracks checks without blocks', () => {
         const logger = buildLogger();
@@ -43,7 +49,7 @@ describe('GlobalCommandCooldownManager behavior', () => {
     it('blocks commands still within cooldown window and reports remaining time', () => {
         const logger = buildLogger();
         const manager = new GlobalCommandCooldownManager(logger);
-        const nowSpy = jest.spyOn(Date, 'now');
+        const nowSpy = spyOn(Date, 'now');
 
         nowSpy.mockReturnValueOnce(1000); // initial timestamp for update
         manager.updateCommandTimestamp('!hello');
@@ -61,7 +67,7 @@ describe('GlobalCommandCooldownManager behavior', () => {
     it('clears expired cooldowns and reports removal count', () => {
         const logger = buildLogger();
         const manager = new GlobalCommandCooldownManager(logger);
-        const nowSpy = jest.spyOn(Date, 'now');
+        const nowSpy = spyOn(Date, 'now');
 
         nowSpy.mockReturnValue(0);
         manager.updateCommandTimestamp('!old');
@@ -76,7 +82,7 @@ describe('GlobalCommandCooldownManager behavior', () => {
 
     it('routes errors through platform error handler and fails open', () => {
         const erroringLogger = buildLogger({
-            debug: jest.fn(() => {
+            debug: createMockFn(() => {
                 throw new Error('logger failure');
             })
         });

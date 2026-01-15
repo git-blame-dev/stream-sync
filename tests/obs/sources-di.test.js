@@ -1,5 +1,9 @@
 
-jest.mock('../../src/core/logging', () => ({
+const { describe, test, expect, beforeEach, it } = require('bun:test');
+const { createMockFn, restoreAllMocks } = require('../helpers/bun-mock-utils');
+const { mockModule, resetModules, restoreAllModuleMocks } = require('../helpers/bun-module-mocks');
+
+mockModule('../../src/core/logging', () => ({
     logger: {
         debug: () => {},
         info: () => {},
@@ -11,8 +15,13 @@ jest.mock('../../src/core/logging', () => ({
 const { createRuntimeConstantsFixture } = require('../helpers/runtime-constants-fixture');
 
 describe('OBSSourcesManager DI requirements', () => {
+    afterEach(() => {
+        restoreAllMocks();
+        restoreAllModuleMocks();
+    });
+
     beforeEach(() => {
-        jest.resetModules();
+        resetModules();
     });
 
     it('exposes only DI-focused exports (no wrapper functions)', () => {
@@ -31,20 +40,20 @@ describe('OBSSourcesManager DI requirements', () => {
     });
 
     it('initializes with provided obsManager without calling getOBSConnectionManager', () => {
-        const getOBSConnectionManager = jest.fn(() => {
+        const getOBSConnectionManager = createMockFn(() => {
             throw new Error('getOBSConnectionManager should not be called');
         });
 
-        jest.doMock('../../src/obs/connection', () => ({
+        mockModule('../../src/obs/connection', () => ({
             getOBSConnectionManager
         }));
 
         const mockObsManager = {
-            ensureConnected: jest.fn().mockResolvedValue(),
-            call: jest.fn().mockResolvedValue({}),
-            addEventListener: jest.fn(),
-            removeEventListener: jest.fn(),
-            isConnected: jest.fn().mockReturnValue(true)
+            ensureConnected: createMockFn().mockResolvedValue(),
+            call: createMockFn().mockResolvedValue({}),
+            addEventListener: createMockFn(),
+            removeEventListener: createMockFn(),
+            isConnected: createMockFn().mockReturnValue(true)
         };
 
         const { createOBSSourcesManager } = require('../../src/obs/sources');
@@ -56,13 +65,13 @@ describe('OBSSourcesManager DI requirements', () => {
     });
 
     it('marks the default sources manager as degraded when OBS manager is unavailable', () => {
-        jest.doMock('../../src/obs/connection', () => ({
+        mockModule('../../src/obs/connection', () => ({
             getOBSConnectionManager: () => {
                 throw new Error('OBS manager unavailable');
             }
         }));
 
-        jest.resetModules();
+        resetModules();
         const { getDefaultSourcesManager } = require('../../src/obs/sources');
         const sourcesManager = getDefaultSourcesManager({
             runtimeConstants: createRuntimeConstantsFixture()

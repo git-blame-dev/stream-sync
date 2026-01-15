@@ -1,7 +1,11 @@
 
-jest.mock('../../src/utils/chat-logger', () => ({
-    logChatMessageWithConfig: jest.fn(),
-    logChatMessageSkipped: jest.fn()
+const { describe, test, expect, beforeEach, jest } = require('bun:test');
+const { createMockFn, restoreAllMocks } = require('../helpers/bun-mock-utils');
+const { mockModule, restoreAllModuleMocks } = require('../helpers/bun-module-mocks');
+
+mockModule('../../src/utils/chat-logger', () => ({
+    logChatMessageWithConfig: createMockFn(),
+    logChatMessageSkipped: createMockFn()
 }));
 
 const { logChatMessageWithConfig, logChatMessageSkipped } = require('../../src/utils/chat-logger');
@@ -20,6 +24,11 @@ setupAutomatedCleanup({
 });
 
 describe('Old Message Filter', () => {
+    afterEach(() => {
+        restoreAllMocks();
+        restoreAllModuleMocks();
+    });
+
     jest.setTimeout(TEST_TIMEOUTS.UNIT);
 
     const buildRouter = (overrides = {}) => {
@@ -31,7 +40,7 @@ describe('Old Message Filter', () => {
                 }
             },
             platformLifecycleService: {
-                getPlatformConnectionTime: jest.fn().mockReturnValue(overrides.connectionTime || null)
+                getPlatformConnectionTime: createMockFn().mockReturnValue(overrides.connectionTime || null)
             },
             gracefulExitService: overrides.gracefulExitService || null
         };
@@ -39,12 +48,12 @@ describe('Old Message Filter', () => {
         const logger = createMockLogger('debug');
         const router = new ChatNotificationRouter({ runtime, logger });
 
-        router.enqueueChatMessage = jest.fn();
-        router.detectCommand = jest.fn().mockResolvedValue(null);
-        router.processCommand = jest.fn();
-        router.isFirstMessage = jest.fn().mockReturnValue(false);
-        router.isGreetingEnabled = jest.fn().mockReturnValue(false);
-        router.detectMonetization = jest.fn().mockReturnValue({ detected: false });
+        router.enqueueChatMessage = createMockFn();
+        router.detectCommand = createMockFn().mockResolvedValue(null);
+        router.processCommand = createMockFn();
+        router.isFirstMessage = createMockFn().mockReturnValue(false);
+        router.isGreetingEnabled = createMockFn().mockReturnValue(false);
+        router.detectMonetization = createMockFn().mockReturnValue({ detected: false });
 
         return { router, runtime };
     };

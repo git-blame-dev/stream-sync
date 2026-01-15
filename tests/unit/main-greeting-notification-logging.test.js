@@ -1,4 +1,8 @@
 
+const { describe, test, expect, beforeEach, jest } = require('bun:test');
+const { createMockFn, restoreAllMocks } = require('../helpers/bun-mock-utils');
+const { mockModule, restoreAllModuleMocks } = require('../helpers/bun-module-mocks');
+
 const { initializeTestLogging, createTestUser, TEST_TIMEOUTS } = require('../helpers/test-setup');
 const { createMockLogger } = require('../helpers/mock-factories');
 const { setupAutomatedCleanup } = require('../helpers/mock-lifecycle');
@@ -15,13 +19,18 @@ setupAutomatedCleanup({
 });
 
 // Mock the logger dependency that main.js uses
-jest.mock('../../src/core/logging', () => ({
-    getLogger: () => ({ console: jest.fn() }),
-    setConfigValidator: jest.fn(),
-    initializeLoggingConfig: jest.fn()
+mockModule('../../src/core/logging', () => ({
+    getLogger: () => ({ console: createMockFn() }),
+    setConfigValidator: createMockFn(),
+    initializeLoggingConfig: createMockFn()
 }));
 
 describe('Main.js Greeting Notification Logging', () => {
+    afterEach(() => {
+        restoreAllMocks();
+        restoreAllModuleMocks();
+    });
+
     // Test timeout protection as per rules
     jest.setTimeout(TEST_TIMEOUTS.UNIT);
 
@@ -31,11 +40,11 @@ describe('Main.js Greeting Notification Logging', () => {
     beforeEach(() => {
         // Create minimal mock logger with console method
         mockLogger = {
-            console: jest.fn(),
-            debug: jest.fn(),
-            info: jest.fn(),
-            warn: jest.fn(),
-            error: jest.fn()
+            console: createMockFn(),
+            debug: createMockFn(),
+            info: createMockFn(),
+            warn: createMockFn(),
+            error: createMockFn()
         };
         
         // Create a minimal AppRuntime-like object with just the logNotificationToConsole method

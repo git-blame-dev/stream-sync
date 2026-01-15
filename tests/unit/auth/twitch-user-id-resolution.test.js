@@ -1,4 +1,8 @@
 
+const { describe, test, expect, beforeEach, it } = require('bun:test');
+const { createMockFn, restoreAllMocks } = require('../../helpers/bun-mock-utils');
+const { mockModule, restoreAllModuleMocks } = require('../../helpers/bun-module-mocks');
+
 const { initializeTestLogging } = require('../../helpers/test-setup');
 const { createMockLogger } = require('../../helpers/mock-factories');
 const { setupAutomatedCleanup } = require('../../helpers/mock-lifecycle');
@@ -14,13 +18,13 @@ setupAutomatedCleanup({
 });
 
 // Mock axios before importing classes
-jest.mock('axios');
+mockModule('axios');
 const axios = require('axios');
 
 // Mock the OAuth handler to prevent server startup
-jest.mock('../../../src/auth/oauth-handler', () => ({
-    TwitchOAuthHandler: jest.fn().mockImplementation(() => ({
-        runOAuthFlow: jest.fn().mockRejectedValue(new Error('OAuth not available in test environment'))
+mockModule('../../../src/auth/oauth-handler', () => ({
+    TwitchOAuthHandler: createMockFn().mockImplementation(() => ({
+        runOAuthFlow: createMockFn().mockRejectedValue(new Error('OAuth not available in test environment'))
     }))
 }));
 
@@ -28,6 +32,11 @@ const TwitchAuthInitializer = require('../../../src/auth/TwitchAuthInitializer')
 const TwitchAuthService = require('../../../src/auth/TwitchAuthService');
 
 describe('Twitch User ID Resolution', () => {
+    afterEach(() => {
+        restoreAllMocks();
+        restoreAllModuleMocks();
+    });
+
     let authInitializer;
     let authService;
     let mockLogger;
@@ -37,12 +46,12 @@ describe('Twitch User ID Resolution', () => {
         
         // Mock dependencies to prevent unwanted side effects
         const mockHttpClient = {
-            post: jest.fn()
+            post: createMockFn()
         };
         
         const mockFs = {
-            readFileSync: jest.fn().mockReturnValue('[twitch]\naccessToken=old_token\nrefreshToken=old_refresh'),
-            writeFileSync: jest.fn()
+            readFileSync: createMockFn().mockReturnValue('[twitch]\naccessToken=old_token\nrefreshToken=old_refresh'),
+            writeFileSync: createMockFn()
         };
         
         // Create auth initializer with mocked axios for dependency injection
@@ -84,7 +93,7 @@ describe('Twitch User ID Resolution', () => {
             
             // Mock the enhancedHttpClient to prevent real OAuth calls
             const mockEnhancedHttpClient = {
-                post: jest.fn()
+                post: createMockFn()
             };
             
             // Create auth initializer with mocked dependencies
@@ -93,8 +102,8 @@ describe('Twitch User ID Resolution', () => {
                 axios: axios,
                 enhancedHttpClient: mockEnhancedHttpClient,
                 fs: {
-                    readFileSync: jest.fn().mockReturnValue('[twitch]\naccessToken=old_token\nrefreshToken=old_refresh'),
-                    writeFileSync: jest.fn()
+                    readFileSync: createMockFn().mockReturnValue('[twitch]\naccessToken=old_token\nrefreshToken=old_refresh'),
+                    writeFileSync: createMockFn()
                 }
             });
             
@@ -116,7 +125,7 @@ describe('Twitch User ID Resolution', () => {
             
             // Mock the enhancedHttpClient to prevent real OAuth calls
             const mockEnhancedHttpClient = {
-                post: jest.fn().mockRejectedValue(new Error('Refresh failed'))
+                post: createMockFn().mockRejectedValue(new Error('Refresh failed'))
             };
             
             // Create auth initializer with mocked dependencies
@@ -125,8 +134,8 @@ describe('Twitch User ID Resolution', () => {
                 axios: axios,
                 enhancedHttpClient: mockEnhancedHttpClient,
                 fs: {
-                    readFileSync: jest.fn().mockReturnValue('[twitch]\naccessToken=old_token\nrefreshToken=old_refresh'),
-                    writeFileSync: jest.fn()
+                    readFileSync: createMockFn().mockReturnValue('[twitch]\naccessToken=old_token\nrefreshToken=old_refresh'),
+                    writeFileSync: createMockFn()
                 }
             });
             
@@ -187,11 +196,11 @@ describe('Twitch User ID Resolution', () => {
                     logger: mockLogger,
                     axios: axios,
                     enhancedHttpClient: {
-                        post: jest.fn()
+                        post: createMockFn()
                     },
                     fs: {
-                        readFileSync: jest.fn().mockReturnValue('[twitch]\naccessToken=old_token\nrefreshToken=old_refresh'),
-                        writeFileSync: jest.fn()
+                        readFileSync: createMockFn().mockReturnValue('[twitch]\naccessToken=old_token\nrefreshToken=old_refresh'),
+                        writeFileSync: createMockFn()
                     }
                 });
                 
@@ -222,7 +231,7 @@ describe('Twitch User ID Resolution', () => {
             
             // Mock the enhancedHttpClient to prevent real OAuth calls
             const mockEnhancedHttpClient = {
-                post: jest.fn()
+                post: createMockFn()
             };
             
             // Create auth initializer with mocked dependencies
@@ -231,8 +240,8 @@ describe('Twitch User ID Resolution', () => {
                 axios: axios,
                 enhancedHttpClient: mockEnhancedHttpClient,
                 fs: {
-                    readFileSync: jest.fn().mockReturnValue('[twitch]\naccessToken=old_token\nrefreshToken=old_refresh'),
-                    writeFileSync: jest.fn()
+                    readFileSync: createMockFn().mockReturnValue('[twitch]\naccessToken=old_token\nrefreshToken=old_refresh'),
+                    writeFileSync: createMockFn()
                 }
             });
             

@@ -1,4 +1,7 @@
 
+const { describe, test, expect, beforeEach, it } = require('bun:test');
+const { createMockFn, restoreAllMocks } = require('../../helpers/bun-mock-utils');
+
 const { initializeTestLogging } = require('../../helpers/test-setup');
 const { createMockLogger } = require('../../helpers/mock-factories');
 const { setupAutomatedCleanup } = require('../../helpers/mock-lifecycle');
@@ -26,7 +29,7 @@ setupAutomatedCleanup({
 });
 
 const buildTimestampService = () => ({
-    extractTimestamp: jest.fn((platform, data) => {
+    extractTimestamp: createMockFn((platform, data) => {
         if (platform === 'twitch') {
             const raw = data?.['tmi-sent-ts'] ?? data?.timestamp;
             if (!raw) {
@@ -58,6 +61,10 @@ const buildTimestampService = () => ({
 });
 
 describe('Message Normalization', () => {
+    afterEach(() => {
+        restoreAllMocks();
+    });
+
     let mockLogger;
     let timestampService;
 
@@ -119,7 +126,7 @@ describe('Message Normalization', () => {
 
         it('should reject non-string timestamps from the service', () => {
             const nonStringTimestampService = {
-                extractTimestamp: jest.fn(() => 123456789)
+                extractTimestamp: createMockFn(() => 123456789)
             };
             const user = { userId: '123456789', username: 'testuser' };
             const message = 'Timestamp type check';
@@ -233,7 +240,7 @@ describe('Message Normalization', () => {
 
         it('should reject non-string timestamps from the service', () => {
             const nonStringTimestampService = {
-                extractTimestamp: jest.fn(() => 123456789)
+                extractTimestamp: createMockFn(() => 123456789)
             };
             const chatItem = {
                 item: {
@@ -331,7 +338,7 @@ describe('Message Normalization', () => {
 
         it('should reject non-string timestamps from the service', () => {
             const nonStringTimestampService = {
-                extractTimestamp: jest.fn(() => 123456789)
+                extractTimestamp: createMockFn(() => 123456789)
             };
             const data = {
                 user: {
@@ -1019,7 +1026,7 @@ describe('Message Normalization', () => {
             it('should integrate with TimestampExtractionService when provided via dependency injection', () => {
                 // Given: A mock TimestampExtractionService
                 const mockTimestampService = {
-                    extractTimestamp: jest.fn((platform, data) => {
+                    extractTimestamp: createMockFn((platform, data) => {
                         // Mock service that preserves original timestamps
                         if (platform === 'tiktok' && data.createTime) {
                             return new Date(data.createTime).toISOString();

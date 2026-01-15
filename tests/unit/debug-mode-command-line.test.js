@@ -1,4 +1,6 @@
 
+const { describe, test, expect, beforeEach, jest } = require('bun:test');
+
 const { initializeTestLogging, createTestUser, TEST_TIMEOUTS } = require('../helpers/test-setup');
 const { createMockLogger, createMockNotificationBuilder } = require('../helpers/mock-factories');
 const { setupAutomatedCleanup } = require('../helpers/mock-lifecycle');

@@ -1,7 +1,13 @@
+const { describe, test, expect, it } = require('bun:test');
+const { mockModule, resetModules, restoreAllModuleMocks } = require('../../helpers/bun-module-mocks');
+
 describe('validation fallback username behavior', () => {
+    afterEach(() => {
+        restoreAllModuleMocks();
+    });
+
     it('uses configured fallback username for invalid inputs', () => {
-        jest.resetModules();
-        jest.doMock('../../../src/core/config', () => ({
+mockModule('../../../src/core/config', () => ({
             config: {
                 general: {
                     fallbackUsername: 'Guest'

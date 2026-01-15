@@ -1,3 +1,6 @@
+const { describe, test, expect, it } = require('bun:test');
+const { mockModule, resetModules, restoreAllModuleMocks } = require('../../helpers/bun-module-mocks');
+
 const {
     sanitizeForOBS,
     isOBSSafe,
@@ -6,6 +9,10 @@ const {
 } = require('../../../src/utils/obs-text-sanitizer');
 
 describe('obs-text-sanitizer behavior', () => {
+    afterEach(() => {
+        restoreAllModuleMocks();
+    });
+
     it('removes unsafe characters and keeps printable ASCII', () => {
         expect(sanitizeForOBS('Coolguy✗o🥭')).toBe('Coolguyo');
         expect(isOBSSafe('Hello World!')).toBe(true);
@@ -24,8 +31,7 @@ describe('obs-text-sanitizer behavior', () => {
     });
 
     it('uses configured fallback username when sanitized output is empty', () => {
-        jest.resetModules();
-        jest.doMock('../../../src/core/config', () => ({
+mockModule('../../../src/core/config', () => ({
             config: {
                 general: {
                     fallbackUsername: 'Guest'

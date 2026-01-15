@@ -1,5 +1,8 @@
 
 // Initialize test logging FIRST
+const { describe, test, expect, beforeEach, it } = require('bun:test');
+const { createMockFn, restoreAllMocks } = require('../helpers/bun-mock-utils');
+
 const { initializeTestLogging } = require('../helpers/test-setup');
 initializeTestLogging();
 
@@ -26,6 +29,10 @@ setupAutomatedCleanup({
 });
 
 describe('Greeting Display Username Fix', () => {
+    afterEach(() => {
+        restoreAllMocks();
+    });
+
     let mockLogger;
     let mockConfig;
     let mockNotificationManager;
@@ -37,7 +44,7 @@ describe('Greeting Display Username Fix', () => {
         mockLogger = createMockLogger('debug', { captureConsole: true });
         mockConfig = createMockConfig();
         mockNotificationManager = createMockNotificationManager({
-            handleNotification: jest.fn().mockResolvedValue({
+            handleNotification: createMockFn().mockResolvedValue({
                 success: true,
                 displayed: true
             })

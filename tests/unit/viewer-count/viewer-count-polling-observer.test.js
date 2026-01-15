@@ -1,36 +1,41 @@
+const { describe, test, expect, afterEach, it } = require('bun:test');
+const { createMockFn, restoreAllMocks } = require('../../helpers/bun-mock-utils');
+const { mockModule, resetModules, restoreAllModuleMocks } = require('../../helpers/bun-module-mocks');
+
 describe('ViewerCountSystem polling observer notifications', () => {
     const originalEnv = process.env.NODE_ENV;
 
     afterEach(() => {
-        jest.resetModules();
-        process.env.NODE_ENV = originalEnv;
-    });
+        restoreAllMocks();
+process.env.NODE_ENV = originalEnv;
+    
+        restoreAllModuleMocks();});
 
     function createSystemWithPlatform(counts = [5, 7], platforms = { youtube: {} }, warnSpy = null, errorSpy = null) {
         process.env.NODE_ENV = 'test';
 
-        jest.doMock('../../../src/core/config', () => ({
+        mockModule('../../../src/core/config', () => ({
             configManager: {
-                getNumber: jest.fn().mockReturnValue(15)
+                getNumber: createMockFn().mockReturnValue(15)
             }
         }));
 
-        jest.doMock('../../../src/utils/timeout-validator', () => ({
-            safeSetInterval: jest.fn(),
-            safeDelay: jest.fn()
+        mockModule('../../../src/utils/timeout-validator', () => ({
+            safeSetInterval: createMockFn(),
+            safeDelay: createMockFn()
         }));
 
-        jest.doMock('../../../src/core/logging', () => ({
+        mockModule('../../../src/core/logging', () => ({
             logger: {
-                debug: jest.fn(),
-                info: jest.fn(),
-                warn: jest.fn(),
-                error: jest.fn()
+                debug: createMockFn(),
+                info: createMockFn(),
+                warn: createMockFn(),
+                error: createMockFn()
             }
         }));
 
         const platform = {
-            getViewerCount: jest.fn()
+            getViewerCount: createMockFn()
                 .mockResolvedValueOnce(counts[0])
                 .mockResolvedValueOnce(counts[1])
         };
@@ -39,8 +44,8 @@ describe('ViewerCountSystem polling observer notifications', () => {
         const system = new ViewerCountSystem({
             platforms: { ...platforms, youtube: platform }
         });
-        system.logger.warn = warnSpy || jest.fn();
-        system.logger.error = errorSpy || jest.fn();
+        system.logger.warn = warnSpy || createMockFn();
+        system.logger.error = errorSpy || createMockFn();
 
         // Mark stream live so polling proceeds
         system.streamStatus.youtube = true;
@@ -54,7 +59,7 @@ describe('ViewerCountSystem polling observer notifications', () => {
         const updates = [];
         system.addObserver({
             getObserverId: () => 'obs-poll',
-            onViewerCountUpdate: jest.fn((payload) => updates.push(payload))
+            onViewerCountUpdate: createMockFn((payload) => updates.push(payload))
         });
 
         await system.pollPlatform('youtube'); // first poll
@@ -82,7 +87,7 @@ describe('ViewerCountSystem polling observer notifications', () => {
         const updates = [];
         system.addObserver({
             getObserverId: () => 'obs-offline',
-            onViewerCountUpdate: jest.fn((payload) => updates.push(payload))
+            onViewerCountUpdate: createMockFn((payload) => updates.push(payload))
         });
 
         await system.pollPlatform('youtube');
@@ -112,7 +117,7 @@ describe('ViewerCountSystem polling observer notifications', () => {
 
     it('warns and skips when platform returns null viewer count', async () => {
         const warnings = [];
-        const platform = { getViewerCount: jest.fn().mockResolvedValue(null) };
+        const platform = { getViewerCount: createMockFn().mockResolvedValue(null) };
         const { system } = createSystemWithPlatform([null], { youtube: platform }, (msg) => warnings.push(msg));
         system.streamStatus.youtube = true;
 
@@ -122,7 +127,7 @@ describe('ViewerCountSystem polling observer notifications', () => {
     });
 
     it('continues when polling throws (logged via error handler)', async () => {
-        const platform = { getViewerCount: jest.fn().mockRejectedValue(new Error('boom')) };
+        const platform = { getViewerCount: createMockFn().mockRejectedValue(new Error('boom')) };
         const { system } = createSystemWithPlatform([1], { youtube: platform });
         system.streamStatus.youtube = true;
 

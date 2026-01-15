@@ -1,17 +1,21 @@
+const { describe, test, expect, afterEach, it } = require('bun:test');
+const { createMockFn, clearAllMocks, restoreAllMocks } = require('../../helpers/bun-mock-utils');
+
 const TwitchAuthManager = require('../../../src/auth/TwitchAuthManager');
 
 describe('TwitchAuthManager OAuth handling', () => {
     const logger = {
-        debug: jest.fn(),
-        info: jest.fn(),
-        warn: jest.fn(),
-        error: jest.fn()
+        debug: createMockFn(),
+        info: createMockFn(),
+        warn: createMockFn(),
+        error: createMockFn()
     };
     const originalEnv = { ...process.env };
 
     afterEach(() => {
+        restoreAllMocks();
         process.env = { ...originalEnv };
-        jest.clearAllMocks();
+        clearAllMocks();
     });
 
     it('auto-triggers OAuth flow when access token is missing', async () => {
@@ -19,7 +23,7 @@ describe('TwitchAuthManager OAuth handling', () => {
         delete process.env.TWITCH_DISABLE_AUTH;
 
         const mockOAuthHandler = {
-            runOAuthFlow: jest.fn().mockResolvedValue({
+            runOAuthFlow: createMockFn().mockResolvedValue({
                 access_token: 'oauth-access',
                 refresh_token: 'oauth-refresh'
             })

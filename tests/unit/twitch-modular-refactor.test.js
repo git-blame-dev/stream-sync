@@ -1,4 +1,7 @@
 
+const { describe, test, expect, beforeEach, it } = require('bun:test');
+const { createMockFn, restoreAllMocks } = require('../helpers/bun-mock-utils');
+
 const { 
     initializeTestLogging,
     createTestUser, 
@@ -76,6 +79,10 @@ class TwitchPlatform {
 }
 
 describe('TwitchPlatform Modular Refactor', () => {
+    afterEach(() => {
+        restoreAllMocks();
+    });
+
     
     describe('ConnectionState Module', () => {
         describe('when creating connection state', () => {
@@ -159,7 +166,7 @@ describe('TwitchPlatform Modular Refactor', () => {
                 accessToken: 'test_token',
                 clientId: 'test_client_id'
             });
-            mockHttpClient = { get: jest.fn() };
+            mockHttpClient = { get: createMockFn() };
             apiClient = new TwitchApiClient(
                 mockAuthManager,
                 { clientId: 'test_client_id' },
@@ -274,7 +281,7 @@ describe('TwitchPlatform Modular Refactor', () => {
         beforeEach(() => {
             mockLogger = createMockLogger();
             mockApiClient = {
-                getStreamInfo: jest.fn()
+                getStreamInfo: createMockFn()
             };
             mockConfig = {
                 channel: 'test_channel',
@@ -359,9 +366,9 @@ describe('TwitchPlatform Modular Refactor', () => {
             
             mockEventSub = {
                 isActive: () => true,
-                initialize: jest.fn().mockResolvedValue()
+                initialize: createMockFn().mockResolvedValue()
             };
-            mockHttpClient = { get: jest.fn() };
+            mockHttpClient = { get: createMockFn() };
 
             const config = {
                 enabled: true,
@@ -466,7 +473,7 @@ describe('TwitchPlatform Modular Refactor', () => {
         it('should provide consistent viewer count interface', () => {
             // Arrange
             const mockLogger = createMockLogger();
-            const mockApiClient = { getStreamInfo: jest.fn() };
+            const mockApiClient = { getStreamInfo: createMockFn() };
             const config = { channel: 'test', eventSub: { isActive: () => true } };
             
             // Act

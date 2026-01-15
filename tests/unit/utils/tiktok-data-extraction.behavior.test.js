@@ -1,3 +1,6 @@
+const { describe, test, expect, it } = require('bun:test');
+const { createMockFn, restoreAllMocks } = require('../../helpers/bun-mock-utils');
+
 const {
     extractTikTokUserData,
     extractTikTokGiftData,
@@ -7,8 +10,12 @@ const {
 } = require('../../../src/utils/tiktok-data-extraction');
 
 describe('logTikTokGiftData behavior', () => {
+    afterEach(() => {
+        restoreAllMocks();
+    });
+
     it('does not write to disk when gift logging is not explicitly enabled', async () => {
-        const writer = jest.fn().mockResolvedValue();
+        const writer = createMockFn().mockResolvedValue();
 
         await logTikTokGiftData(
             {
@@ -25,9 +32,9 @@ describe('logTikTokGiftData behavior', () => {
     });
 
     it('routes writer errors through platform error handler when logging enabled', async () => {
-        const errorHandler = { handleDataLoggingError: jest.fn() };
-        const writer = jest.fn().mockRejectedValue(new Error('disk full'));
-        const logger = { info: jest.fn(), error: jest.fn(), warn: jest.fn(), debug: jest.fn() };
+        const errorHandler = { handleDataLoggingError: createMockFn() };
+        const writer = createMockFn().mockRejectedValue(new Error('disk full'));
+        const logger = { info: createMockFn(), error: createMockFn(), warn: createMockFn(), debug: createMockFn() };
         const configProvider = () => ({ tiktok: { giftLoggingEnabled: true } });
 
         await logTikTokGiftData(
@@ -50,8 +57,8 @@ describe('logTikTokGiftData behavior', () => {
     });
 
     it('reports missing gift logging path when enabled without writer', async () => {
-        const errorHandler = { handleDataLoggingError: jest.fn() };
-        const logger = { info: jest.fn(), error: jest.fn(), warn: jest.fn(), debug: jest.fn() };
+        const errorHandler = { handleDataLoggingError: createMockFn() };
+        const logger = { info: createMockFn(), error: createMockFn(), warn: createMockFn(), debug: createMockFn() };
         const configProvider = () => ({ tiktok: { giftLoggingEnabled: true } });
 
         await logTikTokGiftData(

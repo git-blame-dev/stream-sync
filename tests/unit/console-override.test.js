@@ -1,6 +1,10 @@
 
 // Unmock the logging module for this test since we're testing the actual implementation
-jest.unmock('../../src/core/logging');
+const { describe, test, expect, beforeEach, afterEach, beforeAll, afterAll, jest } = require('bun:test');
+const { createMockFn, restoreAllMocks } = require('../helpers/bun-mock-utils');
+const { unmockModule, restoreAllModuleMocks } = require('../helpers/bun-module-mocks');
+
+unmockModule('../../src/core/logging');
 
 const { initializeTestLogging, createTestUser, TEST_TIMEOUTS } = require('../helpers/test-setup');
 const { createMockLogger, createMockNotificationBuilder } = require('../helpers/mock-factories');
@@ -97,9 +101,11 @@ describe('Console Override Pattern', () => {
     });
     
     afterEach(() => {
+        restoreAllMocks();
         // Restore console after each test
         restoreConsole();
-    });
+    
+        restoreAllModuleMocks();});
     
     describe('ensureLogDirectory', () => {
         test('should create logs directory if it does not exist', () => {
@@ -303,7 +309,7 @@ describe('Console Override Pattern', () => {
         test('should handle file write errors gracefully', () => {
             // Mock fs.appendFileSync to throw an error
             const originalAppendFileSync = fs.appendFileSync;
-            fs.appendFileSync = jest.fn(() => {
+            fs.appendFileSync = createMockFn(() => {
                 throw new Error('Mock file write error');
             });
             
@@ -318,7 +324,7 @@ describe('Console Override Pattern', () => {
         test('should handle directory creation errors gracefully', () => {
             // Mock fs.mkdirSync to throw an error
             const originalMkdirSync = fs.mkdirSync;
-            fs.mkdirSync = jest.fn(() => {
+            fs.mkdirSync = createMockFn(() => {
                 throw new Error('Mock directory creation error');
             });
             

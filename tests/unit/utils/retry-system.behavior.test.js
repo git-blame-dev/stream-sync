@@ -1,8 +1,12 @@
 
-jest.mock('../../../src/utils/platform-error-handler', () => ({
-    createPlatformErrorHandler: jest.fn(() => ({
-        handleEventProcessingError: jest.fn(),
-        logOperationalError: jest.fn()
+const { describe, test, expect, beforeEach, it } = require('bun:test');
+const { createMockFn, spyOn, clearAllMocks, restoreAllMocks } = require('../../helpers/bun-mock-utils');
+const { mockModule, resetModules, restoreAllModuleMocks } = require('../../helpers/bun-module-mocks');
+
+mockModule('../../../src/utils/platform-error-handler', () => ({
+    createPlatformErrorHandler: createMockFn(() => ({
+        handleEventProcessingError: createMockFn(),
+        logOperationalError: createMockFn()
     }))
 }));
 
@@ -15,23 +19,27 @@ let RetrySystem;
 let ADAPTIVE_RETRY_CONFIG;
 
 describe('RetrySystem', () => {
+    afterEach(() => {
+        restoreAllMocks();
+        restoreAllModuleMocks();
+    });
+
     const logger = {
-        debug: jest.fn(),
-        info: jest.fn(),
-        warn: jest.fn()
+        debug: createMockFn(),
+        info: createMockFn(),
+        warn: createMockFn()
     };
 
     beforeEach(() => {
-        jest.resetModules();
-        jest.clearAllMocks();
+        resetModules();
         const timeoutValidator = require('../../../src/utils/timeout-validator');
-        safeSetTimeoutSpy = jest.spyOn(timeoutValidator, 'safeSetTimeout').mockImplementation((fn) => {
+        safeSetTimeoutSpy = spyOn(timeoutValidator, 'safeSetTimeout').mockImplementation((fn) => {
             fn();
             return 1;
         });
-        safeDelaySpy = jest.spyOn(timeoutValidator, 'safeDelay').mockImplementation(() => Promise.resolve());
-        validateTimeoutSpy = jest.spyOn(timeoutValidator, 'validateTimeout').mockImplementation((delay) => delay);
-        validateExponentialBackoffSpy = jest.spyOn(timeoutValidator, 'validateExponentialBackoff').mockImplementation((base, multiplier, retry, max) => {
+        safeDelaySpy = spyOn(timeoutValidator, 'safeDelay').mockImplementation(() => Promise.resolve());
+        validateTimeoutSpy = spyOn(timeoutValidator, 'validateTimeout').mockImplementation((delay) => delay);
+        validateExponentialBackoffSpy = spyOn(timeoutValidator, 'validateExponentialBackoff').mockImplementation((base, multiplier, retry, max) => {
             const calculated = base * Math.pow(multiplier, retry);
             return calculated > max ? max : calculated;
         });
@@ -42,12 +50,12 @@ describe('RetrySystem', () => {
     it('stops retries on authorization errors and cleans up state', () => {
         const retrySystem = new RetrySystem({ logger });
         retrySystem.errorHandler = {
-            handleEventProcessingError: jest.fn(),
-            logOperationalError: jest.fn()
+            handleEventProcessingError: createMockFn(),
+            logOperationalError: createMockFn()
         };
-        const reconnect = jest.fn();
-        const cleanup = jest.fn();
-        const setState = jest.fn();
+        const reconnect = createMockFn();
+        const cleanup = createMockFn();
+        const setState = createMockFn();
 
         retrySystem.handleConnectionError('Twitch', new Error('401 Unauthorized'), reconnect, cleanup, setState);
 
@@ -60,12 +68,12 @@ describe('RetrySystem', () => {
     it('continues gracefully when connection state reset throws during auth failure', () => {
         const retrySystem = new RetrySystem({ logger });
         retrySystem.errorHandler = {
-            handleEventProcessingError: jest.fn(),
-            logOperationalError: jest.fn()
+            handleEventProcessingError: createMockFn(),
+            logOperationalError: createMockFn()
         };
-        const reconnect = jest.fn();
-        const cleanup = jest.fn();
-        const setState = jest.fn(() => { throw new Error('state reset failed'); });
+        const reconnect = createMockFn();
+        const cleanup = createMockFn();
+        const setState = createMockFn(() => { throw new Error('state reset failed'); });
 
         expect(() => retrySystem.handleConnectionError('Twitch', new Error('401 Unauthorized'), reconnect, cleanup, setState))
             .not.toThrow();
@@ -77,10 +85,10 @@ describe('RetrySystem', () => {
     it('schedules reconnect with adaptive delay and executes reconnect when not connected', async () => {
         const retrySystem = new RetrySystem({ logger });
         retrySystem.errorHandler = {
-            handleEventProcessingError: jest.fn(),
-            logOperationalError: jest.fn()
+            handleEventProcessingError: createMockFn(),
+            logOperationalError: createMockFn()
         };
-        const reconnect = jest.fn().mockResolvedValue();
+        const reconnect = createMockFn().mockResolvedValue();
 
         retrySystem.handleConnectionError('TikTok', new Error('temporary failure'), reconnect);
         await Promise.resolve();
@@ -93,11 +101,11 @@ describe('RetrySystem', () => {
     it('continues scheduled reconnect when state reset throws inside scheduler', async () => {
         const retrySystem = new RetrySystem({ logger });
         retrySystem.errorHandler = {
-            handleEventProcessingError: jest.fn(),
-            logOperationalError: jest.fn()
+            handleEventProcessingError: createMockFn(),
+            logOperationalError: createMockFn()
         };
-        const reconnect = jest.fn().mockResolvedValue();
-        retrySystem.isConnected = jest.fn().mockReturnValue(false);
+        const reconnect = createMockFn().mockResolvedValue();
+        retrySystem.isConnected = createMockFn().mockReturnValue(false);
 
         retrySystem.handleConnectionError('TikTok', new Error('temporary failure'), reconnect, null, () => { throw new Error('state error'); });
         await Promise.resolve();
@@ -108,12 +116,12 @@ describe('RetrySystem', () => {
     it('halts scheduled reconnects after exceeding max retries', async () => {
         const retrySystem = new RetrySystem({ logger, constants: { RETRY_MAX_ATTEMPTS: 10 } });
         retrySystem.errorHandler = {
-            handleEventProcessingError: jest.fn(),
-            logOperationalError: jest.fn()
+            handleEventProcessingError: createMockFn(),
+            logOperationalError: createMockFn()
         };
         retrySystem.platformRetryCount.TikTok = 10;
 
-        const reconnect = jest.fn();
+        const reconnect = createMockFn();
         retrySystem.handleConnectionError('TikTok', new Error('fail'), reconnect);
         await Promise.resolve();
 
@@ -125,12 +133,12 @@ describe('RetrySystem', () => {
     it('halts scheduled reconnects when already over max before increment', async () => {
         const retrySystem = new RetrySystem({ logger, constants: { RETRY_MAX_ATTEMPTS: 10 } });
         retrySystem.errorHandler = {
-            handleEventProcessingError: jest.fn(),
-            logOperationalError: jest.fn()
+            handleEventProcessingError: createMockFn(),
+            logOperationalError: createMockFn()
         };
         retrySystem.platformRetryCount.YouTube = 50;
 
-        const reconnect = jest.fn();
+        const reconnect = createMockFn();
         retrySystem.handleConnectionError('YouTube', new Error('fail'), reconnect);
         await Promise.resolve();
 
@@ -141,12 +149,12 @@ describe('RetrySystem', () => {
     it('does not cap retries when max attempts is set to zero', async () => {
         const retrySystem = new RetrySystem({ logger, constants: { RETRY_MAX_ATTEMPTS: 0 } });
         retrySystem.errorHandler = {
-            handleEventProcessingError: jest.fn(),
-            logOperationalError: jest.fn()
+            handleEventProcessingError: createMockFn(),
+            logOperationalError: createMockFn()
         };
         retrySystem.platformRetryCount.TikTok = 50;
 
-        const reconnect = jest.fn().mockResolvedValue();
+        const reconnect = createMockFn().mockResolvedValue();
         retrySystem.handleConnectionError('TikTok', new Error('keep trying'), reconnect);
         await Promise.resolve();
 
@@ -177,11 +185,11 @@ describe('RetrySystem', () => {
     it('waits for async cleanup before scheduling reconnect', async () => {
         const retrySystem = new RetrySystem({ logger });
         retrySystem.errorHandler = {
-            handleEventProcessingError: jest.fn(),
-            logOperationalError: jest.fn()
+            handleEventProcessingError: createMockFn(),
+            logOperationalError: createMockFn()
         };
-        const reconnect = jest.fn().mockResolvedValue();
-        const cleanup = jest.fn().mockResolvedValue();
+        const reconnect = createMockFn().mockResolvedValue();
+        const cleanup = createMockFn().mockResolvedValue();
 
         retrySystem.handleConnectionError('TikTok', new Error('temporary failure'), reconnect, cleanup);
         await Promise.resolve();
@@ -193,13 +201,13 @@ describe('RetrySystem', () => {
     it('routes cleanup failures through platform error handler helper', async () => {
         const retrySystem = new RetrySystem({ logger });
         const errorHandler = {
-            handleEventProcessingError: jest.fn(),
-            logOperationalError: jest.fn()
+            handleEventProcessingError: createMockFn(),
+            logOperationalError: createMockFn()
         };
         retrySystem.errorHandler = errorHandler;
-        const reconnect = jest.fn().mockResolvedValue();
+        const reconnect = createMockFn().mockResolvedValue();
         const cleanupError = new Error('cleanup boom');
-        const cleanup = jest.fn(() => { throw cleanupError; });
+        const cleanup = createMockFn(() => { throw cleanupError; });
 
         retrySystem.handleConnectionError('TikTok', new Error('temporary failure'), reconnect, cleanup);
         await Promise.resolve();
@@ -213,11 +221,11 @@ describe('RetrySystem', () => {
     it('skips scheduled reconnect when already connected', async () => {
         const retrySystem = new RetrySystem({ logger });
         retrySystem.errorHandler = {
-            handleEventProcessingError: jest.fn(),
-            logOperationalError: jest.fn()
+            handleEventProcessingError: createMockFn(),
+            logOperationalError: createMockFn()
         };
-        const reconnect = jest.fn();
-        retrySystem.isConnected = jest.fn().mockReturnValue(true);
+        const reconnect = createMockFn();
+        retrySystem.isConnected = createMockFn().mockReturnValue(true);
 
         retrySystem.handleConnectionError('YouTube', new Error('random failure'), reconnect);
         await Promise.resolve();
@@ -229,10 +237,10 @@ describe('RetrySystem', () => {
     it('halts executeWithRetry after configured max retries', async () => {
         const retrySystem = new RetrySystem({ logger });
         retrySystem.errorHandler = {
-            handleEventProcessingError: jest.fn(),
-            logOperationalError: jest.fn()
+            handleEventProcessingError: createMockFn(),
+            logOperationalError: createMockFn()
         };
-        const failingCall = jest.fn().mockRejectedValue(new Error('fail-fast'));
+        const failingCall = createMockFn().mockRejectedValue(new Error('fail-fast'));
 
         await expect(retrySystem.executeWithRetry('TikTok', failingCall, 1)).rejects.toThrow('fail-fast');
 
@@ -243,10 +251,10 @@ describe('RetrySystem', () => {
     it('executes with retry until success then resets counts', async () => {
         const retrySystem = new RetrySystem({ logger });
         retrySystem.errorHandler = {
-            handleEventProcessingError: jest.fn(),
-            logOperationalError: jest.fn()
+            handleEventProcessingError: createMockFn(),
+            logOperationalError: createMockFn()
         };
-        const execute = jest.fn()
+        const execute = createMockFn()
             .mockRejectedValueOnce(new Error('flaky'))
             .mockResolvedValueOnce('ok');
 
@@ -260,10 +268,10 @@ describe('RetrySystem', () => {
     it('stops executeWithRetry immediately on non-retryable auth errors', async () => {
         const retrySystem = new RetrySystem({ logger });
         retrySystem.errorHandler = {
-            handleEventProcessingError: jest.fn(),
-            logOperationalError: jest.fn()
+            handleEventProcessingError: createMockFn(),
+            logOperationalError: createMockFn()
         };
-        const unauthorizedCall = jest.fn().mockRejectedValue(new Error('401 Unauthorized'));
+        const unauthorizedCall = createMockFn().mockRejectedValue(new Error('401 Unauthorized'));
 
         await expect(retrySystem.executeWithRetry('Twitch', unauthorizedCall, 3)).rejects.toThrow('401');
 
@@ -294,7 +302,7 @@ describe('RetrySystem', () => {
 
     it('routes retry errors through platform error handler helper', () => {
         const retrySystem = new RetrySystem({ logger });
-        const errorHandler = { handleEventProcessingError: jest.fn(), logOperationalError: jest.fn() };
+        const errorHandler = { handleEventProcessingError: createMockFn(), logOperationalError: createMockFn() };
         retrySystem.errorHandler = errorHandler;
 
         retrySystem._handleRetryError('boom', new Error('boom'), 'cleanup', 'TikTok');
@@ -304,7 +312,7 @@ describe('RetrySystem', () => {
 
     it('logs operational errors when non-Error values are provided', () => {
         const retrySystem = new RetrySystem({ logger });
-        const errorHandler = { handleEventProcessingError: jest.fn(), logOperationalError: jest.fn() };
+        const errorHandler = { handleEventProcessingError: createMockFn(), logOperationalError: createMockFn() };
         retrySystem.errorHandler = errorHandler;
 
         retrySystem._handleRetryError('message-only', null, 'retry', 'TikTok');

@@ -1,14 +1,16 @@
 
-const { describe, test, expect, beforeEach, afterEach } = require('@jest/globals');
-
 // Mock axios globally for all tests
-jest.mock('axios');
+const { describe, test, expect, beforeEach, afterEach } = require('bun:test');
+const { createMockFn, clearAllMocks, restoreAllMocks } = require('../../helpers/bun-mock-utils');
+const { mockModule, restoreAllModuleMocks } = require('../../helpers/bun-module-mocks');
+
+mockModule('axios');
 const axios = require('axios');
 
 // Mock the OAuth handler to prevent server startup
-jest.mock('../../../src/auth/oauth-handler', () => ({
-    TwitchOAuthHandler: jest.fn().mockImplementation(() => ({
-        runOAuthFlow: jest.fn().mockRejectedValue(new Error('OAuth not available in test environment'))
+mockModule('../../../src/auth/oauth-handler', () => ({
+    TwitchOAuthHandler: createMockFn().mockImplementation(() => ({
+        runOAuthFlow: createMockFn().mockRejectedValue(new Error('OAuth not available in test environment'))
     }))
 }));
 const { TwitchOAuthHandler } = require('../../../src/auth/oauth-handler');
@@ -24,7 +26,6 @@ describe('OAuth Flow Test Environment Behavior', () => {
     
     beforeEach(() => {
         // Clear all mocks
-        jest.clearAllMocks();
         TwitchOAuthHandler.mockClear();
         
         // Preserve original env state so we can restore for other tests
@@ -36,21 +37,21 @@ describe('OAuth Flow Test Environment Behavior', () => {
         
         // Mock logger
         mockLogger = {
-            debug: jest.fn(),
-            info: jest.fn(),
-            error: jest.fn(),
-            warn: jest.fn()
+            debug: createMockFn(),
+            info: createMockFn(),
+            error: createMockFn(),
+            warn: createMockFn()
         };
         
         // Mock enhanced HTTP client
         mockEnhancedHttpClient = {
-            post: jest.fn()
+            post: createMockFn()
         };
         
         // Mock file system
         mockFs = {
-            readFileSync: jest.fn().mockReturnValue('[twitch]\naccessToken=old_token\nrefreshToken=old_refresh'),
-            writeFileSync: jest.fn()
+            readFileSync: createMockFn().mockReturnValue('[twitch]\naccessToken=old_token\nrefreshToken=old_refresh'),
+            writeFileSync: createMockFn()
         };
         
         // Mock auth service with missing tokens (requires OAuth)
@@ -63,22 +64,24 @@ describe('OAuth Flow Test Environment Behavior', () => {
                 channel: 'testchannel'
             },
             isInitialized: false,
-            validateCredentials: jest.fn().mockReturnValue({
+            validateCredentials: createMockFn().mockReturnValue({
                 hasToken: false,
                 isValid: true,
                 isExpired: false,
                 issues: []
             }),
-            setAuthenticationState: jest.fn()
+            setAuthenticationState: createMockFn()
         };
         
         TwitchAuthInitializer = require('../../../src/auth/TwitchAuthInitializer');
     });
     
     afterEach(() => {
+        restoreAllMocks();
         if (originalNodeEnv === undefined) {
             delete process.env.NODE_ENV;
-        } else {
+        
+        restoreAllModuleMocks();} else {
             process.env.NODE_ENV = originalNodeEnv;
         }
 
@@ -136,7 +139,7 @@ describe('OAuth Flow Test Environment Behavior', () => {
         test('should allow mocking OAuth flow to return successful authentication', async () => {
             // Given: Auth initializer with injected mock OAuth handler
             const mockOAuthHandler = {
-                runOAuthFlow: jest.fn().mockResolvedValue({
+                runOAuthFlow: createMockFn().mockResolvedValue({
                     access_token: 'mock_access_token',
                     refresh_token: 'mock_refresh_token'
                 })
@@ -175,7 +178,7 @@ describe('OAuth Flow Test Environment Behavior', () => {
         test('should handle OAuth flow failures gracefully in tests', async () => {
             // Given: Mock OAuth handler that simulates failure
             const mockOAuthHandler = {
-                runOAuthFlow: jest.fn().mockRejectedValue(new Error('OAuth flow failed'))
+                runOAuthFlow: createMockFn().mockRejectedValue(new Error('OAuth flow failed'))
             };
             
             const authInitializer = new TwitchAuthInitializer({

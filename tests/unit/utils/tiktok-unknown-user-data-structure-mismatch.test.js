@@ -1,5 +1,8 @@
 
 // MANDATORY imports
+const { describe, test, expect, beforeEach, it } = require('bun:test');
+const { createMockFn, restoreAllMocks } = require('../../helpers/bun-mock-utils');
+
 const { 
   initializeTestLogging,
   TEST_TIMEOUTS 
@@ -28,7 +31,7 @@ setupAutomatedCleanup({
 });
 
 const buildTimestampService = () => ({
-  extractTimestamp: jest.fn((platform, data) => {
+  extractTimestamp: createMockFn((platform, data) => {
     if (platform !== 'tiktok') {
       throw new Error('Unsupported platform');
     }
@@ -40,6 +43,10 @@ const buildTimestampService = () => ({
 });
 
 describe('TikTok Unknown User Data Structure Mismatch', () => {
+    afterEach(() => {
+        restoreAllMocks();
+    });
+
   let timestampService;
 
   beforeEach(() => {

@@ -1,4 +1,7 @@
 
+const { describe, test, expect, beforeEach, it } = require('bun:test');
+const { createMockFn, restoreAllMocks } = require('../helpers/bun-mock-utils');
+
 const { initializeTestLogging } = require('../helpers/test-setup');
 initializeTestLogging();
 
@@ -15,16 +18,20 @@ setupAutomatedCleanup({
 });
 
 describe('Twitch gift subscriptions', () => {
+    afterEach(() => {
+        restoreAllMocks();
+    });
+
     let mockLogger;
     let mockDisplayQueue;
     let notificationManager;
 
     const createManager = () => {
-        const mockEventBus = { emit: jest.fn(), on: jest.fn(), off: jest.fn() };
+        const mockEventBus = { emit: createMockFn(), on: createMockFn(), off: createMockFn() };
         const mockConfigService = {
-            areNotificationsEnabled: jest.fn().mockReturnValue(true),
-            getPlatformConfig: jest.fn().mockReturnValue(true),
-            get: jest.fn((section) => {
+            areNotificationsEnabled: createMockFn().mockReturnValue(true),
+            getPlatformConfig: createMockFn().mockReturnValue(true),
+            get: createMockFn((section) => {
                 if (section === 'general') {
                     return {
                         enabled: true,
@@ -39,13 +46,13 @@ describe('Twitch gift subscriptions', () => {
                 }
                 return {};
             }),
-            isDebugEnabled: jest.fn().mockReturnValue(false),
-            getTTSConfig: jest.fn().mockReturnValue({ enabled: false })
+            isDebugEnabled: createMockFn().mockReturnValue(false),
+            getTTSConfig: createMockFn().mockReturnValue({ enabled: false })
         };
         const constants = require('../../src/core/constants');
         const textProcessing = createTextProcessingManager({ logger: mockLogger });
         const obsGoals = require('../../src/obs/goals').getDefaultGoalsManager();
-        const vfxCommandService = { getVFXConfig: jest.fn().mockResolvedValue(null) };
+        const vfxCommandService = { getVFXConfig: createMockFn().mockResolvedValue(null) };
         return new NotificationManager({
             displayQueue: mockDisplayQueue,
             logger: mockLogger,

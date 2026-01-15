@@ -1,4 +1,7 @@
 
+const { describe, test, expect, beforeEach, afterEach, it } = require('bun:test');
+const { createMockFn, restoreAllMocks } = require('../helpers/bun-mock-utils');
+
 const { 
     initializeTestLogging,
     createTestUser, 
@@ -36,14 +39,14 @@ describe('Bits Goal Counter Fix', () => {
     beforeEach(() => {
         mockLogger = createMockLogger('debug', { captureConsole: true });
         mockNotificationManager = createMockNotificationManager({
-            handleNotification: jest.fn().mockResolvedValue({
+            handleNotification: createMockFn().mockResolvedValue({
                 success: true,
                 displayed: true
             })
         });
 
         mockAppRuntime = {
-            handleGiftNotification: jest.fn((platform, username, options = {}) => {
+            handleGiftNotification: createMockFn((platform, username, options = {}) => {
                 const giftType = options.giftType;
                 const giftCount = Number(options.giftCount);
                 const amount = Number(options.amount);
@@ -57,7 +60,7 @@ describe('Bits Goal Counter Fix', () => {
 
         const handlers = {};
         mockEventBus = {
-            subscribe: jest.fn((event, handler) => {
+            subscribe: createMockFn((event, handler) => {
                 if (!handlers[event]) {
                     handlers[event] = [];
                 }
@@ -80,12 +83,13 @@ describe('Bits Goal Counter Fix', () => {
             eventBus: mockEventBus,
             runtime: mockAppRuntime,
             notificationManager: mockNotificationManager,
-            configService: { areNotificationsEnabled: jest.fn(() => true) },
+            configService: { areNotificationsEnabled: createMockFn(() => true) },
             logger: mockLogger
         });
     });
 
     afterEach(() => {
+        restoreAllMocks();
         router?.dispose();
     });
 

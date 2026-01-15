@@ -1,4 +1,8 @@
 
+const { describe, test, expect, beforeEach, afterEach, afterAll } = require('bun:test');
+const { createMockFn, restoreAllMocks } = require('../../helpers/bun-mock-utils');
+const { useFakeTimers, useRealTimers, advanceTimersByTime } = require('../../helpers/bun-timers');
+
 const { ViewerCountSystem } = require('../../../src/utils/viewer-count');
 const { setupAutomatedCleanup } = require('../../helpers/mock-factories');
 const { createRuntimeConstantsFixture } = require('../../helpers/runtime-constants-fixture');
@@ -102,7 +106,7 @@ const createMockConfigManager = (configOverrides = {}) => {
     };
     
     return {
-        getNumber: jest.fn((section, key, defaultValue) => {
+        getNumber: createMockFn((section, key, defaultValue) => {
             console.log(`Mock config getNumber called: section=${section}, key=${key}, defaultValue=${defaultValue}, override=${defaultConfig.viewerCountPollingInterval}`);
             if (section === 'general' && key === 'viewerCountPollingInterval') {
                 const value = defaultConfig.viewerCountPollingInterval !== undefined ? defaultConfig.viewerCountPollingInterval : defaultValue;
@@ -112,7 +116,7 @@ const createMockConfigManager = (configOverrides = {}) => {
             return defaultValue;
         }),
         
-        getBoolean: jest.fn((section, key, defaultValue) => {
+        getBoolean: createMockFn((section, key, defaultValue) => {
             if (section === 'general' && key === 'enableViewerCount') {
                 return defaultConfig.enableViewerCount ?? defaultValue;
             }
@@ -198,11 +202,12 @@ describe('ViewerCountSystem - Comprehensive Behavior Tests', () => {
     beforeEach(() => {
         cleanupFunctions = setupAutomatedCleanup();
         cleanupFunctions.beforeEach();
-        jest.useFakeTimers();
+        useFakeTimers();
     });
     
     afterEach(async () => {
-        jest.useRealTimers();
+        restoreAllMocks();
+        useRealTimers();
         if (cleanupFunctions) {
             cleanupFunctions.afterEach();
         }
@@ -393,7 +398,7 @@ describe('ViewerCountSystem - Comprehensive Behavior Tests', () => {
             system.startPolling();
             
             // Fast-forward time to trigger polling
-            jest.advanceTimersByTime(2);
+            advanceTimersByTime(2);
             
             // Live platforms should be polled
             expect(mockPlatforms.tiktok.getCallCount()).toBeGreaterThan(0);
@@ -407,7 +412,7 @@ describe('ViewerCountSystem - Comprehensive Behavior Tests', () => {
             });
             
             system.startPolling();
-            jest.advanceTimersByTime(2);
+            advanceTimersByTime(2);
             
             // Offline platform should not be polled
             expect(mockPlatforms.youtube.getCallCount()).toBe(0);
@@ -428,7 +433,7 @@ describe('ViewerCountSystem - Comprehensive Behavior Tests', () => {
             system.startPolling();
             
             // Trigger multiple polling cycles with fake timers
-            jest.advanceTimersByTime(3);
+            advanceTimersByTime(3);
             
             // Wait for any pending promises to resolve
             await Promise.resolve();
@@ -451,7 +456,7 @@ describe('ViewerCountSystem - Comprehensive Behavior Tests', () => {
             system.startPolling();
             
             // Should not crash the system when platform fails
-            jest.advanceTimersByTime(5);
+            advanceTimersByTime(5);
             await Promise.resolve();
             
             // System should continue operating despite platform failures
@@ -466,7 +471,7 @@ describe('ViewerCountSystem - Comprehensive Behavior Tests', () => {
             // Stop polling for one platform
             system.stopPlatformPolling('tiktok');
             
-            jest.advanceTimersByTime(5);
+            advanceTimersByTime(5);
             
             // Other platforms should continue polling
             expect(system.pollingHandles.twitch).toBeDefined();
@@ -692,7 +697,7 @@ describe('ViewerCountSystem - Comprehensive Behavior Tests', () => {
             system.startPolling();
             
             // Let polling happen with some failures
-            jest.advanceTimersByTime(10);
+            advanceTimersByTime(10);
             await Promise.resolve();
             
             // System should remain operational
@@ -713,7 +718,7 @@ describe('ViewerCountSystem - Comprehensive Behavior Tests', () => {
             system.startPolling();
             
             // Should not crash system
-            jest.advanceTimersByTime(5);
+            advanceTimersByTime(5);
             await Promise.resolve();
             
             expect(system.isPolling).toBe(true);
@@ -741,7 +746,7 @@ describe('ViewerCountSystem - Comprehensive Behavior Tests', () => {
             system.startPolling();
             
             // Let system experience failure and recovery
-            jest.advanceTimersByTime(10);
+            advanceTimersByTime(10);
             await Promise.resolve();
             
             // System should continue operating and eventually get updates
@@ -761,7 +766,7 @@ describe('ViewerCountSystem - Comprehensive Behavior Tests', () => {
             system.startPolling();
             
             // All platforms failing
-            jest.advanceTimersByTime(5);
+            advanceTimersByTime(5);
             await Promise.resolve();
             
             // System should remain stable
@@ -838,7 +843,7 @@ describe('ViewerCountSystem - Comprehensive Behavior Tests', () => {
             
             // Start intensive polling
             system.startPolling();
-            jest.advanceTimersByTime(50);
+            advanceTimersByTime(50);
             
             // Should remain stable
             expect(system.observers.size).toBe(100);
@@ -920,7 +925,7 @@ describe('ViewerCountSystem - Comprehensive Behavior Tests', () => {
             system.stopPolling();
             system.startPolling();
             
-            jest.advanceTimersByTime(5);
+            advanceTimersByTime(5);
             
             // Should continue working
             expect(system.isPolling).toBe(true);

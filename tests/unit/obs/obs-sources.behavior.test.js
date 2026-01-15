@@ -1,10 +1,14 @@
-jest.mock('../../../src/utils/platform-error-handler', () => {
+const { describe, test, expect, beforeEach, it } = require('bun:test');
+const { createMockFn, clearAllMocks, restoreAllMocks } = require('../../helpers/bun-mock-utils');
+const { mockModule, restoreAllModuleMocks } = require('../../helpers/bun-module-mocks');
+
+mockModule('../../../src/utils/platform-error-handler', () => {
     const handler = {
-        handleEventProcessingError: jest.fn(),
-        logOperationalError: jest.fn()
+        handleEventProcessingError: createMockFn(),
+        logOperationalError: createMockFn()
     };
     return {
-        createPlatformErrorHandler: jest.fn(() => handler)
+        createPlatformErrorHandler: createMockFn(() => handler)
     };
 });
 
@@ -12,7 +16,12 @@ const { createOBSSourcesManager } = require('../../../src/obs/sources');
 const { createPlatformErrorHandler } = require('../../../src/utils/platform-error-handler');
 
 describe('obs/sources behavior', () => {
-    const logger = { debug: jest.fn(), info: jest.fn(), warn: jest.fn(), error: jest.fn() };
+    afterEach(() => {
+        restoreAllMocks();
+        restoreAllModuleMocks();
+    });
+
+    const logger = { debug: createMockFn(), info: createMockFn(), warn: createMockFn(), error: createMockFn() };
     const runtimeConstants = {
         STATUSBAR_GROUP_NAME: 'StatusGroup',
         STATUSBAR_NOTIFICATION_GROUP_NAME: 'NotifyGroup',
@@ -20,14 +29,13 @@ describe('obs/sources behavior', () => {
     };
 
     beforeEach(() => {
-        jest.clearAllMocks();
-    });
+        });
 
     it('sanitizes text and issues SetInputSettings when updating text source in test mode', async () => {
         const obsManager = {
-            call: jest.fn().mockResolvedValue({}),
-            ensureConnected: jest.fn().mockResolvedValue(),
-            isReady: jest.fn().mockResolvedValue(true)
+            call: createMockFn().mockResolvedValue({}),
+            ensureConnected: createMockFn().mockResolvedValue(),
+            isReady: createMockFn().mockResolvedValue(true)
         };
 
         const sources = createOBSSourcesManager(obsManager, { logger, runtimeConstants });
@@ -41,13 +49,13 @@ describe('obs/sources behavior', () => {
     });
 
     it('caches group scene item lookups to avoid repeated OBS calls', async () => {
-        const obsCall = jest.fn().mockResolvedValue({
+        const obsCall = createMockFn().mockResolvedValue({
             sceneItems: [{ sourceName: 'Logo', sceneItemId: 42 }]
         });
 
         const sources = createOBSSourcesManager(
-            { isReady: jest.fn().mockResolvedValue(true) },
-            { logger, runtimeConstants, ensureOBSConnected: jest.fn(), obsCall }
+            { isReady: createMockFn().mockResolvedValue(true) },
+            { logger, runtimeConstants, ensureOBSConnected: createMockFn(), obsCall }
         );
 
         const firstLookup = await sources.getGroupSceneItemId('Logo', 'Logos');
@@ -58,13 +66,13 @@ describe('obs/sources behavior', () => {
     });
 
     it('routes group lookup failures through the platform error handler and retries on subsequent calls', async () => {
-        const handler = { handleEventProcessingError: jest.fn(), logOperationalError: jest.fn() };
+        const handler = { handleEventProcessingError: createMockFn(), logOperationalError: createMockFn() };
         createPlatformErrorHandler.mockReturnValue(handler);
 
-        const obsCall = jest.fn().mockResolvedValue({ sceneItems: [] });
+        const obsCall = createMockFn().mockResolvedValue({ sceneItems: [] });
         const sources = createOBSSourcesManager(
-            { isReady: jest.fn().mockResolvedValue(true) },
-            { logger, runtimeConstants, ensureOBSConnected: jest.fn(), obsCall }
+            { isReady: createMockFn().mockResolvedValue(true) },
+            { logger, runtimeConstants, ensureOBSConnected: createMockFn(), obsCall }
         );
 
         await expect(sources.getGroupSceneItemId('Missing', 'Group')).rejects.toThrow(/Missing/);

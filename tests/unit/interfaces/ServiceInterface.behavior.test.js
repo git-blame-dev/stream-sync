@@ -1,6 +1,13 @@
+const { describe, test, expect, it } = require('bun:test');
+const { createMockFn, restoreAllMocks } = require('../../helpers/bun-mock-utils');
+
 const ServiceInterface = require('../../../src/interfaces/ServiceInterface');
 
 describe('ServiceInterface behavior', () => {
+    afterEach(() => {
+        restoreAllMocks();
+    });
+
     it('throws for required lifecycle methods when not implemented', async () => {
         const service = new ServiceInterface();
 
@@ -11,7 +18,7 @@ describe('ServiceInterface behavior', () => {
     });
 
     it('provides default pause/resume logging and validation helpers', async () => {
-        const logger = { debug: jest.fn() };
+        const logger = { debug: createMockFn() };
         class MockService extends ServiceInterface { constructor() { super(); this.logger = logger; } }
         const service = new MockService();
 

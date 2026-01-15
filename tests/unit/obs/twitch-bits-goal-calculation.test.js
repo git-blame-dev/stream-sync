@@ -1,10 +1,14 @@
 
+const { describe, test, expect, beforeEach, afterEach, it } = require('bun:test');
+const { createMockFn, clearAllMocks, restoreAllMocks } = require('../../helpers/bun-mock-utils');
+const { mockModule, restoreAllModuleMocks } = require('../../helpers/bun-module-mocks');
+
 const { DisplayQueue } = require('../../../src/obs/display-queue');
 const EventEmitter = require('events');
 
 // Mock the goals module
-jest.mock('../../../src/obs/goals', () => {
-    const processDonationGoal = jest.fn();
+mockModule('../../../src/obs/goals', () => {
+    const processDonationGoal = createMockFn();
     return {
         OBSGoalsManager: class {},
         createOBSGoalsManager: () => ({ processDonationGoal }),
@@ -22,13 +26,11 @@ describe('DisplayQueue - Twitch Bits Goal Calculation', () => {
     
     beforeEach(() => {
         // Reset mocks
-        jest.clearAllMocks();
-        
         // Create mock OBS Manager
         mockOBSManager = new EventEmitter();
-        mockOBSManager.call = jest.fn().mockResolvedValue({});
-        mockOBSManager.isConnected = jest.fn().mockReturnValue(true);
-        mockOBSManager.isReady = jest.fn().mockResolvedValue(true);
+        mockOBSManager.call = createMockFn().mockResolvedValue({});
+        mockOBSManager.isConnected = createMockFn().mockReturnValue(true);
+        mockOBSManager.isReady = createMockFn().mockResolvedValue(true);
         
         // Create mock config with goal settings enabled
         mockConfig = {
@@ -69,9 +71,11 @@ describe('DisplayQueue - Twitch Bits Goal Calculation', () => {
     });
     
     afterEach(() => {
+        restoreAllMocks();
         if (displayQueue) {
             displayQueue.stop();
-        }
+        
+        restoreAllModuleMocks();}
     });
     
     describe('Twitch bits contribution to goals', () => {
@@ -193,7 +197,7 @@ describe('DisplayQueue - Twitch Bits Goal Calculation', () => {
             
             for (let i = 0; i < testCases.length; i++) {
                 const bitsAmount = testCases[i];
-                jest.clearAllMocks(); // Clear before each test case
+                clearAllMocks(); // Clear before each test case
                 
                 const event = {
                     type: 'platform:gift',

@@ -1,8 +1,12 @@
 
 // Mock core dependencies before importing modules
-jest.mock('../../src/core/config', () => ({
+const { describe, test, expect, beforeEach, afterEach, it } = require('bun:test');
+const { createMockFn, restoreAllMocks } = require('../helpers/bun-mock-utils');
+const { mockModule, restoreAllModuleMocks } = require('../helpers/bun-module-mocks');
+
+mockModule('../../src/core/config', () => ({
     configManager: {
-        getSection: jest.fn().mockImplementation((section) => ({
+        getSection: createMockFn().mockImplementation((section) => ({
             viewerCountEnabled: true,
             viewerCountSource: `${section}-viewer-count-source`
         }))
@@ -10,27 +14,27 @@ jest.mock('../../src/core/config', () => ({
     config: { general: { fallbackUsername: 'Unknown User' } }
 }));
 
-jest.mock('../../src/core/logging', () => ({
+mockModule('../../src/core/logging', () => ({
     logger: {
-        debug: jest.fn(),
-        info: jest.fn(),
-        warn: jest.fn(),
-        error: jest.fn()
+        debug: createMockFn(),
+        info: createMockFn(),
+        warn: createMockFn(),
+        error: createMockFn()
     }
 }));
 
 const mockTextProcessing = {
-    formatViewerCount: jest.fn().mockImplementation(count => {
+    formatViewerCount: createMockFn().mockImplementation(count => {
         if (count >= 1000000) return `${Math.floor(count / 1000000)}M`;
         if (count >= 1000) return `${Math.floor(count / 1000)}K`;
         return count.toString();
     })
 };
 
-jest.mock('../../src/utils/text-processing', () => ({
-    createTextProcessingManager: jest.fn(() => mockTextProcessing),
-    TextProcessingManager: jest.fn(),
-    formatTimestampCompact: jest.fn()
+mockModule('../../src/utils/text-processing', () => ({
+    createTextProcessingManager: createMockFn(() => mockTextProcessing),
+    TextProcessingManager: createMockFn(),
+    formatTimestampCompact: createMockFn()
 }));
 
 const { ViewerCountObserver } = require('../../src/observers/viewer-count-observer');
@@ -82,6 +86,8 @@ describe('Viewer Count & OBS Observer Performance Tests', () => {
     });
 
     afterEach(() => {
+        restoreAllMocks();
+        restoreAllModuleMocks();
         // Report performance metrics if operations occurred
         const endTime = testClock.now();
         const totalTime = Math.max(1, endTime - performanceMetrics.startTime);
@@ -786,7 +792,7 @@ describe('Viewer Count & OBS Observer Performance Tests', () => {
         
         const manager = {
             isConnected: () => isConnectedState,
-            call: jest.fn(async (method, params) => {
+            call: createMockFn(async (method, params) => {
                 if (isConnectedState) {
                     updateCount++;
                     mockCalls.push({ method, params, timestamp: testClock.now() });
@@ -815,10 +821,10 @@ describe('Viewer Count & OBS Observer Performance Tests', () => {
 
     function createMockLogger() {
         return {
-            debug: jest.fn(),
-            info: jest.fn(),
-            warn: jest.fn(),
-            error: jest.fn()
+            debug: createMockFn(),
+            info: createMockFn(),
+            warn: createMockFn(),
+            error: createMockFn()
         };
     }
 
@@ -1146,7 +1152,7 @@ describe('Viewer Count & OBS Observer Performance Tests', () => {
         
         // Override the call method to track source updates
         const originalCall = mockOBS.call;
-        mockOBS.call = jest.fn(async function(method, params) {
+        mockOBS.call = createMockFn(async function(method, params) {
             const result = await originalCall.call(this, method, params);
             sourceUpdateCount++;
             return result;
