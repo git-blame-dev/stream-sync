@@ -2,9 +2,8 @@
 // MANDATORY imports
 const { describe, test, beforeEach, afterEach, expect } = require('bun:test');
 
-const { 
-  initializeTestLogging,
-  TEST_TIMEOUTS 
+const {
+  TEST_TIMEOUTS
 } = require('../helpers/test-setup');
 
 const { 
@@ -22,9 +21,6 @@ const { createMockFn, restoreAllMocks } = require('../helpers/bun-mock-utils');
 // Import system components
 const { normalizeMessage } = require('../../src/utils/message-normalization');
 const { extractTikTokUserData, extractTikTokGiftData } = require('../../src/utils/tiktok-data-extraction');
-
-// Initialize FIRST
-initializeTestLogging();
 
 // Setup automated cleanup
 setupAutomatedCleanup({

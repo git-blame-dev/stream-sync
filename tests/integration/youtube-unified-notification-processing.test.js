@@ -1,10 +1,7 @@
 const { describe, test, beforeEach, afterEach, expect } = require('bun:test');
 
-const { initializeTestLogging, createMockConfig, createMockPlatformDependencies } = require('../helpers/test-setup');
+const { createMockConfig, createMockPlatformDependencies } = require('../helpers/test-setup');
 const { createMockFn, restoreAllMocks } = require('../helpers/bun-mock-utils');
-
-// Initialize test environment BEFORE requiring platform
-initializeTestLogging();
 
 const { YouTubePlatform } = require('../../src/platforms/youtube');
 
