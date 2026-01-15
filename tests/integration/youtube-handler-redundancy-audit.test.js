@@ -1,6 +1,8 @@
+const { describe, test, beforeEach, afterEach, expect } = require('bun:test');
 
 const { initializeTestLogging, createMockConfig, createMockPlatformDependencies } = require('../helpers/test-setup');
 const testClock = require('../helpers/test-clock');
+const { createMockFn, restoreAllMocks } = require('../helpers/bun-mock-utils');
 
 // Initialize test environment BEFORE requiring platform
 initializeTestLogging();
@@ -15,6 +17,10 @@ describe('YouTube Handler Redundancy Audit', () => {
     let authorExtractionCalls;
     let notificationBuilderCalls;
     let dispatcherCalls;
+
+    afterEach(() => {
+        restoreAllMocks();
+    });
 
     beforeEach(() => {
         testClock.reset();
@@ -31,16 +37,16 @@ describe('YouTube Handler Redundancy Audit', () => {
         mockDependencies = createMockPlatformDependencies('youtube');
 
         mockHandlers = {
-            onGift: jest.fn(),
-            onMembership: jest.fn(),
-            onChat: jest.fn()
+            onGift: createMockFn(),
+            onMembership: createMockFn(),
+            onChat: createMockFn()
         };
 
         platform = new YouTubePlatform(mockConfig, mockDependencies);
         platform.handlers = mockHandlers;
 
         // Apply Platform Method Injection pattern - Add missing methods
-        platform.handleSuperChat = jest.fn().mockImplementation((event) => {
+        platform.handleSuperChat = createMockFn().mockImplementation((event) => {
             if (platform.AuthorExtractor) {
                 platform.AuthorExtractor.extractAuthor(event);
             }
@@ -49,7 +55,7 @@ describe('YouTube Handler Redundancy Audit', () => {
             }
         });
         
-        platform.handleMembership = jest.fn().mockImplementation((event) => {
+        platform.handleMembership = createMockFn().mockImplementation((event) => {
             if (platform.AuthorExtractor) {
                 platform.AuthorExtractor.extractAuthor(event);
             }
@@ -62,7 +68,7 @@ describe('YouTube Handler Redundancy Audit', () => {
             }
         });
         
-        platform.handleGiftMembershipPurchase = jest.fn().mockImplementation((event) => {
+        platform.handleGiftMembershipPurchase = createMockFn().mockImplementation((event) => {
             if (platform.AuthorExtractor) {
                 platform.AuthorExtractor.extractAuthor(event);
             }
@@ -76,13 +82,13 @@ describe('YouTube Handler Redundancy Audit', () => {
         });
         
         // Add missing handler methods for method signature tests
-        platform.handleSubscription = jest.fn();
-        platform.handleFollow = jest.fn();
-        platform.handleRaid = jest.fn();
+        platform.handleSubscription = createMockFn();
+        platform.handleFollow = createMockFn();
+        platform.handleRaid = createMockFn();
 
         // Mock AuthorExtractor to track calls
         platform.AuthorExtractor = {
-            extractAuthor: jest.fn().mockImplementation((...args) => {
+            extractAuthor: createMockFn().mockImplementation((...args) => {
                 authorExtractionCalls.push({ args, timestamp: testClock.now() });
                 return { name: 'MockUser', id: '12345' };
             })
@@ -90,7 +96,7 @@ describe('YouTube Handler Redundancy Audit', () => {
 
         // Mock NotificationBuilder to track calls
         platform.NotificationBuilder = {
-            build: jest.fn().mockImplementation((...args) => {
+            build: createMockFn().mockImplementation((...args) => {
                 notificationBuilderCalls.push({ args, timestamp: testClock.now() });
                 return { id: 'mock-notification', ...args[0] };
             })
@@ -98,10 +104,10 @@ describe('YouTube Handler Redundancy Audit', () => {
 
         // Mock notification dispatcher to track calls
         platform.notificationDispatcher = {
-            dispatchSuperChat: jest.fn().mockImplementation((...args) => {
+            dispatchSuperChat: createMockFn().mockImplementation((...args) => {
                 dispatcherCalls.push({ method: 'dispatchSuperChat', args, timestamp: testClock.now() });
             }),
-            dispatchMembership: jest.fn().mockImplementation((...args) => {
+            dispatchMembership: createMockFn().mockImplementation((...args) => {
                 dispatcherCalls.push({ method: 'dispatchMembership', args, timestamp: testClock.now() });
             })
         };

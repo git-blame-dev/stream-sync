@@ -1,5 +1,7 @@
+const { describe, test, beforeEach, afterEach, expect } = require('bun:test');
 
 const { initializeTestLogging, createMockConfig, createMockPlatformDependencies } = require('../helpers/test-setup');
+const { createMockFn, restoreAllMocks } = require('../helpers/bun-mock-utils');
 
 // Initialize test environment BEFORE requiring platform
 initializeTestLogging();
@@ -12,6 +14,10 @@ describe('YouTube Base Handler Class Extraction Implementation', () => {
     let mockDependencies;
     let mockHandlers;
 
+    afterEach(() => {
+        restoreAllMocks();
+    });
+
     beforeEach(() => {
         mockConfig = createMockConfig('youtube', {
             dataLoggingEnabled: false
@@ -20,9 +26,9 @@ describe('YouTube Base Handler Class Extraction Implementation', () => {
         mockDependencies = createMockPlatformDependencies('youtube');
 
         mockHandlers = {
-            onGift: jest.fn(),
-            onMembership: jest.fn(),
-            onChat: jest.fn()
+            onGift: createMockFn(),
+            onMembership: createMockFn(),
+            onChat: createMockFn()
         };
 
         platform = new YouTubePlatform(mockConfig, mockDependencies);
@@ -30,18 +36,18 @@ describe('YouTube Base Handler Class Extraction Implementation', () => {
 
         // Mock unified logger
         platform.logger = {
-            debug: jest.fn(),
-            info: jest.fn(),
-            warn: jest.fn(),
-            error: jest.fn()
+            debug: createMockFn(),
+            info: createMockFn(),
+            warn: createMockFn(),
+            error: createMockFn()
         };
 
         // Mock notification dispatcher
         platform.notificationDispatcher = {
-            dispatchSuperChat: jest.fn(),
-            dispatchMembership: jest.fn(),
-            dispatchSuperSticker: jest.fn(),
-            dispatchGiftMembership: jest.fn()
+            dispatchSuperChat: createMockFn(),
+            dispatchMembership: createMockFn(),
+            dispatchSuperSticker: createMockFn(),
+            dispatchGiftMembership: createMockFn()
         };
 
         // Add missing handler methods for Implementation Alignment - use actual implementation structure
@@ -161,12 +167,12 @@ describe('YouTube Base Handler Class Extraction Implementation', () => {
             // Test the base handler interface
             const mockPlatform = { handlers: mockHandlers };
             const mockDispatcher = {
-                dispatchSuperChat: jest.fn(),
-                dispatchSuperSticker: jest.fn(),
-                dispatchMembership: jest.fn(),
-                dispatchGiftMembership: jest.fn()
+                dispatchSuperChat: createMockFn(),
+                dispatchSuperSticker: createMockFn(),
+                dispatchMembership: createMockFn(),
+                dispatchGiftMembership: createMockFn()
             };
-            const mockLogger = { warn: jest.fn(), error: jest.fn() };
+            const mockLogger = { warn: createMockFn(), error: createMockFn() };
 
             const baseHandler = new BaseYouTubeEventHandler(mockPlatform, mockDispatcher, mockLogger);
 
@@ -526,7 +532,7 @@ describe('YouTube Base Handler Class Extraction Implementation', () => {
             expect(typeof newEventHandler).toBe('function');
             
             // Mock the new dispatcher method
-            platform.notificationDispatcher.dispatchEngagement = jest.fn();
+            platform.notificationDispatcher.dispatchEngagement = createMockFn();
             
             const testEvent = {
                 item: { type: 'LiveChatPoll' },

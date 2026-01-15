@@ -1,5 +1,7 @@
+const { describe, test, beforeEach, afterEach, expect } = require('bun:test');
 
 const { initializeTestLogging, createMockConfig, createMockPlatformDependencies } = require('../helpers/test-setup');
+const { createMockFn, restoreAllMocks } = require('../helpers/bun-mock-utils');
 
 // Initialize test environment BEFORE requiring platform
 initializeTestLogging();
@@ -20,9 +22,9 @@ describe('YouTube Unified Notification Processing Implementation', () => {
         mockDependencies = createMockPlatformDependencies('youtube');
 
         mockHandlers = {
-            onGift: jest.fn(),
-            onMembership: jest.fn(),
-            onChat: jest.fn()
+            onGift: createMockFn(),
+            onMembership: createMockFn(),
+            onChat: createMockFn()
         };
 
         platform = new YouTubePlatform(mockConfig, mockDependencies);
@@ -30,22 +32,26 @@ describe('YouTube Unified Notification Processing Implementation', () => {
 
         // Mock unified logger
         platform.logger = {
-            debug: jest.fn(),
-            info: jest.fn(),
-            warn: jest.fn(),
-            error: jest.fn()
+            debug: createMockFn(),
+            info: createMockFn(),
+            warn: createMockFn(),
+            error: createMockFn()
         };
 
         // Mock notification dispatcher
         platform.notificationDispatcher = {
-            dispatchSuperChat: jest.fn(),
-            dispatchMembership: jest.fn()
+            dispatchSuperChat: createMockFn(),
+            dispatchMembership: createMockFn()
         };
 
         // Mock NotificationBuilder
         platform.NotificationBuilder = {
-            build: jest.fn().mockReturnValue({ type: 'test-notification' })
+            build: createMockFn().mockReturnValue({ type: 'test-notification' })
         };
+    });
+
+    afterEach(() => {
+        restoreAllMocks();
     });
 
     describe('Define Unified Notification Processing Architecture', () => {
@@ -254,7 +260,7 @@ describe('YouTube Unified Notification Processing Implementation', () => {
 
             // Mock the unified processor
             const mockProcessor = {
-                processNotification: jest.fn()
+                processNotification: createMockFn()
             };
 
             // Test that existing handler interface still works

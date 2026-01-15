@@ -1,5 +1,8 @@
+const { describe, test, beforeEach, afterEach, expect } = require('bun:test');
 
 const { initializeTestLogging, createMockConfig, createMockPlatformDependencies } = require('../helpers/test-setup');
+const { createMockFn, restoreAllMocks } = require('../helpers/bun-mock-utils');
+const { resetModules, restoreAllModuleMocks } = require('../helpers/bun-module-mocks');
 
 // Initialize test environment BEFORE requiring platform
 initializeTestLogging();
@@ -8,9 +11,15 @@ describe('YouTube Architecture Refactoring', () => {
     let mockConfig;
     let mockDependencies;
 
+    afterEach(() => {
+        restoreAllMocks();
+        restoreAllModuleMocks();
+        resetModules();
+    });
+
     beforeEach(() => {
         // Clear module cache to ensure fresh instances
-        jest.resetModules();
+        resetModules();
         
         mockConfig = createMockConfig('youtube', {
             dataLoggingEnabled: false
@@ -18,33 +27,33 @@ describe('YouTube Architecture Refactoring', () => {
 
         mockDependencies = createMockPlatformDependencies('youtube', {
             // Add missing dependencies that YouTube platform constructor needs
-            AuthorExtractor: { extractAuthor: jest.fn() },
-            NotificationBuilder: { build: jest.fn() },
-            SuperChatHandler: jest.fn(),
-            MembershipHandler: jest.fn(),
-            StreamManager: { start: jest.fn(), stop: jest.fn() },
+            AuthorExtractor: { extractAuthor: createMockFn() },
+            NotificationBuilder: { build: createMockFn() },
+            SuperChatHandler: createMockFn(),
+            MembershipHandler: createMockFn(),
+            StreamManager: { start: createMockFn(), stop: createMockFn() },
             app: { 
-                handleChatMessage: jest.fn(),
-                handleNotification: jest.fn(),
-                handleGiftNotification: jest.fn(),
-                handleSuperChatNotification: jest.fn(),
+                handleChatMessage: createMockFn(),
+                handleNotification: createMockFn(),
+                handleGiftNotification: createMockFn(),
+                handleSuperChatNotification: createMockFn(),
                 obs: { connection: null }
             },
             // Add logger dependency to prevent fallback
             logger: { 
-                debug: jest.fn(), 
-                info: jest.fn(), 
-                warn: jest.fn(), 
-                error: jest.fn() 
+                debug: createMockFn(), 
+                info: createMockFn(), 
+                warn: createMockFn(), 
+                error: createMockFn() 
             },
             // Add additional required dependencies
             youtubeApiClient: {
-                videos: { list: jest.fn() },
-                search: { list: jest.fn() }
+                videos: { list: createMockFn() },
+                search: { list: createMockFn() }
             },
             youtubeChatService: {
-                connect: jest.fn(),
-                disconnect: jest.fn()
+                connect: createMockFn(),
+                disconnect: createMockFn()
             }
         });
     });
@@ -73,7 +82,7 @@ describe('YouTube Architecture Refactoring', () => {
             // Mock the base event handler which is what the platform actually uses
             const baseEventHandlerCalls = [];
             platform.baseEventHandler = {
-                handleEvent: jest.fn((...args) => {
+                handleEvent: createMockFn((...args) => {
                     baseEventHandlerCalls.push({ args });
                     return Promise.resolve();
                 })
@@ -82,16 +91,16 @@ describe('YouTube Architecture Refactoring', () => {
             // Mock notification dispatcher to track all calls
             const dispatcherCalls = [];
             platform.notificationDispatcher = {
-                dispatchSuperChat: jest.fn((...args) => dispatcherCalls.push({ type: 'superchat', args })),
-                dispatchMembership: jest.fn((...args) => dispatcherCalls.push({ type: 'platform:paypiggy', args })),
-                dispatchGiftMembership: jest.fn((...args) => dispatcherCalls.push({ type: 'giftMembership', args })),
-                dispatchSuperSticker: jest.fn((...args) => dispatcherCalls.push({ type: 'superSticker', args }))
+                dispatchSuperChat: createMockFn((...args) => dispatcherCalls.push({ type: 'superchat', args })),
+                dispatchMembership: createMockFn((...args) => dispatcherCalls.push({ type: 'platform:paypiggy', args })),
+                dispatchGiftMembership: createMockFn((...args) => dispatcherCalls.push({ type: 'giftMembership', args })),
+                dispatchSuperSticker: createMockFn((...args) => dispatcherCalls.push({ type: 'superSticker', args }))
             };
 
             // Mock handlers
             platform.handlers = {
-                onGift: jest.fn(),
-                onMembership: jest.fn()
+                onGift: createMockFn(),
+                onMembership: createMockFn()
             };
 
             // Test events that should all use dispatcher
@@ -160,13 +169,13 @@ describe('YouTube Architecture Refactoring', () => {
             
             // Mock the base event handler to prevent actual processing
             platform.baseEventHandler = {
-                handleEvent: jest.fn(() => Promise.resolve())
+                handleEvent: createMockFn(() => Promise.resolve())
             };
 
             // Mock NotificationBuilder to detect direct calls
             const builderCalls = [];
             platform.NotificationBuilder = {
-                build: jest.fn((...args) => {
+                build: createMockFn((...args) => {
                     builderCalls.push(args);
                     return { id: 'mock-notification', ...args[0] };
                 })
@@ -174,13 +183,13 @@ describe('YouTube Architecture Refactoring', () => {
 
             // Mock notification dispatcher
             platform.notificationDispatcher = {
-                dispatchSuperChat: jest.fn(),
-                dispatchMembership: jest.fn()
+                dispatchSuperChat: createMockFn(),
+                dispatchMembership: createMockFn()
             };
 
             platform.handlers = {
-                onGift: jest.fn(),
-                onMembership: jest.fn()
+                onGift: createMockFn(),
+                onMembership: createMockFn()
             };
 
             // Test that handlers don't call NotificationBuilder directly
@@ -247,8 +256,8 @@ describe('YouTube Architecture Refactoring', () => {
                 console.log('Platform baseEventHandler not initialized - creating fallback for test');
                 // Create fallback baseEventHandler for Jest environment testing
                 platform.baseEventHandler = {
-                    handleEvent: jest.fn(() => Promise.resolve()),
-                    createHandler: jest.fn((config) => jest.fn(() => Promise.resolve()))
+                    handleEvent: createMockFn(() => Promise.resolve()),
+                    createHandler: createMockFn((config) => createMockFn(() => Promise.resolve()))
                 };
             }
             expect(platform.baseEventHandler).toBeDefined();
@@ -456,20 +465,20 @@ describe('YouTube Architecture Refactoring', () => {
             
             // Mock the base event handler to track calls
             platform.baseEventHandler = {
-                handleEvent: jest.fn((...args) => {
+                handleEvent: createMockFn((...args) => {
                     methodCalls.push('baseEventHandler.handleEvent');
                     return Promise.resolve();
                 })
             };
 
             platform.notificationDispatcher = {
-                dispatchSuperChat: jest.fn((...args) => {
+                dispatchSuperChat: createMockFn((...args) => {
                     methodCalls.push('notificationDispatcher.dispatchSuperChat');
                 })
             };
 
             platform.handlers = {
-                onGift: jest.fn()
+                onGift: createMockFn()
             };
 
             const testEvent = {
@@ -517,21 +526,21 @@ describe('YouTube Architecture Refactoring', () => {
             if (!platform.baseEventHandler) {
                 console.log('Creating fallback baseEventHandler for Jest environment');
                 platform.baseEventHandler = {
-                    handleEvent: jest.fn(() => Promise.resolve()),
-                    createHandler: jest.fn((config) => jest.fn(() => Promise.resolve()))
+                    handleEvent: createMockFn(() => Promise.resolve()),
+                    createHandler: createMockFn((config) => createMockFn(() => Promise.resolve()))
                 };
             }
             if (!platform.unifiedNotificationProcessor) {
                 console.log('Creating fallback unifiedNotificationProcessor for Jest environment');
                 platform.unifiedNotificationProcessor = {
-                    processNotification: jest.fn(() => Promise.resolve())
+                    processNotification: createMockFn(() => Promise.resolve())
                 };
             }
             if (!platform.eventDispatchTable) {
                 console.log('Creating fallback eventDispatchTable for Jest environment');
                 platform.eventDispatchTable = {
-                    'LiveChatPaidMessage': jest.fn(),
-                    'LiveChatMembershipItem': jest.fn()
+                    'LiveChatPaidMessage': createMockFn(),
+                    'LiveChatMembershipItem': createMockFn()
                 };
             }
             

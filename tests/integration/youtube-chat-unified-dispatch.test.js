@@ -1,34 +1,44 @@
+const { describe, test, afterEach, expect } = require('bun:test');
 
 const { initializeTestLogging } = require('../helpers/test-setup');
+const { createMockFn, restoreAllMocks } = require('../helpers/bun-mock-utils');
+const { mockModule, restoreAllModuleMocks, resetModules } = require('../helpers/bun-module-mocks');
+
 initializeTestLogging();
 
-jest.mock('../../src/platforms/youtube.js');
+mockModule('../../src/platforms/youtube.js', () => ({}));
 
 const YouTubePlatform = require('../../src/platforms/youtube.js');
 
 describe('YouTube chat-update unified dispatch', () => {
-    it('routes paid and regular chat through handleChatMessage', async () => {
-        const mockHandleChatMessage = jest.fn();
-        const mockGetLiveChat = jest.fn().mockResolvedValue({
-            on: jest.fn((event, handler) => {
+    afterEach(() => {
+        restoreAllMocks();
+        restoreAllModuleMocks();
+        resetModules();
+    });
+
+    test('routes paid and regular chat through handleChatMessage', async () => {
+        const mockHandleChatMessage = createMockFn();
+        const mockGetLiveChat = createMockFn().mockResolvedValue({
+            on: createMockFn((event, handler) => {
                 if (event === 'chat-update') {
                     handler({ item: { type: 'LiveChatPaidMessage' }, author: { name: 'Paid' } });
                     handler({ item: { type: 'LiveChatTextMessage', message: { text: 'hello' } }, author: { name: 'Viewer' } });
                 }
             }),
-            start: jest.fn()
+            start: createMockFn()
         });
 
         const youtubePlatform = new (class {
             constructor() {
-                this.logger = { debug: jest.fn(), info: jest.fn(), warn: jest.fn(), error: jest.fn() };
+                this.logger = { debug: createMockFn(), info: createMockFn(), warn: createMockFn(), error: createMockFn() };
                 this.handleChatMessage = mockHandleChatMessage;
                 this._extractMessagesFromChatItem = (chatItem) => [chatItem];
                 this._shouldSkipMessage = () => false;
                 this.config = {};
                 this.connectionManager = {
-                    connectToStream: jest.fn().mockResolvedValue({ on: jest.fn(), start: jest.fn() }),
-                    disconnectFromStream: jest.fn()
+                    connectToStream: createMockFn().mockResolvedValue({ on: createMockFn(), start: createMockFn() }),
+                    disconnectFromStream: createMockFn()
                 };
             }
             async connectToLiveChat(videoId) {
