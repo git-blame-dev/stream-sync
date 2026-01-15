@@ -1,7 +1,6 @@
 const fs = require('fs');
-const { logger } = require('../core/logging');
-const innertubeInstanceManager = require('../services/innertube-instance-manager');
-const { InnertubeFactory } = require('../factories/innertube-factory');
+const defaultInnertubeInstanceManager = require('../services/innertube-instance-manager');
+const { InnertubeFactory: DefaultInnertubeFactory } = require('../factories/innertube-factory');
 const { createPlatformErrorHandler } = require('./platform-error-handler');
 const {
     normalizeHandleForCache,
@@ -9,151 +8,155 @@ const {
     resolveChannelId
 } = require('../services/youtube-channel-resolver');
 
-const youtubeDataErrorHandler = createPlatformErrorHandler(logger, 'youtube-data');
+class YouTubeChannelResolver {
+    constructor({
+        fileSystem,
+        logger,
+        innertubeInstanceManager,
+        innertubeFactory,
+        channelResolver
+    }) {
+        if (!logger) throw new Error('YouTubeChannelResolver requires logger');
 
-function handleYouTubeDataError(message, error = null, eventType = 'youtube-data', eventData = null) {
-    if (error instanceof Error) {
-        youtubeDataErrorHandler.handleEventProcessingError(error, eventType, eventData, message);
-    } else {
-        const fallbackError = new Error(message);
-        youtubeDataErrorHandler.handleEventProcessingError(fallbackError, eventType, eventData, message);
+        this.fs = fileSystem || fs;
+        this.logger = logger;
+        this.innertubeInstanceManager = innertubeInstanceManager || defaultInnertubeInstanceManager;
+        this.innertubeFactory = innertubeFactory || DefaultInnertubeFactory;
+        this.channelResolver = channelResolver || { normalizeHandleForCache, normalizeChannelHandle, resolveChannelId };
+
+        this.errorHandler = createPlatformErrorHandler(this.logger, 'youtube-data');
+        this.cacheConfig = { enabled: false, filePath: null };
+        this.channelIdCache = new Map();
+        this.ongoingRequests = new Map();
     }
-}
 
-const channelCacheConfig = {
-    enabled: false,
-    filePath: null
-};
-
-const channelIdCache = new Map();
-
-// In-memory cache for ongoing requests to prevent race conditions
-const ongoingRequests = new Map();
-
-function configureChannelCache(options = {}) {
-    const enabled = Boolean(options.enabled);
-    const filePath = options.filePath;
-
-    channelCacheConfig.enabled = enabled;
-    channelCacheConfig.filePath = enabled ? filePath : null;
-
-    if (enabled && !filePath) {
-        throw new Error('YouTube channel cache requires filePath when enabled');
+    handleError(message, error = null, eventType = 'youtube-data', eventData = null) {
+        const err = error instanceof Error ? error : new Error(message);
+        this.errorHandler.handleEventProcessingError(err, eventType, eventData, message);
     }
-}
 
-function clearChannelCache() {
-    channelIdCache.clear();
-}
+    configureChannelCache(options = {}) {
+        const enabled = Boolean(options.enabled);
+        const filePath = options.filePath;
 
-function isFileCacheEnabled() {
-    return channelCacheConfig.enabled && channelCacheConfig.filePath;
-}
+        this.cacheConfig.enabled = enabled;
+        this.cacheConfig.filePath = enabled ? filePath : null;
 
-function loadCache() {
-    if (!isFileCacheEnabled()) {
+        if (enabled && !filePath) {
+            throw new Error('YouTube channel cache requires filePath when enabled');
+        }
+    }
+
+    clearChannelCache() {
+        this.channelIdCache.clear();
+    }
+
+    isFileCacheEnabled() {
+        return this.cacheConfig.enabled && this.cacheConfig.filePath;
+    }
+
+    loadCache() {
+        if (!this.isFileCacheEnabled()) {
+            return {};
+        }
+
+        try {
+            if (this.fs.existsSync(this.cacheConfig.filePath)) {
+                const data = this.fs.readFileSync(this.cacheConfig.filePath, 'utf8');
+                return JSON.parse(data);
+            }
+        } catch (error) {
+            this.handleError(`Error loading channel cache: ${error.message}`, error, 'cache-load');
+        }
         return {};
     }
 
-    try {
-        if (fs.existsSync(channelCacheConfig.filePath)) {
-            const data = fs.readFileSync(channelCacheConfig.filePath, 'utf8');
-            return JSON.parse(data);
+    saveCache(cache) {
+        if (!this.isFileCacheEnabled()) {
+            return;
         }
-    } catch (error) {
-        handleYouTubeDataError(`Error loading channel cache: ${error.message}`, error, 'cache-load');
-    }
-    return {};
-}
 
-function saveCache(cache) {
-    if (!isFileCacheEnabled()) {
-        return;
-    }
-
-    try {
-        fs.writeFileSync(channelCacheConfig.filePath, JSON.stringify(cache, null, 2), 'utf8');
-    } catch (error) {
-        handleYouTubeDataError(`Error saving channel cache: ${error.message}`, error, 'cache-save');
-    }
-}
-
-async function getChannelId(username) {
-    const normalizedHandle = normalizeChannelHandle(username);
-    if (!normalizedHandle) {
-        handleYouTubeDataError('Cannot get Channel ID: No username provided.', new Error('Missing username'), 'channel-id');
-        return null;
-    }
-
-    const cacheKey = normalizeHandleForCache(normalizedHandle);
-    if (!cacheKey) {
-        handleYouTubeDataError('Cannot get Channel ID: Invalid username provided.', new Error('Invalid username'), 'channel-id', {
-            username: normalizedHandle
-        });
-        return null;
-    }
-
-    if (channelIdCache.has(cacheKey)) {
-        const cachedId = channelIdCache.get(cacheKey);
-        logger.info(`Found cached Channel ID (${cachedId}) for @${cacheKey}.`, 'YouTubeResolver');
-        return cachedId;
-    }
-
-    const cache = loadCache();
-    if (cache[cacheKey]) {
-        channelIdCache.set(cacheKey, cache[cacheKey]);
-        logger.info(`Found cached Channel ID (${cache[cacheKey]}) for @${cacheKey}.`, 'YouTubeResolver');
-        return cache[cacheKey];
-    }
-
-    // Check for ongoing request to prevent duplicate calls
-    if (ongoingRequests.has(cacheKey)) {
-        logger.info(`Request already in progress for @${cacheKey}, waiting...`, 'YouTubeResolver');
-        return await ongoingRequests.get(cacheKey);
-    }
-
-    logger.info(`Resolving YouTube channel: @${cacheKey} using youtubei.js`, 'YouTubeResolver');
-
-    // Create and store the request promise to prevent duplicate calls
-    const requestPromise = (async () => {
         try {
-            const manager = innertubeInstanceManager.getInstance({ logger });
-            const yt = await manager.getInstance('shared-youtube-instance', 
-                () => InnertubeFactory.createWithTimeout(3000)
-            );
-            if (!yt) {
-                throw new Error('YouTube instance unavailable');
-            }
-
-            const channelId = await resolveChannelId(yt, cacheKey, {
-                timeout: 3000,
-                logger,
-                onError: handleYouTubeDataError
-            });
-
-            if (channelId) {
-                logger.info(`Found Channel ID (${channelId}) for @${cacheKey} via youtubei.js resolveURL.`, 'YouTubeResolver');
-                channelIdCache.set(cacheKey, channelId);
-                cache[cacheKey] = channelId;
-                saveCache(cache);
-                return channelId;
-            }
-
-            return null;
+            this.fs.writeFileSync(this.cacheConfig.filePath, JSON.stringify(cache, null, 2), 'utf8');
         } catch (error) {
-            handleYouTubeDataError(`Error resolving YouTube channel @${cacheKey}: ${error.message}`, error, 'channel-resolve', { username: cacheKey });
-            return null;
-        } finally {
-            // Clean up the ongoing request
-            ongoingRequests.delete(cacheKey);
+            this.handleError(`Error saving channel cache: ${error.message}`, error, 'cache-save');
         }
-    })();
+    }
 
-    // Store the promise and return it
-    ongoingRequests.set(cacheKey, requestPromise);
-    return await requestPromise;
+    async getChannelId(username) {
+        const normalizedHandle = this.channelResolver.normalizeChannelHandle(username);
+        if (!normalizedHandle) {
+            this.handleError('Cannot get Channel ID: No username provided.', new Error('Missing username'), 'channel-id');
+            return null;
+        }
+
+        const cacheKey = this.channelResolver.normalizeHandleForCache(normalizedHandle);
+        if (!cacheKey) {
+            this.handleError('Cannot get Channel ID: Invalid username provided.', new Error('Invalid username'), 'channel-id', {
+                username: normalizedHandle
+            });
+            return null;
+        }
+
+        if (this.channelIdCache.has(cacheKey)) {
+            const cachedId = this.channelIdCache.get(cacheKey);
+            this.logger.info(`Found cached Channel ID (${cachedId}) for @${cacheKey}.`, 'YouTubeResolver');
+            return cachedId;
+        }
+
+        const cache = this.loadCache();
+        if (cache[cacheKey]) {
+            this.channelIdCache.set(cacheKey, cache[cacheKey]);
+            this.logger.info(`Found cached Channel ID (${cache[cacheKey]}) for @${cacheKey}.`, 'YouTubeResolver');
+            return cache[cacheKey];
+        }
+
+        if (this.ongoingRequests.has(cacheKey)) {
+            this.logger.info(`Request already in progress for @${cacheKey}, waiting...`, 'YouTubeResolver');
+            return await this.ongoingRequests.get(cacheKey);
+        }
+
+        this.logger.info(`Resolving YouTube channel: @${cacheKey} using youtubei.js`, 'YouTubeResolver');
+
+        const requestPromise = (async () => {
+            try {
+                const manager = this.innertubeInstanceManager.getInstance({ logger: this.logger });
+                const yt = await manager.getInstance('shared-youtube-instance',
+                    () => this.innertubeFactory.createWithTimeout(3000)
+                );
+                if (!yt) {
+                    throw new Error('YouTube instance unavailable');
+                }
+
+                const channelId = await this.channelResolver.resolveChannelId(yt, cacheKey, {
+                    timeout: 3000,
+                    logger: this.logger,
+                    onError: (msg, err, type, data) => this.handleError(msg, err, type, data)
+                });
+
+                if (channelId) {
+                    this.logger.info(`Found Channel ID (${channelId}) for @${cacheKey} via youtubei.js resolveURL.`, 'YouTubeResolver');
+                    this.channelIdCache.set(cacheKey, channelId);
+                    cache[cacheKey] = channelId;
+                    this.saveCache(cache);
+                    return channelId;
+                }
+
+                return null;
+            } catch (error) {
+                this.handleError(`Error resolving YouTube channel @${cacheKey}: ${error.message}`, error, 'channel-resolve', { username: cacheKey });
+                return null;
+            } finally {
+                this.ongoingRequests.delete(cacheKey);
+            }
+        })();
+
+        this.ongoingRequests.set(cacheKey, requestPromise);
+        return await requestPromise;
+    }
 }
 
+// Pure functions - no dependencies, no DI needed
 function extractSuperChatData(chatItem) {
     if (chatItem.superchat) {
         if (chatItem.superchat.amount === undefined || chatItem.superchat.amount === null) {
@@ -175,7 +178,7 @@ function extractSuperChatData(chatItem) {
             author: chatItem.author
         };
     }
-    
+
     if (chatItem.supersticker) {
         if (chatItem.supersticker.amount === undefined || chatItem.supersticker.amount === null) {
             throw new Error('YouTube SuperSticker requires amount');
@@ -196,7 +199,7 @@ function extractSuperChatData(chatItem) {
             author: chatItem.author
         };
     }
-    
+
     return null;
 }
 
@@ -215,7 +218,7 @@ function extractMembershipData(chatItem) {
             timestamp: chatItem.timestamp
         };
     }
-    
+
     return null;
 }
 
@@ -245,20 +248,18 @@ function formatSuperChatAmount(amount, currency) {
     if (!Number.isFinite(numericAmount) || numericAmount <= 0) {
         return '';
     }
-    
+
     if (currency === 'USD') {
         return ` ($${numericAmount.toFixed(2)})`;
     }
-    
+
     return ` (${numericAmount.toFixed(2)} ${currency})`;
 }
 
-module.exports = { 
-    configureChannelCache,
-    clearChannelCache,
-    getChannelId,
+module.exports = {
+    YouTubeChannelResolver,
     extractSuperChatData,
     extractMembershipData,
     extractYouTubeUserData,
     formatSuperChatAmount
-}; 
+};
