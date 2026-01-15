@@ -2,12 +2,9 @@
 const { describe, test, expect, afterEach } = require('bun:test');
 const { createMockFn, restoreAllMocks } = require('../helpers/bun-mock-utils');
 
-const { initializeTestLogging } = require('../helpers/test-setup');
 const { setupAutomatedCleanup } = require('../helpers/mock-lifecycle');
 const { createMockLogger } = require('../helpers/mock-factories');
 const ChatNotificationRouter = require('../../src/services/ChatNotificationRouter');
-
-initializeTestLogging();
 
 setupAutomatedCleanup({
     clearCallsBeforeEach: true,

@@ -2,21 +2,13 @@
 const { describe, test, expect, beforeEach, afterEach } = require('bun:test');
 const { resetModules, restoreAllModuleMocks } = require('../../helpers/bun-module-mocks');
 
-const { 
-    initializeTestLogging,
-    TEST_TIMEOUTS 
-} = require('../../helpers/test-setup');
+const { TEST_TIMEOUTS } = require('../../helpers/test-setup');
 
-const { 
-    setupAutomatedCleanup 
-} = require('../../helpers/mock-lifecycle');
+const { setupAutomatedCleanup } = require('../../helpers/mock-lifecycle');
 
 const {
     expectNoTechnicalArtifacts
 } = require('../../helpers/behavior-validation');
-
-// Initialize logging FIRST
-initializeTestLogging();
 
 // Setup automated cleanup
 setupAutomatedCleanup({
@@ -33,11 +25,7 @@ describe('User-Facing Content Validation', () => {
 
     beforeEach(() => {
         resetModules();
-        
-        // Re-initialize logging after module reset (shared reset pattern)
-        const { initializeTestLogging } = require('../../helpers/test-setup');
-        initializeTestLogging();
-        
+
         const testUtils = require('../../helpers/notification-test-utils');
         createNotificationData = testUtils.createNotificationData;
     });
