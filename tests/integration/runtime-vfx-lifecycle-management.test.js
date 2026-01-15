@@ -3,26 +3,7 @@ const { describe, test, beforeEach, afterEach, expect } = require('bun:test');
 const { clearAllMocks, createMockFn, restoreAllMocks } = require('../helpers/bun-mock-utils');
 const { mockModule, resetModules, restoreAllModuleMocks } = require('../helpers/bun-module-mocks');
 
-mockModule('../../src/core/logging', () => ({
-    setConfigValidator: createMockFn(),
-    setDebugMode: createMockFn(),
-    initializeLoggingConfig: createMockFn(),
-    initializeConsoleOverride: createMockFn(),
-    logger: {
-        info: createMockFn(),
-        warn: createMockFn(),
-        error: createMockFn(),
-        debug: createMockFn()
-    },
-    getLogger: createMockFn(() => ({
-        info: createMockFn(),
-        warn: createMockFn(),
-        error: createMockFn(),
-        debug: createMockFn()
-    }))
-}));
-
-const { initializeTestLogging, TEST_TIMEOUTS } = require('../helpers/test-setup');
+const { TEST_TIMEOUTS } = require('../helpers/test-setup');
 const { setupAutomatedCleanup } = require('../helpers/mock-lifecycle');
 const { AppRuntime } = require('../../src/main');
 const { createAppRuntimeTestDependencies } = require('../helpers/runtime-test-harness');
@@ -30,8 +11,6 @@ const path = require('path');
 const { safeDelay } = require('../../src/utils/timeout-validator');
 const { PlatformEvents } = require('../../src/interfaces/PlatformEvents');
 
-// Initialize logging and cleanup
-initializeTestLogging();
 setupAutomatedCleanup({
     clearCallsBeforeEach: true,
     validateAfterCleanup: true,

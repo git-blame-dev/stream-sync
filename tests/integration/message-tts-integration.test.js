@@ -1,10 +1,6 @@
 
 const { describe, test, expect } = require('bun:test');
 
-// Initialize test setup
-const { initializeTestLogging } = require('../helpers/test-setup');
-initializeTestLogging();
-
 const { createNotificationData } = require('../helpers/notification-test-utils');
 const MessageTTSHandler = require('../../src/utils/message-tts-handler');
 

@@ -1,15 +1,13 @@
 
 const { describe, test, expect, beforeEach, afterEach } = require('bun:test');
 
-const { 
-  initializeTestLogging,
-  createTestUser, 
-  TEST_TIMEOUTS 
+const {
+  createTestUser,
+  TEST_TIMEOUTS
 } = require('../helpers/test-setup');
 
-const { 
-  createMockLogger,
-  createMockConfig 
+const {
+  createMockConfig
 } = require('../helpers/mock-factories');
 
 const { 
@@ -17,9 +15,6 @@ const {
 } = require('../helpers/mock-lifecycle');
 const testClock = require('../helpers/test-clock');
 const { restoreAllMocks, spyOn } = require('../helpers/bun-mock-utils');
-
-// Initialize logging FIRST
-initializeTestLogging();
 
 // Setup automated cleanup
 setupAutomatedCleanup({

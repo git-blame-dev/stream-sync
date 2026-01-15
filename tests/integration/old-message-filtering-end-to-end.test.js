@@ -2,52 +2,13 @@ const { describe, it, beforeEach, afterEach, expect } = require('bun:test');
 const { clearAllMocks, createMockFn, restoreAllMocks } = require('../helpers/bun-mock-utils');
 const { mockModule, resetModules, restoreAllModuleMocks } = require('../helpers/bun-module-mocks');
 
-const applyLoggingMock = () => mockModule('../../src/core/logging', () => ({
-    setConfigValidator: createMockFn(),
-    setDebugMode: createMockFn(),
-    initializeLoggingConfig: createMockFn(),
-    initializeConsoleOverride: createMockFn(),
-    logger: {
-        info: createMockFn(),
-        warn: createMockFn(),
-        error: createMockFn(),
-        debug: createMockFn()
-    },
-    getLogger: createMockFn(() => ({
-        info: createMockFn(),
-        warn: createMockFn(),
-        error: createMockFn(),
-        debug: createMockFn()
-    }))
-}));
-
-applyLoggingMock();
-
-const { 
-    initializeTestLogging,
-    createTestUser, 
-    TEST_TIMEOUTS,
-    createMockConfig
-} = require('../helpers/test-setup');
-
-const { 
-    createMockNotificationDispatcher,
-    createMockLogger,
-    setupAutomatedCleanup 
-} = require('../helpers/mock-factories');
-
-const { 
-    expectNoTechnicalArtifacts,
-    expectValidNotification 
-} = require('../helpers/assertion-helpers');
+const { TEST_TIMEOUTS, createMockConfig } = require('../helpers/test-setup');
+const { createMockNotificationDispatcher, setupAutomatedCleanup } = require('../helpers/mock-factories');
+const { expectNoTechnicalArtifacts } = require('../helpers/assertion-helpers');
 const { createRuntimeConstantsFixture } = require('../helpers/runtime-constants-fixture');
 const { processIncomingMessage } = require('../helpers/old-message-filtering-helper');
 const testClock = require('../helpers/test-clock');
 
-// Initialize logging FIRST
-initializeTestLogging();
-
-// Setup automated cleanup
 setupAutomatedCleanup({
     clearCallsBeforeEach: true,
     validateAfterCleanup: true,
@@ -200,7 +161,6 @@ describe('Old Message Filtering End-to-End Behavior', () => {
     
     beforeEach(() => {
         resetModules();
-        applyLoggingMock();
         testClock.reset();
         testStartTime = testClock.now();
         mockNotificationDispatcher = createMockNotificationDispatcher();

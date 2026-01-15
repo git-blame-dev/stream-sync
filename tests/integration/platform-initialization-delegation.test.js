@@ -3,25 +3,6 @@ const { describe, it, beforeEach, afterEach, expect } = require('bun:test');
 const { createMockFn, restoreAllMocks } = require('../helpers/bun-mock-utils');
 const { mockModule, restoreAllModuleMocks } = require('../helpers/bun-module-mocks');
 
-mockModule('../../src/core/logging', () => ({
-    setConfigValidator: createMockFn(),
-    setDebugMode: createMockFn(),
-    initializeLoggingConfig: createMockFn(),
-    initializeConsoleOverride: createMockFn(),
-    logger: {
-        info: createMockFn(),
-        warn: createMockFn(),
-        error: createMockFn(),
-        debug: createMockFn()
-    },
-    getLogger: createMockFn(() => ({
-        info: createMockFn(),
-        warn: createMockFn(),
-        error: createMockFn(),
-        debug: createMockFn()
-    }))
-}));
-
 const { AppRuntime } = require('../../src/main');
 const PlatformLifecycleService = require('../../src/services/PlatformLifecycleService');
 const { createRuntimeConstantsFixture } = require('../helpers/runtime-constants-fixture');
