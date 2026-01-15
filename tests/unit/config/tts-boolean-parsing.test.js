@@ -1,44 +1,23 @@
 
 const { describe, test, expect, beforeEach, afterEach, it } = require('bun:test');
 const { createMockFn, clearAllMocks, restoreAllMocks } = require('../../helpers/bun-mock-utils');
-const { mockModule, resetModules, restoreAllModuleMocks } = require('../../helpers/bun-module-mocks');
 
-const { initializeTestLogging } = require('../../helpers/test-setup');
-const { createMockLogger } = require('../../helpers/mock-factories');
 const { setupAutomatedCleanup } = require('../../helpers/mock-lifecycle');
 const { createRuntimeConstantsFixture } = require('../../helpers/runtime-constants-fixture');
 
-// Initialize logging FIRST
-initializeTestLogging();
-
-// Setup automated cleanup
 setupAutomatedCleanup({
     clearCallsBeforeEach: true,
     validateAfterCleanup: true,
     logPerformanceMetrics: true
 });
 
+const { DisplayQueue } = require('../../../src/obs/display-queue');
+
 describe('TTS Configuration Boolean Parsing', () => {
-    let mockLogger;
-    let DisplayQueue;
-    
-    beforeEach(() => {
-        // Create mock logger
-        mockLogger = createMockLogger('debug', { captureConsole: true });
-        
-        // Mock the logging module
-        mockModule('../../../src/core/logging', () => ({
-            logger: mockLogger,
-            platformLogger: mockLogger
-        }));
-        
-        // Import after mocking
-        DisplayQueue = require('../../../src/obs/display-queue').DisplayQueue;
-    });
-    
     afterEach(() => {
         restoreAllMocks();
-restoreAllModuleMocks();});
+        clearAllMocks();
+    });
     
     describe('when ttsEnabled is configured with different values', () => {
         const createDisplayQueueWithTTS = (ttsValue) => {

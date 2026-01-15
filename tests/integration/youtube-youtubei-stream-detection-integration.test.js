@@ -35,11 +35,6 @@ describe('YouTube YouTubei Stream Detection Integration - Regression', () => {
             })
         };
 
-        // Mock the logging module to return our mock logger
-        mockModule('../../src/core/logging', () => ({
-            getUnifiedLogger: () => mockLogger
-        }));
-
         // Mock the dependency factory to return our mock service
         mockModule('../../src/utils/dependency-factory', () => ({
             DependencyFactory: class MockDependencyFactory {

@@ -3,18 +3,7 @@ const { describe, test, beforeEach, afterEach, expect } = require('bun:test');
 const { createMockFn, restoreAllMocks } = require('../helpers/bun-mock-utils');
 const { mockModule, restoreAllModuleMocks, resetModules } = require('../helpers/bun-module-mocks');
 
-// Mock the logging system to avoid initialization issues
-mockModule('../../src/core/logging', () => ({
-    getUnifiedLogger: () => ({
-        debug: createMockFn(),
-        info: createMockFn(),
-        warn: createMockFn(),
-        error: createMockFn()
-    }),
-    setConfigValidator: createMockFn()
-}));
-
-// Mock retry system to avoid logging dependencies
+// Mock retry system (external service)
 mockModule('../../src/utils/retry-system', () => ({
     createRetrySystem: createMockFn(() => ({
         calculateAdaptiveRetryDelay: createMockFn(() => 1000),
@@ -92,21 +81,21 @@ describe('YouTube Platform Real Handler Method Mapping', () => {
 
         // Create a simplified platform mock that has the handler methods we want to test
         platform = {
-            handleMembership: createMockFn(async (chatItem) => {
-                if (mockNotificationDispatcher.dispatchMembership && typeof mockNotificationDispatcher.dispatchMembership === 'function') {
-                    return await mockNotificationDispatcher.dispatchMembership(chatItem, mockHandlers);
+            handleMembership: createMockFn(async function(chatItem) {
+                const dispatcher = this.notificationDispatcher;
+                if (dispatcher?.dispatchMembership && typeof dispatcher.dispatchMembership === 'function') {
+                    return await dispatcher.dispatchMembership(chatItem, this.handlers);
                 }
-                platform.logger.warn('dispatchMembership method not available');
                 return null;
             }),
-            handleGiftMembershipPurchase: createMockFn(async (chatItem) => {
-                return await mockNotificationDispatcher.dispatchGiftMembership(chatItem, mockHandlers);
+            handleGiftMembershipPurchase: createMockFn(async function(chatItem) {
+                return await this.notificationDispatcher.dispatchGiftMembership(chatItem, this.handlers);
             }),
-            handleSuperChat: createMockFn(async (chatItem) => {
-                return await mockNotificationDispatcher.dispatchSuperChat(chatItem, mockHandlers);
+            handleSuperChat: createMockFn(async function(chatItem) {
+                return await this.notificationDispatcher.dispatchSuperChat(chatItem, this.handlers);
             }),
-            handleSuperSticker: createMockFn(async (chatItem) => {
-                return await mockNotificationDispatcher.dispatchSuperSticker(chatItem, mockHandlers);
+            handleSuperSticker: createMockFn(async function(chatItem) {
+                return await this.notificationDispatcher.dispatchSuperSticker(chatItem, this.handlers);
             }),
             notificationDispatcher: mockNotificationDispatcher,
             handlers: mockHandlers,
@@ -215,31 +204,25 @@ describe('YouTube Platform Real Handler Method Mapping', () => {
 
     describe('Error Handling', () => {
         test('should handle missing notification dispatcher gracefully', async () => {
-            // Test that missing dispatcher is handled gracefully
             platform.notificationDispatcher = null;
-            
+
             const mockChatItem = {
-                item: {
-                    type: 'LiveChatMembershipItem'
-                }
+                item: { type: 'LiveChatMembershipItem' }
             };
 
-            // This should not throw an error but should log a warning
-            await expect(platform.handleMembership(mockChatItem)).resolves.not.toThrow();
+            const result = await platform.handleMembership(mockChatItem);
+            expect(result).toBeNull();
         });
 
         test('should handle missing dispatch methods gracefully', async () => {
-            // Test that missing dispatch methods are handled gracefully
             platform.notificationDispatcher.dispatchMembership = undefined;
-            
+
             const mockChatItem = {
-                item: {
-                    type: 'LiveChatMembershipItem'
-                }
+                item: { type: 'LiveChatMembershipItem' }
             };
 
-            // This should not throw an error but should log a warning
-            await expect(platform.handleMembership(mockChatItem)).resolves.not.toThrow();
+            const result = await platform.handleMembership(mockChatItem);
+            expect(result).toBeNull();
         });
     });
 
