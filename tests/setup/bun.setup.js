@@ -3,12 +3,16 @@ const { waitForDelay, scheduleTimeout, scheduleInterval } = require('../helpers/
 const testClock = require('../helpers/test-clock');
 const { initializeTestLogging } = require('../helpers/test-setup');
 const { createRuntimeConstantsFixture } = require('../helpers/runtime-constants-fixture');
+
+// Initialize logging FIRST at module load time, before any test files import modules
+// This ensures getUnifiedLogger() works when production code falls back to it
+initializeTestLogging();
 const {
     createMockFn,
-    isMockFunction,
     clearAllMocks,
     restoreAllMocks
 } = require('../helpers/bun-mock-utils');
+const { mockModule } = require('../helpers/bun-module-mocks');
 const {
     installTimerTracking,
     clearTrackedTimers,
@@ -29,6 +33,7 @@ global.restoreConsole = () => {
     global.console = originalConsole;
 };
 
+// Helper for tests that need a mock logger - inject via DI, don't mock globally
 const createLoggerMock = () => ({
     info: createMockFn(),
     debug: createMockFn(),
@@ -37,66 +42,10 @@ const createLoggerMock = () => ({
     log: createMockFn()
 });
 
-const mockHttpClient = {
-    get: createMockFn().mockResolvedValue({ data: {} }),
-    post: createMockFn().mockResolvedValue({ data: {} }),
-    put: createMockFn().mockResolvedValue({ data: {} }),
-    delete: createMockFn().mockResolvedValue({ data: {} }),
-    getWithUserAgent: createMockFn().mockResolvedValue({ data: {} })
-};
-
-const applyLoggingMocks = () => {
-    const logging = require('../../src/core/logging');
-    if (logging && typeof logging.getLogger === 'function' && isMockFunction(logging.getLogger)) {
-        const logger = createLoggerMock();
-        logging.getLogger.mockReturnValue(logger);
-        if (typeof logging.getUnifiedLogger === 'function' && isMockFunction(logging.getUnifiedLogger)) {
-            logging.getUnifiedLogger.mockReturnValue(logger);
-        }
-        if (logging.logger && typeof logging.logger === 'object') {
-            Object.assign(logging.logger, logger);
-        }
-    }
-};
+// Make available globally for tests that need it
+global.createLoggerMock = createLoggerMock;
 
 const registerModuleMocks = () => {
-    mock.module('../../src/core/logging', () => ({
-        logger: createLoggerMock(),
-        platformLogger: createLoggerMock(),
-        getUnifiedLogger: createMockFn(() => createLoggerMock()),
-        setDebugMode: createMockFn(),
-        getDebugMode: createMockFn(() => false),
-        getLogger: createMockFn(() => createLoggerMock()),
-        initializeUnifiedLogger: createMockFn(),
-        setConfigValidator: createMockFn(),
-        initializeLoggingConfig: createMockFn(),
-        initializeConsoleOverride: createMockFn(),
-        logChatMessage: createMockFn(),
-        formatPlatformName: createMockFn((platform) => platform),
-        __esModule: true
-    }));
-
-    mock.module('../../src/utils/logger-utils', () => ({
-        getLazyLogger: () => createLoggerMock(),
-        createNoopLogger: () => createLoggerMock(),
-        getLoggerOrNoop: (logger) => logger || createLoggerMock(),
-        getLazyUnifiedLogger: createMockFn(() => createLoggerMock()),
-        safeObjectStringify: (obj) => {
-            try {
-                return JSON.stringify(obj);
-            } catch (error) {
-                return String(obj);
-            }
-        },
-        __esModule: true
-    }));
-
-    mock.module('../../src/utils/http-client', () => ({
-        HttpClient: createMockFn().mockImplementation(() => mockHttpClient),
-        createHttpClient: createMockFn(() => mockHttpClient),
-        __esModule: true
-    }));
-
     const webSocketMock = createMockFn().mockImplementation(() => ({
         on: createMockFn(),
         send: createMockFn(),
@@ -112,9 +61,9 @@ const registerModuleMocks = () => {
     webSocketMock.CLOSING = 2;
     webSocketMock.CLOSED = 3;
 
-    mock.module('ws', () => webSocketMock);
+    mockModule('ws', () => webSocketMock);
 
-    mock.module('axios', () => ({
+    mockModule('axios', () => ({
         post: createMockFn().mockResolvedValue({ data: { data: [] } }),
         get: createMockFn().mockResolvedValue({ data: { data: [] } }),
         delete: createMockFn().mockResolvedValue({ data: { data: [] } }),
@@ -125,7 +74,7 @@ const registerModuleMocks = () => {
         }))
     }));
 
-    mock.module('tiktok-live-connector', () => ({
+    mockModule('tiktok-live-connector', () => ({
         WebcastPushConnection: createMockFn().mockImplementation(() => ({
             connect: createMockFn().mockResolvedValue(true),
             disconnect: createMockFn().mockResolvedValue(true),
@@ -137,7 +86,7 @@ const registerModuleMocks = () => {
         __esModule: true
     }));
 
-    mock.module('youtubei.js', () => ({
+    mockModule('youtubei.js', () => ({
         Innertube: {
             create: createMockFn().mockResolvedValue({
                 session: {
@@ -224,8 +173,6 @@ beforeAll(() => {
     process.env.YOUTUBE_API_KEY = 'test_mock_key';
     process.env.TIKTOK_API_KEY = 'test_mock_key';
 
-    initializeTestLogging();
-
     if (!global.__TEST_RUNTIME_CONSTANTS__) {
         global.__TEST_RUNTIME_CONSTANTS__ = createRuntimeConstantsFixture();
     }
@@ -248,7 +195,6 @@ beforeAll(() => {
 
 beforeEach(() => {
     testClock.reset();
-    applyLoggingMocks();
     clearAllMocks();
 });
 

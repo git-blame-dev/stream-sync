@@ -1,4 +1,4 @@
-const { describe, test, expect, it } = require('bun:test');
+const { describe, test, expect, it, afterEach } = require('bun:test');
 const { unmockModule, restoreAllModuleMocks } = require('../../helpers/bun-module-mocks');
 
 const { initializeTestLogging } = require('../../helpers/test-setup');

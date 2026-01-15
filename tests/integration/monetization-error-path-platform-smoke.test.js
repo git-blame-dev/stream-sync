@@ -1,4 +1,4 @@
-const { describe, it, expect } = require('bun:test');
+const { describe, it, expect, afterEach } = require('bun:test');
 const { createMockFn, clearAllMocks, restoreAllMocks } = require('../helpers/bun-mock-utils');
 const EventEmitter = require('events');
 const PlatformLifecycleService = require('../../src/services/PlatformLifecycleService');

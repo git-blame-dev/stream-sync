@@ -1,21 +1,15 @@
 
-// Unmock the logging module for this test since we're testing the actual implementation
+// Test the actual logging implementation
+// Uses dynamic import to bypass Bun's module mock caching
 const { describe, test, expect, beforeEach, afterEach, beforeAll, afterAll } = require('bun:test');
 const { createMockFn, restoreAllMocks } = require('../helpers/bun-mock-utils');
-const { unmockModule, restoreAllModuleMocks } = require('../helpers/bun-module-mocks');
-
-unmockModule('../../src/core/logging');
-
+const { restoreAllModuleMocks } = require('../helpers/bun-module-mocks');
 const { initializeTestLogging } = require('../helpers/test-setup');
-const { createMockLogger, createMockNotificationBuilder } = require('../helpers/mock-factories');
 const { setupAutomatedCleanup } = require('../helpers/mock-lifecycle');
-const { expectValidNotification } = require('../helpers/assertion-helpers');
 const testClock = require('../helpers/test-clock');
 
-// Initialize logging FIRST (required for all tests)
 initializeTestLogging();
 
-// Setup automated cleanup (no manual mock management)
 setupAutomatedCleanup({
     clearCallsBeforeEach: true,
     validateAfterCleanup: true,
@@ -24,15 +18,15 @@ setupAutomatedCleanup({
 
 const fs = require('fs');
 const path = require('path');
-const { 
-    initializeConsoleOverride, 
-    restoreConsole, 
-    isConsoleOverrideEnabled,
-    logProgram,
-    ensureLogDirectory,
-    setConfigValidator,
-    initializeLoggingConfig
-} = require('../../src/core/logging');
+
+// Module will be loaded dynamically in beforeAll to get the real implementation
+let initializeConsoleOverride;
+let restoreConsole;
+let isConsoleOverrideEnabled;
+let logProgram;
+let ensureLogDirectory;
+let setConfigValidator;
+let initializeLoggingConfig;
 
 describe('Console Override Pattern', () => {
     let testLogDir;
@@ -51,12 +45,21 @@ describe('Console Override Pattern', () => {
     };
     
     beforeAll(() => {
+        const logging = require('../../src/core/logging');
+        initializeConsoleOverride = logging.initializeConsoleOverride;
+        restoreConsole = logging.restoreConsole;
+        isConsoleOverrideEnabled = logging.isConsoleOverrideEnabled;
+        logProgram = logging.logProgram;
+        ensureLogDirectory = logging.ensureLogDirectory;
+        setConfigValidator = logging.setConfigValidator;
+        initializeLoggingConfig = logging.initializeLoggingConfig;
+
         // Create test log directory
         testLogDir = path.join(__dirname, 'test-logs');
         if (!fs.existsSync(testLogDir)) {
             fs.mkdirSync(testLogDir, { recursive: true });
         }
-        
+
         // Store original console functions
         originalConsoleLogFn = console.log;
         originalConsoleErrorFn = console.error;

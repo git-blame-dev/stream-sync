@@ -1,5 +1,5 @@
 
-const { describe, test, expect, beforeEach } = require('bun:test');
+const { describe, test, expect, beforeEach, afterEach } = require('bun:test');
 const { createMockFn, spyOn, restoreAllMocks } = require('../helpers/bun-mock-utils');
 
 const { initializeTestLogging, createMockPlatformDependencies, createMockConfig } = require('../helpers/test-setup');
