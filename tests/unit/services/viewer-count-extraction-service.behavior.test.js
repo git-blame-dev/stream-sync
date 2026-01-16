@@ -1,33 +1,20 @@
-const { describe, it, beforeEach, afterEach, expect } = require('bun:test');
-const { createMockFn, clearAllMocks } = require('../../helpers/bun-mock-utils');
-const { mockModule, resetModules, restoreAllModuleMocks } = require('../../helpers/bun-module-mocks');
+const { describe, it, beforeEach, expect } = require('bun:test');
+const { createMockFn } = require('../../helpers/bun-mock-utils');
+const { ViewerCountExtractionService } = require('../../../src/services/viewer-count-extraction-service');
+
+const noOpLogger = { debug: () => {} };
 
 describe('ViewerCountExtractionService', () => {
-    let ViewerCountExtractionService;
     let mockInnertube;
     let mockExtractor;
-    let logger;
 
     beforeEach(() => {
-        resetModules();
         mockInnertube = {
             getVideoInfo: createMockFn()
         };
         mockExtractor = {
             extractConcurrentViewers: createMockFn()
         };
-        logger = {
-            debug: createMockFn()
-        };
-        mockModule('../../../src/extractors/youtube-viewer-extractor', () => ({
-            YouTubeViewerExtractor: mockExtractor
-        }));
-        ({ ViewerCountExtractionService } = require('../../../src/services/viewer-count-extraction-service'));
-    });
-
-    afterEach(() => {
-        clearAllMocks();
-        restoreAllModuleMocks();
     });
 
     it('returns success with count and updates stats on extraction success', async () => {
@@ -38,7 +25,12 @@ describe('ViewerCountExtractionService', () => {
             strategy: 'view_text',
             metadata: { attempted: ['view_text'] }
         });
-        const service = new ViewerCountExtractionService(mockInnertube, { logger, strategies: ['view_text'] });
+
+        const service = new ViewerCountExtractionService(mockInnertube, {
+            logger: noOpLogger,
+            strategies: ['view_text'],
+            YouTubeViewerExtractor: mockExtractor
+        });
 
         const result = await service.extractViewerCount('vid1');
 
@@ -55,7 +47,11 @@ describe('ViewerCountExtractionService', () => {
             count: 0,
             metadata: { strategiesAttempted: ['a'] }
         });
-        const service = new ViewerCountExtractionService(mockInnertube, { logger });
+
+        const service = new ViewerCountExtractionService(mockInnertube, {
+            logger: noOpLogger,
+            YouTubeViewerExtractor: mockExtractor
+        });
 
         const result = await service.extractViewerCount('vid1');
 
@@ -66,7 +62,11 @@ describe('ViewerCountExtractionService', () => {
 
     it('returns failure and error message when innertube throws', async () => {
         mockInnertube.getVideoInfo.mockRejectedValue(new Error('boom'));
-        const service = new ViewerCountExtractionService(mockInnertube, { logger });
+
+        const service = new ViewerCountExtractionService(mockInnertube, {
+            logger: noOpLogger,
+            YouTubeViewerExtractor: mockExtractor
+        });
 
         const result = await service.extractViewerCount('vid1');
 
@@ -76,7 +76,11 @@ describe('ViewerCountExtractionService', () => {
     });
 
     it('handles batch extraction with rejected promises', async () => {
-        const service = new ViewerCountExtractionService(mockInnertube, { logger });
+        const service = new ViewerCountExtractionService(mockInnertube, {
+            logger: noOpLogger,
+            YouTubeViewerExtractor: mockExtractor
+        });
+
         let call = 0;
         service.extractViewerCount = createMockFn((videoId) => {
             call++;
@@ -95,7 +99,10 @@ describe('ViewerCountExtractionService', () => {
     });
 
     it('aggregates zero when no video ids provided', async () => {
-        const service = new ViewerCountExtractionService(mockInnertube, { logger });
+        const service = new ViewerCountExtractionService(mockInnertube, {
+            logger: noOpLogger,
+            YouTubeViewerExtractor: mockExtractor
+        });
 
         const result = await service.getAggregatedViewerCount([]);
 

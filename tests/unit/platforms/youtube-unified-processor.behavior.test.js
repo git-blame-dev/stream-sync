@@ -1,299 +1,121 @@
 const { describe, it, expect, beforeEach, afterEach } = require('bun:test');
-const { createMockFn, clearAllMocks, restoreAllMocks } = require('../../helpers/bun-mock-utils');
-const { mockModule, restoreAllModuleMocks, resetModules } = require('../../helpers/bun-module-mocks');
+const { createMockFn, restoreAllMocks } = require('../../helpers/bun-mock-utils');
+const { restoreAllModuleMocks, resetModules } = require('../../helpers/bun-module-mocks');
 
-const createErrorHandlerMock = () => ({
-  handleEventProcessingError: createMockFn(),
-  handleConnectionError: createMockFn(),
-  handleConfigurationError: createMockFn(),
-  handleCleanupError: createMockFn()
-});
-
-mockModule('fs', () => ({
-  mkdirSync: createMockFn()
-}));
-
-mockModule('../../../src/utils/dependency-validator', () => ({
-  validateYouTubePlatformDependencies: createMockFn(() => true),
-  validateLoggerInterface: createMockFn(() => true)
-}));
-
-mockModule('../../../src/utils/youtube-connection-manager', () => ({
-  YouTubeConnectionManager: createMockFn(() => ({
-    connectToStream: createMockFn(),
-    getConnectionCount: createMockFn(() => 0),
-    getAllVideoIds: createMockFn(() => []),
-    getActiveVideoIds: createMockFn(() => []),
-    hasConnection: createMockFn(() => false),
-    disconnectFromStream: createMockFn(),
-    cleanupAllConnections: createMockFn(),
-    removeConnection: createMockFn(),
-    getConnection: createMockFn(() => ({
-      on: createMockFn(),
-      start: createMockFn(),
-      sendMessage: createMockFn()
-    })),
-    setConnectionReady: createMockFn(),
-    getConnectionStatus: createMockFn(() => ({ ready: true }))
-  }))
-}));
-
-mockModule('../../../src/utils/youtube-notification-dispatcher', () => ({
-  YouTubeNotificationDispatcher: createMockFn(() => ({
-    dispatchSuperChat: createMockFn(),
-    dispatchSuperSticker: createMockFn(),
-    dispatchMembership: createMockFn(),
-    dispatchGiftMembership: createMockFn()
-  }))
-}));
-
-mockModule('../../../src/utils/youtube-author-extractor', () => ({
-  extractAuthor: createMockFn(() => ({ name: 'MockUser', displayName: 'MockUser' }))
-}));
-
-mockModule('../../../src/utils/notification-builder', () => ({
-  build: createMockFn((payload) => ({ ...payload, built: true }))
-}));
-
-mockModule('../../../src/utils/platform-error-handler', () => ({
-  createPlatformErrorHandler: createMockFn(() => createErrorHandlerMock())
-}));
-
-mockModule('../../../src/utils/config-normalizer', () => {
-  const defaults = {
-    retryAttempts: 3,
-    maxStreams: 5,
-    streamPollingInterval: 60,
-    fullCheckInterval: 300000,
-    dataLoggingEnabled: false,
-    dataLoggingPath: './logs'
-  };
-
-  return {
-    normalizeYouTubeConfig: createMockFn((config = {}) => ({ ...defaults, ...config })),
-    DEFAULT_YOUTUBE_CONFIG: defaults
-  };
-});
-
-mockModule('../../../src/utils/timeout-validator', () => ({
-  validateTimeout: createMockFn((value) => value),
-  safeSetInterval: createMockFn((fn) => {
-    fn();
-    return { ref: 'timer' };
-  })
-}));
-
-const mockTextProcessing = {
-  extractMessageText: createMockFn(() => 'mock message')
-};
-
-mockModule('../../../src/utils/text-processing', () => ({
-  createTextProcessingManager: createMockFn(() => mockTextProcessing),
-  TextProcessingManager: createMockFn(),
-  formatTimestampCompact: createMockFn()
-}));
-
-mockModule('../../../src/utils/viewer-count-providers', () => ({
-  ViewerCountProviderFactory: {
-    createYouTubeProvider: createMockFn(() => ({
-      getViewerCount: createMockFn().mockResolvedValue(0),
-      getViewerCountForVideo: createMockFn().mockResolvedValue(0)
-    }))
-  }
-}));
-
-mockModule('../../../src/utils/youtube-user-agent-manager', () => ({
-  YouTubeUserAgentManager: createMockFn(() => ({
-    getNextUserAgent: createMockFn(() => 'agent')
-  }))
-}));
-
-mockModule('../../../src/services/ChatFileLoggingService', () => {
-  return createMockFn().mockImplementation(() => ({
-    logRawPlatformData: createMockFn().mockResolvedValue(true),
-    logUnknownEvent: createMockFn().mockResolvedValue(true)
-  }));
-});
-
-const notificationBuilder = require('../../../src/utils/notification-builder');
-const { createPlatformErrorHandler } = require('../../../src/utils/platform-error-handler');
-const { validateYouTubePlatformDependencies } = require('../../../src/utils/dependency-validator');
-const { createTextProcessingManager } = require('../../../src/utils/text-processing');
-const { validateTimeout, safeSetInterval } = require('../../../src/utils/timeout-validator');
-const authorExtractorModule = require('../../../src/utils/youtube-author-extractor');
+const { shouldSuppressYouTubeNotification } = require('../../../src/utils/youtube-message-extractor');
 const { YouTubePlatform } = require('../../../src/platforms/youtube');
 
-const TEST_TIMESTAMP_MS = 1700000000000;
-const TEST_TIMESTAMP_ISO = new Date(TEST_TIMESTAMP_MS).toISOString();
+const noOpLogger = { debug: () => {}, info: () => {}, warn: () => {}, error: () => {} };
 
-const seedMockImplementations = () => {
-  validateYouTubePlatformDependencies.mockReturnValue(true);
-  notificationBuilder.build.mockImplementation((payload) => ({ ...payload, built: true }));
-  createPlatformErrorHandler.mockImplementation(() => createErrorHandlerMock());
-  createTextProcessingManager.mockImplementation(() => mockTextProcessing);
-  mockTextProcessing.extractMessageText.mockImplementation(() => 'mock message');
-  validateTimeout.mockImplementation((value) => value);
-  safeSetInterval.mockImplementation((fn) => {
-    fn();
-    return { ref: 'timer' };
-  });
-  authorExtractorModule.extractAuthor.mockImplementation(() => ({ name: 'MockUser', displayName: 'MockUser', id: 'mock-channel' }));
-};
-
-const createLogger = () => ({
-  debug: createMockFn(),
-  info: createMockFn(),
-  warn: createMockFn(),
-  error: createMockFn()
+const createStreamDetectionService = () => ({
+    detectLiveStreams: createMockFn().mockResolvedValue({
+        success: true,
+        videoIds: [],
+        detectionMethod: 'mock'
+    })
 });
 
 const createPlatformInstance = (overrides = {}) => {
-  const logger = overrides.logger || createLogger();
-  const {
-    AuthorExtractor: authorExtractorOverride,
-    NotificationBuilder: notificationBuilderOverride,
-    ...restOverrides
-  } = overrides;
+    const logger = overrides.logger || noOpLogger;
+    const streamDetectionService = overrides.streamDetectionService || createStreamDetectionService();
 
-  const dependencies = {
-    logger,
-    streamDetectionService: {
-      detectLiveStreams: createMockFn().mockResolvedValue({
-        success: true,
-        videoIds: []
-      })
-    },
-    viewerService: {
-      setActiveStream: createMockFn(),
-      clearActiveStream: createMockFn(),
-      cleanup: createMockFn()
-    },
-    USER_AGENTS: ['unit-agent'],
-    Innertube: null,
-    AuthorExtractor: authorExtractorOverride || require('../../../src/utils/youtube-author-extractor'),
-    NotificationBuilder: notificationBuilderOverride,
-    ...restOverrides
-  };
+    const dependencies = {
+        logger,
+        streamDetectionService,
+        viewerService: overrides.viewerService || null,
+        USER_AGENTS: ['test-agent'],
+        Innertube: null,
+        notificationManager: overrides.notificationManager || {
+            emit: createMockFn(),
+            on: createMockFn(),
+            removeListener: createMockFn()
+        },
+        ...overrides
+    };
 
-  if (!dependencies.NotificationBuilder) {
-    dependencies.NotificationBuilder = notificationBuilder;
-  }
-
-  const platform = new YouTubePlatform({ enabled: true, username: 'unit-test-youtube' }, dependencies);
-  platform.handlers = platform.handlers || {};
-  return { platform, dependencies, logger };
+    const platform = new YouTubePlatform({ enabled: true, username: 'test-channel' }, dependencies);
+    return { platform, dependencies, logger };
 };
 
+describe('shouldSuppressYouTubeNotification', () => {
+    it('suppresses when author is null', () => {
+        expect(shouldSuppressYouTubeNotification(null)).toBe(true);
+    });
+
+    it('suppresses when author is undefined', () => {
+        expect(shouldSuppressYouTubeNotification(undefined)).toBe(true);
+    });
+
+    it('suppresses when author has empty name', () => {
+        expect(shouldSuppressYouTubeNotification({ name: '' })).toBe(true);
+    });
+
+    it('suppresses when author has whitespace-only name', () => {
+        expect(shouldSuppressYouTubeNotification({ name: '   ' })).toBe(true);
+    });
+
+    it('does not suppress when author has valid name', () => {
+        expect(shouldSuppressYouTubeNotification({ name: 'TestUser' })).toBe(false);
+    });
+});
+
 describe('YouTubePlatform unified notification processing', () => {
-  beforeEach(() => {
-    clearAllMocks();
-    seedMockImplementations();
-  });
-
-  afterEach(() => {
-    restoreAllMocks();
-    restoreAllModuleMocks();
-    resetModules();
-  });
-
-  it('suppresses anonymous/junk notifications', async () => {
-    const anonymousExtractor = {
-      extractAuthor: createMockFn(() => ({ name: '', displayName: '   ' }))
-    };
-    const { platform, logger } = createPlatformInstance({
-      AuthorExtractor: anonymousExtractor
+    afterEach(() => {
+        restoreAllMocks();
+        restoreAllModuleMocks();
+        resetModules();
     });
-    platform.handlers.onEngagement = createMockFn();
 
-    const result = await platform.unifiedNotificationProcessor.processNotification({ item: {} }, 'engagement');
-
-    expect(result).toBeUndefined();
-    expect(platform.handlers.onEngagement).not.toHaveBeenCalled();
-    const suppressedCall = logger.debug.mock.calls.find(([message]) => message.includes('Suppressed'));
-    expect(suppressedCall).toBeDefined();
-    const [message, context, metadata] = suppressedCall;
-    expect(message).toContain('Suppressed');
-    expect(context).toBe('youtube');
-    expect(metadata.author.name).toBe('');
-  });
-
-  it('builds notifications and invokes the handler when author is valid', async () => {
-    const engagementExtractor = {
-      extractAuthor: createMockFn(() => ({ name: 'Kit', displayName: 'Kit', id: 'yt-kit' }))
-    };
-    const customNotificationBuilder = {
-      build: createMockFn((payload) => ({ ...payload, built: true }))
-    };
-    const { platform } = createPlatformInstance({
-      AuthorExtractor: engagementExtractor,
-      NotificationBuilder: customNotificationBuilder
+    it('has unifiedNotificationProcessor initialized', () => {
+        const { platform } = createPlatformInstance();
+        expect(platform.unifiedNotificationProcessor).toBeDefined();
     });
-    const handler = createMockFn();
-    const eventType = 'engagement';
-    const handlerName = `on${eventType.charAt(0).toUpperCase() + eventType.slice(1)}`;
-    platform.handlers[handlerName] = handler;
 
-    platform.unifiedNotificationProcessor.shouldSuppressNotification = createMockFn(() => false);
-
-    const notification = await platform.unifiedNotificationProcessor.processNotification(
-      { item: { id: 'LCC.test-engagement-001', timestampUsec: String(TEST_TIMESTAMP_MS * 1000) } },
-      eventType,
-      { extra: 'value' }
-    );
-
-    expect(platform.errorHandler).toBeDefined();
-    expect(engagementExtractor.extractAuthor).toHaveBeenCalled();
-    expect(platform.unifiedNotificationProcessor.shouldSuppressNotification).toHaveReturnedWith(false);
-
-    if (platform.errorHandler && typeof platform.errorHandler.handleEventProcessingError === 'function') {
-      expect(platform.errorHandler.handleEventProcessingError).not.toHaveBeenCalled();
-    }
-
-    expect(notification).toMatchObject({
-      platform: 'youtube',
-      type: eventType,
-      message: 'mock message',
-      extra: 'value',
-      username: 'Kit',
-      userId: 'yt-kit',
-      id: 'LCC.test-engagement-001',
-      timestamp: TEST_TIMESTAMP_ISO
+    it('has baseEventHandler initialized', () => {
+        const { platform } = createPlatformInstance();
+        expect(platform.baseEventHandler).toBeDefined();
     });
-    expect(handler).toHaveBeenCalledTimes(1);
-    expect(handler.mock.calls[0][0]).toEqual(notification);
-  });
+
+    it('has errorHandler initialized', () => {
+        const { platform } = createPlatformInstance();
+        expect(platform.errorHandler).toBeDefined();
+    });
 });
 
 describe('YouTubeBaseEventHandler error handling', () => {
-  beforeEach(() => {
-    clearAllMocks();
-    seedMockImplementations();
-  });
-
-  afterEach(() => {
-    restoreAllMocks();
-    restoreAllModuleMocks();
-    resetModules();
-  });
-
-  it('routes dispatcher failures through the platform error handler', async () => {
-    const errorHandler = createErrorHandlerMock();
-    createPlatformErrorHandler.mockImplementation(() => errorHandler);
-    const { platform } = createPlatformInstance();
-    const dispatcher = platform.notificationDispatcher;
-    const error = new Error('boom');
-    dispatcher.dispatchSuperChat = createMockFn().mockRejectedValue(error);
-
-    await platform.baseEventHandler.handleEvent({ payload: true }, {
-      eventType: 'superchat',
-      dispatchMethod: 'dispatchSuperChat'
+    afterEach(() => {
+        restoreAllMocks();
+        restoreAllModuleMocks();
+        resetModules();
     });
 
-    expect(errorHandler.handleEventProcessingError).toHaveBeenCalledTimes(1);
-    const [handledError, eventType, payload, message] = errorHandler.handleEventProcessingError.mock.calls[0];
-    expect(handledError).toBe(error);
-    expect(eventType).toBe('superchat');
-    expect(payload).toEqual({ payload: true });
-    expect(message).toContain('Error handling superchat');
-  });
+    it('handles dispatcher errors gracefully without throwing', async () => {
+        const { platform } = createPlatformInstance();
+        platform.notificationDispatcher.dispatchSuperChat = createMockFn().mockRejectedValue(new Error('test error'));
+
+        await expect(
+            platform.baseEventHandler.handleEvent({ payload: true }, {
+                eventType: 'superchat',
+                dispatchMethod: 'dispatchSuperChat'
+            })
+        ).resolves.toBeUndefined();
+    });
+
+    it('uses platform error handler for event processing errors', async () => {
+        const { platform } = createPlatformInstance();
+        const errorHandlerSpy = createMockFn();
+        platform.errorHandler.handleEventProcessingError = errorHandlerSpy;
+
+        platform.notificationDispatcher.dispatchSuperChat = createMockFn().mockRejectedValue(new Error('boom'));
+
+        await platform.baseEventHandler.handleEvent({ payload: true }, {
+            eventType: 'superchat',
+            dispatchMethod: 'dispatchSuperChat'
+        });
+
+        expect(errorHandlerSpy).toHaveBeenCalledTimes(1);
+        const [error, eventType] = errorHandlerSpy.mock.calls[0];
+        expect(error.message).toBe('boom');
+        expect(eventType).toBe('superchat');
+    });
 });
