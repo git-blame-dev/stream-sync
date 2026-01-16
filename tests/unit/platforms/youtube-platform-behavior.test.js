@@ -1,48 +1,36 @@
-const { describe, it, expect, afterEach } = require('bun:test');
+const { describe, it, expect, beforeEach, afterEach } = require('bun:test');
 const { createMockFn, restoreAllMocks } = require('../../helpers/bun-mock-utils');
-const { mockModule, restoreAllModuleMocks, resetModules } = require('../../helpers/bun-module-mocks');
+const { unmockModule, restoreAllModuleMocks, resetModules } = require('../../helpers/bun-module-mocks');
 
-const actualMessageNormalization = require('../../../src/utils/message-normalization');
-mockModule('../../../src/utils/message-normalization', () => ({
-    ...actualMessageNormalization,
-    normalizeYouTubeMessage: createMockFn().mockReturnValue({
-        userId: 'user-id',
-        authorChannelId: 'author-channel',
-        username: 'user',
-        authorName: 'user',
-        displayName: 'User',
-        message: 'Hello world',
-        timestamp: '2024-01-01T00:00:00.000Z',
-        videoId: 'vid-1',
-        isMod: false,
-        isOwner: false,
-        isVerified: false
-    })
-}));
+unmockModule('../../../src/platforms/youtube');
 
 const { YouTubePlatform } = require('../../../src/platforms/youtube');
-const createLogger = () => ({
-    debug: createMockFn(),
-    info: createMockFn(),
-    warn: createMockFn(),
-    error: createMockFn()
+
+const noOpLogger = { debug: () => {}, info: () => {}, warn: () => {}, error: () => {} };
+
+const createTimestampService = () => ({
+    extractTimestamp: createMockFn().mockReturnValue('2024-01-01T00:00:00.000Z')
+});
+
+const createStreamDetectionService = () => ({
+    detectLiveStreams: createMockFn().mockResolvedValue({
+        success: true,
+        videoIds: [],
+        detectionMethod: 'mock'
+    })
 });
 
 const createPlatform = (overrides = {}) => {
-    const logger = overrides.logger || createLogger();
-    const streamDetectionService = overrides.streamDetectionService || {
-        detectLiveStreams: createMockFn().mockResolvedValue({
-            success: true,
-            videoIds: [],
-            detectionMethod: 'mock'
-        })
-    };
+    const logger = overrides.logger || noOpLogger;
+    const streamDetectionService = overrides.streamDetectionService || createStreamDetectionService();
+    const timestampService = overrides.timestampService || createTimestampService();
 
     const dependencies = {
         USER_AGENTS: ['test-agent'],
         Innertube: null,
         logger,
         streamDetectionService,
+        timestampService,
         viewerService: overrides.viewerService || null,
         notificationDispatcher: overrides.notificationDispatcher,
         ChatFileLoggingService: overrides.ChatFileLoggingService,
@@ -55,6 +43,7 @@ const createPlatform = (overrides = {}) => {
 
     const platform = new YouTubePlatform({ enabled: true, username: 'test-channel' }, dependencies);
     platform.startMultiStreamMonitoring = createMockFn().mockResolvedValue();
+
     if (!platform.connectionManager) {
         platform.connectionManager = {
             connectToStream: createMockFn().mockResolvedValue(true),
@@ -76,6 +65,7 @@ const createPlatform = (overrides = {}) => {
         platform.connectionManager.cleanupAllConnections = createMockFn().mockResolvedValue();
         platform.connectionManager.removeConnection = createMockFn();
     }
+
     if (!platform.connectionStateManager) {
         platform.connectionStateManager = {
             markConnecting: createMockFn(),
@@ -105,7 +95,7 @@ const createPlatform = (overrides = {}) => {
         };
     }
 
-    return { platform, logger, streamDetectionService };
+    return { platform, logger, streamDetectionService, timestampService };
 };
 
 describe('YouTubePlatform modern architecture', () => {
@@ -115,7 +105,7 @@ describe('YouTubePlatform modern architecture', () => {
         resetModules();
     });
 
-    it('should emit aggregated viewer counts as platform events after stream updates', () => {
+    it('emits aggregated viewer counts as platform events after stream updates', () => {
         const { platform } = createPlatform();
         const received = [];
         platform.on('platform:event', (payload) => {
@@ -135,7 +125,7 @@ describe('YouTubePlatform modern architecture', () => {
         expect(latest.timestamp).toEqual(expect.any(String));
     });
 
-    it('should emit platform:event error with context and metadata', () => {
+    it('emits platform:event error with context and metadata', () => {
         const { platform } = createPlatform();
         const received = [];
         platform.on('platform:event', (payload) => {
@@ -175,7 +165,7 @@ describe('YouTubePlatform modern architecture', () => {
         });
     });
 
-    it('should emit platform chat events for normalized chat items', async () => {
+    it('emits platform chat events for normalized chat items', async () => {
         const { platform } = createPlatform();
         const received = new Promise((resolve) => {
             const handler = (payload) => {
@@ -188,7 +178,14 @@ describe('YouTubePlatform modern architecture', () => {
             platform.on('platform:event', handler);
         });
 
-        platform._processRegularChatMessage({ videoId: 'vid-1' }, 'User');
+        const chatItem = {
+            id: 'test-msg-1',
+            videoId: 'vid-1',
+            author: { id: 'user-123', name: 'TestUser' },
+            message: { runs: [{ text: 'Hello world' }] }
+        };
+
+        platform._processRegularChatMessage(chatItem, 'TestUser');
 
         const payload = await received;
         expect(payload.platform).toBe('youtube');
@@ -196,7 +193,7 @@ describe('YouTubePlatform modern architecture', () => {
         expect(payload.metadata.videoId).toBe('vid-1');
     });
 
-    it('should emit chat connected event when connectToYouTubeStream succeeds', async () => {
+    it('emits chat connected event when connectToYouTubeStream succeeds', async () => {
         const mockConnectionManager = {
             hasConnection: createMockFn().mockReturnValue(false),
             connectToStream: createMockFn().mockResolvedValue(true),
@@ -205,12 +202,8 @@ describe('YouTubePlatform modern architecture', () => {
         };
 
         const youtubePlatform = new YouTubePlatform(
-            {
-                enableAPI: false,
-                username: 'creator',
-                viewerCountEnabled: true
-            },
-            { logger: { debug: createMockFn(), info: createMockFn(), warn: createMockFn(), error: createMockFn() }, streamDetectionService: { detectLiveStreams: createMockFn() } }
+            { enableAPI: false, username: 'creator', viewerCountEnabled: true },
+            { logger: noOpLogger, streamDetectionService: createStreamDetectionService() }
         );
 
         youtubePlatform.connectionManager = mockConnectionManager;
@@ -242,16 +235,11 @@ describe('YouTubePlatform modern architecture', () => {
         };
 
         const youtubePlatform = new YouTubePlatform(
-            {
-                enableAPI: false,
-                username: 'creator',
-                viewerCountEnabled: true
-            },
-            { logger: { debug: createMockFn(), info: createMockFn(), warn: createMockFn(), error: createMockFn() }, streamDetectionService: { detectLiveStreams: createMockFn() } }
+            { enableAPI: false, username: 'creator', viewerCountEnabled: true },
+            { logger: noOpLogger, streamDetectionService: createStreamDetectionService() }
         );
 
         youtubePlatform.connectionManager = mockConnectionManager;
-
         const events = [];
         youtubePlatform.on('platform:event', (payload) => events.push(payload));
 
@@ -279,16 +267,11 @@ describe('YouTubePlatform modern architecture', () => {
         };
 
         const youtubePlatform = new YouTubePlatform(
-            {
-                enableAPI: false,
-                username: 'creator',
-                viewerCountEnabled: true
-            },
-            { logger: { debug: createMockFn(), info: createMockFn(), warn: createMockFn(), error: createMockFn() }, streamDetectionService: { detectLiveStreams: createMockFn() } }
+            { enableAPI: false, username: 'creator', viewerCountEnabled: true },
+            { logger: noOpLogger, streamDetectionService: createStreamDetectionService() }
         );
 
         youtubePlatform.connectionManager = mockConnectionManager;
-
         const events = [];
         youtubePlatform.on('platform:event', (payload) => events.push(payload));
 
