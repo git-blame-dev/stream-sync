@@ -35,12 +35,7 @@ const createConfigServiceStub = () => ({
     getTTSConfig: () => ({ enabled: false })
 });
 
-const createLoggerStub = () => ({
-    debug: createMockFn(),
-    info: createMockFn(),
-    warn: createMockFn(),
-    error: createMockFn()
-});
+const noOpLogger = { debug: () => {}, info: () => {}, warn: () => {}, error: () => {} };
 
 describe('NotificationManager paypiggy normalization', () => {
     afterEach(() => {
@@ -54,7 +49,7 @@ describe('NotificationManager paypiggy normalization', () => {
             eventBus: { emit: createMockFn(), subscribe: createMockFn() },
             configService: createConfigServiceStub(),
             vfxCommandService: { getVFXConfig: createMockFn().mockResolvedValue({ commandKey: 'paypiggies' }) },
-            logger: createLoggerStub(),
+            logger: noOpLogger,
             constants,
             textProcessing: { formatChatMessage: createMockFn() },
             obsGoals: { processDonationGoal: createMockFn() }
@@ -82,7 +77,7 @@ describe('NotificationManager paypiggy normalization', () => {
             eventBus: { emit: createMockFn(), subscribe: createMockFn() },
             configService: createConfigServiceStub(),
             vfxCommandService: { getVFXConfig: createMockFn().mockResolvedValue({ commandKey: 'paypiggies' }) },
-            logger: createLoggerStub(),
+            logger: noOpLogger,
             constants,
             textProcessing: { formatChatMessage: createMockFn() },
             obsGoals: { processDonationGoal: createMockFn() }
@@ -107,7 +102,7 @@ describe('NotificationManager paypiggy normalization', () => {
             eventBus: { emit: createMockFn(), subscribe: createMockFn() },
             configService: createConfigServiceStub(),
             vfxCommandService: { getVFXConfig: createMockFn().mockResolvedValue({ commandKey: 'paypiggies' }) },
-            logger: createLoggerStub(),
+            logger: noOpLogger,
             constants,
             textProcessing: { formatChatMessage: createMockFn() },
             obsGoals: { processDonationGoal: createMockFn() }
@@ -129,7 +124,7 @@ describe('NotificationManager paypiggy normalization', () => {
             eventBus: { emit: createMockFn(), subscribe: createMockFn() },
             configService: createConfigServiceStub(),
             vfxCommandService: { getVFXConfig: createMockFn().mockResolvedValue({ commandKey: 'paypiggies' }) },
-            logger: createLoggerStub(),
+            logger: noOpLogger,
             constants,
             textProcessing: { formatChatMessage: createMockFn() },
             obsGoals: { processDonationGoal: createMockFn() }
@@ -151,7 +146,7 @@ describe('NotificationManager paypiggy normalization', () => {
             eventBus: { emit: createMockFn(), subscribe: createMockFn() },
             configService: createConfigServiceStub(),
             vfxCommandService: { getVFXConfig: createMockFn().mockResolvedValue({ commandKey: 'paypiggies' }) },
-            logger: createLoggerStub(),
+            logger: noOpLogger,
             constants,
             textProcessing: { formatChatMessage: createMockFn() },
             obsGoals: { processDonationGoal: createMockFn() }
@@ -173,7 +168,7 @@ describe('NotificationManager paypiggy normalization', () => {
             eventBus: { emit: createMockFn(), subscribe: createMockFn() },
             configService: createConfigServiceStub(),
             vfxCommandService: { getVFXConfig: createMockFn().mockResolvedValue({ commandKey: 'paypiggies' }) },
-            logger: createLoggerStub(),
+            logger: noOpLogger,
             constants,
             textProcessing: { formatChatMessage: createMockFn() },
             obsGoals: { processDonationGoal: createMockFn() }
@@ -195,7 +190,7 @@ describe('NotificationManager paypiggy normalization', () => {
             eventBus: { emit: createMockFn(), subscribe: createMockFn() },
             configService: createConfigServiceStub(),
             vfxCommandService: { getVFXConfig: createMockFn().mockResolvedValue({ commandKey: 'paypiggies' }) },
-            logger: createLoggerStub(),
+            logger: noOpLogger,
             constants,
             textProcessing: { formatChatMessage: createMockFn() },
             obsGoals: { processDonationGoal: createMockFn() }
@@ -228,7 +223,7 @@ describe('NotificationManager paypiggy normalization', () => {
             displayQueue,
             eventBus: { emit: createMockFn(), subscribe: createMockFn() },
             vfxCommandService: { getVFXConfig: createMockFn().mockResolvedValue(null) },
-            logger: createLoggerStub(),
+            logger: noOpLogger,
             constants,
             textProcessing: { formatChatMessage: createMockFn() },
             obsGoals: { processDonationGoal: createMockFn() }
@@ -243,7 +238,7 @@ describe('NotificationManager paypiggy normalization', () => {
             eventBus: { emit: createMockFn(), subscribe: createMockFn() },
             configService: createConfigServiceStub(),
             vfxCommandService: { getVFXConfig: createMockFn().mockResolvedValue(null) },
-            logger: createLoggerStub(),
+            logger: noOpLogger,
             constants,
             textProcessing: { formatChatMessage: createMockFn() },
             obsGoals: { processDonationGoal: createMockFn() }

@@ -5,16 +5,15 @@ const { createMockFn, clearAllMocks, restoreAllMocks } = require('../../helpers/
 const { initializeTestLogging } = require('../../helpers/test-setup');
 const { OBSConnectionManager, initializeOBSConnection } = require('../../../src/obs/connection');
 
-// Initialize logging system for tests
+const noOpLogger = { debug: () => {}, info: () => {}, warn: () => {}, error: () => {} };
+
 initializeTestLogging();
 
 describe('OBS Connection Configuration with Getter Properties', () => {
     let mockOBSWebSocket;
-    let mockLogger;
     let obsManager;
 
     beforeEach(() => {
-        // Create mock OBS WebSocket
         mockOBSWebSocket = createMockFn().mockImplementation(() => ({
             connect: createMockFn().mockResolvedValue({
                 obsWebSocketVersion: '5.0.0',
@@ -26,13 +25,6 @@ describe('OBS Connection Configuration with Getter Properties', () => {
             off: createMockFn(),
             identified: false
         }));
-
-        mockLogger = {
-            debug: createMockFn(),
-            info: createMockFn(),
-            error: createMockFn(),
-            warn: createMockFn()
-        };
     });
 
     afterEach(() => {
@@ -54,7 +46,7 @@ describe('OBS Connection Configuration with Getter Properties', () => {
             obsManager = new OBSConnectionManager({
                 config: configWithGetters,
                 OBSWebSocket: mockOBSWebSocket,
-                logger: mockLogger,
+                logger: noOpLogger,
                 isTestEnvironment: false
             });
 
@@ -173,7 +165,7 @@ describe('OBS Connection Configuration with Getter Properties', () => {
             obsManager = new OBSConnectionManager({
                 config: configWithGetters,
                 OBSWebSocket: mockOBSWebSocket,
-                logger: mockLogger,
+                logger: noOpLogger,
                 isTestEnvironment: false
             });
 
@@ -196,7 +188,7 @@ describe('OBS Connection Configuration with Getter Properties', () => {
                     enabled: true
                 },
                 OBSWebSocket: mockOBSWebSocket,
-                logger: mockLogger,
+                logger: noOpLogger,
                 isTestEnvironment: false
             });
 
@@ -225,7 +217,7 @@ describe('OBS Connection Configuration with Getter Properties', () => {
             obsManager = new OBSConnectionManager({
                 config: mixedConfig,
                 OBSWebSocket: mockOBSWebSocket,
-                logger: mockLogger,
+                logger: noOpLogger,
                 isTestEnvironment: false
             });
 
@@ -272,7 +264,7 @@ describe('OBS Connection Configuration with Getter Properties', () => {
             // Initialize through the main initialization function
             const manager = await initializeOBSConnection(configModuleStyle, {
                 OBSWebSocket: mockOBSWebSocket,
-                logger: mockLogger,
+                logger: noOpLogger,
                 isTestEnvironment: false
             });
 
@@ -299,7 +291,7 @@ describe('OBS Connection Configuration with Getter Properties', () => {
             obsManager = new OBSConnectionManager({
                 config: getterConfig,
                 OBSWebSocket: mockOBSWebSocket,
-                logger: mockLogger,
+                logger: noOpLogger,
                 isTestEnvironment: false
             });
 
@@ -328,7 +320,7 @@ describe('OBS Connection Configuration with Getter Properties', () => {
             obsManager = new OBSConnectionManager({
                 config: disabledConfig,
                 OBSWebSocket: mockOBSWebSocket,
-                logger: mockLogger,
+                logger: noOpLogger,
                 isTestEnvironment: false
             });
 
@@ -393,7 +385,7 @@ describe('OBS Connection Configuration with Getter Properties', () => {
             obsManager = new OBSConnectionManager({
                 config: configWithUndefined,
                 OBSWebSocket: mockOBSWebSocket,
-                logger: mockLogger,
+                logger: noOpLogger,
                 isTestEnvironment: false
             });
 
@@ -418,7 +410,7 @@ describe('OBS Connection Configuration with Getter Properties', () => {
                 obsManager = new OBSConnectionManager({
                     config: configWithError,
                     OBSWebSocket: mockOBSWebSocket,
-                    logger: mockLogger,
+                    logger: noOpLogger,
                     isTestEnvironment: false
                 });
             }).toThrow('Config not loaded');
@@ -438,7 +430,7 @@ describe('OBS Connection Configuration with Getter Properties', () => {
             obsManager = new OBSConnectionManager({
                 config: nestedConfig.obs,
                 OBSWebSocket: mockOBSWebSocket,
-                logger: mockLogger,
+                logger: noOpLogger,
                 isTestEnvironment: false
             });
 

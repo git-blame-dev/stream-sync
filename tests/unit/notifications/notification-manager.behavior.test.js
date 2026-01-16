@@ -3,6 +3,8 @@ const { createMockFn, restoreAllMocks } = require('../../helpers/bun-mock-utils'
 
 const NotificationManager = require('../../../src/notifications/NotificationManager');
 
+const noOpLogger = { debug: () => {}, info: () => {}, warn: () => {}, error: () => {} };
+
 describe('NotificationManager behavior', () => {
     let originalNodeEnv;
 
@@ -17,7 +19,7 @@ describe('NotificationManager behavior', () => {
     });
 
     const createDeps = (overrides = {}) => ({
-        logger: { debug: createMockFn(), info: createMockFn(), warn: createMockFn(), error: createMockFn() },
+        logger: noOpLogger,
         displayQueue: { enqueue: createMockFn(), addItem: createMockFn(), getQueueLength: createMockFn(() => 0) },
         eventBus: { on: createMockFn(), emit: createMockFn(), subscribe: createMockFn() },
         configService: {

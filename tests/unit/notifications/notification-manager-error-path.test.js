@@ -35,12 +35,7 @@ const createConfigServiceStub = () => ({
     getTTSConfig: () => ({ enabled: false })
 });
 
-const createLoggerStub = () => ({
-    debug: createMockFn(),
-    info: createMockFn(),
-    warn: createMockFn(),
-    error: createMockFn()
-});
+const noOpLogger = { debug: () => {}, info: () => {}, warn: () => {}, error: () => {} };
 
 describe('NotificationManager monetization error path', () => {
     afterEach(() => {
@@ -54,7 +49,7 @@ describe('NotificationManager monetization error path', () => {
             eventBus: { emit: createMockFn(), subscribe: createMockFn() },
             configService: createConfigServiceStub(),
             vfxCommandService: { getVFXConfig: createMockFn().mockResolvedValue(null) },
-            logger: createLoggerStub(),
+            logger: noOpLogger,
             constants,
             textProcessing: { formatChatMessage: createMockFn() },
             obsGoals: { processDonationGoal: createMockFn() }
