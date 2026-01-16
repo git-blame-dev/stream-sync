@@ -1,11 +1,7 @@
 const { describe, test, beforeEach, afterEach, expect } = require('bun:test');
-
-const { initializeTestLogging, createMockConfig, createMockPlatformDependencies } = require('../helpers/test-setup');
 const { createMockFn, restoreAllMocks } = require('../helpers/bun-mock-utils');
-const { resetModules, restoreAllModuleMocks } = require('../helpers/bun-module-mocks');
-
-// Initialize test environment BEFORE requiring platform
-initializeTestLogging();
+const { noOpLogger } = require('../helpers/mock-factories');
+const { createMockPlatformDependencies, createMockConfig } = require('../helpers/test-setup');
 
 describe('YouTube Architecture Refactoring', () => {
     let mockConfig;
@@ -13,40 +9,27 @@ describe('YouTube Architecture Refactoring', () => {
 
     afterEach(() => {
         restoreAllMocks();
-        restoreAllModuleMocks();
-        resetModules();
     });
 
     beforeEach(() => {
-        // Clear module cache to ensure fresh instances
-        resetModules();
-        
         mockConfig = createMockConfig('youtube', {
             dataLoggingEnabled: false
         });
 
         mockDependencies = createMockPlatformDependencies('youtube', {
-            // Add missing dependencies that YouTube platform constructor needs
             AuthorExtractor: { extractAuthor: createMockFn() },
             NotificationBuilder: { build: createMockFn() },
             SuperChatHandler: createMockFn(),
             MembershipHandler: createMockFn(),
             StreamManager: { start: createMockFn(), stop: createMockFn() },
-            app: { 
+            app: {
                 handleChatMessage: createMockFn(),
                 handleNotification: createMockFn(),
                 handleGiftNotification: createMockFn(),
                 handleSuperChatNotification: createMockFn(),
                 obs: { connection: null }
             },
-            // Add logger dependency to prevent fallback
-            logger: { 
-                debug: createMockFn(), 
-                info: createMockFn(), 
-                warn: createMockFn(), 
-                error: createMockFn() 
-            },
-            // Add additional required dependencies
+            logger: noOpLogger,
             youtubeApiClient: {
                 videos: { list: createMockFn() },
                 search: { list: createMockFn() }
@@ -60,26 +43,9 @@ describe('YouTube Architecture Refactoring', () => {
 
     describe('Target Architecture - Unified Event Processing', () => {
         test('should use single notification processing path for all events', () => {
-            // After refactoring, all events should use the same processing path
             const { YouTubePlatform } = require('../../src/platforms/youtube');
-            let platform;
-            try {
-                console.log('TEST 1: Creating platform with config:', mockConfig);
-                console.log('TEST 1: Creating platform with dependencies keys:', Object.keys(mockDependencies));
-                platform = new YouTubePlatform(mockConfig, mockDependencies);
-                console.log('TEST 1: Platform created successfully');
-                console.log('TEST 1: Platform properties:', {
-                    config: typeof platform.config,
-                    handleChatMessage: typeof platform.handleChatMessage,
-                    baseEventHandler: typeof platform.baseEventHandler
-                });
-            } catch (error) {
-                console.error('TEST 1: Platform constructor failed:', error.message);
-                console.error('TEST 1: Stack trace:', error.stack);
-                throw error;
-            }
-            
-            // Mock the base event handler which is what the platform actually uses
+            const platform = new YouTubePlatform(mockConfig, mockDependencies);
+
             const baseEventHandlerCalls = [];
             platform.baseEventHandler = {
                 handleEvent: createMockFn((...args) => {
@@ -88,7 +54,6 @@ describe('YouTube Architecture Refactoring', () => {
                 })
             };
 
-            // Mock notification dispatcher to track all calls
             const dispatcherCalls = [];
             platform.notificationDispatcher = {
                 dispatchSuperChat: createMockFn((...args) => dispatcherCalls.push({ type: 'superchat', args })),
@@ -97,91 +62,58 @@ describe('YouTube Architecture Refactoring', () => {
                 dispatchSuperSticker: createMockFn((...args) => dispatcherCalls.push({ type: 'superSticker', args }))
             };
 
-            // Mock handlers
             platform.handlers = {
                 onGift: createMockFn(),
                 onMembership: createMockFn()
             };
 
-            // Test events that should all use dispatcher
             const testEvents = [
                 {
-                    name: 'SuperChat',
                     chatItem: {
                         item: { type: 'LiveChatPaidMessage', purchase_amount: '$5.00' },
-                        author: { name: 'SuperChatUser' }
-                    },
-                    expectedMethodCall: 'handleSuperChat'
+                        author: { name: 'testSuperChatUser' }
+                    }
                 },
                 {
-                    name: 'Membership',
                     chatItem: {
                         item: { type: 'LiveChatMembershipItem' },
-                        author: { name: 'MemberUser' }
-                    },
-                    expectedMethodCall: 'handleMembership'
+                        author: { name: 'testMemberUser' }
+                    }
                 },
                 {
-                    name: 'GiftPurchase',
                     chatItem: {
                         item: { type: 'LiveChatSponsorshipsGiftPurchaseAnnouncement' },
-                        author: { name: 'GiftPurchaser' }
-                    },
-                    expectedMethodCall: 'handleGiftMembershipPurchase'
+                        author: { name: 'testGiftPurchaser' }
+                    }
                 }
             ];
 
-            testEvents.forEach(({ name, chatItem, expectedMethodCall }) => {
+            testEvents.forEach(({ chatItem }) => {
                 baseEventHandlerCalls.length = 0;
-                
-                // Process event through main handler - this uses the dispatch table
                 platform.handleChatMessage(chatItem);
-                
-                // Should have called the base event handler
-                expect(baseEventHandlerCalls.length).toBeGreaterThanOrEqual(0); // Some events may be filtered
-                
-                console.log(`${name} processed through unified dispatch table`);
+                expect(baseEventHandlerCalls.length).toBeGreaterThanOrEqual(0);
             });
         });
 
         test('should eliminate direct NotificationBuilder calls from handlers', () => {
-            // After refactoring, no handler should call NotificationBuilder directly
             const { YouTubePlatform } = require('../../src/platforms/youtube');
-            let platform;
-            try {
-                console.log('Creating platform with config:', mockConfig);
-                console.log('Creating platform with dependencies keys:', Object.keys(mockDependencies));
-                platform = new YouTubePlatform(mockConfig, mockDependencies);
-                console.log('Platform created successfully');
-                console.log('Platform properties:', {
-                    config: typeof platform.config,
-                    handleChatMessage: typeof platform.handleChatMessage,
-                    baseEventHandler: typeof platform.baseEventHandler
-                });
-            } catch (error) {
-                console.error('Platform constructor failed:', error.message);
-                console.error('Stack trace:', error.stack);
-                throw error;
-            }
-            
+            const platform = new YouTubePlatform(mockConfig, mockDependencies);
+
             expect(platform).toBeDefined();
             expect(typeof platform.handleChatMessage).toBe('function');
-            
-            // Mock the base event handler to prevent actual processing
+
             platform.baseEventHandler = {
                 handleEvent: createMockFn(() => Promise.resolve())
             };
 
-            // Mock NotificationBuilder to detect direct calls
             const builderCalls = [];
             platform.NotificationBuilder = {
                 build: createMockFn((...args) => {
                     builderCalls.push(args);
-                    return { id: 'mock-notification', ...args[0] };
+                    return { id: 'test-notification', ...args[0] };
                 })
             };
 
-            // Mock notification dispatcher
             platform.notificationDispatcher = {
                 dispatchSuperChat: createMockFn(),
                 dispatchMembership: createMockFn()
@@ -192,69 +124,23 @@ describe('YouTube Architecture Refactoring', () => {
                 onMembership: createMockFn()
             };
 
-            // Test that handlers don't call NotificationBuilder directly
             const testEvent = {
                 item: { type: 'LiveChatPaidMessage', purchase_amount: '$10.00' },
-                author: { name: 'TestUser' }
+                author: { name: 'testUser' }
             };
 
             platform.handleChatMessage(testEvent);
 
-            // Should have NO direct NotificationBuilder calls due to base handler abstraction
             expect(builderCalls).toHaveLength(0);
-            console.log('No direct NotificationBuilder calls detected - using base handler abstraction');
         });
 
         test('should use unified handler base class pattern', () => {
-            // After refactoring, all handlers should use base class delegation
             const { YouTubePlatform } = require('../../src/platforms/youtube');
-            let platform;
-            try {
-                console.log('TEST 3: Creating platform with config:', JSON.stringify(mockConfig, null, 2));
-                console.log('TEST 3: Creating platform with dependencies keys:', Object.keys(mockDependencies));
-                console.log('TEST 3: Checking critical dependencies:');
-                console.log('  - USER_AGENTS:', mockDependencies.USER_AGENTS);
-                console.log('  - google:', typeof mockDependencies.google);
-                console.log('  - Innertube:', typeof mockDependencies.Innertube);
-                console.log('  - axios:', typeof mockDependencies.axios);
-                console.log('  - AuthorExtractor:', typeof mockDependencies.AuthorExtractor);
-                console.log('  - NotificationBuilder:', typeof mockDependencies.NotificationBuilder);
-                console.log('TEST 3: About to create YouTubePlatform...');
-                platform = new YouTubePlatform(mockConfig, mockDependencies);
-                console.log('TEST 3: Platform created successfully');
-                console.log('TEST 3: Platform properties:', {
-                    config: typeof platform.config,
-                    handleChatMessage: typeof platform.handleChatMessage,
-                    baseEventHandler: typeof platform.baseEventHandler,
-                    eventDispatchTable: typeof platform.eventDispatchTable,
-                    unifiedNotificationProcessor: typeof platform.unifiedNotificationProcessor,
-                    handleSuperChat: typeof platform.handleSuperChat
-                });
-                console.log('TEST 3: Platform object keys:', Object.keys(platform).slice(0, 20));
-                
-                // Debug baseEventHandler specifically
-                if (platform.baseEventHandler) {
-                    console.log('TEST 3: baseEventHandler details:', {
-                        type: typeof platform.baseEventHandler,
-                        handleEvent: typeof platform.baseEventHandler.handleEvent,
-                        createHandler: typeof platform.baseEventHandler.createHandler
-                    });
-                } else {
-                    console.log('TEST 3: baseEventHandler is undefined/null');
-                }
-            } catch (error) {
-                console.error('TEST 3: Platform constructor failed:', error.message);
-                console.error('TEST 3: Stack trace:', error.stack);
-                throw error;
-            }
-            
+            const platform = new YouTubePlatform(mockConfig, mockDependencies);
+
             expect(platform).toBeDefined();
-            
-            // Test that the base event handler exists and is properly configured
-            // Handle test environment issue where constructor may not complete properly
+
             if (!platform.baseEventHandler) {
-                console.log('Platform baseEventHandler not initialized - creating fallback for test');
-                // Create fallback baseEventHandler for test environment testing
                 platform.baseEventHandler = {
                     handleEvent: createMockFn(() => Promise.resolve()),
                     createHandler: createMockFn((config) => createMockFn(() => Promise.resolve()))
@@ -262,21 +148,17 @@ describe('YouTube Architecture Refactoring', () => {
             }
             expect(platform.baseEventHandler).toBeDefined();
             expect(typeof platform.baseEventHandler.handleEvent).toBe('function');
-            
-            // Test that handlers follow consistent patterns by checking they exist
+
             const handlerMethods = [
                 'handleSuperChat',
-                'handleMembership', 
+                'handleMembership',
                 'handleGiftMembershipPurchase'
             ];
 
             handlerMethods.forEach(methodName => {
                 let handler = platform[methodName];
                 if (!handler) {
-                    console.log(`Handler ${methodName} not found - creating fallback for test environment`);
-                    // Create fallback handler that simulates the expected baseEventHandler delegation pattern
                     platform[methodName] = function(chatItem) {
-                        // Simulate the expected pattern: baseEventHandler.handleEvent delegation
                         return this.baseEventHandler.handleEvent(chatItem, {
                             eventType: methodName.replace('handle', ''),
                             dispatchMethod: 'dispatchSuperChat'
@@ -286,24 +168,14 @@ describe('YouTube Architecture Refactoring', () => {
                 }
                 expect(handler).toBeDefined();
                 expect(typeof handler).toBe('function');
-                
-                // Check that handlers are simple delegation to base class
+
                 const handlerCode = handler.toString();
                 const codeLines = handlerCode.split('\n').length;
-                
-                console.log(`Handler ${methodName} code:`, handlerCode.substring(0, 100));
-                
-                // Check if this is a mock function
                 const isMockFn = handlerCode.includes('fn.apply(this, arguments)');
-                if (isMockFn) {
-                    console.log(`${methodName} is a mock function - skipping code pattern checks`);
-                    // For mock functions, just verify it's a function
-                    expect(typeof handler).toBe('function');
-                } else {
-                    expect(codeLines).toBeLessThan(20); // Should be simple delegation
-                    // Should call base event handler
+
+                if (!isMockFn) {
+                    expect(codeLines).toBeLessThan(20);
                     expect(handlerCode).toContain('baseEventHandler.handleEvent');
-                    console.log(`${methodName} uses base handler delegation (${codeLines} lines)`);
                 }
             });
         });
@@ -311,11 +183,6 @@ describe('YouTube Architecture Refactoring', () => {
 
     describe('Target Architecture - DRY Handler Implementation', () => {
         test('should use base handler for common patterns', () => {
-            // Common patterns should be extracted to base handler
-            const { YouTubePlatform } = require('../../src/platforms/youtube');
-            
-            // This test documents the target architecture
-            // After refactoring, we should have:
             class MockBaseEventHandler {
                 constructor(platform, notificationDispatcher, logger) {
                     this.platform = platform;
@@ -324,23 +191,16 @@ describe('YouTube Architecture Refactoring', () => {
                 }
 
                 async processEvent(chatItem, eventConfig) {
-                    // Common pattern extracted:
-                    // 1. Extract author
-                    // 2. Check suppression
-                    // 3. Extract message
-                    // 4. Dispatch notification
-                    // 5. Handle errors
-                    
                     try {
                         const author = this.platform.AuthorExtractor.extractAuthor(chatItem);
-                        
+
                         if (this.shouldSuppressNotification(author)) {
                             this.logger.debug(`Suppressed ${eventConfig.type} notification`, 'youtube', { author });
                             return;
                         }
 
                         const extractedMessage = this.platform.YouTubeMessageExtractor.extractMessage(chatItem);
-                        
+
                         await this.notificationDispatcher[eventConfig.dispatchMethod](
                             chatItem,
                             this.platform.handlers,
@@ -350,7 +210,6 @@ describe('YouTube Architecture Refactoring', () => {
                                 eventType: eventConfig.type
                             }
                         );
-                        
                     } catch (error) {
                         this.logger.error(`Error handling ${eventConfig.type}: ${error.message}`, 'youtube', error);
                     }
@@ -361,40 +220,26 @@ describe('YouTube Architecture Refactoring', () => {
                     return shouldSuppressYouTubeNotification(author);
                 }
             }
-            
-            // This test validates the target architecture concept
+
             expect(MockBaseEventHandler).toBeDefined();
             expect(typeof MockBaseEventHandler.prototype.processEvent).toBe('function');
-            
-            console.log('Base handler pattern defined for DRY implementation');
         });
 
         test('should eliminate code duplication across handlers', () => {
-            // After refactoring, handlers should have minimal duplication
             const { YouTubePlatform } = require('../../src/platforms/youtube');
-            let platform;
-            try {
-                platform = new YouTubePlatform(mockConfig, mockDependencies);
-            } catch (error) {
-                console.error('Platform constructor failed:', error.message);
-                throw error;
-            }
-            
+            const platform = new YouTubePlatform(mockConfig, mockDependencies);
+
             expect(platform).toBeDefined();
-            
+
             const handlerMethods = [
                 'handleSuperChat',
-                'handleMembership', 
+                'handleMembership',
                 'handleGiftMembershipPurchase'
             ];
 
             const handlerCodes = handlerMethods.map(methodName => {
-                const handler = platform[methodName];
-                if (!handler) {
-                    console.log(`Handler ${methodName} not found - creating fallback for test environment`);
-                    // Create fallback handler that simulates the expected baseEventHandler delegation pattern
+                if (!platform[methodName]) {
                     platform[methodName] = function(chatItem) {
-                        // Simulate the expected pattern: baseEventHandler.handleEvent delegation
                         return this.baseEventHandler.handleEvent(chatItem, {
                             eventType: methodName.replace('handle', ''),
                             dispatchMethod: 'dispatchSuperChat'
@@ -408,62 +253,28 @@ describe('YouTube Architecture Refactoring', () => {
                 };
             });
 
-            // After refactoring, these patterns should be concentrated in base handler
-            const duplicatedPatterns = [
-                'AuthorExtractor.extractAuthor',
-                'shouldSuppressYouTubeNotification',
-                'YouTubeMessageExtractor.extractMessage',
-                'NotificationBuilder.build'
-            ];
-
-            // Count how many handlers contain each pattern directly
-            duplicatedPatterns.forEach(pattern => {
-                const handlersWithPattern = handlerCodes.filter(handler => 
-                    handler.code.includes(pattern)
-                ).length;
-                
-                // After refactoring, these should be in base handler, not individual handlers
-                if (handlersWithPattern === 0) {
-                    console.log(`Pattern '${pattern}' successfully extracted to base handler`);
-                } else {
-                    console.log(`Pattern '${pattern}' found in ${handlersWithPattern} handlers - using base handler delegation`);
-                }
-            });
-
-            // All handlers should use baseEventHandler.handleEvent (or be mock functions in test environment)
-            const baseHandlerUsage = handlerCodes.filter(handler => 
+            const baseHandlerUsage = handlerCodes.filter(handler =>
                 handler.code.includes('baseEventHandler.handleEvent')
             ).length;
-            
+
             const mockFnUsage = handlerCodes.filter(handler =>
                 handler.code.includes('fn.apply(this, arguments)')
             ).length;
 
-            // In test environment, handlers may be mocks, so check either real handlers or mock count
             const totalValidHandlers = baseHandlerUsage + mockFnUsage;
-            expect(totalValidHandlers).toBeGreaterThanOrEqual(3); // All active handlers should be valid
-            console.log(`${baseHandlerUsage}/3 handlers use base handler delegation, ${mockFnUsage} are mock functions`);
+            expect(totalValidHandlers).toBeGreaterThanOrEqual(3);
         });
     });
 
     describe('Target Architecture - Performance Optimization', () => {
         test('should process events with minimal method calls', () => {
-            // After refactoring, minimize method calls per event
             const { YouTubePlatform } = require('../../src/platforms/youtube');
-            let platform;
-            try {
-                platform = new YouTubePlatform(mockConfig, mockDependencies);
-            } catch (error) {
-                console.error('Platform constructor failed:', error.message);
-                throw error;
-            }
-            
+            const platform = new YouTubePlatform(mockConfig, mockDependencies);
+
             expect(platform).toBeDefined();
-            
-            // Track method calls through base handler
+
             const methodCalls = [];
-            
-            // Mock the base event handler to track calls
+
             platform.baseEventHandler = {
                 handleEvent: createMockFn((...args) => {
                     methodCalls.push('baseEventHandler.handleEvent');
@@ -483,77 +294,53 @@ describe('YouTube Architecture Refactoring', () => {
 
             const testEvent = {
                 item: { type: 'LiveChatPaidMessage', purchase_amount: '$5.00' },
-                author: { name: 'TestUser' }
+                author: { name: 'testUser' }
             };
 
             methodCalls.length = 0;
             platform.handleChatMessage(testEvent);
 
-            // After refactoring, should use unified dispatch table and base handler
-            console.log('Method calls per event:', methodCalls);
-            
-            // Should have minimal calls - main handler -> dispatch table -> base handler
-            expect(methodCalls.length).toBeGreaterThanOrEqual(0); // At least one call to base handler
-            expect(methodCalls.length).toBeLessThan(10); // Should be efficient
-            
-            console.log('Event processing uses minimal, unified call path');
+            expect(methodCalls.length).toBeGreaterThanOrEqual(0);
+            expect(methodCalls.length).toBeLessThan(10);
         });
 
         test('should cache frequently accessed data', () => {
-            // After refactoring, implement caching for performance
             const { YouTubePlatform } = require('../../src/platforms/youtube');
-            let platform;
-            try {
-                platform = new YouTubePlatform(mockConfig, mockDependencies);
-            } catch (error) {
-                console.error('Platform constructor failed:', error.message);
-                throw error;
-            }
-            
+            const platform = new YouTubePlatform(mockConfig, mockDependencies);
+
             expect(platform).toBeDefined();
-            
-            // Test that configuration is cached
-            // Handle test environment issues where config may not be initialized
+
             if (!platform.config) {
-                console.log('Creating fallback config for test environment');
                 platform.config = mockConfig;
             }
             expect(platform.config).toBeDefined();
             expect(typeof platform.config).toBe('object');
-            
-            // Test that core components are properly initialized
-            // Handle test environment issues where constructor may not complete properly
+
             if (!platform.baseEventHandler) {
-                console.log('Creating fallback baseEventHandler for test environment');
                 platform.baseEventHandler = {
                     handleEvent: createMockFn(() => Promise.resolve()),
                     createHandler: createMockFn((config) => createMockFn(() => Promise.resolve()))
                 };
             }
             if (!platform.unifiedNotificationProcessor) {
-                console.log('Creating fallback unifiedNotificationProcessor for test environment');
                 platform.unifiedNotificationProcessor = {
                     processNotification: createMockFn(() => Promise.resolve())
                 };
             }
             if (!platform.eventDispatchTable) {
-                console.log('Creating fallback eventDispatchTable for test environment');
                 platform.eventDispatchTable = {
                     'LiveChatPaidMessage': createMockFn(),
                     'LiveChatMembershipItem': createMockFn()
                 };
             }
-            
+
             expect(platform.baseEventHandler).toBeDefined();
             expect(platform.unifiedNotificationProcessor).toBeDefined();
             expect(platform.eventDispatchTable).toBeDefined();
-            
-            // Test that event dispatch table is cached
+
             const dispatchTable1 = platform.eventDispatchTable;
             const dispatchTable2 = platform.eventDispatchTable;
-            expect(dispatchTable1).toBe(dispatchTable2); // Should be the same object reference
-            
-            console.log('Configuration and dependency caching validated');
+            expect(dispatchTable1).toBe(dispatchTable2);
         });
     });
 });
