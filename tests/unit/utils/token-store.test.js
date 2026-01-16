@@ -1,6 +1,5 @@
-const fs = require('fs');
-const os = require('os');
-const path = require('path');
+const { describe, it, expect, beforeEach } = require('bun:test');
+const { createMockFn } = require('../../helpers/bun-mock-utils');
 
 const { loadTokens, saveTokens, clearTokens } = require('../../../src/utils/token-store');
 
@@ -15,17 +14,63 @@ const createLogger = () => {
     };
 };
 
+const createMockFs = (fileStore) => {
+    const permissions = {};
+
+    return {
+        promises: {
+            readFile: createMockFn(async (path) => {
+                if (path in fileStore) return fileStore[path];
+                const error = new Error(`ENOENT: no such file or directory, open '${path}'`);
+                error.code = 'ENOENT';
+                throw error;
+            }),
+            writeFile: createMockFn(async (path, content, options) => {
+                fileStore[path] = content;
+                if (options && options.mode) {
+                    permissions[path] = options.mode;
+                }
+            }),
+            mkdir: createMockFn(async (dirPath, options) => {
+                if (options && options.mode) {
+                    permissions[dirPath] = options.mode;
+                }
+            }),
+            rename: createMockFn(async (oldPath, newPath) => {
+                if (oldPath in fileStore) {
+                    fileStore[newPath] = fileStore[oldPath];
+                    delete fileStore[oldPath];
+                    if (oldPath in permissions) {
+                        permissions[newPath] = permissions[oldPath];
+                        delete permissions[oldPath];
+                    }
+                }
+            }),
+            chmod: createMockFn(async (path, mode) => {
+                permissions[path] = mode;
+            }),
+            stat: createMockFn(async (path) => {
+                if (path in fileStore) {
+                    return { mode: (permissions[path] || 0o644) | 0o100000 };
+                }
+                const error = new Error(`ENOENT: no such file or directory, stat '${path}'`);
+                error.code = 'ENOENT';
+                throw error;
+            })
+        },
+        _fileStore: fileStore,
+        _permissions: permissions
+    };
+};
+
 describe('token-store', () => {
-    let tempDir;
-    let storePath;
+    const storePath = '/test/tokens.json';
+    let fileStore;
+    let mockFs;
 
     beforeEach(() => {
-        tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'token-store-'));
-        storePath = path.join(tempDir, 'tokens.json');
-    });
-
-    afterEach(() => {
-        fs.rmSync(tempDir, { recursive: true, force: true });
+        fileStore = {};
+        mockFs = createMockFs(fileStore);
     });
 
     it('throws when tokenStorePath is missing', async () => {
@@ -35,7 +80,7 @@ describe('token-store', () => {
     it('returns null when token store file does not exist', async () => {
         const logger = createLogger();
 
-        const result = await loadTokens({ tokenStorePath: storePath, logger });
+        const result = await loadTokens({ tokenStorePath: storePath, fs: mockFs, logger });
 
         expect(result).toBeNull();
         expect(logger.entries.some((entry) => entry.message.includes('Token store file not found'))).toBe(true);
@@ -45,11 +90,11 @@ describe('token-store', () => {
         const logger = createLogger();
 
         await saveTokens(
-            { tokenStorePath: storePath, logger },
+            { tokenStorePath: storePath, fs: mockFs, logger },
             { accessToken: 'new-access', refreshToken: 'new-refresh', expiresAt: 123456 }
         );
 
-        const result = await loadTokens({ tokenStorePath: storePath, logger });
+        const result = await loadTokens({ tokenStorePath: storePath, fs: mockFs, logger });
 
         expect(result).toEqual({
             accessToken: 'new-access',
@@ -60,16 +105,16 @@ describe('token-store', () => {
 
     it('creates missing token store directories and persists tokens securely', async () => {
         const logger = createLogger();
-        const nestedStorePath = path.join(tempDir, 'nested', 'tokens.json');
+        const nestedStorePath = '/test/nested/tokens.json';
 
         await saveTokens(
-            { tokenStorePath: nestedStorePath, logger },
+            { tokenStorePath: nestedStorePath, fs: mockFs, logger },
             { accessToken: 'new-access', refreshToken: 'new-refresh', expiresAt: 123456 }
         );
 
-        expect(fs.existsSync(path.dirname(nestedStorePath))).toBe(true);
+        expect(mockFs.promises.mkdir).toHaveBeenCalled();
 
-        const result = await loadTokens({ tokenStorePath: nestedStorePath, logger });
+        const result = await loadTokens({ tokenStorePath: nestedStorePath, fs: mockFs, logger });
 
         expect(result).toEqual({
             accessToken: 'new-access',
@@ -78,7 +123,7 @@ describe('token-store', () => {
         });
 
         if (process.platform !== 'win32') {
-            const mode = fs.statSync(nestedStorePath).mode & 0o077;
+            const mode = mockFs._permissions[nestedStorePath] & 0o077;
             expect(mode).toBe(0);
         }
     });
@@ -89,14 +134,14 @@ describe('token-store', () => {
             otherService: { value: 'keep' },
             twitch: { accessToken: 'old', refreshToken: 'old-refresh' }
         };
-        fs.writeFileSync(storePath, JSON.stringify(existing, null, 2), 'utf8');
+        fileStore[storePath] = JSON.stringify(existing, null, 2);
 
         await saveTokens(
-            { tokenStorePath: storePath, logger },
+            { tokenStorePath: storePath, fs: mockFs, logger },
             { accessToken: 'updated-access', refreshToken: 'updated-refresh' }
         );
 
-        const updated = JSON.parse(fs.readFileSync(storePath, 'utf8'));
+        const updated = JSON.parse(fileStore[storePath]);
         expect(updated.otherService).toEqual({ value: 'keep' });
         expect(updated.twitch.accessToken).toBe('updated-access');
         expect(updated.twitch.refreshToken).toBe('updated-refresh');
@@ -104,9 +149,9 @@ describe('token-store', () => {
 
     it('throws when token store contains invalid JSON', async () => {
         const logger = createLogger();
-        fs.writeFileSync(storePath, '{invalid-json', 'utf8');
+        fileStore[storePath] = '{invalid-json';
 
-        await expect(loadTokens({ tokenStorePath: storePath, logger })).rejects.toThrow(/invalid token store/i);
+        await expect(loadTokens({ tokenStorePath: storePath, fs: mockFs, logger })).rejects.toThrow(/invalid token store/i);
     });
 
     it('clears twitch tokens while preserving other data', async () => {
@@ -115,11 +160,11 @@ describe('token-store', () => {
             otherService: { value: 'keep' },
             twitch: { accessToken: 'old', refreshToken: 'old-refresh' }
         };
-        fs.writeFileSync(storePath, JSON.stringify(existing, null, 2), 'utf8');
+        fileStore[storePath] = JSON.stringify(existing, null, 2);
 
-        await clearTokens({ tokenStorePath: storePath, logger });
+        await clearTokens({ tokenStorePath: storePath, fs: mockFs, logger });
 
-        const updated = JSON.parse(fs.readFileSync(storePath, 'utf8'));
+        const updated = JSON.parse(fileStore[storePath]);
         expect(updated.otherService).toEqual({ value: 'keep' });
         expect(updated.twitch).toBeUndefined();
     });

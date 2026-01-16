@@ -1,35 +1,11 @@
-const { describe, test, expect, it, afterEach } = require('bun:test');
+const { describe, test, expect, it, beforeEach, afterEach } = require('bun:test');
+const { createMockFn, restoreAllMocks } = require('../../helpers/bun-mock-utils');
 const { resetModules, restoreAllModuleMocks } = require('../../helpers/bun-module-mocks');
 
 const fs = require('fs');
-const os = require('os');
-const path = require('path');
 
-function writeTempConfig(content) {
-    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'chat-bot-config-'));
-    const configPath = path.join(dir, 'config.ini');
-    fs.writeFileSync(configPath, content, 'utf8');
-    return { dir, configPath };
-}
-
-function loadConfigWithPath(configPath) {
-    const previousPath = process.env.CHAT_BOT_CONFIG_PATH;
-    process.env.CHAT_BOT_CONFIG_PATH = configPath;
-const { configManager, config } = require('../../../src/core/config');
-    configManager.load();
-
-    return {
-        configManager,
-        config,
-        restoreEnv: () => {
-            if (previousPath === undefined) {
-                delete process.env.CHAT_BOT_CONFIG_PATH;
-            } else {
-                process.env.CHAT_BOT_CONFIG_PATH = previousPath;
-            }
-        }
-    };
-}
+let originalReadFileSync;
+let originalExistsSync;
 
 function buildMinimalConfig(overrides = {}) {
     const base = {
@@ -130,8 +106,18 @@ function buildMinimalConfig(overrides = {}) {
 }
 
 describe('Config path override', () => {
+    beforeEach(() => {
+        originalReadFileSync = fs.readFileSync;
+        originalExistsSync = fs.existsSync;
+        resetModules();
+    });
+
     afterEach(() => {
+        fs.readFileSync = originalReadFileSync;
+        fs.existsSync = originalExistsSync;
+        restoreAllMocks();
         restoreAllModuleMocks();
+        delete process.env.CHAT_BOT_CONFIG_PATH;
     });
 
     it('loads config from CHAT_BOT_CONFIG_PATH when set', () => {
@@ -139,69 +125,69 @@ describe('Config path override', () => {
         const configContent = buildMinimalConfig({
             general: { chatMsgScene: uniqueScene }
         });
-        const { dir, configPath } = writeTempConfig(configContent);
+        const testConfigPath = '/test/override/config.ini';
 
-        let restoreEnv = null;
-        try {
-            const { configManager, restoreEnv: restoreEnvFn } = loadConfigWithPath(configPath);
-            restoreEnv = restoreEnvFn;
+        fs.existsSync = createMockFn((filePath) => filePath === testConfigPath);
+        fs.readFileSync = createMockFn((filePath) => {
+            if (filePath === testConfigPath) return configContent;
+            throw new Error(`ENOENT: no such file: ${filePath}`);
+        });
 
-            const raw = configManager.getRaw();
-            expect(raw.general.chatMsgScene).toBe(uniqueScene);
-        } finally {
-            if (restoreEnv) {
-                restoreEnv();
-            }
-            fs.rmSync(dir, { recursive: true, force: true });
-        }
+        process.env.CHAT_BOT_CONFIG_PATH = testConfigPath;
+        const { configManager } = require('../../../src/core/config');
+        configManager.isLoaded = false;
+        configManager.config = null;
+        configManager.load();
+
+        const raw = configManager.getRaw();
+        expect(raw.general.chatMsgScene).toBe(uniqueScene);
     });
 
     it('provides startup-critical general defaults when values are missing', () => {
         const configContent = buildMinimalConfig({
-            general: {
-                chatMsgScene: '__smoke_scene_defaults__'
-            }
+            general: { chatMsgScene: '__smoke_scene_defaults__' }
         });
-        const { dir, configPath } = writeTempConfig(configContent);
+        const testConfigPath = '/test/defaults/config.ini';
 
-        let restoreEnv = null;
-        try {
-            const { config, restoreEnv: restoreEnvFn } = loadConfigWithPath(configPath);
-            restoreEnv = restoreEnvFn;
+        fs.existsSync = createMockFn((filePath) => filePath === testConfigPath);
+        fs.readFileSync = createMockFn((filePath) => {
+            if (filePath === testConfigPath) return configContent;
+            throw new Error(`ENOENT: no such file: ${filePath}`);
+        });
 
-            const general = config.general;
-            const requiredBooleans = [
-                'ttsEnabled',
-                'streamDetectionEnabled',
-                'userSuppressionEnabled'
-            ];
-            const requiredNumbers = [
-                'streamRetryInterval',
-                'streamMaxRetries',
-                'continuousMonitoringInterval',
-                'maxNotificationsPerUser',
-                'suppressionWindowMs',
-                'suppressionDurationMs',
-                'suppressionCleanupIntervalMs'
-            ];
+        process.env.CHAT_BOT_CONFIG_PATH = testConfigPath;
+        const { config, configManager } = require('../../../src/core/config');
+        configManager.isLoaded = false;
+        configManager.config = null;
+        configManager.load();
 
-            requiredBooleans.forEach((key) => {
-                expect(typeof general[key]).toBe('boolean');
-            });
+        const general = config.general;
+        const requiredBooleans = [
+            'ttsEnabled',
+            'streamDetectionEnabled',
+            'userSuppressionEnabled'
+        ];
+        const requiredNumbers = [
+            'streamRetryInterval',
+            'streamMaxRetries',
+            'continuousMonitoringInterval',
+            'maxNotificationsPerUser',
+            'suppressionWindowMs',
+            'suppressionDurationMs',
+            'suppressionCleanupIntervalMs'
+        ];
 
-            requiredNumbers.forEach((key) => {
-                expect(Number.isFinite(general[key])).toBe(true);
-            });
+        requiredBooleans.forEach((key) => {
+            expect(typeof general[key]).toBe('boolean');
+        });
 
-            expect(typeof general.chatMsgTxt).toBe('string');
-            expect(general.chatMsgTxt.length).toBeGreaterThan(0);
-            expect(typeof general.chatMsgScene).toBe('string');
-            expect(general.chatMsgScene.length).toBeGreaterThan(0);
-        } finally {
-            if (restoreEnv) {
-                restoreEnv();
-            }
-            fs.rmSync(dir, { recursive: true, force: true });
-        }
+        requiredNumbers.forEach((key) => {
+            expect(Number.isFinite(general[key])).toBe(true);
+        });
+
+        expect(typeof general.chatMsgTxt).toBe('string');
+        expect(general.chatMsgTxt.length).toBeGreaterThan(0);
+        expect(typeof general.chatMsgScene).toBe('string');
+        expect(general.chatMsgScene.length).toBeGreaterThan(0);
     });
 });

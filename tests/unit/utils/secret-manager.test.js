@@ -1,11 +1,14 @@
+const { describe, it, expect, beforeEach, afterEach } = require('bun:test');
+const { createMockFn, restoreAllMocks } = require('../../helpers/bun-mock-utils');
+const { resetModules, restoreAllModuleMocks } = require('../../helpers/bun-module-mocks');
+
 const fs = require('fs');
-const os = require('os');
-const path = require('path');
 
-const { configManager: globalConfigManager } = require('../../../src/core/config');
-const { ensureSecrets } = require('../../../src/utils/secret-manager');
-
-const ConfigManager = globalConfigManager.constructor;
+let originalReadFileSync;
+let originalWriteFileSync;
+let originalExistsSync;
+let originalChmodSync;
+let originalStatSync;
 
 const runtimeConfig = `
 [general]
@@ -111,18 +114,59 @@ const createCapturingLogger = () => {
 };
 
 describe('secret-manager', () => {
-    let tempDir;
-    let configPath;
-    let envFilePath;
     let configManager;
     let logger;
+    let ConfigManager;
     const originalEnv = {};
+    const configPath = '/test/config.ini';
+    const envFilePath = '/test/.env';
+
+    let fileStore;
+    let filePermissions;
+
+    const setupFsMocks = () => {
+        fileStore = {
+            [configPath]: baseConfig,
+            './config.ini': baseConfig
+        };
+        filePermissions = {};
+
+        fs.existsSync = createMockFn((path) => path in fileStore);
+        fs.readFileSync = createMockFn((path) => {
+            if (path in fileStore) return fileStore[path];
+            throw new Error(`ENOENT: no such file: ${path}`);
+        });
+        fs.writeFileSync = createMockFn((path, content, options) => {
+            fileStore[path] = content;
+            if (options && options.mode) {
+                filePermissions[path] = options.mode;
+            }
+        });
+        fs.chmodSync = createMockFn((path, mode) => {
+            filePermissions[path] = mode;
+        });
+        fs.statSync = createMockFn((path) => {
+            if (!(path in fileStore)) {
+                throw new Error(`ENOENT: no such file: ${path}`);
+            }
+            return {
+                mode: (filePermissions[path] || 0o644) | 0o100000
+            };
+        });
+    };
 
     beforeEach(() => {
-        tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'secret-manager-'));
-        configPath = path.join(tempDir, 'config.ini');
-        envFilePath = path.join(tempDir, '.env');
-        fs.writeFileSync(configPath, baseConfig, 'utf8');
+        originalReadFileSync = fs.readFileSync;
+        originalWriteFileSync = fs.writeFileSync;
+        originalExistsSync = fs.existsSync;
+        originalChmodSync = fs.chmodSync;
+        originalStatSync = fs.statSync;
+
+        resetModules();
+        setupFsMocks();
+
+        const { configManager: globalConfigManager } = require('../../../src/core/config');
+        ConfigManager = globalConfigManager.constructor;
         configManager = new ConfigManager(configPath);
         configManager.load();
         logger = createCapturingLogger();
@@ -142,10 +186,18 @@ describe('secret-manager', () => {
             }
         });
 
-        fs.rmSync(tempDir, { recursive: true, force: true });
+        fs.readFileSync = originalReadFileSync;
+        fs.writeFileSync = originalWriteFileSync;
+        fs.existsSync = originalExistsSync;
+        fs.chmodSync = originalChmodSync;
+        fs.statSync = originalStatSync;
+        restoreAllMocks();
+        restoreAllModuleMocks();
     });
 
     it('applies environment secrets without prompting and leaves existing env file untouched', async () => {
+        const { ensureSecrets } = require('../../../src/utils/secret-manager');
+
         process.env.TIKTOK_API_KEY = 'env_tiktok_key';
         process.env.TWITCH_CLIENT_ID = 'env_client_id';
         process.env.TWITCH_CLIENT_SECRET = 'env_client_secret';
@@ -173,11 +225,13 @@ describe('secret-manager', () => {
         expect(updatedTwitch.clientId).toBe('env_client_id');
         expect(configManager.getSection('tiktok').apiKey).toBe('env_tiktok_key');
         expect(configManager.getSection('obs').password).toBe('env_obs_password');
-        expect(fs.existsSync(envFilePath)).toBe(false);
+        expect(envFilePath in fileStore).toBe(false);
         expect(logger.entries.some((entry) => entry.message.includes('env_tiktok_key'))).toBe(false);
     });
 
     it('prompts in interactive mode, persists secrets to .env, and preserves existing entries', async () => {
+        const { ensureSecrets } = require('../../../src/utils/secret-manager');
+
         const promptValues = {
             TIKTOK_API_KEY: 'prompt_tiktok',
             TWITCH_CLIENT_ID: 'prompt_client_id',
@@ -188,7 +242,7 @@ describe('secret-manager', () => {
         };
 
         const promptFor = async (secretId) => promptValues[secretId] || '';
-        fs.writeFileSync(envFilePath, 'EXISTING=keep\n', 'utf8');
+        fileStore[envFilePath] = 'EXISTING=keep\n';
 
         const result = await ensureSecrets({
             configManager,
@@ -206,7 +260,7 @@ describe('secret-manager', () => {
             promptFor
         });
 
-        const envContent = fs.readFileSync(envFilePath, 'utf8');
+        const envContent = fileStore[envFilePath];
         expect(envContent).toContain('EXISTING=keep');
         expect(envContent).toContain('TIKTOK_API_KEY=prompt_tiktok');
         expect(envContent).toContain('TWITCH_CLIENT_ID=prompt_client_id');
@@ -219,6 +273,8 @@ describe('secret-manager', () => {
     });
 
     it('writes the env file with restricted permissions', async () => {
+        const { ensureSecrets } = require('../../../src/utils/secret-manager');
+
         const promptValues = {
             TIKTOK_API_KEY: 'prompt_tiktok',
             TWITCH_CLIENT_ID: 'prompt_client_id',
@@ -246,15 +302,17 @@ describe('secret-manager', () => {
             promptFor
         });
 
-        expect(fs.existsSync(envFilePath)).toBe(true);
+        expect(envFilePath in fileStore).toBe(true);
 
         if (process.platform !== 'win32') {
-            const mode = fs.statSync(envFilePath).mode & 0o077;
+            const mode = filePermissions[envFilePath] & 0o077;
             expect(mode).toBe(0);
         }
     });
 
     it('shows colon-terminated prompts for interactive clarity', async () => {
+        const { ensureSecrets } = require('../../../src/utils/secret-manager');
+
         const promptValues = {
             TIKTOK_API_KEY: 'prompt_tiktok',
             TWITCH_CLIENT_ID: 'prompt_client_id',
@@ -293,11 +351,12 @@ describe('secret-manager', () => {
     });
 
     it('fails fast in non-interactive mode when required secrets are missing', async () => {
+        const { ensureSecrets } = require('../../../src/utils/secret-manager');
+
         process.env.TIKTOK_API_KEY = 'env_tiktok_key';
         process.env.OBS_PASSWORD = 'env_obs_password';
         process.env.STREAMELEMENTS_JWT_TOKEN = 'env_jwt_token';
 
-        // Even if Twitch secrets exist in config, env-only policy should still fail.
         const twitchSection = configManager.getSection('twitch');
         twitchSection.clientId = 'config_client_id';
         twitchSection.clientSecret = 'config_client_secret';
