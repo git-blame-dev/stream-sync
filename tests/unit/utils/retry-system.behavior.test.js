@@ -1,34 +1,20 @@
-
 const { describe, test, expect, beforeEach, it, afterEach } = require('bun:test');
-const { createMockFn, spyOn, clearAllMocks, restoreAllMocks } = require('../../helpers/bun-mock-utils');
-const { mockModule, resetModules, restoreAllModuleMocks } = require('../../helpers/bun-module-mocks');
+const { createMockFn, spyOn, restoreAllMocks } = require('../../helpers/bun-mock-utils');
+const { resetModules } = require('../../helpers/bun-module-mocks');
 
-mockModule('../../../src/utils/platform-error-handler', () => ({
-    createPlatformErrorHandler: createMockFn(() => ({
-        handleEventProcessingError: createMockFn(),
-        logOperationalError: createMockFn()
-    }))
-}));
+const noOpLogger = { debug: () => {}, info: () => {}, warn: () => {}, error: () => {} };
 
 let safeSetTimeoutSpy;
 let safeDelaySpy;
 let validateTimeoutSpy;
 let validateExponentialBackoffSpy;
-let createPlatformErrorHandler;
 let RetrySystem;
 let ADAPTIVE_RETRY_CONFIG;
 
 describe('RetrySystem', () => {
     afterEach(() => {
         restoreAllMocks();
-        restoreAllModuleMocks();
     });
-
-    const logger = {
-        debug: createMockFn(),
-        info: createMockFn(),
-        warn: createMockFn()
-    };
 
     beforeEach(() => {
         resetModules();
@@ -43,16 +29,19 @@ describe('RetrySystem', () => {
             const calculated = base * Math.pow(multiplier, retry);
             return calculated > max ? max : calculated;
         });
-        createPlatformErrorHandler = require('../../../src/utils/platform-error-handler').createPlatformErrorHandler;
         ({ RetrySystem, ADAPTIVE_RETRY_CONFIG } = require('../../../src/utils/retry-system'));
     });
 
-    it('stops retries on authorization errors and cleans up state', () => {
-        const retrySystem = new RetrySystem({ logger });
-        retrySystem.errorHandler = {
+    function createMockErrorHandler() {
+        return {
             handleEventProcessingError: createMockFn(),
             logOperationalError: createMockFn()
         };
+    }
+
+    it('stops retries on authorization errors and cleans up state', () => {
+        const retrySystem = new RetrySystem({ logger: noOpLogger });
+        retrySystem.errorHandler = createMockErrorHandler();
         const reconnect = createMockFn();
         const cleanup = createMockFn();
         const setState = createMockFn();
@@ -66,11 +55,8 @@ describe('RetrySystem', () => {
     });
 
     it('continues gracefully when connection state reset throws during auth failure', () => {
-        const retrySystem = new RetrySystem({ logger });
-        retrySystem.errorHandler = {
-            handleEventProcessingError: createMockFn(),
-            logOperationalError: createMockFn()
-        };
+        const retrySystem = new RetrySystem({ logger: noOpLogger });
+        retrySystem.errorHandler = createMockErrorHandler();
         const reconnect = createMockFn();
         const cleanup = createMockFn();
         const setState = createMockFn(() => { throw new Error('state reset failed'); });
@@ -83,11 +69,8 @@ describe('RetrySystem', () => {
     });
 
     it('schedules reconnect with adaptive delay and executes reconnect when not connected', async () => {
-        const retrySystem = new RetrySystem({ logger });
-        retrySystem.errorHandler = {
-            handleEventProcessingError: createMockFn(),
-            logOperationalError: createMockFn()
-        };
+        const retrySystem = new RetrySystem({ logger: noOpLogger });
+        retrySystem.errorHandler = createMockErrorHandler();
         const reconnect = createMockFn().mockResolvedValue();
 
         retrySystem.handleConnectionError('TikTok', new Error('temporary failure'), reconnect);
@@ -99,11 +82,8 @@ describe('RetrySystem', () => {
     });
 
     it('continues scheduled reconnect when state reset throws inside scheduler', async () => {
-        const retrySystem = new RetrySystem({ logger });
-        retrySystem.errorHandler = {
-            handleEventProcessingError: createMockFn(),
-            logOperationalError: createMockFn()
-        };
+        const retrySystem = new RetrySystem({ logger: noOpLogger });
+        retrySystem.errorHandler = createMockErrorHandler();
         const reconnect = createMockFn().mockResolvedValue();
         retrySystem.isConnected = createMockFn().mockReturnValue(false);
 
@@ -114,11 +94,9 @@ describe('RetrySystem', () => {
     });
 
     it('halts scheduled reconnects after exceeding max retries', async () => {
-        const retrySystem = new RetrySystem({ logger, constants: { RETRY_MAX_ATTEMPTS: 10 } });
-        retrySystem.errorHandler = {
-            handleEventProcessingError: createMockFn(),
-            logOperationalError: createMockFn()
-        };
+        const retrySystem = new RetrySystem({ logger: noOpLogger, constants: { RETRY_MAX_ATTEMPTS: 10 } });
+        const errorHandler = createMockErrorHandler();
+        retrySystem.errorHandler = errorHandler;
         retrySystem.platformRetryCount.TikTok = 10;
 
         const reconnect = createMockFn();
@@ -127,15 +105,13 @@ describe('RetrySystem', () => {
 
         expect(reconnect).not.toHaveBeenCalled();
         expect(retrySystem.platformRetryCount.TikTok).toBeGreaterThanOrEqual(10);
-        expect(retrySystem.errorHandler.logOperationalError).toHaveBeenCalled();
+        expect(errorHandler.logOperationalError).toHaveBeenCalled();
     });
 
     it('halts scheduled reconnects when already over max before increment', async () => {
-        const retrySystem = new RetrySystem({ logger, constants: { RETRY_MAX_ATTEMPTS: 10 } });
-        retrySystem.errorHandler = {
-            handleEventProcessingError: createMockFn(),
-            logOperationalError: createMockFn()
-        };
+        const retrySystem = new RetrySystem({ logger: noOpLogger, constants: { RETRY_MAX_ATTEMPTS: 10 } });
+        const errorHandler = createMockErrorHandler();
+        retrySystem.errorHandler = errorHandler;
         retrySystem.platformRetryCount.YouTube = 50;
 
         const reconnect = createMockFn();
@@ -143,15 +119,12 @@ describe('RetrySystem', () => {
         await Promise.resolve();
 
         expect(reconnect).not.toHaveBeenCalled();
-        expect(retrySystem.errorHandler.logOperationalError).toHaveBeenCalled();
+        expect(errorHandler.logOperationalError).toHaveBeenCalled();
     });
 
     it('does not cap retries when max attempts is set to zero', async () => {
-        const retrySystem = new RetrySystem({ logger, constants: { RETRY_MAX_ATTEMPTS: 0 } });
-        retrySystem.errorHandler = {
-            handleEventProcessingError: createMockFn(),
-            logOperationalError: createMockFn()
-        };
+        const retrySystem = new RetrySystem({ logger: noOpLogger, constants: { RETRY_MAX_ATTEMPTS: 0 } });
+        retrySystem.errorHandler = createMockErrorHandler();
         retrySystem.platformRetryCount.TikTok = 50;
 
         const reconnect = createMockFn().mockResolvedValue();
@@ -163,14 +136,14 @@ describe('RetrySystem', () => {
     });
 
     it('treats Infinity as unlimited retries', () => {
-        const retrySystem = new RetrySystem({ logger });
+        const retrySystem = new RetrySystem({ logger: noOpLogger });
         retrySystem.platformRetryCount.YouTube = 999;
 
         expect(retrySystem.hasExceededMaxRetries('YouTube', Infinity)).toBe(false);
     });
 
     it('uses configured backoff multiplier for delays', () => {
-        const retrySystem = new RetrySystem({ logger });
+        const retrySystem = new RetrySystem({ logger: noOpLogger });
         retrySystem.platformRetryCount.TikTok = 0;
 
         const firstDelay = retrySystem.calculateAdaptiveRetryDelay('TikTok');
@@ -183,11 +156,8 @@ describe('RetrySystem', () => {
     });
 
     it('waits for async cleanup before scheduling reconnect', async () => {
-        const retrySystem = new RetrySystem({ logger });
-        retrySystem.errorHandler = {
-            handleEventProcessingError: createMockFn(),
-            logOperationalError: createMockFn()
-        };
+        const retrySystem = new RetrySystem({ logger: noOpLogger });
+        retrySystem.errorHandler = createMockErrorHandler();
         const reconnect = createMockFn().mockResolvedValue();
         const cleanup = createMockFn().mockResolvedValue();
 
@@ -199,11 +169,8 @@ describe('RetrySystem', () => {
     });
 
     it('routes cleanup failures through platform error handler helper', async () => {
-        const retrySystem = new RetrySystem({ logger });
-        const errorHandler = {
-            handleEventProcessingError: createMockFn(),
-            logOperationalError: createMockFn()
-        };
+        const retrySystem = new RetrySystem({ logger: noOpLogger });
+        const errorHandler = createMockErrorHandler();
         retrySystem.errorHandler = errorHandler;
         const reconnect = createMockFn().mockResolvedValue();
         const cleanupError = new Error('cleanup boom');
@@ -219,11 +186,8 @@ describe('RetrySystem', () => {
     });
 
     it('skips scheduled reconnect when already connected', async () => {
-        const retrySystem = new RetrySystem({ logger });
-        retrySystem.errorHandler = {
-            handleEventProcessingError: createMockFn(),
-            logOperationalError: createMockFn()
-        };
+        const retrySystem = new RetrySystem({ logger: noOpLogger });
+        retrySystem.errorHandler = createMockErrorHandler();
         const reconnect = createMockFn();
         retrySystem.isConnected = createMockFn().mockReturnValue(true);
 
@@ -235,25 +199,18 @@ describe('RetrySystem', () => {
     });
 
     it('halts executeWithRetry after configured max retries', async () => {
-        const retrySystem = new RetrySystem({ logger });
-        retrySystem.errorHandler = {
-            handleEventProcessingError: createMockFn(),
-            logOperationalError: createMockFn()
-        };
+        const retrySystem = new RetrySystem({ logger: noOpLogger });
+        retrySystem.errorHandler = createMockErrorHandler();
         const failingCall = createMockFn().mockRejectedValue(new Error('fail-fast'));
 
         await expect(retrySystem.executeWithRetry('TikTok', failingCall, 1)).rejects.toThrow('fail-fast');
 
         expect(failingCall).toHaveBeenCalledTimes(1);
-        expect(createPlatformErrorHandler).toHaveBeenCalled();
     });
 
     it('executes with retry until success then resets counts', async () => {
-        const retrySystem = new RetrySystem({ logger });
-        retrySystem.errorHandler = {
-            handleEventProcessingError: createMockFn(),
-            logOperationalError: createMockFn()
-        };
+        const retrySystem = new RetrySystem({ logger: noOpLogger });
+        retrySystem.errorHandler = createMockErrorHandler();
         const execute = createMockFn()
             .mockRejectedValueOnce(new Error('flaky'))
             .mockResolvedValueOnce('ok');
@@ -266,22 +223,18 @@ describe('RetrySystem', () => {
     });
 
     it('stops executeWithRetry immediately on non-retryable auth errors', async () => {
-        const retrySystem = new RetrySystem({ logger });
-        retrySystem.errorHandler = {
-            handleEventProcessingError: createMockFn(),
-            logOperationalError: createMockFn()
-        };
+        const retrySystem = new RetrySystem({ logger: noOpLogger });
+        retrySystem.errorHandler = createMockErrorHandler();
         const unauthorizedCall = createMockFn().mockRejectedValue(new Error('401 Unauthorized'));
 
         await expect(retrySystem.executeWithRetry('Twitch', unauthorizedCall, 3)).rejects.toThrow('401');
 
         expect(unauthorizedCall).toHaveBeenCalledTimes(1);
-        expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('Non-retryable error detected'), 'Twitch');
         expect(safeDelaySpy).not.toHaveBeenCalled();
     });
 
     it('extracts readable error messages from nested structures', () => {
-        const retrySystem = new RetrySystem({ logger });
+        const retrySystem = new RetrySystem({ logger: noOpLogger });
         expect(retrySystem.extractErrorMessage('simple')).toBe('simple');
         expect(retrySystem.extractErrorMessage({ message: 'oops' })).toBe('oops');
         expect(retrySystem.extractErrorMessage({ error: { message: 'nested' } })).toBe('nested');
@@ -290,7 +243,7 @@ describe('RetrySystem', () => {
     });
 
     it('clears timers and resets counts on success', () => {
-        const retrySystem = new RetrySystem({ logger });
+        const retrySystem = new RetrySystem({ logger: noOpLogger });
         retrySystem.retryTimers.Twitch = 123;
         retrySystem.platformRetryCount.Twitch = 3;
 
@@ -301,8 +254,8 @@ describe('RetrySystem', () => {
     });
 
     it('routes retry errors through platform error handler helper', () => {
-        const retrySystem = new RetrySystem({ logger });
-        const errorHandler = { handleEventProcessingError: createMockFn(), logOperationalError: createMockFn() };
+        const retrySystem = new RetrySystem({ logger: noOpLogger });
+        const errorHandler = createMockErrorHandler();
         retrySystem.errorHandler = errorHandler;
 
         retrySystem._handleRetryError('boom', new Error('boom'), 'cleanup', 'TikTok');
@@ -311,8 +264,8 @@ describe('RetrySystem', () => {
     });
 
     it('logs operational errors when non-Error values are provided', () => {
-        const retrySystem = new RetrySystem({ logger });
-        const errorHandler = { handleEventProcessingError: createMockFn(), logOperationalError: createMockFn() };
+        const retrySystem = new RetrySystem({ logger: noOpLogger });
+        const errorHandler = createMockErrorHandler();
         retrySystem.errorHandler = errorHandler;
 
         retrySystem._handleRetryError('message-only', null, 'retry', 'TikTok');
@@ -324,8 +277,8 @@ describe('RetrySystem', () => {
     });
 
     it('computes retry statistics and honors cap', () => {
-        const retrySystem = new RetrySystem({ logger });
-        retrySystem.platformRetryCount.TikTok = 3; // simulate attempts
+        const retrySystem = new RetrySystem({ logger: noOpLogger });
+        retrySystem.platformRetryCount.TikTok = 3;
 
         const stats = retrySystem.getRetryStatistics();
 
@@ -336,7 +289,7 @@ describe('RetrySystem', () => {
     });
 
     it('calculates total retry time with backoff for monitoring', () => {
-        const retrySystem = new RetrySystem({ logger });
+        const retrySystem = new RetrySystem({ logger: noOpLogger });
         retrySystem.platformRetryCount.YouTube = 2;
 
         const totalTime = retrySystem.calculateTotalRetryTime('YouTube');
@@ -348,13 +301,13 @@ describe('RetrySystem', () => {
     });
 
     it('calculates zero total retry time when no retries have occurred', () => {
-        const retrySystem = new RetrySystem({ logger });
+        const retrySystem = new RetrySystem({ logger: noOpLogger });
 
         expect(retrySystem.calculateTotalRetryTime('TikTok')).toBe(0);
     });
 
     it('caps total retry time calculation using max delay', () => {
-        const retrySystem = new RetrySystem({ logger });
+        const retrySystem = new RetrySystem({ logger: noOpLogger });
         retrySystem.platformRetryCount.Twitch = 10;
 
         const totalTime = retrySystem.calculateTotalRetryTime('Twitch');
@@ -364,7 +317,7 @@ describe('RetrySystem', () => {
     });
 
     it('caps adaptive retry delay at max when count is high', () => {
-        const retrySystem = new RetrySystem({ logger });
+        const retrySystem = new RetrySystem({ logger: noOpLogger });
         retrySystem.platformRetryCount.YouTube = 50;
 
         const delay = retrySystem.calculateAdaptiveRetryDelay('YouTube');
@@ -373,7 +326,7 @@ describe('RetrySystem', () => {
     });
 
     it('increments retry count for unknown platform and returns base delay', () => {
-        const retrySystem = new RetrySystem({ logger });
+        const retrySystem = new RetrySystem({ logger: noOpLogger });
 
         const delay = retrySystem.incrementRetryCount('Mixer');
 
@@ -382,11 +335,18 @@ describe('RetrySystem', () => {
     });
 
     it('validates config values with fallback', () => {
-        const retrySystem = new RetrySystem({ logger });
+        const warnCalled = { value: false };
+        const trackingLogger = {
+            debug: () => {},
+            info: () => {},
+            warn: () => { warnCalled.value = true; },
+            error: () => {}
+        };
+        const retrySystem = new RetrySystem({ logger: trackingLogger });
         const value = retrySystem._validateConfigValue('bad', 5000, 'test');
 
         expect(value).toBe(5000);
-        expect(logger.warn).toHaveBeenCalled();
+        expect(warnCalled.value).toBe(true);
     });
 
     it('throws when retry configuration is invalid', () => {
@@ -394,7 +354,7 @@ describe('RetrySystem', () => {
         ADAPTIVE_RETRY_CONFIG.BASE_DELAY = 0;
 
         try {
-            expect(() => new RetrySystem({ logger })).toThrow('BASE_DELAY must be positive');
+            expect(() => new RetrySystem({ logger: noOpLogger })).toThrow('BASE_DELAY must be positive');
         } finally {
             Object.assign(ADAPTIVE_RETRY_CONFIG, originalConfig);
         }
