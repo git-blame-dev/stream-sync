@@ -1,146 +1,116 @@
-
-const { describe, test, expect, beforeEach, afterEach, it } = require('bun:test');
-const { spyOn, restoreAllMocks } = require('../helpers/bun-mock-utils');
-const { unmockModule, requireActual, restoreAllModuleMocks } = require('../helpers/bun-module-mocks');
-
-const {
-  initializeTestLogging,
-  TEST_TIMEOUTS
-} = require('../helpers/test-setup');
-
-const {
-  noOpLogger
-} = require('../helpers/mock-factories');
-
-const {
-  setupAutomatedCleanup
-} = require('../helpers/mock-lifecycle');
-
+const { describe, test, expect, beforeEach, afterEach } = require('bun:test');
 const { EventEmitter } = require('events');
 
-unmockModule('../../src/platforms/twitch-eventsub');
-const TwitchEventSub = requireActual('../../src/platforms/twitch-eventsub');
+const TwitchEventSub = require('../../src/platforms/twitch-eventsub');
 
-// Initialize logging FIRST
-initializeTestLogging();
-
-// Setup automated cleanup
-setupAutomatedCleanup({
-  clearCallsBeforeEach: true,
-  validateAfterCleanup: true,
-  logPerformanceMetrics: true
-});
+const noOpLogger = { debug: () => {}, info: () => {}, warn: () => {}, error: () => {} };
 
 describe('TwitchEventSub Resubscription Notification Fix', () => {
-  let eventSub;
-  let emitSpy;
-  let mockLogger;
+    let eventSub;
 
-  beforeEach(() => {
-    mockLogger = noOpLogger;
-    const mockAuthManager = {
-      getState: () => 'READY',
-      getUserId: () => '123',
-      authState: { executeWhenReady: async (fn) => fn() },
-      getAccessToken: async () => 'token'
-    };
-    class MockChatFileLoggingService {
-      constructor() {}
-    }
+    beforeEach(() => {
+        const mockAuthManager = {
+            getState: () => 'READY',
+            getUserId: () => 'testUser123',
+            authState: { executeWhenReady: async (fn) => fn() },
+            getAccessToken: async () => 'testAccessToken'
+        };
 
-    eventSub = new TwitchEventSub(
-      { clientId: 'cid', accessToken: 'token', channel: 'streamer', username: 'streamer', dataLoggingEnabled: false },
-      { logger: mockLogger, authManager: mockAuthManager, ChatFileLoggingService: MockChatFileLoggingService }
-    );
-
-    emitSpy = spyOn(EventEmitter.prototype, 'emit').mockImplementation(() => {});
-  });
-
-  afterEach(() => {
-    restoreAllMocks();
-  
-        restoreAllModuleMocks();});
-
-  describe('when resubscription message received', () => {
-    it('emits canonical paypiggyMessage payload with months and tier', () => {
-      const resubEvent = {
-        user_id: '900000003',
-        user_name: 'example_user_13',
-        tier: '1000',
-        cumulative_months: 3,
-        timestamp: '2024-01-01T00:00:00Z',
-        message: {
-          text: '',
-          emotes: null
+        class MockWebSocket extends EventEmitter {
+            constructor() { super(); this.readyState = 1; }
+            send() {}
+            close() {}
         }
-      };
 
-      eventSub._handlePaypiggyMessageEvent(resubEvent);
-
-      const [eventType, payload] = emitSpy.mock.calls[0];
-      expect(eventType).toBe('paypiggyMessage');
-      expect(payload).toMatchObject({
-        type: 'paypiggy',
-        username: 'example_user_13',
-        userId: '900000003',
-        tier: '1000',
-        months: 3,
-        message: '',
-        timestamp: resubEvent.timestamp
-      });
+        eventSub = new TwitchEventSub(
+            {
+                clientId: 'testClientId',
+                accessToken: 'testToken',
+                channel: 'testStreamer',
+                username: 'testStreamer',
+                dataLoggingEnabled: false
+            },
+            {
+                logger: noOpLogger,
+                authManager: mockAuthManager,
+                WebSocketCtor: MockWebSocket,
+                ChatFileLoggingService: class {}
+            }
+        );
     });
 
-    it('emits canonical paypiggyMessage with message text and premium tier', () => {
-      const resubEvent = {
-        user_id: '123456789',
-        user_name: 'premium_user',
-        tier: '2000',
-        cumulative_months: 12,
-        timestamp: '2024-01-01T00:00:00Z',
-        message: {
-          text: 'Love the streams!',
-          emotes: null
-        }
-      };
-
-      eventSub._handlePaypiggyMessageEvent(resubEvent);
-
-      const [eventType, payload] = emitSpy.mock.calls[0];
-      expect(eventType).toBe('paypiggyMessage');
-      expect(payload).toMatchObject({
-        type: 'paypiggy',
-        username: 'premium_user',
-        tier: '2000',
-        months: 12,
-        message: 'Love the streams!',
-        timestamp: resubEvent.timestamp
-      });
+    afterEach(() => {
+        eventSub?.removeAllListeners();
     });
-  });
 
-  describe('when standard subscription event received', () => {
-    it('emits canonical paypiggy payload with normalized months', () => {
-      const subEvent = {
-        user_id: 'sub123',
-        user_name: 'new_subscriber',
-        tier: '2000',
-        cumulative_months: 6,
-        timestamp: '2024-01-01T00:00:00Z',
-        is_gift: false
-      };
+    describe('when resubscription message received', () => {
+        test('emits paypiggyMessage with months and tier', (done) => {
+            const resubEvent = {
+                user_id: 'testUserId123',
+                user_name: 'testResubUser',
+                tier: '1000',
+                cumulative_months: 3,
+                timestamp: '2024-01-01T00:00:00Z',
+                message: { text: '', emotes: null }
+            };
 
-      eventSub._handlePaypiggyEvent(subEvent);
+            eventSub.on('paypiggyMessage', (payload) => {
+                expect(payload.type).toBe('paypiggy');
+                expect(payload.username).toBe('testResubUser');
+                expect(payload.userId).toBe('testUserId123');
+                expect(payload.tier).toBe('1000');
+                expect(payload.months).toBe(3);
+                expect(payload.timestamp).toBe(resubEvent.timestamp);
+                done();
+            });
 
-      const [eventType, payload] = emitSpy.mock.calls[0];
-      expect(eventType).toBe('paypiggy');
-      expect(payload).toMatchObject({
-        type: 'paypiggy',
-        username: 'new_subscriber',
-        userId: 'sub123',
-        tier: '2000',
-        months: 6,
-        timestamp: subEvent.timestamp
-      });
+            eventSub._handlePaypiggyMessageEvent(resubEvent);
+        });
+
+        test('emits paypiggyMessage with message text and premium tier', (done) => {
+            const resubEvent = {
+                user_id: 'testPremiumUser456',
+                user_name: 'testPremiumSub',
+                tier: '2000',
+                cumulative_months: 12,
+                timestamp: '2024-01-01T00:00:00Z',
+                message: { text: 'Love the streams!', emotes: null }
+            };
+
+            eventSub.on('paypiggyMessage', (payload) => {
+                expect(payload.type).toBe('paypiggy');
+                expect(payload.username).toBe('testPremiumSub');
+                expect(payload.tier).toBe('2000');
+                expect(payload.months).toBe(12);
+                expect(payload.message).toBe('Love the streams!');
+                done();
+            });
+
+            eventSub._handlePaypiggyMessageEvent(resubEvent);
+        });
     });
-  });
-}, TEST_TIMEOUTS.FAST);
+
+    describe('when standard subscription event received', () => {
+        test('emits paypiggy with normalized months', (done) => {
+            const subEvent = {
+                user_id: 'testNewSub789',
+                user_name: 'testNewSubscriber',
+                tier: '2000',
+                cumulative_months: 6,
+                timestamp: '2024-01-01T00:00:00Z',
+                is_gift: false
+            };
+
+            eventSub.on('paypiggy', (payload) => {
+                expect(payload.type).toBe('paypiggy');
+                expect(payload.username).toBe('testNewSubscriber');
+                expect(payload.userId).toBe('testNewSub789');
+                expect(payload.tier).toBe('2000');
+                expect(payload.months).toBe(6);
+                done();
+            });
+
+            eventSub._handlePaypiggyEvent(subEvent);
+        });
+    });
+});

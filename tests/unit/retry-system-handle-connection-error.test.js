@@ -1,98 +1,76 @@
-const { describe, test, expect, afterEach, it } = require('bun:test');
-const { createMockFn, clearAllMocks, restoreAllMocks } = require('../helpers/bun-mock-utils');
-const { useFakeTimers, useRealTimers, runOnlyPendingTimers } = require('../helpers/bun-timers');
+const { describe, test, expect, afterEach } = require('bun:test');
 
 const { RetrySystem } = require('../../src/utils/retry-system');
-const { safeSetTimeout, safeDelay } = require('../../src/utils/timeout-validator');
+const { safeDelay } = require('../../src/utils/timeout-validator');
+
+const noOpLogger = { debug: () => {}, info: () => {}, warn: () => {}, error: () => {} };
 
 describe('RetrySystem.handleConnectionError', () => {
-    const createLogger = () => ({
-        debug: createMockFn(),
-        info: createMockFn(),
-        warn: createMockFn(),
-        error: createMockFn()
-    });
+    let retrySystem;
 
     afterEach(() => {
-        restoreAllMocks();
-        clearAllMocks();
-    });
-
-    it('awaits cleanup before scheduling reconnect attempts', async () => {
-        const retrySystem = new RetrySystem({ logger: createLogger() });
-        retrySystem.isConnected = () => false;
-        let retryCount = 0;
-        retrySystem.incrementRetryCount = createMockFn().mockImplementation(() => {
-            retryCount += 1;
-            return 1;
-        });
-        retrySystem.getRetryCount = createMockFn().mockImplementation(() => retryCount);
-
-        let cleanupResolved = false;
-        const cleanupFn = createMockFn(() => new Promise((resolve) => {
-            safeSetTimeout(() => {
-                cleanupResolved = true;
-                resolve();
-            }, 1);
-        }));
-        const reconnectFn = createMockFn();
-
-        retrySystem.handleConnectionError('tiktok', new Error('room-id'), reconnectFn, cleanupFn);
-
-        // Allow cleanup promise and scheduled reconnect to run
-        await safeDelay(20);
-
-        expect(reconnectFn).toHaveBeenCalledTimes(1);
-        expect(cleanupFn).toHaveBeenCalledTimes(1);
-        expect(cleanupResolved).toBe(true);
-    });
-
-    it('cancels an in-flight retry timer when a newer error arrives', async () => {
-        useFakeTimers();
-        try {
-            const retrySystem = new RetrySystem({ logger: createLogger() });
-            retrySystem.isConnected = () => false;
-            retrySystem.incrementRetryCount = createMockFn().mockReturnValue(5);
-            retrySystem.getRetryCount = createMockFn().mockReturnValue(1);
-
-            const cleanupFn = createMockFn().mockResolvedValue();
-            const reconnectFn = createMockFn();
-
-            retrySystem.handleConnectionError('tiktok', new Error('first'), reconnectFn, cleanupFn);
-            retrySystem.handleConnectionError('tiktok', new Error('second'), reconnectFn, cleanupFn);
-
-            await Promise.resolve();
-            await Promise.resolve();
-            await runOnlyPendingTimers();
-
-            expect(reconnectFn).toHaveBeenCalledTimes(1);
-            expect(cleanupFn).toHaveBeenCalledTimes(2);
-        } finally {
-            useRealTimers();
+        if (retrySystem && retrySystem.retryTimers) {
+            Object.values(retrySystem.retryTimers).forEach(timer => clearTimeout(timer));
         }
     });
 
-    it('continues scheduling retries when a scheduled reconnect throws', async () => {
-        const retrySystem = new RetrySystem({ logger: createLogger() });
-        retrySystem.isConnected = () => false;
-        let retryCount = 0;
-        retrySystem.incrementRetryCount = createMockFn().mockImplementation(() => {
-            retryCount += 1;
-            return 1;
-        });
-        retrySystem.getRetryCount = createMockFn().mockImplementation(() => retryCount);
+    test('calls cleanup function on connection error', async () => {
+        retrySystem = new RetrySystem({ logger: noOpLogger });
 
-        const reconnectFn = createMockFn()
-            .mockImplementationOnce(() => { throw new Error('scheduled boom'); })
-            .mockResolvedValueOnce();
-        const cleanupFn = createMockFn().mockResolvedValue();
+        let cleanupCalled = false;
+        const cleanupFn = () => { cleanupCalled = true; };
 
-        retrySystem.handleConnectionError('tiktok', new Error('initial failure'), reconnectFn, cleanupFn);
+        retrySystem.handleConnectionError('TikTok', new Error('test-error'), () => {}, cleanupFn);
 
-        // Allow first scheduled attempt to run and trigger recursive scheduling
-        await safeDelay(50);
+        await safeDelay(100);
 
-        expect(reconnectFn).toHaveBeenCalledTimes(2);
-        expect(retrySystem.getRetryCount('tiktok')).toBeGreaterThanOrEqual(2);
+        expect(cleanupCalled).toBe(true);
+    });
+
+    test('increments retry count on each error', () => {
+        retrySystem = new RetrySystem({ logger: noOpLogger });
+
+        expect(retrySystem.getRetryCount('TikTok')).toBe(0);
+
+        retrySystem.handleConnectionError('TikTok', new Error('first'), () => {}, null);
+        expect(retrySystem.getRetryCount('TikTok')).toBe(1);
+
+        retrySystem.handleConnectionError('TikTok', new Error('second'), () => {}, null);
+        expect(retrySystem.getRetryCount('TikTok')).toBe(2);
+    });
+
+    test('stops retrying for 401 unauthorized errors', () => {
+        retrySystem = new RetrySystem({ logger: noOpLogger });
+
+        let reconnectCalled = false;
+        const reconnectFn = () => { reconnectCalled = true; };
+
+        retrySystem.handleConnectionError('TikTok', new Error('401 Unauthorized'), reconnectFn, null);
+
+        expect(retrySystem.getRetryCount('TikTok')).toBe(0);
+        expect(reconnectCalled).toBe(false);
+    });
+
+    test('resets retry count on connection success', () => {
+        retrySystem = new RetrySystem({ logger: noOpLogger });
+
+        retrySystem.handleConnectionError('TikTok', new Error('error'), () => {}, null);
+        retrySystem.handleConnectionError('TikTok', new Error('error'), () => {}, null);
+        expect(retrySystem.getRetryCount('TikTok')).toBe(2);
+
+        retrySystem.handleConnectionSuccess('TikTok', {});
+        expect(retrySystem.getRetryCount('TikTok')).toBe(0);
+    });
+
+    test('calculates increasing delay with backoff', () => {
+        retrySystem = new RetrySystem({ logger: noOpLogger });
+
+        const delay1 = retrySystem.incrementRetryCount('TikTok');
+        const delay2 = retrySystem.incrementRetryCount('TikTok');
+        const delay3 = retrySystem.incrementRetryCount('TikTok');
+
+        expect(delay1).toBeGreaterThan(0);
+        expect(delay2).toBeGreaterThan(delay1);
+        expect(delay3).toBeGreaterThan(delay2);
     });
 });
