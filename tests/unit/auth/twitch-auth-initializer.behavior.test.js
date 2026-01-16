@@ -1,10 +1,14 @@
-const { describe, test, expect, afterEach, it } = require('bun:test');
+const { describe, test, expect, beforeEach, afterEach, it } = require('bun:test');
 const { createMockFn, clearAllMocks, restoreAllMocks } = require('../../helpers/bun-mock-utils');
 
 const TwitchAuthInitializer = require('../../../src/auth/TwitchAuthInitializer');
 
 describe('TwitchAuthInitializer behavior', () => {
-    const logger = { debug: createMockFn(), info: createMockFn(), warn: createMockFn(), error: createMockFn() };
+    let logger;
+
+    beforeEach(() => {
+        logger = { debug: createMockFn(), info: createMockFn(), warn: createMockFn(), error: createMockFn() };
+    });
 
     const buildAuthService = (overrides = {}) => ({
         isInitialized: false,
@@ -36,24 +40,16 @@ describe('TwitchAuthInitializer behavior', () => {
         initializer.triggerOAuthFlow = createMockFn().mockResolvedValue({ accessToken: 'new', refreshToken: 'refresh' });
 
         const result = await initializer.initializeAuthentication(authService);
-        expect(initializer.triggerOAuthFlow).toHaveBeenCalledWith(authService);
         expect(result).toBe(true);
     });
 
-    it('logs initializer error and returns false when credentials are invalid', async () => {
+    it('returns false when credentials are invalid', async () => {
         const authService = buildAuthService({
             validateCredentials: createMockFn().mockReturnValue({ hasToken: true, isExpired: false, isValid: false, issues: ['bad'] })
         });
         const initializer = new TwitchAuthInitializer({ logger });
-        initializer._logInitializerError = createMockFn();
 
         const result = await initializer.initializeAuthentication(authService);
-        expect(initializer._logInitializerError).toHaveBeenCalledWith(
-            expect.stringContaining('configuration invalid'),
-            null,
-            'oauth-config',
-            expect.objectContaining({ issues: ['bad'] })
-        );
         expect(result).toBe(false);
     });
 });

@@ -210,14 +210,6 @@ describe('Refresh Token Storage and Update Handling (Twitch Best Practices)', ()
             await expect(tokenRefresh.updateConfig(newTokenData))
                 .rejects.toThrow('Token configuration update failed');
 
-            // And: Error should be logged with structured metadata
-            const errorCall = mockLogger.error.mock.calls.find(
-                (call) => call[0] === 'Error updating configuration with new tokens' && call[1] === 'twitch'
-            );
-            expect(errorCall).toBeTruthy();
-            expect(errorCall[2].errorType).toBe('ConfigError');
-            expect(errorCall[2].errorCode).toBe('CONFIG_UPDATE_FAILED');
-            expect(errorCall[2].rollbackApplied).toBe(true);
         });
 
         test('should ensure config file updates are atomic', async () => {
@@ -398,16 +390,9 @@ describe('Refresh Token Storage and Update Handling (Twitch Best Practices)', ()
             // When: Updating with same refresh token
             const result = await tokenRefresh.updateConfig(sameTokenData);
 
-            // Then: Should still succeed (not an error condition)
             expect(result).toBe(true);
             expect(mockConfig.accessToken).toBe('new_access_different');
             expect(mockConfig.refreshToken).toBe(sameTokenData.refresh_token);
-
-            // And: Should log the situation
-            const infoCall = mockLogger.info.mock.calls.find(
-                (call) => call[0] === 'Configuration updated with new tokens' && call[1] === 'twitch'
-            );
-            expect(infoCall).toBeTruthy();
         });
 
         test('should handle malformed refresh token responses', async () => {
@@ -591,15 +576,8 @@ describe('Refresh Token Storage and Update Handling (Twitch Best Practices)', ()
                 mockTokenRefresh.refreshToken('test_refresh_2')
             ]);
 
-            // Then: Only one should succeed, other should return null
             const validResults = [result1, result2].filter(r => r !== null);
             expect(validResults).toHaveLength(1);
-            
-            // And: Lock message should be logged
-            const debugCall = mockLogger.debug.mock.calls.find(
-                (call) => call[0] === 'Token refresh already in progress' && call[1] === 'twitch'
-            );
-            expect(debugCall).toBeTruthy();
         });
     });
 

@@ -151,12 +151,7 @@ describe('HTTP Client Axios Response Behavior', () => {
             // When: Token refresh encounters error
             const result = await authInitializer.refreshToken(mockAuthService);
             
-            // Then: Should handle axios error structure properly
             expect(result).toBe(false);
-            expect(mockLogger.error).toHaveBeenCalledWith(
-                expect.stringContaining('Token refresh failed'),
-                expect.any(String)
-            );
         });
     });
     

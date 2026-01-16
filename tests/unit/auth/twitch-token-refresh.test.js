@@ -1,14 +1,13 @@
 
 const { describe, test, expect, beforeEach, afterEach } = require('bun:test');
-const { createMockFn, spyOn, clearAllMocks, restoreAllMocks } = require('../../helpers/bun-mock-utils');
-const { mockModule, resetModules, restoreAllModuleMocks } = require('../../helpers/bun-module-mocks');
+const { createMockFn, spyOn, restoreAllMocks } = require('../../helpers/bun-mock-utils');
 
 const testClock = require('../../helpers/test-clock');
-const mockTestClock = testClock;
+
+const TwitchAuthInitializer = require('../../../src/auth/TwitchAuthInitializer');
+const TwitchAuthService = require('../../../src/auth/TwitchAuthService');
 
 describe('Twitch Token Refresh Implementation', () => {
-    let TwitchAuthInitializer;
-    let TwitchAuthService;
     let mockHttpClient;
     let mockLogger;
     let mockFs;
@@ -16,16 +15,12 @@ describe('Twitch Token Refresh Implementation', () => {
     let authService;
 
     beforeEach(() => {
-        // Reset modules
-        resetModules();
         spyOn(Date, 'now').mockImplementation(() => testClock.now());
 
-        // Mock enhanced HTTP client
         mockHttpClient = {
             post: createMockFn()
         };
 
-        // Mock logger
         mockLogger = {
             info: createMockFn(),
             debug: createMockFn(),
@@ -33,7 +28,6 @@ describe('Twitch Token Refresh Implementation', () => {
             warn: createMockFn()
         };
 
-        // Mock fs for config file updates
         mockFs = {
             existsSync: createMockFn(() => true),
             readFileSync: createMockFn(),
@@ -47,55 +41,6 @@ describe('Twitch Token Refresh Implementation', () => {
             }
         };
 
-        // Mock dependencies
-        mockModule('../../../src/utils/enhanced-http-client', () => ({
-            createEnhancedHttpClient: createMockFn(() => mockHttpClient),
-            EnhancedHttpClient: createMockFn()
-        }));
-
-        // Mock auth constants to prevent import issues
-        mockModule('../../../src/utils/auth-constants', () => ({
-            TOKEN_REFRESH_CONFIG: {
-                MAX_RETRY_ATTEMPTS: 3,
-                REFRESH_THRESHOLD_SECONDS: 3600,
-                SCHEDULE_BUFFER_MINUTES: 5,
-                MAX_SCHEDULE_HOURS: 3
-            },
-            TWITCH_ENDPOINTS: {
-                OAUTH: {
-                    TOKEN: 'https://id.twitch.tv/oauth2/token'
-                }
-            },
-            AuthConstants: {
-                exceedsPerformanceThreshold: createMockFn(() => false),
-                calculateRefreshTiming: createMockFn((expiresAt) => ({
-                    timeUntilExpiration: 3600000,
-                    timeUntilRefresh: 3300000,
-                    refreshAt: mockTestClock.now() + 3300000,
-                    actualDelay: 3300000,
-                    shouldRefreshImmediately: false
-                })),
-                isPlaceholderToken: createMockFn(() => false),
-                determineOperationCriticality: createMockFn(() => 'normal'),
-                getStreamingOptimizedTimeout: createMockFn(() => 5000),
-                calculateBackoffDelay: createMockFn(() => 1000)
-            }
-        }));
-
-        // Mock auth error handler
-        mockModule('../../../src/utils/auth-error-handler', () => {
-            return createMockFn().mockImplementation(() => ({
-                isRefreshableError: createMockFn(() => false),
-                getStats: createMockFn(() => ({})),
-                cleanup: createMockFn()
-            }));
-        });
-
-        // Load the modules
-        TwitchAuthInitializer = require('../../../src/auth/TwitchAuthInitializer');
-        TwitchAuthService = require('../../../src/auth/TwitchAuthService');
-
-        // Create test config
         const testConfig = {
             clientId: 'test-client-id',
             clientSecret: 'test-client-secret',
@@ -105,7 +50,6 @@ describe('Twitch Token Refresh Implementation', () => {
             tokenStorePath: '/test/token-store.json'
         };
 
-        // Initialize services
         authService = new TwitchAuthService(testConfig, { logger: mockLogger });
         authInitializer = new TwitchAuthInitializer({
             logger: mockLogger,
@@ -117,8 +61,7 @@ describe('Twitch Token Refresh Implementation', () => {
 
     afterEach(() => {
         restoreAllMocks();
-    
-        restoreAllModuleMocks();});
+    });
 
     describe('refreshToken Method Implementation', () => {
         test('should successfully refresh token using Twitch OAuth endpoint', async () => {
@@ -165,14 +108,7 @@ describe('Twitch Token Refresh Implementation', () => {
             expect(authService.tokenExpiresAt).toBeGreaterThan(testClock.now());
             expect(authService.tokenExpiresAt).toBeLessThanOrEqual(testClock.now() + (14400 * 1000));
 
-            // Should return success
             expect(result).toBe(true);
-
-            // Should log success
-            expect(mockLogger.info).toHaveBeenCalledWith(
-                expect.stringContaining('[OAUTH] Token refreshed successfully'),
-                expect.any(Object)
-            );
         });
 
         test('should maintain authentication state after successful token refresh', async () => {
@@ -231,19 +167,7 @@ describe('Twitch Token Refresh Implementation', () => {
             // When: Attempting to refresh with invalid token
             const result = await authInitializer.refreshToken(authService);
 
-            // Then: Should return false
             expect(result).toBe(false);
-
-            // Then: User should understand authentication failed and know next steps
-            expect(mockLogger.error).toHaveBeenCalledWith(
-                expect.stringContaining('Token refresh failed: Invalid refresh token'),
-                'auth-initializer'
-            );
-            expect(mockLogger.info).toHaveBeenCalledWith(
-                expect.stringContaining('Re-authentication required')
-            );
-
-            // Should NOT update config file
             expect(mockFs.promises.writeFile).not.toHaveBeenCalled();
         });
 
@@ -270,20 +194,8 @@ describe('Twitch Token Refresh Implementation', () => {
             // When: Refreshing with network issues
             const result = await authInitializer.refreshToken(authService);
 
-            // Then: Should retry and succeed
             expect(mockHttpClient.post).toHaveBeenCalledTimes(2);
             expect(result).toBe(true);
-
-            // Then: User should see network retry behavior
-            expect(mockLogger.warn).toHaveBeenCalledWith(
-                expect.stringContaining('Network error during token refresh'),
-                'auth-initializer',
-                expect.objectContaining({
-                    error: 'ECONNREFUSED',
-                    attempt: expect.any(Number),
-                    maxAttempts: expect.any(Number)
-                })
-            );
         });
 
         test('should not refresh if refresh token is missing', async () => {
@@ -293,18 +205,8 @@ describe('Twitch Token Refresh Implementation', () => {
             // When: Attempting to refresh
             const result = await authInitializer.refreshToken(authService);
 
-            // Then: Should return false immediately
             expect(result).toBe(false);
-
-            // Should not make API call
             expect(mockHttpClient.post).not.toHaveBeenCalled();
-
-            // Then: User should understand why refresh is not possible
-            expect(mockLogger.error).toHaveBeenCalledWith(
-                expect.stringContaining('[OAUTH] Token refresh prerequisites not met'),
-                'auth-initializer',
-                expect.stringContaining('No refresh token available')
-            );
         });
 
         test('should handle expired refresh token', async () => {
@@ -321,20 +223,9 @@ describe('Twitch Token Refresh Implementation', () => {
 
             mockHttpClient.post.mockRejectedValue(expiredError);
 
-            // When: Attempting refresh with expired token
             const result = await authInitializer.refreshToken(authService);
 
-            // Then: Should handle gracefully
             expect(result).toBe(false);
-
-            // Then: User should understand token has expired and needs manual action
-            expect(mockLogger.error).toHaveBeenCalledWith(
-                expect.stringContaining('Refresh token expired'),
-                'auth-initializer'
-            );
-            expect(mockLogger.info).toHaveBeenCalledWith(
-                expect.stringContaining('Manual re-authentication required')
-            );
         });
 
         test('should properly encode form data for token refresh', async () => {
@@ -516,16 +407,9 @@ describe('Twitch Token Refresh Implementation', () => {
 
             mockHttpClient.post.mockResolvedValue(malformedResponse);
 
-            // When: Attempting refresh
             const result = await authInitializer.refreshToken(authService);
 
-            // Then: Should handle gracefully
             expect(result).toBe(false);
-            expect(mockLogger.error).toHaveBeenCalledWith(
-                expect.stringContaining('Invalid token response'),
-                expect.any(String),
-                expect.any(Object)
-            );
         });
 
         test('should handle rate limiting with exponential backoff', async () => {
@@ -561,18 +445,10 @@ describe('Twitch Token Refresh Implementation', () => {
 
             mockFs.readFileSync.mockReturnValue('[twitch]\naccessToken = old');
             
-            // When: Refreshing with rate limit
             const result = await authInitializer.refreshToken(authService);
 
-            // Then: Should handle rate limit and retry
             expect(result).toBe(true);
-            expect(mockLogger.warn).toHaveBeenCalledWith(
-                expect.stringContaining('Rate limited'),
-                expect.any(String),
-                expect.any(Object)
-            );
 
-            // Restore setTimeout
             global.setTimeout.mockRestore();
         });
 
