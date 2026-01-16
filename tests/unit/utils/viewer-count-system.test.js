@@ -344,21 +344,19 @@ describe('ViewerCountSystem - Comprehensive Behavior Tests', () => {
 
         test('should isolate observer failures without affecting others', async () => {
             const { system } = createViewerCountTestEnvironment();
-            
+
             const workingObserver = createMockViewerCountObserver('working-observer');
             const failingObserver = createMockViewerCountObserver('failing-observer', {
                 onUpdate: async () => {
                     throw new Error('Observer processing failed');
                 }
             });
-            
+
             system.addObserver(workingObserver);
             system.addObserver(failingObserver);
-            
-            // Should not throw despite failing observer
-            await expect(system.notifyObservers('tiktok', 100, 50)).resolves.not.toThrow();
-            
-            // Working observer should still receive updates
+
+            await system.notifyObservers('tiktok', 100, 50);
+
             expect(workingObserver.receivedUpdates).toHaveLength(1);
         });
 
@@ -776,19 +774,17 @@ describe('ViewerCountSystem - Comprehensive Behavior Tests', () => {
 
         test('should handle observer notification failures without affecting others', async () => {
             const { system } = createViewerCountTestEnvironment();
-            
+
             const workingObserver = createMockViewerCountObserver('working');
             const errorObserver = createMockViewerCountObserver('error', {
                 onUpdate: async () => { throw new Error('Observer error'); }
             });
-            
+
             system.addObserver(workingObserver);
             system.addObserver(errorObserver);
-            
-            // Should complete without throwing
-            await expect(system.notifyObservers('tiktok', 100, 50)).resolves.not.toThrow();
-            
-            // Working observer should still receive update
+
+            await system.notifyObservers('tiktok', 100, 50);
+
             expect(workingObserver.receivedUpdates).toHaveLength(1);
         });
     });
@@ -824,12 +820,13 @@ describe('ViewerCountSystem - Comprehensive Behavior Tests', () => {
 
         test('should handle cleanup during active polling gracefully', async () => {
             const { system } = createViewerCountTestEnvironment();
-            
+
             system.startPolling();
             expect(system.isPolling).toBe(true);
-            
-            // Cleanup should work even during active polling
-            await expect(system.cleanup()).resolves.not.toThrow();
+
+            await system.cleanup();
+
+            expect(system.isPolling).toBe(false);
         });
 
         test('should manage resources efficiently under load', async () => {

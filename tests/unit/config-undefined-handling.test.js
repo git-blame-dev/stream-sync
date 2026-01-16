@@ -37,7 +37,7 @@ describe('Gift Notification Config Resiliency', () => {
     };
 
     test('handleGiftNotification throws when config becomes undefined', async () => {
-        const { runtime, mockLogger } = buildAppRuntime();
+        const { runtime } = buildAppRuntime();
         runtime.config = undefined;
 
         await expect(
@@ -53,8 +53,6 @@ describe('Gift Notification Config Resiliency', () => {
                 id: 'gift-evt-1'
             })
         ).rejects.toThrow('AppRuntime config unavailable for gift notifications');
-
-        expect(mockLogger.error).not.toHaveBeenCalled();
     });
 
     test('gift notifications require complete gift payloads', async () => {

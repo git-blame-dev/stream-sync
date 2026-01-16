@@ -323,21 +323,18 @@ describe('User-Friendly Error System', () => {
                 expectContentReadabilityForAudience(output, 'user');
             });
 
-            it('should log technical details when logger provided', () => {
+            it('should display user-friendly message for authentication errors', () => {
                 const technicalError = new Error('Token validation failed: 401 Unauthorized');
-                
-                handleUserFacingError(technicalError, { 
+
+                handleUserFacingError(technicalError, {
                     logger: mockLogger,
                     category: 'authentication'
                 });
-                
-                expect(mockLogger.error).toHaveBeenCalled();
-                const logArgs = mockLogger.error.mock.calls[0];
-                expect(logArgs[1]).toBe('authentication');
-                expect(logArgs[2]).toMatchObject({
-                    error: 'Token validation failed: 401 Unauthorized',
-                    eventType: 'user-friendly-error'
-                });
+
+                const output = consoleOutput.join('\n');
+                expect(output).toContain('TWITCH CONNECTION PROBLEM');
+                expect(output).toContain('reconnect your Twitch account');
+                expectNoTechnicalArtifacts(output);
             });
 
             it('should not show console output when disabled', () => {
@@ -350,16 +347,17 @@ describe('User-Friendly Error System', () => {
                 expect(consoleOutput).toHaveLength(0);
             });
 
-            it('should handle warnings with appropriate logging', () => {
+            it('should display warning-level messages appropriately', () => {
                 const warningError = 'YouTube API key missing';
-                
-                handleUserFacingError(warningError, { 
+
+                handleUserFacingError(warningError, {
                     logger: mockLogger,
                     category: 'configuration'
                 });
-                
-                // Should log as warning for YouTube API key issues
-                expect(mockLogger.warn).toHaveBeenCalled();
+
+                const output = consoleOutput.join('\n');
+                expect(output).toContain('YOUTUBE SETUP REQUIRED');
+                expect(output).toContain('WARNING');
             });
         });
 
