@@ -1,35 +1,26 @@
-const { describe, test, expect, beforeEach, it, afterEach } = require('bun:test');
-const { createMockFn, restoreAllMocks } = require('../../helpers/bun-mock-utils');
-const { mockModule, resetModules, restoreAllModuleMocks } = require('../../helpers/bun-module-mocks');
+
+const { describe, test, expect, beforeEach, afterEach } = require('bun:test');
+const { createMockFn } = require('../../helpers/bun-mock-utils');
 
 const { PlatformEvents } = require('../../../src/interfaces/PlatformEvents');
-
-mockModule('../../../src/chat/commands', () => ({
-    CommandParser: createMockFn(),
-    runCommand: createMockFn().mockResolvedValue()
-}));
+const { VFXCommandService } = require('../../../src/services/VFXCommandService');
 
 describe('VFXCommandService completion events', () => {
-    afterEach(() => {
-        restoreAllMocks();
-        restoreAllModuleMocks();
-    });
-
-    let VFXCommandService;
     let eventBus;
     let recordedEvents;
+    let mockEffectsManager;
 
     beforeEach(() => {
-        resetModules();
         recordedEvents = [];
         eventBus = {
             emit: (name, payload) => recordedEvents.push({ name, payload })
         };
-
-        ({ VFXCommandService } = require('../../../src/services/VFXCommandService'));
+        mockEffectsManager = {
+            playMediaInOBS: createMockFn().mockResolvedValue(undefined)
+        };
     });
 
-    it('emits both executed and effect-completed with enriched payload', async () => {
+    test('emits both executed and effect-completed with enriched payload', async () => {
         const configService = {
             get: createMockFn((section, key) => {
                 if (section === 'commands') return { greetings: '!hello' };
@@ -42,7 +33,9 @@ describe('VFXCommandService completion events', () => {
             }),
             getCommand: createMockFn(() => '!hello')
         };
-        const service = new VFXCommandService(configService, eventBus);
+        const service = new VFXCommandService(configService, eventBus, {
+            effectsManager: mockEffectsManager
+        });
 
         const vfxConfig = {
             commandKey: 'greetings',
@@ -56,12 +49,12 @@ describe('VFXCommandService completion events', () => {
         service.selectVFXCommand = createMockFn().mockResolvedValue(vfxConfig);
 
         await service.executeCommand('!hello', {
-            username: 'Viewer',
+            username: 'testViewer',
             platform: 'twitch',
-            userId: 'user-123',
+            userId: 'test-user-123',
             skipCooldown: true,
             notificationType: 'greeting',
-            correlationId: 'corr-1'
+            correlationId: 'test-corr-1'
         });
 
         const executedEvent = recordedEvents.find(e => e.name === PlatformEvents.VFX_COMMAND_EXECUTED);
@@ -74,9 +67,9 @@ describe('VFXCommandService completion events', () => {
         expect(payload.commandKey).toBe('greetings');
         expect(payload.filename).toBe('hello');
         expect(payload.mediaSource).toBe('VFX Top');
-        expect(payload.username).toBe('Viewer');
+        expect(payload.username).toBe('testViewer');
         expect(payload.platform).toBe('twitch');
-        expect(payload.userId).toBe('user-123');
+        expect(payload.userId).toBe('test-user-123');
         expect(payload.context).toEqual(expect.objectContaining({ notificationType: 'greeting' }));
     });
 });

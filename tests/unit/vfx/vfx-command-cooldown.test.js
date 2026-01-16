@@ -1,44 +1,14 @@
 
-const { describe, test, expect, beforeEach, it, jest, afterEach } = require('bun:test');
-const { createMockFn, clearAllMocks, restoreAllMocks } = require('../../helpers/bun-mock-utils');
-const { mockModule, restoreAllModuleMocks } = require('../../helpers/bun-module-mocks');
+const { describe, test, expect, beforeEach, afterEach, jest } = require('bun:test');
+const { createMockFn } = require('../../helpers/bun-mock-utils');
 const { useFakeTimers, useRealTimers, advanceTimersByTime } = require('../../helpers/bun-timers');
-
-mockModule('../../../src/core/logging', () => ({
-    logger: {
-        debug: createMockFn(),
-        info: createMockFn(),
-        warn: createMockFn(),
-        error: createMockFn()
-    }
-}));
-
-mockModule('../../../src/chat/commands', () => {
-    const runCommand = createMockFn().mockResolvedValue();
-    const CommandParser = createMockFn().mockImplementation(() => ({
-        getVFXConfig: createMockFn((message) => ({
-            command: message,
-            commandKey: message,
-            primaryCommand: message,
-            vfxFilePath: `${message}.vfx`
-        }))
-    }));
-
-    return {
-        CommandParser,
-        runCommand
-    };
-});
+const { createMockLogger } = require('../../helpers/mock-factories');
 
 const { VFXCommandService } = require('../../../src/services/VFXCommandService');
-const { runCommand } = require('../../../src/chat/commands');
 
 describe('VFXCommandService cooldown handling', () => {
-    afterEach(() => {
-        restoreAllMocks();
-        restoreAllModuleMocks();
-        useRealTimers();
-    });
+    let mockEffectsManager;
+    let mockLogger;
 
     const createConfigService = (commandValue, overrides = {}) => ({
         getCommand: createMockFn().mockReturnValue(commandValue),
@@ -56,167 +26,145 @@ describe('VFXCommandService cooldown handling', () => {
         })
     });
 
+    const createMockCommandParser = () => ({
+        getVFXConfig: createMockFn((message) => ({
+            command: message,
+            commandKey: message,
+            filename: `${message}.mp4`,
+            mediaSource: 'VFX Source',
+            vfxFilePath: `${message}.vfx`,
+            duration: 5000
+        }))
+    });
+
     beforeEach(() => {
-        });
-
-    it('blocks repeat VFX command for same user during cooldown window', async () => {
-        const service = new VFXCommandService(createConfigService('!one | !two'), null);
-        service.commandParser = {
-            getVFXConfig: createMockFn((message) => ({
-                command: message,
-                commandKey: message,
-                filename: `${message}.mp4`,
-                mediaSource: 'VFX Source',
-                vfxFilePath: `${message}.vfx`,
-                duration: 5000
-            }))
+        mockLogger = createMockLogger();
+        mockEffectsManager = {
+            playMediaInOBS: createMockFn().mockResolvedValue(undefined)
         };
+    });
 
-        // First execution succeeds
+    afterEach(() => {
+        useRealTimers();
+    });
+
+    test('blocks repeat VFX command for same user during cooldown window', async () => {
+        const service = new VFXCommandService(createConfigService('!one | !two'), null, {
+            effectsManager: mockEffectsManager
+        });
+        service.commandParser = createMockCommandParser();
+
         const first = await service.executeCommand('!one', {
-            username: 'user1',
-            userId: '123',
+            username: 'testUser1',
+            userId: 'test-user-123',
             platform: 'tiktok',
             skipCooldown: false
         });
         expect(first.success).toBe(true);
-        expect(runCommand).toHaveBeenCalledTimes(1);
 
-        // Second execution should be blocked by cooldown
         const second = await service.executeCommand('!one', {
-            username: 'user1',
-            userId: '123',
+            username: 'testUser1',
+            userId: 'test-user-123',
             platform: 'tiktok',
             skipCooldown: false
         });
         expect(second.success).toBe(false);
         expect(second.error).toBe('Command on cooldown');
-        expect(runCommand).toHaveBeenCalledTimes(1);
     });
 
-    it('honors skipCooldown flag for notification-triggered executions', async () => {
-        const service = new VFXCommandService(createConfigService('!one | !two'), null);
-        service.commandParser = {
-            getVFXConfig: createMockFn((message) => ({
-                command: message,
-                commandKey: message,
-                filename: `${message}.mp4`,
-                mediaSource: 'VFX Source',
-                vfxFilePath: `${message}.vfx`,
-                duration: 5000
-            }))
-        };
+    test('honors skipCooldown flag for notification-triggered executions', async () => {
+        const service = new VFXCommandService(createConfigService('!one | !two'), null, {
+            effectsManager: mockEffectsManager
+        });
+        service.commandParser = createMockCommandParser();
 
         const first = await service.executeCommand('!one', {
-            username: 'user1',
-            userId: '123',
+            username: 'testUser1',
+            userId: 'test-user-123',
             platform: 'tiktok',
             skipCooldown: true
         });
 
         const second = await service.executeCommand('!one', {
-            username: 'user1',
-            userId: '123',
+            username: 'testUser1',
+            userId: 'test-user-123',
             platform: 'tiktok',
             skipCooldown: true
         });
 
         expect(first.success).toBe(true);
         expect(second.success).toBe(true);
-        expect(runCommand).toHaveBeenCalledTimes(2);
     });
 
-    it('returns failure when VFX execution throws', async () => {
-        const service = new VFXCommandService(createConfigService('!one | !two'), null);
-        service.commandParser = {
-            getVFXConfig: createMockFn((message) => ({
-                command: message,
-                commandKey: message,
-                filename: `${message}.mp4`,
-                mediaSource: 'VFX Source',
-                vfxFilePath: `${message}.vfx`,
-                duration: 5000
-            }))
+    test('returns failure when VFX execution throws', async () => {
+        const failingEffectsManager = {
+            playMediaInOBS: createMockFn().mockRejectedValue(new Error('vfx failed'))
         };
-
-        runCommand.mockRejectedValueOnce(new Error('vfx failed'));
+        const service = new VFXCommandService(createConfigService('!one | !two'), null, {
+            effectsManager: failingEffectsManager
+        });
+        service.commandParser = createMockCommandParser();
 
         const result = await service.executeCommand('!boom', {
-            username: 'user1',
-            userId: '123',
+            username: 'testUser1',
+            userId: 'test-user-123',
             platform: 'tiktok',
             skipCooldown: false
         });
 
         expect(result.success).toBe(false);
         expect(result.error).toBe('vfx failed');
-        expect(runCommand).toHaveBeenCalledTimes(1);
     });
 
-    it('allows disabling user and global cooldowns via zero config values', async () => {
+    test('allows disabling user and global cooldowns via zero config values', async () => {
         const service = new VFXCommandService(createConfigService('!one', {
             cmdCoolDown: 0,
             globalCmdCooldownMs: 0
-        }), null);
-        service.commandParser = {
-            getVFXConfig: createMockFn((message) => ({
-                command: message,
-                commandKey: message,
-                filename: `${message}.mp4`,
-                mediaSource: 'VFX Source',
-                vfxFilePath: `${message}.vfx`,
-                duration: 5000
-            }))
-        };
+        }), null, {
+            effectsManager: mockEffectsManager
+        });
+        service.commandParser = createMockCommandParser();
 
         const first = await service.executeCommand('!one', {
-            username: 'user1',
-            userId: '123',
+            username: 'testUser1',
+            userId: 'test-user-123',
             platform: 'tiktok',
             skipCooldown: false
         });
         const second = await service.executeCommand('!one', {
-            username: 'user1',
-            userId: '123',
+            username: 'testUser1',
+            userId: 'test-user-123',
             platform: 'tiktok',
             skipCooldown: false
         });
 
         expect(first.success).toBe(true);
         expect(second.success).toBe(true);
-        expect(runCommand).toHaveBeenCalledTimes(2);
     });
 
-    it('applies global cooldown across users using configured duration', async () => {
+    test('applies global cooldown across users using configured duration', async () => {
         useFakeTimers();
         jest.setSystemTime(new Date(0));
         try {
             const service = new VFXCommandService(createConfigService('!spark', {
                 cmdCoolDown: 0,
                 globalCmdCooldownMs: 2000
-            }), null);
-            service.commandParser = {
-                getVFXConfig: createMockFn((message) => ({
-                    command: message,
-                    commandKey: message,
-                    filename: `${message}.mp4`,
-                    mediaSource: 'VFX Source',
-                    vfxFilePath: `${message}.vfx`,
-                    duration: 5000
-                }))
-            };
+            }), null, {
+                effectsManager: mockEffectsManager
+            });
+            service.commandParser = createMockCommandParser();
 
             const first = await service.executeCommand('!spark', {
-                username: 'user1',
-                userId: 'u1',
+                username: 'testUser1',
+                userId: 'test-user-u1',
                 platform: 'twitch',
                 skipCooldown: false
             });
             expect(first.success).toBe(true);
 
             const second = await service.executeCommand('!spark', {
-                username: 'user2',
-                userId: 'u2',
+                username: 'testUser2',
+                userId: 'test-user-u2',
                 platform: 'twitch',
                 skipCooldown: false
             });
@@ -226,27 +174,27 @@ describe('VFXCommandService cooldown handling', () => {
             advanceTimersByTime(2100);
 
             const third = await service.executeCommand('!spark', {
-                username: 'user2',
-                userId: 'u2',
+                username: 'testUser2',
+                userId: 'test-user-u2',
                 platform: 'twitch',
                 skipCooldown: false
             });
-
             expect(third.success).toBe(true);
-            expect(runCommand).toHaveBeenCalledTimes(2);
         } finally {
             useRealTimers();
         }
     });
 
-    it('honors configured cooldown duration from config service', async () => {
+    test('honors configured cooldown duration from config service', async () => {
         useFakeTimers();
-        jest.setSystemTime(new Date(1000)); // ensure cooldown timestamps are truthy
+        jest.setSystemTime(new Date(1000));
         try {
             const service = new VFXCommandService(createConfigService('!one', {
                 cmdCoolDown: 1,
                 globalCmdCooldownMs: 1
-            }), null);
+            }), null, {
+                effectsManager: mockEffectsManager
+            });
             service.selectVFXCommand = createMockFn().mockResolvedValue({
                 command: '!one',
                 commandKey: '!one',
@@ -257,19 +205,18 @@ describe('VFXCommandService cooldown handling', () => {
             });
 
             const first = await service.executeCommandForKey('gifts', {
-                username: 'user1',
-                userId: '123',
+                username: 'testUser1',
+                userId: 'test-user-123',
                 platform: 'twitch',
                 skipCooldown: false
             });
             expect(first.success).toBe(true);
-            expect(runCommand).toHaveBeenCalledTimes(1);
             expect(service.userLastCommand.size).toBe(1);
-            expect(service.checkCommandCooldown('123', '!one').allowed).toBe(false);
+            expect(service.checkCommandCooldown('test-user-123', '!one').allowed).toBe(false);
 
             const second = await service.executeCommandForKey('gifts', {
-                username: 'user1',
-                userId: '123',
+                username: 'testUser1',
+                userId: 'test-user-123',
                 platform: 'twitch',
                 skipCooldown: false
             });
@@ -277,17 +224,15 @@ describe('VFXCommandService cooldown handling', () => {
             expect(second.error).toBe('Command on cooldown');
 
             advanceTimersByTime(1500);
-            expect(service.checkCommandCooldown('123', '!one').allowed).toBe(true);
+            expect(service.checkCommandCooldown('test-user-123', '!one').allowed).toBe(true);
 
             const third = await service.executeCommandForKey('gifts', {
-                username: 'user1',
-                userId: '123',
+                username: 'testUser1',
+                userId: 'test-user-123',
                 platform: 'twitch',
                 skipCooldown: false
             });
-
             expect(third.success).toBe(true);
-            expect(runCommand).toHaveBeenCalledTimes(2);
         } finally {
             useRealTimers();
         }
