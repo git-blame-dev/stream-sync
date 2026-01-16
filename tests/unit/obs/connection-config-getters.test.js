@@ -345,34 +345,40 @@ describe('OBS Connection Configuration with Getter Properties', () => {
     });
 
         test('should demonstrate the importance of explicit property extraction', () => {
-            // This test demonstrates why the current implementation is necessary
-            // Create a config object with computed getters
-            const dynamicConfig = {
-                _baseAddress: 'ws://computed-server',
-                _port: 4455,
-                get address() { 
-                    return `${this._baseAddress}:${this._port}`; 
-                },
-                get password() { 
-                    return process.env.OBS_PASSWORD || 'fallback-password'; 
-                },
-                get enabled() { 
-                    return !process.env.DISABLE_OBS; 
-                }
-            };
+            const savedPassword = process.env.OBS_PASSWORD;
+            const savedDisable = process.env.DISABLE_OBS;
+            delete process.env.OBS_PASSWORD;
+            delete process.env.DISABLE_OBS;
 
-            // Test that OBSConnectionManager extracts computed values correctly
-            const obsManager = new OBSConnectionManager({
-                config: dynamicConfig,
-                OBSWebSocket: mockOBSWebSocket,
-                isTestEnvironment: true
-            });
+            try {
+                const dynamicConfig = {
+                    _baseAddress: 'ws://computed-server',
+                    _port: 4455,
+                    get address() {
+                        return `${this._baseAddress}:${this._port}`;
+                    },
+                    get password() {
+                        return process.env.OBS_PASSWORD || 'fallback-password';
+                    },
+                    get enabled() {
+                        return !process.env.DISABLE_OBS;
+                    }
+                };
 
-            // Should get the computed values, not the getter functions
-            expect(obsManager.config.address).toBe('ws://computed-server:4455');
-            expect(typeof obsManager.config.address).toBe('string'); // Not a function
-            expect(obsManager.config.password).toBe('fallback-password');
-            expect(obsManager.config.enabled).toBe(true); // !undefined = true
+                const obsManager = new OBSConnectionManager({
+                    config: dynamicConfig,
+                    OBSWebSocket: mockOBSWebSocket,
+                    isTestEnvironment: true
+                });
+
+                expect(obsManager.config.address).toBe('ws://computed-server:4455');
+                expect(typeof obsManager.config.address).toBe('string');
+                expect(obsManager.config.password).toBe('fallback-password');
+                expect(obsManager.config.enabled).toBe(true);
+            } finally {
+                if (savedPassword !== undefined) process.env.OBS_PASSWORD = savedPassword;
+                if (savedDisable !== undefined) process.env.DISABLE_OBS = savedDisable;
+            }
         });
 
     describe('Edge Cases and Error Scenarios', () => {

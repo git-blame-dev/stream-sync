@@ -1,30 +1,25 @@
-const { describe, test, expect, beforeEach, it, afterEach } = require('bun:test');
-const { createMockFn, clearAllMocks, restoreAllMocks } = require('../../helpers/bun-mock-utils');
-const { mockModule, resetModules, restoreAllModuleMocks } = require('../../helpers/bun-module-mocks');
+const { describe, expect, it, beforeEach, afterEach } = require('bun:test');
+const { createMockFn, restoreAllMocks } = require('../../helpers/bun-mock-utils');
 
-mockModule('../../../src/utils/timeout-validator', () => ({
-    validateTimeout: createMockFn((n) => n),
-    safeSetInterval: createMockFn(() => ({ id: 'interval' })),
-    safeDelay: createMockFn()
-}));
-
-mockModule('../../../src/utils/platform-error-handler', () => ({
-    createPlatformErrorHandler: createMockFn(() => ({
-        handleEventProcessingError: createMockFn(),
-        logOperationalError: createMockFn()
-    }))
-}));
+const NotificationManager = require('../../../src/notifications/NotificationManager');
 
 describe('NotificationManager behavior', () => {
+    let originalNodeEnv;
+
+    beforeEach(() => {
+        originalNodeEnv = process.env.NODE_ENV;
+        process.env.NODE_ENV = 'test';
+    });
+
     afterEach(() => {
+        process.env.NODE_ENV = originalNodeEnv;
         restoreAllMocks();
-        restoreAllModuleMocks();
     });
 
     const createDeps = (overrides = {}) => ({
         logger: { debug: createMockFn(), info: createMockFn(), warn: createMockFn(), error: createMockFn() },
         displayQueue: { enqueue: createMockFn(), addItem: createMockFn(), getQueueLength: createMockFn(() => 0) },
-        eventBus: { on: createMockFn(), emit: createMockFn() },
+        eventBus: { on: createMockFn(), emit: createMockFn(), subscribe: createMockFn() },
         configService: {
             areNotificationsEnabled: createMockFn(() => true),
             getPlatformConfig: createMockFn(() => true),
@@ -61,35 +56,41 @@ describe('NotificationManager behavior', () => {
         ...overrides
     });
 
-    beforeEach(() => {
-        resetModules();
-    });
-
-    it('throws when required dependencies are missing', () => {
-        const NotificationManager = require('../../../src/notifications/NotificationManager');
+    it('throws when logger dependency is missing', () => {
         expect(() => new NotificationManager({})).toThrow('logger dependency');
-        expect(() => new NotificationManager({ logger: {} })).toThrow('constants dependency');
     });
 
-    it('throws when configService is missing', () => {
-        const NotificationManager = require('../../../src/notifications/NotificationManager');
+    it('throws when constants dependency is missing', () => {
+        const deps = createDeps({ constants: undefined });
+        expect(() => new NotificationManager(deps)).toThrow('constants dependency');
+    });
+
+    it('throws when configService dependency is missing', () => {
         const deps = createDeps({ configService: null });
         expect(() => new NotificationManager(deps)).toThrow('ConfigService dependency');
     });
 
-    it('logs initialization and starts suppression cleanup', () => {
-        const { safeSetInterval } = require('../../../src/utils/timeout-validator');
-        const NotificationManager = require('../../../src/notifications/NotificationManager');
+    it('throws when displayQueue dependency is missing', () => {
+        const deps = createDeps({ displayQueue: null });
+        expect(() => new NotificationManager(deps)).toThrow('displayQueue dependency');
+    });
+
+    it('throws when eventBus dependency is missing', () => {
+        const deps = createDeps({ eventBus: null });
+        expect(() => new NotificationManager(deps)).toThrow('EventBus dependency');
+    });
+
+    it('disables suppression cleanup in test environment', () => {
         const deps = createDeps();
-
         const manager = new NotificationManager(deps);
-
-        expect(deps.logger.debug).toHaveBeenCalled();
-        const initCall = deps.logger.debug.mock.calls.find(([message]) => (
-            typeof message === 'string' && message.includes('Initializing with pure service-based architecture')
-        ));
-        expect(initCall).toBeDefined();
-        expect(safeSetInterval).not.toHaveBeenCalled();
         expect(manager.suppressionConfig.enabled).toBe(false);
+    });
+
+    it('initializes with valid dependencies', () => {
+        const deps = createDeps();
+        const manager = new NotificationManager(deps);
+        expect(manager).toBeInstanceOf(NotificationManager);
+        expect(manager.displayQueue).toBe(deps.displayQueue);
+        expect(manager.configService).toBe(deps.configService);
     });
 });

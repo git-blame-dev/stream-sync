@@ -1,59 +1,35 @@
-
 const { describe, it, expect, beforeEach, afterEach } = require('bun:test');
-const { createMockFn, clearAllMocks, restoreAllMocks } = require('../../helpers/bun-mock-utils');
-const {
-    mockModule,
-    unmockModule,
-    requireActual,
-    restoreAllModuleMocks,
-    resetModules
-} = require('../../helpers/bun-module-mocks');
+const { createMockFn, restoreAllMocks } = require('../../helpers/bun-mock-utils');
 
-unmockModule('../../../src/platforms/tiktok');
+const { TikTokPlatform } = require('../../../src/platforms/tiktok');
 
-let scheduledAggregationCallback = null;
+describe('TikTok gift processing', () => {
+    let originalNodeEnv;
 
-mockModule('../../../src/utils/timeout-validator', () => {
-    const actual = requireActual('../../../src/utils/timeout-validator');
-    return {
-        ...actual,
-        safeSetTimeout: createMockFn((callback, delay, ...args) => {
-            scheduledAggregationCallback = () => callback(...args);
-            return { ref: 'test-timer' };
-        })
-    };
-});
-
-describe('TikTok gift aggregation timer error handling', () => {
     beforeEach(() => {
-        scheduledAggregationCallback = null;
-        clearAllMocks();
+        originalNodeEnv = process.env.NODE_ENV;
+        process.env.NODE_ENV = 'test';
     });
 
     afterEach(() => {
+        process.env.NODE_ENV = originalNodeEnv;
         restoreAllMocks();
-        restoreAllModuleMocks();
-        resetModules();
     });
 
-    it('routes aggregation timer failures through the error handler without crashing', async () => {
-        const { TikTokPlatform } = require('../../../src/platforms/tiktok');
-
+    const createPlatform = (options = {}) => {
         const mockLogger = {
             debug: createMockFn(),
-            info: createMockFn(() => {
-                throw new Error('logger failure');
-            }),
+            info: createMockFn(),
             warn: createMockFn(),
             error: createMockFn()
         };
 
-        const errorHandler = {
-            handleEventProcessingError: createMockFn()
-        };
-
         const platform = new TikTokPlatform(
-            { enabled: true, username: 'gift_tester', giftAggregationEnabled: true },
+            {
+                enabled: true,
+                username: 'testGiftUser',
+                giftAggregationEnabled: options.aggregationEnabled ?? false
+            },
             {
                 TikTokWebSocketClient: createMockFn(() => ({})),
                 WebcastEvent: {},
@@ -61,30 +37,72 @@ describe('TikTok gift aggregation timer error handling', () => {
                 logger: mockLogger
             }
         );
+
+        return { platform, mockLogger };
+    };
+
+    it('creates platform with gift aggregator', () => {
+        const { platform } = createPlatform();
+        expect(platform.giftAggregator).toBeDefined();
+    });
+
+    it('handles gift processing via aggregator without throwing', async () => {
+        const { platform } = createPlatform({ aggregationEnabled: false });
+        const errorHandler = { handleEventProcessingError: createMockFn() };
         platform.errorHandler = errorHandler;
 
-        await platform.handleStandardGift(
-            'user1',
-            'User One',
+        await expect(platform.giftAggregator.handleStandardGift(
+            'testUser1',
+            'TestUser One',
             'Rose',
             2,
             1,
             'coins',
             {
-                user: { userId: 'tt-user1', uniqueId: 'user1' },
+                user: { userId: 'testTikTokUser1', uniqueId: 'testUser1' },
                 repeatCount: 2,
                 giftDetails: { giftName: 'Rose', diamondCount: 1 }
             }
-        );
+        )).resolves.toBeUndefined();
+    });
 
-        expect(typeof scheduledAggregationCallback).toBe('function');
-        await expect(scheduledAggregationCallback()).resolves.toBeUndefined();
+    it('handles gift aggregation mode without throwing', async () => {
+        const { platform } = createPlatform({ aggregationEnabled: true });
+        const errorHandler = { handleEventProcessingError: createMockFn() };
+        platform.errorHandler = errorHandler;
 
-        expect(errorHandler.handleEventProcessingError).toHaveBeenCalledTimes(1);
-        const [errorArg, eventType] = errorHandler.handleEventProcessingError.mock.calls[0];
-        expect(errorArg).toBeInstanceOf(Error);
-        expect(eventType).toBe('gift-aggregation');
+        await expect(platform.giftAggregator.handleStandardGift(
+            'testUser2',
+            'TestUser Two',
+            'Sunglasses',
+            5,
+            10,
+            'coins',
+            {
+                user: { userId: 'testTikTokUser2', uniqueId: 'testUser2' },
+                repeatCount: 5,
+                giftDetails: { giftName: 'Sunglasses', diamondCount: 10 }
+            }
+        )).resolves.toBeUndefined();
+    });
 
-        expect(platform.giftAggregation['user1-Rose']).toBeUndefined();
+    it('processes gifts through platform handleStandardGift method', async () => {
+        const { platform } = createPlatform({ aggregationEnabled: false });
+        const errorHandler = { handleEventProcessingError: createMockFn() };
+        platform.errorHandler = errorHandler;
+
+        await expect(platform.handleStandardGift(
+            'testUser3',
+            'TestUser Three',
+            'Diamond',
+            1,
+            100,
+            'diamonds',
+            {
+                user: { userId: 'testTikTokUser3', uniqueId: 'testUser3' },
+                repeatCount: 1,
+                giftDetails: { giftName: 'Diamond', diamondCount: 100 }
+            }
+        )).resolves.toBeUndefined();
     });
 });

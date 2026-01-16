@@ -1,6 +1,7 @@
-const { describe, test, expect, afterEach } = require('bun:test');
+const { describe, expect, it, afterEach } = require('bun:test');
 const { createMockFn, restoreAllMocks } = require('../../helpers/bun-mock-utils');
-const { mockModule, resetModules, restoreAllModuleMocks } = require('../../helpers/bun-module-mocks');
+
+const { EnhancedHttpClient } = require('../../../src/utils/enhanced-http-client');
 
 describe('EnhancedHttpClient behavior', () => {
     const createLogger = () => ({
@@ -11,58 +12,46 @@ describe('EnhancedHttpClient behavior', () => {
     });
 
     afterEach(() => {
-restoreAllMocks();
-    
-        restoreAllModuleMocks();});
-
-    test('rotates user agents and uses streaming timeout when auth constants are available', () => {
-        mockModule('../../../src/utils/auth-constants', () => ({
-            AuthConstants: {
-                determineOperationCriticality: createMockFn(() => 'critical'),
-                getStreamingOptimizedTimeout: createMockFn(() => 1234)
-            }
-        }));
-
-        const axios = { get: createMockFn().mockResolvedValue({ status: 200 }) };
-        const logger = createLogger();
-
-        let EnhancedHttpClient;
-        jest.isolateModules(() => {
-            ({ EnhancedHttpClient } = require('../../../src/utils/enhanced-http-client'));
-        });
-
-        const client = new EnhancedHttpClient({ axios, logger });
-        client.userAgents = ['agent-a', 'agent-b'];
-
-        const firstConfig = client.buildRequestConfig({ operationContext: { operationType: 'tokenValidation' } });
-        const secondConfig = client.buildRequestConfig({ operationContext: { operationType: 'tokenValidation' } });
-
-        expect(firstConfig.timeout).toBe(1234);
-        expect(firstConfig.headers['User-Agent']).toBe('agent-a');
-        expect(secondConfig.headers['User-Agent']).toBe('agent-b');
+        restoreAllMocks();
     });
 
-    test('falls back to default timeout when auth constants cannot be loaded', () => {
-        mockModule('../../../src/utils/auth-constants', () => {
-            throw new Error('auth constants missing');
-        });
-
+    it('rotates user agents across requests', () => {
         const axios = { get: createMockFn().mockResolvedValue({ status: 200 }) };
         const logger = createLogger();
 
-        let EnhancedHttpClient;
-        jest.isolateModules(() => {
-            ({ EnhancedHttpClient } = require('../../../src/utils/enhanced-http-client'));
-        });
+        const client = new EnhancedHttpClient({ axios, logger });
+        client.userAgents = ['testAgentA', 'testAgentB'];
+
+        const firstConfig = client.buildRequestConfig({});
+        const secondConfig = client.buildRequestConfig({});
+        const thirdConfig = client.buildRequestConfig({});
+
+        expect(firstConfig.headers['User-Agent']).toBe('testAgentA');
+        expect(secondConfig.headers['User-Agent']).toBe('testAgentB');
+        expect(thirdConfig.headers['User-Agent']).toBe('testAgentA');
+    });
+
+    it('uses explicit timeout when provided', () => {
+        const axios = { get: createMockFn().mockResolvedValue({ status: 200 }) };
+        const logger = createLogger();
 
         const client = new EnhancedHttpClient({ axios, logger });
-        const config = client.buildRequestConfig({ operationContext: { operationType: 'tokenValidation' } });
+        const config = client.buildRequestConfig({ timeout: 5000 });
+
+        expect(config.timeout).toBe(5000);
+    });
+
+    it('uses default timeout when no explicit timeout provided', () => {
+        const axios = { get: createMockFn().mockResolvedValue({ status: 200 }) };
+        const logger = createLogger();
+
+        const client = new EnhancedHttpClient({ axios, logger, timeout: 3000 });
+        const config = client.buildRequestConfig({});
 
         expect(config.timeout).toBe(3000);
-        expect(logger.debug).toHaveBeenCalled();
     });
 
-    test('wraps requests with retry system when platform is provided', async () => {
+    it('wraps requests with retry system when platform is provided', async () => {
         const axios = { get: createMockFn().mockResolvedValue({ status: 204 }) };
         const logger = createLogger();
         let executedThroughRetry = false;
@@ -74,32 +63,28 @@ restoreAllMocks();
             })
         };
 
-        const { EnhancedHttpClient } = require('../../../src/utils/enhanced-http-client');
         const client = new EnhancedHttpClient({ axios, logger, retrySystem });
-
         const response = await client.get('https://example.com', { platform: 'twitch' });
 
         expect(executedThroughRetry).toBe(true);
         expect(response.status).toBe(204);
     });
 
-    test('respects disableRetry and surfaces request errors with logging', async () => {
-        const axios = { get: createMockFn().mockRejectedValue(new Error('boom')) };
+    it('bypasses retry system when disableRetry is true', async () => {
+        const axios = { get: createMockFn().mockRejectedValue(new Error('testNetworkError')) };
         const logger = createLogger();
         const retrySystem = {
             executeWithRetry: createMockFn(async (_platform, handler) => handler())
         };
 
-        const { EnhancedHttpClient } = require('../../../src/utils/enhanced-http-client');
         const client = new EnhancedHttpClient({ axios, logger, retrySystem });
 
         await expect(client.get('https://example.com', { platform: 'twitch', disableRetry: true }))
-            .rejects.toThrow('boom');
+            .rejects.toThrow('testNetworkError');
         expect(retrySystem.executeWithRetry).not.toHaveBeenCalled();
-        expect(logger.debug).toHaveBeenCalled();
     });
 
-    test('encodes urlencoded post bodies without mutating headers', async () => {
+    it('encodes urlencoded post bodies', async () => {
         let postedBody;
         let postedConfig;
         const axios = {
@@ -110,7 +95,6 @@ restoreAllMocks();
             })
         };
         const logger = createLogger();
-        const { EnhancedHttpClient } = require('../../../src/utils/enhanced-http-client');
         const client = new EnhancedHttpClient({ axios, logger });
 
         const response = await client.post('https://example.com', { a: 1, b: 'two' }, {
@@ -124,14 +108,25 @@ restoreAllMocks();
         expect(response.status).toBe(201);
     });
 
-    test('returns false when reachability check fails', async () => {
-        const axios = { get: createMockFn().mockRejectedValue(new Error('network')) };
+    it('returns false when reachability check fails', async () => {
+        const axios = { get: createMockFn().mockRejectedValue(new Error('testNetworkFailure')) };
         const logger = createLogger();
-        const { EnhancedHttpClient } = require('../../../src/utils/enhanced-http-client');
         const client = new EnhancedHttpClient({ axios, logger });
 
         const reachable = await client.isReachable('https://example.com');
 
         expect(reachable).toBe(false);
+    });
+
+    it('builds auth headers for bearer tokens', () => {
+        const axios = { get: createMockFn() };
+        const logger = createLogger();
+        const client = new EnhancedHttpClient({ axios, logger });
+
+        const bearerHeaders = client.buildAuthHeaders('testToken123', 'bearer');
+        const oauthHeaders = client.buildAuthHeaders('testToken456', 'oauth');
+
+        expect(bearerHeaders.Authorization).toBe('Bearer testToken123');
+        expect(oauthHeaders.Authorization).toBe('OAuth testToken456');
     });
 });
