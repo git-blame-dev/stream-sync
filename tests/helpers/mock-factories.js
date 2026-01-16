@@ -957,97 +957,17 @@ const createMockConfigManager = (configData = {}, methodOverrides = {}) => {
         once: createMockFn(),
         emit: createMockFn(),
         
-        // Additional methods needed for config consistency tests
-        updateTokens: createMockFn().mockImplementation(async (tokenData) => {
-            const ConfigurationManager = require('../../src/auth/shared/ConfigurationManager');
-            const configManager = new ConfigurationManager({
-                logger: configData.logger,
-                fileSystem: configData.fileSystem
-            });
-            return configManager.updateTokens(tokenData);
-        }),
-        
-        validateConfigData: createMockFn().mockImplementation(async (configDataToValidate) => {
-            const ConfigurationManager = require('../../src/auth/shared/ConfigurationManager');
-            const configManager = new ConfigurationManager({
-                logger: configData.logger
-            });
-            return configManager.validateConfigData(configDataToValidate);
-        }),
-        
-        updateWithBackup: createMockFn().mockImplementation(async (updates) => {
-            const ConfigurationManager = require('../../src/auth/shared/ConfigurationManager');
-            const configManager = new ConfigurationManager({
-                logger: configData.logger,
-                fileSystem: configData.fileSystem
-            });
-            return configManager.updateWithBackup(updates);
-        }),
-        
-        handleConfigUpdateError: createMockFn().mockImplementation(async (errorType) => {
-            const ConfigurationManager = require('../../src/auth/shared/ConfigurationManager');
-            const configManager = new ConfigurationManager({
-                logger: configData.logger
-            });
-            return configManager.handleConfigUpdateError(errorType);
-        }),
-        
-        attemptUpdateWithRollback: createMockFn().mockImplementation(async (updates) => {
-            const ConfigurationManager = require('../../src/auth/shared/ConfigurationManager');
-            const configManager = new ConfigurationManager({
-                logger: configData.logger,
-                fileSystem: configData.fileSystem
-            });
-            return configManager.attemptUpdateWithRollback(updates);
-        }),
-        
-        getErrorRecoveryGuidance: createMockFn().mockImplementation(async (errorType) => {
-            const ConfigurationManager = require('../../src/auth/shared/ConfigurationManager');
-            const configManager = new ConfigurationManager({
-                logger: configData.logger
-            });
-            return configManager.getErrorRecoveryGuidance(errorType);
-        }),
-        
-        performStateChange: createMockFn().mockImplementation(async (action, token) => {
-            const ConfigurationManager = require('../../src/auth/shared/ConfigurationManager');
-            const configManager = new ConfigurationManager({
-                logger: configData.logger
-            });
-            return configManager.performStateChange(action, token);
-        }),
-        
-        getSynchronizedConfig: createMockFn().mockImplementation(async () => {
-            const ConfigurationManager = require('../../src/auth/shared/ConfigurationManager');
-            const configManager = new ConfigurationManager({
-                logger: configData.logger
-            });
-            return configManager.getSynchronizedConfig();
-        }),
-        
-        performConfigOperation: createMockFn().mockImplementation(async (operation) => {
-            const ConfigurationManager = require('../../src/auth/shared/ConfigurationManager');
-            const configManager = new ConfigurationManager({
-                logger: configData.logger
-            });
-            return configManager.performConfigOperation(operation);
-        }),
-        
-        performComprehensiveValidation: createMockFn().mockImplementation(async (config) => {
-            const ConfigurationManager = require('../../src/auth/shared/ConfigurationManager');
-            const configManager = new ConfigurationManager({
-                logger: configData.logger
-            });
-            return configManager.performComprehensiveValidation(config);
-        }),
-        
-        getCurrentState: createMockFn().mockImplementation(async () => {
-            const ConfigurationManager = require('../../src/auth/shared/ConfigurationManager');
-            const configManager = new ConfigurationManager({
-                logger: configData.logger
-            });
-            return configManager.getCurrentState();
-        })
+        updateTokens: createMockFn().mockResolvedValue(true),
+        validateConfigData: createMockFn().mockResolvedValue(true),
+        updateWithBackup: createMockFn().mockResolvedValue(true),
+        handleConfigUpdateError: createMockFn().mockResolvedValue({ handled: true }),
+        attemptUpdateWithRollback: createMockFn().mockResolvedValue(true),
+        getErrorRecoveryGuidance: createMockFn().mockResolvedValue({ guidance: 'retry' }),
+        performStateChange: createMockFn().mockResolvedValue(true),
+        getSynchronizedConfig: createMockFn().mockResolvedValue({}),
+        performConfigOperation: createMockFn().mockResolvedValue(true),
+        performComprehensiveValidation: createMockFn().mockResolvedValue({ valid: true }),
+        getCurrentState: createMockFn().mockResolvedValue({})
     };
 
     return {
@@ -2778,8 +2698,6 @@ const createMockPlatformConnection = (handlerOverrides = {}) => {
 // ================================================================================================
 
 const createMockAuthService = (options = {}) => {
-    const TokenValidationService = require('../../src/auth/shared/TokenValidationService');
-    
     return {
         config: options.config || {
             accessToken: 'test-access-token',
@@ -2787,36 +2705,15 @@ const createMockAuthService = (options = {}) => {
             apiKey: 'test-access-token'
         },
         logger: options.logger || createMockLogger(),
-        
-        // Delegate to centralized TokenValidationService
-        validateToken: createMockFn().mockImplementation(async (token) => {
-            return TokenValidationService.validateToken(token);
-        }),
-        
-        isPlaceholderToken: createMockFn().mockImplementation(async (token) => {
-            return TokenValidationService.isPlaceholderToken(token);
-        }),
-        
-        validateTokenFormat: createMockFn().mockImplementation(async (token) => {
-            return TokenValidationService.validateTokenFormat(token);
-        }),
-        
-        checkTokenExpiration: createMockFn().mockImplementation(async (token) => {
-            return TokenValidationService.checkTokenExpiration(token);
-        }),
-        
-        getValidationCriteria: createMockFn().mockImplementation(async (token) => {
-            return TokenValidationService.getValidationCriteria(token);
-        }),
-        
-        performComprehensiveValidation: createMockFn().mockImplementation(async (token) => {
-            return TokenValidationService.performComprehensiveValidation(token);
-        }),
-        
-        getValidationImplementationInfo: createMockFn().mockImplementation(async () => {
-            return TokenValidationService.getValidationImplementationInfo();
-        }),
-        
+
+        validateToken: createMockFn().mockResolvedValue(true),
+        isPlaceholderToken: createMockFn().mockResolvedValue(false),
+        validateTokenFormat: createMockFn().mockResolvedValue(true),
+        checkTokenExpiration: createMockFn().mockResolvedValue(false),
+        getValidationCriteria: createMockFn().mockResolvedValue({}),
+        performComprehensiveValidation: createMockFn().mockResolvedValue({ valid: true }),
+        getValidationImplementationInfo: createMockFn().mockResolvedValue({ type: 'mock' }),
+
         _mockType: 'AuthService'
     };
 };
