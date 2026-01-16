@@ -1,9 +1,6 @@
 const { describe, it, expect, afterEach } = require('bun:test');
-const { createMockFn, restoreAllMocks } = require('../helpers/bun-mock-utils');
-const { unmockModule, restoreAllModuleMocks, resetModules } = require('../helpers/bun-module-mocks');
-
-// Use real implementation (bun.setup mocks the platform by default).
-unmockModule('../../../src/platforms/tiktok');
+const { createMockFn, restoreAllMocks } = require('../../helpers/bun-mock-utils');
+const { restoreAllModuleMocks, resetModules } = require('../../helpers/bun-module-mocks');
 
 const { TikTokPlatform } = require('../../../src/platforms/tiktok');
 

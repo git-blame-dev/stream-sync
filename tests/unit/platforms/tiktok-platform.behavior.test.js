@@ -1,21 +1,14 @@
 const { describe, it, expect, afterEach } = require('bun:test');
-const { createMockFn, restoreAllMocks } = require('../helpers/bun-mock-utils');
-const { unmockModule, restoreAllModuleMocks, resetModules } = require('../helpers/bun-module-mocks');
-
-unmockModule('../../../src/platforms/tiktok');
+const { createMockFn, restoreAllMocks } = require('../../helpers/bun-mock-utils');
+const { restoreAllModuleMocks, resetModules } = require('../../helpers/bun-module-mocks');
 
 const { TikTokPlatform } = require('../../../src/platforms/tiktok');
 const { PlatformEvents } = require('../../../src/interfaces/PlatformEvents');
 
-const createLogger = () => ({
-    debug: createMockFn(),
-    info: createMockFn(),
-    warn: createMockFn(),
-    error: createMockFn()
-});
+const noOpLogger = { debug: () => {}, info: () => {}, warn: () => {}, error: () => {} };
 
 const createPlatform = (configOverrides = {}, dependencyOverrides = {}) => {
-    const logger = dependencyOverrides.logger || createLogger();
+    const logger = dependencyOverrides.logger || noOpLogger;
     const notificationManager = dependencyOverrides.notificationManager || {
         emit: createMockFn(),
         on: createMockFn(),
@@ -177,7 +170,6 @@ describe('TikTokPlatform behavior alignment', () => {
             const routedEvents = [];
             const errors = [];
 
-            // Inject handlers to capture events
             platform.handlers = {
                 ...platform.handlers,
                 onGift: (data) => routedEvents.push({ type: 'platform:gift', platform: 'tiktok', data })
@@ -260,7 +252,6 @@ describe('TikTokPlatform behavior alignment', () => {
 
             platform.connection = connection;
 
-            // Inject handler to capture viewer count events
             platform.handlers = {
                 ...platform.handlers,
                 onViewerCount: (data) => events.push({ type: 'viewer-count', platform: 'tiktok', data })
@@ -280,22 +271,20 @@ describe('TikTokPlatform behavior alignment', () => {
 
     describe('dependency validation', () => {
         it('fails fast when TikTokWebSocketClient is missing', () => {
-            const logger = createLogger();
             expect(() => new TikTokPlatform({ enabled: true, username: 'tester' }, {
                 WebcastEvent: { ERROR: 'error', DISCONNECT: 'disconnect' },
                 ControlEvent: {},
                 connectionFactory: { createConnection: createMockFn() },
-                logger
+                logger: noOpLogger
             })).toThrow(/TikTokWebSocketClient/i);
         });
 
         it('fails fast when WebcastEvent is missing', () => {
-            const logger = createLogger();
             expect(() => new TikTokPlatform({ enabled: true, username: 'tester' }, {
                 TikTokWebSocketClient: createMockFn(),
                 ControlEvent: {},
                 connectionFactory: { createConnection: createMockFn() },
-                logger
+                logger: noOpLogger
             })).toThrow(/WebcastEvent/i);
         });
     });

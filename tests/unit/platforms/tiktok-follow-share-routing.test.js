@@ -1,6 +1,5 @@
-
 const { describe, it, expect } = require('bun:test');
-const { createMockFn } = require('../helpers/bun-mock-utils');
+const { createMockFn } = require('../../helpers/bun-mock-utils');
 const EventEmitter = require('events');
 const PlatformEventRouter = require('../../../src/services/PlatformEventRouter');
 const { TikTokPlatform } = require('../../../src/platforms/tiktok');
@@ -65,7 +64,6 @@ describe('TikTok follow/share routing', () => {
         const emitted = [];
         eventBus.subscribe('platform:event', (payload) => emitted.push(payload));
 
-        // Platform handler uses injected onShare in other tests; here simulate emitter
         eventBus.emit('platform:event', {
             type: 'platform:share',
             platform: 'tiktok',
