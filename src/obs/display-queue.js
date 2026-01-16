@@ -62,25 +62,25 @@ function delay(ms) {
 }
 
 class DisplayQueue {
-    constructor(obsManager, config = {}, constants = {}, eventBus = null, runtimeConstants = null) {
+    constructor(obsManager, config = {}, constants = {}, eventBus = null, runtimeConstants = null, dependencies = {}) {
         if (!obsManager) {
             throw new Error('DisplayQueue requires OBSConnectionManager instance');
         }
         try {
-        
+
         this.queue = [];
         this.isProcessing = false;
-        this.isRetryScheduled = false; // Track if a retry timeout is already scheduled
-        this.currentDisplay = null; // To track what's currently on screen
-        this.lastChatItem = null;   // To store the last chat message for lingering
+        this.isRetryScheduled = false;
+        this.currentDisplay = null;
+        this.lastChatItem = null;
         this.obsManager = obsManager;
-        this.constants = constants; // Store injected constants
+        this.constants = constants;
         this.runtimeConstants = resolveRuntimeConstants(runtimeConstants, constants);
         if (!this.runtimeConstants) {
             throw new Error('DisplayQueue requires runtimeConstants');
         }
-        this.sourcesManager = getDefaultSourcesManager({ runtimeConstants: this.runtimeConstants });
-        this.goalsManager = getDefaultGoalsManager({
+        this.sourcesManager = dependencies.sourcesManager || getDefaultSourcesManager({ runtimeConstants: this.runtimeConstants });
+        this.goalsManager = dependencies.goalsManager || getDefaultGoalsManager({
             runtimeConstants: this.runtimeConstants,
             obsManager: this.obsManager,
             sourcesManager: this.sourcesManager

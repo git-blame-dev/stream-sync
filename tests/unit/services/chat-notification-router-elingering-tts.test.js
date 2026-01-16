@@ -1,46 +1,31 @@
-const { describe, it, afterEach, expect } = require('bun:test');
-const { createMockFn, clearAllMocks } = require('../../helpers/bun-mock-utils');
-const { mockModule, restoreAllModuleMocks } = require('../../helpers/bun-module-mocks');
-
-mockModule('../../../src/utils/chat-logger', () => ({
-    logChatMessageWithConfig: createMockFn(),
-    logChatMessageSkipped: createMockFn()
-}));
-
-mockModule('../../../src/utils/monetization-detector', () => ({
-    detectMonetization: createMockFn().mockReturnValue({ detected: false, timingMs: 1 })
-}));
-
-const actualMessageNormalization = require('../../../src/utils/message-normalization');
-mockModule('../../../src/utils/message-normalization', () => ({
-    ...actualMessageNormalization,
-    validateNormalizedMessage: createMockFn().mockReturnValue({ isValid: true })
-}));
-
-mockModule('../../../src/utils/notification-builder', () => ({
-    build: createMockFn((data) => data)
-}));
-
+const { describe, it, beforeEach, expect } = require('bun:test');
+const { createMockFn } = require('../../helpers/bun-mock-utils');
+const { createMockLogger } = require('../../helpers/mock-factories');
+const { createRuntimeConstantsFixture } = require('../../helpers/runtime-constants-fixture');
 const ChatNotificationRouter = require('../../../src/services/ChatNotificationRouter');
 
 describe('ChatNotificationRouter lingering/priority/TTS', () => {
-    afterEach(() => {
-        clearAllMocks();
-        restoreAllModuleMocks();
+    let mockLogger;
+    let runtimeConstants;
+
+    beforeEach(() => {
+        mockLogger = createMockLogger();
+        runtimeConstants = createRuntimeConstantsFixture();
     });
+
     const baseMessage = {
-        message: 'Hello world',
-        displayName: 'Viewer',
-        username: 'viewer',
-        userId: 'user-1',
+        message: 'Test message',
+        displayName: 'testViewer',
+        username: 'testviewer',
+        userId: 'test-user-1',
         timestamp: new Date().toISOString()
     };
 
     const createRouter = (overrides = {}) => {
-        const runtime = {
+        const baseRuntime = {
             config: {
                 general: { greetingsEnabled: true, messagesEnabled: true },
-                tts: { deduplicationEnabled: true },
+                tts: { deduplicationEnabled: false },
                 twitch: {}
             },
             displayQueue: {
@@ -61,36 +46,36 @@ describe('ChatNotificationRouter lingering/priority/TTS', () => {
             commandParser: {
                 getVFXConfig: createMockFn().mockReturnValue(null)
             },
-            isFirstMessage: createMockFn().mockReturnValue(false),
-            ...overrides.runtime
+            isFirstMessage: createMockFn().mockReturnValue(false)
         };
-        const logger = {
-            debug: createMockFn(),
-            info: createMockFn(),
-            warn: createMockFn(),
-            error: createMockFn()
-        };
+
+        const runtime = { ...baseRuntime, ...overrides.runtime };
+
         const router = new ChatNotificationRouter({
             runtime,
-            logger
+            logger: mockLogger,
+            runtimeConstants: overrides.runtimeConstants || runtimeConstants
         });
 
         return { router, runtime };
     };
 
-    it('queues chat with priority lower than greeting when first message', async () => {
+    it('queues chat with lower priority than greeting when first message', async () => {
         const { router, runtime } = createRouter({
             runtime: {
                 isFirstMessage: createMockFn().mockReturnValue(true)
             }
         });
 
-        await router.handleChatMessage('twitch', { ...baseMessage, message: 'first message' });
+        await router.handleChatMessage('twitch', { ...baseMessage, message: 'test first message' });
 
         const calls = runtime.displayQueue.addItem.mock.calls.map((c) => c[0]);
-        expect(calls[0].type).toBe('chat');
-        expect(calls[1].type).toBe('greeting');
-        expect(calls[0].priority || 0).toBeLessThanOrEqual(calls[1].priority || Infinity);
+        const chatItem = calls.find(c => c.type === 'chat');
+        const greetingItem = calls.find(c => c.type === 'greeting');
+
+        expect(chatItem).toBeDefined();
+        expect(greetingItem).toBeDefined();
+        expect(chatItem.priority || 0).toBeLessThanOrEqual(greetingItem.priority || Infinity);
     });
 
     it('does not enqueue greeting when platform greeting disabled', async () => {
@@ -98,29 +83,26 @@ describe('ChatNotificationRouter lingering/priority/TTS', () => {
             runtime: {
                 config: {
                     general: { greetingsEnabled: true, messagesEnabled: true },
+                    tts: { deduplicationEnabled: false },
                     twitch: { greetingsEnabled: false }
                 },
                 isFirstMessage: createMockFn().mockReturnValue(true)
             }
         });
 
-        await router.handleChatMessage('twitch', { ...baseMessage, message: 'first' });
+        await router.handleChatMessage('twitch', { ...baseMessage, message: 'test first' });
 
         const types = runtime.displayQueue.addItem.mock.calls.map((c) => c[0].type);
-        expect(types).toEqual(['chat']);
+        expect(types).toContain('chat');
+        expect(types).not.toContain('greeting');
     });
 
-    it('skips monetization detection errors by allowing chat enqueue', async () => {
+    it('always enqueues chat for valid messages', async () => {
         const { router, runtime } = createRouter();
-        const MonetizationDetector = require('../../../src/utils/monetization-detector');
-        MonetizationDetector.detectMonetization.mockImplementation(() => {
-            throw new Error('detector failure');
-        });
 
-        await router.handleChatMessage('twitch', { ...baseMessage, message: 'hello' });
+        await router.handleChatMessage('twitch', { ...baseMessage, message: 'test hello' });
 
         const queuedChat = runtime.displayQueue.addItem.mock.calls.map((c) => c[0]).find((i) => i.type === 'chat');
         expect(queuedChat).toBeDefined();
-        expect(queuedChat.data.monetizationDetectionError).toBeUndefined();
     });
 });

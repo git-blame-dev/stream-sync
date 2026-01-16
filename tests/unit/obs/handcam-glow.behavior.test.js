@@ -1,40 +1,31 @@
-
-const { describe, test, expect, beforeEach, it, afterEach } = require('bun:test');
-const { createMockFn, restoreAllMocks } = require('../../helpers/bun-mock-utils');
-const { mockModule, resetModules, restoreAllModuleMocks } = require('../../helpers/bun-module-mocks');
-
-mockModule('../../../src/utils/platform-error-handler', () => ({
-    createPlatformErrorHandler: createMockFn(() => ({
-        handleEventProcessingError: createMockFn(),
-        logOperationalError: createMockFn()
-    }))
-}));
-mockModule('../../../src/utils/timeout-validator', () => ({
-    safeDelay: createMockFn().mockResolvedValue(),
-    safeSetTimeout: createMockFn()
-}));
-
+const { describe, expect, beforeEach, it, afterEach } = require('bun:test');
+const { createMockFn } = require('../../helpers/bun-mock-utils');
+const { createMockLogger } = require('../../helpers/mock-factories');
 const { createRuntimeConstantsFixture } = require('../../helpers/runtime-constants-fixture');
 
-describe('handcam-glow', () => {
-    afterEach(() => {
-        restoreAllMocks();
-        restoreAllModuleMocks();
-    });
+const handcamGlow = require('../../../src/obs/handcam-glow');
 
-    let handcamGlow;
+describe('handcam-glow', () => {
+    let mockLogger;
+    let mockEnsureConnected;
+    let mockDelay;
     let runtimeConstants;
 
-    const flushPromises = async (iterations = 3) => {
-        for (let i = 0; i < iterations; i += 1) {
-            await new Promise(resolve => setImmediate(resolve));
-        }
-    };
-
     beforeEach(() => {
-        resetModules();
-        handcamGlow = require('../../../src/obs/handcam-glow');
+        mockLogger = createMockLogger();
+        mockEnsureConnected = createMockFn().mockResolvedValue();
+        mockDelay = createMockFn().mockResolvedValue();
         runtimeConstants = createRuntimeConstantsFixture();
+
+        handcamGlow._testing.setDependencies({
+            logger: mockLogger,
+            ensureConnected: mockEnsureConnected,
+            delay: mockDelay
+        });
+    });
+
+    afterEach(() => {
+        handcamGlow._testing.resetDependencies();
     });
 
     it('skips initialization when disabled in config', async () => {
@@ -57,23 +48,23 @@ describe('handcam-glow', () => {
 
         await handcamGlow.initializeHandcamGlow(
             obs,
-            { glowEnabled: true, sourceName: 'cam', filterName: 'Glow' },
+            { glowEnabled: true, sourceName: 'testCam', glowFilterName: 'testGlow' },
             runtimeConstants
         );
 
         expect(obs.call).toHaveBeenCalledWith('SetSourceFilterSettings', {
-            sourceName: 'cam',
-            filterName: 'Glow',
+            sourceName: 'testCam',
+            filterName: 'testGlow',
             filterSettings: { brightness: 10, Size: 0, glow_size: 0 }
         });
     });
 
     it('handles initialization failure gracefully without throwing', async () => {
-        const obs = { call: createMockFn().mockRejectedValue(new Error('fail')) };
+        const obs = { call: createMockFn().mockRejectedValue(new Error('OBS filter not found')) };
 
         await expect(handcamGlow.initializeHandcamGlow(
             obs,
-            { glowEnabled: true, sourceName: 'cam', filterName: 'Glow' },
+            { glowEnabled: true, sourceName: 'testCam', glowFilterName: 'testGlow' },
             runtimeConstants
         )).resolves.toBeUndefined();
     });
@@ -94,7 +85,9 @@ describe('handcam-glow', () => {
         };
 
         handcamGlow.triggerHandcamGlow(obs, { glowEnabled: true, totalSteps: 1 }, runtimeConstants);
-        await flushPromises();
+        await new Promise(resolve => setImmediate(resolve));
+        await new Promise(resolve => setImmediate(resolve));
+        await new Promise(resolve => setImmediate(resolve));
 
         const hasDualSizeFields = settingsCalls.some((settings) => (
             Number.isFinite(settings.Size)
@@ -115,7 +108,7 @@ describe('handcam-glow', () => {
                 if (action === 'SetSourceFilterSettings') {
                     setCallCount += 1;
                     if (setCallCount === 1) {
-                        throw new Error('boom');
+                        throw new Error('First call fails');
                     }
                     return {};
                 }
@@ -124,7 +117,10 @@ describe('handcam-glow', () => {
         };
 
         handcamGlow.triggerHandcamGlow(obs, { glowEnabled: true, totalSteps: 1 }, runtimeConstants);
-        await flushPromises(4);
+        await new Promise(resolve => setImmediate(resolve));
+        await new Promise(resolve => setImmediate(resolve));
+        await new Promise(resolve => setImmediate(resolve));
+        await new Promise(resolve => setImmediate(resolve));
 
         expect(setCallCount).toBeGreaterThanOrEqual(2);
     });

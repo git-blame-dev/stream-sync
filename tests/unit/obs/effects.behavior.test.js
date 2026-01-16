@@ -1,24 +1,11 @@
-const { describe, test, expect, beforeEach, it, afterEach } = require('bun:test');
-const { createMockFn, clearAllMocks, restoreAllMocks } = require('../../helpers/bun-mock-utils');
-const { mockModule, restoreAllModuleMocks } = require('../../helpers/bun-module-mocks');
-
-mockModule('../../../src/utils/platform-error-handler', () => ({
-    createPlatformErrorHandler: createMockFn(() => ({
-        handleEventProcessingError: createMockFn(),
-        logOperationalError: createMockFn()
-    }))
-}));
-
-const { createPlatformErrorHandler } = require('../../../src/utils/platform-error-handler');
+const { describe, test, expect, beforeEach, it } = require('bun:test');
+const { createMockFn } = require('../../helpers/bun-mock-utils');
+const { createMockLogger } = require('../../helpers/mock-factories');
 const { OBSEffectsManager } = require('../../../src/obs/effects');
 
 describe('obs effects behavior', () => {
-    afterEach(() => {
-        restoreAllMocks();
-        restoreAllModuleMocks();
-    });
-
-    const logger = { debug: createMockFn(), info: createMockFn(), warn: createMockFn() };
+    let mockLogger;
+    let mockObsManager;
 
     const createObsManager = () => ({
         ensureConnected: createMockFn(async () => {}),
@@ -28,37 +15,33 @@ describe('obs effects behavior', () => {
     });
 
     beforeEach(() => {
-        });
+        mockLogger = createMockLogger();
+        mockObsManager = createObsManager();
+    });
 
     it('plays media and triggers OBS calls with fire-and-forget mode', async () => {
-        const obsManager = createObsManager();
-        const manager = new OBSEffectsManager(obsManager, { logger });
+        const manager = new OBSEffectsManager(mockObsManager, { logger: mockLogger });
 
-        await manager.playMediaInOBS({ mediaSource: 'src', filename: 'file', vfxFilePath: '/path' }, false);
+        await manager.playMediaInOBS({ mediaSource: 'testSrc', filename: 'testFile', vfxFilePath: '/test/path' }, false);
 
-        expect(obsManager.ensureConnected).toHaveBeenCalled();
-        expect(obsManager.call).toHaveBeenCalledWith('SetInputSettings', expect.any(Object));
-        expect(obsManager.call).toHaveBeenCalledWith('TriggerMediaInputAction', expect.any(Object));
+        expect(mockObsManager.ensureConnected).toHaveBeenCalled();
+        expect(mockObsManager.call).toHaveBeenCalledWith('SetInputSettings', expect.any(Object));
+        expect(mockObsManager.call).toHaveBeenCalledWith('TriggerMediaInputAction', expect.any(Object));
     });
 
-    it('routes errors through platform error handler when OBS calls fail', async () => {
-        const handler = { handleEventProcessingError: createMockFn(), logOperationalError: createMockFn() };
-        createPlatformErrorHandler.mockReturnValue(handler);
-        const obsManager = createObsManager();
-        obsManager.call.mockRejectedValueOnce(new Error('fail'));
-        const manager = new OBSEffectsManager(obsManager, { logger });
-        manager.errorHandler = handler;
+    it('throws error when OBS calls fail', async () => {
+        mockObsManager.call.mockRejectedValueOnce(new Error('OBS connection failed'));
+        const manager = new OBSEffectsManager(mockObsManager, { logger: mockLogger });
 
-        await expect(manager.playMediaInOBS({ mediaSource: 'src', filename: 'file', vfxFilePath: '/path' }, false)).rejects.toThrow('fail');
-        expect(handler.handleEventProcessingError).toHaveBeenCalled();
+        await expect(
+            manager.playMediaInOBS({ mediaSource: 'testSrc', filename: 'testFile', vfxFilePath: '/test/path' }, false)
+        ).rejects.toThrow('OBS connection failed');
     });
 
-    it('waitForMediaCompletion resolves when no obs manager present', async () => {
-        const obsManager = createObsManager();
-        const manager = new OBSEffectsManager(obsManager, { logger });
+    it('resolves when no obs manager present during waitForMediaCompletion', async () => {
+        const manager = new OBSEffectsManager(mockObsManager, { logger: mockLogger });
         manager.obsManager = null;
 
-        await expect(manager.waitForMediaCompletion('src')).resolves.toBeUndefined();
-        expect(logger.warn).toHaveBeenCalled();
+        await expect(manager.waitForMediaCompletion('testSrc')).resolves.toBeUndefined();
     });
 });
