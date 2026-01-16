@@ -1,235 +1,85 @@
-
 const { describe, it, beforeEach, afterEach, expect } = require('bun:test');
-
-const { 
-  initializeTestLogging,
-  createTestUser, 
-  TEST_TIMEOUTS 
-} = require('../helpers/test-setup');
-
-const { 
-  createMockNotificationDispatcher,
-  noOpLogger,
-  createMockTikTokServices 
-} = require('../helpers/mock-factories');
-
-const { 
-  setupAutomatedCleanup
-} = require('../helpers/mock-lifecycle');
-
 const { createMockFn, restoreAllMocks } = require('../helpers/bun-mock-utils');
-const { mockModule, requireActual, resetModules, restoreAllModuleMocks } = require('../helpers/bun-module-mocks');
-
-// Mock the logger-utils module
-mockModule('../../src/utils/logger-utils', () => ({
-  getLazyLogger: () => ({
-    debug: createMockFn(),
-    info: createMockFn(),
-    warn: createMockFn(),
-    error: createMockFn()
-  }),
-  createNoopLogger: () => ({
-    debug: createMockFn(),
-    info: createMockFn(),
-    warn: createMockFn(),
-    error: createMockFn()
-  }),
-  getLoggerOrNoop: (logger) => logger || ({
-    debug: createMockFn(),
-    info: createMockFn(),
-    warn: createMockFn(),
-    error: createMockFn()
-  }),
-  getLazyUnifiedLogger: () => ({
-    debug: createMockFn(),
-    info: createMockFn(),
-    warn: createMockFn(),
-    error: createMockFn()
-  })
-}));
-
-// Mock message normalization module
-const actualMessageNormalization = require('../../src/utils/message-normalization');
-mockModule('../../src/utils/message-normalization', () => ({
-  ...actualMessageNormalization,
-  normalizeTikTokMessage: createMockFn(() => ({
-    message: 'test message',
-    username: 'testuser',
-    platform: 'tiktok'
-  })),
-  validateNormalizedMessage: createMockFn(() => ({ isValid: true, issues: [] }))
-}));
-
-// Initialize logging FIRST
-initializeTestLogging();
-
-// Override the global TikTokPlatform mock to use the real implementation for construction testing
-mockModule('../../src/platforms/tiktok', () => {
-    // Import the actual TikTokPlatform for construction tests
-    const actualModule = requireActual('../../src/platforms/tiktok');
-    return {
-        ...actualModule,
-        // Keep the real TikTokPlatform constructor
-        TikTokPlatform: actualModule.TikTokPlatform
-    };
-});
-
-// Setup automated cleanup
-setupAutomatedCleanup({
-  clearCallsBeforeEach: true,
-  validateAfterCleanup: true,
-  logPerformanceMetrics: true
-});
-
+const { noOpLogger } = require('../helpers/mock-factories');
 const { TikTokPlatform } = require('../../src/platforms/tiktok');
 
-afterEach(() => {
-  restoreAllMocks();
-  restoreAllModuleMocks();
-  resetModules();
-});
-
 describe('TikTok Platform Validation', () => {
-  let mockLogger;
-  let mockTikTokServices;
+    let mockDependencies;
 
-  beforeEach(() => {
-    mockLogger = noOpLogger;
-    mockTikTokServices = createMockTikTokServices();
-  });
-
-  describe('Platform Construction and Basic Validation', () => {
-    it('should be importable and constructible', () => {
-      // Arrange & Act
-      expect(TikTokPlatform).toBeDefined();
-      expect(typeof TikTokPlatform).toBe('function');
-      
-      // Verify we can create an instance without errors
-      const config = {
-        enabled: true,
-        username: 'test_user'
-      };
-      
-      const dependencies = {
-        logger: mockLogger,
-        TikTokWebSocketClient: createMockFn(),
-        WebcastEvent: { CHAT: 'chat', GIFT: 'gift', FOLLOW: 'follow' },
-        ControlEvent: { CONNECTED: 'connected' },
-        WebcastPushConnection: createMockFn(),
-        constants: { GRACE_PERIODS: { TIKTOK: 5000 } }
-      };
-      
-      let platform;
-      expect(() => {
-        platform = new TikTokPlatform(config, dependencies);
-      }).not.toThrow();
-      
-      // Verify the platform was actually created
-      expect(platform).toBeDefined();
-      expect(platform instanceof TikTokPlatform).toBe(true);
-    });
-    
-    it('should validate platform instance structure', () => {
-      // Arrange
-      const config = { enabled: true, username: 'test_user' };
-      const dependencies = {
-        logger: mockLogger,
-        TikTokWebSocketClient: createMockFn(),
-        WebcastEvent: { CHAT: 'chat', GIFT: 'gift', FOLLOW: 'follow' },
-        ControlEvent: { CONNECTED: 'connected' },
-        WebcastPushConnection: createMockFn(),
-        constants: { GRACE_PERIODS: { TIKTOK: 5000 } }
-      };
-      
-      // Act
-      const platform = new TikTokPlatform(config, dependencies);
-      
-      // Assert - Check if it's a valid object instance
-      expect(platform).toBeDefined();
-      expect(typeof platform).toBe('object');
-      expect(platform.constructor.name).toBe('TikTokPlatform');
+    beforeEach(() => {
+        mockDependencies = {
+            logger: noOpLogger,
+            TikTokWebSocketClient: createMockFn(),
+            WebcastEvent: { CHAT: 'chat', GIFT: 'gift', FOLLOW: 'follow' },
+            ControlEvent: { CONNECTED: 'connected' },
+            WebcastPushConnection: createMockFn(),
+            constants: { GRACE_PERIODS: { TIKTOK: 5000 } }
+        };
     });
 
-    it('should validate available method enumeration', () => {
-      // Arrange
-      const config = { enabled: true, username: 'test_user' };
-      const dependencies = {
-        logger: mockLogger,
-        TikTokWebSocketClient: createMockFn(),
-        WebcastEvent: { CHAT: 'chat' },
-        ControlEvent: { CONNECTED: 'connected' },
-        WebcastPushConnection: createMockFn(),
-        constants: { GRACE_PERIODS: { TIKTOK: 5000 } }
-      };
-      
-      // Act
-      const platform = new TikTokPlatform(config, dependencies);
-      const methods = Object.getOwnPropertyNames(Object.getPrototypeOf(platform))
-        .filter(name => typeof platform[name] === 'function' && name !== 'constructor');
-      
-      // Assert - Should have some methods defined
-      expect(methods).toBeDefined();
-      expect(Array.isArray(methods)).toBe(true);
-      expect(methods.length).toBeGreaterThan(0);
-      
-      // Log available methods for debugging
-      console.log('Available TikTok Platform methods:', methods);
+    afterEach(() => {
+        restoreAllMocks();
     });
 
-    it('should validate test environment setup', () => {
-      // Arrange
-      const config = { enabled: true, username: 'test_user' };
-      const dependencies = {
-        logger: mockLogger,
-        TikTokWebSocketClient: createMockFn(),
-        WebcastEvent: { CHAT: 'chat' },
-        ControlEvent: { CONNECTED: 'connected' },
-        WebcastPushConnection: createMockFn(),
-        constants: { GRACE_PERIODS: { TIKTOK: 5000 } }
-      };
-      
-      // Act
-      const platform = new TikTokPlatform(config, dependencies);
-      
-      // Assert - Test environment should be working
-      expect(mockLogger).toBeDefined();
-      expect(mockTikTokServices).toBeDefined();
-      expect(platform).toBeDefined();
-    });
+    describe('Platform Construction and Basic Validation', () => {
+        it('should be importable and constructible', () => {
+            expect(TikTokPlatform).toBeDefined();
+            expect(typeof TikTokPlatform).toBe('function');
 
-    it('should validate TikTok Platform prototype structure', () => {
-      // Arrange & Act
-      const prototype = TikTokPlatform.prototype;
-      const prototypeMethodNames = Object.getOwnPropertyNames(prototype);
-      
-      // Assert
-      expect(prototype).toBeDefined();
-      expect(prototypeMethodNames).toBeDefined();
-      expect(Array.isArray(prototypeMethodNames)).toBe(true);
-      
-      // Log prototype methods for debugging
-      console.log('TikTok Platform prototype methods:', prototypeMethodNames);
-    });
+            const config = { enabled: true, username: 'test_user' };
+            let platform;
+            expect(() => {
+                platform = new TikTokPlatform(config, mockDependencies);
+            }).not.toThrow();
 
-    it('should validate test environment configuration', () => {
-      // Arrange
-      const config = { enabled: true, username: 'test_user' };
-      const dependencies = {
-        logger: mockLogger,
-        TikTokWebSocketClient: createMockFn(),
-        WebcastEvent: { CHAT: 'chat' },
-        ControlEvent: { CONNECTED: 'connected' },
-        WebcastPushConnection: createMockFn(),
-        constants: { GRACE_PERIODS: { TIKTOK: 5000 } }
-      };
-      
-      // Act
-      const platform = new TikTokPlatform(config, dependencies);
-      
-      // Assert - Basic platform validation in test environment
-      expect(platform).toBeTruthy();
-      expect(config.enabled).toBe(true);
-      expect(dependencies.logger).toBe(mockLogger);
+            expect(platform).toBeDefined();
+            expect(platform instanceof TikTokPlatform).toBe(true);
+        });
+
+        it('should validate platform instance structure', () => {
+            const config = { enabled: true, username: 'test_user' };
+            const platform = new TikTokPlatform(config, mockDependencies);
+
+            expect(platform).toBeDefined();
+            expect(typeof platform).toBe('object');
+            expect(platform.constructor.name).toBe('TikTokPlatform');
+        });
+
+        it('should have expected methods available', () => {
+            const config = { enabled: true, username: 'test_user' };
+            const platform = new TikTokPlatform(config, mockDependencies);
+
+            const methods = Object.getOwnPropertyNames(Object.getPrototypeOf(platform))
+                .filter(name => typeof platform[name] === 'function' && name !== 'constructor');
+
+            expect(methods).toBeDefined();
+            expect(Array.isArray(methods)).toBe(true);
+            expect(methods.length).toBeGreaterThan(0);
+        });
+
+        it('should accept injected logger dependency', () => {
+            const config = { enabled: true, username: 'test_user' };
+            const platform = new TikTokPlatform(config, mockDependencies);
+
+            expect(platform.logger).toBe(noOpLogger);
+        });
+
+        it('should validate TikTok Platform prototype structure', () => {
+            const prototype = TikTokPlatform.prototype;
+            const prototypeMethodNames = Object.getOwnPropertyNames(prototype);
+
+            expect(prototype).toBeDefined();
+            expect(prototypeMethodNames).toBeDefined();
+            expect(Array.isArray(prototypeMethodNames)).toBe(true);
+        });
+
+        it('should store provided config', () => {
+            const config = { enabled: true, username: 'test_user' };
+            const platform = new TikTokPlatform(config, mockDependencies);
+
+            expect(platform.config).toBeDefined();
+            expect(platform.config.enabled).toBe(true);
+            expect(platform.config.username).toBe('test_user');
+        });
     });
-  });
 });
