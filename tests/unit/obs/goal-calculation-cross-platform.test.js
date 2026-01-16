@@ -1,20 +1,8 @@
-
 const { describe, test, expect, beforeEach, afterEach, it } = require('bun:test');
-const { createMockFn, clearAllMocks, restoreAllMocks } = require('../../helpers/bun-mock-utils');
-const { mockModule, restoreAllModuleMocks } = require('../../helpers/bun-module-mocks');
+const { createMockFn, restoreAllMocks } = require('../../helpers/bun-mock-utils');
 
 const { DisplayQueue } = require('../../../src/obs/display-queue');
 const EventEmitter = require('events');
-
-// Mock the goals module
-mockModule('../../../src/obs/goals', () => {
-    const processDonationGoal = createMockFn();
-    return {
-        OBSGoalsManager: class {},
-        createOBSGoalsManager: () => ({ processDonationGoal }),
-        getDefaultGoalsManager: () => ({ processDonationGoal })
-    };
-});
 
 describe('Cross-Platform Goal Calculation', () => {
     let displayQueue;
@@ -79,8 +67,7 @@ describe('Cross-Platform Goal Calculation', () => {
         restoreAllMocks();
         if (displayQueue) {
             displayQueue.stop();
-        
-        restoreAllModuleMocks();}
+        }
     });
     
     describe('TikTok gifts should use total amount correctly', () => {
@@ -93,8 +80,8 @@ describe('Cross-Platform Goal Calculation', () => {
                     username: 'TikTokUser',
                     displayName: 'TikTokUser',
                     giftType: 'Rose',
-                    giftCount: 5,   // Number of gifts
-                    amount: 50,     // Total amount
+                    giftCount: 5,
+                    amount: 50,
                     currency: 'coins',
                     displayMessage: 'TikTokUser sent 5 Rose',
                     platform: 'tiktok'
@@ -106,7 +93,6 @@ describe('Cross-Platform Goal Calculation', () => {
             displayQueue.addItem(tiktokGift);
             await displayQueue.processQueue();
 
-            // Should use the total amount directly
             expect(displayQueue.__goalTotals.tiktok).toBe(50);
         });
         
@@ -119,8 +105,8 @@ describe('Cross-Platform Goal Calculation', () => {
                     username: 'TikTokDiamondUser',
                     displayName: 'TikTokDiamondUser',
                     giftType: 'Diamond',
-                    giftCount: 3,  // Normalized from repeatCount by platform layer
-                    amount: 300,   // Total amount
+                    giftCount: 3,
+                    amount: 300,
                     currency: 'coins',
                     displayMessage: 'TikTokDiamondUser sent 3 Diamond',
                     platform: 'tiktok'
@@ -132,7 +118,6 @@ describe('Cross-Platform Goal Calculation', () => {
             displayQueue.addItem(tiktokDiamonds);
             await displayQueue.processQueue();
 
-            // Should multiply: 100 diamonds × 3 repeats = 300
             expect(displayQueue.__goalTotals.tiktok).toBe(300);
         });
     });
@@ -148,7 +133,7 @@ describe('Cross-Platform Goal Calculation', () => {
                     displayName: 'YouTubeUser',
                     giftType: 'Donation',
                     giftCount: 2,
-                    amount: 10,      // Total amount
+                    amount: 10,
                     currency: 'USD',
                     displayMessage: 'YouTubeUser sent 2 Donation',
                     platform: 'youtube'
@@ -160,7 +145,6 @@ describe('Cross-Platform Goal Calculation', () => {
             displayQueue.addItem(youtubeDonation);
             await displayQueue.processQueue();
 
-            // Should use total amount directly
             expect(displayQueue.__goalTotals.youtube).toBe(10);
         });
     });
@@ -175,7 +159,7 @@ describe('Cross-Platform Goal Calculation', () => {
                     username: 'TwitchUser',
                     displayName: 'TwitchUser',
                     message: 'Cheer100',
-                    bits: 100,      // Total bits
+                    bits: 100,
                     giftType: 'bits',
                     giftCount: 1,
                     amount: 100,
@@ -190,7 +174,6 @@ describe('Cross-Platform Goal Calculation', () => {
             displayQueue.addItem(twitchBits);
             await displayQueue.processQueue();
 
-            // Should use total amount directly
             expect(displayQueue.__goalTotals.twitch).toBe(100);
         });
     });
@@ -230,7 +213,6 @@ describe('Cross-Platform Goal Calculation', () => {
                     type: 'platform:gift',
                     data: {
                         username: 'User3',
-                        // No gift value fields
                         displayMessage: 'User3 sent a gift',
                         platform: 'youtube'
                     },
@@ -242,10 +224,7 @@ describe('Cross-Platform Goal Calculation', () => {
                 displayQueue.addItem(gift);
                 await displayQueue.processQueue();
             }
-            
-            // First case: 0 × 10 = 0 (should not call processDonationGoal)
-            // Second case: 10 × 0 = 0 (should not call processDonationGoal)  
-            // Third case: no value fields = 0 (should not call processDonationGoal)
+
             expect(displayQueue.goalsManager.processDonationGoal).not.toHaveBeenCalled();
         });
 

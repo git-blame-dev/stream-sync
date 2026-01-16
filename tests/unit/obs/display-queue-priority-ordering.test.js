@@ -38,8 +38,6 @@ describe('DisplayQueue priority ordering', () => {
         return queue;
     };
 
-    // Note: We mock displayItem to capture processing order. This is acceptable
-    // for queue ordering tests since the order IS the observable behavior.
     it('front-loads higher priority items even when added later', () => {
         const queue = createQueue();
         const processed = [];

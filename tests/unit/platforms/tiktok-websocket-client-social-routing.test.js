@@ -1,5 +1,5 @@
 const { describe, it, expect } = require('bun:test');
-const { createMockFn } = require('../helpers/bun-mock-utils');
+const { createMockFn } = require('../../helpers/bun-mock-utils');
 const { TikTokWebSocketClient } = require('../../../src/platforms/tiktok-websocket-client');
 
 describe('TikTokWebSocketClient social routing', () => {
