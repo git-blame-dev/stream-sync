@@ -1,6 +1,6 @@
 
 const { initializeTestLogging } = require('../../helpers/test-setup');
-const { createMockLogger } = require('../../helpers/mock-factories');
+const { noOpLogger } = require('../../helpers/mock-factories');
 const { setupAutomatedCleanup } = require('../../helpers/mock-lifecycle');
 const {
     TextProcessingManager,
@@ -26,7 +26,7 @@ describe('Text Processing', () => {
 
     beforeEach(() => {
         // Create mocks using factory functions
-        mockLogger = createMockLogger('debug');
+        mockLogger = noOpLogger;
         mockConstants = {
             MAX_USERNAME_LENGTH: 12,
             MAX_MESSAGE_LENGTH: 500,

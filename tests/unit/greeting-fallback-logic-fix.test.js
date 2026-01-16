@@ -3,7 +3,7 @@ const { describe, test, expect, beforeEach, it, afterEach } = require('bun:test'
 const { createMockFn, restoreAllMocks } = require('../helpers/bun-mock-utils');
 const { restoreAllModuleMocks } = require('../helpers/bun-module-mocks');
 
-const { createMockLogger, createMockConfig } = require('../helpers/mock-factories');
+const { noOpLogger, createMockConfig } = require('../helpers/mock-factories');
 const { setupAutomatedCleanup } = require('../helpers/mock-lifecycle');
 const { createTestAppRuntime } = require('../helpers/runtime-test-harness');
 
@@ -24,7 +24,7 @@ describe('Greeting Fallback Logic Fix', () => {
     let mockLogger;
 
     beforeEach(() => {
-        mockLogger = createMockLogger('debug');
+        mockLogger = noOpLogger;
         mockConfig = createMockConfig({
             general: { 
                 greetingsEnabled: true, // Global setting enabled

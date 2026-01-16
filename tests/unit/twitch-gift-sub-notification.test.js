@@ -2,7 +2,7 @@
 const { describe, test, expect, beforeEach, it, afterEach } = require('bun:test');
 const { createMockFn, restoreAllMocks } = require('../helpers/bun-mock-utils');
 
-const { createMockLogger, createMockDisplayQueue } = require('../helpers/mock-factories');
+const { noOpLogger, createMockDisplayQueue } = require('../helpers/mock-factories');
 const { setupAutomatedCleanup } = require('../helpers/mock-lifecycle');
 const { expectNoTechnicalArtifacts } = require('../helpers/assertion-helpers');
 const NotificationManager = require('../../src/notifications/NotificationManager');
@@ -63,7 +63,7 @@ describe('Twitch gift subscriptions', () => {
     };
 
     beforeEach(() => {
-        mockLogger = createMockLogger('debug', { captureConsole: true });
+        mockLogger = noOpLogger;
         mockDisplayQueue = createMockDisplayQueue({ length: 0 });
         notificationManager = createManager();
     });

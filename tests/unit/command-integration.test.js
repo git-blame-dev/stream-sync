@@ -2,7 +2,7 @@
 const { describe, test, expect, beforeEach } = require('bun:test');
 
 const { initializeTestLogging, createTestUser } = require('../helpers/test-setup');
-const { createMockLogger, createMockNotificationBuilder } = require('../helpers/mock-factories');
+const { noOpLogger, createMockNotificationBuilder } = require('../helpers/mock-factories');
 const { setupAutomatedCleanup } = require('../helpers/mock-lifecycle');
 const { expectValidNotification } = require('../helpers/assertion-helpers');
 const testClock = require('../helpers/test-clock');

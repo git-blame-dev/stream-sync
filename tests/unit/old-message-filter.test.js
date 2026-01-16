@@ -3,7 +3,7 @@ const { describe, test, expect, beforeEach, afterEach } = require('bun:test');
 const { createMockFn, restoreAllMocks } = require('../helpers/bun-mock-utils');
 const { mockModule, resetModules, restoreAllModuleMocks } = require('../helpers/bun-module-mocks');
 const { createTestUser } = require('../helpers/test-setup');
-const { createMockLogger } = require('../helpers/mock-factories');
+const { noOpLogger } = require('../helpers/mock-factories');
 const { setupAutomatedCleanup } = require('../helpers/mock-lifecycle');
 const testClock = require('../helpers/test-clock');
 
@@ -55,7 +55,7 @@ describe('Old Message Filter', () => {
             gracefulExitService: overrides.gracefulExitService || null
         };
 
-        const logger = createMockLogger('debug');
+        const logger = noOpLogger;
         const router = new ChatNotificationRouter({ runtime, logger });
 
         router.enqueueChatMessage = createMockFn();

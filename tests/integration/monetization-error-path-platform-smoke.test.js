@@ -6,7 +6,7 @@ const NotificationManager = require('../../src/notifications/NotificationManager
 const { YouTubeNotificationDispatcher } = require('../../src/utils/youtube-notification-dispatcher');
 const { createMonetizationErrorPayload } = require('../../src/utils/monetization-error-utils');
 const { createTestAppRuntime } = require('../helpers/runtime-test-harness');
-const { createMockDisplayQueue, createMockLogger } = require('../helpers/mock-factories');
+const { createMockDisplayQueue, noOpLogger } = require('../helpers/mock-factories');
 const { createTextProcessingManager } = require('../../src/utils/text-processing');
 
 describe('Monetization error-path platform flows (smoke)', () => {
@@ -44,7 +44,7 @@ describe('Monetization error-path platform flows (smoke)', () => {
 
     const createHarness = (platformKey) => {
         const eventBus = createEventBus();
-        const logger = createMockLogger('debug', { captureConsole: true });
+        const logger = noOpLogger;
         const displayQueue = createMockDisplayQueue();
         const textProcessing = createTextProcessingManager({ logger });
         const configSnapshot = {

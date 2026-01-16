@@ -9,7 +9,7 @@ const { createMockFn, restoreAllMocks } = require('../../helpers/bun-mock-utils'
 const { mockModule, restoreAllModuleMocks, resetModules } = require('../../helpers/bun-module-mocks');
 
 const {
-    createMockLogger
+    noOpLogger
 } = require('../../helpers/mock-factories');
 
 const {
@@ -81,7 +81,7 @@ describe('TikTokPlatform Error Handling', () => {
     
     beforeEach(() => {
         // Create mocks
-        mockLogger = createMockLogger('debug', { captureConsole: true });
+        mockLogger = noOpLogger;
         
         // Create a simple mock connection
         mockConnection = {

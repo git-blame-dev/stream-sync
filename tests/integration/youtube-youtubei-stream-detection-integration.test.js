@@ -3,7 +3,7 @@ const { describe, test, beforeEach, afterEach, expect } = require('bun:test');
 const { createMockFn, restoreAllMocks } = require('../helpers/bun-mock-utils');
 const { mockModule, restoreAllModuleMocks, resetModules } = require('../helpers/bun-module-mocks');
 const { YouTubeStreamDetectionService } = require('../../src/services/youtube-stream-detection-service');
-const { createMockConfig, createMockLogger } = require('../helpers/mock-factories');
+const { createMockConfig, noOpLogger } = require('../helpers/mock-factories');
 const { expectNoTechnicalArtifacts } = require('../helpers/assertion-helpers');
 const testClock = require('../helpers/test-clock');
 
@@ -22,7 +22,7 @@ describe('YouTube YouTubei Stream Detection Integration - Regression', () => {
         resetModules();
         testClock.reset();
 
-        mockLogger = createMockLogger();
+        mockLogger = noOpLogger;
         mockConfig = createMockConfig();
 
         // Mock YouTube service behavior

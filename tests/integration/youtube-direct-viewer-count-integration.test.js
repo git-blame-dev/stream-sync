@@ -3,7 +3,7 @@ const { describe, test, beforeEach, afterEach, expect } = require('bun:test');
 const { createMockFn, restoreAllMocks } = require('../helpers/bun-mock-utils');
 const { mockModule, restoreAllModuleMocks } = require('../helpers/bun-module-mocks');
 const { initializeTestLogging } = require('../helpers/test-setup');
-const { createMockLogger } = require('../helpers/mock-factories');
+const { noOpLogger } = require('../helpers/mock-factories');
 const testClock = require('../helpers/test-clock');
 
 // Initialize logging for tests
@@ -88,7 +88,7 @@ describe('YouTube Direct getViewerCount() Integration', () => {
 
     beforeEach(() => {
         testClock.reset();
-        mockLogger = createMockLogger();
+        mockLogger = noOpLogger;
         mockInnertube = {
             getInfo: createMockFn()
         };

@@ -3,7 +3,7 @@ const { describe, test, expect, beforeEach, afterEach, it } = require('bun:test'
 const { spyOn, restoreAllMocks } = require('../../helpers/bun-mock-utils');
 
 const { initializeTestLogging } = require('../../helpers/test-setup');
-const { createMockLogger } = require('../../helpers/mock-factories');
+const { noOpLogger } = require('../../helpers/mock-factories');
 const { setupAutomatedCleanup } = require('../../helpers/mock-lifecycle');
 const {
     SpamDetectionConfig,
@@ -29,7 +29,7 @@ describe('Spam Detection', () => {
 
     beforeEach(() => {
         // Create mocks using factory functions
-        mockLogger = createMockLogger('debug');
+        mockLogger = noOpLogger;
         spyOn(Date, 'now').mockImplementation(() => testClock.now());
         mockConstants = {
             SPAM_DETECTION: {

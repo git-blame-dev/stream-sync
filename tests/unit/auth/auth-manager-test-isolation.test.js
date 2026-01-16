@@ -1,7 +1,7 @@
 
 const { describe, test, expect, beforeEach, afterEach } = require('bun:test');
 const { createMockFn } = require('../../helpers/bun-mock-utils');
-const { createMockLogger } = require('../../helpers/mock-factories');
+const { noOpLogger } = require('../../helpers/mock-factories');
 
 const TwitchAuthManager = require('../../../src/auth/TwitchAuthManager');
 
@@ -20,7 +20,7 @@ function createTestConfiguration(testName, overrides = {}) {
 function createTestAuthManager(testName, overrides = {}) {
     const config = createTestConfiguration(testName, overrides);
     return TwitchAuthManager.getInstance(config, {
-        logger: createMockLogger()
+        logger: noOpLogger
     });
 }
 

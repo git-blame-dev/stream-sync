@@ -2,7 +2,7 @@
 const { describe, test, expect, beforeEach, afterEach } = require('bun:test');
 const { createMockFn, restoreAllMocks } = require('../helpers/bun-mock-utils');
 
-const { createMockLogger } = require('../helpers/mock-factories');
+const { noOpLogger } = require('../helpers/mock-factories');
 const { setupAutomatedCleanup } = require('../helpers/mock-lifecycle');
 const testClock = require('../helpers/test-clock');
 setupAutomatedCleanup({
@@ -24,8 +24,7 @@ describe('Object Logging Serialization Validation', () => {
     let goalsManager;
 
     beforeEach(() => {
-        // Create mock logger to capture log calls
-        mockLogger = createMockLogger('debug', { captureConsole: true });
+        mockLogger = noOpLogger;
         
         // Create mock config manager
         mockConfigManager = {

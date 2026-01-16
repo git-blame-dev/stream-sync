@@ -9,7 +9,7 @@ const {
 
 const { 
   createMockNotificationDispatcher,
-  createMockLogger,
+  noOpLogger,
   createMockTikTokServices 
 } = require('../helpers/mock-factories');
 
@@ -94,7 +94,7 @@ describe('TikTok Platform Validation', () => {
   let mockTikTokServices;
 
   beforeEach(() => {
-    mockLogger = createMockLogger('debug');
+    mockLogger = noOpLogger;
     mockTikTokServices = createMockTikTokServices();
   });
 

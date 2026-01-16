@@ -4,7 +4,7 @@ const EventEmitter = require('events');
 const PlatformLifecycleService = require('../../src/services/PlatformLifecycleService');
 const NotificationManager = require('../../src/notifications/NotificationManager');
 const { createTestAppRuntime } = require('../helpers/runtime-test-harness');
-const { createMockDisplayQueue, createMockLogger } = require('../helpers/mock-factories');
+const { createMockDisplayQueue, noOpLogger } = require('../helpers/mock-factories');
 const { expectNoTechnicalArtifacts } = require('../helpers/assertion-helpers');
 const { createTextProcessingManager } = require('../../src/utils/text-processing');
 const { createMockFn, restoreAllMocks } = require('../helpers/bun-mock-utils');
@@ -81,7 +81,7 @@ describe('YouTube gift platform flow (smoke)', () => {
 
     const createRuntimeDeps = () => {
         const eventBus = createEventBus();
-        const logger = createMockLogger('debug', { captureConsole: true });
+        const logger = noOpLogger;
         const displayQueue = createMockDisplayQueue();
         const textProcessing = createTextProcessingManager({ logger });
         const configSnapshot = {

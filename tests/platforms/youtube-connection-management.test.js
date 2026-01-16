@@ -37,7 +37,6 @@ describe('YouTube Connection Manager - Lifecycle Behavior', () => {
         mockErrorHandler.logOperationalError.mockReset();
         createPlatformErrorHandler.mockClear();
 
-        // Create mock logger
         mockLogger = {
             debug: createMockFn(),
             info: createMockFn(),

@@ -73,7 +73,7 @@ describe('Viewer Count & OBS Observer Performance Tests', () => {
 
         // Create mock OBS manager for testing
         mockOBSManager = createMockOBSManager();
-        mockLogger = createMockLogger();
+        mockLogger = noOpLogger;
     });
 
     afterEach(() => {
@@ -810,14 +810,7 @@ describe('Viewer Count & OBS Observer Performance Tests', () => {
         return manager;
     }
 
-    function createMockLogger() {
-        return {
-            debug: createMockFn(),
-            info: createMockFn(),
-            warn: createMockFn(),
-            error: createMockFn()
-        };
-    }
+    const noOpLogger = { debug: () => {}, info: () => {}, warn: () => {}, error: () => {} };
 
     function createMultipleObservers(count) {
         return Array.from({ length: count }, (_, i) => ({

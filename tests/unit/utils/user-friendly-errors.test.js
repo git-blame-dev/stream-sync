@@ -31,7 +31,7 @@ const {
 } = require('../../helpers/mock-lifecycle');
 
 const {
-    createMockLogger
+    noOpLogger
 } = require('../../helpers/mock-factories');
 
 // Setup automated cleanup
@@ -306,7 +306,7 @@ describe('User-Friendly Error System', () => {
 
         beforeEach(() => {
             consoleOutput = [];
-            mockLogger = createMockLogger('debug');
+            mockLogger = noOpLogger;
             mockLogger.console = (message) => {
                 consoleOutput.push(message);
             };

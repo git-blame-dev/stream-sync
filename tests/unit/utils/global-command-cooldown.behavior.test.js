@@ -1,13 +1,13 @@
 const { describe, expect, beforeEach, it } = require('bun:test');
 const { createMockFn, spyOn } = require('../../helpers/bun-mock-utils');
-const { createMockLogger } = require('../../helpers/mock-factories');
+const { noOpLogger } = require('../../helpers/mock-factories');
 const { GlobalCommandCooldownManager } = require('../../../src/utils/global-command-cooldown');
 
 describe('GlobalCommandCooldownManager behavior', () => {
     let mockLogger;
 
     beforeEach(() => {
-        mockLogger = createMockLogger();
+        mockLogger = noOpLogger;
     });
 
     it('allows execution on invalid inputs and tracks checks without blocks', () => {

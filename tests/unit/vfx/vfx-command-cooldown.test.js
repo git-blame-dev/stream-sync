@@ -2,7 +2,7 @@
 const { describe, test, expect, beforeEach, afterEach, jest } = require('bun:test');
 const { createMockFn } = require('../../helpers/bun-mock-utils');
 const { useFakeTimers, useRealTimers, advanceTimersByTime } = require('../../helpers/bun-timers');
-const { createMockLogger } = require('../../helpers/mock-factories');
+const { noOpLogger } = require('../../helpers/mock-factories');
 
 const { VFXCommandService } = require('../../../src/services/VFXCommandService');
 
@@ -38,7 +38,7 @@ describe('VFXCommandService cooldown handling', () => {
     });
 
     beforeEach(() => {
-        mockLogger = createMockLogger();
+        mockLogger = noOpLogger;
         mockEffectsManager = {
             playMediaInOBS: createMockFn().mockResolvedValue(undefined)
         };

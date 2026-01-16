@@ -3,7 +3,7 @@ const { createMockFn, restoreAllMocks } = require('../../helpers/bun-mock-utils'
 const { mockModule, restoreAllModuleMocks, resetModules } = require('../../helpers/bun-module-mocks');
 
 const { initializeTestLogging } = require('../../helpers/test-setup');
-const { createMockLogger } = require('../../helpers/mock-factories');
+const { noOpLogger } = require('../../helpers/mock-factories');
 const { setupAutomatedCleanup } = require('../../helpers/mock-lifecycle');
 
 // Initialize logging FIRST
@@ -43,7 +43,7 @@ describe('YouTube Platform Config Injection', () => {
     let mockConfig, mockConfigManager, mockLogger;
 
     beforeEach(() => {
-        mockLogger = createMockLogger('debug', { captureConsole: true });
+        mockLogger = noOpLogger;
         
         // Mock the ConfigManager that has .get() method
         mockConfigManager = {

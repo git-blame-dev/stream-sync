@@ -8,7 +8,7 @@ const {
 } = require('../../helpers/test-setup');
 
 const { 
-    createMockLogger,
+    noOpLogger,
     setupAutomatedCleanup 
 } = require('../../helpers/mock-factories');
 
@@ -42,7 +42,7 @@ describe('TimestampExtractionService Behavior', () => {
     });
     
     beforeEach(() => {
-        mockLogger = createMockLogger();
+        mockLogger = noOpLogger;
         mockPerformanceTracker = {
             recordExtraction: createMockFn()
         };

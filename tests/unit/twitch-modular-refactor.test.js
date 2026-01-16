@@ -2,7 +2,7 @@
 const { describe, test, expect, beforeEach, it, afterEach } = require('bun:test');
 const { createMockFn, restoreAllMocks } = require('../helpers/bun-mock-utils');
 
-const { createMockLogger, createMockAuthManager } = require('../helpers/mock-factories');
+const { noOpLogger, createMockAuthManager } = require('../helpers/mock-factories');
 const { setupAutomatedCleanup } = require('../helpers/mock-lifecycle');
 setupAutomatedCleanup({
     clearCallsBeforeEach: true,
@@ -24,7 +24,7 @@ class TwitchPlatform {
         this.enhancedHttpClient = dependencies.enhancedHttpClient;
         this.apiClient = null;
         this.viewerCountProvider = null;
-        this.mockLogger = createMockLogger(); // Create mock logger for use in initialize
+        this.mockLogger = noOpLogger;
     }
 
     async initialize(handlers) {
@@ -138,7 +138,7 @@ describe('TwitchPlatform Modular Refactor', () => {
         let apiClient;
 
         beforeEach(() => {
-            mockLogger = createMockLogger();
+            mockLogger = noOpLogger;
             mockAuthManager = createMockAuthManager('READY', {
                 accessToken: 'test_token',
                 clientId: 'test_client_id'
@@ -256,7 +256,7 @@ describe('TwitchPlatform Modular Refactor', () => {
         let provider;
 
         beforeEach(() => {
-            mockLogger = createMockLogger();
+            mockLogger = noOpLogger;
             mockApiClient = {
                 getStreamInfo: createMockFn()
             };
@@ -449,7 +449,7 @@ describe('TwitchPlatform Modular Refactor', () => {
 
         it('should provide consistent viewer count interface', () => {
             // Arrange
-            const mockLogger = createMockLogger();
+            const mockLogger = noOpLogger;
             const mockApiClient = { getStreamInfo: createMockFn() };
             const config = { channel: 'test', eventSub: { isActive: () => true } };
             

@@ -3,7 +3,7 @@ const { describe, test, expect, beforeEach, afterEach } = require('bun:test');
 // Core testing infrastructure
 const { initializeTestLogging, createTestUser, TEST_TIMEOUTS } = require('../../helpers/test-setup');
 const { createMockFn, clearAllMocks, restoreAllMocks } = require('../../helpers/bun-mock-utils');
-const { createMockLogger, createMockNotificationBuilder, createMockConfig } = require('../../helpers/mock-factories');
+const { noOpLogger, createMockNotificationBuilder, createMockConfig } = require('../../helpers/mock-factories');
 const { setupAutomatedCleanup } = require('../../helpers/mock-lifecycle');
 const { expectNoTechnicalArtifacts, expectValidNotification } = require('../../helpers/assertion-helpers');
 const { extractTikTokUserData } = require('../../../src/utils/tiktok-data-extraction');
@@ -80,7 +80,7 @@ describe('TikTok Envelope Notification - Behavior Testing', () => {
 
     beforeEach(() => {
         // Create behavior-focused mocks
-        mockLogger = createMockLogger();
+        mockLogger = noOpLogger;
         mockNotificationBuilder = createMockNotificationBuilder();
         mockConfig = createMockConfig({
             tiktok: { enabled: true, username: 'testUserConfig' }

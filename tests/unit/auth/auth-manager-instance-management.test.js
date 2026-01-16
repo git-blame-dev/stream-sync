@@ -1,7 +1,7 @@
 
 const { describe, test, expect, beforeEach, afterEach } = require('bun:test');
 const { createMockFn } = require('../../helpers/bun-mock-utils');
-const { createMockLogger } = require('../../helpers/mock-factories');
+const { noOpLogger } = require('../../helpers/mock-factories');
 
 const TwitchAuthManager = require('../../../src/auth/TwitchAuthManager');
 
@@ -19,7 +19,7 @@ function createContextConfiguration(context, overrides = {}) {
 
 function createAuthManagerInstance(context, config) {
     return TwitchAuthManager.getInstance(config, {
-        logger: createMockLogger(),
+        logger: noOpLogger,
         context
     });
 }

@@ -9,7 +9,7 @@ const {
 } = require('../helpers/test-setup');
 
 const { 
-    createMockLogger,
+    noOpLogger,
     createMockNotificationManager 
 } = require('../helpers/mock-factories');
 
@@ -37,7 +37,7 @@ describe('Bits Goal Counter Fix', () => {
     let router;
 
     beforeEach(() => {
-        mockLogger = createMockLogger('debug', { captureConsole: true });
+        mockLogger = noOpLogger;
         mockNotificationManager = createMockNotificationManager({
             handleNotification: createMockFn().mockResolvedValue({
                 success: true,

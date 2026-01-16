@@ -4,7 +4,7 @@ const { createMockFn, restoreAllMocks } = require('../helpers/bun-mock-utils');
 const { mockModule, unmockModule, restoreAllModuleMocks } = require('../helpers/bun-module-mocks');
 
 const { initializeTestLogging, createTestUser, TEST_TIMEOUTS } = require('../helpers/test-setup');
-const { createMockLogger, createMockConfig } = require('../helpers/mock-factories');
+const { noOpLogger, createMockConfig } = require('../helpers/mock-factories');
 const { setupAutomatedCleanup } = require('../helpers/mock-lifecycle');
 
 // Initialize logging first
@@ -19,7 +19,6 @@ setupAutomatedCleanup({
 // Unmock the TikTok platform to test the real implementation
 unmockModule('../../src/platforms/tiktok');
 
-// Mock logger utils to return our mock logger
 mockModule('../../src/utils/logger-utils', () => ({
     getLazyLogger: createMockFn(),
     getLazyUnifiedLogger: createMockFn(),
@@ -41,7 +40,7 @@ describe('TikTok Connection Fix Validation - Solution C', () => {
     let mockLogger, mockConfig, mockConnection, TikTokPlatform, mockDependencies;
 
     beforeEach(() => {
-        mockLogger = createMockLogger('debug');
+        mockLogger = noOpLogger;
         
         mockConfig = createMockConfig({
             username: 'test_user',

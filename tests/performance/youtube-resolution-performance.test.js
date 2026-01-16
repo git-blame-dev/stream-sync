@@ -14,7 +14,7 @@ const {
 
 const {
   createMockNotificationDispatcher,
-  createMockLogger,
+  noOpLogger,
   createMockYouTubeServices,
   setupAutomatedCleanup
 } = require('../helpers/mock-factories');
@@ -71,7 +71,7 @@ describe('YouTube Resolution Performance - User Experience Validation', () => {
     };
 
     // Create performance-aware mocks for user experience testing
-    mockLogger = createMockLogger();
+    mockLogger = noOpLogger;
     
     mockInnertubeClient = {
       getChannel: createMockFn(),

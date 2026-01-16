@@ -4,7 +4,7 @@ const { createMockFn, restoreAllMocks } = require('../../helpers/bun-mock-utils'
 
 const NotificationManager = require('../../../src/notifications/NotificationManager');
 const constants = require('../../../src/core/constants');
-const { createMockLogger } = require('../../helpers/mock-factories');
+const { noOpLogger } = require('../../helpers/mock-factories');
 
 describe('NotificationManager follow/raid/share behavior', () => {
     afterEach(() => {
@@ -62,7 +62,7 @@ describe('NotificationManager follow/raid/share behavior', () => {
         };
 
         manager = new NotificationManager({
-            logger: createMockLogger('debug', { captureConsole: true }),
+            logger: noOpLogger,
             displayQueue,
             configService,
             eventBus,

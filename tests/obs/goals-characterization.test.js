@@ -4,7 +4,7 @@ const { createMockFn, restoreAllMocks } = require('../helpers/bun-mock-utils');
 const { mockModule, restoreAllModuleMocks } = require('../helpers/bun-module-mocks');
 
 const { TEST_TIMEOUTS } = require('../helpers/test-setup');
-const { createMockLogger, createMockOBSConnection, createMockConfigManager, createMockSourcesManager } = require('../helpers/mock-factories');
+const { noOpLogger, createMockOBSConnection, createMockConfigManager, createMockSourcesManager } = require('../helpers/mock-factories');
 const { setupAutomatedCleanup } = require('../helpers/mock-lifecycle');
 const testClock = require('../helpers/test-clock');
 
@@ -80,7 +80,7 @@ describe('OBS Goals Module Characterization Tests', () => {
 
     beforeEach(() => {
         // Create mocks using factories
-        mockLogger = createMockLogger('debug');
+        mockLogger = noOpLogger;
         mockOBSConnection = createMockOBSConnection();
         mockConfigManager = createMockConfigManager();
         mockSourcesManager = createMockSourcesManager();

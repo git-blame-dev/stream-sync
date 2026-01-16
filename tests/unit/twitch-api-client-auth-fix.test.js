@@ -9,12 +9,7 @@ describe('TwitchApiClient authentication', () => {
     let mockAuthManager;
     let apiClient;
 
-    const createMockLogger = () => ({
-        debug: createMockFn(),
-        info: createMockFn(),
-        warn: createMockFn(),
-        error: createMockFn()
-    });
+    const noOpLogger = { debug: () => {}, info: () => {}, warn: () => {}, error: () => {} };
 
     const createMockHttpClient = () => ({
         get: createMockFn(),
@@ -29,7 +24,7 @@ describe('TwitchApiClient authentication', () => {
     });
 
     beforeEach(() => {
-        mockLogger = createMockLogger();
+        mockLogger = noOpLogger;
         mockHttpClient = createMockHttpClient();
         mockAuthManager = createMockAuthManager();
 

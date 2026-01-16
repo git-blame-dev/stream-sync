@@ -1,6 +1,6 @@
 const { describe, expect, it, beforeEach, afterEach } = require('bun:test');
 const { createMockFn } = require('../../helpers/bun-mock-utils');
-const { createMockLogger } = require('../../helpers/mock-factories');
+const { noOpLogger } = require('../../helpers/mock-factories');
 const PlatformEventRouter = require('../../../src/services/PlatformEventRouter');
 
 describe('PlatformEventRouter error handling', () => {
@@ -24,7 +24,7 @@ describe('PlatformEventRouter error handling', () => {
     };
 
     beforeEach(() => {
-        mockLogger = createMockLogger();
+        mockLogger = noOpLogger;
 
         subscriber = null;
         mockEventBus = {

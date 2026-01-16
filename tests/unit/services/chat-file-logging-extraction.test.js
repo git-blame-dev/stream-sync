@@ -12,7 +12,6 @@ describe('ChatFileLoggingService - Behavior-Focused Regression Tests', () => {
     let tempLogDir;
 
     beforeEach(async () => {
-        // Create mock logger that follows our patterns
         mockLogger = {
             debug: createMockFn(),
             error: createMockFn()

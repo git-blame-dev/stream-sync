@@ -1,6 +1,6 @@
 const { describe, expect, beforeEach, afterEach, it } = require('bun:test');
 const { createMockFn } = require('../../helpers/bun-mock-utils');
-const { createMockLogger } = require('../../helpers/mock-factories');
+const { noOpLogger } = require('../../helpers/mock-factories');
 const { waitForDelay } = require('../../helpers/time-utils');
 const { createRuntimeConstantsFixture } = require('../../helpers/runtime-constants-fixture');
 const { DisplayQueue } = require('../../../src/obs/display-queue');
@@ -15,7 +15,7 @@ describe('DisplayQueue - Twitch Bits Goal Calculation', () => {
     let runtimeConstants;
 
     beforeEach(() => {
-        mockLogger = createMockLogger();
+        mockLogger = noOpLogger;
         runtimeConstants = createRuntimeConstantsFixture();
 
         mockOBSManager = new EventEmitter();

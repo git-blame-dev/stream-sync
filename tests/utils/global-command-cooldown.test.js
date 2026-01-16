@@ -8,8 +8,8 @@ const {
   TEST_TIMEOUTS 
 } = require('../helpers/test-setup');
 
-const { 
-  createMockLogger 
+const {
+  noOpLogger
 } = require('../helpers/mock-factories');
 
 const { 
@@ -32,7 +32,7 @@ describe('GlobalCommandCooldownManager', () => {
   let mockLogger;
 
   beforeEach(() => {
-    mockLogger = createMockLogger('debug', { captureConsole: true });
+    mockLogger = noOpLogger;
     spyOn(Date, 'now').mockImplementation(() => testClock.now());
     
     // Import and create fresh instance for each test

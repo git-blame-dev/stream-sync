@@ -1,6 +1,6 @@
 const { describe, test, expect, beforeEach, it } = require('bun:test');
 const { createMockFn } = require('../../helpers/bun-mock-utils');
-const { createMockLogger } = require('../../helpers/mock-factories');
+const { noOpLogger } = require('../../helpers/mock-factories');
 const { OBSEffectsManager } = require('../../../src/obs/effects');
 
 describe('obs effects behavior', () => {
@@ -15,7 +15,7 @@ describe('obs effects behavior', () => {
     });
 
     beforeEach(() => {
-        mockLogger = createMockLogger();
+        mockLogger = noOpLogger;
         mockObsManager = createObsManager();
     });
 

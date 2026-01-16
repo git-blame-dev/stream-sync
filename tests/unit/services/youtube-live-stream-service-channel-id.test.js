@@ -11,7 +11,7 @@ const {
 
 const {
   createMockNotificationDispatcher,
-  createMockLogger,
+  noOpLogger,
   createMockYouTubeServices,
   setupAutomatedCleanup
 } = require('../../helpers/mock-factories');
@@ -45,7 +45,7 @@ describe('YouTube Live Stream Service - Channel ID User Experience', () => {
       search: createMockFn(),
       resolveURL: createMockFn()
     };
-    mockLogger = createMockLogger();
+    mockLogger = noOpLogger;
   });
 
   afterEach(() => {

@@ -177,14 +177,7 @@ function createMockTwitchAuth() {
     };
 }
 
-function createMockLogger() {
-    return {
-        info: createMockFn(),
-        debug: createMockFn(),
-        warn: createMockFn(),
-        error: createMockFn()
-    };
-}
+const noOpLogger = { debug: () => {}, info: () => {}, warn: () => {}, error: () => {} };
 
 module.exports = {
     MockWebSocket,
@@ -196,5 +189,5 @@ module.exports = {
     createPaypiggyEvent,
     createMockConfig,
     createMockTwitchAuth,
-    createMockLogger
+    noOpLogger
 };

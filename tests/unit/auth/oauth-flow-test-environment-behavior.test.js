@@ -1,7 +1,7 @@
 
 const { describe, test, expect, beforeEach, afterEach } = require('bun:test');
 const { createMockFn, restoreAllMocks } = require('../../helpers/bun-mock-utils');
-const { createMockLogger } = require('../../helpers/mock-factories');
+const { noOpLogger } = require('../../helpers/mock-factories');
 
 const TwitchAuthInitializer = require('../../../src/auth/TwitchAuthInitializer');
 
@@ -20,7 +20,7 @@ describe('OAuth Flow Test Environment Behavior', () => {
 
         process.env.NODE_ENV = 'test';
 
-        mockLogger = createMockLogger();
+        mockLogger = noOpLogger;
 
         mockAxios = {
             get: createMockFn(),

@@ -3,7 +3,7 @@ const { describe, test, beforeEach, afterEach, expect } = require('bun:test');
 const { createMockFn, restoreAllMocks } = require('../helpers/bun-mock-utils');
 const { mockModule, restoreAllModuleMocks } = require('../helpers/bun-module-mocks');
 const { initializeTestLogging } = require('../helpers/test-setup');
-const { createMockLogger } = require('../helpers/mock-factories');
+const { noOpLogger } = require('../helpers/mock-factories');
 
 // Initialize logging for tests
 initializeTestLogging();
@@ -137,7 +137,7 @@ describe('YouTube Multi-Stream Aggregation', () => {
     };
 
     beforeEach(() => {
-        mockLogger = createMockLogger();
+        mockLogger = noOpLogger;
     });
 
     describe('Multi-Stream Aggregation Success Scenarios', () => {

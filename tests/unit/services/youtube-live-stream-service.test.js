@@ -11,7 +11,7 @@ const {
 
 const {
   createMockNotificationDispatcher,
-  createMockLogger,
+  noOpLogger,
   createMockYouTubeServices,
   setupAutomatedCleanup
 } = require('../../helpers/mock-factories');
@@ -41,7 +41,7 @@ describe('YouTube Live Stream Service - Complete User Experience', () => {
 
   beforeEach(() => {
     // Create comprehensive mocks for user experience testing
-    mockLogger = createMockLogger();
+    mockLogger = noOpLogger;
     
     mockInnertubeClient = {
       getChannel: createMockFn(),

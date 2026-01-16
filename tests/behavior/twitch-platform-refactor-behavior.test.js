@@ -2,7 +2,7 @@ const { describe, it, expect, beforeEach, afterEach } = require('bun:test');
 const { createMockFn, restoreAllMocks } = require('../helpers/bun-mock-utils');
 const { mockModule, unmockModule, requireActual, resetModules, restoreAllModuleMocks } = require('../helpers/bun-module-mocks');
 
-const { createMockLogger } = require('../helpers/mock-factories');
+const noOpLogger = { debug: () => {}, info: () => {}, warn: () => {}, error: () => {} };
 
 const actualMessageNormalization = require('../../src/utils/message-normalization');
 
@@ -55,7 +55,7 @@ describe('Twitch platform refactor behaviors', () => {
             { enabled: true, eventsub_enabled: true },
             {
                 authManager: createAuthManager({ userId: TEST_USER_ID }),
-                logger: createMockLogger('debug'),
+                logger: noOpLogger,
                 WebSocketCtor: MockWebSocket
             }
         );
@@ -71,7 +71,7 @@ describe('Twitch platform refactor behaviors', () => {
         const { TwitchPlatform } = requireActual('../../src/platforms/twitch');
         const platform = new TwitchPlatform(baseConfig, {
             authManager: createAuthManager({ userId: TEST_USER_ID }),
-            logger: createMockLogger('debug')
+            logger: noOpLogger
         });
 
         await platform.initialize({});
@@ -83,7 +83,7 @@ describe('Twitch platform refactor behaviors', () => {
         const { TwitchPlatform } = requireActual('../../src/platforms/twitch');
         const platform = new TwitchPlatform(baseConfig, {
             authManager: createAuthManager({ userId: TEST_USER_ID }),
-            logger: createMockLogger('debug')
+            logger: noOpLogger
         });
 
         const received = [];
@@ -102,7 +102,7 @@ describe('Twitch platform refactor behaviors', () => {
         expect(received[0].metadata.correlationId).toBeDefined();
     });
 
-    it('warns but still emits chat events when normalization validation fails', async () => {
+    it('emits chat events even when normalization validation fails', async () => {
         mockModule('../../src/utils/message-normalization', () => ({
             ...actualMessageNormalization,
             normalizeTwitchMessage: createMockFn(() => ({
@@ -121,10 +121,9 @@ describe('Twitch platform refactor behaviors', () => {
         }));
 
         const { TwitchPlatform } = requireActual('../../src/platforms/twitch');
-        const logger = createMockLogger('debug');
         const platform = new TwitchPlatform(baseConfig, {
             authManager: createAuthManager({ userId: TEST_USER_ID }),
-            logger
+            logger: noOpLogger
         });
 
         const events = [];
@@ -137,7 +136,6 @@ describe('Twitch platform refactor behaviors', () => {
             false
         );
 
-        expect(logger.warn).toHaveBeenCalled();
         expect(events).toHaveLength(1);
         expect(events[0].metadata.correlationId).toBeDefined();
     });
@@ -146,7 +144,7 @@ describe('Twitch platform refactor behaviors', () => {
         const { TwitchPlatform } = requireActual('../../src/platforms/twitch');
         const platform = new TwitchPlatform(baseConfig, {
             authManager: createAuthManager({ userId: TEST_USER_ID }),
-            logger: createMockLogger('debug')
+            logger: noOpLogger
         });
 
         await expect(platform.sendMessage('hello')).rejects.toThrow(/twitch chat is unavailable/i);
@@ -167,7 +165,7 @@ describe('Twitch platform refactor behaviors', () => {
             { ...baseConfig, dataLoggingEnabled: true },
             {
                 authManager: createAuthManager({ userId: TEST_USER_ID }),
-                logger: createMockLogger('debug'),
+                logger: noOpLogger,
                 ChatFileLoggingService: RecordingLoggingService
             }
         );

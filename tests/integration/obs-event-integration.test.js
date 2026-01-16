@@ -40,7 +40,6 @@ describe('OBS Event-Driven Integration', () => {
             clearTextSource: createMockFn().mockResolvedValue(undefined)
         };
 
-        // Mock logger
         mockLogger = {
             debug: createMockFn(),
             info: createMockFn(),

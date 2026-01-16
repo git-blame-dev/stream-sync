@@ -9,7 +9,7 @@ const {
 } = require('../helpers/test-setup');
 
 const {
-  createMockLogger
+  noOpLogger
 } = require('../helpers/mock-factories');
 
 const {
@@ -37,7 +37,7 @@ describe('TwitchEventSub Resubscription Notification Fix', () => {
   let mockLogger;
 
   beforeEach(() => {
-    mockLogger = createMockLogger('debug', { captureConsole: true });
+    mockLogger = noOpLogger;
     const mockAuthManager = {
       getState: () => 'READY',
       getUserId: () => '123',

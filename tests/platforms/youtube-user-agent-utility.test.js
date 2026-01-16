@@ -18,7 +18,6 @@ describe('YouTube User-Agent Utility', () => {
     let mockLogger;
 
     beforeEach(() => {
-        // Create mock logger
         mockLogger = {
             debug: createMockFn(),
             info: createMockFn(),

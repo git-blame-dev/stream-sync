@@ -6,13 +6,7 @@ const path = require('path');
 // Test against real implementation
 const { YouTubeConnectionManager } = require('../../../src/utils/youtube-connection-manager');
 
-// Mock logger for testing
-const createMockLogger = () => ({
-    debug: createMockFn(),
-    info: createMockFn(),
-    warn: createMockFn(),
-    error: createMockFn()
-});
+const noOpLogger = { debug: () => {}, info: () => {}, warn: () => {}, error: () => {} };
 
 // Mock connection object
 const createMockConnection = (videoId, isReady = false) => ({
@@ -47,7 +41,7 @@ describe('YouTube Premiere Connection Handling', () => {
     let mockLogger;
 
     beforeEach(() => {
-        mockLogger = createMockLogger();
+        mockLogger = noOpLogger;
         connectionManager = new YouTubeConnectionManager(mockLogger);
     });
 

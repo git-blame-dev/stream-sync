@@ -4,7 +4,7 @@ const { createMockFn } = require('./bun-mock-utils');
 const {
     createMockDisplayQueue,
     createMockNotificationManager,
-    createMockLogger
+    noOpLogger
 } = require('./mock-factories');
 const testClock = require('./test-clock');
 const { createRuntimeConstantsFixture } = require('./runtime-constants-fixture');
@@ -155,7 +155,7 @@ function createAppRuntimeTestDependencies(options = {}) {
         monitoring: { ...baseConfigSnapshot.monitoring, ...(configSnapshot.monitoring || {}) }
     };
 
-    const logger = options.logger || createMockLogger('debug', { captureConsole: true });
+    const logger = options.logger || noOpLogger;
     const displayQueue = options.displayQueue || createMockDisplayQueue();
     const notificationManager = options.notificationManager ||
         createMockNotificationManager(notificationManagerOverrides);

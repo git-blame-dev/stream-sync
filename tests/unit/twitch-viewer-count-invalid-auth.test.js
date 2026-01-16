@@ -2,7 +2,7 @@
 const { describe, test, expect, beforeEach, it, afterEach } = require('bun:test');
 const { createMockFn, restoreAllMocks } = require('../helpers/bun-mock-utils');
 
-const { createMockLogger } = require('../helpers/mock-factories');
+const { noOpLogger } = require('../helpers/mock-factories');
 
 const { TwitchViewerCountProvider } = require('../../src/utils/viewer-count-providers');
 
@@ -36,8 +36,7 @@ describe('Twitch Viewer Count with Invalid Authentication', () => {
       accessToken: 'new_access_123456789', // Invalid placeholder token
     };
     
-    // Create mock logger using the factory
-    mockLogger = createMockLogger();
+    mockLogger = noOpLogger;
   });
 
   describe('when authentication is invalid but channel is configured', () => {

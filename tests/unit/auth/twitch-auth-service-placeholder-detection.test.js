@@ -1,6 +1,6 @@
 
 const { initializeTestLogging } = require('../../helpers/test-setup');
-const { createMockLogger } = require('../../helpers/mock-factories');
+const { noOpLogger } = require('../../helpers/mock-factories');
 const { setupAutomatedCleanup } = require('../../helpers/mock-lifecycle');
 
 // Initialize logging FIRST
@@ -20,7 +20,7 @@ describe('TwitchAuthService Placeholder Token Detection', () => {
     let mockLogger;
 
     beforeEach(() => {
-        mockLogger = createMockLogger('debug');
+        mockLogger = noOpLogger;
     });
 
     describe('when placeholder tokens are provided', () => {

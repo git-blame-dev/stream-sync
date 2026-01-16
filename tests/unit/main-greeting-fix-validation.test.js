@@ -2,7 +2,7 @@
 const { describe, test, expect, beforeEach, afterEach } = require('bun:test');
 const { createMockFn, restoreAllMocks } = require('../helpers/bun-mock-utils');
 
-const { createMockLogger } = require('../helpers/mock-factories');
+const { noOpLogger } = require('../helpers/mock-factories');
 const { setupAutomatedCleanup } = require('../helpers/mock-lifecycle');
 const NotificationBuilder = require('../../src/utils/notification-builder');
 
@@ -23,7 +23,6 @@ describe('Main.js Greeting Username Extraction Fix', () => {
     let mockLogger;
 
     beforeEach(() => {
-        // Create mock logger with console method
         mockLogger = {
             console: createMockFn(),
             debug: createMockFn(),

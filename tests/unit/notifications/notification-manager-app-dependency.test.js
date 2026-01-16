@@ -28,7 +28,6 @@ describe('NotificationManager Service Dependency Injection - Modernized', () => 
             getQueueLength: createMockFn().mockReturnValue(0)
         };
 
-        // Mock logger
         mockLogger = {
             debug: createMockFn(),
             info: createMockFn(),

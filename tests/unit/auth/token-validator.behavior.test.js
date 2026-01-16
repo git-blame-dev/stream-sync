@@ -1,7 +1,7 @@
 
 const { describe, test, expect, beforeEach, it, afterEach } = require('bun:test');
 const { createMockFn, spyOn, restoreAllMocks } = require('../../helpers/bun-mock-utils');
-const { createMockLogger } = require('../../helpers/mock-factories');
+const { noOpLogger } = require('../../helpers/mock-factories');
 
 const { TokenValidator } = require('../../../src/auth/token-validator');
 
@@ -13,7 +13,7 @@ describe('token-validator behavior', () => {
     });
 
     beforeEach(() => {
-        mockLogger = createMockLogger();
+        mockLogger = noOpLogger;
     });
 
     const baseConfig = {

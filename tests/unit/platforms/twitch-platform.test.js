@@ -2,7 +2,7 @@
 const { describe, it, expect, beforeEach, afterEach, beforeAll } = require('bun:test');
 const { createMockFn, restoreAllMocks, spyOn } = require('../../helpers/bun-mock-utils');
 const { unmockModule, resetModules, restoreAllModuleMocks } = require('../../helpers/bun-module-mocks');
-const { createMockLogger, createMockNotificationBuilder } = require('../../helpers/mock-factories');
+const { noOpLogger, createMockNotificationBuilder } = require('../../helpers/mock-factories');
 const { setupAutomatedCleanup } = require('../../helpers/mock-lifecycle');
 const { expectValidNotification, expectNoTechnicalArtifacts } = require('../../helpers/assertion-helpers');
 const { createTwitchChatEvent, createTwitchFollowEvent, createTwitchSubscriptionEvent } = require('../../helpers/twitch-test-data');
@@ -52,7 +52,7 @@ describe('Twitch Platform', () => {
 
     beforeEach(() => {
         // Create mocks using factory functions
-        mockLogger = createMockLogger('debug');
+        mockLogger = noOpLogger;
         mockAuthManager = {
             getState: createMockFn().mockReturnValue('READY'),
             getAccessToken: createMockFn().mockResolvedValue('mock-access-token'),

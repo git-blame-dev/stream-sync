@@ -1,6 +1,6 @@
 const { describe, expect, beforeEach, it, afterEach } = require('bun:test');
 const { createMockFn } = require('../../helpers/bun-mock-utils');
-const { createMockLogger } = require('../../helpers/mock-factories');
+const { noOpLogger } = require('../../helpers/mock-factories');
 const { createRuntimeConstantsFixture } = require('../../helpers/runtime-constants-fixture');
 
 const handcamGlow = require('../../../src/obs/handcam-glow');
@@ -12,7 +12,7 @@ describe('handcam-glow', () => {
     let runtimeConstants;
 
     beforeEach(() => {
-        mockLogger = createMockLogger();
+        mockLogger = noOpLogger;
         mockEnsureConnected = createMockFn().mockResolvedValue();
         mockDelay = createMockFn().mockResolvedValue();
         runtimeConstants = createRuntimeConstantsFixture();

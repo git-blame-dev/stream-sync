@@ -3,7 +3,7 @@ const { describe, test, expect, afterEach } = require('bun:test');
 const { createMockFn, restoreAllMocks } = require('../helpers/bun-mock-utils');
 
 const { setupAutomatedCleanup } = require('../helpers/mock-lifecycle');
-const { createMockLogger } = require('../helpers/mock-factories');
+const { noOpLogger } = require('../helpers/mock-factories');
 const ChatNotificationRouter = require('../../src/services/ChatNotificationRouter');
 
 setupAutomatedCleanup({
@@ -18,7 +18,7 @@ describe('Greeting System Diagnosis', () => {
     });
 
     const buildRouter = (overrides = {}) => {
-        const logger = createMockLogger('debug');
+        const logger = noOpLogger;
         const displayQueue = overrides.displayQueue || { addItem: createMockFn() };
         const runtime = {
             config: { general: { greetingsEnabled: true } },

@@ -17,7 +17,6 @@ describe('Twitch Proactive Token Checking', () => {
         resetModules();
         spyOn(Date, 'now').mockImplementation(() => testClock.now());
 
-        // Mock logger
         mockLogger = {
             info: createMockFn(),
             debug: createMockFn(),

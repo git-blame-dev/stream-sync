@@ -4,7 +4,7 @@ const { createMockFn, restoreAllMocks } = require('../helpers/bun-mock-utils');
 const { mockModule, resetModules, restoreAllModuleMocks } = require('../helpers/bun-module-mocks');
 
 const { initializeTestLogging, TEST_TIMEOUTS } = require('../helpers/test-setup');
-const { createMockLogger, createMockOBSConnection, createMockOBSManager } = require('../helpers/mock-factories');
+const { noOpLogger, createMockOBSConnection, createMockOBSManager } = require('../helpers/mock-factories');
 const { setupAutomatedCleanup } = require('../helpers/mock-lifecycle');
 const testClock = require('../helpers/test-clock');
 
@@ -61,7 +61,7 @@ describe('OBS Sources Module Characterization Tests', () => {
 
     beforeEach(() => {
         // Create mocks using factories
-        mockLogger = createMockLogger('debug');
+        mockLogger = noOpLogger;
         mockOBSConnection = createMockOBSConnection();
 
         // Set test environment to prevent OBS calls in some functions

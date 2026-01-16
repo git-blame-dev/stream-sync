@@ -2,7 +2,7 @@
 const { describe, test, expect, beforeEach, afterEach } = require('bun:test');
 const { createMockFn, restoreAllMocks } = require('../../helpers/bun-mock-utils');
 
-const { createMockLogger } = require('../../helpers/mock-factories');
+const { noOpLogger } = require('../../helpers/mock-factories');
 const { setupAutomatedCleanup } = require('../../helpers/mock-lifecycle');
 
 // Setup automated cleanup
@@ -40,8 +40,7 @@ describe('Refresh Token Storage and Update Handling (Twitch Best Practices)', ()
         };
         fsPromises = fs.promises;
         
-        // Create mock logger
-        mockLogger = createMockLogger('debug', { captureDebug: true });
+        mockLogger = noOpLogger;
         
         // Setup mock config with typical values
         tokenStorePath = '/test/token-store.json';
