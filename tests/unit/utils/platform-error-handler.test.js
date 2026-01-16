@@ -1,165 +1,112 @@
+const { describe, test, expect, beforeEach } = require('bun:test');
+const { PlatformErrorHandler, createPlatformErrorHandler } = require('../../../src/utils/platform-error-handler');
 
-const { 
-    initializeTestLogging,
-    createTestUser, 
-    TEST_TIMEOUTS
-} = require('../../helpers/test-setup');
-
-const { 
-    noOpLogger
-} = require('../../helpers/mock-factories');
-
-const { 
-    setupAutomatedCleanup
-} = require('../../helpers/mock-lifecycle');
-
-const { 
-    expectNoTechnicalArtifacts
-} = require('../../helpers/assertion-helpers');
-
-const { 
-    PlatformErrorHandler, 
-    createPlatformErrorHandler 
-} = require('../../../src/utils/platform-error-handler');
-
-// Initialize test logging
-initializeTestLogging();
-
-// Setup automated cleanup
-setupAutomatedCleanup({
-    clearCallsBeforeEach: true,
-    validateAfterCleanup: true
-});
+const noOpLogger = { debug: () => {}, info: () => {}, warn: () => {}, error: () => {} };
 
 describe('Platform Error Handler - User Experience Behavior', () => {
-    let mockLogger;
     let errorHandler;
     let testPlatformName;
 
     beforeEach(() => {
         testPlatformName = 'tiktok';
-        mockLogger = noOpLogger;
-        errorHandler = new PlatformErrorHandler(mockLogger, testPlatformName);
+        errorHandler = new PlatformErrorHandler(noOpLogger, testPlatformName);
     });
 
     describe('Error Recovery Behavior', () => {
-        it('should maintain system stability during initialization failures', () => {
-            // Given: System is running and an initialization error occurs
+        test('maintains system stability during initialization failures', () => {
             const initError = new Error('Network connection failed');
             let systemCrashed = false;
-            
-            // When: Initialization error is handled
+
             try {
                 errorHandler.handleInitializationError(initError, 'startup');
             } catch (error) {
-                // Then: Error should be re-thrown for retry logic (expected behavior)
                 expect(error).toBe(initError);
                 expect(error.message).toBe('Network connection failed');
-                expectNoTechnicalArtifacts(error.message);
+                expect(error.message).not.toContain('undefined');
+                expect(error.message).not.toContain('null');
             }
-            
-            // System should still be functional after error handling
+
             expect(systemCrashed).toBe(false);
         });
 
-        it('should prevent chat processing pipeline disruption during event errors', () => {
-            // Given: Chat processing is active and an event processing error occurs
+        test('prevents chat processing pipeline disruption during event errors', () => {
             const eventError = new Error('Failed to parse gift data');
             const eventType = 'platform:gift';
             const eventData = { id: 'gift_123', type: 'platform:gift', username: 'TestUser' };
             let chatProcessingStopped = false;
-            
-            // When: Event processing error is handled
+
             try {
                 errorHandler.handleEventProcessingError(eventError, eventType, eventData);
-                // No exception should be thrown for event processing errors
                 chatProcessingStopped = false;
-            } catch (error) {
+            } catch {
                 chatProcessingStopped = true;
             }
-            
-            // Then: Chat processing should continue uninterrupted
+
             expect(chatProcessingStopped).toBe(false);
         });
 
-        it('should maintain user experience during service unavailability', () => {
-            // Given: User is using the system and a service becomes unavailable
+        test('maintains user experience during service unavailability', () => {
             const serviceError = new Error('Authentication service timeout');
             const serviceName = 'AuthenticationService';
             let userExperienceDisrupted = false;
-            
-            // When: Service unavailable error is handled
+
             try {
                 errorHandler.handleServiceUnavailableError(serviceName, serviceError);
-                // Service errors should not disrupt user experience
                 userExperienceDisrupted = false;
-            } catch (error) {
+            } catch {
                 userExperienceDisrupted = true;
             }
-            
-            // Then: User experience should remain stable with fallback behavior
+
             expect(userExperienceDisrupted).toBe(false);
         });
 
-        it('should provide consistent error recovery across different error types', () => {
-            // Given: Various error scenarios that users might encounter
+        test('provides consistent error recovery across different error types', () => {
             const connectionError = new Error('WebSocket connection failed');
             const authError = 'not ready';
             const cleanupError = new Error('Failed to cleanup resources');
-            
+
             let allErrorsHandledGracefully = true;
-            
-            // When: Different types of errors are handled
+
             try {
                 errorHandler.handleConnectionError(connectionError, 'reconnect');
                 errorHandler.handleAuthenticationError(authError);
                 errorHandler.handleCleanupError(cleanupError, 'EventSub subscriptions');
-            } catch (error) {
+            } catch {
                 allErrorsHandledGracefully = false;
             }
-            
-            // Then: All error types should be handled without system disruption
+
             expect(allErrorsHandledGracefully).toBe(true);
         });
 
-        it('should maintain platform functionality during message sending failures', () => {
-            // Given: User attempts to send messages and sending fails
+        test('maintains platform functionality during message sending failures', () => {
             const sendError = new Error('API rate limit exceeded');
             const context = 'chat message sending';
             let platformFunctionalityMaintained = true;
-            
-            // When: Message sending error is handled
+
             try {
                 errorHandler.handleMessageSendError(sendError, context);
-                // Message sending errors should not crash the platform
-            } catch (error) {
+            } catch {
                 platformFunctionalityMaintained = false;
             }
-            
-            // Then: Platform should remain functional for other operations
+
             expect(platformFunctionalityMaintained).toBe(true);
         });
     });
 
     describe('Factory Function Behavior', () => {
-        it('should create functional error handler instances', () => {
-            // Given: Need for a new platform error handler
-            const testLogger = noOpLogger;
+        test('creates functional error handler instances', () => {
             const platformName = 'youtube';
-            
-            // When: Factory function creates error handler
-            const handler = createPlatformErrorHandler(testLogger, platformName);
-            
-            // Then: Handler should be functional and ready for error scenarios
+
+            const handler = createPlatformErrorHandler(noOpLogger, platformName);
+
             expect(handler).toBeInstanceOf(PlatformErrorHandler);
-            expect(handler.logger).toBe(testLogger);
+            expect(handler.logger).toBe(noOpLogger);
             expect(handler.platformName).toBe(platformName);
-            
-            // Verify handler can handle errors without crashing
+
             let handlerFunctional = true;
             try {
                 handler.handleConnectionError(new Error('Test error'), 'test');
-            } catch (error) {
+            } catch {
                 handlerFunctional = false;
             }
             expect(handlerFunctional).toBe(true);
@@ -167,24 +114,20 @@ describe('Platform Error Handler - User Experience Behavior', () => {
     });
 
     describe('Error Message Quality', () => {
-        it('should produce clean error contexts without technical artifacts', () => {
-            // Given: Various error scenarios with different contexts
+        test('produces clean error contexts without technical artifacts', () => {
             const testError = new Error('User-facing error occurred');
-            
-            // When: Error contexts are generated
+
             const contexts = [];
             try {
                 errorHandler.handleInitializationError(testError, 'user session startup');
             } catch (error) {
                 contexts.push(error.message);
             }
-            
-            // Then: All error contexts should be clean and user-friendly
+
             contexts.forEach(context => {
-                expectNoTechnicalArtifacts(context);
                 expect(context).not.toMatch(/undefined|null|NaN/);
-                expect(context).not.toMatch(/\{.*\}/); // No template placeholders
+                expect(context).not.toMatch(/\{.*\}/);
             });
         });
     });
-}, TEST_TIMEOUTS.UNIT_TEST);
+});

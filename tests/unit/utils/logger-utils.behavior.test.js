@@ -1,5 +1,4 @@
-const { describe, test, expect, beforeEach, afterEach, it } = require('bun:test');
-const { createMockFn, restoreAllMocks } = require('../../helpers/bun-mock-utils');
+const { describe, test, expect, afterEach } = require('bun:test');
 
 const {
     isDebugModeEnabled,
@@ -16,12 +15,11 @@ describe('logger-utils behavior', () => {
     const originalEnv = { ...process.env };
 
     afterEach(() => {
-        restoreAllMocks();
         process.argv = [...originalArgv];
         process.env = { ...originalEnv };
     });
 
-    it('detects debug mode via argv or env', () => {
+    test('detects debug mode via argv or env', () => {
         process.argv.push('--debug');
         expect(isDebugModeEnabled()).toBe(true);
         process.argv = [...originalArgv];
@@ -29,7 +27,7 @@ describe('logger-utils behavior', () => {
         expect(isDebugModeEnabled()).toBe(true);
     });
 
-    it('lazily loads loggers', () => {
+    test('lazily loads loggers', () => {
         const logger = getLazyLogger();
         expect(logger).toBeDefined();
         expect(typeof logger.debug).toBe('function');
@@ -39,7 +37,7 @@ describe('logger-utils behavior', () => {
         expect(typeof unifiedLogger.debug).toBe('function');
     });
 
-    it('safely stringifies objects and formats params', () => {
+    test('safely stringifies objects and formats params', () => {
         const circ = {}; circ.self = circ;
         const str = safeObjectStringify(circ, 1);
         expect(str).toContain('stringify failed');
@@ -50,7 +48,7 @@ describe('logger-utils behavior', () => {
         expect(formatted).toContain('"b":2');
     });
 
-    it('provides a no-op logger fallback', () => {
+    test('provides a no-op logger fallback', () => {
         const noop = createNoopLogger();
         expect(typeof noop.debug).toBe('function');
         expect(typeof noop.info).toBe('function');
@@ -59,12 +57,12 @@ describe('logger-utils behavior', () => {
         expect(() => noop.debug('hello')).not.toThrow();
     });
 
-    it('returns the provided logger when available', () => {
-        const logger = { debug: createMockFn(), info: createMockFn(), warn: createMockFn(), error: createMockFn() };
+    test('returns the provided logger when available', () => {
+        const logger = { debug: () => {}, info: () => {}, warn: () => {}, error: () => {} };
         expect(getLoggerOrNoop(logger)).toBe(logger);
     });
 
-    it('returns a no-op logger when none is provided', () => {
+    test('returns a no-op logger when none is provided', () => {
         const logger = getLoggerOrNoop();
         expect(typeof logger.debug).toBe('function');
         expect(() => logger.info('hello')).not.toThrow();

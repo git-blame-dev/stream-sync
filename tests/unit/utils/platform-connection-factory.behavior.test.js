@@ -1,52 +1,9 @@
-const { describe, test, expect, beforeEach, it, afterEach } = require('bun:test');
-const { createMockFn, clearAllMocks, restoreAllMocks } = require('../../helpers/bun-mock-utils');
-const { mockModule, restoreAllModuleMocks } = require('../../helpers/bun-module-mocks');
-
-const { EventEmitter } = require('events');
-
-mockModule('../../../src/utils/logger-utils', () => ({
-    getLazyUnifiedLogger: () => ({
-        debug: createMockFn(),
-        info: createMockFn(),
-        warn: createMockFn(),
-        error: createMockFn()
-    }),
-    createNoopLogger: () => ({
-        debug: createMockFn(),
-        info: createMockFn(),
-        warn: createMockFn(),
-        error: createMockFn()
-    }),
-    getLoggerOrNoop: (logger) => logger || ({
-        debug: createMockFn(),
-        info: createMockFn(),
-        warn: createMockFn(),
-        error: createMockFn()
-    })
-}));
-
-mockModule('../../../src/utils/platform-error-handler', () => ({
-    createPlatformErrorHandler: createMockFn(() => ({
-        handleEventProcessingError: createMockFn(),
-        logOperationalError: createMockFn()
-    }))
-}));
-
-mockModule('../../../src/utils/dependency-validator', () => ({
-    validateLoggerInterface: createMockFn(() => true)
-}));
-
-const { createPlatformErrorHandler } = require('../../../src/utils/platform-error-handler');
-const { validateLoggerInterface } = require('../../../src/utils/dependency-validator');
+const { describe, test, expect, beforeEach } = require('bun:test');
 const { PlatformConnectionFactory } = require('../../../src/utils/platform-connection-factory');
 
 describe('platform-connection-factory behavior', () => {
-    afterEach(() => {
-        restoreAllMocks();
-        restoreAllModuleMocks();
-    });
+    const noOpLogger = { debug: () => {}, info: () => {}, warn: () => {}, error: () => {} };
 
-    const logger = { debug: createMockFn(), info: createMockFn(), warn: createMockFn(), error: createMockFn() };
     const createLogCollector = () => {
         const entries = [];
         const collect = (level) => (message) => entries.push({ level, message });
@@ -59,49 +16,42 @@ describe('platform-connection-factory behavior', () => {
         };
     };
 
-    beforeEach(() => {
-        });
-
-    it('wraps non-emitter connections returned by TikTok constructor', () => {
-        const factory = new PlatformConnectionFactory(logger);
+    test('wraps non-emitter connections returned by TikTok constructor', () => {
+        const factory = new PlatformConnectionFactory(noOpLogger);
         const deps = {
-            logger,
-            TikTokWebSocketClient: createMockFn(() => ({ connect: createMockFn() }))
+            logger: noOpLogger,
+            TikTokWebSocketClient: function() { this.connect = () => {}; }
         };
 
-        const conn = factory.createConnection('tiktok', { username: 'user' }, deps);
+        const conn = factory.createConnection('tiktok', { username: 'testuser' }, deps);
         expect(typeof conn.on).toBe('function');
         expect(typeof conn.removeAllListeners).toBe('function');
     });
 
-    it('throws on missing inputs and validates logger dependency', () => {
-        const factory = new PlatformConnectionFactory(logger);
-        expect(() => factory.createConnection(null, {}, { logger })).toThrow('Platform name is required');
-        expect(() => factory.createConnection('tiktok', null, { logger })).toThrow('Configuration is required');
+    test('throws on missing inputs', () => {
+        const factory = new PlatformConnectionFactory(noOpLogger);
+        expect(() => factory.createConnection(null, {}, { logger: noOpLogger })).toThrow('Platform name is required');
+        expect(() => factory.createConnection('tiktok', null, { logger: noOpLogger })).toThrow('Configuration is required');
         expect(() => factory.createConnection('tiktok', {}, null)).toThrow('missing dependencies');
         expect(() => factory.createConnection('tiktok', {}, { logger: null })).toThrow('missing dependencies (logger)');
-        expect(validateLoggerInterface).toHaveBeenCalled();
     });
 
-    it('creates TikTok connections and routes constructor errors', () => {
-        const factory = new PlatformConnectionFactory(logger);
+    test('creates TikTok connections and propagates constructor errors', () => {
+        const factory = new PlatformConnectionFactory(noOpLogger);
         const deps = {
-            logger,
-            TikTokWebSocketClient: createMockFn(() => {
-                throw new Error('construct fail');
-            })
+            logger: noOpLogger,
+            TikTokWebSocketClient: function() { throw new Error('construct fail'); }
         };
 
-        expect(() => factory.createConnection('tiktok', { username: 'user' }, deps)).toThrow('construct fail');
-        expect(createPlatformErrorHandler).toHaveBeenCalled();
+        expect(() => factory.createConnection('tiktok', { username: 'testuser' }, deps)).toThrow('construct fail');
     });
 
-    it('throws for unsupported platform', () => {
-        const factory = new PlatformConnectionFactory(logger);
-        expect(() => factory.createConnection('unknown', {}, { logger })).toThrow('Unsupported platform');
+    test('throws for unsupported platform', () => {
+        const factory = new PlatformConnectionFactory(noOpLogger);
+        expect(() => factory.createConnection('unknown', {}, { logger: noOpLogger })).toThrow('Unsupported platform');
     });
 
-    it('logs masked apiKey when building TikTok connection config', () => {
+    test('logs masked apiKey when building TikTok connection config', () => {
         const logCollector = createLogCollector();
         const factory = new PlatformConnectionFactory(logCollector);
 
@@ -113,7 +63,7 @@ describe('platform-connection-factory behavior', () => {
         expect(logCollector.entries.every((entry) => !entry.message.includes(apiKey))).toBe(true);
     });
 
-    it('warns when TikTok apiKey is missing from config', () => {
+    test('warns when TikTok apiKey is missing from config', () => {
         const logCollector = createLogCollector();
         const factory = new PlatformConnectionFactory(logCollector);
 
