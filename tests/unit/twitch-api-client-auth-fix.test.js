@@ -1,115 +1,167 @@
-
-const { describe, test, expect, beforeEach, it, afterEach } = require('bun:test');
-const { createMockFn, clearAllMocks, restoreAllMocks } = require('../helpers/bun-mock-utils');
-
-const { createMockLogger } = require('../helpers/mock-factories');
-const { setupAutomatedCleanup } = require('../helpers/mock-lifecycle');
-setupAutomatedCleanup({
-    clearCallsBeforeEach: true,
-    validateAfterCleanup: true,
-    logPerformanceMetrics: true
-});
-
-// Mock the enhanced HTTP client before any imports
-const mockEnhancedHttpClient = {
-    get: createMockFn()
-};
+const { describe, expect, it, beforeEach, afterEach } = require('bun:test');
+const { createMockFn, restoreAllMocks } = require('../helpers/bun-mock-utils');
 
 const { TwitchApiClient } = require('../../src/utils/api-clients/twitch-api-client');
 
-describe('TwitchApiClient Authentication Integration', () => {
+describe('TwitchApiClient authentication', () => {
+    let mockLogger;
+    let mockHttpClient;
+    let mockAuthManager;
+    let apiClient;
+
+    const createMockLogger = () => ({
+        debug: createMockFn(),
+        info: createMockFn(),
+        warn: createMockFn(),
+        error: createMockFn()
+    });
+
+    const createMockHttpClient = () => ({
+        get: createMockFn(),
+        post: createMockFn()
+    });
+
+    const createMockAuthManager = (overrides = {}) => ({
+        getAccessToken: createMockFn().mockResolvedValue('test-access-token'),
+        ensureValidToken: createMockFn().mockResolvedValue(true),
+        getState: createMockFn().mockReturnValue('READY'),
+        ...overrides
+    });
+
+    beforeEach(() => {
+        mockLogger = createMockLogger();
+        mockHttpClient = createMockHttpClient();
+        mockAuthManager = createMockAuthManager();
+
+        apiClient = new TwitchApiClient(
+            mockAuthManager,
+            { clientId: 'test-client-id', channel: 'test-channel' },
+            mockLogger,
+            { enhancedHttpClient: mockHttpClient }
+        );
+    });
+
     afterEach(() => {
         restoreAllMocks();
     });
 
-    let mockAuthManager;
-    let mockConfig;
-    let mockLogger;
-    let apiClient;
-
-    beforeEach(() => {
-        mockLogger = createMockLogger('debug');
-        
-        // Create mock auth manager with correct method
-        mockAuthManager = {
-            getAccessToken: createMockFn().mockResolvedValue('test-access-token'),
-            getState: createMockFn().mockReturnValue('READY')
-        };
-
-        mockConfig = {
-            clientId: 'test-client-id',
-            channel: 'test-channel'
-        };
-
-        apiClient = new TwitchApiClient(mockAuthManager, mockConfig, mockLogger, {
-            enhancedHttpClient: mockEnhancedHttpClient
-        });
-    });
-
-    describe('when making API requests', () => {
-        it('should use getAccessToken method from auth manager', async () => {
-            // Arrange
-            const mockResponse = {
+    describe('API request authentication', () => {
+        it('includes Bearer token and Client-Id in requests', async () => {
+            mockHttpClient.get.mockResolvedValue({
                 status: 200,
                 data: { data: [] }
-            };
-            mockEnhancedHttpClient.get.mockResolvedValue(mockResponse);
+            });
 
-            // Act
             await apiClient.makeRequest('/test-endpoint');
 
-            // Assert
-            expect(mockAuthManager.getAccessToken).toHaveBeenCalled();
-            expect(mockEnhancedHttpClient.get).toHaveBeenCalledWith(
-                'https://api.twitch.tv/helix/test-endpoint',
-                expect.objectContaining({
-                    authToken: 'test-access-token',
-                    authType: 'app',
-                    clientId: 'test-client-id'
-                })
-            );
+            const requestOptions = mockHttpClient.get.mock.calls[0][1];
+            expect(requestOptions.authToken).toBe('test-access-token');
+            expect(requestOptions.clientId).toBe('test-client-id');
         });
-    });
 
-    describe('when getting stream info', () => {
-        it('should successfully get stream info with proper auth', async () => {
-            // Arrange
-            const mockStreamData = {
-                data: [{
-                    viewer_count: 42,
-                    game_name: 'Test Game'
-                }]
-            };
-            const mockResponse = {
+        it('returns stream info when channel is live', async () => {
+            mockHttpClient.get.mockResolvedValue({
                 status: 200,
-                data: mockStreamData
-            };
-            mockEnhancedHttpClient.get.mockResolvedValue(mockResponse);
+                data: {
+                    data: [{
+                        viewer_count: 42,
+                        game_name: 'Test Game'
+                    }]
+                }
+            });
 
-            // Act
             const result = await apiClient.getStreamInfo('test-channel');
 
-            // Assert
-            expect(result).toEqual({
-                isLive: true,
-                stream: mockStreamData.data[0],
-                viewerCount: 42
+            expect(result.isLive).toBe(true);
+            expect(result.viewerCount).toBe(42);
+        });
+
+        it('returns offline status when channel is not live', async () => {
+            mockHttpClient.get.mockResolvedValue({
+                status: 200,
+                data: { data: [] }
             });
-            expect(mockAuthManager.getAccessToken).toHaveBeenCalled();
+
+            const result = await apiClient.getStreamInfo('test-channel');
+
+            expect(result.isLive).toBe(false);
+            expect(result.viewerCount).toBe(0);
         });
     });
 
-    describe('when auth manager getAccessToken fails', () => {
-        it('should handle auth errors gracefully', async () => {
-            // Arrange
+    describe('401 retry with token refresh', () => {
+        it('retries request after refreshing token on 401', async () => {
+            mockHttpClient.get
+                .mockRejectedValueOnce({ response: { status: 401 } })
+                .mockResolvedValueOnce({
+                    status: 200,
+                    data: { data: [{ id: 'test-user-id', login: 'testuser' }] }
+                });
+
+            mockAuthManager.getAccessToken
+                .mockResolvedValueOnce('expired-token')
+                .mockResolvedValueOnce('refreshed-token');
+
+            const result = await apiClient.getUserByUsername('testuser');
+
+            expect(result).toEqual({ id: 'test-user-id', login: 'testuser' });
+        });
+
+        it('uses refreshed token in retry request', async () => {
+            mockHttpClient.get
+                .mockRejectedValueOnce({ response: { status: 401 } })
+                .mockResolvedValueOnce({
+                    status: 200,
+                    data: { data: [{ id: 'user-123' }] }
+                });
+
+            mockAuthManager.getAccessToken
+                .mockResolvedValueOnce('old-token')
+                .mockResolvedValueOnce('new-refreshed-token');
+
+            await apiClient.getUserByUsername('testuser');
+
+            const retryRequestOptions = mockHttpClient.get.mock.calls[1][1];
+            expect(retryRequestOptions.authToken).toBe('new-refreshed-token');
+        });
+
+        it('throws when retry after 401 also fails', async () => {
+            mockHttpClient.get
+                .mockRejectedValueOnce({ response: { status: 401 } })
+                .mockRejectedValueOnce({ response: { status: 401 } });
+
+            await expect(apiClient.makeRequest('/test')).rejects.toMatchObject({
+                response: { status: 401 }
+            });
+        });
+
+        it('does not retry on non-401 errors', async () => {
+            mockHttpClient.get.mockRejectedValueOnce({
+                response: { status: 500 }
+            });
+
+            await expect(apiClient.makeRequest('/test')).rejects.toMatchObject({
+                response: { status: 500 }
+            });
+        });
+    });
+
+    describe('auth failure handling', () => {
+        it('returns offline status when getAccessToken throws', async () => {
             mockAuthManager.getAccessToken.mockRejectedValue(new Error('Auth failed'));
 
-            // Act & Assert
-            await expect(apiClient.getStreamInfo('test-channel')).resolves.toEqual({
-                isLive: false,
-                stream: null,
-                viewerCount: 0
-            });
+            const result = await apiClient.getStreamInfo('test-channel');
+
+            expect(result.isLive).toBe(false);
+            expect(result.viewerCount).toBe(0);
+        });
+
+        it('throws when no access token available', async () => {
+            mockAuthManager.getAccessToken.mockResolvedValue(null);
+
+            await expect(apiClient.makeRequest('/test')).rejects.toThrow(
+                'No access token available'
+            );
         });
     });
 });
