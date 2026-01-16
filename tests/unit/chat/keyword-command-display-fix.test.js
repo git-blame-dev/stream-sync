@@ -1,6 +1,6 @@
 
 const { initializeTestLogging, createTestUser, TEST_TIMEOUTS } = require('../../helpers/test-setup');
-const { createMockLogger, createMockConfig } = require('../../helpers/mock-factories');
+const { noOpLogger, createMockConfig } = require('../../helpers/mock-factories');
 const { setupAutomatedCleanup } = require('../../helpers/mock-lifecycle');
 
 // Initialize logging first
@@ -18,7 +18,7 @@ describe('CommandParser Keyword vs Command Display Fix', () => {
     let commandParser, mockLogger, mockConfig;
 
     beforeEach(() => {
-        mockLogger = createMockLogger('debug');
+        mockLogger = noOpLogger;
         mockConfig = createMockConfig({
             commands: {
                 'im-a-mod': '!mod, vfx top, mod|mods',

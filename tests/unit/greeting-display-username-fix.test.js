@@ -3,7 +3,7 @@ const { describe, test, expect, beforeEach, it, afterEach } = require('bun:test'
 const { createMockFn, restoreAllMocks } = require('../helpers/bun-mock-utils');
 
 const {
-    createMockLogger,
+    noOpLogger,
     createMockConfig,
     createMockNotificationManager
 } = require('../helpers/mock-factories');
@@ -35,7 +35,7 @@ describe('Greeting Display Username Fix', () => {
     
     beforeEach(() => {
         // Create fresh mocks for each test
-        mockLogger = createMockLogger('debug', { captureConsole: true });
+        mockLogger = noOpLogger;
         mockConfig = createMockConfig();
         mockNotificationManager = createMockNotificationManager({
             handleNotification: createMockFn().mockResolvedValue({

@@ -6,7 +6,7 @@ const { YouTubeNotificationDispatcher } = require('../../src/utils/youtube-notif
 const { createYouTubeEventDispatchTable } = require('../../src/platforms/youtube/events/youtube-event-dispatch-table');
 const { initializeTestLogging } = require('../helpers/test-setup');
 const { getSyntheticFixture } = require('../helpers/platform-test-data');
-const { createMockDisplayQueue, createMockLogger } = require('../helpers/mock-factories');
+const { createMockDisplayQueue, noOpLogger } = require('../helpers/mock-factories');
 const { createTextProcessingManager } = require('../../src/utils/text-processing');
 const { createMockFn, restoreAllMocks } = require('../helpers/bun-mock-utils');
 
@@ -27,7 +27,7 @@ const createEventBus = () => {
 };
 
 const createDispatcherHarness = () => {
-    const logger = createMockLogger('debug', { captureConsole: true });
+    const logger = noOpLogger;
     const dispatcher = new YouTubeNotificationDispatcher({ logger });
     let capturedPayload;
     const handlers = {
@@ -50,7 +50,7 @@ const createDispatcherHarness = () => {
 
 const createNotificationManagerHarness = () => {
     const displayQueue = createMockDisplayQueue();
-    const logger = createMockLogger('debug', { captureConsole: true });
+    const logger = noOpLogger;
     const textProcessing = createTextProcessingManager({ logger });
     const eventBus = createEventBus();
     const configSnapshot = {

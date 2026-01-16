@@ -4,7 +4,7 @@ const { createMockFn, restoreAllMocks } = require('../../helpers/bun-mock-utils'
 
 const { expectNoTechnicalArtifacts } = require('../../helpers/assertion-helpers');
 
-const { createMockLogger } = require('../../helpers/mock-factories');
+const { noOpLogger } = require('../../helpers/mock-factories');
 
 const { setupAutomatedCleanup } = require('../../helpers/mock-lifecycle');
 
@@ -27,7 +27,7 @@ describe('NotificationManager Spam Protection Behavior - Modernized', () => {
     let configService;
 
     beforeEach(() => {
-        mockLogger = createMockLogger();
+        mockLogger = noOpLogger;
 
         mockConstants = {
             PRIORITY_LEVELS: {
@@ -194,7 +194,7 @@ describe('NotificationManager Spam Protection Behavior - Modernized', () => {
 
         it('should not log warnings about missing spam config', () => {
             // BEHAVIOR: Optional dependency - no warnings when not provided
-            const localLogger = createMockLogger();
+            const localLogger = noOpLogger;
 
             const mockEventBus = { emit: createMockFn(), on: createMockFn(), off: createMockFn() };
             const notificationManager = new NotificationManager({

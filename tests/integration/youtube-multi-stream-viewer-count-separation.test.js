@@ -3,7 +3,7 @@ const { describe, test, beforeEach, afterEach, expect } = require('bun:test');
 const { createMockFn, restoreAllMocks } = require('../helpers/bun-mock-utils');
 const { mockModule, restoreAllModuleMocks } = require('../helpers/bun-module-mocks');
 const { initializeTestLogging } = require('../helpers/test-setup');
-const { createMockLogger, createMockNotificationManager, setupAutomatedCleanup } = require('../helpers/mock-factories');
+const { noOpLogger, createMockNotificationManager, setupAutomatedCleanup } = require('../helpers/mock-factories');
 const { expectNoTechnicalArtifacts } = require('../helpers/behavior-validation');
 
 // Initialize test environment
@@ -169,7 +169,7 @@ describe('YouTube Multi-Stream Viewer Count Separation', () => {
 
     beforeEach(async () => {
         cleanup = setupAutomatedCleanup();
-        mockLogger = createMockLogger();
+        mockLogger = noOpLogger;
         mockNotificationManager = createMockNotificationManager();
     });
 

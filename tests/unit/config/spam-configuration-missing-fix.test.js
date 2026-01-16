@@ -11,7 +11,7 @@ const {
 
 const {
     createMockNotificationDispatcher,
-    createMockLogger
+    noOpLogger
 } = require('../../helpers/mock-factories');
 
 const {
@@ -50,7 +50,7 @@ describe('Spam Detection Service Integration Tests', () => {
     let NotificationManager;
 
     beforeEach(() => {
-        mockLogger = createMockLogger();
+        mockLogger = noOpLogger;
 
         mockConstants = {
             PRIORITY_LEVELS: {

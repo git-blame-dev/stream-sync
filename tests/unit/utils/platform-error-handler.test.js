@@ -6,7 +6,7 @@ const {
 } = require('../../helpers/test-setup');
 
 const { 
-    createMockLogger
+    noOpLogger
 } = require('../../helpers/mock-factories');
 
 const { 
@@ -38,7 +38,7 @@ describe('Platform Error Handler - User Experience Behavior', () => {
 
     beforeEach(() => {
         testPlatformName = 'tiktok';
-        mockLogger = createMockLogger();
+        mockLogger = noOpLogger;
         errorHandler = new PlatformErrorHandler(mockLogger, testPlatformName);
     });
 
@@ -144,7 +144,7 @@ describe('Platform Error Handler - User Experience Behavior', () => {
     describe('Factory Function Behavior', () => {
         it('should create functional error handler instances', () => {
             // Given: Need for a new platform error handler
-            const testLogger = createMockLogger();
+            const testLogger = noOpLogger;
             const platformName = 'youtube';
             
             // When: Factory function creates error handler

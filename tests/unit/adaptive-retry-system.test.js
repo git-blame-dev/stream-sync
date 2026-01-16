@@ -2,7 +2,7 @@
 const { describe, test, expect, beforeEach } = require('bun:test');
 
 const { initializeTestLogging } = require('../helpers/test-setup');
-const { createMockLogger, createMockNotificationBuilder, createMockPlatform } = require('../helpers/mock-factories');
+const { noOpLogger, createMockNotificationBuilder, createMockPlatform } = require('../helpers/mock-factories');
 const { setupAutomatedCleanup } = require('../helpers/mock-lifecycle');
 const { expectValidNotification } = require('../helpers/assertion-helpers');
 const testClock = require('../helpers/test-clock');
@@ -24,7 +24,7 @@ describe('Unified Adaptive Retry System', () => {
     let platformRetryCount;
 
     beforeEach(() => {
-        retrySystem = new RetrySystem({ logger: createMockLogger('debug') });
+        retrySystem = new RetrySystem({ logger: noOpLogger });
         platformRetryCount = retrySystem.platformRetryCount;
         // Reset all platform retry counts before each test
         // Ensure all platforms are properly initialized

@@ -2,7 +2,7 @@ const { describe, test, expect, beforeEach, afterEach } = require('bun:test');
 const { createMockFn, restoreAllMocks } = require('../../helpers/bun-mock-utils');
 
 const { TEST_TIMEOUTS } = require('../../helpers/test-setup');
-const { createMockLogger, createMockFileSystem } = require('../../helpers/mock-factories');
+const { noOpLogger, createMockFileSystem } = require('../../helpers/mock-factories');
 const { setupAutomatedCleanup } = require('../../helpers/mock-lifecycle');
 const testClock = require('../../helpers/test-clock');
 
@@ -57,7 +57,7 @@ describe('YouTube Data Extraction', () => {
     const CACHE_PATH = '/path/to/cache.json';
 
     beforeEach(() => {
-        mockLogger = createMockLogger('debug');
+        mockLogger = noOpLogger;
         mockFileSystem = createMockFileSystem();
 
         mockInstanceManager = {

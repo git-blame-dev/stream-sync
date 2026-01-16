@@ -6,7 +6,7 @@ const { YouTubeiCurrencyParser } = require('../../../src/utils/youtubei-currency
 const NotificationManager = require('../../../src/notifications/NotificationManager');
 const { createTextProcessingManager } = require('../../../src/utils/text-processing');
 const { 
-    createMockLogger,
+    noOpLogger,
     createMockNotificationManager,
     createMockPlatform
 } = require('../../helpers/mock-factories');
@@ -55,7 +55,7 @@ describe('YouTube Turkish Lira (TRY) Currency Parsing', () => {
         let mockLogger;
 
         beforeEach(() => {
-            mockLogger = createMockLogger('debug');
+            mockLogger = noOpLogger;
             parser = new YouTubeiCurrencyParser({ logger: mockLogger });
         });
 
@@ -269,7 +269,7 @@ describe('YouTube Turkish Lira (TRY) Currency Parsing', () => {
         let mockLogger;
 
         beforeEach(() => {
-            mockLogger = createMockLogger('debug');
+            mockLogger = noOpLogger;
             mockDisplayQueue = {
                 add: createMockFn().mockReturnValue(true),
                 addItem: createMockFn().mockReturnValue(true),
@@ -459,7 +459,7 @@ describe('YouTube Turkish Lira (TRY) Currency Parsing', () => {
             };
             const mockEventBus = { emit: createMockFn(), on: createMockFn(), off: createMockFn() };
             const constants = require('../../../src/core/constants');
-            const logger = createMockLogger('debug');
+            const logger = noOpLogger;
             const textProcessing = createTextProcessingManager({ logger });
             const obsGoals = require('../../../src/obs/goals').getDefaultGoalsManager();
             const vfxCommandService = { getVFXConfig: createMockFn().mockResolvedValue(null) };
@@ -491,7 +491,7 @@ describe('Currency Parsing Performance and Reliability', () => {
     let parser;
 
     beforeEach(() => {
-        parser = new YouTubeiCurrencyParser({ logger: createMockLogger('error') });
+        parser = new YouTubeiCurrencyParser({ logger: noOpLogger });
     });
 
     it('should parse 1000 TRY amounts quickly', () => {

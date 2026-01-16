@@ -4,7 +4,7 @@ const EventEmitter = require('events');
 const PlatformLifecycleService = require('../../src/services/PlatformLifecycleService');
 const NotificationManager = require('../../src/notifications/NotificationManager');
 const { createTestAppRuntime } = require('../helpers/runtime-test-harness');
-const { createMockDisplayQueue, createMockLogger } = require('../helpers/mock-factories');
+const { createMockDisplayQueue, noOpLogger } = require('../helpers/mock-factories');
 const { createTextProcessingManager } = require('../../src/utils/text-processing');
 const { expectNoTechnicalArtifacts } = require('../helpers/assertion-helpers');
 const { createMockFn, restoreAllMocks } = require('../helpers/bun-mock-utils');
@@ -76,7 +76,7 @@ describe('Twitch giftpaypiggy platform flow (smoke)', () => {
 
     test('routes giftpaypiggy through lifecycle, router, and runtime', async () => {
         const eventBus = createEventBus();
-        const logger = createMockLogger('debug', { captureConsole: true });
+        const logger = noOpLogger;
         const displayQueue = createMockDisplayQueue();
         const textProcessing = createTextProcessingManager({ logger });
         const configSnapshot = {

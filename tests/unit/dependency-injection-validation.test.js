@@ -3,7 +3,7 @@ const { describe, test, expect, beforeEach, it, afterEach } = require('bun:test'
 const { createMockFn, restoreAllMocks } = require('../helpers/bun-mock-utils');
 const { unmockModule, restoreAllModuleMocks } = require('../helpers/bun-module-mocks');
 
-const { createMockLogger } = require('../helpers/mock-factories');
+const { noOpLogger } = require('../helpers/mock-factories');
 const { setupAutomatedCleanup } = require('../helpers/mock-lifecycle');
 
 unmockModule('../../src/platforms/youtube');
@@ -25,7 +25,7 @@ describe('Dependency Injection Validation', () => {
     let mockLogger;
     
     beforeEach(() => {
-        mockLogger = createMockLogger();
+        mockLogger = noOpLogger;
     });
 
     describe('Logger Interface Contract Validation', () => {

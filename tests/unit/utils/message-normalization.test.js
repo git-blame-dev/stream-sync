@@ -2,7 +2,7 @@
 const { describe, test, expect, beforeEach, it, afterEach } = require('bun:test');
 const { createMockFn, restoreAllMocks } = require('../../helpers/bun-mock-utils');
 
-const { createMockLogger } = require('../../helpers/mock-factories');
+const { noOpLogger } = require('../../helpers/mock-factories');
 const { setupAutomatedCleanup } = require('../../helpers/mock-lifecycle');
 const { createTwitchChatEvent, createYouTubeChatEvent, createTikTokChatEvent } = require('../../helpers/platform-test-data');
 const testClock = require('../../helpers/test-clock');
@@ -66,7 +66,7 @@ describe('Message Normalization', () => {
 
     beforeEach(() => {
         // Create mocks using factory functions
-        mockLogger = createMockLogger('debug');
+        mockLogger = noOpLogger;
         timestampService = buildTimestampService();
     });
 

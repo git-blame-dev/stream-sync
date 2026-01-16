@@ -1,6 +1,6 @@
 const { describe, expect, beforeEach, it, afterEach } = require('bun:test');
 const { createMockFn } = require('../../helpers/bun-mock-utils');
-const { createMockLogger } = require('../../helpers/mock-factories');
+const { noOpLogger } = require('../../helpers/mock-factories');
 const { createOBSSourcesManager } = require('../../../src/obs/sources');
 
 describe('obs/sources behavior', () => {
@@ -8,7 +8,7 @@ describe('obs/sources behavior', () => {
     let runtimeConstants;
 
     beforeEach(() => {
-        mockLogger = createMockLogger();
+        mockLogger = noOpLogger;
         runtimeConstants = {
             STATUSBAR_GROUP_NAME: 'TestStatusGroup',
             STATUSBAR_NOTIFICATION_GROUP_NAME: 'TestNotifyGroup',

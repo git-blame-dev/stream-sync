@@ -11,7 +11,7 @@ initializeTestLogging();
 // Skip in main suite since global mock intercepts the require.
 const { TikTokPlatform } = require('../../../../src/platforms/tiktok');
 const isPreloadMocked = !TikTokPlatform || !TikTokPlatform.prototype || !TikTokPlatform.prototype.handleTikTokSocial;
-const { createMockTikTokPlatformDependencies, createMockLogger } = require('../../../helpers/mock-factories');
+const { createMockTikTokPlatformDependencies, noOpLogger } = require('../../../helpers/mock-factories');
 const testClock = require('../../../helpers/test-clock');
 
 describe('TikTok social filtering', () => {
@@ -25,7 +25,7 @@ describe('TikTok social filtering', () => {
 
     const createPlatform = () => new TikTokPlatform(baseConfig, {
         ...createMockTikTokPlatformDependencies(),
-        logger: createMockLogger(),
+        logger: noOpLogger,
         connectionFactory: { createConnection: createMockFn() },
         timestampService: { extractTimestamp: createMockFn(() => new Date(testClock.now()).toISOString()) }
     });

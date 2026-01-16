@@ -28,7 +28,7 @@ const { TEST_TIMEOUTS } = require('../helpers/test-setup');
 
 const { 
     createMockNotificationDispatcher,
-    createMockLogger,
+    noOpLogger,
     createMockConfig,
     createMockOBSConnection,
     createMockTwitchPlatform,
@@ -155,7 +155,7 @@ describe('ViewerCount System Activation Integration', () => {
         registerMockPlatforms();
 
         buildAppRuntimeDependencies = (overrides = {}) => {
-            const logger = createMockLogger();
+            const logger = noOpLogger;
             return createAppRuntimeTestDependencies({
                 configSnapshot: mockConfig,
                 displayQueue: mockDisplayQueue,

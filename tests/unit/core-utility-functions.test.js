@@ -1,6 +1,6 @@
 const { describe, test, expect, beforeEach } = require('bun:test');
 const { initializeTestLogging, createTestUser, TEST_TIMEOUTS } = require('../helpers/test-setup');
-const { createMockLogger, createMockNotificationBuilder } = require('../helpers/mock-factories');
+const { noOpLogger, createMockNotificationBuilder } = require('../helpers/mock-factories');
 const { setupAutomatedCleanup } = require('../helpers/mock-lifecycle');
 const { expectValidNotification } = require('../helpers/assertion-helpers');
 
@@ -23,7 +23,7 @@ describe('Core Utility Functions', () => {
 
         // Reset shared state before each test to ensure isolation
         beforeEach(() => {
-            retrySystem = new RetrySystem({ logger: createMockLogger('debug') });
+            retrySystem = new RetrySystem({ logger: noOpLogger });
         });
 
         test('ADAPTIVE_RETRY_CONFIG should be exported with correct configuration', () => {

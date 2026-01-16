@@ -16,7 +16,6 @@ describe('Twitch Viewer Count System Debug', () => {
     };
 
     beforeEach(() => {
-        // Mock logger
         logger = {
             debug: createMockFn(),
             info: createMockFn(),

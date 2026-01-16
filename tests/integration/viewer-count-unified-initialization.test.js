@@ -2,7 +2,7 @@ const { describe, test, afterEach, expect } = require('bun:test');
 
 const { createMockFn, restoreAllMocks } = require('../helpers/bun-mock-utils');
 const { initializeTestLogging } = require('../helpers/test-setup');
-const { createMockPlatform, createMockNotificationManager, createMockLogger } = require('../helpers/mock-factories');
+const { createMockPlatform, createMockNotificationManager, noOpLogger } = require('../helpers/mock-factories');
 const { setupAutomatedCleanup } = require('../helpers/mock-lifecycle');
 
 // Initialize logging for tests FIRST
@@ -36,7 +36,7 @@ const createViewerCountSystemWithBehaviors = (platformBehaviors = {}, systemBeha
         });
     });
     
-    const logger = createMockLogger('info');
+    const logger = noOpLogger;
     const app = {
         platforms,
         notificationManager: createMockNotificationManager(),

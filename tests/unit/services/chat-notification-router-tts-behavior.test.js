@@ -1,6 +1,6 @@
 const { describe, it, beforeEach, expect } = require('bun:test');
 const { createMockFn } = require('../../helpers/bun-mock-utils');
-const { createMockLogger } = require('../../helpers/mock-factories');
+const { noOpLogger } = require('../../helpers/mock-factories');
 const { createRuntimeConstantsFixture } = require('../../helpers/runtime-constants-fixture');
 const ChatNotificationRouter = require('../../../src/services/ChatNotificationRouter');
 
@@ -9,7 +9,7 @@ describe('ChatNotificationRouter TTS behavior', () => {
     let runtimeConstants;
 
     beforeEach(() => {
-        mockLogger = createMockLogger();
+        mockLogger = noOpLogger;
         runtimeConstants = createRuntimeConstantsFixture();
     });
 

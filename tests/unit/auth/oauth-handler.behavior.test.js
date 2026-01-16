@@ -1,7 +1,7 @@
 
 const { describe, test, expect, beforeEach, afterEach, it } = require('bun:test');
 const { createMockFn, spyOn, restoreAllMocks } = require('../../helpers/bun-mock-utils');
-const { createMockLogger } = require('../../helpers/mock-factories');
+const { noOpLogger } = require('../../helpers/mock-factories');
 
 const { TwitchOAuthHandler } = require('../../../src/auth/oauth-handler');
 
@@ -10,7 +10,7 @@ describe('TwitchOAuthHandler behavior', () => {
     const originalEnv = { ...process.env };
 
     beforeEach(() => {
-        logger = createMockLogger();
+        logger = noOpLogger;
     });
 
     afterEach(() => {

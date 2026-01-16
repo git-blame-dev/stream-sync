@@ -34,7 +34,6 @@ describe('YouTubePlatform handleChatMessage Integration', () => {
 
     beforeEach(() => {
         // Clear all mocks
-        // Create mock logger
         mockLogger = {
             debug: createMockFn(),
             info: createMockFn(),

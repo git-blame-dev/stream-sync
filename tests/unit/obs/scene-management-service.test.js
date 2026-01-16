@@ -22,7 +22,6 @@ describe('SceneManagementService', () => {
             isReady: createMockFn().mockResolvedValue(true)
         };
 
-        // Mock logger
         mockLogger = {
             debug: createMockFn(),
             info: createMockFn(),

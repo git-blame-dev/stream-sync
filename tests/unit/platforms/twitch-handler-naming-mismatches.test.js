@@ -1,13 +1,13 @@
 const { describe, it, expect, beforeEach } = require('bun:test');
 const { createMockFn } = require('../../helpers/bun-mock-utils');
-const { createMockLogger } = require('../../helpers/mock-factories');
+const { noOpLogger } = require('../../helpers/mock-factories');
 
 describe('Twitch Handler Integration', () => {
     let handlers;
     let mockLogger;
 
     beforeEach(() => {
-        mockLogger = createMockLogger();
+        mockLogger = noOpLogger;
         handlers = {
             onFollow: createMockFn().mockResolvedValue(),
             onPaypiggy: createMockFn().mockResolvedValue(),

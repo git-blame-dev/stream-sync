@@ -15,12 +15,7 @@ describe('TwitchTokenRefresh behavior edges', () => {
 
     let dateNowSpy;
 
-    const createMockLogger = () => ({
-        debug: createMockFn(),
-        info: createMockFn(),
-        warn: createMockFn(),
-        error: createMockFn()
-    });
+    const noOpLogger = { debug: () => {}, info: () => {}, warn: () => {}, error: () => {} };
 
     const createMockErrorHandler = () => ({
         handleEventProcessingError: createMockFn(),
@@ -41,7 +36,7 @@ describe('TwitchTokenRefresh behavior edges', () => {
     it('returns null when refresh token is missing', async () => {
         const refresh = new TwitchTokenRefresh({ ...baseConfig, refreshToken: null });
         refresh.platformErrorHandler = createMockErrorHandler();
-        refresh.logger = createMockLogger();
+        refresh.logger = noOpLogger;
 
         const result = await refresh.refreshToken(null);
 
@@ -51,7 +46,7 @@ describe('TwitchTokenRefresh behavior edges', () => {
     it('returns null when refresh request returns non-200', async () => {
         const refresh = new TwitchTokenRefresh(baseConfig);
         refresh.platformErrorHandler = createMockErrorHandler();
-        refresh.logger = createMockLogger();
+        refresh.logger = noOpLogger;
         refresh.makeRequest = createMockFn().mockResolvedValue({
             statusCode: 500,
             body: 'bad'
@@ -65,7 +60,7 @@ describe('TwitchTokenRefresh behavior edges', () => {
     it('returns false when updating config with invalid token data', async () => {
         const refresh = new TwitchTokenRefresh(baseConfig);
         refresh.platformErrorHandler = createMockErrorHandler();
-        refresh.logger = createMockLogger();
+        refresh.logger = noOpLogger;
 
         const success = await refresh.updateConfig({ access_token: null });
 
@@ -75,7 +70,7 @@ describe('TwitchTokenRefresh behavior edges', () => {
     it('returns null when refresh request throws', async () => {
         const refresh = new TwitchTokenRefresh(baseConfig);
         refresh.platformErrorHandler = createMockErrorHandler();
-        refresh.logger = createMockLogger();
+        refresh.logger = noOpLogger;
         refresh.makeRequest = createMockFn().mockRejectedValue(new Error('network boom'));
 
         const result = await refresh.refreshToken(baseConfig.refreshToken);
@@ -86,7 +81,7 @@ describe('TwitchTokenRefresh behavior edges', () => {
     it('throws when config file updates exhaust retries', async () => {
         const refresh = new TwitchTokenRefresh(baseConfig);
         refresh.platformErrorHandler = createMockErrorHandler();
-        refresh.logger = createMockLogger();
+        refresh.logger = noOpLogger;
         refresh._retryAttempts = 2;
         refresh._retryDelay = 0;
         refresh.persistTokens = createMockFn().mockRejectedValue(new Error('fs fail'));
@@ -98,7 +93,7 @@ describe('TwitchTokenRefresh behavior edges', () => {
     it('returns true from ensureValidToken when refresh fails', async () => {
         const refresh = new TwitchTokenRefresh({ ...baseConfig, accessToken: 'old', refreshToken: 'missing' });
         refresh.platformErrorHandler = createMockErrorHandler();
-        refresh.logger = createMockLogger();
+        refresh.logger = noOpLogger;
         refresh.needsRefresh = createMockFn().mockResolvedValue(true);
         refresh.refreshToken = createMockFn().mockResolvedValue(null);
 
@@ -110,7 +105,7 @@ describe('TwitchTokenRefresh behavior edges', () => {
     it('returns null when refresh response has malformed JSON', async () => {
         const refresh = new TwitchTokenRefresh(baseConfig);
         refresh.platformErrorHandler = createMockErrorHandler();
-        refresh.logger = createMockLogger();
+        refresh.logger = noOpLogger;
         refresh.makeRequest = createMockFn().mockResolvedValue({
             statusCode: 200,
             body: '{invalid-json'
@@ -124,7 +119,7 @@ describe('TwitchTokenRefresh behavior edges', () => {
     it('returns true when config update throws during ensureValidToken', async () => {
         const refresh = new TwitchTokenRefresh(baseConfig);
         refresh.platformErrorHandler = createMockErrorHandler();
-        refresh.logger = createMockLogger();
+        refresh.logger = noOpLogger;
         refresh.needsRefresh = createMockFn().mockResolvedValue(true);
         refresh.refreshToken = createMockFn().mockResolvedValue({
             access_token: 'new-access',
@@ -140,7 +135,7 @@ describe('TwitchTokenRefresh behavior edges', () => {
     it('returns true when refresh token missing during ensureValidToken', async () => {
         const refresh = new TwitchTokenRefresh({ ...baseConfig, refreshToken: null });
         refresh.platformErrorHandler = createMockErrorHandler();
-        refresh.logger = createMockLogger();
+        refresh.logger = noOpLogger;
 
         const result = await refresh.ensureValidToken();
 
@@ -150,7 +145,7 @@ describe('TwitchTokenRefresh behavior edges', () => {
     it('returns null on rate limit response', async () => {
         const refresh = new TwitchTokenRefresh(baseConfig);
         refresh.platformErrorHandler = createMockErrorHandler();
-        refresh.logger = createMockLogger();
+        refresh.logger = noOpLogger;
         refresh.makeRequest = createMockFn().mockResolvedValue({
             statusCode: 429,
             body: JSON.stringify({ message: 'rate limited' })
@@ -165,7 +160,7 @@ describe('TwitchTokenRefresh behavior edges', () => {
     it('cleans up refresh timers and resets stats on cleanup', () => {
         const refresh = new TwitchTokenRefresh(baseConfig);
         refresh.errorHandler = { cleanup: createMockFn() };
-        refresh.logger = createMockLogger();
+        refresh.logger = noOpLogger;
         refresh.refreshTimer = null;
         refresh.refreshSuccessCount = 3;
         refresh.refreshFailureCount = 2;
@@ -211,7 +206,7 @@ describe('TwitchTokenRefresh behavior edges', () => {
 
     it('retries config file update with backoff before succeeding', async () => {
         const refresh = new TwitchTokenRefresh(baseConfig);
-        refresh.logger = createMockLogger();
+        refresh.logger = noOpLogger;
         refresh._retryAttempts = 2;
         refresh._retryDelay = 10;
         refresh.persistTokens = createMockFn()
@@ -229,7 +224,7 @@ describe('TwitchTokenRefresh behavior edges', () => {
     describe('needsRefresh validation behavior', () => {
         it('returns true when access token is missing', async () => {
             const refresh = new TwitchTokenRefresh({ ...baseConfig, accessToken: null });
-            refresh.logger = createMockLogger();
+            refresh.logger = noOpLogger;
 
             const needs = await refresh.needsRefresh(null);
 
@@ -238,7 +233,7 @@ describe('TwitchTokenRefresh behavior edges', () => {
 
         it('returns false when token expiry is far in the future', async () => {
             const refresh = new TwitchTokenRefresh(baseConfig);
-            refresh.logger = createMockLogger();
+            refresh.logger = noOpLogger;
             refresh.config.tokenExpiresAt = testClock.now() + (2 * 60 * 60 * 1000);
             refresh.makeRequest = createMockFn();
 
@@ -250,7 +245,7 @@ describe('TwitchTokenRefresh behavior edges', () => {
 
         it('returns true when token expiry is within threshold', async () => {
             const refresh = new TwitchTokenRefresh(baseConfig);
-            refresh.logger = createMockLogger();
+            refresh.logger = noOpLogger;
             refresh.config.tokenExpiresAt = testClock.now() + (5 * 60 * 1000);
             refresh.makeRequest = createMockFn();
 
@@ -262,7 +257,7 @@ describe('TwitchTokenRefresh behavior edges', () => {
 
         it('returns true when expiration metadata is missing', async () => {
             const refresh = new TwitchTokenRefresh(baseConfig);
-            refresh.logger = createMockLogger();
+            refresh.logger = noOpLogger;
             refresh.config.tokenExpiresAt = null;
             refresh.makeRequest = createMockFn();
 
@@ -275,7 +270,7 @@ describe('TwitchTokenRefresh behavior edges', () => {
 
     it('returns true from ensureValidToken when needsRefresh throws', async () => {
         const refresh = new TwitchTokenRefresh(baseConfig);
-        refresh.logger = createMockLogger();
+        refresh.logger = noOpLogger;
         refresh.platformErrorHandler = createMockErrorHandler();
         refresh.needsRefresh = createMockFn().mockRejectedValue(new Error('boom'));
 

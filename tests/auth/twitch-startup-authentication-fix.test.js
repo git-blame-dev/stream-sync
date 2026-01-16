@@ -18,7 +18,6 @@ describe('Twitch Authentication User Experience', () => {
         // Clear all mocks first
         clearAllMocks();
         
-        // Mock logger
         mockLogger = {
             debug: createMockFn(),
             info: createMockFn(),

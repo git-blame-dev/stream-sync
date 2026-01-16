@@ -3,7 +3,7 @@ const { describe, test, expect, beforeEach, afterEach } = require('bun:test');
 const { restoreAllMocks } = require('../../helpers/bun-mock-utils');
 
 const { TEST_TIMEOUTS } = require('../../helpers/test-setup');
-const { createMockLogger, createMockFileSystem } = require('../../helpers/mock-factories');
+const { noOpLogger, createMockFileSystem } = require('../../helpers/mock-factories');
 const { setupAutomatedCleanup } = require('../../helpers/mock-lifecycle');
 const testClock = require('../../helpers/test-clock');
 
@@ -26,7 +26,7 @@ describe('Goal Tracker - Core Functionality', () => {
 
     beforeEach(() => {
         // Create mocks using factories
-        mockLogger = createMockLogger('debug');
+        mockLogger = noOpLogger;
         mockFileSystem = createMockFileSystem();
 
         // Mock configuration

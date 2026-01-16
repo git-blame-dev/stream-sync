@@ -6,7 +6,7 @@ const {
 } = require('../helpers/test-setup');
 
 const { 
-    createMockLogger
+    noOpLogger
 } = require('../helpers/mock-factories');
 
 const { 

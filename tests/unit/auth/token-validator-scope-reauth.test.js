@@ -1,7 +1,7 @@
 
 const { describe, test, expect, beforeEach, afterEach, it } = require('bun:test');
 const { createMockFn, spyOn, restoreAllMocks } = require('../../helpers/bun-mock-utils');
-const { createMockLogger } = require('../../helpers/mock-factories');
+const { noOpLogger } = require('../../helpers/mock-factories');
 
 const { TokenValidator } = require('../../../src/auth/token-validator');
 
@@ -12,7 +12,7 @@ describe('Token Validator Scope Reauth', () => {
     let mockProcessExit;
 
     beforeEach(() => {
-        mockLogger = createMockLogger('debug');
+        mockLogger = noOpLogger;
 
         mockAxios = {
             get: createMockFn(),

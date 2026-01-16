@@ -4,7 +4,7 @@ const { createMockFn, mockResolvedValue, clearAllMocks, restoreAllMocks } = requ
 const { mockModule, restoreAllModuleMocks } = require('../helpers/bun-module-mocks');
 const { TEST_TIMEOUTS } = require('../helpers/test-setup');
 const {
-    createMockLogger,
+    noOpLogger,
     createMockConfigManager,
     createMockOBSConnection,
     createMockDisplayQueue
@@ -46,7 +46,7 @@ describe('End-to-End Platform Workflow Integration Tests', () => {
     beforeEach(() => {
         testClock.reset();
         // Create mocks using factories
-        mockLogger = createMockLogger('debug');
+        mockLogger = noOpLogger;
         mockConfigManager = createMockConfigManager();
         mockOBSConnection = createMockOBSConnection();
         mockDisplayQueue = createMockDisplayQueue();

@@ -22,7 +22,6 @@ describe('OBSHealthChecker', () => {
         // Reset modules for clean testing
         resetModules();
         
-        // Mock logger
         mockLogger = {
             debug: createMockFn(),
             error: createMockFn(),

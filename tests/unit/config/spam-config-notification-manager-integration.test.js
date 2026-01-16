@@ -6,7 +6,6 @@ const { config } = require('../../../src/core/config');
 const NotificationManager = require('../../../src/notifications/NotificationManager');
 const { createTextProcessingManager } = require('../../../src/utils/text-processing');
 
-// Mock logger to capture log messages
 const mockLogger = {
     debug: createMockFn(),
     info: createMockFn(),
