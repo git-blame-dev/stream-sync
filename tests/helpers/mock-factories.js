@@ -680,36 +680,7 @@ const createMockFileSystem = (behaviorConfig = {}) => {
     };
 };
 
-const createMockLogger = (logLevel = 'error', outputConfig = {}) => {
-    const defaultOutputConfig = {
-        captureConsole: false,
-        captureFile: false,
-        captureDebug: false,
-        ...outputConfig
-    };
-
-    const logLevels = { debug: 0, info: 1, warn: 2, error: 3 };
-    const minLevel = logLevels[logLevel] || 3;
-
-    const createLogMethod = (level) => {
-        return createMockFn().mockImplementation((message, platform, data) => {
-            if (logLevels[level] >= minLevel && defaultOutputConfig.captureConsole) {
-                console.log(`[${level.toUpperCase()}] ${platform || 'system'}: ${message}`, data || '');
-            }
-        });
-    };
-
-    return {
-        debug: createLogMethod('debug'),
-        info: createLogMethod('info'),
-        warn: createLogMethod('warn'),
-        error: createLogMethod('error'),
-        
-        _mockType: 'Logger',
-        _logLevel: logLevel,
-        _outputConfig: defaultOutputConfig
-    };
-};
+const noOpLogger = { debug: () => {}, info: () => {}, warn: () => {}, error: () => {} };
 
 const createTestApp = (handlerOverrides = {}) => {
     const baseHandlers = {
@@ -2632,7 +2603,7 @@ const createMockTikTokPlatformDependencies = (behaviorOverrides = {}) => {
         WebcastEvent: mockWebcastEvent,
         ControlEvent: mockControlEvent,
         WebcastPushConnection: mockWebcastPushConnection,
-        logger: createMockLogger(),
+        logger: noOpLogger,
         retrySystem: createMockRetrySystem(),
         constants: {
             GRACE_PERIODS: { TIKTOK: 5000 },
@@ -2704,7 +2675,7 @@ const createMockAuthService = (options = {}) => {
             refreshToken: 'test-refresh-token',
             apiKey: 'test-access-token'
         },
-        logger: options.logger || createMockLogger(),
+        logger: options.logger || noOpLogger,
 
         validateToken: createMockFn().mockResolvedValue(true),
         isPlaceholderToken: createMockFn().mockResolvedValue(false),
@@ -2911,7 +2882,7 @@ const createMockTokenRefresh = (options = {}) => {
             refreshToken: 'test-refresh-token',
             apiKey: 'test-access-token'
         },
-        logger: options.logger || createMockLogger(),
+        logger: options.logger || noOpLogger,
         fileSystem: options.fileSystem || createMockFileSystem(),
 
         // Mock validation methods
@@ -2957,7 +2928,7 @@ const createMockAuthInitializer = (options = {}) => {
             refreshToken: 'test-refresh-token',
             apiKey: 'test-access-token'
         },
-        logger: options.logger || createMockLogger(),
+        logger: options.logger || noOpLogger,
 
         // Mock validation methods
         validateToken: createMockFn().mockResolvedValue(true),
@@ -2982,7 +2953,7 @@ const createMockOAuthHandler = (options = {}) => {
             refreshToken: 'test-refresh-token',
             apiKey: 'test-access-token'
         },
-        logger: options.logger || createMockLogger(),
+        logger: options.logger || noOpLogger,
         fileSystem: options.fileSystem || createMockFileSystem(),
 
         // Mock configuration methods
@@ -3039,7 +3010,7 @@ const createMockHttpClient = (options = {}) => {
             clientId: 'test-client-id',
             clientSecret: 'test-client-secret'
         },
-        logger: options.logger || createMockLogger(),
+        logger: options.logger || noOpLogger,
         axios: options.axios || { request: createMockFn(), get: createMockFn(), post: createMockFn() },
         
         // HTTP Request Methods - Consistent across all auth components
@@ -3073,7 +3044,7 @@ module.exports = {
     createMockSourcesManager,
     createMockRetrySystem,
     createMockFileSystem,
-    createMockLogger,
+    noOpLogger,
     createTestApp,
     createMockConfig,
     // createMockGiftDataLogger, // REMOVED - redundant
