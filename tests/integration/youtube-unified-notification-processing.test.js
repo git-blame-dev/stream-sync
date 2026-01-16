@@ -15,33 +15,24 @@ describe('YouTube Unified Notification Processing Implementation', () => {
         mockConfig = createMockConfig('youtube', {
             dataLoggingEnabled: false
         });
-
         mockDependencies = createMockPlatformDependencies('youtube');
-
         mockHandlers = {
             onGift: createMockFn(),
             onMembership: createMockFn(),
             onChat: createMockFn()
         };
-
         platform = new YouTubePlatform(mockConfig, mockDependencies);
         platform.handlers = mockHandlers;
-
-        // Mock unified logger
         platform.logger = {
             debug: createMockFn(),
             info: createMockFn(),
             warn: createMockFn(),
             error: createMockFn()
         };
-
-        // Mock notification dispatcher
         platform.notificationDispatcher = {
             dispatchSuperChat: createMockFn(),
             dispatchMembership: createMockFn()
         };
-
-        // Mock NotificationBuilder
         platform.NotificationBuilder = {
             build: createMockFn().mockReturnValue({ type: 'test-notification' })
         };
@@ -53,7 +44,6 @@ describe('YouTube Unified Notification Processing Implementation', () => {
 
     describe('Define Unified Notification Processing Architecture', () => {
         test('should identify dual notification processing paths', () => {
-            // Document the current dual processing paths that need unification
             const dualProcessingPaths = {
                 path1: {
                     name: 'Notification Dispatcher Path',
@@ -67,15 +57,11 @@ describe('YouTube Unified Notification Processing Implementation', () => {
                 }
             };
 
-            // Verify both paths exist
             expect(dualProcessingPaths.path1.handlers.length).toBe(4);
             expect(dualProcessingPaths.path2.handlers.length).toBe(2);
-
-            console.log('Dual notification processing paths identified');
         });
 
         test('should define unified notification processing interface', () => {
-            // Define the target unified notification processing interface
             const unifiedNotificationInterface = {
                 method: 'processNotification',
                 parameters: {
@@ -95,16 +81,13 @@ describe('YouTube Unified Notification Processing Implementation', () => {
             expect(unifiedNotificationInterface.method).toBe('processNotification');
             expect(unifiedNotificationInterface.parameters.eventType).toBeDefined();
             expect(unifiedNotificationInterface.behavior.step1).toBeDefined();
-
-            console.log('Unified notification processing interface defined');
         });
 
         test('should identify handlers using different notification paths', () => {
-            // Identify which handlers use which notification paths
             const handlerNotificationPaths = {
                 dispatcherPath: [
                     'handleSuperChat',
-                    'handleSuperSticker', 
+                    'handleSuperSticker',
                     'handleMembership',
                     'handleGiftMembershipPurchase'
                 ],
@@ -114,17 +97,13 @@ describe('YouTube Unified Notification Processing Implementation', () => {
                 ]
             };
 
-            // Verify handlers are categorized correctly
             expect(handlerNotificationPaths.dispatcherPath).toContain('handleSuperChat');
             expect(handlerNotificationPaths.builderPath).toContain('handleTickerSponsor');
-
-            console.log('Handler notification paths categorized');
         });
     });
 
     describe('Implement Unified Notification Processing', () => {
         test('should create unified notification processing method', () => {
-            // Implement the unified notification processing method
             class UnifiedNotificationProcessor {
                 constructor(platform) {
                     this.platform = platform;
@@ -136,21 +115,14 @@ describe('YouTube Unified Notification Processing Implementation', () => {
 
                 async processNotification(chatItem, eventType, eventData = {}) {
                     try {
-                        // Step 1: Extract author
                         const author = this.AuthorExtractor.extractAuthor(chatItem);
-                        
-                        // Step 2: Check suppression
                         const { shouldSuppressYouTubeNotification } = require('../../src/utils/youtube-message-extractor');
                         if (shouldSuppressYouTubeNotification(author)) {
                             this.logger.debug(`Suppressed ${eventType} notification for anonymous/junk user`, 'youtube', { author });
                             return;
                         }
-
-                        // Step 3: Extract message
                         const { YouTubeMessageExtractor } = require('../../src/utils/youtube-message-extractor');
                         const extractedMessage = YouTubeMessageExtractor.extractMessage(chatItem);
-
-                        // Step 4: Build notification
                         const notification = this.NotificationBuilder.build({
                             platform: 'youtube',
                             type: eventType,
@@ -158,12 +130,9 @@ describe('YouTube Unified Notification Processing Implementation', () => {
                             message: extractedMessage,
                             ...eventData
                         });
-
-                        // Step 5: Dispatch to appropriate handler
                         if (this.platform.handlers[`on${eventType.charAt(0).toUpperCase() + eventType.slice(1)}`]) {
                             this.platform.handlers[`on${eventType.charAt(0).toUpperCase() + eventType.slice(1)}`](notification);
                         }
-
                         this.logger.debug(`${eventType} notification processed via unified method`, 'youtube');
                     } catch (error) {
                         this.logger.error(`Error processing ${eventType} notification: ${error.message}`, 'youtube', error);
@@ -171,15 +140,11 @@ describe('YouTube Unified Notification Processing Implementation', () => {
                 }
             }
 
-            // Test the unified processor
             const processor = new UnifiedNotificationProcessor(platform);
             expect(typeof processor.processNotification).toBe('function');
-
-            console.log('Unified notification processing method implemented');
         });
 
         test('should refactor handlers to use unified processing', () => {
-            // Test refactoring handlers to use unified processing
             class UnifiedNotificationProcessor {
                 constructor(platform) {
                     this.platform = platform;
@@ -193,14 +158,11 @@ describe('YouTube Unified Notification Processing Implementation', () => {
                     try {
                         const author = this.AuthorExtractor.extractAuthor(chatItem);
                         const { shouldSuppressYouTubeNotification } = require('../../src/utils/youtube-message-extractor');
-                        
                         if (shouldSuppressYouTubeNotification(author)) {
                             return;
                         }
-
                         const { YouTubeMessageExtractor } = require('../../src/utils/youtube-message-extractor');
                         const extractedMessage = YouTubeMessageExtractor.extractMessage(chatItem);
-
                         const notification = this.NotificationBuilder.build({
                             platform: 'youtube',
                             type: eventType,
@@ -208,7 +170,6 @@ describe('YouTube Unified Notification Processing Implementation', () => {
                             message: extractedMessage,
                             ...eventData
                         });
-
                         if (this.platform.handlers[`on${eventType.charAt(0).toUpperCase() + eventType.slice(1)}`]) {
                             this.platform.handlers[`on${eventType.charAt(0).toUpperCase() + eventType.slice(1)}`](notification);
                         }
@@ -219,8 +180,6 @@ describe('YouTube Unified Notification Processing Implementation', () => {
             }
 
             const processor = new UnifiedNotificationProcessor(platform);
-
-            // Test refactored handlers
             const testEvents = [
                 {
                     handlerName: 'handleSuperChat',
@@ -228,7 +187,7 @@ describe('YouTube Unified Notification Processing Implementation', () => {
                     chatItem: { item: { type: 'LiveChatPaidMessage' }, author: { name: 'TestUser' } }
                 },
                 {
-                    handlerName: 'handleMembership', 
+                    handlerName: 'handleMembership',
                     eventType: 'membership',
                     chatItem: { item: { type: 'LiveChatMembershipItem' }, author: { name: 'TestUser' } }
                 },
@@ -239,49 +198,37 @@ describe('YouTube Unified Notification Processing Implementation', () => {
                 }
             ];
 
-            testEvents.forEach(({ handlerName, eventType, chatItem }) => {
+            testEvents.forEach(({ eventType, chatItem }) => {
                 expect(() => {
                     processor.processNotification(chatItem, eventType);
                 }).not.toThrow();
-
-                console.log(`${handlerName}: Successfully refactored to use unified processing`);
             });
         });
 
         test('should maintain backward compatibility with existing handlers', () => {
-            // Ensure unified processing maintains existing handler interfaces
             const testEvent = {
                 item: { type: 'LiveChatPaidMessage', purchase_amount: '$5.00' },
                 author: { name: 'SuperChatUser' }
             };
-
-            // Mock the unified processor
             const mockProcessor = {
                 processNotification: createMockFn()
             };
 
-            // Test that existing handler interface still works
             expect(() => {
                 mockProcessor.processNotification(testEvent, 'gift');
             }).not.toThrow();
 
             expect(mockProcessor.processNotification).toHaveBeenCalledWith(testEvent, 'gift');
-
-            console.log('Backward compatibility maintained with unified processing');
         });
     });
 
     describe('Optimize Unified Notification Processing', () => {
         test('should measure performance improvement from unified processing', () => {
-            // Test performance benefits of unified processing
             const testEvents = Array.from({ length: 100 }, (_, i) => ({
                 item: { type: 'LiveChatPaidMessage', purchase_amount: '$1.00' },
                 author: { name: `PerfUser${i}` }
             }));
-
             const startTime = process.hrtime.bigint();
-
-            // Simulate unified processing
             testEvents.forEach(event => {
                 platform.NotificationBuilder.build({
                     platform: 'youtube',
@@ -290,55 +237,23 @@ describe('YouTube Unified Notification Processing Implementation', () => {
                     message: 'Test message'
                 });
             });
-
             const endTime = process.hrtime.bigint();
             const totalTimeMs = Number(endTime - startTime) / 1_000_000;
             const avgTimePerEvent = totalTimeMs / testEvents.length;
 
-            console.log('Unified processing performance:', {
-                totalEvents: testEvents.length,
-                totalTimeMs: totalTimeMs.toFixed(2),
-                avgTimePerEventMs: avgTimePerEvent.toFixed(3)
-            });
-
-            // Should be performant
-            expect(avgTimePerEvent).toBeLessThan(1); // Less than 1ms per event
+            expect(avgTimePerEvent).toBeLessThan(1);
             expect(platform.NotificationBuilder.build).toHaveBeenCalledTimes(100);
         });
 
         test('should validate code consistency metrics', () => {
-            // Measure code consistency achieved by unified processing
-            const originalHandlerCounts = {
-                dispatcherPath: 5,
-                builderPath: 3
-            };
+            const consistencyImprovement = ((2 - 1) / 2) * 100;
 
-            const unifiedHandlerCount = 8; // All handlers use same path
-
-            // Calculate consistency improvement based on reducing from 2 paths to 1 path
-            const consistencyImprovement = ((2 - 1) / 2) * 100; // 50% improvement
-
-            console.log('Code consistency analysis:', {
-                originalPaths: 2,
-                unifiedPaths: 1,
-                consistencyImprovement: `${consistencyImprovement.toFixed(1)}%`
-            });
-
-            // Should achieve consistency improvement
             expect(consistencyImprovement).toBeGreaterThan(0);
         });
 
         test('should provide extensibility for future notification types', () => {
-            // Test that unified processing makes adding new notification types easier
-            const newEventType = 'LiveChatPoll';
             const newEventData = { pollQuestion: 'What is your favorite color?' };
 
-            const testEvent = {
-                item: { type: newEventType },
-                author: { name: 'PollUser' }
-            };
-
-            // Adding new notification type should be simple with unified processing
             expect(() => {
                 platform.NotificationBuilder.build({
                     platform: 'youtube',
@@ -348,8 +263,6 @@ describe('YouTube Unified Notification Processing Implementation', () => {
                     ...newEventData
                 });
             }).not.toThrow();
-
-            console.log('New notification type easily added with unified processing');
         });
     });
 });
