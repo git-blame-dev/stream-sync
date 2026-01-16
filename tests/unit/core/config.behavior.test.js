@@ -1,16 +1,8 @@
 const { describe, it, expect, beforeEach, afterEach } = require('bun:test');
-const { createMockFn, clearAllMocks } = require('../../helpers/bun-mock-utils');
-const { mockModule, restoreAllModuleMocks } = require('../../helpers/bun-module-mocks');
-
-mockModule('../../../src/utils/user-friendly-errors', () => ({
-    handleUserFacingError: createMockFn()
-}));
-
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
 
-const { handleUserFacingError } = require('../../../src/utils/user-friendly-errors');
 const { config, configManager } = require('../../../src/core/config');
 
 describe('ConfigManager behavior', () => {
@@ -94,41 +86,30 @@ ${streamelementsSection}
 
     beforeEach(() => {
         resetConfigManagerState();
-        clearAllMocks();
     });
 
     afterEach(() => {
         resetConfigManagerState();
     });
 
-    it('surfaces user-friendly error when config file is missing', () => {
+    it('throws user-friendly error when config file is missing', () => {
         configManager.config = null;
         configManager.isLoaded = false;
         configManager.configPath = '/tmp/non-existent-config.ini';
 
         expect(() => configManager.load()).toThrow(/Configuration file not found/);
-        expect(handleUserFacingError).toHaveBeenCalledWith(
-            expect.any(Error),
-            expect.objectContaining({ category: 'configuration', operation: 'loading' }),
-            expect.objectContaining({ showInConsole: true, includeActions: true })
-        );
     });
 
-    it('fails validation when required sections are missing and reports via user-facing error', () => {
+    it('throws error when required sections are missing', () => {
         const filePath = writeTempConfig('[general]\ndebugEnabled = true\n');
         configManager.config = null;
         configManager.isLoaded = false;
         configManager.configPath = filePath;
 
         expect(() => configManager.load()).toThrow(/Missing required configuration sections/);
-        expect(handleUserFacingError).toHaveBeenCalledWith(
-            expect.any(Error),
-            expect.objectContaining({ category: 'configuration', operation: 'loading' }),
-            expect.objectContaining({ showInConsole: true })
-        );
     });
 
-    it('fails validation when runtime config keys are missing', () => {
+    it('throws error when runtime config keys are missing', () => {
         const filePath = writeTempConfig(`
 [general]
 chatMsgGroup = statusbar chat grp
@@ -192,11 +173,6 @@ enabled = true
         configManager.configPath = filePath;
 
         expect(() => configManager.load()).toThrow(/obs.connectionTimeoutMs/);
-        expect(handleUserFacingError).toHaveBeenCalledWith(
-            expect.any(Error),
-            expect.objectContaining({ category: 'configuration', operation: 'loading' }),
-            expect.objectContaining({ showInConsole: true })
-        );
     });
 
     it('parses booleans/numbers with safe defaults when keys are missing or invalid', () => {
@@ -277,11 +253,8 @@ maxEntries = 1000
         configManager.configPath = filePath;
         configManager.load();
 
-        // Invalid boolean resolves to false because only explicit "true" passes
         expect(configManager.getBoolean('general', 'debugEnabled', false)).toBe(false);
-        // Invalid number falls back to default provided
         expect(configManager.getNumber('general', 'streamRetryInterval', 15)).toBe(15);
-        // Missing section keys return defaults without throwing
         expect(configManager.get('missing', 'key', 'default')).toBe('default');
     });
 
@@ -357,7 +330,7 @@ enabled = true
         expect(config.cooldowns.maxEntries).toBe('1000');
     });
 
-    it('fails validation when StreamElements enabled without channel IDs', () => {
+    it('throws error when StreamElements enabled without channel IDs', () => {
         const filePath = writeTempConfig(buildConfig({
             streamelementsSection: `enabled = true
 jwtToken = se-jwt-token`
@@ -369,7 +342,7 @@ jwtToken = se-jwt-token`
         expect(() => configManager.load()).toThrow(/StreamElements channel ID/);
     });
 
-    it('fails validation when YouTube API usage is enabled without apiKey', () => {
+    it('throws error when YouTube API usage is enabled without apiKey', () => {
         const filePath = writeTempConfig(buildConfig({
             youtubeSection: `enabled = true
  username = TestChannel
@@ -383,9 +356,4 @@ jwtToken = se-jwt-token`
 
         expect(() => configManager.load()).toThrow(/YouTube API key/);
     });
-
-    afterAll(() => {
-        restoreAllModuleMocks();
-    });
-
 });

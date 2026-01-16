@@ -96,11 +96,8 @@ describe('Spam Detection Service Integration Tests - Modernized', () => {
             });
         });
 
-        it('should initialize without warnings when spam detector provided', () => {
-            // BEHAVIOR: No warnings when properly configured via dependency injection
-            expect(mockLogger.warn).not.toHaveBeenCalledWith(
-                expect.stringContaining('No spam configuration')
-            );
+        it('should store spam detector when provided via dependency injection', () => {
+            expect(notificationManager.donationSpamDetector).toBe(mockSpamDetector);
         });
 
         it('should use spam detector to filter gift notifications', async () => {
@@ -185,11 +182,8 @@ describe('Spam Detection Service Integration Tests - Modernized', () => {
             });
         });
 
-        it('should not log warnings about missing spam configuration', () => {
-            // BEHAVIOR: Optional dependency - no warnings when not provided
-            expect(mockLogger.warn).not.toHaveBeenCalledWith(
-                expect.stringContaining('spam')
-            );
+        it('should have undefined spam detector when not provided', () => {
+            expect(notificationManager.donationSpamDetector).toBeUndefined();
         });
 
         it('should process gifts without spam detection', async () => {
