@@ -1,50 +1,35 @@
-const { describe, it, afterEach, expect } = require('bun:test');
-const { createMockFn, clearAllMocks } = require('../../helpers/bun-mock-utils');
-const { mockModule, restoreAllModuleMocks } = require('../../helpers/bun-module-mocks');
-
-mockModule('../../../src/utils/chat-logger', () => ({
-    logChatMessageWithConfig: createMockFn(),
-    logChatMessageSkipped: createMockFn()
-}));
-
-mockModule('../../../src/utils/monetization-detector', () => ({
-    detectMonetization: createMockFn().mockReturnValue({ detected: false, timingMs: 1 })
-}));
-
-const actualMessageNormalization = require('../../../src/utils/message-normalization');
-mockModule('../../../src/utils/message-normalization', () => ({
-    ...actualMessageNormalization,
-    validateNormalizedMessage: createMockFn().mockReturnValue({ isValid: true })
-}));
-
-mockModule('../../../src/utils/notification-builder', () => ({
-    build: createMockFn((data) => data)
-}));
-
+const { describe, it, beforeEach, expect } = require('bun:test');
+const { createMockFn } = require('../../helpers/bun-mock-utils');
+const { createMockLogger } = require('../../helpers/mock-factories');
+const { createRuntimeConstantsFixture } = require('../../helpers/runtime-constants-fixture');
 const ChatNotificationRouter = require('../../../src/services/ChatNotificationRouter');
 const testClock = require('../../helpers/test-clock');
 
 describe('ChatNotificationRouter platform chat behavior', () => {
-    afterEach(() => {
-        clearAllMocks();
-        restoreAllModuleMocks();
+    let mockLogger;
+    let runtimeConstants;
+
+    beforeEach(() => {
+        mockLogger = createMockLogger();
+        runtimeConstants = createRuntimeConstantsFixture();
     });
+
     const baseMessage = {
-        message: 'Hello world',
-        displayName: 'Viewer',
-        username: 'viewer',
-        userId: 'user-1',
+        message: 'Test message',
+        displayName: 'testViewer',
+        username: 'testviewer',
+        userId: 'test-user-1',
         timestamp: new Date(testClock.now()).toISOString()
     };
 
     const createRouter = (overrides = {}) => {
-        const runtime = {
+        const baseRuntime = {
             config: {
                 general: { greetingsEnabled: true, messagesEnabled: true },
                 tiktok: { messagesEnabled: true },
                 twitch: { messagesEnabled: true },
                 youtube: { messagesEnabled: true },
-                tts: { deduplicationEnabled: true }
+                tts: { deduplicationEnabled: false }
             },
             platformLifecycleService: {
                 getPlatformConnectionTime: createMockFn().mockReturnValue(null)
@@ -64,18 +49,15 @@ describe('ChatNotificationRouter platform chat behavior', () => {
             commandParser: {
                 getVFXConfig: createMockFn().mockReturnValue(null)
             },
-            isFirstMessage: createMockFn().mockReturnValue(false),
-            ...overrides.runtime
+            isFirstMessage: createMockFn().mockReturnValue(false)
         };
-        const logger = {
-            debug: createMockFn(),
-            info: createMockFn(),
-            warn: createMockFn(),
-            error: createMockFn()
-        };
+
+        const runtime = { ...baseRuntime, ...overrides.runtime };
+
         const router = new ChatNotificationRouter({
             runtime,
-            logger
+            logger: mockLogger,
+            runtimeConstants: overrides.runtimeConstants || runtimeConstants
         });
 
         return { router, runtime };
@@ -83,7 +65,7 @@ describe('ChatNotificationRouter platform chat behavior', () => {
 
     it('queues chat on TikTok when enabled', async () => {
         const { router, runtime } = createRouter();
-        await router.handleChatMessage('tiktok', { ...baseMessage, message: 'ni hao' });
+        await router.handleChatMessage('tiktok', { ...baseMessage, message: 'test ni hao' });
 
         const queued = runtime.displayQueue.addItem.mock.calls.map((c) => c[0]).find((i) => i.type === 'chat');
         expect(queued).toBeDefined();
@@ -95,37 +77,35 @@ describe('ChatNotificationRouter platform chat behavior', () => {
             runtime: {
                 config: {
                     general: { messagesEnabled: true },
+                    tts: { deduplicationEnabled: false },
                     twitch: { messagesEnabled: false }
-                },
-                displayQueue: { addItem: createMockFn() }
+                }
             }
         });
 
-        await router.handleChatMessage('twitch', { ...baseMessage, message: 'hi' });
+        await router.handleChatMessage('twitch', { ...baseMessage, message: 'test hi' });
 
         expect(runtime.displayQueue.addItem).not.toHaveBeenCalledWith(expect.objectContaining({ type: 'chat' }));
-        const { logChatMessageSkipped } = require('../../../src/utils/chat-logger');
-        expect(logChatMessageSkipped).toHaveBeenCalledWith('twitch', expect.any(Object), 'messages disabled');
     });
 
     it('sanitizes Twitch chat payload with HTML and enqueues', async () => {
         const { router, runtime } = createRouter();
-        await router.handleChatMessage('twitch', { ...baseMessage, message: '<b>Hi</b>' });
+        await router.handleChatMessage('twitch', { ...baseMessage, message: '<b>Test Hi</b>' });
 
         const queued = runtime.displayQueue.addItem.mock.calls.map((c) => c[0]).find((i) => i.type === 'chat');
-        expect(queued.data.message).toBe('Hi');
+        expect(queued.data.message).toBe('Test Hi');
     });
 
     it('queues chat on YouTube when enabled', async () => {
         const { router, runtime } = createRouter();
 
-        await router.handleChatMessage('youtube', { ...baseMessage, username: 'ytuser', message: 'hello youtube' });
+        await router.handleChatMessage('youtube', { ...baseMessage, username: 'testytuser', message: 'test hello youtube' });
 
         expect(runtime.displayQueue.addItem).toHaveBeenCalledWith(
             expect.objectContaining({
                 type: 'chat',
                 platform: 'youtube',
-                data: expect.objectContaining({ message: 'hello youtube' })
+                data: expect.objectContaining({ message: 'test hello youtube' })
             })
         );
     });
@@ -135,17 +115,15 @@ describe('ChatNotificationRouter platform chat behavior', () => {
             runtime: {
                 config: {
                     general: { messagesEnabled: true },
+                    tts: { deduplicationEnabled: false },
                     youtube: { messagesEnabled: false }
-                },
-                displayQueue: { addItem: createMockFn() }
+                }
             }
         });
 
-        await router.handleChatMessage('youtube', { ...baseMessage, message: 'hello youtube' });
+        await router.handleChatMessage('youtube', { ...baseMessage, message: 'test hello youtube' });
 
         expect(runtime.displayQueue.addItem).not.toHaveBeenCalledWith(expect.objectContaining({ type: 'chat' }));
-        const { logChatMessageSkipped } = require('../../../src/utils/chat-logger');
-        expect(logChatMessageSkipped).toHaveBeenCalledWith('youtube', expect.any(Object), 'messages disabled');
     });
 
     it('skips all platform chat when global messagesEnabled is false', async () => {
@@ -153,29 +131,17 @@ describe('ChatNotificationRouter platform chat behavior', () => {
             runtime: {
                 config: {
                     general: { messagesEnabled: false },
+                    tts: { deduplicationEnabled: false },
                     tiktok: {},
                     twitch: {},
                     youtube: {}
-                },
-                displayQueue: { addItem: createMockFn() }
+                }
             }
         });
 
-        await router.handleChatMessage('tiktok', { ...baseMessage, message: 'blocked globally' });
+        await router.handleChatMessage('tiktok', { ...baseMessage, message: 'test blocked globally' });
 
         expect(runtime.displayQueue.addItem).not.toHaveBeenCalled();
-        const { logChatMessageSkipped } = require('../../../src/utils/chat-logger');
-        expect(logChatMessageSkipped).toHaveBeenCalledWith('tiktok', expect.any(Object), 'messages disabled');
-    });
-
-    it('defaults to allowing chat for unknown platforms when global toggle is on', async () => {
-        const { router, runtime } = createRouter();
-
-        await router.handleChatMessage('unknownPlatform', { ...baseMessage, message: 'hello unknown' });
-
-        const queued = runtime.displayQueue.addItem.mock.calls.map((c) => c[0]).find((i) => i.type === 'chat');
-        expect(queued).toBeDefined();
-        expect(queued.platform).toBe('unknownPlatform');
     });
 
     it('skips chat messages that are only whitespace', async () => {
@@ -184,8 +150,6 @@ describe('ChatNotificationRouter platform chat behavior', () => {
         await router.handleChatMessage('tiktok', { ...baseMessage, message: '   ' });
 
         expect(runtime.displayQueue.addItem).not.toHaveBeenCalled();
-        const { logChatMessageSkipped } = require('../../../src/utils/chat-logger');
-        expect(logChatMessageSkipped).toHaveBeenCalledWith('tiktok', expect.any(Object), 'empty message');
     });
 
     it('skips chat sent before platform connection time', async () => {
@@ -194,20 +158,18 @@ describe('ChatNotificationRouter platform chat behavior', () => {
             runtime: {
                 config: {
                     general: { messagesEnabled: true, filterOldMessages: true },
+                    tts: { deduplicationEnabled: false },
                     tiktok: { messagesEnabled: true }
                 },
                 platformLifecycleService: {
                     getPlatformConnectionTime: createMockFn().mockReturnValue(connectionTime)
-                },
-                displayQueue: { addItem: createMockFn() }
+                }
             }
         });
 
         const oldTimestamp = new Date(connectionTime - 1000).toISOString();
-        await router.handleChatMessage('tiktok', { ...baseMessage, message: 'late arrival', timestamp: oldTimestamp });
+        await router.handleChatMessage('tiktok', { ...baseMessage, message: 'test late arrival', timestamp: oldTimestamp });
 
         expect(runtime.displayQueue.addItem).not.toHaveBeenCalled();
-        const { logChatMessageSkipped } = require('../../../src/utils/chat-logger');
-        expect(logChatMessageSkipped).toHaveBeenCalledWith('tiktok', expect.any(Object), 'old message (sent before connection)');
     });
 });

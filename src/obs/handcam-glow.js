@@ -1,12 +1,30 @@
-
-const { ensureOBSConnected } = require('./connection');
-const { logger } = require('../core/logging');
-const { safeDelay } = require('../utils/timeout-validator');
+const { ensureOBSConnected: defaultEnsureConnected } = require('./connection');
+const { logger: defaultLogger } = require('../core/logging');
+const { safeDelay: defaultDelay } = require('../utils/timeout-validator');
 const { createPlatformErrorHandler } = require('../utils/platform-error-handler');
+
+let moduleDeps = {
+    ensureConnected: defaultEnsureConnected,
+    logger: defaultLogger,
+    delay: defaultDelay
+};
+
+function _setDependencies(deps) {
+    moduleDeps = { ...moduleDeps, ...deps };
+}
+
+function _resetDependencies() {
+    moduleDeps = {
+        ensureConnected: defaultEnsureConnected,
+        logger: defaultLogger,
+        delay: defaultDelay
+    };
+}
 
 let handcamGlowErrorHandler = null;
 
 function handleHandcamGlowError(message, error, payload = null) {
+    const logger = moduleDeps.logger;
     if (!handcamGlowErrorHandler && logger) {
         handcamGlowErrorHandler = createPlatformErrorHandler(logger, 'handcam-glow');
     }
@@ -69,21 +87,22 @@ function createHandcamGlowConfig(handcamConfig = {}, runtimeConstants) {
 }
 
 async function setHandcamGlowSize(obs, config, baseSettings, size) {
+    const { logger, ensureConnected } = moduleDeps;
     try {
-        await ensureOBSConnected();
-        
-        const newSettings = { 
-            ...baseSettings, 
-            Size: size, 
-            glow_size: size 
+        await ensureConnected();
+
+        const newSettings = {
+            ...baseSettings,
+            Size: size,
+            glow_size: size
         };
-        
+
         await obs.call('SetSourceFilterSettings', {
             sourceName: config.sourceName,
             filterName: config.filterName,
             filterSettings: newSettings
         });
-        
+
     } catch (error) {
         logger.debug(`[Handcam] Error setting glow size to ${size}`, 'handcam-glow', error.message);
         throw error;
@@ -91,21 +110,21 @@ async function setHandcamGlowSize(obs, config, baseSettings, size) {
 }
 
 async function executeAnimationPhase(obs, config, baseSettings, phaseName, phaseNumber, calculateSize, stepDelay) {
+    const { logger, delay } = moduleDeps;
     try {
         logger.debug(`[Handcam] Phase ${phaseNumber}: ${phaseName} - ${config.totalSteps} steps, ${stepDelay.toFixed(1)}ms per step`, 'handcam-glow');
-        
+
         for (let step = 0; step <= config.totalSteps; step++) {
             const size = calculateSize(step);
             await setHandcamGlowSize(obs, config, baseSettings, size);
-            
-            // Add delay between steps (except for the last step)
+
             if (step < config.totalSteps) {
-                await safeDelay(stepDelay, Math.max(stepDelay || 0, 10), 'Handcam glow step delay');
+                await delay(stepDelay, Math.max(stepDelay || 0, 10), 'Handcam glow step delay');
             }
         }
-        
+
         logger.debug(`[Handcam] Phase ${phaseNumber} completed: ${phaseName}`, 'handcam-glow');
-        
+
     } catch (error) {
         logger.debug(`[Handcam] Error in phase ${phaseNumber} (${phaseName})`, 'handcam-glow', error.message);
         throw error;
@@ -113,10 +132,10 @@ async function executeAnimationPhase(obs, config, baseSettings, phaseName, phase
 }
 
 async function animateGlowSize(obs, config, baseSettings) {
+    const { logger, delay } = moduleDeps;
     try {
         logger.debug(`[Handcam] Starting enhanced glow animation with easing: ${config.easingEnabled ? 'enabled' : 'disabled'}`, 'handcam-glow');
-        
-        // Step 1: Ramp up (0% → 100%) with optional easing
+
         await executeAnimationPhase(
             obs,
             config,
@@ -130,12 +149,10 @@ async function animateGlowSize(obs, config, baseSettings) {
             },
             config.rampUpStepDelay
         );
-        
-        // Step 2: Hold at maximum intensity
+
         logger.debug(`[Handcam] Phase 2: Hold at maximum glow for ${config.holdDuration}s`, 'handcam-glow');
-        await safeDelay(config.holdDuration * 1000, 1000, 'Handcam glow hold duration');
-        
-        // Step 3: Ramp down (100% → 0%) with optional easing
+        await delay(config.holdDuration * 1000, 1000, 'Handcam glow hold duration');
+
         await executeAnimationPhase(
             obs,
             config,
@@ -149,29 +166,29 @@ async function animateGlowSize(obs, config, baseSettings) {
             },
             config.rampDownStepDelay
         );
-        
+
         logger.debug(`[Handcam] Enhanced glow animation completed successfully`, 'handcam-glow');
-        
+
     } catch (error) {
         logger.debug(`[Handcam] Error during enhanced glow animation`, 'handcam-glow', error.message);
-        // Re-throw to let the calling function handle cleanup
         throw error;
     }
 }
 
 async function setSourceFilterEnabled(obs, sourceName, filterName, enabled) {
+    const { logger, ensureConnected } = moduleDeps;
     try {
-        await ensureOBSConnected();
+        await ensureConnected();
         logger.debug(`[OBS Filter] Setting ${sourceName}:${filterName} to ${enabled ? 'enabled' : 'disabled'}`, 'handcam-glow');
-        
+
         await obs.call('SetSourceFilterEnabled', {
             sourceName: sourceName,
             filterName: filterName,
             filterEnabled: enabled
         });
-        
+
         logger.debug(`[OBS Filter] Successfully set ${sourceName}:${filterName} to ${enabled ? 'enabled' : 'disabled'}`, 'handcam-glow');
-        
+
     } catch (error) {
         logger.debug(`[OBS Filter] Error setting ${sourceName}:${filterName}`, 'handcam-glow', error.message);
         throw error;
@@ -179,49 +196,43 @@ async function setSourceFilterEnabled(obs, sourceName, filterName, enabled) {
 }
 
 async function activateHandcamGlow(obs, handcamConfig = {}, runtimeConstants) {
+    const { logger, ensureConnected } = moduleDeps;
     const config = createHandcamGlowConfig(handcamConfig, runtimeConstants);
-    
+
     if (!config.enabled) {
         logger.debug('[Handcam] Glow filter disabled in config', 'handcam-glow');
         return;
     }
-    
+
     try {
         logger.debug(`[Handcam] Starting glow animation: 0→${config.maxSize}→0 over ${config.totalDuration}s (${config.rampUpDuration}s up + ${config.holdDuration}s hold + ${config.rampDownDuration}s down)`, 'handcam-glow');
-        
-        // Clear any existing timeout to reset duration
+
         if (handcamGlowTimeout) {
             clearTimeout(handcamGlowTimeout);
             handcamGlowTimeout = null;
             logger.debug('[Handcam] Cleared existing glow animation timeout', 'handcam-glow');
         }
-        
-        // Ensure OBS connection is ready
-        await ensureOBSConnected();
-        
-        // Get current filter settings to preserve other properties
+
+        await ensureConnected();
+
         const filterInfo = await obs.call('GetSourceFilter', {
             sourceName: config.sourceName,
             filterName: config.filterName
         });
-        
+
         const baseSettings = filterInfo.filterSettings;
         logger.debug(`[Handcam] Retrieved filter settings for ${config.sourceName}:${config.filterName}`, 'handcam-glow');
-        
-        // Initialize to 0 using the modular helper function
+
         await setHandcamGlowSize(obs, config, baseSettings, 0);
-        
-        // Execute the 3-phase animation
         await animateGlowSize(obs, config, baseSettings);
-        
+
         logger.debug('[Handcam] Glow animation completed', 'handcam-glow');
-        
+
     } catch (error) {
         handleHandcamGlowError('[Handcam] Error in glow animation', error, { config });
-        
-        // Try to reset properties on error using modular helper
+
         try {
-            await ensureOBSConnected();
+            await ensureConnected();
             const filterInfo = await obs.call('GetSourceFilter', {
                 sourceName: config.sourceName,
                 filterName: config.filterName
@@ -235,44 +246,43 @@ async function activateHandcamGlow(obs, handcamConfig = {}, runtimeConstants) {
 }
 
 async function initializeHandcamGlow(obs, handcamConfig = {}, runtimeConstants) {
+    const { logger, ensureConnected } = moduleDeps;
     const config = createHandcamGlowConfig(handcamConfig, runtimeConstants);
-    
+
     if (!config.enabled) {
         logger.debug('[Handcam] Glow initialization skipped - disabled in config', 'handcam-glow');
         return;
     }
-    
+
     try {
-        await ensureOBSConnected();
-        
-        // Get current filter settings to preserve other properties
+        await ensureConnected();
+
         const filterInfo = await obs.call('GetSourceFilter', {
             sourceName: config.sourceName,
             filterName: config.filterName
         });
-        
+
         const baseSettings = filterInfo.filterSettings;
-        
-        // Initialize to 0 to ensure clean state
+
         await setHandcamGlowSize(obs, config, baseSettings, 0);
         logger.debug('[Handcam] Glow filter initialized to 0', 'handcam-glow');
-        
+
     } catch (error) {
         logger.debug('[Handcam] Error initializing glow filter', 'handcam-glow', error.message);
     }
 }
 
 function triggerHandcamGlow(obs, handcamConfig = {}, runtimeConstants) {
+    const { logger } = moduleDeps;
     const config = createHandcamGlowConfig(handcamConfig, runtimeConstants);
-    
+
     if (!config.enabled) {
         logger.debug('[Handcam] Glow trigger ignored - disabled in config', 'handcam-glow');
         return;
     }
-    
+
     logger.debug('[Handcam] Triggering glow animation (fire-and-forget)', 'handcam-glow');
-    
-    // Fire-and-forget execution
+
     activateHandcamGlow(obs, handcamConfig, runtimeConstants).catch(error => {
         logger.debug('[Handcam] Fire-and-forget glow animation error', 'handcam-glow', error.message);
     });
@@ -280,5 +290,6 @@ function triggerHandcamGlow(obs, handcamConfig = {}, runtimeConstants) {
 
 module.exports = {
     triggerHandcamGlow,
-    initializeHandcamGlow
+    initializeHandcamGlow,
+    _testing: { setDependencies: _setDependencies, resetDependencies: _resetDependencies }
 };

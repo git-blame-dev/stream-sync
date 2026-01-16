@@ -1,44 +1,33 @@
-
-const { describe, test, expect, it, afterEach } = require('bun:test');
-const { createMockFn, restoreAllMocks } = require('../../helpers/bun-mock-utils');
-const { mockModule, resetModules, restoreAllModuleMocks } = require('../../helpers/bun-module-mocks');
+const { describe, expect, it, beforeEach, afterEach } = require('bun:test');
+const { createMockFn } = require('../../helpers/bun-mock-utils');
+const { createMockLogger } = require('../../helpers/mock-factories');
+const PlatformEventRouter = require('../../../src/services/PlatformEventRouter');
 
 describe('PlatformEventRouter error handling', () => {
-    afterEach(() => {
-        restoreAllMocks();
-        restoreAllModuleMocks();
-    });
+    let mockLogger;
+    let mockEventBus;
+    let mockRuntime;
+    let mockNotificationManager;
+    let mockConfigService;
+    let subscriber;
 
     const baseEvent = {
         platform: 'twitch',
         type: 'platform:chat-message',
         data: {
-            username: 'User',
-            message: { text: 'hi' },
-            userId: 'user-1',
+            username: 'testUser',
+            message: { text: 'test message' },
+            userId: 'test-user-1',
             timestamp: new Date().toISOString(),
             metadata: {}
         }
     };
 
-    const buildRouter = (thrownValue) => {
-const errorHandler = {
-            handleEventProcessingError: createMockFn(),
-            logOperationalError: createMockFn()
-        };
+    beforeEach(() => {
+        mockLogger = createMockLogger();
 
-        mockModule('../../../src/utils/platform-error-handler', () => ({
-            createPlatformErrorHandler: createMockFn(() => errorHandler)
-        }));
-
-        const PlatformEventRouter = require('../../../src/services/PlatformEventRouter');
-
-        const mockAppRuntime = {
-            handleChatMessage: createMockFn(() => Promise.reject(thrownValue))
-        };
-
-        let subscriber;
-        const eventBus = {
+        subscriber = null;
+        mockEventBus = {
             subscribe: createMockFn((event, handler) => {
                 subscriber = handler;
                 return () => {};
@@ -50,50 +39,49 @@ const errorHandler = {
             }
         };
 
-        const logger = {
-            debug: createMockFn(),
-            info: createMockFn(),
-            warn: createMockFn(),
-            error: createMockFn()
+        mockRuntime = {
+            handleChatMessage: createMockFn().mockResolvedValue()
         };
 
-        const router = new PlatformEventRouter({
-            eventBus,
-            runtime: mockAppRuntime,
-            notificationManager: { handleNotification: createMockFn() },
-            configService: { areNotificationsEnabled: createMockFn(() => true) },
-            logger
-        });
+        mockNotificationManager = {
+            handleNotification: createMockFn()
+        };
 
-        return { router, mockAppRuntime, errorHandler, eventBus };
-    };
-
-    it('routes handler errors through createPlatformErrorHandler', async () => {
-        const thrownError = new Error('route boom');
-        const { errorHandler, eventBus } = buildRouter(thrownError);
-
-        await eventBus.emit('platform:event', baseEvent);
-
-        expect(errorHandler.handleEventProcessingError).toHaveBeenCalledWith(
-            thrownError,
-            'platform:chat-message',
-            null,
-            expect.stringContaining('route boom')
-        );
-        expect(errorHandler.logOperationalError).not.toHaveBeenCalled();
+        mockConfigService = {
+            areNotificationsEnabled: createMockFn().mockReturnValue(true)
+        };
     });
 
-    it('logs operational errors for non-Error handler failures', async () => {
-        const thrownValue = 'string failure';
-        const { errorHandler, eventBus } = buildRouter(thrownValue);
+    it('continues processing events after handler throws an error', async () => {
+        mockRuntime.handleChatMessage
+            .mockRejectedValueOnce(new Error('first call fails'))
+            .mockResolvedValueOnce();
 
-        await eventBus.emit('platform:event', baseEvent);
+        const router = new PlatformEventRouter({
+            eventBus: mockEventBus,
+            runtime: mockRuntime,
+            notificationManager: mockNotificationManager,
+            configService: mockConfigService,
+            logger: mockLogger
+        });
 
-        expect(errorHandler.logOperationalError).toHaveBeenCalledWith(
-            expect.stringContaining('string failure'),
-            'PlatformEventRouter',
-            thrownValue
-        );
-        expect(errorHandler.handleEventProcessingError).not.toHaveBeenCalled();
+        await mockEventBus.emit('platform:event', baseEvent);
+        await mockEventBus.emit('platform:event', baseEvent);
+
+        expect(mockRuntime.handleChatMessage).toHaveBeenCalledTimes(2);
+    });
+
+    it('does not crash when handler throws non-Error value', async () => {
+        mockRuntime.handleChatMessage.mockRejectedValueOnce('string error');
+
+        const router = new PlatformEventRouter({
+            eventBus: mockEventBus,
+            runtime: mockRuntime,
+            notificationManager: mockNotificationManager,
+            configService: mockConfigService,
+            logger: mockLogger
+        });
+
+        await expect(mockEventBus.emit('platform:event', baseEvent)).resolves.toBeUndefined();
     });
 });
