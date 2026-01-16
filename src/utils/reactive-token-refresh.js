@@ -1,11 +1,11 @@
 
-const { 
-    AuthErrorFactory, 
-    ErrorHandler, 
+const {
+    AuthErrorFactory: DefaultAuthErrorFactory,
+    ErrorHandler: DefaultErrorHandler,
     TokenRefreshError,
     NetworkError
 } = require('./auth-errors');
-const { createPlatformErrorHandler } = require('./platform-error-handler');
+const { createPlatformErrorHandler: defaultCreatePlatformErrorHandler } = require('./platform-error-handler');
 const { resolveLogger } = require('./logger-resolver');
 
 class ReactiveTokenRefresh {
@@ -13,8 +13,12 @@ class ReactiveTokenRefresh {
         this.config = config;
         this.logger = resolveLogger(dependencies.logger, 'ReactiveTokenRefresh');
         this.TwitchTokenRefresh = dependencies.TwitchTokenRefresh || require('./twitch-token-refresh');
-        
-        // Enhanced error handling
+
+        const ErrorHandler = dependencies.ErrorHandler || DefaultErrorHandler;
+        const createPlatformErrorHandler = dependencies.createPlatformErrorHandler || defaultCreatePlatformErrorHandler;
+        this.AuthErrorFactory = dependencies.AuthErrorFactory || DefaultAuthErrorFactory;
+        this._createPlatformErrorHandler = createPlatformErrorHandler;
+
         this.errorHandler = new ErrorHandler(this.logger);
         this.platformErrorHandler = createPlatformErrorHandler(this.logger, 'reactive-token-refresh');
         
@@ -288,7 +292,7 @@ class ReactiveTokenRefresh {
     }
 
     _handleRefreshError(refreshError) {
-        const categorizedError = AuthErrorFactory.createTokenRefreshError(refreshError, {
+        const categorizedError = this.AuthErrorFactory.createTokenRefreshError(refreshError, {
             operationName: 'token_refresh',
             refreshAttempted: this.refreshAttempted
         });
@@ -321,8 +325,8 @@ class ReactiveTokenRefresh {
             refreshAttempted: this.refreshAttempted,
             hasRefreshToken: !!this.config.refreshToken
         };
-        
-        return AuthErrorFactory.categorizeError(error, context);
+
+        return this.AuthErrorFactory.categorizeError(error, context);
     }
 
     _is401UnauthorizedError(error) {
@@ -381,7 +385,7 @@ ReactiveTokenRefresh.prototype._logReactiveRefreshError = function(
     eventType = 'reactive-token-refresh'
 ) {
     if (!this.platformErrorHandler) {
-        this.platformErrorHandler = createPlatformErrorHandler(this.logger, 'reactive-token-refresh');
+        this.platformErrorHandler = this._createPlatformErrorHandler(this.logger, 'reactive-token-refresh');
     }
 
     if (error instanceof Error) {

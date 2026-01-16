@@ -1,7 +1,7 @@
 
 const { createHttpClient } = require('./http-client');
 const { validateExponentialBackoff, safeSetTimeout, safeSetInterval } = require('./timeout-validator');
-const { createPlatformErrorHandler } = require('./platform-error-handler');
+const { createPlatformErrorHandler: defaultCreatePlatformErrorHandler } = require('./platform-error-handler');
 const { validateLoggerInterface } = require('./dependency-validator');
 const { YOUTUBE } = require('../core/endpoints');
 
@@ -9,17 +9,16 @@ class StreamDetector {
     constructor(config = {}, services = {}) {
         this.logger = this._resolveLogger(services.logger);
         this.config = this._resolveConfig(config);
-        
-        // Track retry attempts per platform
+
         this.retryAttempts = new Map();
         this.retryTimeouts = new Map();
-        
-        // Continuous monitoring state
+
         this.monitoringIntervals = new Map();
         this.platformConfigs = new Map();
         this.platformCallbacks = new Map();
         this.platformStreamStatus = new Map();
 
+        const createPlatformErrorHandler = services.createPlatformErrorHandler || defaultCreatePlatformErrorHandler;
         this._errorHandler = createPlatformErrorHandler(this.logger, 'stream-detector');
 
         // Optional injected detection services (constructor DI)
@@ -560,7 +559,7 @@ module.exports = { StreamDetector };
 
 StreamDetector.prototype._handleStreamDetectorError = function(message, error = null, eventType = 'stream-detector', eventData = null) {
     if (!this._errorHandler) {
-        this._errorHandler = createPlatformErrorHandler(this.logger, 'stream-detector');
+        this._errorHandler = defaultCreatePlatformErrorHandler(this.logger, 'stream-detector');
     }
 
     if (error instanceof Error) {
