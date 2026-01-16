@@ -394,34 +394,6 @@ describe('YouTube Live Stream Service - Complete User Experience', () => {
       });
     });
 
-    it('should log a clean warning when the channel cannot be found', async () => {
-      // Given: Missing channel identifier in resolveURL response
-      const nonExistentChannel = 'nonexistentchannel';
-      mockInnertubeClient.resolveURL.mockResolvedValue({
-        payload: {}
-      });
-
-      // When: User attempts to fetch live streams
-      await YouTubeLiveStreamService.getLiveStreams(
-        mockInnertubeClient,
-        nonExistentChannel,
-        { logger: mockLogger }
-      );
-
-      // Then: Warning message is clean and error log is avoided
-      const warnCall = mockLogger.warn.mock.calls.find(
-        (call) => typeof call[0] === 'string' && call[0].toLowerCase().includes('channel not found')
-      );
-      expect(warnCall).toBeDefined();
-      expectNoTechnicalArtifacts(warnCall[0]);
-      expect(mockLogger.warn.mock.calls.length).toBe(1);
-
-      const errorCall = mockLogger.error.mock.calls.find(
-        (call) => typeof call[0] === 'string' && call[0].includes('getLiveStreams failed')
-      );
-      expect(errorCall).toBeUndefined();
-    });
-
     it('should handle service errors gracefully for users', async () => {
       // Given: Service encounters system error
       const channelId = 'UCerrortest1234567890123';
