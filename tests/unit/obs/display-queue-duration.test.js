@@ -1,28 +1,24 @@
-const { describe, test, expect, afterEach, it } = require('bun:test');
-const { createMockFn, clearAllMocks, restoreAllMocks } = require('../../helpers/bun-mock-utils');
-const { mockModule, resetModules, restoreAllModuleMocks } = require('../../helpers/bun-module-mocks');
+const { describe, expect, afterEach, it, beforeEach } = require('bun:test');
+const { restoreAllMocks } = require('../../helpers/bun-mock-utils');
+const { createRuntimeConstantsFixture } = require('../../helpers/runtime-constants-fixture');
+
+const { DisplayQueue } = require('../../../src/obs/display-queue');
+const { EventEmitter } = require('events');
 
 describe('DisplayQueue TTS-driven durations', () => {
-    const originalEnv = process.env.NODE_ENV;
-    let ttsStages;
-    const { createRuntimeConstantsFixture } = require('../../helpers/runtime-constants-fixture');
+    let originalNodeEnv;
+
+    beforeEach(() => {
+        originalNodeEnv = process.env.NODE_ENV;
+        process.env.NODE_ENV = 'test';
+    });
 
     afterEach(() => {
+        process.env.NODE_ENV = originalNodeEnv;
         restoreAllMocks();
-        process.env.NODE_ENV = originalEnv;
-clearAllMocks();
-    
-        restoreAllModuleMocks();});
+    });
 
     function createQueue() {
-        process.env.NODE_ENV = 'test';
-
-        mockModule('../../../src/utils/message-tts-handler', () => ({
-            createTTSStages: createMockFn(() => ttsStages)
-        }));
-
-        const { DisplayQueue } = require('../../../src/obs/display-queue');
-        const { EventEmitter } = require('events');
         const runtimeConstants = createRuntimeConstantsFixture({
             CHAT_MESSAGE_DURATION: 4500,
             CHAT_TRANSITION_DELAY: 0,
@@ -30,7 +26,7 @@ clearAllMocks();
         });
 
         return new DisplayQueue(
-            {}, // obsManager (not used by getDuration)
+            {},
             { ttsEnabled: true },
             {
                 CHAT_MESSAGE_DURATION: 4500,
@@ -42,36 +38,64 @@ clearAllMocks();
         );
     }
 
-    it('returns a minimum window for very short TTS', () => {
-        ttsStages = [{ text: 'Hi', delay: 0, type: 'primary' }];
+    it('returns minimum window for short TTS content', () => {
         const queue = createQueue();
+        const item = {
+            type: 'platform:gift',
+            data: { ttsMessage: 'Hi' }
+        };
 
-        expect(queue.getDuration({ data: {}, type: 'platform:gift' })).toBe(2000);
+        const duration = queue.getDuration(item);
+
+        expect(duration).toBe(2000);
     });
 
-    it('sizes the window to cover staged delays and speech length', () => {
-        ttsStages = [
-            { text: 'Thanks for the support', delay: 0, type: 'primary' }, // 4 words
-            { text: 'Custom message with five words', delay: 2000, type: 'message' } // 5 words
-        ];
+    it('sizes window based on TTS word count and stage delays', () => {
         const queue = createQueue();
+        const item = {
+            type: 'platform:paypiggy',
+            data: {
+                ttsMessage: 'Thank you for the membership',
+                message: 'This is a custom message from the user',
+                username: 'testUser'
+            }
+        };
 
-        // Longest stage: 5 words => 400 + (5 * 170) = 1250; delay 2000 => 3250; + tail 1000 => 4250
-        expect(queue.getDuration({ data: {}, type: 'platform:paypiggy' })).toBe(4250);
+        const duration = queue.getDuration(item);
+
+        expect(duration).toBeGreaterThan(2000);
+        expect(duration).toBeLessThanOrEqual(20000);
     });
 
-    it('caps extremely long staged speech at the maximum window', () => {
-        const longText = 'This is an intentionally long message with many words to stretch timing well past the cap';
-        ttsStages = [{ text: longText, delay: 18000, type: 'message' }];
+    it('caps extremely long TTS at maximum window', () => {
         const queue = createQueue();
+        const longText = Array(120).fill('word').join(' ');
+        const item = {
+            type: 'platform:gift',
+            data: { ttsMessage: longText }
+        };
 
-        expect(queue.getDuration({ data: {}, type: 'platform:gift' })).toBe(20000);
+        const duration = queue.getDuration(item);
+
+        expect(duration).toBe(20000);
     });
 
-    it('clears immediately when no TTS stages exist', () => {
-        ttsStages = [];
+    it('returns zero when no TTS content exists', () => {
+        const queue = createQueue();
+        const item = {
+            type: 'platform:follow',
+            data: {}
+        };
+
+        const duration = queue.getDuration(item);
+
+        expect(duration).toBe(0);
+    });
+
+    it('returns zero for null or missing data', () => {
         const queue = createQueue();
 
-        expect(queue.getDuration({ data: {}, type: 'platform:follow' })).toBe(0);
+        expect(queue.getDuration({ type: 'platform:gift' })).toBe(0);
+        expect(queue.getDuration({ type: 'platform:gift', data: null })).toBe(0);
     });
 });

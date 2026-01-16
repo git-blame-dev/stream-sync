@@ -1,58 +1,80 @@
-
-const { describe, test, expect, it, afterEach } = require('bun:test');
+const { describe, expect, it, beforeEach, afterEach } = require('bun:test');
 const { createMockFn, restoreAllMocks } = require('../../helpers/bun-mock-utils');
-const { mockModule, requireActual, restoreAllModuleMocks } = require('../../helpers/bun-module-mocks');
-
-const sources = require('../../../src/obs/sources');
-mockModule('../../../src/obs/sources', () => {
-    const instance = {
-        updateChatMsgText: createMockFn().mockResolvedValue(),
-        updateTextSource: createMockFn().mockResolvedValue(),
-        setNotificationPlatformLogoVisibility: createMockFn().mockResolvedValue(),
-        setGroupSourceVisibility: createMockFn().mockResolvedValue(),
-        setChatDisplayVisibility: createMockFn().mockResolvedValue(),
-        setNotificationDisplayVisibility: createMockFn().mockResolvedValue()
-    };
-    return {
-        OBSSourcesManager: class {},
-        createOBSSourcesManager: () => instance,
-        getDefaultSourcesManager: () => instance
-    };
-});
+const { createRuntimeConstantsFixture } = require('../../helpers/runtime-constants-fixture');
 
 const { DisplayQueue } = require('../../../src/obs/display-queue');
-const { createMockOBSManager } = require('../../helpers/mock-factories');
+const { EventEmitter } = require('events');
 
 describe('DisplayQueue platform notification gating', () => {
-    afterEach(() => {
-        restoreAllMocks();
-        restoreAllModuleMocks();
+    let originalNodeEnv;
+
+    beforeEach(() => {
+        originalNodeEnv = process.env.NODE_ENV;
+        process.env.NODE_ENV = 'test';
     });
 
-    const constants = {
-        PRIORITY_LEVELS: { CHAT: 1, FOLLOW: 2 },
-        CHAT_MESSAGE_DURATION: 4500,
-        CHAT_TRANSITION_DELAY: 200,
-        NOTIFICATION_CLEAR_DELAY: 200
-    };
+    afterEach(() => {
+        process.env.NODE_ENV = originalNodeEnv;
+        restoreAllMocks();
+    });
 
-    const config = {
-        autoProcess: false,
-        chat: { sourceName: 'chat', sceneName: 'scene', groupName: 'group', platformLogos: {} },
-        notification: { sourceName: 'notification', sceneName: 'scene', groupName: 'group', platformLogos: {} },
-        twitch: { notificationsEnabled: false }
-    };
+    function createQueue(platformConfig = {}) {
+        const runtimeConstants = createRuntimeConstantsFixture({
+            CHAT_MESSAGE_DURATION: 4500,
+            CHAT_TRANSITION_DELAY: 200,
+            NOTIFICATION_CLEAR_DELAY: 200
+        });
+
+        const mockSourcesManager = {
+            updateTextSource: createMockFn().mockResolvedValue(),
+            updateChatMsgText: createMockFn().mockResolvedValue(),
+            setSourceVisibility: createMockFn().mockResolvedValue(),
+            setNotificationDisplayVisibility: createMockFn().mockResolvedValue(),
+            setChatDisplayVisibility: createMockFn().mockResolvedValue(),
+            hideAllDisplays: createMockFn().mockResolvedValue(),
+            setPlatformLogoVisibility: createMockFn().mockResolvedValue(),
+            setNotificationPlatformLogoVisibility: createMockFn().mockResolvedValue(),
+            setGroupSourceVisibility: createMockFn().mockResolvedValue(),
+            setSourceFilterVisibility: createMockFn().mockResolvedValue()
+        };
+
+        const obsManager = {
+            call: createMockFn().mockResolvedValue({}),
+            isConnected: () => true,
+            isReady: createMockFn().mockResolvedValue(true)
+        };
+
+        const config = {
+            autoProcess: false,
+            ttsEnabled: false,
+            chat: { sourceName: 'chat', sceneName: 'scene', groupName: 'group', platformLogos: {} },
+            notification: { sourceName: 'notification', sceneName: 'scene', groupName: 'group', platformLogos: {} },
+            ...platformConfig
+        };
+
+        const queue = new DisplayQueue(
+            obsManager,
+            config,
+            { PRIORITY_LEVELS: { CHAT: 1, FOLLOW: 2 } },
+            new EventEmitter(),
+            runtimeConstants
+        );
+
+        queue.sourcesManager = mockSourcesManager;
+        return { queue, mockSourcesManager };
+    }
 
     it('skips notification display when platform notifications are disabled', async () => {
-        const queue = new DisplayQueue(createMockOBSManager('connected'), config, constants);
-        queue.displayNotificationItem = requireActual('../../../src/obs/display-queue').DisplayQueue.prototype.displayNotificationItem;
+        const { queue, mockSourcesManager } = createQueue({
+            twitch: { notificationsEnabled: false }
+        });
 
         const notificationItem = {
             type: 'platform:follow',
             platform: 'twitch',
             data: {
-                username: 'Follower',
-                displayMessage: 'Follower just followed!'
+                username: 'testFollower',
+                displayMessage: 'testFollower just followed!'
             },
             priority: 2,
             duration: 5000
@@ -60,9 +82,47 @@ describe('DisplayQueue platform notification gating', () => {
 
         await queue.displayNotificationItem(notificationItem);
 
-        const obsSources = sources.getDefaultSourcesManager();
-        expect(obsSources.updateTextSource).not.toHaveBeenCalled();
-        expect(obsSources.setGroupSourceVisibility).not.toHaveBeenCalled();
-        expect(obsSources.setNotificationDisplayVisibility).not.toHaveBeenCalled();
+        expect(mockSourcesManager.updateTextSource).not.toHaveBeenCalled();
+        expect(mockSourcesManager.setNotificationDisplayVisibility).not.toHaveBeenCalled();
+    });
+
+    it('displays notification when platform notifications are enabled', async () => {
+        const { queue, mockSourcesManager } = createQueue({
+            twitch: { notificationsEnabled: true }
+        });
+
+        const notificationItem = {
+            type: 'platform:follow',
+            platform: 'twitch',
+            data: {
+                username: 'testFollower',
+                displayMessage: 'testFollower just followed!'
+            },
+            priority: 2,
+            duration: 5000
+        };
+
+        await queue.displayNotificationItem(notificationItem);
+
+        expect(mockSourcesManager.setNotificationDisplayVisibility).toHaveBeenCalled();
+    });
+
+    it('displays notification for platforms without explicit config', async () => {
+        const { queue, mockSourcesManager } = createQueue({});
+
+        const notificationItem = {
+            type: 'platform:follow',
+            platform: 'youtube',
+            data: {
+                username: 'testFollower',
+                displayMessage: 'testFollower just subscribed!'
+            },
+            priority: 2,
+            duration: 5000
+        };
+
+        await queue.displayNotificationItem(notificationItem);
+
+        expect(mockSourcesManager.setNotificationDisplayVisibility).toHaveBeenCalled();
     });
 });

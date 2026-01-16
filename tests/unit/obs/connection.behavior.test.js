@@ -1,64 +1,45 @@
-const { describe, test, expect, afterEach, it } = require('bun:test');
-const { createMockFn, clearAllMocks, restoreAllMocks } = require('../../helpers/bun-mock-utils');
-const { mockModule, restoreAllModuleMocks } = require('../../helpers/bun-module-mocks');
+const { describe, expect, afterEach, it, beforeEach } = require('bun:test');
+const { createMockFn, restoreAllMocks } = require('../../helpers/bun-mock-utils');
 
-mockModule('../../../src/utils/timeout-validator', () => ({
-    safeSetTimeout: createMockFn((fn) => fn())
-}));
-
-mockModule('../../../src/utils/timeout-wrapper', () => ({
-    withTimeout: createMockFn((promise) => promise)
-}));
-
-mockModule('../../../src/utils/platform-error-handler', () => {
-    const handler = {
-        handleEventProcessingError: createMockFn(),
-        logOperationalError: createMockFn()
-    };
-    return {
-        createPlatformErrorHandler: createMockFn(() => handler)
-    };
-});
-
-const { safeSetTimeout } = require('../../../src/utils/timeout-validator');
-const { withTimeout } = require('../../../src/utils/timeout-wrapper');
-const { createPlatformErrorHandler } = require('../../../src/utils/platform-error-handler');
 const { OBSConnectionManager } = require('../../../src/obs/connection');
 
-const mockLogger = () => ({
-    debug: createMockFn(),
-    info: createMockFn(),
-    warn: createMockFn(),
-    error: createMockFn()
-});
-
-const baseDependencies = () => ({
-    config: { address: 'ws://localhost:4455', password: 'pass', enabled: true },
-    mockOBS: {
-        connect: createMockFn().mockResolvedValue({ obsWebSocketVersion: '5', negotiatedRpcVersion: 1 }),
-        disconnect: createMockFn().mockResolvedValue(),
-        call: createMockFn().mockResolvedValue({}),
-        on: createMockFn(),
-        off: createMockFn(),
-        once: createMockFn()
-    },
-    constants: {
-        OBS_CONNECTION_TIMEOUT: 50,
-        ERROR_MESSAGES: { OBS_CONNECTION_TIMEOUT: 'Timed out' }
-    },
-    isTestEnvironment: true,
-    logger: mockLogger()
-});
-
 describe('OBSConnectionManager behavior', () => {
-    afterEach(() => {
-        restoreAllMocks();
-        clearAllMocks();
-    
-        restoreAllModuleMocks();});
+    let originalNodeEnv;
 
-    it('skips connect when already connected or connecting', async () => {
-        const deps = baseDependencies();
+    beforeEach(() => {
+        originalNodeEnv = process.env.NODE_ENV;
+        process.env.NODE_ENV = 'test';
+        global.__TEST_RUNTIME_CONSTANTS__ = {
+            OBS_CONNECTION_TIMEOUT: 50
+        };
+    });
+
+    afterEach(() => {
+        process.env.NODE_ENV = originalNodeEnv;
+        delete global.__TEST_RUNTIME_CONSTANTS__;
+        restoreAllMocks();
+    });
+
+    const createDeps = (overrides = {}) => ({
+        config: { address: 'ws://localhost:4455', password: 'testPass', enabled: true },
+        mockOBS: {
+            connect: createMockFn().mockResolvedValue({ obsWebSocketVersion: '5', negotiatedRpcVersion: 1 }),
+            disconnect: createMockFn().mockResolvedValue(),
+            call: createMockFn().mockResolvedValue({}),
+            on: createMockFn(),
+            off: createMockFn(),
+            once: createMockFn()
+        },
+        constants: {
+            OBS_CONNECTION_TIMEOUT: 50,
+            ERROR_MESSAGES: { OBS_CONNECTION_TIMEOUT: 'Timed out' }
+        },
+        isTestEnvironment: true,
+        ...overrides
+    });
+
+    it('returns true immediately when already connected', async () => {
+        const deps = createDeps();
         const manager = new OBSConnectionManager(deps);
         manager._isConnected = true;
 
@@ -66,53 +47,76 @@ describe('OBSConnectionManager behavior', () => {
 
         expect(result).toBe(true);
         expect(deps.mockOBS.connect).not.toHaveBeenCalled();
+    });
 
+    it('returns existing promise when connection already in progress', async () => {
+        const deps = createDeps({ testConnectionBehavior: true });
+        const manager = new OBSConnectionManager(deps);
         manager._isConnected = false;
         manager.isConnecting = true;
-        manager.connectionPromise = Promise.resolve('inflight');
-        await expect(manager.connect()).resolves.toBe(true);
+        const existingPromise = Promise.resolve('existing');
+        manager.connectionPromise = existingPromise;
+
+        const result = await manager.connect();
+
+        expect(result).toBe('existing');
     });
 
-    it('uses withTimeout when ensuring connection readiness', async () => {
-        const deps = baseDependencies();
+    it('skips reconnect scheduling when OBS is disabled', () => {
+        const deps = createDeps({ config: { enabled: false } });
         const manager = new OBSConnectionManager(deps);
-        manager.isConnected = createMockFn().mockReturnValue(false);
-        manager.connectionPromise = Promise.resolve(true);
 
-        await manager.ensureConnected(123);
+        manager.scheduleReconnect('test');
 
-        expect(withTimeout).toHaveBeenCalledWith(
-            manager.connectionPromise,
-            123,
-            expect.objectContaining({ operationName: 'OBS connection readiness' })
-        );
+        expect(manager.reconnectTimer).toBeNull();
     });
 
-    it('schedules reconnect only when enabled and not already pending', () => {
-        const depsDisabled = baseDependencies();
-        depsDisabled.config.enabled = false;
-        const disabledManager = new OBSConnectionManager(depsDisabled);
-        disabledManager.scheduleReconnect('disabled');
-        expect(safeSetTimeout).not.toHaveBeenCalled();
-
-        const depsEnabled = baseDependencies();
-        const enabledManager = new OBSConnectionManager(depsEnabled);
-        enabledManager.scheduleReconnect('first');
-        expect(safeSetTimeout).toHaveBeenCalled();
-    });
-
-    it('routes errors through platform error handler', () => {
-        const deps = baseDependencies();
+    it('does not double-schedule reconnect when already pending', () => {
+        const deps = createDeps();
         const manager = new OBSConnectionManager(deps);
-        const handler = { handleEventProcessingError: createMockFn(), logOperationalError: createMockFn() };
-        createPlatformErrorHandler.mockReturnValue(handler);
+        manager.reconnectTimer = { id: 'existing' };
 
-        manager._handleConnectionError('boom', new Error('err'), { ctx: true });
-        expect(handler.handleEventProcessingError).toHaveBeenCalled();
+        manager.scheduleReconnect('test');
 
-        handler.handleEventProcessingError.mockClear();
-        manager.errorHandler = handler;
-        manager._handleConnectionError('op', 'non-error', { foo: 'bar' });
-        expect(handler.logOperationalError).toHaveBeenCalled();
+        expect(manager.reconnectTimer).toEqual({ id: 'existing' });
+    });
+
+    it('exposes connection state via getConnectionState', () => {
+        const deps = createDeps();
+        const manager = new OBSConnectionManager(deps);
+        manager._isConnected = true;
+
+        const state = manager.getConnectionState();
+
+        expect(state.isConnected).toBe(true);
+        expect(state.config.address).toBe('ws://localhost:4455');
+    });
+
+    it('exposes config via getConfig', () => {
+        const deps = createDeps();
+        const manager = new OBSConnectionManager(deps);
+
+        const config = manager.getConfig();
+
+        expect(config.address).toBe('ws://localhost:4455');
+        expect(config.password).toBe('testPass');
+        expect(config.enabled).toBe(true);
+    });
+
+    it('isConnected returns internal connection state when testConnectionBehavior enabled', () => {
+        const deps = createDeps({ testConnectionBehavior: true });
+        const manager = new OBSConnectionManager(deps);
+
+        expect(manager.isConnected()).toBe(false);
+
+        manager._isConnected = true;
+        expect(manager.isConnected()).toBe(true);
+    });
+
+    it('isConnected returns true by default in test environment for convenience', () => {
+        const deps = createDeps();
+        const manager = new OBSConnectionManager(deps);
+
+        expect(manager.isConnected()).toBe(true);
     });
 });

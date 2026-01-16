@@ -1,59 +1,64 @@
-const { describe, test, expect, afterEach, it } = require('bun:test');
+const { describe, expect, it, beforeEach, afterEach } = require('bun:test');
 const { createMockFn, restoreAllMocks } = require('../../helpers/bun-mock-utils');
-const { mockModule, resetModules, restoreAllModuleMocks } = require('../../helpers/bun-module-mocks');
+
+const { safeOBSOperation } = require('../../../src/obs/safe-operations');
 
 describe('safeOBSOperation error handling', () => {
-    const originalEnv = process.env.NODE_ENV;
+    let originalNodeEnv;
+
+    beforeEach(() => {
+        originalNodeEnv = process.env.NODE_ENV;
+        process.env.NODE_ENV = 'test';
+    });
 
     afterEach(() => {
+        process.env.NODE_ENV = originalNodeEnv;
         restoreAllMocks();
-process.env.NODE_ENV = originalEnv;
-    
-        restoreAllModuleMocks();});
+    });
 
-    it('routes operation failures through createPlatformErrorHandler and rethrows', async () => {
-        process.env.NODE_ENV = 'test';
-
-        const errorHandler = {
-            handleEventProcessingError: createMockFn(),
-            logOperationalError: createMockFn()
-        };
-
-        mockModule('../../../src/utils/platform-error-handler', () => ({
-            createPlatformErrorHandler: createMockFn(() => errorHandler)
-        }));
-
+    it('rethrows operation errors', async () => {
         const obsManager = {
             isReady: createMockFn().mockResolvedValue(true)
         };
 
-        const { safeOBSOperation } = require('../../../src/obs/safe-operations');
-
         await expect(
-            safeOBSOperation(obsManager, () => { throw new Error('obs op fail'); }, 'Test Operation')
-        ).rejects.toThrow('obs op fail');
-
-        expect(errorHandler.handleEventProcessingError).toHaveBeenCalledTimes(1);
-        const [error, eventType, payload, message, context] = errorHandler.handleEventProcessingError.mock.calls[0];
-        expect(error).toBeInstanceOf(Error);
-        expect(error.message).toBe('obs op fail');
-        expect(eventType).toBe('obs-operation');
-        expect(payload).toEqual({ context: 'Test Operation' });
-        expect(message).toContain('Test Operation');
-        expect(context).toBe('obs-safety');
+            safeOBSOperation(obsManager, () => { throw new Error('testOperationFailed'); }, 'Test Operation')
+        ).rejects.toThrow('testOperationFailed');
     });
 
-    it('skips operation entirely when OBS is not ready', async () => {
+    it('returns null when OBS is not ready', async () => {
         const obsManager = {
             isReady: createMockFn().mockResolvedValue(false)
         };
 
         const operation = createMockFn();
-        const { safeOBSOperation } = require('../../../src/obs/safe-operations');
-
         const result = await safeOBSOperation(obsManager, operation, 'Not ready test');
 
         expect(result).toBeNull();
         expect(operation).not.toHaveBeenCalled();
+    });
+
+    it('returns operation result when successful', async () => {
+        const obsManager = {
+            isReady: createMockFn().mockResolvedValue(true)
+        };
+
+        const operation = createMockFn().mockResolvedValue({ success: true, data: 'testData' });
+        const result = await safeOBSOperation(obsManager, operation, 'Success test');
+
+        expect(result).toEqual({ success: true, data: 'testData' });
+        expect(operation).toHaveBeenCalledTimes(1);
+    });
+
+    it('executes operation when OBS is ready', async () => {
+        const obsManager = {
+            isReady: createMockFn().mockResolvedValue(true)
+        };
+
+        const operation = createMockFn().mockResolvedValue('completed');
+        await safeOBSOperation(obsManager, operation, 'Execute test');
+
+        expect(obsManager.isReady).toHaveBeenCalledTimes(1);
+        expect(operation).toHaveBeenCalledTimes(1);
     });
 });

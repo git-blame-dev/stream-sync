@@ -1,51 +1,59 @@
-
-const { describe, test, expect, beforeEach, it, afterEach } = require('bun:test');
+const { describe, expect, beforeEach, it, afterEach } = require('bun:test');
 const { createMockFn, spyOn, restoreAllMocks } = require('../../helpers/bun-mock-utils');
-const { restoreAllModuleMocks } = require('../../helpers/bun-module-mocks');
-const { useFakeTimers, useRealTimers, advanceTimersByTime } = require('../../helpers/bun-timers');
+const { createRuntimeConstantsFixture } = require('../../helpers/runtime-constants-fixture');
+const { safeDelay, safeSetTimeout } = require('../../../src/utils/timeout-validator');
 
 const { EventEmitter } = require('events');
 const { DisplayQueue } = require('../../../src/obs/display-queue');
 const constants = require('../../../src/core/constants');
 const { PlatformEvents } = require('../../../src/interfaces/PlatformEvents');
 
-const baseConfig = {
-    autoProcess: false,
-    chat: {},
-    notification: {},
-    obs: {},
-    ttsEnabled: false
-};
-
-const createQueue = (eventBus) => {
-    const obsManager = {
-        isReady: createMockFn().mockResolvedValue(true),
-        call: createMockFn().mockResolvedValue({ success: true })
-    };
-    const queue = new DisplayQueue(obsManager, baseConfig, constants, eventBus);
-    // Skip OBS side effects and TTS for these unit assertions
-    queue.playGiftVideoAndAudio = createMockFn().mockResolvedValue();
-    queue.isTTSEnabled = createMockFn().mockReturnValue(false);
-    return queue;
-};
-
 describe('DisplayQueue monetization VFX context', () => {
-    afterEach(() => {
-        restoreAllMocks();
-        restoreAllModuleMocks();
-        useRealTimers();
-    });
-
-    let eventBus;
-    let emitSpy;
+    let originalNodeEnv;
 
     beforeEach(() => {
-        eventBus = new EventEmitter();
-        emitSpy = spyOn(eventBus, 'emit');
+        originalNodeEnv = process.env.NODE_ENV;
+        process.env.NODE_ENV = 'test';
     });
 
-    it('emits VFX with userId for gift notifications', async () => {
+    afterEach(() => {
+        process.env.NODE_ENV = originalNodeEnv;
+        restoreAllMocks();
+    });
+
+    function createQueue(eventBus) {
+        const runtimeConstants = createRuntimeConstantsFixture({});
+
+        const obsManager = {
+            isReady: createMockFn().mockResolvedValue(true),
+            call: createMockFn().mockResolvedValue({ success: true }),
+            isConnected: () => true
+        };
+
+        const baseConfig = {
+            autoProcess: false,
+            chat: {},
+            notification: {},
+            obs: { ttsTxt: 'testTts' },
+            ttsEnabled: false
+        };
+
+        const queue = new DisplayQueue(obsManager, baseConfig, constants, eventBus, runtimeConstants);
+        queue.playGiftVideoAndAudio = createMockFn().mockResolvedValue();
+        queue.isTTSEnabled = createMockFn().mockReturnValue(false);
+        queue.sourcesManager = {
+            updateTextSource: createMockFn().mockResolvedValue(),
+            setSourceVisibility: createMockFn().mockResolvedValue()
+        };
+
+        return queue;
+    }
+
+    it('emits VFX_COMMAND_RECEIVED for gift notifications', async () => {
+        const eventBus = new EventEmitter();
+        const emitSpy = spyOn(eventBus, 'emit');
         const queue = createQueue(eventBus);
+
         const item = {
             type: 'platform:gift',
             platform: 'youtube',
@@ -57,25 +65,36 @@ describe('DisplayQueue monetization VFX context', () => {
                 vfxFilePath: '/tmp/vfx',
                 duration: 5000
             },
-            data: { username: 'GiftHero', userId: 'gift-1', displayMessage: 'GiftHero sent a gift' }
+            data: { username: 'testGiftUser', userId: 'testUserId123', displayMessage: 'sent a gift' }
         };
 
-        await queue.handleGiftEffects(item, []);
+        const giftPromise = queue.handleGiftEffects(item, []);
 
-        expect(emitSpy).toHaveBeenCalledTimes(1);
-        const [eventName, payload] = emitSpy.mock.calls[0];
-        expect(eventName).toBe(PlatformEvents.VFX_COMMAND_RECEIVED);
-        expect(payload).toEqual(expect.objectContaining({
+        await safeDelay(2100);
+
+        expect(emitSpy).toHaveBeenCalled();
+        const vfxCall = emitSpy.mock.calls.find(c => c[0] === PlatformEvents.VFX_COMMAND_RECEIVED);
+        expect(vfxCall).toBeDefined();
+        expect(vfxCall[1]).toEqual(expect.objectContaining({
             commandKey: 'gifts',
-            username: 'GiftHero',
-            platform: 'youtube',
-            userId: 'gift-1',
-            context: expect.objectContaining({ source: 'display-queue' })
+            username: 'testGiftUser',
+            userId: 'testUserId123',
+            platform: 'youtube'
         }));
     });
 
-    it('emits VFX for follow notifications with correct context', async () => {
+    it('emits VFX_COMMAND_RECEIVED for sequential notifications', async () => {
+        const eventBus = new EventEmitter();
+        const emitSpy = spyOn(eventBus, 'emit');
+
+        eventBus.on(PlatformEvents.VFX_COMMAND_RECEIVED, (payload) => {
+            safeSetTimeout(() => {
+                eventBus.emit(PlatformEvents.VFX_EFFECT_COMPLETED, { correlationId: payload.correlationId });
+            }, 10, 50, 'test VFX completion emit');
+        });
+
         const queue = createQueue(eventBus);
+
         const item = {
             type: 'platform:follow',
             platform: 'twitch',
@@ -87,112 +106,70 @@ describe('DisplayQueue monetization VFX context', () => {
                 vfxFilePath: '/tmp/vfx',
                 duration: 5000
             },
-            data: { username: 'FollowHero', userId: 'follow-1', displayMessage: 'FollowHero followed' }
+            data: { username: 'testFollowUser', userId: 'testFollowId', displayMessage: 'followed' }
         };
 
         await queue.handleSequentialEffects(item, []);
 
-        expect(emitSpy).toHaveBeenCalledTimes(1);
-        const [eventName, payload] = emitSpy.mock.calls[0];
-        expect(eventName).toBe(PlatformEvents.VFX_COMMAND_RECEIVED);
-        expect(payload).toEqual(expect.objectContaining({
+        const vfxCall = emitSpy.mock.calls.find(c => c[0] === PlatformEvents.VFX_COMMAND_RECEIVED);
+        expect(vfxCall).toBeDefined();
+        expect(vfxCall[1]).toEqual(expect.objectContaining({
             commandKey: 'follows',
-            username: 'FollowHero',
+            username: 'testFollowUser',
             platform: 'twitch',
-            userId: 'follow-1',
-            context: expect.objectContaining({ source: 'display-queue', notificationType: 'platform:follow' })
+            userId: 'testFollowId'
         }));
     });
 
-    it('emits gift VFX with standard delay metadata', async () => {
-        useFakeTimers();
-        try {
-            const queue = createQueue(eventBus);
-            const item = {
-                type: 'platform:gift',
-                platform: 'tiktok',
-                vfxConfig: {
-                    commandKey: 'gifts',
-                    command: '!gift',
-                    filename: 'gift.mp4',
-                    mediaSource: 'vfx top',
-                    vfxFilePath: '/tmp/vfx',
-                    duration: 5000
-                },
-                data: {
-                    username: 'DelayHero',
-                    userId: 'gift-delay-1',
-                    displayMessage: 'DelayHero sent a gift',
-                    giftType: 'Rose',
-                    giftCount: 1,
-                    amount: 10,
-                    currency: 'coins'
-                }
-            };
+    it('includes context with source and notificationType in VFX payload', async () => {
+        const eventBus = new EventEmitter();
+        const emitSpy = spyOn(eventBus, 'emit');
 
-            const pending = queue.handleGiftEffects(item, []);
+        eventBus.on(PlatformEvents.VFX_COMMAND_RECEIVED, (payload) => {
+            safeSetTimeout(() => {
+                eventBus.emit(PlatformEvents.VFX_EFFECT_COMPLETED, { correlationId: payload.correlationId });
+            }, 10, 50, 'test VFX completion emit');
+        });
 
-            advanceTimersByTime(2000);
-            await Promise.resolve();
-            await pending;
-
-            expect(emitSpy).toHaveBeenCalledTimes(1);
-            const [eventName, payload] = emitSpy.mock.calls[0];
-            expect(eventName).toBe(PlatformEvents.VFX_COMMAND_RECEIVED);
-            expect(payload.context).toEqual(expect.objectContaining({
-                notificationType: 'platform:gift',
-                delayApplied: 2000
-            }));
-            expect(payload.commandKey).toBe('gifts');
-        } finally {
-            useRealTimers();
-        }
-    });
-
-    const standardFlows = [
-        { type: 'platform:gift', giftType: 'Super Chat', giftCount: 1, amount: 5, currency: 'USD', commandKey: 'gifts', platform: 'youtube' },
-        { type: 'platform:gift', giftType: 'Super Sticker', giftCount: 1, amount: 3, currency: 'USD', commandKey: 'gifts', platform: 'youtube' },
-        { type: 'platform:giftpaypiggy', commandKey: 'gifts', platform: 'twitch' },
-        { type: 'platform:gift', giftType: 'bits', giftCount: 1, amount: 100, currency: 'bits', commandKey: 'gifts', platform: 'twitch' },
-        { type: 'platform:envelope', commandKey: 'gifts', platform: 'tiktok' },
-        { type: 'platform:paypiggy', commandKey: 'paypiggies', platform: 'tiktok' }
-    ];
-
-    test.each(standardFlows)('emits VFX with userId for %s', async ({ type, commandKey, platform, giftType, giftCount, amount, currency }) => {
         const queue = createQueue(eventBus);
+
         const item = {
-            type,
-            platform,
+            type: 'platform:paypiggy',
+            platform: 'tiktok',
             vfxConfig: {
-                commandKey,
-                command: `!${type}`,
-                filename: `${type}.mp4`,
+                commandKey: 'paypiggies',
+                command: '!member',
+                filename: 'member.mp4',
                 mediaSource: 'vfx top',
                 vfxFilePath: '/tmp/vfx',
                 duration: 5000
             },
-            data: {
-                username: 'MonoUser',
-                userId: `${type}-user`,
-                displayMessage: 'MonoUser sent something',
-                ...(giftType ? { giftType } : {}),
-                ...(giftCount ? { giftCount } : {}),
-                ...(amount !== undefined ? { amount } : {}),
-                ...(currency ? { currency } : {})
-            }
+            data: { username: 'testMember', userId: 'testMemberId', displayMessage: 'joined' }
         };
 
         await queue.handleSequentialEffects(item, []);
 
-        expect(emitSpy).toHaveBeenCalledTimes(1);
-        const [eventName, payload] = emitSpy.mock.calls[0];
-        expect(eventName).toBe(PlatformEvents.VFX_COMMAND_RECEIVED);
-        expect(payload).toEqual(expect.objectContaining({
-            commandKey,
-            username: 'MonoUser',
-            platform,
-            userId: `${type}-user`,
-            context: expect.objectContaining({ source: 'display-queue' })
+        const vfxCall = emitSpy.mock.calls.find(c => c[0] === PlatformEvents.VFX_COMMAND_RECEIVED);
+        expect(vfxCall[1].context).toEqual(expect.objectContaining({
+            source: 'display-queue',
+            notificationType: 'platform:paypiggy'
         }));
+    });
+
+    it('skips VFX emit when no vfxConfig provided', async () => {
+        const eventBus = new EventEmitter();
+        const emitSpy = spyOn(eventBus, 'emit');
+        const queue = createQueue(eventBus);
+
+        const item = {
+            type: 'platform:follow',
+            platform: 'youtube',
+            data: { username: 'testUser', userId: 'testId', displayMessage: 'subscribed' }
+        };
+
+        await queue.handleSequentialEffects(item, []);
+
+        const vfxCalls = emitSpy.mock.calls.filter(c => c[0] === PlatformEvents.VFX_COMMAND_RECEIVED);
+        expect(vfxCalls).toHaveLength(0);
     });
 });

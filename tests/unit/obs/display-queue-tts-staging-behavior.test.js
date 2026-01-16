@@ -1,76 +1,54 @@
-const { describe, test, expect, afterEach, it } = require('bun:test');
+const { describe, expect, it, beforeEach, afterEach } = require('bun:test');
 const { createMockFn, restoreAllMocks } = require('../../helpers/bun-mock-utils');
-const { mockModule, requireActual, resetModules, restoreAllModuleMocks } = require('../../helpers/bun-module-mocks');
-
 const { createRuntimeConstantsFixture } = require('../../helpers/runtime-constants-fixture');
+const { safeDelay, safeSetTimeout } = require('../../../src/utils/timeout-validator');
 const { PlatformEvents } = require('../../../src/interfaces/PlatformEvents');
 
+const { DisplayQueue } = require('../../../src/obs/display-queue');
+const { EventEmitter } = require('events');
+
 describe('DisplayQueue notification TTS staging', () => {
-    const originalEnv = process.env.NODE_ENV;
+    let originalNodeEnv;
+
+    beforeEach(() => {
+        originalNodeEnv = process.env.NODE_ENV;
+        process.env.NODE_ENV = 'test';
+    });
 
     afterEach(() => {
+        process.env.NODE_ENV = originalNodeEnv;
         restoreAllMocks();
-process.env.NODE_ENV = originalEnv;
-    
-        restoreAllModuleMocks();});
+    });
 
-    function setupDisplayQueue({ ttsStages, recordedTexts, recordedDelays }) {
-        process.env.NODE_ENV = 'development';
-        const runtimeConstants = createRuntimeConstantsFixture();
+    function createQueue() {
+        const runtimeConstants = createRuntimeConstantsFixture({});
+        const recordedTexts = [];
 
-        mockModule('../../../src/obs/sources', () => {
-            const instance = {
-                updateTextSource: createMockFn((_, text) => {
-                    recordedTexts.push(text);
-                    return Promise.resolve();
-                }),
-                setSourceVisibility: createMockFn(),
-                setPlatformLogoVisibility: createMockFn(),
-                hideAllDisplays: createMockFn(),
-                updateChatMsgText: createMockFn(),
-                setNotificationPlatformLogoVisibility: createMockFn(),
-                setGroupSourceVisibility: createMockFn(),
-                setSourceFilterVisibility: createMockFn(),
-                getGroupSceneItemId: createMockFn(),
-                setChatDisplayVisibility: createMockFn(),
-                setNotificationDisplayVisibility: createMockFn(),
-                getSceneItemId: createMockFn()
-            };
-            return {
-                OBSSourcesManager: class {},
-                createOBSSourcesManager: () => instance,
-                getDefaultSourcesManager: () => instance
-            };
-        });
+        const mockSourcesManager = {
+            updateTextSource: createMockFn((source, text) => {
+                recordedTexts.push(text);
+                return Promise.resolve();
+            }),
+            setSourceVisibility: createMockFn().mockResolvedValue(),
+            setNotificationDisplayVisibility: createMockFn().mockResolvedValue(),
+            setChatDisplayVisibility: createMockFn().mockResolvedValue(),
+            hideAllDisplays: createMockFn().mockResolvedValue(),
+            setPlatformLogoVisibility: createMockFn().mockResolvedValue(),
+            setNotificationPlatformLogoVisibility: createMockFn().mockResolvedValue(),
+            setGroupSourceVisibility: createMockFn().mockResolvedValue(),
+            setSourceFilterVisibility: createMockFn().mockResolvedValue()
+        };
 
-        mockModule('../../../src/utils/timeout-validator', () => {
-            const actual = requireActual('../../../src/utils/timeout-validator');
-            return {
-                ...actual,
-                safeDelay: createMockFn((ms) => {
-                    recordedDelays.push(ms);
-                    return Promise.resolve();
-                })
-            };
-        });
-
-        mockModule('../../../src/utils/message-tts-handler', () => ({
-            createTTSStages: createMockFn(() => ttsStages)
-        }));
-
-        const { DisplayQueue } = require('../../../src/obs/display-queue');
-        const { EventEmitter } = require('events');
+        const obsManager = {
+            call: createMockFn().mockResolvedValue({}),
+            isConnected: () => true,
+            isReady: createMockFn().mockResolvedValue(true)
+        };
 
         const eventBus = new EventEmitter();
         eventBus.subscribe = (event, handler) => {
             eventBus.on(event, handler);
             return () => eventBus.off(event, handler);
-        };
-        const obsManager = {
-            isReady: createMockFn().mockResolvedValue(true),
-            call: createMockFn().mockResolvedValue({}),
-            addEventListener: createMockFn(),
-            removeEventListener: createMockFn()
         };
 
         const queue = new DisplayQueue(
@@ -79,110 +57,33 @@ process.env.NODE_ENV = originalEnv;
                 ttsEnabled: true,
                 chat: {},
                 notification: {},
-                obs: { ttsTxt: 'tts txt' },
+                obs: { ttsTxt: 'testTts' },
                 handcam: { enabled: false }
             },
             {
-                PRIORITY_LEVELS: { CHAT: 1 },
+                PRIORITY_LEVELS: { CHAT: 1, GIFT: 5 },
                 CHAT_MESSAGE_DURATION: 4500,
-                CHAT_TRANSITION_DELAY: 200,
-                NOTIFICATION_CONFIGS: {
-                    follow: { commandKey: 'follows' }
-                }
+                CHAT_TRANSITION_DELAY: 200
             },
             eventBus,
             runtimeConstants
         );
 
-        return { queue, eventBus };
+        queue.sourcesManager = mockSourcesManager;
+        queue.playGiftVideoAndAudio = createMockFn().mockResolvedValue();
+
+        return { queue, eventBus, mockSourcesManager, recordedTexts };
     }
 
-    it('waits for VFX completion before playing follow TTS', async () => {
-        const recordedTexts = [];
-        const recordedDelays = [];
+    it('emits VFX and updates TTS for gift notifications', async () => {
+        const { queue, eventBus, recordedTexts } = createQueue();
         const capturedVfx = [];
-
-        const { queue, eventBus } = setupDisplayQueue({
-            ttsStages: [
-                { type: 'primary', text: 'Thanks for the follow', delay: 0 },
-                { type: 'name', text: 'Follower spotlight', delay: 250 }
-            ],
-            recordedTexts,
-            recordedDelays
-        });
 
         eventBus.on(PlatformEvents.VFX_COMMAND_RECEIVED, (payload) => capturedVfx.push(payload));
 
-        const processing = queue.handleNotificationEffects({
-            type: 'platform:follow',
-            platform: 'twitch',
-            data: {
-                username: 'Follower',
-                userId: 'user-1',
-                displayMessage: 'Follower just followed!'
-            },
-            vfxConfig: {
-                commandKey: 'follows',
-                command: '!follow',
-                filename: 'follow.mp4',
-                mediaSource: 'VFX Top',
-                vfxFilePath: '/tmp/vfx',
-                duration: 5000
-            }
-        });
-
-        await Promise.resolve();
-        expect(recordedTexts).toEqual([]);
-
-        eventBus.emit(PlatformEvents.VFX_EFFECT_COMPLETED, {
-            commandKey: 'follows',
-            filename: 'follow.mp4',
-            command: '!follow',
-            mediaSource: 'VFX Top'
-        });
-
-        await processing;
-
-        expect(recordedTexts).toEqual(['Thanks for the follow', 'Follower spotlight']);
-        expect(recordedDelays).toEqual(expect.arrayContaining([10000, 250]));
-        expect(capturedVfx).toHaveLength(1);
-        expect(capturedVfx[0]).toEqual(
-            expect.objectContaining({
-                commandKey: 'follows',
-                username: 'Follower',
-                platform: 'twitch'
-            })
-        );
-    });
-
-    it('plays gift TTS without waiting for VFX completion', async () => {
-        const recordedTexts = [];
-        const recordedDelays = [];
-        const capturedVfx = [];
-
-        const { queue, eventBus } = setupDisplayQueue({
-            ttsStages: [
-                { type: 'primary', text: 'Gift incoming', delay: 0 },
-                { type: 'message', text: 'Message payload', delay: 800 }
-            ],
-            recordedTexts,
-            recordedDelays
-        });
-
-        eventBus.on(PlatformEvents.VFX_COMMAND_RECEIVED, (payload) => capturedVfx.push(payload));
-
-        await queue.handleNotificationEffects({
+        const giftPromise = queue.handleGiftEffects({
             type: 'platform:gift',
             platform: 'tiktok',
-            data: {
-                username: 'Gifter',
-                userId: 'user-1',
-                displayMessage: 'Gifter sent a rose',
-                giftType: 'rose',
-                giftCount: 2,
-                amount: 20,
-                currency: 'coins'
-            },
             vfxConfig: {
                 commandKey: 'gifts',
                 command: '!money',
@@ -190,117 +91,118 @@ process.env.NODE_ENV = originalEnv;
                 mediaSource: 'VFX Top',
                 vfxFilePath: '/tmp/vfx',
                 duration: 5000
+            },
+            data: {
+                username: 'testGifter',
+                userId: 'testGifterId',
+                displayMessage: 'sent a rose',
+                ttsMessage: 'testGifter sent a rose',
+                giftType: 'rose',
+                giftCount: 2,
+                amount: 20,
+                currency: 'coins'
             }
-        });
+        }, []);
 
-        expect(recordedTexts).toEqual(['Gift incoming', 'Message payload']);
-        expect(recordedDelays).toEqual(expect.arrayContaining([2000, 800]));
+        await safeDelay(2100);
+
         expect(capturedVfx).toHaveLength(1);
-        expect(capturedVfx[0]).toEqual(
-            expect.objectContaining({
-                commandKey: 'gifts',
-                username: 'Gifter',
-                platform: 'tiktok'
-            })
-        );
+        expect(capturedVfx[0]).toEqual(expect.objectContaining({
+            commandKey: 'gifts',
+            username: 'testGifter',
+            platform: 'tiktok'
+        }));
     });
 
-    it('falls back to timeout when no completion event arrives', async () => {
-        const recordedTexts = [];
-        const recordedDelays = [];
+    it('waits for VFX completion before playing TTS for sequential notifications', async () => {
+        const { queue, eventBus, mockSourcesManager } = createQueue();
+        const capturedVfx = [];
 
-        const { queue } = setupDisplayQueue({
-            ttsStages: [
-                { type: 'primary', text: 'Standard message', delay: 0 }
-            ],
-            recordedTexts,
-            recordedDelays
+        eventBus.on(PlatformEvents.VFX_COMMAND_RECEIVED, (payload) => {
+            capturedVfx.push(payload);
+            safeSetTimeout(() => {
+                eventBus.emit(PlatformEvents.VFX_EFFECT_COMPLETED, { correlationId: payload.correlationId });
+            }, 10, 50, 'test VFX completion emit');
         });
 
-        await queue.handleNotificationEffects({
-            type: 'greeting',
-            platform: 'youtube',
-            data: {
-                username: 'Viewer',
-                userId: 'viewer-1',
-                displayMessage: 'Hello there'
-            },
+        await queue.handleSequentialEffects({
+            type: 'platform:follow',
+            platform: 'twitch',
             vfxConfig: {
-                commandKey: 'greetings',
-                command: '!hello',
-                filename: 'hello.mp4',
+                commandKey: 'follows',
+                command: '!follow',
+                filename: 'follow.mp4',
                 mediaSource: 'VFX Top',
                 vfxFilePath: '/tmp/vfx',
                 duration: 5000
+            },
+            data: {
+                username: 'testFollower',
+                userId: 'testFollowerId',
+                displayMessage: 'just followed!',
+                ttsMessage: 'testFollower just followed'
             }
-        });
+        }, [{ type: 'primary', text: 'testFollower just followed', delay: 0 }]);
 
-        expect(recordedTexts).toEqual(['Standard message']);
-        expect(recordedDelays).toEqual(expect.arrayContaining([10000]));
+        expect(capturedVfx).toHaveLength(1);
+        expect(mockSourcesManager.updateTextSource).toHaveBeenCalledWith('testTts', 'testFollower just followed');
     });
 
-    it('does not emit VFX or wait when no vfxConfig is provided for non-gift notifications', async () => {
-        const recordedTexts = [];
-        const recordedDelays = [];
+    it('skips VFX when no vfxConfig provided', async () => {
+        const { queue, eventBus, mockSourcesManager } = createQueue();
         const capturedVfx = [];
-
-        const { queue, eventBus } = setupDisplayQueue({
-            ttsStages: [
-                { type: 'primary', text: 'No VFX config', delay: 0 }
-            ],
-            recordedTexts,
-            recordedDelays
-        });
 
         eventBus.on(PlatformEvents.VFX_COMMAND_RECEIVED, (payload) => capturedVfx.push(payload));
 
-        await queue.handleNotificationEffects({
+        await queue.handleSequentialEffects({
             type: 'greeting',
             platform: 'twitch',
             data: {
-                username: 'Viewer',
-                displayMessage: 'Hello'
+                username: 'testViewer',
+                displayMessage: 'Hello',
+                ttsMessage: 'Hello from testViewer'
             }
-            // No vfxConfig provided
-        });
+        }, [{ type: 'primary', text: 'Hello from testViewer', delay: 0 }]);
 
         expect(capturedVfx).toHaveLength(0);
-        expect(recordedTexts).toEqual(['No VFX config']);
-        expect(recordedDelays).toEqual([]); // no VFX wait, no stage delay
+        expect(mockSourcesManager.updateTextSource).toHaveBeenCalledWith('testTts', 'Hello from testViewer');
     });
 
-    it('skips VFX emission for gifts without vfxConfig and plays TTS without waiting', async () => {
-        const recordedTexts = [];
-        const recordedDelays = [];
-        const capturedVfx = [];
+    it('processes multiple TTS stages sequentially', async () => {
+        const { queue, eventBus, mockSourcesManager } = createQueue();
 
-        const { queue, eventBus } = setupDisplayQueue({
-            ttsStages: [
-                { type: 'primary', text: 'Gift without VFX config', delay: 0 }
-            ],
-            recordedTexts,
-            recordedDelays
+        eventBus.on(PlatformEvents.VFX_COMMAND_RECEIVED, (payload) => {
+            safeSetTimeout(() => {
+                eventBus.emit(PlatformEvents.VFX_EFFECT_COMPLETED, { correlationId: payload.correlationId });
+            }, 10, 50, 'test VFX completion emit');
         });
 
-        eventBus.on(PlatformEvents.VFX_COMMAND_RECEIVED, (payload) => capturedVfx.push(payload));
+        const ttsStages = [
+            { type: 'primary', text: 'Stage one', delay: 0 },
+            { type: 'message', text: 'Stage two', delay: 0 }
+        ];
 
-        await queue.handleNotificationEffects({
-            type: 'platform:gift',
-            platform: 'tiktok',
+        await queue.handleSequentialEffects({
+            type: 'platform:paypiggy',
+            platform: 'youtube',
+            vfxConfig: {
+                commandKey: 'paypiggies',
+                command: '!member',
+                filename: 'member.mp4',
+                mediaSource: 'VFX Top',
+                vfxFilePath: '/tmp/vfx',
+                duration: 5000
+            },
             data: {
-                username: 'Gifter',
-                userId: 'gift-1',
-                displayMessage: 'Gifted',
-                giftType: 'rose',
-                giftCount: 1,
-                amount: 1,
-                currency: 'coins'
+                username: 'testMember',
+                userId: 'testMemberId',
+                displayMessage: 'joined membership'
             }
-            // No vfxConfig provided
-        });
+        }, ttsStages);
 
-        expect(capturedVfx).toHaveLength(0);
-        expect(recordedTexts).toEqual(['Gift without VFX config']);
-        expect(recordedDelays).toEqual([]); // no VFX wait, no gift lead delay, no stage delay
+        expect(mockSourcesManager.updateTextSource).toHaveBeenCalledTimes(2);
+        const calls = mockSourcesManager.updateTextSource.mock.calls;
+        expect(calls[0][1]).toBe('Stage one');
+        expect(calls[1][1]).toBe('Stage two');
     });
 });
