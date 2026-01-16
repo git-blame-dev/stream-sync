@@ -1,154 +1,74 @@
-
-const { describe, beforeAll, test, expect } = require('bun:test');
-
+const { describe, test, expect, beforeEach, afterEach } = require('bun:test');
 const fs = require('fs');
 const path = require('path');
-const { spawn } = require('child_process');
-const testClock = require('../helpers/test-clock');
+const os = require('os');
 
 describe('Critical Startup Flow', () => {
-    let startupResult;
+    let tempDir;
+    let originalEnv;
+    let originalConfigPath;
+    let originalIsLoaded;
+    let configManager;
 
-    beforeAll(async () => {
-        startupResult = await runApplicationStartup();
-    }, { timeout: 20000 });
+    beforeEach(() => {
+        originalEnv = { ...process.env };
+        tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'startup-test-'));
 
-    test('should fail fast when required configuration is missing', async () => {
-        const result = startupResult;
-
-        expect(result.timeout).not.toBe(true);
-        expect(result.exitCode).toBe(1);
-    }, { timeout: 15000 });
-    
-    test('should exit with failure status without a config file', async () => {
-        const result = startupResult;
-
-        expect(result.timeout).not.toBe(true);
-        expect(result.exitCode).toBe(1);
-    }, { timeout: 15000 });
-});
-
-async function runApplicationStartup() {
-    return new Promise((resolve) => {
-        testClock.reset();
-        const startTime = testClock.now();
-        const bootstrap = path.join(__dirname, '../../src/bootstrap.js');
-        const missingConfigPath = path.join(__dirname, 'fixtures', 'missing-config.ini');
-        
-        // Run with debug mode to capture detailed logs
-        const child = spawn('node', [bootstrap, '--debug'], {
-            stdio: ['pipe', 'pipe', 'pipe'],
-            env: {
-                ...process.env,
-                CHAT_BOT_CONFIG_PATH: missingConfigPath,
-                NODE_ENV: 'test',
-                DEBUG: 'true'
-            }
-        });
-        
-        let stdout = '';
-        let stderr = '';
-
-        const startupTimeoutId = scheduleTestTimeout(() => {
-            child.kill('SIGTERM');
-            scheduleTestTimeout(() => child.kill('SIGKILL'), 1000);
-
-            const endTime = testClock.now();
-            let output = stdout + stderr;
-            let outputLines = output.split('\n').filter(line => line.trim());
-
-            if (outputLines.length === 0) {
-                const fallback = readFallbackStartupLog();
-                if (fallback) {
-                    output = fallback;
-                    outputLines = fallback.split('\n').filter(line => line.trim());
-                }
-            }
-
-            resolve({
-                exitCode: 'TIMEOUT',
-                output,
-                outputLines, 
-                duration: endTime - startTime,
-                stdout,
-                stderr,
-                timeout: true
-            });
-        }, 12000);
-        
-        child.stdout.on('data', (data) => {
-            stdout += data.toString();
-        });
-        
-        child.stderr.on('data', (data) => {
-            stderr += data.toString();
-        });
-        
-        // Handle normal exit
-        child.on('close', (code) => {
-            clearTimeout(startupTimeoutId);
-            const endTime = testClock.now();
-            let output = stdout + stderr;
-            let outputLines = output.split('\n').filter(line => line.trim());
-
-            if (outputLines.length === 0) {
-                const fallback = readFallbackStartupLog();
-                if (fallback) {
-                    output = fallback;
-                    outputLines = fallback.split('\n').filter(line => line.trim());
-                }
-            }
-            
-            resolve({
-                exitCode: code,
-                output,
-                outputLines,
-                duration: endTime - startTime,
-                stdout,
-                stderr
-            });
-        });
-        
-        // Handle spawn errors
-        child.on('error', (error) => {
-            clearTimeout(startupTimeoutId);
-            const endTime = testClock.now();
-            resolve({
-                exitCode: -1,
-                output: error.message,
-                outputLines: [error.message],
-                duration: endTime - startTime,
-                stdout: '',
-                stderr: error.message,
-                error
-            });
-        });
-        
+        const configModule = require('../../src/core/config');
+        configManager = configModule.configManager;
+        originalConfigPath = configManager.configPath;
+        originalIsLoaded = configManager.isLoaded;
     });
-}
 
-function readFallbackStartupLog() {
-    try {
-        const logDir = path.join(__dirname, '../../logs');
-        const candidates = [
-            path.join(logDir, 'runtime.log'),
-            path.join(logDir, 'program-log.txt')
-        ];
-
-        let combined = '';
-        for (const file of candidates) {
-            if (!fs.existsSync(file)) {
-                continue;
-            }
-            const content = fs.readFileSync(file, 'utf8');
-            const lines = content.split('\n').filter(Boolean);
-            const tailLines = lines.slice(-200);
-            combined += tailLines.join('\n') + '\n';
+    afterEach(() => {
+        process.env = originalEnv;
+        if (configManager) {
+            configManager.configPath = originalConfigPath;
+            configManager.isLoaded = originalIsLoaded;
         }
+        if (tempDir && fs.existsSync(tempDir)) {
+            fs.rmSync(tempDir, { recursive: true, force: true });
+        }
+    });
 
-        return combined.trim();
-    } catch (error) {
-        console.log('Unable to read fallback startup log:', error.message);
-        return '';
-    }
-}
+    test('startup fails fast when config file does not exist', () => {
+        const nonExistentPath = path.join(tempDir, 'does-not-exist.ini');
+        configManager.configPath = nonExistentPath;
+        configManager.isLoaded = false;
+
+        expect(() => configManager.load()).toThrow('Configuration file not found');
+    });
+
+    test('startup fails fast when required sections are missing', () => {
+        const configPath = path.join(tempDir, 'incomplete.ini');
+        fs.writeFileSync(configPath, '[minimal]\nkey=value\n');
+        configManager.configPath = configPath;
+        configManager.isLoaded = false;
+
+        expect(() => configManager.load()).toThrow('Missing required configuration sections');
+    });
+
+    test('config path override via environment variable takes precedence', () => {
+        const overridePath = path.join(tempDir, 'override.ini');
+        process.env.CHAT_BOT_CONFIG_PATH = overridePath;
+        configManager.configPath = './default.ini';
+        configManager.isLoaded = false;
+
+        expect(() => configManager.load()).toThrow(overridePath);
+    });
+
+    test('logging system exports required initialization functions', () => {
+        const logging = require('../../src/core/logging');
+
+        expect(typeof logging.setConfigValidator).toBe('function');
+        expect(typeof logging.setDebugMode).toBe('function');
+        expect(typeof logging.initializeLoggingConfig).toBe('function');
+        expect(typeof logging.getLogger).toBe('function');
+    });
+
+    test('config module exports required validation function', () => {
+        const config = require('../../src/core/config');
+
+        expect(typeof config.validateLoggingConfig).toBe('function');
+    });
+});

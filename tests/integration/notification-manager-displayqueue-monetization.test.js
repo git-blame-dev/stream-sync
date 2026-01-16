@@ -224,7 +224,7 @@ describe('Monetisation pipeline integration', () => {
         expect(recordedEvents[0].context.source).toBe('display-queue');
     });
 
-    it('respects paypiggiesEnabled gating', async () => {
+    test('respects paypiggiesEnabled gating', async () => {
         configFlags.paypiggiesEnabled = false;
 
         eventBus.emit('platform:event', {
@@ -240,7 +240,7 @@ describe('Monetisation pipeline integration', () => {
         expect(recordedEvents).toHaveLength(0);
     });
 
-    it('respects giftsEnabled gating for all gift-like monetisation', async () => {
+    test('respects giftsEnabled gating for all gift-like monetisation', async () => {
         configFlags.giftsEnabled = false;
 
         eventBus.emit('platform:event', {
@@ -266,7 +266,7 @@ describe('Monetisation pipeline integration', () => {
         expect(recordedEvents).toHaveLength(0);
     });
 
-    it('normalizes paypiggy months/levels and builds copy/TTS/log without placeholders', async () => {
+    test('normalizes paypiggy months/levels and builds copy/TTS/log without placeholders', async () => {
         eventBus.emit('platform:event', {
             platform: 'youtube',
             type: 'platform:paypiggy',

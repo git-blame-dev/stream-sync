@@ -4,12 +4,11 @@ const { createMockFn, clearAllMocks, restoreAllMocks } = require('../helpers/bun
 const { ViewerCountSystem } = require('../../src/utils/viewer-count');
 const { ViewerCountObserver } = require('../../src/observers/viewer-count-observer');
 const { OBSViewerCountObserver } = require('../../src/observers/obs-viewer-count-observer');
-
-// Test utilities
 const { createMockOBSManager } = require('../helpers/mock-factories');
 const { expectNoTechnicalArtifacts } = require('../helpers/behavior-validation');
 const { createSilentLogger } = require('../helpers/test-logger');
 const testClock = require('../helpers/test-clock');
+const { createRuntimeConstantsFixture } = require('../helpers/runtime-constants-fixture');
 
 const createTimeProvider = () => ({
     now: () => testClock.now(),
@@ -20,9 +19,12 @@ describe('Observer Pattern Integration', () => {
     let viewerCountSystem;
     let platforms;
     let logger;
-    
+    let runtimeConstants;
+
     beforeEach(async () => {
         testClock.reset();
+        runtimeConstants = createRuntimeConstantsFixture();
+        global.__TEST_RUNTIME_CONSTANTS__ = runtimeConstants;
         logger = createSilentLogger();
         platforms = {
             youtube: {
@@ -34,20 +36,22 @@ describe('Observer Pattern Integration', () => {
                 isEnabled: () => true
             }
         };
-        
+
         viewerCountSystem = new ViewerCountSystem({
             platforms,
             logger,
-            timeProvider: createTimeProvider()
+            timeProvider: createTimeProvider(),
+            runtimeConstants
         });
         await viewerCountSystem.initialize();
     });
-    
+
     afterEach(async () => {
         if (viewerCountSystem) {
             viewerCountSystem.stopPolling();
             await viewerCountSystem.cleanup();
         }
+        delete global.__TEST_RUNTIME_CONSTANTS__;
         clearAllMocks();
         restoreAllMocks();
     });
