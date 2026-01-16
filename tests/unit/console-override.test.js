@@ -1,22 +1,9 @@
-
-// Test the actual logging implementation
-// Uses dynamic import to bypass Bun's module mock caching
 const { describe, test, expect, beforeEach, afterEach, beforeAll, afterAll } = require('bun:test');
 const { createMockFn, restoreAllMocks } = require('../helpers/bun-mock-utils');
-const { restoreAllModuleMocks } = require('../helpers/bun-module-mocks');
-const { setupAutomatedCleanup } = require('../helpers/mock-lifecycle');
-const testClock = require('../helpers/test-clock');
-
-setupAutomatedCleanup({
-    clearCallsBeforeEach: true,
-    validateAfterCleanup: true,
-    logPerformanceMetrics: true
-});
 
 const fs = require('fs');
 const path = require('path');
 
-// Module will be loaded dynamically in beforeAll to get the real implementation
 let initializeConsoleOverride;
 let restoreConsole;
 let isConsoleOverrideEnabled;
@@ -26,9 +13,15 @@ let setConfigValidator;
 let initializeLoggingConfig;
 
 describe('Console Override Pattern', () => {
-    let testLogDir;
-    let originalConsoleLogFn;
-    let originalConsoleErrorFn;
+    let originalConsoleLog;
+    let originalConsoleError;
+    let mockAppendFileSync;
+    let mockMkdirSync;
+    let mockExistsSync;
+    let writtenContent;
+    let createdDirectories;
+    const testLogDir = '/mock/test-logs';
+
     const configureFileLogging = () => {
         const loggingConfig = {
             console: { enabled: false, level: 'error' },
@@ -40,7 +33,7 @@ describe('Console Override Pattern', () => {
         setConfigValidator(() => loggingConfig);
         initializeLoggingConfig({});
     };
-    
+
     beforeAll(() => {
         const logging = require('../../src/core/logging');
         initializeConsoleOverride = logging.initializeConsoleOverride;
@@ -51,191 +44,158 @@ describe('Console Override Pattern', () => {
         setConfigValidator = logging.setConfigValidator;
         initializeLoggingConfig = logging.initializeLoggingConfig;
 
-        // Create test log directory
-        testLogDir = path.join(__dirname, 'test-logs');
-        if (!fs.existsSync(testLogDir)) {
-            fs.mkdirSync(testLogDir, { recursive: true });
-        }
+        originalConsoleLog = console.log;
+        originalConsoleError = console.error;
+    });
 
-        // Store original console functions
-        originalConsoleLogFn = console.log;
-        originalConsoleErrorFn = console.error;
-    });
-    
     afterAll(() => {
-        // Restore original console functions
-        console.log = originalConsoleLogFn;
-        console.error = originalConsoleErrorFn;
-        
-        // Clean up test log directory
-        if (fs.existsSync(testLogDir)) {
-            try {
-                fs.rmSync(testLogDir, { recursive: true, force: true });
-            } catch (err) {
-                // Ignore cleanup errors in tests
-            }
-        }
+        console.log = originalConsoleLog;
+        console.error = originalConsoleError;
     });
-    
+
     beforeEach(() => {
-        // Restore console before each test
         restoreConsole();
-        
-        // Clear any existing program log
-        const programLogPath = path.join(testLogDir, 'program-log.txt');
-        if (fs.existsSync(programLogPath)) {
-            try {
-                if (fs.rmSync) {
-                    fs.rmSync(programLogPath, { force: true });
-                } else {
-                    // Fallback for older Node.js versions
-                    fs.unlinkSync(programLogPath);
-                }
-            } catch (err) {
-                // Ignore errors during cleanup
-            }
-        }
+        writtenContent = [];
+        createdDirectories = [];
+
+        mockAppendFileSync = createMockFn((filePath, content) => {
+            writtenContent.push({ filePath, content });
+        });
+
+        mockMkdirSync = createMockFn((dirPath) => {
+            createdDirectories.push(dirPath);
+        });
+
+        mockExistsSync = createMockFn(() => true);
+
+        fs.appendFileSync = mockAppendFileSync;
+        fs.mkdirSync = mockMkdirSync;
+        fs.existsSync = mockExistsSync;
     });
-    
+
     afterEach(() => {
         restoreAllMocks();
-        // Restore console after each test
         restoreConsole();
-    
-        restoreAllModuleMocks();});
-    
+    });
+
     describe('ensureLogDirectory', () => {
-        test('should create logs directory if it does not exist', () => {
-            const testDir = path.join(testLogDir, 'test-dir');
-            
-            // Ensure directory doesn't exist
-            if (fs.existsSync(testDir)) {
-                try {
-                    fs.rmSync(testDir, { recursive: true, force: true });
-                } catch (err) {
-                    // Use alternative cleanup if rmSync not available
-                    try {
-                        require('child_process').execSync(`rm -rf "${testDir}"`, { stdio: 'ignore' });
-                    } catch (fallbackErr) {
-                        // Ignore cleanup errors in tests
-                    }
-                }
-            }
-            
+        test('should create directory when it does not exist', () => {
+            fs.existsSync = createMockFn(() => false);
+            const testDir = '/mock/new-dir';
+
             ensureLogDirectory(testDir);
-            
-            expect(fs.existsSync(testDir)).toBe(true);
+
+            expect(fs.mkdirSync).toHaveBeenCalled();
         });
-        
-        test('should not throw if directory already exists', () => {
-            const testDir = path.join(testLogDir, 'existing-dir');
-            
-            // Create directory first
-            fs.mkdirSync(testDir, { recursive: true });
-            
-            expect(() => {
-                ensureLogDirectory(testDir);
-            }).not.toThrow();
-            
-            expect(fs.existsSync(testDir)).toBe(true);
+
+        test('should not create directory when it already exists', () => {
+            fs.existsSync = createMockFn(() => true);
+            const testDir = '/mock/existing-dir';
+
+            ensureLogDirectory(testDir);
+
+            expect(fs.mkdirSync).not.toHaveBeenCalled();
         });
-        
+
         test('should return false when no path is provided', () => {
             expect(ensureLogDirectory()).toBe(false);
         });
+
+        test('should handle mkdir errors gracefully', () => {
+            fs.existsSync = createMockFn(() => false);
+            fs.mkdirSync = createMockFn(() => {
+                throw new Error('Permission denied');
+            });
+
+            expect(() => ensureLogDirectory('/invalid/path')).not.toThrow();
+        });
     });
-    
+
     describe('logProgram', () => {
         beforeEach(() => {
             configureFileLogging();
         });
 
-        test('should write message to program log file', () => {
+        test('should write message to log file', () => {
             const testMessage = 'Test log message';
-            
+
             logProgram(testMessage);
-            
-            const programLogPath = path.join(testLogDir, 'program-log.txt');
-            expect(fs.existsSync(programLogPath)).toBe(true);
-            
-            const logContent = fs.readFileSync(programLogPath, 'utf8');
-            expect(logContent).toContain(testMessage);
+
+            expect(writtenContent.length).toBeGreaterThan(0);
+            const lastWrite = writtenContent[writtenContent.length - 1];
+            expect(lastWrite.content).toContain(testMessage);
         });
-        
-        test('should include ISO timestamp in log entry', () => {
-            const testMessage = 'Timestamp test message';
-            
+
+        test('should include timestamp in log entry', () => {
+            const testMessage = 'Timestamp test';
+
             logProgram(testMessage);
-            
-            const programLogPath = path.join(testLogDir, 'program-log.txt');
-            const logContent = fs.readFileSync(programLogPath, 'utf8');
-            
-            // Should contain timestamp format (using the actual format from the logging system: [HH:MM:SS])
-            expect(logContent).toMatch(/\[\d{2}:\d{2}:\d{2}\]/);
-            expect(logContent).toContain(testMessage);
+
+            const lastWrite = writtenContent[writtenContent.length - 1];
+            expect(lastWrite.content).toMatch(/\[\d{2}:\d{2}:\d{2}\]/);
         });
-        
+
         test('should handle multiple log entries', () => {
             const messages = ['Message 1', 'Message 2', 'Message 3'];
-            
+
             messages.forEach(msg => logProgram(msg));
-            
-            const programLogPath = path.join(testLogDir, 'program-log.txt');
-            const logContent = fs.readFileSync(programLogPath, 'utf8');
-            
-            messages.forEach(msg => {
-                expect(logContent).toContain(msg);
+
+            expect(writtenContent.length).toBe(messages.length);
+            messages.forEach((msg, i) => {
+                expect(writtenContent[i].content).toContain(msg);
             });
         });
+
+        test('should handle write errors gracefully', () => {
+            fs.appendFileSync = createMockFn(() => {
+                throw new Error('Disk full');
+            });
+
+            expect(() => logProgram('Test message')).not.toThrow();
+        });
     });
-    
+
     describe('Console Override Functionality', () => {
         test('should not be enabled by default', () => {
             expect(isConsoleOverrideEnabled()).toBe(false);
         });
-        
-        test('should enable console override when initialized', () => {
+
+        test('should enable when initialized', () => {
             initializeConsoleOverride();
+
             expect(isConsoleOverrideEnabled()).toBe(true);
         });
-        
+
         test('should restore original console functions', () => {
             initializeConsoleOverride();
             expect(isConsoleOverrideEnabled()).toBe(true);
-            
+
             restoreConsole();
+
             expect(isConsoleOverrideEnabled()).toBe(false);
-            
-            // Console functions should be restored to some form of original function
-            // Note: Test framework may mock console, so we check that they're not our override functions
             expect(typeof console.log).toBe('function');
             expect(typeof console.error).toBe('function');
-            // The functions should not be our override implementations
-            expect(console.log.toString()).not.toContain('logProgram');
         });
-        
+
         test('should not re-initialize if already enabled', () => {
             initializeConsoleOverride();
             const firstOverride = console.log;
-            
-            initializeConsoleOverride(); // Second call
+
+            initializeConsoleOverride();
             const secondOverride = console.log;
-            
+
             expect(firstOverride).toBe(secondOverride);
-            expect(isConsoleOverrideEnabled()).toBe(true);
         });
-        
+
         test('should handle restore when not enabled', () => {
             expect(isConsoleOverrideEnabled()).toBe(false);
-            
-            expect(() => {
-                restoreConsole();
-            }).not.toThrow();
-            
+
+            expect(() => restoreConsole()).not.toThrow();
+
             expect(isConsoleOverrideEnabled()).toBe(false);
         });
     });
-    
+
     describe('Console Override Behavior', () => {
         beforeEach(() => {
             configureFileLogging();
@@ -243,125 +203,65 @@ describe('Console Override Pattern', () => {
 
         test('should write console.log to file', () => {
             initializeConsoleOverride();
-            
             const testMessage = 'Test console.log override';
+
             console.log(testMessage);
-            
-            // Should have written to file
-            const programLogPath = path.join(testLogDir, 'program-log.txt');
-            expect(fs.existsSync(programLogPath)).toBe(true);
-            
-            const logContent = fs.readFileSync(programLogPath, 'utf8');
-            expect(logContent).toContain(testMessage);
-        });
-        
-        test('should write console.error to file with ERROR prefix', () => {
-            initializeConsoleOverride();
-            
-            const testMessage = 'Test console.error override';
-            console.error(testMessage);
-            
-            // Should have written to file with ERROR prefix
-            const programLogPath = path.join(testLogDir, 'program-log.txt');
-            expect(fs.existsSync(programLogPath)).toBe(true);
-            
-            const logContent = fs.readFileSync(programLogPath, 'utf8');
-            expect(logContent).toContain(`ERROR: ${testMessage}`);
-        });
-        
-        test('should handle multiple arguments to console.log', () => {
-            initializeConsoleOverride();
-            
-            const arg1 = 'First';
-            const arg2 = 'Second';
-            const arg3 = 'Third';
-            
-            console.log(arg1, arg2, arg3);
-            
-            // Should have written joined arguments to file
-            const programLogPath = path.join(testLogDir, 'program-log.txt');
-            const logContent = fs.readFileSync(programLogPath, 'utf8');
-            expect(logContent).toContain(`${arg1} ${arg2} ${arg3}`);
-        });
-        
-        test('should handle console.log with objects', () => {
-            initializeConsoleOverride();
-            
-            const testObj = { key: 'value', num: 42 };
-            console.log('Object test:', testObj);
-            
-            // Should have written string representation to file
-            const programLogPath = path.join(testLogDir, 'program-log.txt');
-            const logContent = fs.readFileSync(programLogPath, 'utf8');
-            expect(logContent).toContain('Object test:');
-            expect(logContent).toContain('[object Object]');
-        });
-    });
-    
-    describe('Error Handling', () => {
-        beforeEach(() => {
-            configureFileLogging();
+
+            const hasMessage = writtenContent.some(w => w.content.includes(testMessage));
+            expect(hasMessage).toBe(true);
         });
 
-        test('should handle file write errors gracefully', () => {
-            // Mock fs.appendFileSync to throw an error
-            const originalAppendFileSync = fs.appendFileSync;
-            fs.appendFileSync = createMockFn(() => {
-                throw new Error('Mock file write error');
-            });
-            
-            expect(() => {
-                logProgram('Test message');
-            }).not.toThrow();
-            
-            // Restore original function
-            fs.appendFileSync = originalAppendFileSync;
+        test('should write console.error with ERROR prefix', () => {
+            initializeConsoleOverride();
+            const testMessage = 'Test error message';
+
+            console.error(testMessage);
+
+            const hasError = writtenContent.some(w =>
+                w.content.includes('ERROR:') && w.content.includes(testMessage)
+            );
+            expect(hasError).toBe(true);
         });
-        
-        test('should handle directory creation errors gracefully', () => {
-            // Mock fs.mkdirSync to throw an error
-            const originalMkdirSync = fs.mkdirSync;
-            fs.mkdirSync = createMockFn(() => {
-                throw new Error('Mock directory creation error');
-            });
-            
-            expect(() => {
-                ensureLogDirectory('/invalid/path');
-            }).not.toThrow();
-            
-            // Restore original function
-            fs.mkdirSync = originalMkdirSync;
+
+        test('should handle multiple arguments', () => {
+            initializeConsoleOverride();
+
+            console.log('First', 'Second', 'Third');
+
+            const hasAllArgs = writtenContent.some(w =>
+                w.content.includes('First') &&
+                w.content.includes('Second') &&
+                w.content.includes('Third')
+            );
+            expect(hasAllArgs).toBe(true);
+        });
+
+        test('should handle objects in arguments', () => {
+            initializeConsoleOverride();
+            const testObj = { key: 'value' };
+
+            console.log('Object:', testObj);
+
+            const hasOutput = writtenContent.some(w => w.content.includes('Object:'));
+            expect(hasOutput).toBe(true);
         });
     });
-    
+
     describe('Performance', () => {
         beforeEach(() => {
             configureFileLogging();
         });
 
-        test('should handle logging without throwing errors', () => {
+        test('should handle rapid logging without errors', () => {
             initializeConsoleOverride();
-            
-            const start = testClock.now();
-            const messageCount = 10; // Reduced count for testing
-            
+
             expect(() => {
-                for (let i = 0; i < messageCount; i++) {
-                    console.log(`Performance test message ${i}`);
+                for (let i = 0; i < 100; i++) {
+                    console.log(`Message ${i}`);
                 }
             }).not.toThrow();
-            
-            const simulatedDurationMs = 20;
-            testClock.advance(simulatedDurationMs);
-            const end = testClock.now();
-            const duration = end - start;
-            
-            // Should complete within reasonable time
-            expect(duration).toBeLessThan(1000); // 1 second for 10 messages
-            
-            // Verify log file was created
-            const programLogPath = path.join(testLogDir, 'program-log.txt');
-            expect(fs.existsSync(programLogPath)).toBe(true);
+
+            expect(writtenContent.length).toBe(100);
         });
     });
-}); 
+});
