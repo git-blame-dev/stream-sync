@@ -1,15 +1,13 @@
-
 const { describe, it, expect, beforeEach, afterEach } = require('bun:test');
-const { createMockFn, restoreAllMocks } = require('../helpers/bun-mock-utils');
-const { unmockModule, restoreAllModuleMocks, resetModules } = require('../helpers/bun-module-mocks');
-
-unmockModule('../../../src/platforms/tiktok');
-unmockModule('../../../src/services/PlatformEventRouter');
+const { createMockFn, restoreAllMocks } = require('../../helpers/bun-mock-utils');
+const { restoreAllModuleMocks, resetModules } = require('../../helpers/bun-module-mocks');
 
 const PlatformEventRouter = require('../../../src/services/PlatformEventRouter');
 const { PlatformEvents } = require('../../../src/interfaces/PlatformEvents');
 const { TikTokPlatform } = require('../../../src/platforms/tiktok');
 const testClock = require('../../helpers/test-clock');
+
+const noOpLogger = { debug: () => {}, info: () => {}, warn: () => {}, error: () => {} };
 
 describe('TikTokPlatform unified event contract (expected behavior)', () => {
     let platform;
@@ -52,13 +50,11 @@ describe('TikTokPlatform unified event contract (expected behavior)', () => {
             runtime,
             notificationManager: { handleNotification: createMockFn() },
             configService: { areNotificationsEnabled: createMockFn(() => true) },
-            logger: { debug: () => {}, info: () => {}, warn: () => {}, error: () => {} }
+            logger: noOpLogger
         });
 
-        // Use production initialization with proper mocking
-        const mockLogger = { debug: () => {}, info: () => {}, warn: () => {}, error: () => {} };
         const mockDependencies = {
-            logger: mockLogger,
+            logger: noOpLogger,
             connectionFactory: {
                 createConnection: createMockFn().mockReturnValue({
                     connect: createMockFn().mockResolvedValue(),
@@ -94,7 +90,6 @@ describe('TikTokPlatform unified event contract (expected behavior)', () => {
             eventBus: mockEventBus
         });
 
-        // Inject handlers that route to EventBus (production pattern)
         const platformHandlers = {
             onChat: (data) => mockEventBus.emit('platform:event', { platform: 'tiktok', type: PlatformEvents.CHAT_MESSAGE, data }),
             onFollow: (data) => mockEventBus.emit('platform:event', { platform: 'tiktok', type: PlatformEvents.FOLLOW, data }),
@@ -102,7 +97,6 @@ describe('TikTokPlatform unified event contract (expected behavior)', () => {
             onShare: (data) => mockEventBus.emit('platform:event', { platform: 'tiktok', type: PlatformEvents.SHARE, data })
         };
 
-        // Initialize platform with handlers (production pattern)
         platform.handlers = { ...platform.handlers, ...platformHandlers };
     });
 
@@ -169,7 +163,6 @@ describe('TikTokPlatform unified event contract (expected behavior)', () => {
         const emitted = [];
         mockEventBus.subscribe('platform:event', (payload) => emitted.push(payload));
 
-        // Do not call bridge shims
         await platform._handleChatMessage({
             user: {
                 userId: 'tt-user-2',
