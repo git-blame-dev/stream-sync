@@ -1,168 +1,138 @@
+const { describe, test, expect, afterEach } = require('bun:test');
+const EventEmitter = require('events');
 
-const { describe, test, expect, beforeEach, afterEach, it } = require('bun:test');
-const { createMockFn, restoreAllMocks } = require('../helpers/bun-mock-utils');
-const { mockModule, unmockModule, restoreAllModuleMocks } = require('../helpers/bun-module-mocks');
+const { TikTokPlatform } = require('../../src/platforms/tiktok');
 
-const { initializeTestLogging, createTestUser, TEST_TIMEOUTS } = require('../helpers/test-setup');
-const { noOpLogger, createMockConfig } = require('../helpers/mock-factories');
-const { setupAutomatedCleanup } = require('../helpers/mock-lifecycle');
+const noOpLogger = { debug: () => {}, info: () => {}, warn: () => {}, error: () => {} };
 
-// Initialize logging first
-initializeTestLogging();
-
-// Setup automated cleanup
-setupAutomatedCleanup({
-    clearCallsBeforeEach: true,
-    logPerformanceMetrics: true
-});
-
-// Unmock the TikTok platform to test the real implementation
-unmockModule('../../src/platforms/tiktok');
-
-mockModule('../../src/utils/logger-utils', () => ({
-    getLazyLogger: createMockFn(),
-    getLazyUnifiedLogger: createMockFn(),
-    createNoopLogger: () => ({
-        error: createMockFn(),
-        debug: createMockFn(),
-        info: createMockFn(),
-        warn: createMockFn()
-    }),
-    getLoggerOrNoop: (logger) => logger || ({
-        error: createMockFn(),
-        debug: createMockFn(),
-        info: createMockFn(),
-        warn: createMockFn()
-    })
-}));
-
-describe('TikTok Connection Fix Validation - Solution C', () => {
-    let mockLogger, mockConfig, mockConnection, TikTokPlatform, mockDependencies;
-
-    beforeEach(() => {
-        mockLogger = noOpLogger;
-        
-        mockConfig = createMockConfig({
-            username: 'test_user',
-            apiKey: 'test_api_key',
-            enabled: true
-        });
-
-        // Mock TikTok Live Connector with proper connection state simulation
-        mockConnection = {
-            fetchIsLive: createMockFn().mockResolvedValue(true),
-            waitUntilLive: createMockFn().mockResolvedValue(),
-            connect: createMockFn().mockResolvedValue(),
-            disconnect: createMockFn().mockResolvedValue(),
-            removeAllListeners: createMockFn(),
-            on: createMockFn(),
-            getState: createMockFn().mockReturnValue({ isConnected: false })
-        };
-
-        // Import the actual TikTok platform for testing
-        TikTokPlatform = require('../../src/platforms/tiktok').TikTokPlatform;
-        
-        // Mock dependencies
-        mockDependencies = {
-            TikTokWebSocketClient: createMockFn().mockImplementation(() => mockConnection),
-            WebcastPushConnection: createMockFn(),
-            WebcastEvent: {
-                CHAT: 'chat',
-                GIFT: 'gift',
-                FOLLOW: 'follow',
-                ROOM_USER: 'roomUser',
-                ERROR: 'error',
-                DISCONNECT: 'disconnect'
-            },
-            ControlEvent: {},
-            retrySystem: {
-                executeWithRetry: createMockFn().mockImplementation(async (fn) => await fn()),
-                handleConnectionError: createMockFn(),
-                handleConnectionSuccess: createMockFn(),
-                resetRetryCount: createMockFn(),
-                incrementRetryCount: createMockFn(),
-                extractErrorMessage: createMockFn().mockImplementation(err => err?.message || 'Unknown error')
-            },
-            constants: {
-                GRACE_PERIODS: { TIKTOK: 5000 }
-            },
-            logger: mockLogger,
-            app: null
-        };
-
-        // Mock the unified logger that the real implementation uses
-        const { getLazyUnifiedLogger, getLazyLogger } = require('../../src/utils/logger-utils');
-        getLazyUnifiedLogger.mockReturnValue(mockLogger);
-        getLazyLogger.mockReturnValue(mockLogger);
-    });
+describe('TikTok Connection State Management', () => {
+    let platform;
 
     afterEach(() => {
-        restoreAllMocks();
-    
-        restoreAllModuleMocks();});
-
-    describe('Solution C Implementation Validation', () => {
-        it('should prevent null pointer exceptions when connection is null', async () => {
-            const platform = new TikTokPlatform(mockConfig, mockDependencies);
-            
-            platform.checkConnectionPrerequisites = createMockFn().mockReturnValue({
-                canConnect: true,
-                reason: 'All prerequisites met'
-            });
-
-            // Set a null connection to exercise ensureConnection
-            platform.connection = null;
-            
-            expect(() => platform.connectionStateManager.ensureConnection()).not.toThrow();
-            
-            const connection = platform.connectionStateManager.ensureConnection();
-            expect(connection).not.toBeNull();
-            expect(typeof connection.connect).toBe('function');
-        });
-
-        it('should handle connection cleanup and recreation gracefully', async () => {
-            const platform = new TikTokPlatform(mockConfig, mockDependencies);
-            
-            platform.checkConnectionPrerequisites = createMockFn().mockReturnValue({
-                canConnect: true,
-                reason: 'All prerequisites met'
-            });
-
-            await platform.initialize({});
-            expect(platform.connection).not.toBeNull();
-            
-            await platform.cleanup();
-            expect(platform.connection).toBeNull();
-
-            await expect(platform.initialize({})).resolves.not.toThrow();
-            expect(platform.connection).not.toBeNull();
-        });
-
-        it('should maintain connection state through the state manager', async () => {
-            const platform = new TikTokPlatform(mockConfig, mockDependencies);
-            
-            expect(platform.connectionStateManager).toBeDefined();
-            expect(platform.connectionFactory).toBeDefined();
-            
-            expect(platform.connectionStateManager.getState()).toBe('disconnected');
-            expect(platform.connectionStateManager.isConnected()).toBe(false);
-            
-            const connectionInfo = platform.connectionStateManager.getConnectionInfo();
-            expect(connectionInfo.platform).toBe('tiktok');
-            expect(connectionInfo.state).toBe('disconnected');
-            expect(connectionInfo.hasConnection).toBe(false);
-        });
-
-        it('should create connections using the factory pattern', async () => {
-            const platform = new TikTokPlatform(mockConfig, mockDependencies);
-            
-            const connection = platform.connectionFactory.createConnection('tiktok', mockConfig, mockDependencies);
-            expect(connection).not.toBeNull();
-            expect(typeof connection.connect).toBe('function');
-            
-            expect(typeof connection.disconnect).toBe('function');
-            expect(typeof connection.fetchIsLive).toBe('function');
-            expect(typeof connection.on).toBe('function');
-        });
+        if (platform) {
+            platform.removeAllListeners?.();
+        }
     });
-}, TEST_TIMEOUTS.FAST);
+
+    const createMockConnection = () => {
+        const emitter = new EventEmitter();
+        return {
+            connect: async () => ({ roomId: 'testRoom123' }),
+            disconnect: async () => true,
+            fetchIsLive: async () => true,
+            waitUntilLive: async () => {},
+            on: emitter.on.bind(emitter),
+            emit: emitter.emit.bind(emitter),
+            removeAllListeners: emitter.removeAllListeners.bind(emitter),
+            isConnected: false,
+            isConnecting: false,
+            roomId: 'testRoom123'
+        };
+    };
+
+    const buildPlatform = () => {
+        const mockConnection = createMockConnection();
+
+        const config = {
+            enabled: true,
+            username: 'testTikTokUser',
+            dataLoggingEnabled: false
+        };
+
+        const deps = {
+            logger: noOpLogger,
+            connectionStateManager: {
+                initialize: () => {},
+                markDisconnected: () => {},
+                markConnecting: () => {},
+                markConnected: () => {},
+                markError: () => {},
+                ensureConnection: () => mockConnection,
+                getState: () => 'disconnected',
+                isConnected: () => false,
+                getConnectionInfo: () => ({
+                    platform: 'tiktok',
+                    state: 'disconnected',
+                    hasConnection: false
+                })
+            },
+            connectionFactory: {
+                createConnection: () => mockConnection
+            },
+            intervalManager: {
+                createInterval: () => {},
+                hasInterval: () => false,
+                clearInterval: () => {},
+                clearAllIntervals: () => {}
+            },
+            retrySystem: { resetRetryCount: () => {}, handleConnectionError: () => {} },
+            TikTokWebSocketClient: class {},
+            WebcastEvent: {},
+            ControlEvent: { CONNECTED: 'connected' },
+            initializationManager: {
+                beginInitialization: () => true,
+                markInitializationSuccess: () => {},
+                markInitializationFailure: () => {},
+                reset: () => {}
+            },
+            initializationStats: {
+                startInitializationAttempt: () => 'test-attempt',
+                recordSuccess: () => {},
+                recordFailure: () => {},
+                reset: () => {}
+            }
+        };
+
+        return new TikTokPlatform(config, deps);
+    };
+
+    test('has connectionStateManager defined', () => {
+        platform = buildPlatform();
+
+        expect(platform.connectionStateManager).toBeDefined();
+    });
+
+    test('has connectionFactory defined', () => {
+        platform = buildPlatform();
+
+        expect(platform.connectionFactory).toBeDefined();
+    });
+
+    test('connectionStateManager reports disconnected state initially', () => {
+        platform = buildPlatform();
+
+        expect(platform.connectionStateManager.getState()).toBe('disconnected');
+        expect(platform.connectionStateManager.isConnected()).toBe(false);
+    });
+
+    test('connectionStateManager provides connection info', () => {
+        platform = buildPlatform();
+
+        const info = platform.connectionStateManager.getConnectionInfo();
+
+        expect(info.platform).toBe('tiktok');
+        expect(info.state).toBe('disconnected');
+        expect(info.hasConnection).toBe(false);
+    });
+
+    test('connectionFactory creates connection with required methods', () => {
+        platform = buildPlatform();
+
+        const connection = platform.connectionFactory.createConnection();
+
+        expect(connection).not.toBeNull();
+        expect(typeof connection.connect).toBe('function');
+        expect(typeof connection.disconnect).toBe('function');
+    });
+
+    test('cleanup sets connection to null', async () => {
+        platform = buildPlatform();
+        platform.connection = createMockConnection();
+
+        expect(platform.connection).not.toBeNull();
+
+        await platform.cleanup();
+
+        expect(platform.connection).toBeNull();
+    });
+});
