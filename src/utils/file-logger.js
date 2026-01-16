@@ -1,12 +1,13 @@
-const fs = require('fs');
+const defaultFs = require('fs');
 const path = require('path');
 
 class FileLogger {
-    constructor(config = {}) {
+    constructor(config = {}, deps = {}) {
         if (!config.logDir) {
             throw new Error('logDir is required for FileLogger');
         }
 
+        this.fs = deps.fs || defaultFs;
         this.config = {
             ...config,
             maxSize: config.maxSize ?? 10 * 1024 * 1024, // 10MB
@@ -19,18 +20,15 @@ class FileLogger {
     
     write(filename, content) {
         const fullPath = path.join(this.config.logDir, filename);
-        
+
         try {
-            // Check if rotation needed
             if (this.needsRotation(fullPath)) {
                 this.rotateFile(fullPath);
             }
-            
-            // Write to file
-            fs.appendFileSync(fullPath, content + '\n');
-            
+
+            this.fs.appendFileSync(fullPath, content + '\n');
+
         } catch (error) {
-            // Use process.stderr.write for critical system messages to avoid circular dependency
             process.stderr.write(`[FileLogger] Failed to write to ${fullPath}: ${error.message}\n`);
         }
     }
@@ -42,9 +40,9 @@ class FileLogger {
     
     needsRotation(filePath) {
         try {
-            if (!fs.existsSync(filePath)) return false;
-            
-            const stats = fs.statSync(filePath);
+            if (!this.fs.existsSync(filePath)) return false;
+
+            const stats = this.fs.statSync(filePath);
             return stats.size >= this.config.maxSize;
         } catch {
             return false;
@@ -56,39 +54,35 @@ class FileLogger {
             const dir = path.dirname(filePath);
             const ext = path.extname(filePath);
             const basename = path.basename(filePath, ext);
-            
-            // Rotate existing files
+
             for (let i = this.config.maxFiles - 1; i >= 1; i--) {
                 const oldFile = path.join(dir, `${basename}.${i}${ext}`);
                 const newFile = path.join(dir, `${basename}.${i + 1}${ext}`);
-                
-                if (fs.existsSync(oldFile)) {
+
+                if (this.fs.existsSync(oldFile)) {
                     if (i === this.config.maxFiles - 1) {
-                        fs.unlinkSync(oldFile); // Delete oldest
+                        this.fs.unlinkSync(oldFile);
                     } else {
-                        fs.renameSync(oldFile, newFile);
+                        this.fs.renameSync(oldFile, newFile);
                     }
                 }
             }
-            
-            // Move current file to .1
+
             const rotatedFile = path.join(dir, `${basename}.1${ext}`);
-            if (fs.existsSync(filePath)) {
-                fs.renameSync(filePath, rotatedFile);
+            if (this.fs.existsSync(filePath)) {
+                this.fs.renameSync(filePath, rotatedFile);
             }
         } catch (error) {
-            // Use process.stderr.write for critical system messages to avoid circular dependency
             process.stderr.write(`[FileLogger] Failed to rotate log file: ${error.message}\n`);
         }
     }
     
     ensureLogDirectory() {
         try {
-            if (!fs.existsSync(this.config.logDir)) {
-                fs.mkdirSync(this.config.logDir, { recursive: true });
+            if (!this.fs.existsSync(this.config.logDir)) {
+                this.fs.mkdirSync(this.config.logDir, { recursive: true });
             }
         } catch (error) {
-            // Use process.stderr.write for critical system messages to avoid circular dependency
             process.stderr.write(`[FileLogger] Failed to create log directory: ${error.message}\n`);
         }
     }

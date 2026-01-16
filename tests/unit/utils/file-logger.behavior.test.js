@@ -1,73 +1,64 @@
-const { describe, test, expect, beforeEach, it, afterEach } = require('bun:test');
-const { createMockFn, spyOn, clearAllMocks, restoreAllMocks } = require('../../helpers/bun-mock-utils');
-const { mockModule, restoreAllModuleMocks } = require('../../helpers/bun-module-mocks');
+const { describe, expect, beforeEach, it, afterEach } = require('bun:test');
+const { createMockFn, spyOn, restoreAllMocks } = require('../../helpers/bun-mock-utils');
 
-mockModule('fs', () => {
-    const mockState = { files: {}, dirs: new Set() };
+const { FileLogger } = require('../../../src/utils/file-logger');
+
+function createMockFs() {
+    const files = {};
+    const dirs = new Set();
 
     return {
-        __state: mockState,
-        existsSync: createMockFn((target) => {
-            if (mockState.dirs.has(target)) return true;
-            return Object.prototype.hasOwnProperty.call(mockState.files, target);
-        }),
-        mkdirSync: createMockFn((dir) => { mockState.dirs.add(dir); }),
-        appendFileSync: createMockFn((file, content) => { mockState.files[file] = (mockState.files[file] || '') + content; }),
-        statSync: createMockFn((file) => ({ size: (mockState.files[file] || '').length })),
+        _files: files,
+        _dirs: dirs,
+        existsSync: createMockFn((target) => dirs.has(target) || Object.prototype.hasOwnProperty.call(files, target)),
+        mkdirSync: createMockFn((dir) => { dirs.add(dir); }),
+        appendFileSync: createMockFn((file, content) => { files[file] = (files[file] || '') + content; }),
+        statSync: createMockFn((file) => ({ size: (files[file] || '').length })),
         renameSync: createMockFn((oldPath, newPath) => {
-            mockState.files[newPath] = mockState.files[oldPath] || '';
-            delete mockState.files[oldPath];
+            files[newPath] = files[oldPath] || '';
+            delete files[oldPath];
         }),
-        unlinkSync: createMockFn((target) => { delete mockState.files[target]; })
+        unlinkSync: createMockFn((target) => { delete files[target]; })
     };
-});
-
-const fs = require('fs');
-const { FileLogger } = require('../../../src/utils/file-logger');
+}
 
 describe('file-logger behavior', () => {
     afterEach(() => {
         restoreAllMocks();
-        restoreAllModuleMocks();
     });
-
-    const resetFsState = () => {
-        fs.__state.files = {};
-        fs.__state.dirs = new Set();
-        clearAllMocks();
-    };
-
-    beforeEach(() => resetFsState());
 
     it('requires a log directory for construction', () => {
         expect(() => new FileLogger()).toThrow('logDir is required');
     });
 
     it('ensures log directory exists on construction', () => {
-        new FileLogger({ logDir: 'logs-test' });
+        const mockFs = createMockFs();
 
-        expect(fs.mkdirSync).toHaveBeenCalledWith('logs-test', { recursive: true });
+        new FileLogger({ logDir: 'logs-test' }, { fs: mockFs });
+
+        expect(mockFs.mkdirSync).toHaveBeenCalledWith('logs-test', { recursive: true });
     });
 
     it('writes log content and rotates when exceeding max size', () => {
-        fs.__state.files['logs/app.log'] = 'x'.repeat(15);
-        const rotationSpy = spyOn(FileLogger.prototype, 'needsRotation').mockReturnValue(true);
-        const rotateFileSpy = spyOn(FileLogger.prototype, 'rotateFile');
-        const logger = new FileLogger({ logDir: 'logs', filename: 'app.log', maxSize: 10, maxFiles: 2 });
+        const mockFs = createMockFs();
+        mockFs._files['logs/app.log'] = 'x'.repeat(15);
+
+        const logger = new FileLogger({ logDir: 'logs', filename: 'app.log', maxSize: 10, maxFiles: 2 }, { fs: mockFs });
+        const rotateFileSpy = spyOn(logger, 'rotateFile');
 
         logger.log('new-line');
 
         expect(rotateFileSpy).toHaveBeenCalledWith('logs/app.log');
-        expect(fs.appendFileSync).toHaveBeenCalledWith('logs/app.log', 'new-line\n');
-        rotationSpy.mockRestore();
+        expect(mockFs.appendFileSync).toHaveBeenCalledWith('logs/app.log', 'new-line\n');
         rotateFileSpy.mockRestore();
     });
 
     it('writes error to stderr when append fails', () => {
-        fs.appendFileSync.mockImplementation(() => { throw new Error('disk full'); });
+        const mockFs = createMockFs();
+        mockFs.appendFileSync.mockImplementation(() => { throw new Error('disk full'); });
         const stderrSpy = spyOn(process.stderr, 'write').mockImplementation(() => {});
-        const logger = new FileLogger({ logDir: 'logs', filename: 'app.log' });
 
+        const logger = new FileLogger({ logDir: 'logs', filename: 'app.log' }, { fs: mockFs });
         logger.log('entry');
 
         expect(stderrSpy).toHaveBeenCalledWith(expect.stringContaining('Failed to write'));
