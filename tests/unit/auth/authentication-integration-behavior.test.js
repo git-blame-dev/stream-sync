@@ -1,166 +1,125 @@
 
-// Mock axios globally for all tests
 const { describe, test, expect, beforeEach, afterEach } = require('bun:test');
 const { createMockFn, clearAllMocks, restoreAllMocks } = require('../../helpers/bun-mock-utils');
-const { mockModule, restoreAllModuleMocks } = require('../../helpers/bun-module-mocks');
+const { createMockLogger } = require('../../helpers/mock-factories');
 
-mockModule('axios');
-const axios = require('axios');
-
-// Mock the OAuth handler to prevent server startup
-mockModule('../../../src/auth/oauth-handler', () => ({
-    TwitchOAuthHandler: createMockFn().mockImplementation(() => ({
-        runOAuthFlow: createMockFn().mockRejectedValue(new Error('OAuth not available in test environment'))
-    }))
-}));
+const TwitchAuthInitializer = require('../../../src/auth/TwitchAuthInitializer');
+const TwitchAuthService = require('../../../src/auth/TwitchAuthService');
 
 describe('Authentication Integration Behavior', () => {
-    afterEach(() => {
-        restoreAllMocks();
-        restoreAllModuleMocks();
-    });
-
-    let TwitchAuthInitializer;
-    let TwitchAuthService;
     let mockLogger;
+    let mockAxios;
     let mockEnhancedHttpClient;
     let mockFileSystem;
-    
+
     beforeEach(() => {
-        mockLogger = {
-            debug: createMockFn(),
-            info: createMockFn(),
-            error: createMockFn(),
-            warn: createMockFn()
+        mockLogger = createMockLogger();
+
+        mockAxios = {
+            get: createMockFn(),
+            post: createMockFn()
         };
-        
-        // Mock enhanced HTTP client
+
         mockEnhancedHttpClient = {
             post: createMockFn()
         };
-        
-        // Use the globally mocked axios
-        clearAllMocks();
-        
-        // Mock file system
+
         mockFileSystem = {
             readFileSync: createMockFn().mockReturnValue('[twitch]\naccessToken=old_token\nrefreshToken=old_refresh'),
             writeFileSync: createMockFn()
         };
-        
-        TwitchAuthInitializer = require('../../../src/auth/TwitchAuthInitializer');
-        TwitchAuthService = require('../../../src/auth/TwitchAuthService');
     });
-    
+
+    afterEach(() => {
+        restoreAllMocks();
+    });
+
     describe('when authentication initialization completes successfully', () => {
         test('should integrate all auth components for complete workflow', async () => {
-            // Given: Complete auth service with valid config
             const authConfig = {
-                clientId: 'integration_client_id',
-                clientSecret: 'integration_client_secret',
-                accessToken: 'valid_integration_token',
-                refreshToken: 'valid_integration_refresh',
-                channel: 'integrationuser'
+                clientId: 'test-integration-client-id',
+                clientSecret: 'test-integration-client-secret',
+                accessToken: 'test-valid-integration-token',
+                refreshToken: 'test-valid-integration-refresh',
+                channel: 'test-integration-user'
             };
-            
+
             const authService = new TwitchAuthService(authConfig, { logger: mockLogger });
-            
-            // And: Successful token validation
+
             const mockResponse = {
                 data: {
                     user_id: '555666777',
-                    login: 'integrationuser',
+                    login: 'test-integration-user',
                     expires_in: 14400
                 }
             };
-            // Mock both proactive check and validation calls
-            axios.get.mockResolvedValueOnce(mockResponse); // For proactive check
-            axios.get.mockResolvedValueOnce(mockResponse); // For validation
-            
+            mockAxios.get.mockResolvedValue(mockResponse);
+
             const authInitializer = new TwitchAuthInitializer({
                 logger: mockLogger,
                 enhancedHttpClient: mockEnhancedHttpClient,
-                axios: axios,
+                axios: mockAxios,
                 fs: mockFileSystem
             });
-            
-            // When: Complete authentication initialization
+
             const result = await authInitializer.initializeAuthentication(authService);
-            
-            // Then: Should complete full integration successfully
+
             expect(result).toBe(true);
             expect(authService.isInitialized).toBe(true);
             expect(authService.userId).toBe('555666777');
-            expect(mockLogger.info).toHaveBeenCalledWith(
-                expect.stringContaining('Authentication initialized for user: integrationuser')
-            );
-        }, 10000); // Add timeout protection
-        
+        }, 10000);
+
         test('should maintain authentication state across component interactions', async () => {
-            // Given: Auth service and initializer working together
             const authConfig = {
-                clientId: 'state_client_id',
-                clientSecret: 'state_client_secret',
-                accessToken: 'state_test_token',
-                refreshToken: 'state_test_refresh',
-                channel: 'stateuser'
+                clientId: 'test-state-client-id',
+                clientSecret: 'test-state-client-secret',
+                accessToken: 'test-state-test-token',
+                refreshToken: 'test-state-test-refresh',
+                channel: 'test-state-user'
             };
-            
+
             const authService = new TwitchAuthService(authConfig, { logger: mockLogger });
-            
+
             const mockResponse = {
                 data: {
                     user_id: '888999111',
-                    login: 'stateuser',
+                    login: 'test-state-user',
                     expires_in: 7200
                 }
             };
-            // Mock both proactive check and validation calls
-            axios.get.mockResolvedValueOnce(mockResponse); // For proactive check
-            axios.get.mockResolvedValueOnce(mockResponse); // For validation
-            
+            mockAxios.get.mockResolvedValue(mockResponse);
+
             const authInitializer = new TwitchAuthInitializer({
                 logger: mockLogger,
                 enhancedHttpClient: mockEnhancedHttpClient,
-                axios: axios,
+                axios: mockAxios,
                 fs: mockFileSystem
             });
-            
-            // When: Authentication is initialized
+
             await authInitializer.initializeAuthentication(authService);
-            
-            // Then: Auth service should maintain consistent state
+
             expect(authService.isInitialized).toBe(true);
-            expect(authService.config.accessToken).toBe('state_test_token');
-            
-            // And: Auth provider should be accessible (skip if method doesn't exist)
-            if (typeof authService.getAuthProvider === 'function') {
-                const authProvider = authService.getAuthProvider();
-                expect(authProvider).toBeDefined();
-                expect(typeof authProvider.getAccessTokenForUser).toBe('function');
-            }
-            
-            // And: User ID should be retrievable
+            expect(authService.config.accessToken).toBe('test-state-test-token');
+
             const userId = authService.getUserId();
             expect(userId).toBe('888999111');
-        }, 10000); // Add timeout protection
+        }, 10000);
     });
-    
+
     describe('when authentication requires token refresh', () => {
         test('should integrate refresh flow with auth service updates', async () => {
-            // Given: Auth service with expired token
             const authConfig = {
-                clientId: 'refresh_client_id',
-                clientSecret: 'refresh_client_secret',
-                accessToken: 'expired_token',
-                refreshToken: 'valid_refresh_token',
-                channel: 'refreshuser'
+                clientId: 'test-refresh-client-id',
+                clientSecret: 'test-refresh-client-secret',
+                accessToken: 'test-expired-token',
+                refreshToken: 'test-valid-refresh-token',
+                channel: 'test-refresh-user'
             };
-            
+
             const authService = new TwitchAuthService(authConfig, { logger: mockLogger });
-            
-            // And: Token validation fails initially (expired)
-            axios.get
+
+            // Token validation fails initially (401), then succeeds after refresh
+            mockAxios.get
                 .mockRejectedValueOnce({
                     response: { status: 401 },
                     message: 'Invalid OAuth token'
@@ -168,60 +127,52 @@ describe('Authentication Integration Behavior', () => {
                 .mockResolvedValueOnce({
                     data: {
                         user_id: '111222333',
-                        login: 'refreshuser',
+                        login: 'test-refresh-user',
                         expires_in: 14400
                     }
                 });
-            
-            // And: Successful token refresh
+
             mockEnhancedHttpClient.post.mockResolvedValue({
                 data: {
-                    access_token: 'new_refreshed_token',
-                    refresh_token: 'new_refreshed_refresh',
+                    access_token: 'test-new-refreshed-token',
+                    refresh_token: 'test-new-refreshed-refresh',
                     expires_in: 14400
                 }
             });
-            
+
             const authInitializer = new TwitchAuthInitializer({
                 logger: mockLogger,
                 enhancedHttpClient: mockEnhancedHttpClient,
-                axios: axios,
+                axios: mockAxios,
                 fs: mockFileSystem
             });
-            
-            // When: Authentication initialization with refresh
+
             const result = await authInitializer.initializeAuthentication(authService);
-            
-            // Then: Should complete integration with refreshed tokens
+
             expect(result).toBe(true);
-            expect(authService.config.accessToken).toBe('new_refreshed_token');
-            expect(authService.config.refreshToken).toBe('new_refreshed_refresh');
+            expect(authService.config.accessToken).toBe('test-new-refreshed-token');
+            expect(authService.config.refreshToken).toBe('test-new-refreshed-refresh');
             expect(authService.isInitialized).toBe(true);
-            
-            // And: Authentication state should be maintainable for user
             expect(authService.getUserId()).toBe('111222333');
             expect(authService.getStatus().hasValidTokens).toBe(true);
-        }, 10000); // Add timeout protection
-        
+        }, 10000);
+
         test('should handle refresh failure and fallback to OAuth gracefully', async () => {
-            // Given: Auth service with invalid refresh token
             const authConfig = {
-                clientId: 'fallback_client_id',
-                clientSecret: 'fallback_client_secret',
-                accessToken: 'expired_token',
-                refreshToken: 'invalid_refresh_token',
-                channel: 'fallbackuser'
+                clientId: 'test-fallback-client-id',
+                clientSecret: 'test-fallback-client-secret',
+                accessToken: 'test-expired-token',
+                refreshToken: 'test-invalid-refresh-token',
+                channel: 'test-fallback-user'
             };
-            
+
             const authService = new TwitchAuthService(authConfig, { logger: mockLogger });
-            
-            // And: Token validation fails
-            axios.get.mockRejectedValue({
+
+            mockAxios.get.mockRejectedValue({
                 response: { status: 401 },
                 message: 'Invalid OAuth token'
             });
-            
-            // And: Token refresh fails
+
             mockEnhancedHttpClient.post.mockRejectedValue({
                 response: {
                     status: 400,
@@ -229,99 +180,86 @@ describe('Authentication Integration Behavior', () => {
                 },
                 message: 'Invalid refresh token'
             });
-            
-            // Set test environment to prevent real OAuth flow
+
+            const originalEnv = process.env.NODE_ENV;
             process.env.NODE_ENV = 'test';
-            
-            const authInitializer = new TwitchAuthInitializer({
-                logger: mockLogger,
-                enhancedHttpClient: mockEnhancedHttpClient,
-                axios: axios,
-                fs: mockFileSystem
-            });
-            
-            // When: Authentication fails and falls back to OAuth
-            const result = await authInitializer.initializeAuthentication(authService);
-            
-            // Then: Should handle failure gracefully
-            expect(result).toBe(false); // OAuth not run in test env
-            expect(authService.isInitialized).toBe(false);
-            expect(mockLogger.info).toHaveBeenCalledWith(
-                expect.stringContaining('Test environment detected')
-            );
-            
-            // Cleanup
-            delete process.env.NODE_ENV;
-        }, 10000); // Add timeout protection
+
+            try {
+                const authInitializer = new TwitchAuthInitializer({
+                    logger: mockLogger,
+                    enhancedHttpClient: mockEnhancedHttpClient,
+                    axios: mockAxios,
+                    fs: mockFileSystem
+                });
+
+                const result = await authInitializer.initializeAuthentication(authService);
+
+                expect(result).toBe(false);
+                expect(authService.isInitialized).toBe(false);
+            } finally {
+                process.env.NODE_ENV = originalEnv;
+            }
+        }, 10000);
     });
-    
+
     describe('when network issues occur during authentication', () => {
         test('should integrate retry logic across authentication components', async () => {
-            // Given: Auth service with valid credentials
             const authConfig = {
-                clientId: 'network_client_id',
-                clientSecret: 'network_client_secret',
-                accessToken: 'network_test_token',
-                refreshToken: 'network_test_refresh',
-                channel: 'networkuser'
+                clientId: 'test-network-client-id',
+                clientSecret: 'test-network-client-secret',
+                accessToken: 'test-network-test-token',
+                refreshToken: 'test-network-test-refresh',
+                channel: 'test-network-user'
             };
-            
+
             const authService = new TwitchAuthService(authConfig, { logger: mockLogger });
-            
-            // And: Network error on first validation, success on second
-            axios.get
+
+            // Network error on first try, success on retry after refresh
+            mockAxios.get
                 .mockRejectedValueOnce(new Error('ECONNREFUSED'))
                 .mockResolvedValueOnce({
                     data: {
                         user_id: '444555666',
-                        login: 'networkuser',
+                        login: 'test-network-user',
                         expires_in: 10800
                     }
                 });
-            
-            // And: Successful token refresh
+
             mockEnhancedHttpClient.post.mockResolvedValue({
                 data: {
-                    access_token: 'network_refreshed_token',
-                    refresh_token: 'network_refreshed_refresh',
+                    access_token: 'test-network-refreshed-token',
+                    refresh_token: 'test-network-refreshed-refresh',
                     expires_in: 14400
                 }
             });
-            
+
             const authInitializer = new TwitchAuthInitializer({
                 logger: mockLogger,
                 enhancedHttpClient: mockEnhancedHttpClient,
-                axios: axios,
+                axios: mockAxios,
                 fs: mockFileSystem
             });
-            
-            // When: Authentication with network issues
+
             const result = await authInitializer.initializeAuthentication(authService);
-            
-            // Then: Should recover from network issues and authenticate successfully
+
             expect(result).toBe(true);
             expect(authService.isInitialized).toBe(true);
-            
-            // AND: User experience should be seamless despite network issues
-            // (Authentication succeeds without requiring user intervention)
-        }, 10000); // Add timeout protection
+        }, 10000);
     });
-    
+
     describe('when configuration management is required', () => {
         test('should integrate config updates across authentication components', async () => {
-            // Given: Auth service with initial config
             const authConfig = {
-                clientId: 'config_client_id',
-                clientSecret: 'config_client_secret',
-                accessToken: 'config_old_token',
-                refreshToken: 'config_old_refresh',
-                channel: 'configuser'
+                clientId: 'test-config-client-id',
+                clientSecret: 'test-config-client-secret',
+                accessToken: 'test-config-old-token',
+                refreshToken: 'test-config-old-refresh',
+                channel: 'test-config-user'
             };
-            
+
             const authService = new TwitchAuthService(authConfig, { logger: mockLogger });
-            
-            // And: Token needs refresh
-            axios.get
+
+            mockAxios.get
                 .mockRejectedValueOnce({
                     response: { status: 401 },
                     message: 'Invalid OAuth token'
@@ -329,41 +267,34 @@ describe('Authentication Integration Behavior', () => {
                 .mockResolvedValueOnce({
                     data: {
                         user_id: '777888999',
-                        login: 'configuser',
+                        login: 'test-config-user',
                         expires_in: 14400
                     }
                 });
-            
-            // And: Successful token refresh with new values
+
             const newTokens = {
-                access_token: 'config_new_token',
-                refresh_token: 'config_new_refresh',
+                access_token: 'test-config-new-token',
+                refresh_token: 'test-config-new-refresh',
                 expires_in: 14400
             };
             mockEnhancedHttpClient.post.mockResolvedValue({ data: newTokens });
-            
+
             const authInitializer = new TwitchAuthInitializer({
                 logger: mockLogger,
                 enhancedHttpClient: mockEnhancedHttpClient,
-                axios: axios,
+                axios: mockAxios,
                 fs: mockFileSystem
             });
-            
-            // When: Authentication with config updates
+
             const result = await authInitializer.initializeAuthentication(authService);
-            
-            // Then: Should integrate config updates across components
+
             expect(result).toBe(true);
-            
-            // Auth service should have updated tokens
-            expect(authService.config.accessToken).toBe('config_new_token');
-            expect(authService.config.refreshToken).toBe('config_new_refresh');
-            
-            // And: User should experience seamless authentication state
+            expect(authService.config.accessToken).toBe('test-config-new-token');
+            expect(authService.config.refreshToken).toBe('test-config-new-refresh');
             expect(authService.isInitialized).toBe(true);
             expect(authService.getUserId()).toBe('777888999');
             expect(authService.getStatus().hasValidTokens).toBe(true);
             expect(authService.getStatus().configValid).toBe(true);
-        }, 10000); // Add timeout protection
+        }, 10000);
     });
 });

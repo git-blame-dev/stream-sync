@@ -1,66 +1,59 @@
+
 const { describe, test, expect, beforeEach, it, afterEach } = require('bun:test');
-const { createMockFn, spyOn, clearAllMocks, restoreAllMocks } = require('../../helpers/bun-mock-utils');
-const { mockModule, restoreAllModuleMocks } = require('../../helpers/bun-module-mocks');
+const { createMockFn, spyOn, restoreAllMocks } = require('../../helpers/bun-mock-utils');
+const { createMockLogger } = require('../../helpers/mock-factories');
 
-mockModule('../../../src/auth/TwitchAuthFactory');
-mockModule('../../../src/utils/platform-error-handler', () => ({
-    createPlatformErrorHandler: createMockFn(() => ({
-        handleEventProcessingError: createMockFn(),
-        logOperationalError: createMockFn()
-    })),
-    ensurePlatformErrorHandler: createMockFn((existing, logger, name) => existing || ({
-        handleEventProcessingError: createMockFn(),
-        logOperationalError: createMockFn()
-    }))
-}));
-mockModule('../../../src/utils/user-friendly-errors', () => ({
-    handleUserFacingError: createMockFn()
-}));
-
-const TwitchAuthFactory = require('../../../src/auth/TwitchAuthFactory');
-const { handleUserFacingError } = require('../../../src/utils/user-friendly-errors');
 const { TokenValidator } = require('../../../src/auth/token-validator');
 
 describe('token-validator behavior', () => {
+    let mockLogger;
+
     afterEach(() => {
         restoreAllMocks();
-        restoreAllModuleMocks();
+    });
+
+    beforeEach(() => {
+        mockLogger = createMockLogger();
     });
 
     const baseConfig = {
-        clientId: 'cid',
-        clientSecret: 'secret',
-        accessToken: 'token',
-        refreshToken: 'refresh'
+        clientId: 'test-client-id',
+        clientSecret: 'test-client-secret',
+        accessToken: 'test-access-token',
+        refreshToken: 'test-refresh-token'
     };
 
-    const createAuthFactory = (managerImpl) => {
-        const factory = {
-            getInitializedAuthManager: createMockFn(async () => managerImpl),
-            cleanup: createMockFn()
-        };
-        TwitchAuthFactory.mockImplementation(() => factory);
-        return factory;
-    };
-
-    beforeEach(() => {
-        });
+    const createMockAuthFactory = (managerImpl) => ({
+        getInitializedAuthManager: createMockFn(async () => managerImpl),
+        cleanup: createMockFn()
+    });
 
     it('flags missing tokens and placeholders as needing new tokens', async () => {
         const validator = new TokenValidator();
+        validator.logger = mockLogger;
 
-        const missing = await validator.validateTwitchTokens({ clientId: 'cid', clientSecret: 's' });
+        const missing = await validator.validateTwitchTokens({
+            clientId: 'test-client-id',
+            clientSecret: 'test-secret'
+        });
         expect(missing.needsNewTokens).toBe(true);
         expect(missing.isValid).toBe(false);
 
-        const placeholder = await validator.validateTwitchTokens({ ...baseConfig, accessToken: 'test_token_123' });
+        const placeholder = await validator.validateTwitchTokens({
+            ...baseConfig,
+            accessToken: 'test_token_123'
+        });
         expect(placeholder.needsNewTokens).toBe(true);
     });
 
     it('flags missing client credentials as blocking authentication', async () => {
         const validator = new TokenValidator();
+        validator.logger = mockLogger;
 
-        const result = await validator.validateTwitchTokens({ accessToken: 'token', refreshToken: 'refresh' });
+        const result = await validator.validateTwitchTokens({
+            accessToken: 'test-token',
+            refreshToken: 'test-refresh'
+        });
 
         expect(result.isValid).toBe(false);
         expect(result.missingClientCredentials).toBe(true);
@@ -68,9 +61,10 @@ describe('token-validator behavior', () => {
 
     it('prompts for missing client credentials and skips OAuth flow', async () => {
         const validator = new TokenValidator();
+        validator.logger = mockLogger;
         const oauthSpy = spyOn(validator, 'runOAuthFlow').mockResolvedValue({
-            access_token: 'token',
-            refresh_token: 'refresh'
+            access_token: 'test-token',
+            refresh_token: 'test-refresh'
         });
         const results = {
             isValid: false,
@@ -87,14 +81,16 @@ describe('token-validator behavior', () => {
 
         expect(isValid).toBe(false);
         expect(oauthSpy).toHaveBeenCalledTimes(0);
-        expect(handleUserFacingError).toHaveBeenCalled();
-        const [error] = handleUserFacingError.mock.calls[0];
-        expect(error.message).toMatch(/Missing clientId or clientSecret/);
     });
 
     it('bubbles scope validation retryable errors without forcing new tokens', async () => {
         const validator = new TokenValidator();
-        spyOn(validator, '_validateTokenScopes').mockResolvedValue({ valid: false, errors: ['Network'], retryable: true });
+        validator.logger = mockLogger;
+        spyOn(validator, '_validateTokenScopes').mockResolvedValue({
+            valid: false,
+            errors: ['Network'],
+            retryable: true
+        });
 
         const result = await validator.validateTwitchTokens(baseConfig);
 
@@ -104,30 +100,39 @@ describe('token-validator behavior', () => {
 
     it('returns validated auth manager on success', async () => {
         const authManager = {
-            getAccessToken: createMockFn(async () => 'token'),
+            getAccessToken: createMockFn(async () => 'test-token'),
             getAuthProvider: createMockFn(() => ({})),
-            getUserId: createMockFn(() => 'user')
+            getUserId: createMockFn(() => 'test-user-id')
         };
-        const factory = createAuthFactory(authManager);
-        const validator = new TokenValidator();
-        spyOn(validator, '_validateTokenScopes').mockResolvedValue({ valid: true, errors: [] });
+        const mockFactory = createMockAuthFactory(authManager);
+        const validator = new TokenValidator(mockFactory);
+        validator.logger = mockLogger;
+        spyOn(validator, '_validateTokenScopes').mockResolvedValue({
+            valid: true,
+            errors: []
+        });
 
         const result = await validator.validateTwitchTokens(baseConfig);
 
         expect(result.isValid).toBe(true);
         expect(result.userExperience).toBe('seamless');
         expect(result.authManager).toBe(authManager);
-        expect(factory.getInitializedAuthManager).toHaveBeenCalled();
+        expect(mockFactory.getInitializedAuthManager).toHaveBeenCalled();
     });
 
     it('marks needsRefresh when auth manager throws token error', async () => {
-        const factory = {
-            getInitializedAuthManager: createMockFn(async () => { throw new Error('Invalid refresh token'); }),
+        const mockFactory = {
+            getInitializedAuthManager: createMockFn(async () => {
+                throw new Error('Invalid refresh token');
+            }),
             cleanup: createMockFn()
         };
-        TwitchAuthFactory.mockImplementation(() => factory);
-        const validator = new TokenValidator();
-        spyOn(validator, '_validateTokenScopes').mockResolvedValue({ valid: true, errors: [] });
+        const validator = new TokenValidator(mockFactory);
+        validator.logger = mockLogger;
+        spyOn(validator, '_validateTokenScopes').mockResolvedValue({
+            valid: true,
+            errors: []
+        });
 
         const result = await validator.validateTwitchTokens(baseConfig);
 

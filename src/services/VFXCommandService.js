@@ -19,13 +19,14 @@ function handleVFXCommandError(message, error, eventType) {
 }
 
 class VFXCommandService {
-    constructor(configService, eventBus) {
+    constructor(configService, eventBus, options = {}) {
         if (!configService) {
             throw new Error('VFXCommandService requires configService');
         }
         this.configService = configService;
         this.eventBus = eventBus;
-        
+        this._effectsManager = options.effectsManager || null;
+
         // Initialize CommandParser with current config
         this.commandParser = null;
         this._initializeCommandParser();
@@ -424,9 +425,12 @@ class VFXCommandService {
                 platform: context.platform
             };
 
-            // Use existing runCommand function
-            await runCommand(commandData, vfxConfig.vfxFilePath);
-            
+            if (this._effectsManager) {
+                await runCommand(commandData, vfxConfig.vfxFilePath, this._effectsManager);
+            } else {
+                await runCommand(commandData, vfxConfig.vfxFilePath);
+            }
+
             return {
                 success: true,
                 vfxConfig,

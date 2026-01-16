@@ -1,40 +1,14 @@
 
-const { describe, test, expect, afterEach, it } = require('bun:test');
-const { createMockFn, clearAllMocks, restoreAllMocks } = require('../../helpers/bun-mock-utils');
-const { mockModule, restoreAllModuleMocks } = require('../../helpers/bun-module-mocks');
-
-mockModule('../../../src/chat/commands', () => {
-    const runCommand = createMockFn().mockResolvedValue();
-    const CommandParser = createMockFn().mockImplementation(() => ({
-        getVFXConfig: createMockFn((message) => ({
-            command: message,
-            commandKey: message,
-            filename: `${message}.mp4`,
-            mediaSource: 'VFX Source',
-            vfxFilePath: `${message}.vfx`,
-            duration: 5000
-        }))
-    }));
-
-    return {
-        CommandParser,
-        runCommand
-    };
-});
+const { describe, test, expect, beforeEach, afterEach } = require('bun:test');
+const { createMockFn } = require('../../helpers/bun-mock-utils');
 
 const crypto = require('crypto');
 const { VFXCommandService } = require('../../../src/services/VFXCommandService');
-const { runCommand } = require('../../../src/chat/commands');
 
 describe('VFXCommandService random variant selection', () => {
     const originalRandomInt = crypto.randomInt;
-
-    afterEach(() => {
-        restoreAllMocks();
-        clearAllMocks();
-        crypto.randomInt = originalRandomInt;
-    
-        restoreAllModuleMocks();});
+    let mockEffectsManager;
+    let capturedCommands;
 
     const createConfigService = (commandValue) => ({
         getCommand: createMockFn().mockReturnValue(commandValue),
@@ -49,11 +23,27 @@ describe('VFXCommandService random variant selection', () => {
         })
     });
 
-    it('selects a single variant based on deterministic random value', async () => {
+    beforeEach(() => {
+        capturedCommands = [];
+        mockEffectsManager = {
+            playMediaInOBS: createMockFn().mockImplementation((config) => {
+                capturedCommands.push(config);
+                return Promise.resolve();
+            })
+        };
+    });
+
+    afterEach(() => {
+        crypto.randomInt = originalRandomInt;
+    });
+
+    test('selects a single variant based on deterministic random value', async () => {
         const configService = createConfigService('!one | !two | !three');
         crypto.randomInt = createMockFn().mockReturnValue(1); // picks index 1 => !two
 
-        const service = new VFXCommandService(configService, null);
+        const service = new VFXCommandService(configService, null, {
+            effectsManager: mockEffectsManager
+        });
         service.commandParser = {
             getVFXConfig: createMockFn((message) => ({
                 command: message,
@@ -66,32 +56,32 @@ describe('VFXCommandService random variant selection', () => {
         };
 
         const result = await service.executeCommandForKey('gifts', {
-            username: 'user1',
+            username: 'testUser1',
             platform: 'tiktok',
-            userId: '123',
+            userId: 'test-user-123',
             skipCooldown: true
         });
-        expect(runCommand).toHaveBeenCalledTimes(1);
-        expect(result.success).toBe(true);
 
-        const [commandData, filePath] = runCommand.mock.calls[0];
-        expect(commandData.vfx.command).toBe('!two');
-        expect(filePath).toBe('!two.vfx');
+        expect(result.success).toBe(true);
+        expect(capturedCommands.length).toBe(1);
+        expect(capturedCommands[0].filename).toBe('!two.mp4');
     });
 
-    it('returns friendly failure when command key is missing from config', async () => {
+    test('returns friendly failure when command key is missing from config', async () => {
         const configService = createConfigService(null);
 
-        const service = new VFXCommandService(configService, null);
+        const service = new VFXCommandService(configService, null, {
+            effectsManager: mockEffectsManager
+        });
         const result = await service.executeCommandForKey('gifts', {
-            username: 'user1',
+            username: 'testUser1',
             platform: 'tiktok',
-            userId: 'user1',
+            userId: 'test-user-123',
             skipCooldown: true
         });
 
         expect(result.success).toBe(false);
         expect(result.reason).toBe('No VFX configured for gifts');
-        expect(runCommand).not.toHaveBeenCalled();
+        expect(capturedCommands.length).toBe(0);
     });
 });
