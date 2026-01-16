@@ -1,7 +1,8 @@
+const { describe, test, expect } = require('bun:test');
 const NotificationBuilder = require('../../../src/utils/notification-builder');
 
 describe('NotificationBuilder', () => {
-    it('should build a basic notification object from minimal input', () => {
+    test('builds a basic notification object from minimal input', () => {
         const input = {
             platform: 'youtube',
             type: 'platform:gift',
@@ -21,7 +22,7 @@ describe('NotificationBuilder', () => {
         expect(notification.message).toBe('Hello world!');
     });
 
-    it('should include optional fields if provided', () => {
+    test('includes optional fields if provided', () => {
         const input = {
             platform: 'twitch',
             type: 'platform:gift',
@@ -40,15 +41,15 @@ describe('NotificationBuilder', () => {
         expect(notification.vfxConfig.command).toBe('!money');
     });
 
-    it('should handle missing/invalid input gracefully', () => {
+    test('handles missing/invalid input gracefully', () => {
         const result1 = NotificationBuilder.build(null);
         const result2 = NotificationBuilder.build({});
-        
+
         expect(result1).toBeNull();
         expect(result2).toBeNull();
     });
 
-    it('should support YouTube, Twitch, and TikTok platforms', () => {
+    test('supports YouTube, Twitch, and TikTok platforms', () => {
         const platforms = ['youtube', 'twitch', 'tiktok'];
         for (const platform of platforms) {
             const input = {
@@ -63,7 +64,7 @@ describe('NotificationBuilder', () => {
         }
     });
 
-    it('should allow custom notification templates', () => {
+    test('allows custom notification templates', () => {
         const input = {
             platform: 'youtube',
             type: 'platform:gift',
@@ -80,7 +81,7 @@ describe('NotificationBuilder', () => {
         expect(notification.rendered).toBe('Custom: TestUser - Hello world!');
     });
 
-    it('renders paypiggy with membership wording for YouTube', () => {
+    test('renders paypiggy with membership wording for YouTube', () => {
         const input = {
             platform: 'youtube',
             type: 'platform:paypiggy',
@@ -99,11 +100,11 @@ describe('NotificationBuilder', () => {
         expect(notification.logMessage).toContain('Test Member Plus');
     });
 
-    it('renders explicit error copy for monetization error payloads', () => {
+    test('renders explicit error copy for monetization error payloads', () => {
         const errorInputs = [
             {
                 platform: 'twitch',
-            type: 'platform:gift',
+                type: 'platform:gift',
                 username: 'Unknown User',
                 userId: 'unknown',
                 giftType: 'Unknown gift',
@@ -123,7 +124,7 @@ describe('NotificationBuilder', () => {
             },
             {
                 platform: 'twitch',
-            type: 'platform:paypiggy',
+                type: 'platform:paypiggy',
                 username: 'Unknown User',
                 userId: 'unknown',
                 months: 0,
@@ -151,7 +152,7 @@ describe('NotificationBuilder', () => {
         });
     });
 
-    it('uses generic error copy when username is missing', () => {
+    test('uses generic error copy when username is missing', () => {
         const notification = NotificationBuilder.build({
             platform: 'twitch',
             type: 'platform:gift',
@@ -165,6 +166,4 @@ describe('NotificationBuilder', () => {
         expect(notification.logMessage).toMatch(/error/i);
         expect(notification.logMessage.toLowerCase()).not.toContain('from ');
     });
-
-    // Edge cases are handled by graceful degradation in implementation
-}); 
+});

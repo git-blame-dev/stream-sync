@@ -1,4 +1,4 @@
-
+const { describe, test, expect } = require('bun:test');
 const NotificationBuilder = require('../../../src/utils/notification-builder');
 
 describe('Notification Builder Edge Cases', () => {
