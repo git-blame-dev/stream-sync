@@ -5,6 +5,8 @@ const { createMockFn, restoreAllMocks } = require('../../helpers/bun-mock-utils'
 const EventEmitter = require('events');
 const NotificationManager = require('../../../src/notifications/NotificationManager');
 
+const noOpLogger = { debug: () => {}, info: () => {}, warn: () => {}, error: () => {} };
+
 describe('NotificationManager YouTube monetisation behavior', () => {
     afterEach(() => {
         restoreAllMocks();
@@ -15,12 +17,7 @@ describe('NotificationManager YouTube monetisation behavior', () => {
     let configService;
 
     const baseDependencies = () => ({
-        logger: {
-            info: createMockFn(),
-            debug: createMockFn(),
-            warn: createMockFn(),
-            error: createMockFn()
-        },
+        logger: noOpLogger,
         displayQueue,
         eventBus: new EventEmitter(),
         constants: require('../../../src/core/constants'),

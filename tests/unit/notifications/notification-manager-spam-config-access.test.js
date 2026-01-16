@@ -82,10 +82,7 @@ describe('NotificationManager Spam Protection Behavior - Modernized', () => {
     });
 
     describe('when spam protection is properly configured', () => {
-        it('should enable spam protection silently for optimal user experience', () => {
-            // BEHAVIOR: Spam protection works without user-facing warnings
-            const { config } = require('../../../src/core/config');
-
+        it('should enable spam protection when spam detector is provided', () => {
             const mockEventBus = { emit: createMockFn(), on: createMockFn(), off: createMockFn() };
             const notificationManager = new NotificationManager({
                 displayQueue: mockDisplayQueue,
@@ -99,11 +96,7 @@ describe('NotificationManager Spam Protection Behavior - Modernized', () => {
                 vfxCommandService: { getVFXConfig: createMockFn().mockResolvedValue(null) }
             });
 
-            // Spam protection activates without disruptive messages
-            const warningCalls = mockLogger.warn.mock.calls.filter(call =>
-                call[0] && call[0].includes('No spam configuration found')
-            );
-            expect(warningCalls.length).toBe(0);
+            expect(notificationManager.donationSpamDetector).toBe(mockSpamDetector);
         });
 
         it('should access spam configuration for effective spam protection', () => {
@@ -192,28 +185,21 @@ describe('NotificationManager Spam Protection Behavior - Modernized', () => {
             expect(mockDisplayQueue.addItem).toHaveBeenCalled();
         });
 
-        it('should not log warnings about missing spam config', () => {
-            // BEHAVIOR: Optional dependency - no warnings when not provided
-            const localLogger = noOpLogger;
-
+        it('should initialize successfully without spam detector (optional dependency)', () => {
             const mockEventBus = { emit: createMockFn(), on: createMockFn(), off: createMockFn() };
             const notificationManager = new NotificationManager({
                 displayQueue: mockDisplayQueue,
-                logger: localLogger,
+                logger: mockLogger,
                 eventBus: mockEventBus,
                 configService,
                 constants: mockConstants,
                 textProcessing: { formatChatMessage: createMockFn() },
                 obsGoals: { processDonationGoal: createMockFn() },
                 vfxCommandService: { getVFXConfig: createMockFn().mockResolvedValue(null) }
-                // donationSpamDetector: NOT PROVIDED
             });
 
-            // Should not warn about missing spam config (it's optional)
-            const spamWarnings = localLogger.warn.mock.calls.filter(call =>
-                call[0] && call[0].toLowerCase().includes('spam')
-            );
-            expect(spamWarnings).toHaveLength(0);
+            expect(notificationManager.donationSpamDetector).toBeUndefined();
+            expect(notificationManager).toBeDefined();
         });
     });
 

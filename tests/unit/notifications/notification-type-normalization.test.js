@@ -3,6 +3,8 @@ const { createMockFn, restoreAllMocks } = require('../../helpers/bun-mock-utils'
 
 const NotificationManager = require('../../../src/notifications/NotificationManager');
 
+const noOpLogger = { debug: () => {}, info: () => {}, warn: () => {}, error: () => {} };
+
 describe('Notification type normalization', () => {
     afterEach(() => {
         restoreAllMocks();
@@ -46,7 +48,7 @@ describe('Notification type normalization', () => {
         };
 
         notificationManager = new NotificationManager({
-            logger: { debug: createMockFn(), info: createMockFn(), warn: createMockFn(), error: createMockFn() },
+            logger: noOpLogger,
             displayQueue,
             eventBus,
             constants: require('../../../src/core/constants'),
