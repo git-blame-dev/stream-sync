@@ -1,86 +1,76 @@
-
 const { describe, test, beforeEach, afterEach, expect } = require('bun:test');
 const { createMockFn, clearAllMocks, restoreAllMocks } = require('../helpers/bun-mock-utils');
 const { ViewerCountSystem } = require('../../src/utils/viewer-count');
 const { OBSViewerCountObserver } = require('../../src/observers/obs-viewer-count-observer');
 const { createOBSConnectionManager } = require('../../src/obs/connection');
-
-// Test utilities
-const { createMockConfig } = require('../helpers/test-setup');
-const { expectNoTechnicalArtifacts } = require('../helpers/behavior-validation');
 const { createSilentLogger } = require('../helpers/test-logger');
+const { createRuntimeConstantsFixture } = require('../helpers/runtime-constants-fixture');
 
 describe('OBS Connection Lifecycle Integration', () => {
     let viewerCountSystem, obsManager, obsObserver;
     let mockPlatforms;
     let mockOBSWebSocket;
-    
+    let runtimeConstants;
+
     beforeEach(async () => {
-        // Create mock OBS WebSocket that simulates real connection behavior
+        runtimeConstants = createRuntimeConstantsFixture();
+        global.__TEST_RUNTIME_CONSTANTS__ = runtimeConstants;
         mockOBSWebSocket = createMockOBSWebSocket();
-        
-        // Create OBS manager with controlled connection behavior
+
         obsManager = createOBSConnectionManager({
             mockOBS: mockOBSWebSocket,
             isTestEnvironment: true,
             testConnectionBehavior: true,
+            runtimeConstants,
             config: {
                 address: 'ws://localhost:4455',
-                password: 'test-password',
+                password: 'testPassword123',
                 enabled: true
             }
         });
-        
+
         mockPlatforms = {
             youtube: createStreamingPlatformMock('youtube', 1500),
             twitch: createStreamingPlatformMock('twitch', 2500),
             tiktok: createStreamingPlatformMock('tiktok', 800)
         };
-        
-        // Initialize viewer count system
-        viewerCountSystem = new ViewerCountSystem({ platforms: mockPlatforms });
+
+        viewerCountSystem = new ViewerCountSystem({ platforms: mockPlatforms, runtimeConstants });
         obsObserver = new OBSViewerCountObserver(obsManager, createSilentLogger());
-        
+
         await viewerCountSystem.initialize();
     });
-    
+
     afterEach(async () => {
         if (viewerCountSystem?.isPolling) {
             viewerCountSystem.stopPolling();
         }
-        
+
         if (viewerCountSystem) {
             await viewerCountSystem.cleanup();
         }
-        
+
+        delete global.__TEST_RUNTIME_CONSTANTS__;
         clearAllMocks();
         restoreAllMocks();
     });
 
-    describe('OBS Disconnection Behavior Tests', () => {
-        test('should initialize OBS observer system correctly', async () => {
-            // Given: Basic system setup
+    describe('OBS Observer System', () => {
+        test('initializes and registers observer correctly', async () => {
             expect(viewerCountSystem).toBeDefined();
             expect(obsObserver).toBeDefined();
             expect(obsManager).toBeDefined();
-            
-            // When: Adding observer to system
+
             viewerCountSystem.addObserver(obsObserver);
-            
-            // Then: Observer should be registered
+
             expect(viewerCountSystem.observers.size).toBe(1);
             expect(viewerCountSystem.observers.has('obs-viewer-count-observer')).toBe(true);
         });
-
     });
 });
 
-// ================================================================================================
-// HELPER FUNCTIONS
-// ================================================================================================
-
 function createMockOBSWebSocket() {
-    const mock = {
+    return {
         connected: false,
         call: createMockFn().mockResolvedValue({}),
         connect: createMockFn().mockResolvedValue({ obsWebSocketVersion: '5.0.0', negotiatedRpcVersion: 1 }),
@@ -90,14 +80,10 @@ function createMockOBSWebSocket() {
         once: createMockFn(),
         addEventListener: createMockFn(),
         removeEventListener: createMockFn(),
-        
-        // Simulation methods
-        setConnected: function(connected) {
+        setConnected(connected) {
             this.connected = connected;
         }
     };
-    
-    return mock;
 }
 
 function createStreamingPlatformMock(platformName, initialViewerCount) {
