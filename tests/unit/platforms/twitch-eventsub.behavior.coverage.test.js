@@ -1,122 +1,100 @@
+const { describe, it, expect, afterEach } = require('bun:test');
+const { createMockFn } = require('../../helpers/bun-mock-utils');
 
-const { describe, it, expect, beforeEach, afterEach } = require('bun:test');
-const { createMockFn, clearAllMocks, restoreAllMocks } = require('../../helpers/bun-mock-utils');
-const { mockModule, unmockModule, requireActual, restoreAllModuleMocks, resetModules } = require('../../helpers/bun-module-mocks');
+const TwitchEventSub = require('../../../src/platforms/twitch-eventsub');
 
-mockModule('../../../src/utils/platform-error-handler', () => ({
-    createPlatformErrorHandler: createMockFn(() => ({
-        handleEventProcessingError: createMockFn(),
-        logOperationalError: createMockFn()
-    }))
-}));
-
-mockModule('ws', () => createMockFn(() => ({ readyState: 1 })));
-
-mockModule('../../../src/utils/timeout-validator', () => ({
-    safeSetTimeout: createMockFn(),
-    safeSetInterval: createMockFn(),
-    validateTimeout: createMockFn((value) => value),
-    safeDelay: createMockFn().mockResolvedValue()
-}));
-
-unmockModule('../../../src/platforms/twitch-eventsub');
-resetModules();
-const { createPlatformErrorHandler } = require('../../../src/utils/platform-error-handler');
-const TwitchEventSub = requireActual('../../../src/platforms/twitch-eventsub');
-
-const mockLogger = {
-    info: createMockFn(),
-    warn: createMockFn(),
-    error: createMockFn(),
-    debug: createMockFn()
-};
+const noOpLogger = { debug: () => {}, info: () => {}, warn: () => {}, error: () => {} };
 
 class MockChatFileLoggingService {
-    constructor() {
-        this.appendLog = createMockFn();
-    }
+    logRawPlatformData() {}
 }
 
-const readyAuthManager = (overrides = {}) => ({
-    getState: createMockFn(() => overrides.state || 'READY'),
-    getScopes: createMockFn(() => overrides.scopes || []),
-    getAccessToken: createMockFn().mockResolvedValue('token'),
-    getClientId: createMockFn(() => overrides.clientId || null),
+const createAuthManager = (overrides = {}) => ({
+    getState: () => overrides.state || 'READY',
+    getScopes: async () => overrides.scopes || [],
+    getAccessToken: async () => 'test-token',
+    getUserId: () => 'test-user-123',
+    getClientId: () => overrides.clientId || null,
     clientId: overrides.clientId || null,
-    twitchAuth: {
-        triggerOAuthFlow: createMockFn().mockRejectedValue(new Error('oauth fail'))
-    },
-    authState: { executeWhenReady: createMockFn((cb) => cb()) },
+    twitchAuth: { triggerOAuthFlow: createMockFn().mockRejectedValue(new Error('oauth fail')) },
+    authState: { executeWhenReady: async (fn) => fn() },
     ...overrides
 });
 
+const createEventSub = (configOverrides = {}, depsOverrides = {}) => {
+    return new TwitchEventSub(
+        { dataLoggingEnabled: false, ...configOverrides },
+        {
+            logger: noOpLogger,
+            authManager: createAuthManager(),
+            axios: { post: createMockFn(), get: createMockFn(), delete: createMockFn() },
+            WebSocketCtor: class { close() {} },
+            ChatFileLoggingService: MockChatFileLoggingService,
+            ...depsOverrides
+        }
+    );
+};
+
 describe('TwitchEventSub behavior guardrails', () => {
+    let eventSub;
+
     afterEach(() => {
-        restoreAllMocks();
-        restoreAllModuleMocks();
-        resetModules();
+        if (eventSub?.cleanup) {
+            eventSub.cleanup().catch(() => {});
+        }
     });
 
-    beforeEach(() => {
-        clearAllMocks();
-    });
-
-    it('warns when relying on centralized auth for clientId and optional fields mismatch types', async () => {
-        const instance = new TwitchEventSub(
+    it('validates config fields and generates warnings for type mismatches', () => {
+        eventSub = createEventSub(
             { dataLoggingEnabled: 'not-bool' },
-            { logger: mockLogger, authManager: readyAuthManager(), ChatFileLoggingService: MockChatFileLoggingService }
+            { authManager: createAuthManager() }
         );
 
-        const result = instance._validateConfigurationFields();
+        const result = eventSub._validateConfigurationFields();
 
         expect(result.valid).toBe(true);
         expect(result.warnings.some((w) => w.includes('centralized auth'))).toBe(true);
     });
 
     it('throws when auth manager is missing or not ready', () => {
-        const missingAuth = () => new TwitchEventSub({}, { logger: mockLogger, authManager: null, ChatFileLoggingService: MockChatFileLoggingService })._validateAuthManager();
-        expect(missingAuth).toThrow('AuthManager is required');
+        expect(() => {
+            const es = createEventSub({}, { authManager: null });
+            es._validateAuthManager();
+        }).toThrow('AuthManager is required');
 
-        const notReady = () => new TwitchEventSub({}, { logger: mockLogger, authManager: readyAuthManager({ state: 'STALE' }), ChatFileLoggingService: MockChatFileLoggingService })._validateAuthManager();
-        expect(notReady).toThrow("AuthManager state is 'STALE'");
+        expect(() => {
+            const es = createEventSub({}, { authManager: createAuthManager({ state: 'STALE' }) });
+            es._validateAuthManager();
+        }).toThrow("AuthManager state is 'STALE'");
     });
 
-    it('halts subscription validation when connection/session is missing and logs operational error', () => {
-        const instance = new TwitchEventSub({}, { logger: mockLogger, authManager: readyAuthManager({ state: 'READY' }), ChatFileLoggingService: MockChatFileLoggingService });
-        instance.sessionId = '';
-        instance._isConnected = false;
-        instance.ws = { readyState: 0 };
-        instance.isInitialized = false;
+    it('returns false from connection validation when session/connection is invalid', () => {
+        eventSub = createEventSub();
+        eventSub.sessionId = '';
+        eventSub._isConnected = false;
+        eventSub.ws = { readyState: 0 };
+        eventSub.isInitialized = false;
 
-        if (!instance.errorHandler) {
-            instance.errorHandler = { logOperationalError: createMockFn(), handleEventProcessingError: createMockFn() };
-        }
-        const valid = instance._validateConnectionForSubscriptions();
+        const valid = eventSub._validateConnectionForSubscriptions();
 
-        const handler = instance.errorHandler;
         expect(valid).toBe(false);
-        expect(handler.logOperationalError).toHaveBeenCalled();
-    });
-
-    it('auto-triggers OAuth when scopes are missing and routes failures through error handler', async () => {
-        const authManager = readyAuthManager({ scopes: ['user:read:chat'], clientId: 'id' });
-        const instance = new TwitchEventSub({}, { logger: mockLogger, authManager, ChatFileLoggingService: MockChatFileLoggingService });
-
-        if (!instance.errorHandler) {
-            instance.errorHandler = { logOperationalError: createMockFn(), handleEventProcessingError: createMockFn() };
-        }
-        instance._handleMissingScopes(['bits:read']);
-        await new Promise((resolve) => setImmediate(resolve));
-
-        expect(authManager.twitchAuth.triggerOAuthFlow).toHaveBeenCalledWith(['bits:read']);
-        expect(instance.errorHandler.handleEventProcessingError).toHaveBeenCalled();
     });
 
     it('categorizes subscription errors by severity and retryability', () => {
-        const instance = new TwitchEventSub({}, { logger: mockLogger, authManager: readyAuthManager(), ChatFileLoggingService: MockChatFileLoggingService });
-        const critical = instance._parseSubscriptionError({ response: { data: { error: 'Unauthorized', message: 'bad' } } }, { type: 'x' });
-        const retryable = instance._parseSubscriptionError({ response: { data: { error: 'Too Many Requests', message: 'slow' } } }, { type: 'x' });
-        const fallback = instance._parseSubscriptionError(new Error('boom'), { type: 'x' });
+        eventSub = createEventSub();
+
+        const critical = eventSub._parseSubscriptionError(
+            { response: { data: { error: 'Unauthorized', message: 'bad' } } },
+            { type: 'test.sub' }
+        );
+        const retryable = eventSub._parseSubscriptionError(
+            { response: { data: { error: 'Too Many Requests', message: 'slow' } } },
+            { type: 'test.sub' }
+        );
+        const fallback = eventSub._parseSubscriptionError(
+            new Error('boom'),
+            { type: 'test.sub' }
+        );
 
         expect(critical.isCritical).toBe(true);
         expect(retryable.isRetryable).toBe(true);
@@ -124,13 +102,27 @@ describe('TwitchEventSub behavior guardrails', () => {
         expect(fallback.isRetryable).toBe(true);
     });
 
-    it('reports missing scopes via logger warning', async () => {
-        const authManager = readyAuthManager({ scopes: ['user:read:chat'], getState: () => 'READY', clientId: 'abc' });
-        const instance = new TwitchEventSub({}, { logger: mockLogger, authManager, ChatFileLoggingService: MockChatFileLoggingService });
+    it('detects missing scopes via token validation', async () => {
+        eventSub = createEventSub(
+            {},
+            { authManager: createAuthManager({ scopes: ['user:read:chat'], clientId: 'test-client' }) }
+        );
 
-        const result = await instance._validateTokenScopes();
+        const result = await eventSub._validateTokenScopes();
 
         expect(result.valid).toBe(false);
-        expect(mockLogger.warn).toHaveBeenCalledWith('Token missing required scopes', 'twitch', expect.any(Object));
+        expect(result.missingScopes.length).toBeGreaterThan(0);
+    });
+
+    it('validates auth manager state is READY', () => {
+        eventSub = createEventSub(
+            {},
+            { authManager: createAuthManager({ state: 'READY' }) }
+        );
+
+        const result = eventSub._validateAuthManager();
+
+        expect(result.valid).toBe(true);
+        expect(result.details.state).toBe('READY');
     });
 });

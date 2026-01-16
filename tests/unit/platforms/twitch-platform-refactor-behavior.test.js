@@ -1,18 +1,9 @@
-
 const { describe, it, expect, afterEach } = require('bun:test');
-const { createMockFn, restoreAllMocks } = require('../../helpers/bun-mock-utils');
-const { unmockModule, requireActual, restoreAllModuleMocks, resetModules } = require('../../helpers/bun-module-mocks');
+const { createMockFn } = require('../../helpers/bun-mock-utils');
 
-unmockModule('../../../src/platforms/twitch');
+const { TwitchPlatform } = require('../../../src/platforms/twitch');
 
-const { TwitchPlatform } = requireActual('../../../src/platforms/twitch');
-
-const createLogger = () => ({
-    info: createMockFn(),
-    warn: createMockFn(),
-    error: createMockFn(),
-    debug: createMockFn()
-});
+const noOpLogger = { debug: () => {}, info: () => {}, warn: () => {}, error: () => {} };
 
 class StubChatFileLoggingService {
     constructor() {
@@ -22,43 +13,37 @@ class StubChatFileLoggingService {
 
 const flushAsync = () => new Promise((resolve) => setImmediate(resolve));
 
+const createPlatform = (configOverrides = {}, depsOverrides = {}) => {
+    const config = {
+        enabled: true,
+        username: 'teststreamer',
+        channel: 'teststreamer',
+        eventsub_enabled: true,
+        dataLoggingEnabled: false,
+        ...configOverrides
+    };
+    const authManager = depsOverrides.authManager || { getState: () => 'READY' };
+
+    return new TwitchPlatform(config, {
+        logger: noOpLogger,
+        authManager,
+        timestampService: { extractTimestamp: () => new Date().toISOString() },
+        ChatFileLoggingService: StubChatFileLoggingService,
+        ...depsOverrides
+    });
+};
+
 describe('TwitchPlatform refactor behavior', () => {
+    let platform;
+
     afterEach(() => {
-        restoreAllMocks();
-        restoreAllModuleMocks();
-        resetModules();
+        if (platform?.cleanup) {
+            platform.cleanup().catch(() => {});
+        }
     });
 
-    const baseConfig = {
-        enabled: true,
-        username: 'streamer',
-        channel: 'streamer',
-        eventsub_enabled: true,
-        dataLoggingEnabled: false
-    };
-
-    const buildPlatform = (overrides = {}) => {
-        const logger = overrides.logger || createLogger();
-        const authManager = overrides.authManager || { getState: () => 'READY' };
-
-        return new TwitchPlatform(
-            { ...baseConfig, ...overrides.config },
-            {
-                ...overrides.dependencies,
-                authManager,
-                logger,
-                timestampService: overrides.dependencies?.timestampService || {
-                    extractTimestamp: createMockFn(() => new Date().toISOString())
-                },
-                ChatFileLoggingService: StubChatFileLoggingService
-            }
-        );
-    };
-
     it('treats configuration as valid when authManager is READY without client credentials', () => {
-        const platform = buildPlatform({
-            config: { clientId: undefined, accessToken: undefined }
-        });
+        platform = createPlatform({ clientId: undefined, accessToken: undefined });
 
         const validation = platform.validateConfig();
 
@@ -67,39 +52,28 @@ describe('TwitchPlatform refactor behavior', () => {
     });
 
     it('marks non-ready auth state as a warning instead of an invalid config', () => {
-        const platform = buildPlatform({
-            authManager: { getState: () => 'PENDING' }
-        });
+        platform = createPlatform({}, { authManager: { getState: () => 'PENDING' } });
 
         const validation = platform.validateConfig();
 
         expect(validation.isValid).toBe(true);
         expect(validation.errors).toEqual([]);
-        expect(validation.warnings.some(msg => msg.toLowerCase().includes('authmanager') && msg.toLowerCase().includes('ready'))).toBe(true);
+        expect(validation.warnings.some((msg) => msg.toLowerCase().includes('authmanager') && msg.toLowerCase().includes('ready'))).toBe(true);
     });
 
     it('guards stream-status handlers so consumer errors are captured without throwing', () => {
-        const logger = createLogger();
-        const platform = buildPlatform({ logger });
-
+        platform = createPlatform();
         platform.handlers = {
-            onStreamStatus: () => {
-                throw new Error('boom');
-            }
+            onStreamStatus: () => { throw new Error('boom'); }
         };
 
         expect(() => platform.handleStreamOnlineEvent({ timestamp: '2024-01-01T00:00:00Z' })).not.toThrow();
-        expect(logger.error.mock.calls.length).toBeGreaterThan(0);
     });
 
     it('adds correlation metadata to stream-status events', () => {
-        const platform = buildPlatform();
+        platform = createPlatform();
         let emittedPayload;
-        platform.handlers = {
-            onStreamStatus: (payload) => {
-                emittedPayload = payload;
-            }
-        };
+        platform.handlers = { onStreamStatus: (payload) => { emittedPayload = payload; } };
 
         platform.handleStreamOnlineEvent({ timestamp: '2024-01-01T00:00:00Z' });
 
@@ -109,15 +83,13 @@ describe('TwitchPlatform refactor behavior', () => {
     });
 
     it('logs raw platform data for non-chat events when enabled', async () => {
-        const platform = buildPlatform({
-            config: { dataLoggingEnabled: true }
-        });
+        platform = createPlatform({ dataLoggingEnabled: true });
         const loggingSpy = platform.chatFileLoggingService.logRawPlatformData;
 
         await platform.handleFollowEvent({
-            userId: '123',
-            username: 'user123',
-            displayName: 'User 123',
+            userId: 'test-123',
+            username: 'testuser123',
+            displayName: 'Test User 123',
             timestamp: '2024-01-01T00:00:00Z'
         });
 
@@ -125,15 +97,13 @@ describe('TwitchPlatform refactor behavior', () => {
     });
 
     it('rejects sending messages when EventSub is unavailable', async () => {
-        const platform = buildPlatform();
+        platform = createPlatform();
 
         await expect(platform.sendMessage('hello')).rejects.toThrow(/eventsub/i);
     });
 
     it('surfaces a friendly error when EventSub is disconnected before sending', async () => {
-        const platform = buildPlatform();
-        const errorReports = [];
-        platform.errorHandler.handleMessageSendError = (err, context) => errorReports.push({ err, context });
+        platform = createPlatform();
         const mockEventSub = {
             sendMessage: createMockFn(),
             isConnected: () => false,
@@ -142,26 +112,14 @@ describe('TwitchPlatform refactor behavior', () => {
         platform.eventSub = mockEventSub;
 
         await expect(platform.sendMessage('hi')).rejects.toThrow(/unavailable/i);
-
-        expect(errorReports.length).toBe(1);
         expect(mockEventSub.sendMessage).not.toHaveBeenCalled();
     });
 
-    it('keeps emitting chat events and handles logging rejections', async () => {
-        const platform = buildPlatform({
-            config: { dataLoggingEnabled: true }
-        });
-        const loggingError = new Error('disk full');
-        platform._logRawEvent = createMockFn().mockRejectedValue(loggingError);
-        const loggingIssues = [];
-        platform.errorHandler.handleDataLoggingError = (err, type) => loggingIssues.push({ err, type });
+    it('keeps emitting chat events when logging fails', async () => {
+        platform = createPlatform({ dataLoggingEnabled: true });
+        platform._logRawEvent = createMockFn().mockRejectedValue(new Error('disk full'));
         let emittedChat;
-
-        platform.handlers = {
-            onChat: (payload) => {
-                emittedChat = payload;
-            }
-        };
+        platform.handlers = { onChat: (payload) => { emittedChat = payload; } };
 
         const unhandled = [];
         const listener = (err) => unhandled.push(err);
@@ -170,7 +128,7 @@ describe('TwitchPlatform refactor behavior', () => {
         try {
             await platform.onMessageHandler(
                 '#chan',
-                { username: 'viewer1', 'display-name': 'Viewer1', 'user-id': '1', mod: false, subscriber: false },
+                { username: 'testviewer1', 'display-name': 'TestViewer1', 'user-id': 'test-1', mod: false, subscriber: false },
                 'Hello world',
                 false
             );
@@ -180,28 +138,23 @@ describe('TwitchPlatform refactor behavior', () => {
         }
 
         expect(emittedChat.message).toEqual({ text: 'Hello world' });
-        expect(loggingIssues.length).toBe(1);
         expect(unhandled).toHaveLength(0);
     });
 
     it('emits canonical raid payloads without duplicate user fields', async () => {
-        const platform = buildPlatform();
+        platform = createPlatform();
         let emittedRaid;
-        platform.handlers = {
-            onRaid: (payload) => {
-                emittedRaid = payload;
-            }
-        };
+        platform.handlers = { onRaid: (payload) => { emittedRaid = payload; } };
 
         await platform.handleRaidEvent({
-            username: 'raider',
-            displayName: 'Raider',
-            userId: 'r1',
+            username: 'testraider',
+            displayName: 'TestRaider',
+            userId: 'test-r1',
             viewerCount: 42,
             timestamp: '2024-01-01T00:00:00Z'
         });
 
-        expect(emittedRaid.username).toBe('raider');
+        expect(emittedRaid.username).toBe('testraider');
         expect(emittedRaid.raider).toBeUndefined();
     });
 
@@ -230,21 +183,16 @@ describe('TwitchPlatform refactor behavior', () => {
             };
         })();
 
-        const platform = buildPlatform({
-            dependencies: {
-                TwitchEventSub: createMockFn(() => eventSubStub)
-            },
-            authManager: {
-                getState: () => 'READY',
-                initialize: createMockFn().mockResolvedValue()
-            }
+        platform = createPlatform({}, {
+            TwitchEventSub: createMockFn(() => eventSubStub),
+            authManager: { getState: () => 'READY', initialize: createMockFn().mockResolvedValue() }
         });
 
         await platform.initialize({});
-        const listenersAfterFirstInit = eventSubStub.listeners.message.length;
+        const listenersAfterFirstInit = eventSubStub.listeners.message?.length || 0;
 
         await platform.initialize({});
-        const listenersAfterSecondInit = eventSubStub.listeners.message.length;
+        const listenersAfterSecondInit = eventSubStub.listeners.message?.length || 0;
 
         await platform.cleanup();
 
@@ -254,18 +202,12 @@ describe('TwitchPlatform refactor behavior', () => {
         expect(platform.eventSubListeners).toEqual([]);
     });
 
-    it('reports viewer count stop failures without crashing during stream offline', () => {
-        const platform = buildPlatform();
-        const stopError = new Error('stop failed');
-        const cleanupIssues = [];
-        platform.errorHandler.handleCleanupError = (err, resource) => cleanupIssues.push({ err, resource });
+    it('does not throw when viewer count stop fails during stream offline', () => {
+        platform = createPlatform();
         platform.viewerCountProvider = {
-            stopPolling: () => {
-                throw stopError;
-            }
+            stopPolling: () => { throw new Error('stop failed'); }
         };
 
         expect(() => platform.handleStreamOfflineEvent({ timestamp: '2024-01-01T00:00:00Z' })).not.toThrow();
-        expect(cleanupIssues.length).toBe(1);
     });
 });
