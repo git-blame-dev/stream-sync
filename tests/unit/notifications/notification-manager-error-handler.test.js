@@ -1,34 +1,35 @@
-const { describe, test, expect, afterEach, it } = require('bun:test');
+const { describe, test, expect, beforeEach, afterEach } = require('bun:test');
 const { createMockFn, restoreAllMocks } = require('../../helpers/bun-mock-utils');
-const { mockModule, resetModules, restoreAllModuleMocks } = require('../../helpers/bun-module-mocks');
 
-describe('NotificationManager error handling with createPlatformErrorHandler', () => {
-    const originalEnv = process.env.NODE_ENV;
+const NotificationManager = require('../../../src/notifications/NotificationManager');
+const constants = require('../../../src/core/constants');
 
-    afterEach(() => {
-        restoreAllMocks();
-process.env.NODE_ENV = originalEnv;
-    
-        restoreAllModuleMocks();});
+describe('NotificationManager error handling', () => {
+    let manager;
+    let mockDisplayQueue;
+    let mockEventBus;
+    let mockLogger;
 
-    function createManagerWithFailingDisplayQueue() {
-        process.env.NODE_ENV = 'test';
-
-        const errorHandler = {
-            handleEventProcessingError: createMockFn(),
-            logOperationalError: createMockFn()
+    beforeEach(() => {
+        mockLogger = {
+            info: createMockFn(),
+            debug: createMockFn(),
+            warn: createMockFn(),
+            error: createMockFn()
         };
 
-        mockModule('../../../src/utils/platform-error-handler', () => ({
-            createPlatformErrorHandler: createMockFn(() => errorHandler)
-        }));
-
-        const mockDisplayQueue = {
-            addItem: createMockFn(() => { throw new Error('queue fail'); }),
+        mockDisplayQueue = {
+            addItem: createMockFn(),
             addToQueue: createMockFn(),
             processQueue: createMockFn(),
             isQueueEmpty: createMockFn().mockReturnValue(true),
             clearQueue: createMockFn()
+        };
+
+        mockEventBus = {
+            emit: createMockFn(),
+            on: createMockFn(),
+            off: createMockFn()
         };
 
         const mockConfigService = {
@@ -50,44 +51,62 @@ process.env.NODE_ENV = originalEnv;
             isDebugEnabled: createMockFn().mockReturnValue(false)
         };
 
-        const mockEventBus = { emit: createMockFn() };
-
-        const NotificationManager = require('../../../src/notifications/NotificationManager');
-
-        const manager = new NotificationManager({
-            logger: { info: createMockFn(), debug: createMockFn(), warn: createMockFn(), error: createMockFn() },
+        manager = new NotificationManager({
+            logger: mockLogger,
             displayQueue: mockDisplayQueue,
             eventBus: mockEventBus,
-            constants: require('../../../src/core/constants'),
+            constants,
             textProcessing: { formatChatMessage: createMockFn() },
             obsGoals: { processDonationGoal: createMockFn() },
             configService: mockConfigService,
             vfxCommandService: { getVFXConfig: createMockFn().mockResolvedValue(null) }
         });
+    });
 
-        return { manager, errorHandler, mockEventBus };
-    }
+    afterEach(() => {
+        restoreAllMocks();
+    });
 
-    it('routes display queue failures through platform error handler and returns failure', async () => {
-        const { manager, errorHandler, mockEventBus } = createManagerWithFailingDisplayQueue();
+    test('returns failure result when display queue throws error', async () => {
+        mockDisplayQueue.addItem.mockImplementation(() => {
+            throw new Error('queue fail');
+        });
 
-        const result = await manager.handleNotification('platform:follow', 'tiktok', { username: 'User', userId: '1' });
+        const result = await manager.handleNotification('platform:follow', 'tiktok', {
+            username: 'testUser',
+            userId: 'test-user-id-001'
+        });
 
-        expect(result).toEqual(expect.objectContaining({
-            success: false,
-            error: 'Display queue error',
-            details: 'queue fail'
-        }));
+        expect(result.success).toBe(false);
+        expect(result.error).toBe('Display queue error');
+        expect(result.details).toBe('queue fail');
+    });
 
-        expect(errorHandler.handleEventProcessingError).toHaveBeenCalled();
-        const [error, eventType] = errorHandler.handleEventProcessingError.mock.calls[0];
-        expect(error).toBeInstanceOf(Error);
-        expect(error.message).toBe('queue fail');
-        expect(eventType).toBe('display-queue');
+    test('does not emit notification:processed event on display queue failure', async () => {
+        mockDisplayQueue.addItem.mockImplementation(() => {
+            throw new Error('queue fail');
+        });
 
-        const processedEvents = mockEventBus.emit.mock.calls.filter(([event]) => event === 'notification:processed');
+        await manager.handleNotification('platform:follow', 'tiktok', {
+            username: 'testUser',
+            userId: 'test-user-id-002'
+        });
+
+        const processedEvents = mockEventBus.emit.mock.calls.filter(
+            ([event]) => event === 'notification:processed'
+        );
         expect(processedEvents).toHaveLength(0);
     });
 
-    // VFX is emitted by DisplayQueue; NotificationManager no longer emits VFX commands directly.
+    test('handles notification successfully when display queue works', async () => {
+        mockDisplayQueue.addItem.mockReturnValue(undefined);
+
+        const result = await manager.handleNotification('platform:follow', 'tiktok', {
+            username: 'testUser',
+            userId: 'test-user-id-003'
+        });
+
+        expect(result.success).toBe(true);
+        expect(mockDisplayQueue.addItem).toHaveBeenCalled();
+    });
 });

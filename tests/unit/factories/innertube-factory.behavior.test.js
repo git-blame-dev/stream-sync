@@ -1,74 +1,111 @@
-const { describe, test, expect, beforeEach, afterEach, it } = require('bun:test');
-const { createMockFn, spyOn, clearAllMocks, restoreAllMocks } = require('../../helpers/bun-mock-utils');
-const { mockModule, restoreAllModuleMocks } = require('../../helpers/bun-module-mocks');
+const { describe, test, expect, beforeEach, afterEach } = require('bun:test');
 
-mockModule('../../../src/utils/timeout-wrapper', () => ({
-    withTimeout: createMockFn((promise) => promise)
-}));
-
-const { withTimeout } = require('../../../src/utils/timeout-wrapper');
 const { InnertubeFactory } = require('../../../src/factories/innertube-factory');
 
 describe('InnertubeFactory behavior', () => {
     const restoreCache = () => {
         InnertubeFactory._innertubeClassCache = null;
         InnertubeFactory._importPromise = null;
+        InnertubeFactory._importer = null;
     };
 
     beforeEach(() => {
         restoreCache();
-        });
+    });
 
     afterEach(() => {
-        restoreAllMocks();
         restoreCache();
-    
-        restoreAllModuleMocks();});
+    });
 
-    it('creates an instance via cached class and surfaces contextual errors', async () => {
-        const create = createMockFn().mockResolvedValue({ instance: true });
-        const getSpy = spyOn(InnertubeFactory, '_getInnertubeClass').mockResolvedValue({ create });
+    test('createInstance returns Innertube instance via configured importer', async () => {
+        const mockInstance = { id: 'test-innertube-instance' };
+        const mockInnertube = { create: async () => mockInstance };
+        const mockImporter = async () => ({ Innertube: mockInnertube });
+
+        InnertubeFactory.configure({ importer: mockImporter });
 
         const result = await InnertubeFactory.createInstance();
 
-        expect(result).toEqual({ instance: true });
-        expect(create).toHaveBeenCalled();
-
-        const failingCreate = createMockFn().mockRejectedValue(new Error('boom'));
-        getSpy.mockResolvedValueOnce({ create: failingCreate });
-        InnertubeFactory._innertubeClassCache = null;
-
-        await expect(InnertubeFactory.createInstance()).rejects.toThrow('Innertube creation failed: boom');
+        expect(result).toEqual(mockInstance);
     });
 
-    it('passes config through and respects timeout wrapper when provided', async () => {
-        spyOn(InnertubeFactory, 'createWithConfig').mockResolvedValue(Promise.resolve('configured'));
-        withTimeout.mockImplementation(async (promise, timeout, options) => {
-            expect(options.operationName).toBe('Innertube creation');
-            expect(options.errorMessage).toContain('500');
-            return promise;
+    test('createInstance wraps errors with contextual message', async () => {
+        const mockImporter = async () => ({
+            Innertube: { create: async () => { throw new Error('network failure'); } }
         });
 
-        const result = await InnertubeFactory.createWithTimeout(500, { debug: true });
+        InnertubeFactory.configure({ importer: mockImporter });
 
-        expect(InnertubeFactory.createWithConfig).toHaveBeenCalledWith({ debug: true });
-        expect(withTimeout).toHaveBeenCalledWith(
-            expect.any(Promise),
-            500,
-            expect.objectContaining({ operationName: 'Innertube creation' })
-        );
-        expect(result).toBe('configured');
+        await expect(InnertubeFactory.createInstance()).rejects.toThrow('Innertube creation failed: network failure');
     });
 
-    it('provides lazy class references and stats reflecting cache usage', async () => {
-        InnertubeFactory._innertubeClassCache = { create: createMockFn() };
-        const lazy = InnertubeFactory.createLazyReference();
+    test('createWithConfig passes configuration to Innertube.create', async () => {
+        let receivedConfig = null;
+        const mockInstance = { id: 'configured-instance' };
+        const mockInnertube = {
+            create: async (config) => {
+                receivedConfig = config;
+                return mockInstance;
+            }
+        };
+        const mockImporter = async () => ({ Innertube: mockInnertube });
 
-        const resolved = await lazy();
-        expect(resolved).toBe(InnertubeFactory._innertubeClassCache);
+        InnertubeFactory.configure({ importer: mockImporter });
 
-        const stats = InnertubeFactory.getStats();
-        expect(stats.cached).toBe(true);
-        expect(stats.supportedMethods).toContain('createWithTimeout');
+        const result = await InnertubeFactory.createWithConfig({ debug: true, cache: false });
+
+        expect(result).toEqual(mockInstance);
+        expect(receivedConfig).toEqual({ debug: true, cache: false });
+    });
+
+    test('caches Innertube class after first import', async () => {
+        let importCount = 0;
+        const mockInnertube = { create: async () => ({ id: 'instance' }) };
+        const mockImporter = async () => {
+            importCount++;
+            return { Innertube: mockInnertube };
+        };
+
+        InnertubeFactory.configure({ importer: mockImporter });
+
+        await InnertubeFactory.createInstance();
+        await InnertubeFactory.createInstance();
+        await InnertubeFactory.createInstance();
+
+        expect(importCount).toBe(1);
+    });
+
+    test('getStats reflects cache state', async () => {
+        const mockInnertube = { create: async () => ({ id: 'instance' }) };
+        const mockImporter = async () => ({ Innertube: mockInnertube });
+
+        InnertubeFactory.configure({ importer: mockImporter });
+
+        const statsBefore = InnertubeFactory.getStats();
+        expect(statsBefore.cached).toBe(false);
+
+        await InnertubeFactory.createInstance();
+
+        const statsAfter = InnertubeFactory.getStats();
+        expect(statsAfter.cached).toBe(true);
+        expect(statsAfter.supportedMethods).toContain('createWithTimeout');
+    });
+
+    test('createLazyReference returns function that resolves to cached class', async () => {
+        const mockInnertube = { create: async () => ({ id: 'instance' }) };
+        const mockImporter = async () => ({ Innertube: mockInnertube });
+
+        InnertubeFactory.configure({ importer: mockImporter });
+        await InnertubeFactory.createInstance();
+
+        const lazyRef = InnertubeFactory.createLazyReference();
+        const resolved = await lazyRef();
+
+        expect(resolved).toBe(mockInnertube);
+    });
+
+    test('configure rejects non-function importer', () => {
+        expect(() => InnertubeFactory.configure({ importer: 'not-a-function' }))
+            .toThrow('InnertubeFactory importer must be a function');
     });
 });

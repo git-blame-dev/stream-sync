@@ -287,19 +287,13 @@ describe('Viewer Count & OBS Observer Edge Case Tests', () => {
         });
 
         test('should handle infinity viewer counts gracefully without system crash', async () => {
-            // Given: Platform returning infinity values (corrupted API response)
             const { system } = createEdgeCaseTestEnvironment();
-            
+
             const observer = createEdgeCaseObserver('infinity-observer');
             system.addObserver(observer);
-            
-            // When: Processing infinity value
-            const processInfinity = async () => {
-                await system.notifyObservers('tiktok', Infinity, 500);
-            };
-            
-            // Then: System handles gracefully without crashing
-            await expect(processInfinity()).resolves.not.toThrow();
+
+            await system.notifyObservers('tiktok', Infinity, 500);
+
             expect(observer.receivedUpdates).toHaveLength(1);
             expect(observer.receivedUpdates[0].count).toBe(Infinity);
             expectSystemStability(system);
@@ -356,28 +350,22 @@ describe('Viewer Count & OBS Observer Edge Case Tests', () => {
 
     describe('Platform API Response Edge Cases', () => {
         test('should continue operation when platform API completely fails', async () => {
-            // Given: Platform that throws errors on API calls
             const { system, mockPlatforms } = createEdgeCaseTestEnvironment({
-                platforms: { 
+                platforms: {
                     tiktok: { shouldThrow: true, errorMessage: 'Network timeout' },
-                    twitch: { returnValue: 500 } // Working platform
+                    twitch: { returnValue: 500 }
                 }
             });
-            
+
             const observer = createEdgeCaseObserver('api-failure-observer');
             system.addObserver(observer);
-            
-            // When: API failures occur during polling (test without actual polling)
-            const pollPromise = async () => {
-                try {
-                    await mockPlatforms.tiktok.getViewerCount();
-                } catch (error) {
-                    // Expected error - system should handle gracefully
-                }
-            };
-            
-            // Then: System continues operating despite platform failures
-            await expect(pollPromise()).resolves.not.toThrow();
+
+            try {
+                await mockPlatforms.tiktok.getViewerCount();
+            } catch (error) {
+                expect(error.message).toBe('Network timeout');
+            }
+
             expectSystemStability(system);
         });
 
@@ -653,22 +641,18 @@ describe('Viewer Count & OBS Observer Edge Case Tests', () => {
 
     describe('Observer Pattern Edge Cases', () => {
         test('should isolate and continue when observer throws exceptions', async () => {
-            // Given: Mix of working and failing observers
             const { system } = createEdgeCaseTestEnvironment();
-            
+
             const workingObserver = createEdgeCaseObserver('working-observer');
             const failingObserver = createEdgeCaseObserver('failing-observer', {
                 shouldThrowOnUpdate: true
             });
-            
+
             system.addObserver(workingObserver);
             system.addObserver(failingObserver);
-            
-            // When: Notifying observers where one throws exception
-            const notifyOperation = system.notifyObservers('tiktok', 100, 50);
-            
-            // Then: Should complete without throwing and continue operating
-            await expect(notifyOperation).resolves.not.toThrow();
+
+            await system.notifyObservers('tiktok', 100, 50);
+
             expect(workingObserver.receivedUpdates).toHaveLength(1);
             expectSystemStability(system);
         });
@@ -856,28 +840,17 @@ describe('Viewer Count & OBS Observer Edge Case Tests', () => {
         });
 
         test('should maintain system stability during shutdown while operations are active', async () => {
-            // Given: System with active operations
             const { system } = createEdgeCaseTestEnvironment();
-            
+
             const observer = createEdgeCaseObserver('shutdown-observer');
             system.addObserver(observer);
-            
+
             system.startPolling();
-            
-            // When: Shutting down during active polling
-            const shutdownDuringOperation = async () => {
-                // Start some operations
-                const operationPromise = system.notifyObservers('tiktok', 100, 50);
-                
-                // Immediately shutdown
-                await system.cleanup();
-                
-                // Wait for operation to complete
-                await operationPromise;
-            };
-            
-            // Then: Should handle shutdown gracefully
-            await expect(shutdownDuringOperation()).resolves.not.toThrow();
+
+            const operationPromise = system.notifyObservers('tiktok', 100, 50);
+            await system.cleanup();
+            await operationPromise;
+
             expectSystemStability(system);
         });
 
@@ -941,63 +914,48 @@ describe('Viewer Count & OBS Observer Edge Case Tests', () => {
 
     describe('OBS Integration Edge Cases', () => {
         test('should handle missing OBS sources gracefully', async () => {
-            // Given: OBS manager that fails when sources don\'t exist
             const obsManager = createMockOBSManager('connected', {
                 call: createMockFn().mockRejectedValue(new Error('Source "youtube viewer count" not found'))
             });
-            
+
             const obsObserver = new OBSViewerCountObserver(obsManager, createSilentLogger());
-            
-            // When: Updating viewer count for non-existent source
-            const updatePromise = obsObserver.onViewerCountUpdate({
+
+            await obsObserver.onViewerCountUpdate({
                 platform: 'youtube',
                 count: 1000,
                 isStreamLive: true,
                 timestamp: new Date(testClock.now())
             });
-            
-            // Then: Should handle missing source gracefully
-            await expect(updatePromise).resolves.not.toThrow();
         });
 
         test('should handle OBS source type mismatches appropriately', async () => {
-            // Given: OBS source exists but is wrong type (e.g., image instead of text)
             const obsManager = createMockOBSManager('connected', {
                 call: createMockFn().mockRejectedValue(new Error('Source is not a text source'))
             });
-            
+
             const obsObserver = new OBSViewerCountObserver(obsManager, createSilentLogger());
-            
-            // When: Attempting to update non-text source
-            const updatePromise = obsObserver.onViewerCountUpdate({
+
+            await obsObserver.onViewerCountUpdate({
                 platform: 'twitch',
                 count: 500,
                 isStreamLive: true,
                 timestamp: new Date(testClock.now())
             });
-            
-            // Then: Should handle type mismatch gracefully
-            await expect(updatePromise).resolves.not.toThrow();
         });
 
         test('should handle OBS WebSocket protocol errors without system crash', async () => {
-            // Given: OBS WebSocket with protocol-level errors
             const obsManager = createMockOBSManager('connected', {
                 call: createMockFn().mockRejectedValue(new Error('WebSocket protocol error'))
             });
-            
+
             const obsObserver = new OBSViewerCountObserver(obsManager, createSilentLogger());
-            
-            // When: WebSocket protocol errors occur
-            const updatePromise = obsObserver.onViewerCountUpdate({
+
+            await obsObserver.onViewerCountUpdate({
                 platform: 'tiktok',
                 count: 750,
                 isStreamLive: true,
                 timestamp: new Date(testClock.now())
             });
-            
-            // Then: Should handle protocol errors gracefully
-            await expect(updatePromise).resolves.not.toThrow();
         });
 
         test('should handle very slow OBS connections without blocking system', async () => {
@@ -1032,38 +990,33 @@ describe('Viewer Count & OBS Observer Edge Case Tests', () => {
         });
 
         test('should handle OBS scene changes dynamically', async () => {
-            // Given: OBS with dynamic scene changes affecting sources
             const obsManager = createMockOBSManager('connected');
             let sourceExists = true;
-            
+
             obsManager.call = createMockFn().mockImplementation(() => {
                 if (!sourceExists) {
                     throw new Error('Source not found in current scene');
                 }
                 return Promise.resolve({ status: 'success' });
             });
-            
+
             const obsObserver = new OBSViewerCountObserver(obsManager, createSilentLogger());
-            
-            // When: Source becomes unavailable due to scene change
+
             await obsObserver.onViewerCountUpdate({
                 platform: 'twitch',
                 count: 300,
                 isStreamLive: true,
                 timestamp: new Date(testClock.now())
             });
-            
-            sourceExists = false; // Simulate scene change
-            
-            const updateAfterSceneChange = obsObserver.onViewerCountUpdate({
+
+            sourceExists = false;
+
+            await obsObserver.onViewerCountUpdate({
                 platform: 'twitch',
                 count: 350,
                 isStreamLive: true,
                 timestamp: new Date(testClock.now())
             });
-            
-            // Then: Should handle scene changes gracefully
-            await expect(updateAfterSceneChange).resolves.not.toThrow();
         });
     });
 

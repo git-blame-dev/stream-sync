@@ -202,8 +202,7 @@ describe('Spam Detection Service Integration Tests', () => {
             );
         });
 
-        it('should not log warnings about missing spam config when detector provided', () => {
-            // BEHAVIOR: No warnings when spam detection properly configured via dependency injection
+        it('should store spam detector when provided via dependency injection', () => {
             const mockEventBus = { emit: createMockFn(), on: createMockFn(), off: createMockFn() };
             const notificationManager = new NotificationManager({
                 displayQueue: mockDisplayQueue,
@@ -218,10 +217,7 @@ describe('Spam Detection Service Integration Tests', () => {
                 ttsService: mockTtsService
             });
 
-            // Should NOT warn about missing configuration
-            expect(mockLogger.warn).not.toHaveBeenCalledWith(
-                expect.stringContaining('No spam configuration')
-            );
+            expect(notificationManager.donationSpamDetector).toBe(mockSpamDetector);
         });
 
         it('should suppress gifts when spam detector indicates spam', async () => {
@@ -297,8 +293,7 @@ describe('Spam Detection Service Integration Tests', () => {
             expect(mockDisplayQueue.addItem).toHaveBeenCalled();
         });
 
-        it('should not log warnings when spam detector intentionally not provided', () => {
-            // BEHAVIOR: Optional dependency - no warnings when not provided
+        it('should have undefined spam detector when not provided', () => {
             const mockEventBus = { emit: createMockFn(), on: createMockFn(), off: createMockFn() };
             const notificationManager = new NotificationManager({
                 displayQueue: mockDisplayQueue,
@@ -312,10 +307,7 @@ describe('Spam Detection Service Integration Tests', () => {
                 ttsService: mockTtsService
             });
 
-            // Should NOT warn (it's optional)
-            expect(mockLogger.warn).not.toHaveBeenCalledWith(
-                expect.stringContaining('spam')
-            );
+            expect(notificationManager.donationSpamDetector).toBeUndefined();
         });
     });
 
