@@ -1,69 +1,64 @@
-const { describe, test, expect, afterEach } = require('bun:test');
-const { clearAllMocks, restoreAllMocks } = require('../helpers/bun-mock-utils');
-const { mockModule, restoreAllModuleMocks, resetModules } = require('../helpers/bun-module-mocks');
-const { useFakeTimers, useRealTimers, advanceTimersByTime } = require('../helpers/bun-timers');
+const { describe, test, expect, beforeEach, afterEach, jest } = require('bun:test');
+const { EventEmitter } = require('events');
 
-// Mock ws to avoid real network connections
-const mockSockets = [];
-mockModule('ws', () => {
-    const { EventEmitter } = require('events');
-    class WS extends EventEmitter {
-        constructor() {
-            super();
-            this.readyState = 1;
-            this.CONNECTING = 0;
-            this.OPEN = 1;
-            this.CLOSING = 2;
-            this.CLOSED = 3;
-            mockSockets.push(this);
-        }
-        ping() {}
-        close(code = 1000, reason = '') {
-            this.readyState = this.CLOSED;
-            this.emit('close', code, reason);
-        }
+class MockWebSocket extends EventEmitter {
+    static CONNECTING = 0;
+    static OPEN = 1;
+    static CLOSING = 2;
+    static CLOSED = 3;
+
+    constructor() {
+        super();
+        this.readyState = MockWebSocket.OPEN;
     }
-    WS.OPEN = 1;
-    WS.CONNECTING = 0;
-    WS.CLOSING = 2;
-    WS.CLOSED = 3;
-    return WS;
-});
 
-const WebSocket = require('ws');
+    ping() {}
+
+    close(code = 1000, reason = '') {
+        this.readyState = MockWebSocket.CLOSED;
+        this.emit('close', code, reason);
+    }
+}
 
 describe('TikTokWebSocketClient (behavior)', () => {
+    let TikTokWebSocketClient;
+    let mockWs;
+    let client;
+
+    beforeEach(() => {
+        jest.useFakeTimers();
+        ({ TikTokWebSocketClient } = require('../../../src/platforms/tiktok-websocket-client'));
+        mockWs = null;
+        const CapturingWebSocket = class extends MockWebSocket {
+            constructor(...args) {
+                super(...args);
+                mockWs = this;
+            }
+        };
+        client = new TikTokWebSocketClient('testuser123', { WebSocketCtor: CapturingWebSocket });
+    });
+
     afterEach(() => {
-        mockSockets.length = 0;
-        clearAllMocks();
-        restoreAllMocks();
-        restoreAllModuleMocks();
-        resetModules();
-        useRealTimers();
+        jest.useRealTimers();
+        if (client && client.disconnect) {
+            client.disconnect();
+        }
     });
 
     test('resolves connect and emits room info and chat from batched messages', async () => {
-        useFakeTimers();
-        const { TikTokWebSocketClient } = require('../../../src/platforms/tiktok-websocket-client');
-        const client = new TikTokWebSocketClient('xenasosieoff', { apiKey: 'test_key' });
-
         const chatEvents = [];
         client.on('chat', (data) => chatEvents.push(data));
 
         const connectPromise = client.connect();
-        const ws = mockSockets[0];
+        mockWs.emit('open');
 
-        ws.emit('open');
         const payload = {
             messages: [
                 { type: 'roomInfo', data: { roomInfo: { id: 'room123', isLive: true, status: 2 } } },
-                {
-                    type: 'chat',
-                    data: { comment: 'hello world', user: { userId: 'user123-id', uniqueId: 'user123' } }
-                }
+                { type: 'chat', data: { comment: 'hello world', user: { userId: 'user123-id', uniqueId: 'user123' } } }
             ]
         };
-        ws.emit('message', Buffer.from(JSON.stringify(payload)));
+        mockWs.emit('message', Buffer.from(JSON.stringify(payload)));
 
         const roomInfo = await connectPromise;
         expect(roomInfo.roomId).toBe('room123');
@@ -72,14 +67,12 @@ describe('TikTokWebSocketClient (behavior)', () => {
     });
 
     test('emits gift events with repeat and group data', async () => {
-        const { TikTokWebSocketClient } = require('../../../src/platforms/tiktok-websocket-client');
-        const client = new TikTokWebSocketClient('xenasosieoff');
         const gifts = [];
         client.on('gift', (data) => gifts.push(data));
 
         const connectPromise = client.connect();
-        const ws = mockSockets[0];
-        ws.emit('open');
+        mockWs.emit('open');
+
         const payload = {
             messages: [
                 { type: 'roomInfo', data: { roomInfo: { id: 'room123', isLive: true, status: 2 } } },
@@ -94,7 +87,7 @@ describe('TikTokWebSocketClient (behavior)', () => {
                 }
             ]
         };
-        ws.emit('message', Buffer.from(JSON.stringify(payload)));
+        mockWs.emit('message', Buffer.from(JSON.stringify(payload)));
         await connectPromise;
 
         expect(gifts).toHaveLength(1);
@@ -105,17 +98,12 @@ describe('TikTokWebSocketClient (behavior)', () => {
     });
 
     test('emits streamEnd on close code 4404 and rejects connect', async () => {
-        useFakeTimers();
-        const { TikTokWebSocketClient } = require('../../../src/platforms/tiktok-websocket-client');
-        const client = new TikTokWebSocketClient('xenasosieoff');
-
         const streamEndEvents = [];
         client.on('streamEnd', (data) => streamEndEvents.push(data));
 
         const connectPromise = client.connect();
-        const ws = mockSockets[0];
-        ws.emit('open');
-        ws.emit('close', 4404, 'offline');
+        mockWs.emit('open');
+        mockWs.emit('close', 4404, 'offline');
 
         await expect(connectPromise).rejects.toBeInstanceOf(Error);
         expect(streamEndEvents).toHaveLength(1);
@@ -123,15 +111,10 @@ describe('TikTokWebSocketClient (behavior)', () => {
     });
 
     test('rejects connect when no room info arrives before timeout', async () => {
-        useFakeTimers();
-        const { TikTokWebSocketClient } = require('../../../src/platforms/tiktok-websocket-client');
-        const client = new TikTokWebSocketClient('xenasosieoff');
-
         const connectPromise = client.connect();
-        const ws = mockSockets[0];
-        ws.emit('open');
+        mockWs.emit('open');
 
-        advanceTimersByTime(16000);
+        jest.advanceTimersByTime(16000);
 
         await expect(connectPromise).rejects.toThrow(/timeout/i);
     });
