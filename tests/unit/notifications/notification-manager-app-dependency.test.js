@@ -94,7 +94,6 @@ describe('NotificationManager Service Dependency Injection - Modernized', () => 
                 configService: mockConfigService
             });
 
-            // System initialized and stable
             expect(notificationManager).toBeDefined();
             expect(typeof notificationManager.handleNotification).toBe('function');
         });
@@ -113,7 +112,6 @@ describe('NotificationManager Service Dependency Injection - Modernized', () => 
                 userTrackingService: mockUserTrackingService
             });
 
-            // All services properly injected
             expect(notificationManager.eventBus).toBe(mockEventBus);
             expect(notificationManager.configService).toBe(mockConfigService);
             expect(notificationManager.vfxCommandService).toBe(mockVFXCommandService);
@@ -130,7 +128,6 @@ describe('NotificationManager Service Dependency Injection - Modernized', () => 
                     textProcessing: { formatChatMessage: createMockFn() },
                     obsGoals: { processDonationGoal: createMockFn() },
                     configService: mockConfigService
-                    // No displayQueue
                 });
             }).toThrow('NotificationManager requires displayQueue dependency');
         });
@@ -146,7 +143,6 @@ describe('NotificationManager Service Dependency Injection - Modernized', () => 
                 configService: mockConfigService
             });
 
-            // System ready to process notifications
             expect(typeof notificationManager.handleNotification).toBe('function');
             expect(typeof notificationManager.handleGreeting).toBe('function');
         });
@@ -162,7 +158,6 @@ describe('NotificationManager Service Dependency Injection - Modernized', () => 
                     textProcessing: { formatChatMessage: createMockFn() },
                     obsGoals: { processDonationGoal: createMockFn() },
                     configService: mockConfigService
-                    // No EventBus - should throw
                 });
             }).toThrow('NotificationManager requires EventBus dependency for event-driven architecture');
         });
@@ -191,10 +186,8 @@ describe('NotificationManager Service Dependency Injection - Modernized', () => 
                 textProcessing: { formatChatMessage: createMockFn() },
                 obsGoals: { processDonationGoal: createMockFn() },
                 configService: mockConfigService
-                // No donationSpamDetector
             });
 
-            // Should be undefined (optional)
             expect(notificationManager.donationSpamDetector).toBeUndefined();
         });
 
@@ -208,7 +201,6 @@ describe('NotificationManager Service Dependency Injection - Modernized', () => 
                 textProcessing: { formatChatMessage: createMockFn() },
                 obsGoals: { processDonationGoal: createMockFn() },
                 configService: mockConfigService
-                // No VFX services
             });
 
             await expect(notificationManager.handleNotification('platform:gift', 'tiktok', {
@@ -238,7 +230,6 @@ describe('NotificationManager Service Dependency Injection - Modernized', () => 
                 userTrackingService: mockUserTrackingService
             });
 
-            // When: User sends a gift
             await notificationManager.handleNotification('platform:gift', 'tiktok', {
                 username: 'TestUser',
                 userId: '123',
@@ -248,10 +239,8 @@ describe('NotificationManager Service Dependency Injection - Modernized', () => 
                 currency: 'coins'
             });
 
-            // Then: Gift notification appears
             expect(mockDisplayQueue.addItem).toHaveBeenCalled();
 
-            // Verify notification content is user-friendly
             const addedItem = mockDisplayQueue.addItem.mock.calls[0][0];
             expect(addedItem).toBeDefined();
             expect(addedItem.data).toBeDefined();
@@ -272,7 +261,6 @@ describe('NotificationManager Service Dependency Injection - Modernized', () => 
                 userTrackingService: mockUserTrackingService
             });
 
-            // When: User sends a gift
             await notificationManager.handleNotification('platform:gift', 'tiktok', {
                 username: 'TestUser',
                 userId: '123',
@@ -282,7 +270,6 @@ describe('NotificationManager Service Dependency Injection - Modernized', () => 
                 currency: 'coins'
             });
 
-            // Then: Gift notification still appears (graceful degradation)
             expect(mockDisplayQueue.addItem).toHaveBeenCalled();
         });
     });
@@ -308,7 +295,6 @@ describe('NotificationManager Service Dependency Injection - Modernized', () => 
                 })
             };
 
-            // When: NotificationManager initializes with custom config
             const mockEventBus = { emit: createMockFn(), on: createMockFn(), off: createMockFn() };
             notificationManager = new NotificationManager({
                 displayQueue: mockDisplayQueue,
@@ -320,7 +306,6 @@ describe('NotificationManager Service Dependency Injection - Modernized', () => 
                 configService: customConfigService
             });
 
-            // Then: Should attempt to load config
             expect(customConfigService.get).toHaveBeenCalled();
         });
 
@@ -360,7 +345,6 @@ describe('NotificationManager Service Dependency Injection - Modernized', () => 
                 donationSpamDetector: mockSpamDetector
             });
 
-            // Process gift
             await notificationManager.handleNotification('platform:gift', 'tiktok', {
                 username: 'TestUser',
                 userId: '123',
@@ -370,7 +354,6 @@ describe('NotificationManager Service Dependency Injection - Modernized', () => 
                 currency: 'coins'
             });
 
-            // Should use spam detector
             expect(mockSpamDetector.handleDonationSpam).toHaveBeenCalled();
         });
 
@@ -387,10 +370,8 @@ describe('NotificationManager Service Dependency Injection - Modernized', () => 
                 vfxCommandService: mockVFXCommandService,
                 ttsService: mockTTSService,
                 userTrackingService: mockUserTrackingService
-                // No spam detector
             });
 
-            // Process gift without spam detection
             await notificationManager.handleNotification('platform:gift', 'tiktok', {
                 username: 'TestUser',
                 userId: '123',
@@ -400,7 +381,6 @@ describe('NotificationManager Service Dependency Injection - Modernized', () => 
                 currency: 'coins'
             });
 
-            // Should still work
             expect(mockDisplayQueue.addItem).toHaveBeenCalled();
         });
     });
@@ -419,10 +399,8 @@ describe('NotificationManager Service Dependency Injection - Modernized', () => 
                 vfxCommandService: mockVFXCommandService,
                 ttsService: mockTTSService,
                 userTrackingService: mockUserTrackingService
-                // Minimal services only
             });
 
-            // Process various notification types
             const notifications = [
                 { type: 'platform:follow', data: { username: 'User1', userId: '1' } },
                 { type: 'platform:gift', data: { username: 'User2', userId: '2', giftType: 'Rose', giftCount: 1, amount: 1, currency: 'coins' } },
@@ -433,7 +411,6 @@ describe('NotificationManager Service Dependency Injection - Modernized', () => 
                 await notificationManager.handleNotification(notif.type, 'tiktok', notif.data);
             }
 
-            // All notifications should be processed
             expect(mockDisplayQueue.addItem).toHaveBeenCalledTimes(3);
         });
 
