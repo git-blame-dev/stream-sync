@@ -1,8 +1,8 @@
 const { describe, it, expect } = require('bun:test');
 const { createMockFn } = require('../../helpers/bun-mock-utils');
+const { noOpLogger } = require('../../helpers/mock-factories');
 const EventEmitter = require('events');
 const PlatformEventRouter = require('../../../src/services/PlatformEventRouter');
-const { TikTokPlatform } = require('../../../src/platforms/tiktok');
 
 function createAppRuntimeMocks() {
     const handled = [];
@@ -37,7 +37,7 @@ describe('TikTok follow/share routing', () => {
             runtime,
             notificationManager: { handleNotification: createMockFn() },
             configService: { areNotificationsEnabled: createMockFn(() => true) },
-            logger: { warn: () => {}, info: () => {}, debug: () => {}, error: () => {} }
+            logger: noOpLogger
         });
 
         await eventBus.emit('platform:event', {
@@ -59,7 +59,7 @@ describe('TikTok follow/share routing', () => {
             runtime,
             notificationManager: { handleNotification: createMockFn() },
             configService: { areNotificationsEnabled: createMockFn(() => true) },
-            logger: { warn: () => {}, info: () => {}, debug: () => {}, error: () => {} }
+            logger: noOpLogger
         });
         const emitted = [];
         eventBus.subscribe('platform:event', (payload) => emitted.push(payload));

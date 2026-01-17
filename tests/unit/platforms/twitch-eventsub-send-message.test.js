@@ -1,9 +1,8 @@
 const { describe, it, expect, afterEach } = require('bun:test');
 const { createMockFn } = require('../../helpers/bun-mock-utils');
+const { noOpLogger } = require('../../helpers/mock-factories');
 
 const TwitchEventSub = require('../../../src/platforms/twitch-eventsub');
-
-const noOpLogger = { debug: () => {}, info: () => {}, warn: () => {}, error: () => {} };
 
 const createAuthManager = () => ({
     getState: () => 'READY',

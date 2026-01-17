@@ -1,6 +1,5 @@
 const { describe, it, expect, afterEach } = require('bun:test');
 const { createMockFn, restoreAllMocks } = require('../../helpers/bun-mock-utils');
-const { restoreAllModuleMocks, resetModules } = require('../../helpers/bun-module-mocks');
 
 const { EventEmitter } = require('events');
 
@@ -10,8 +9,6 @@ const { createMockTikTokPlatformDependencies } = require('../../helpers/mock-fac
 describe('TikTokPlatform initialize failure propagation', () => {
     afterEach(() => {
         restoreAllMocks();
-        restoreAllModuleMocks();
-        resetModules();
     });
 
     it('rejects initialize when the initial connection attempt fails', async () => {

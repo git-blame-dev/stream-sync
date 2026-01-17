@@ -1,11 +1,9 @@
 const { describe, it, expect, afterEach } = require('bun:test');
 const { createMockFn, restoreAllMocks } = require('../../helpers/bun-mock-utils');
-const { restoreAllModuleMocks, resetModules } = require('../../helpers/bun-module-mocks');
+const { noOpLogger } = require('../../helpers/mock-factories');
 
 const { TikTokPlatform } = require('../../../src/platforms/tiktok');
 const { PlatformEvents } = require('../../../src/interfaces/PlatformEvents');
-
-const noOpLogger = { debug: () => {}, info: () => {}, warn: () => {}, error: () => {} };
 
 const createPlatform = (configOverrides = {}, dependencyOverrides = {}) => {
     const logger = dependencyOverrides.logger || noOpLogger;
@@ -59,8 +57,6 @@ const createPlatform = (configOverrides = {}, dependencyOverrides = {}) => {
 describe('TikTokPlatform behavior alignment', () => {
     afterEach(() => {
         restoreAllMocks();
-        restoreAllModuleMocks();
-        resetModules();
     });
 
     describe('gift handling', () => {

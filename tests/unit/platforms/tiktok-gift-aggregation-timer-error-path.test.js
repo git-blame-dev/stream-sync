@@ -1,5 +1,6 @@
 const { describe, it, expect, beforeEach, afterEach } = require('bun:test');
 const { createMockFn, restoreAllMocks } = require('../../helpers/bun-mock-utils');
+const { noOpLogger } = require('../../helpers/mock-factories');
 
 const { TikTokPlatform } = require('../../../src/platforms/tiktok');
 
@@ -17,13 +18,6 @@ describe('TikTok gift processing', () => {
     });
 
     const createPlatform = (options = {}) => {
-        const mockLogger = {
-            debug: createMockFn(),
-            info: createMockFn(),
-            warn: createMockFn(),
-            error: createMockFn()
-        };
-
         const platform = new TikTokPlatform(
             {
                 enabled: true,
@@ -34,11 +28,11 @@ describe('TikTok gift processing', () => {
                 TikTokWebSocketClient: createMockFn(() => ({})),
                 WebcastEvent: {},
                 ControlEvent: {},
-                logger: mockLogger
+                logger: noOpLogger
             }
         );
 
-        return { platform, mockLogger };
+        return { platform };
     };
 
     it('creates platform with gift aggregator', () => {

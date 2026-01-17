@@ -1,19 +1,14 @@
 const { describe, it, expect, afterEach } = require('bun:test');
 const { createMockFn, restoreAllMocks } = require('../../helpers/bun-mock-utils');
-const { restoreAllModuleMocks, resetModules } = require('../../helpers/bun-module-mocks');
 
 const { TikTokPlatform } = require('../../../src/platforms/tiktok');
-const { createMockTikTokPlatformDependencies } = require('../../helpers/mock-factories');
-
-const noOpLogger = { debug: () => {}, info: () => {}, warn: () => {}, error: () => {} };
+const { createMockTikTokPlatformDependencies, noOpLogger } = require('../../helpers/mock-factories');
 
 describe('TikTokPlatform retry deduplication', () => {
     const baseConfig = { enabled: true, username: 'retry_tester' };
 
     afterEach(() => {
         restoreAllMocks();
-        restoreAllModuleMocks();
-        resetModules();
     });
 
     it('only schedules one retry when queueRetry is invoked multiple times before a reconnect starts', () => {

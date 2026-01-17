@@ -1,6 +1,5 @@
 const { describe, it, expect, beforeEach, afterEach } = require('bun:test');
 const { createMockFn, restoreAllMocks } = require('../../helpers/bun-mock-utils');
-const { restoreAllModuleMocks, resetModules } = require('../../helpers/bun-module-mocks');
 const { useFakeTimers, useRealTimers, runOnlyPendingTimers } = require('../../helpers/bun-timers');
 
 const { TikTokPlatform } = require('../../../src/platforms/tiktok');
@@ -49,8 +48,6 @@ describe('TikTokPlatform gift aggregation and schema behavior', () => {
     afterEach(() => {
         useRealTimers();
         restoreAllMocks();
-        restoreAllModuleMocks();
-        resetModules();
     });
 
     it('emits aggregated gifts with normalized user schema and correct amount', async () => {

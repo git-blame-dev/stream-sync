@@ -1,5 +1,6 @@
 const { describe, it, expect, beforeEach } = require('bun:test');
 const { createMockFn } = require('../../helpers/bun-mock-utils');
+const { noOpLogger } = require('../../helpers/mock-factories');
 
 const TwitchEventSub = require('../../../src/platforms/twitch-eventsub');
 
@@ -10,8 +11,6 @@ class MockWebSocket {
     close() {}
     send() {}
 }
-
-const noOpLogger = { debug: () => {}, info: () => {}, warn: () => {}, error: () => {} };
 
 describe('TwitchEventSub behavior', () => {
     let mockAuthManager;
