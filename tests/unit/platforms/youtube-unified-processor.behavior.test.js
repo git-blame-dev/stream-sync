@@ -1,11 +1,9 @@
 const { describe, it, expect, beforeEach, afterEach } = require('bun:test');
 const { createMockFn, restoreAllMocks } = require('../../helpers/bun-mock-utils');
 const { restoreAllModuleMocks, resetModules } = require('../../helpers/bun-module-mocks');
-
+const { noOpLogger } = require('../../helpers/mock-factories');
 const { shouldSuppressYouTubeNotification } = require('../../../src/utils/youtube-message-extractor');
 const { YouTubePlatform } = require('../../../src/platforms/youtube');
-
-const noOpLogger = { debug: () => {}, info: () => {}, warn: () => {}, error: () => {} };
 
 const createStreamDetectionService = () => ({
     detectLiveStreams: createMockFn().mockResolvedValue({

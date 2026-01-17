@@ -1,9 +1,6 @@
-
 const { describe, it, expect, beforeEach, afterEach } = require('bun:test');
 const { createMockFn, restoreAllMocks } = require('../../helpers/bun-mock-utils');
-
-// TwitchEventSub passed via DI - no module mock needed
-
+const { noOpLogger } = require('../../helpers/mock-factories');
 const EventEmitter = require('events');
 const { TwitchPlatform } = require('../../../src/platforms/twitch');
 const { PlatformEvents } = require('../../../src/interfaces/PlatformEvents');
@@ -38,6 +35,7 @@ describe('TwitchPlatform monetisation mapping', () => {
         twitch = new TwitchPlatform(
             { username: 'tester', eventsub_enabled: true },
             {
+                logger: noOpLogger,
                 authManager: { getState: createMockFn(), isTokenValid: createMockFn().mockReturnValue(true) },
                 ChatFileLoggingService: createMockFn(() => ({ start: createMockFn(), stop: createMockFn() })),
                 TwitchEventSub,
@@ -81,7 +79,6 @@ describe('TwitchPlatform monetisation mapping', () => {
             };
         }
 
-        // Patch emit to also capture platform:event emissions
         twitch.emit = (evt, payload) => {
             emitted.push({ evt, payload });
         };
