@@ -8,10 +8,8 @@ const {
     formatTimestampCompact
 } = require('../../../src/utils/text-processing');
 
-// Initialize logging FIRST
 initializeTestLogging();
 
-// Setup automated cleanup
 setupAutomatedCleanup({
     clearCallsBeforeEach: true,
     validateAfterCleanup: true,
@@ -25,7 +23,6 @@ describe('Text Processing', () => {
     let mockConfig;
 
     beforeEach(() => {
-        // Create mocks using factory functions
         mockLogger = noOpLogger;
         mockConstants = {
             MAX_USERNAME_LENGTH: 12,
@@ -40,7 +37,6 @@ describe('Text Processing', () => {
             }
         };
 
-        // Mock the text processing module
         textProcessing = createTextProcessingManager({ logger: mockLogger });
     });
 
@@ -373,8 +369,6 @@ describe('Text Processing', () => {
         });
     });
 
-    // createNotificationData tests removed - function was moved to NotificationBuilder
-
     describe('when formatting chat messages', () => {
         it('should format basic chat message', () => {
             const formatted = textProcessing.formatChatMessage('chat', 'testuser', 'Hello world!');
@@ -412,7 +406,6 @@ describe('Text Processing', () => {
             expect(formatted).toBeNull();
         });
 
-        // NEW TESTS FOR USERNAME TRUNCATION BEHAVIOR SEPARATION
         it('should truncate usernames for TTS contexts when truncateUsername is true', () => {
             const longUsername = 'verylongusername123';
             const formatted = textProcessing.formatChatMessage('chat', longUsername, 'Hello world!', {}, true);

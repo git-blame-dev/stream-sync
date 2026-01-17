@@ -1,20 +1,13 @@
 const { describe, test, expect, beforeEach, it } = require('bun:test');
 const { createMockFn } = require('../../helpers/bun-mock-utils');
+const { noOpLogger } = require('../../helpers/mock-factories');
 const { PlatformInitializationManager } = require('../../../src/utils/platform-initialization-manager');
 
 describe('PlatformInitializationManager behavior edges', () => {
-    let logger;
     let sharedHandler;
     let mockCreateErrorHandler;
 
     beforeEach(() => {
-        logger = {
-            debug: createMockFn(),
-            info: createMockFn(),
-            warn: createMockFn(),
-            error: createMockFn()
-        };
-
         sharedHandler = {
             handleEventProcessingError: createMockFn(),
             logOperationalError: createMockFn()
@@ -24,7 +17,7 @@ describe('PlatformInitializationManager behavior edges', () => {
     });
 
     function createManager(platformName, deps = {}) {
-        return new PlatformInitializationManager(platformName, logger, {
+        return new PlatformInitializationManager(platformName, noOpLogger, {
             createPlatformErrorHandler: mockCreateErrorHandler,
             ...deps
         });
@@ -130,7 +123,7 @@ describe('PlatformInitializationManager behavior edges', () => {
             logOperationalError: createMockFn()
         };
         const lazyMockCreate = createMockFn().mockReturnValue(lazyHandler);
-        const manager = new PlatformInitializationManager('twitch', logger, {
+        const manager = new PlatformInitializationManager('twitch', noOpLogger, {
             createPlatformErrorHandler: lazyMockCreate
         });
         manager.errorHandler = null;
@@ -138,7 +131,7 @@ describe('PlatformInitializationManager behavior edges', () => {
         manager.beginInitialization();
         manager.markInitializationFailure(new Error('lazy failure'), { stage: 'lazy' });
 
-        expect(lazyMockCreate).toHaveBeenCalledWith(logger, 'twitch');
+        expect(lazyMockCreate).toHaveBeenCalledWith(noOpLogger, 'twitch');
         expect(lazyHandler.handleEventProcessingError).toHaveBeenCalled();
     });
 
@@ -268,7 +261,7 @@ describe('PlatformInitializationManager behavior edges', () => {
             logOperationalError: createMockFn()
         };
         const lazyMockCreate = createMockFn().mockReturnValue(lazyHandler);
-        const manager = new PlatformInitializationManager('twitch', logger, {
+        const manager = new PlatformInitializationManager('twitch', noOpLogger, {
             createPlatformErrorHandler: lazyMockCreate
         });
         manager.errorHandler = null;
@@ -276,7 +269,7 @@ describe('PlatformInitializationManager behavior edges', () => {
         manager.beginInitialization();
         manager.markInitializationFailure(new Error('boom'), { stage: 'connect' });
 
-        expect(lazyMockCreate).toHaveBeenCalledWith(logger, 'twitch');
+        expect(lazyMockCreate).toHaveBeenCalledWith(noOpLogger, 'twitch');
         expect(lazyHandler.handleEventProcessingError).toHaveBeenCalledWith(
             expect.any(Error),
             'initialization',
@@ -292,7 +285,7 @@ describe('PlatformInitializationManager behavior edges', () => {
             logOperationalError: createMockFn()
         };
         const lazyMockCreate = createMockFn().mockReturnValue(lazyHandler);
-        const manager = new PlatformInitializationManager('youtube', logger, {
+        const manager = new PlatformInitializationManager('youtube', noOpLogger, {
             createPlatformErrorHandler: lazyMockCreate
         });
         manager.errorHandler = null;
@@ -300,7 +293,7 @@ describe('PlatformInitializationManager behavior edges', () => {
         manager.beginInitialization();
         manager.markInitializationFailure('string failure', { stage: 'nonerror' });
 
-        expect(lazyMockCreate).toHaveBeenCalledWith(logger, 'youtube');
+        expect(lazyMockCreate).toHaveBeenCalledWith(noOpLogger, 'youtube');
         expect(lazyHandler.logOperationalError).toHaveBeenCalledWith(
             expect.stringContaining('Initialization failed'),
             'youtube',
@@ -315,7 +308,7 @@ describe('PlatformInitializationManager behavior edges', () => {
             logOperationalError: createMockFn()
         };
         const lazyMockCreate = createMockFn().mockReturnValue(lazyHandler);
-        const manager = new PlatformInitializationManager(undefined, logger, {
+        const manager = new PlatformInitializationManager(undefined, noOpLogger, {
             createPlatformErrorHandler: lazyMockCreate
         });
         manager.errorHandler = null;
@@ -323,7 +316,7 @@ describe('PlatformInitializationManager behavior edges', () => {
         manager.beginInitialization();
         manager.markInitializationFailure(new Error('missing name'), { stage: 'no-name' });
 
-        expect(lazyMockCreate).toHaveBeenCalledWith(logger, 'platform-initialization');
+        expect(lazyMockCreate).toHaveBeenCalledWith(noOpLogger, 'platform-initialization');
         expect(lazyHandler.handleEventProcessingError).toHaveBeenCalled();
     });
 
