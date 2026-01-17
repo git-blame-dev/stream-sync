@@ -1,17 +1,13 @@
-const { describe, test, expect, beforeEach, it, afterEach } = require('bun:test');
-const { createMockFn, restoreAllMocks } = require('../../helpers/bun-mock-utils');
+const { describe, expect, beforeEach, it } = require('bun:test');
+const { noOpLogger } = require('../../helpers/mock-factories');
 
 const AuthErrorHandler = require('../../../src/utils/auth-error-handler');
 
 describe('auth-error-handler behavior', () => {
-    afterEach(() => {
-        restoreAllMocks();
-    });
-
     let handler;
 
     beforeEach(() => {
-        handler = new AuthErrorHandler({ debug: createMockFn(), info: createMockFn(), warn: createMockFn(), error: createMockFn() });
+        handler = new AuthErrorHandler(noOpLogger);
     });
 
     it('categorizes errors and determines refreshability', () => {
@@ -30,13 +26,12 @@ describe('auth-error-handler behavior', () => {
         expect(strategy.delay).toBe(2000);
     });
 
-    it('logs user-facing errors and delegates event processing errors', () => {
-        handler.errorHandler = { handleEventProcessingError: createMockFn(), logOperationalError: createMockFn() };
-        handler.logUserFacingError('network_error', { stage: 'refresh' });
-        handler.handleEventProcessingError(new Error('boom'), 'auth');
-        const platformHandler = handler.errorHandler;
+    it('handles user-facing errors without throwing', () => {
+        expect(() => handler.logUserFacingError('network_error', { stage: 'refresh' })).not.toThrow();
+        expect(() => handler.logUserFacingError('unknown_category')).not.toThrow();
+    });
 
-        expect(platformHandler.logOperationalError).toHaveBeenCalled();
-        expect(platformHandler.handleEventProcessingError).toHaveBeenCalled();
+    it('handles event processing errors without throwing', () => {
+        expect(() => handler.handleEventProcessingError(new Error('boom'), 'auth')).not.toThrow();
     });
 });

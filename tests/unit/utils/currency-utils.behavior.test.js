@@ -1,14 +1,8 @@
-const { describe, test, expect, it, afterEach } = require('bun:test');
-const { restoreAllMocks } = require('../../helpers/bun-mock-utils');
+const { describe, expect, it } = require('bun:test');
 const { noOpLogger } = require('../../helpers/mock-factories');
-
 const { normalizeCurrency, getCodeToSymbolMap } = require('../../../src/utils/currency-utils');
 
 describe('currency-utils behavior', () => {
-    afterEach(() => {
-        restoreAllMocks();
-    });
-
     it('normalizes unknown currency to XXX', () => {
         const code = normalizeCurrency('💰', { logger: noOpLogger });
         expect(code).toBe('XXX');

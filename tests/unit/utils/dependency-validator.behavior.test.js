@@ -1,6 +1,5 @@
-const { describe, test, expect, it, afterEach } = require('bun:test');
-const { createMockFn, restoreAllMocks } = require('../../helpers/bun-mock-utils');
-
+const { describe, expect, it } = require('bun:test');
+const { noOpLogger } = require('../../helpers/mock-factories');
 const {
     validateLoggerInterface,
     validateNotificationManagerInterface,
@@ -10,28 +9,17 @@ const {
 } = require('../../../src/utils/dependency-validator');
 
 describe('dependency-validator behavior', () => {
-    afterEach(() => {
-        restoreAllMocks();
-    });
-
-    const validLogger = () => ({
-        debug: createMockFn(),
-        info: createMockFn(),
-        error: createMockFn(),
-        warn: createMockFn()
-    });
-
     it('validates logger interfaces and surfaces missing method guidance', () => {
         expect(() => validateLoggerInterface(null)).toThrow(/Logger dependency is required/);
         expect(() => validateLoggerInterface({})).toThrow(/Logger interface missing required methods: debug, info, error, warn/);
-        expect(() => validateLoggerInterface(validLogger())).not.toThrow();
+        expect(() => validateLoggerInterface(noOpLogger)).not.toThrow();
     });
 
     it('validates notification manager and YouTube platform dependencies', () => {
         expect(() => validateNotificationManagerInterface(null)).toThrow(/NotificationManager dependency is required/);
         expect(() => validateNotificationManagerInterface({ emit: () => {} })).toThrow(/missing required methods: on/);
 
-        const deps = { logger: validLogger(), streamDetectionService: { detectLiveStreams: () => {} } };
+        const deps = { logger: noOpLogger, streamDetectionService: { detectLiveStreams: () => {} } };
         expect(() => validateYouTubePlatformDependencies(deps)).not.toThrow();
 
         const missingLogger = { streamDetectionService: { detectLiveStreams: () => {} } };
@@ -55,7 +43,7 @@ describe('dependency-validator behavior', () => {
     });
 
     it('creates standard dependencies structure once logger validates', () => {
-        const deps = createStandardDependencies('youtube', validLogger());
+        const deps = createStandardDependencies('youtube', noOpLogger);
         expect(deps.logger).toBeDefined();
         expect(typeof deps.notificationManager.emit).toBe('function');
         expect(typeof deps.displayQueue.add).toBe('function');

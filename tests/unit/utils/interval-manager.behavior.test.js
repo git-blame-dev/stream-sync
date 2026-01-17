@@ -1,20 +1,16 @@
-const { describe, test, expect, beforeEach, afterAll, it, afterEach } = require('bun:test');
-const { createMockFn, spyOn, clearAllMocks, restoreAllMocks } = require('../../helpers/bun-mock-utils');
+const { describe, expect, beforeEach, afterEach, it } = require('bun:test');
+const { createMockFn, spyOn, restoreAllMocks } = require('../../helpers/bun-mock-utils');
 const { noOpLogger } = require('../../helpers/mock-factories');
-
 const { IntervalManager } = require('../../../src/utils/interval-manager');
 const testClock = require('../../helpers/test-clock');
 
 describe('IntervalManager behavior', () => {
-    afterEach(() => {
-        restoreAllMocks();
-    });
-
     let intervalIdCounter;
     let mockSafeSetInterval;
-    const clearIntervalSpy = spyOn(global, 'clearInterval').mockImplementation(() => {});
+    let clearIntervalSpy;
 
     beforeEach(() => {
+        clearIntervalSpy = spyOn(global, 'clearInterval').mockImplementation(() => {});
         intervalIdCounter = 0;
         mockSafeSetInterval = createMockFn((callback) => {
             intervalIdCounter += 1;
@@ -22,8 +18,9 @@ describe('IntervalManager behavior', () => {
         });
     });
 
-    afterAll(() => {
+    afterEach(() => {
         clearIntervalSpy.mockRestore();
+        restoreAllMocks();
     });
 
     it('creates intervals with tracking for out-of-range durations', () => {

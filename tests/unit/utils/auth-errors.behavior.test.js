@@ -1,5 +1,4 @@
-const { describe, test, expect, it, afterEach } = require('bun:test');
-const { restoreAllMocks } = require('../../helpers/bun-mock-utils');
+const { describe, expect, it } = require('bun:test');
 const { noOpLogger } = require('../../helpers/mock-factories');
 
 const {
@@ -15,10 +14,6 @@ const {
 } = require('../../../src/utils/auth-errors');
 
 describe('auth-errors behavior', () => {
-    afterEach(() => {
-        restoreAllMocks();
-    });
-
     it('categorizes HTTP errors by status', () => {
         const error401 = { response: { status: 401 }, config: { url: '/x', method: 'GET' } };
         const error429 = { response: { status: 429 }, config: { url: '/y', method: 'POST' } };

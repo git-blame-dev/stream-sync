@@ -1,31 +1,7 @@
-
-const { describe, test, expect, beforeEach, it, afterEach } = require('bun:test');
-const { resetModules, restoreAllModuleMocks } = require('../../helpers/bun-module-mocks');
-
-const { setupAutomatedCleanup } = require('../../helpers/mock-lifecycle');
-
-// Setup automated cleanup
-setupAutomatedCleanup({
-    clearCallsBeforeEach: true,
-    validateAfterCleanup: true,
-    logPerformanceMetrics: true
-});
+const { describe, expect, it } = require('bun:test');
+const { parseConfigBoolean, parseConfigBooleanDefaultTrue } = require('../../../src/utils/config-boolean-parser');
 
 describe('Config Boolean Parser Utility', () => {
-    afterEach(() => {
-        restoreAllModuleMocks();
-    });
-
-    let parseConfigBoolean;
-    let parseConfigBooleanDefaultTrue;
-    
-    beforeEach(() => {
-        resetModules();
-        const parser = require('../../../src/utils/config-boolean-parser');
-        parseConfigBoolean = parser.parseConfigBoolean;
-        parseConfigBooleanDefaultTrue = parser.parseConfigBooleanDefaultTrue;
-    });
-    
     describe('parseConfigBoolean with default false', () => {
         describe('when value is boolean', () => {
             it('should return true for boolean true', () => {
@@ -144,7 +120,6 @@ describe('Config Boolean Parser Utility', () => {
     
     describe('real-world INI parsing scenarios', () => {
         it('should handle typical INI parser output', () => {
-            // INI parsers typically return strings
             const iniValues = {
                 'ttsEnabled': 'false',
                 'debugEnabled': 'true',
@@ -159,7 +134,6 @@ describe('Config Boolean Parser Utility', () => {
         });
         
         it('should handle mixed boolean and string configs', () => {
-            // Some configs might be pre-processed or come from different sources
             const mixedConfigs = [
                 { value: true, expected: true },
                 { value: false, expected: false },
