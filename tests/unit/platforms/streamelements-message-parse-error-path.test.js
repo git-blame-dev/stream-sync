@@ -1,6 +1,7 @@
 const { describe, it, expect, afterEach } = require('bun:test');
 const { unmockModule, restoreAllModuleMocks, resetModules } = require('../../helpers/bun-module-mocks');
 const { createMockFn, restoreAllMocks } = require('../../helpers/bun-mock-utils');
+const { noOpLogger } = require('../../helpers/mock-factories');
 
 unmockModule('../../../src/platforms/streamelements');
 
@@ -14,14 +15,7 @@ describe('StreamElementsPlatform message parsing', () => {
     it('routes invalid JSON messages through the error handler without throwing', () => {
         const { StreamElementsPlatform } = require('../../../src/platforms/streamelements');
 
-        const mockLogger = {
-            debug: createMockFn(),
-            info: createMockFn(),
-            warn: createMockFn(),
-            error: createMockFn()
-        };
-
-        const platform = new StreamElementsPlatform({ enabled: true }, { logger: mockLogger });
+        const platform = new StreamElementsPlatform({ enabled: true }, { logger: noOpLogger });
 
         const errorHandler = {
             handleEventProcessingError: createMockFn()

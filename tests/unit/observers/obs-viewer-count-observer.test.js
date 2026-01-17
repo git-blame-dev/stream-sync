@@ -2,9 +2,8 @@ const { describe, test, expect, beforeEach } = require('bun:test');
 const { createMockFn } = require('../../helpers/bun-mock-utils');
 const { OBSViewerCountObserver } = require('../../../src/observers/obs-viewer-count-observer');
 const { ViewerCountObserver } = require('../../../src/observers/viewer-count-observer');
-const { createMockOBSManager } = require('../../helpers/mock-factories');
+const { createMockOBSManager, noOpLogger } = require('../../helpers/mock-factories');
 const { expectNoTechnicalArtifacts } = require('../../helpers/behavior-validation');
-const { createSilentLogger } = require('../../helpers/test-logger');
 
 const defaultPlatforms = ['twitch', 'youtube', 'tiktok'];
 
@@ -27,7 +26,7 @@ describe('OBSViewerCountObserver - Behavior-Focused Testing', () => {
 
     beforeEach(() => {
         mockConfigManager = createMockConfigManager();
-        logger = createSilentLogger();
+        logger = noOpLogger;
 
         obsManager = createMockOBSManager('connected', {
             call: createMockFn().mockResolvedValue({ status: 'success' }),
