@@ -366,7 +366,8 @@ describe('OBS Sources Module Characterization Tests', () => {
         }, TEST_TIMEOUTS.FAST);
 
         test('should handle invalid source names gracefully', async () => {
-            const { obsCall } = require('../../src/obs/connection');
+            const { ensureOBSConnected, obsCall } = require('../../src/obs/connection');
+            ensureOBSConnected.mockResolvedValue();
             obsCall.mockResolvedValue({ sceneItemId: null });
 
             await expect(sourcesModule.getSceneItemId('test-scene', '')).rejects.toThrow(

@@ -28,14 +28,14 @@ const {
 } = require('../helpers/assertion-helpers');
 
 const testClock = require('../helpers/test-clock');
-const { YouTubeLiveStreamService } = require('../../src/services/youtube-live-stream-service');
 
-// Mock the YouTubeLiveStreamService for deterministic performance testing
+const MockYouTubeLiveStreamService = {
+  getLiveStreams: createMockFn(),
+  isChannelId: createMockFn()
+};
+
 mockModule('../../src/services/youtube-live-stream-service', () => ({
-  YouTubeLiveStreamService: {
-    getLiveStreams: createMockFn(),
-    isChannelId: createMockFn()
-  }
+  YouTubeLiveStreamService: MockYouTubeLiveStreamService
 }));
 
 // Initialize testing standards
@@ -102,11 +102,11 @@ describe('YouTube Resolution Performance - User Experience Validation', () => {
     ];
 
     // Mock the service to return consistent performance results
-    YouTubeLiveStreamService.isChannelId.mockImplementation((handle) => {
+    MockYouTubeLiveStreamService.isChannelId.mockImplementation((handle) => {
       return testChannelIds.includes(handle);
     });
 
-    YouTubeLiveStreamService.getLiveStreams.mockImplementation(async (client, channelHandle, options = {}) => {
+    MockYouTubeLiveStreamService.getLiveStreams.mockImplementation(async (client, channelHandle, options = {}) => {
       // Simulate realistic timing based on whether it's a username or Channel ID
       const isChannelId = testChannelIds.includes(channelHandle);
       
@@ -145,7 +145,7 @@ describe('YouTube Resolution Performance - User Experience Validation', () => {
       
       // When: User performs operation with username (slower path)
       const usernameStartTime = testClock.now();
-      const usernameResult = await YouTubeLiveStreamService.getLiveStreams(
+      const usernameResult = await MockYouTubeLiveStreamService.getLiveStreams(
         mockInnertubeClient,
         username,
         { logger: mockLogger, timeout: 2000 }
@@ -154,7 +154,7 @@ describe('YouTube Resolution Performance - User Experience Validation', () => {
 
       // When: User performs operation with Channel ID (faster path)
       const channelIdStartTime = testClock.now();
-      const channelIdResult = await YouTubeLiveStreamService.getLiveStreams(
+      const channelIdResult = await MockYouTubeLiveStreamService.getLiveStreams(
         mockInnertubeClient,
         channelId,
         { logger: mockLogger, timeout: 2000 }
@@ -190,7 +190,7 @@ describe('YouTube Resolution Performance - User Experience Validation', () => {
       for (let i = 0; i < operationCount; i++) {
         const startTime = testClock.now();
         
-        const result = await YouTubeLiveStreamService.getLiveStreams(
+        const result = await MockYouTubeLiveStreamService.getLiveStreams(
           mockInnertubeClient,
           channelId,
           { logger: mockLogger, timeout: 1000 }
@@ -242,7 +242,7 @@ describe('YouTube Resolution Performance - User Experience Validation', () => {
         const operations = [];
         // Each operation would previously require resolution (~150ms each)
         for (let i = 0; i < 3; i++) {
-          await YouTubeLiveStreamService.getLiveStreams(
+          await MockYouTubeLiveStreamService.getLiveStreams(
             mockInnertubeClient,
             username,
             { logger: mockLogger }
@@ -255,7 +255,7 @@ describe('YouTube Resolution Performance - User Experience Validation', () => {
       const newBehaviorSimulation = async () => {
         const operations = [];
         // First operation resolves (~150ms), subsequent operations use Channel ID (~15ms)
-        await YouTubeLiveStreamService.getLiveStreams(
+        await MockYouTubeLiveStreamService.getLiveStreams(
           mockInnertubeClient,
           username,
           { logger: mockLogger }
@@ -264,7 +264,7 @@ describe('YouTube Resolution Performance - User Experience Validation', () => {
         
         // Subsequent operations use Channel ID (much faster)
         for (let i = 0; i < 2; i++) {
-          await YouTubeLiveStreamService.getLiveStreams(
+          await MockYouTubeLiveStreamService.getLiveStreams(
             mockInnertubeClient,
             channelId,
             { logger: mockLogger }
@@ -305,7 +305,7 @@ describe('YouTube Resolution Performance - User Experience Validation', () => {
       for (let i = 0; i < sessionOperationCount; i++) {
         const startTime = testClock.now();
         
-        const result = await YouTubeLiveStreamService.getLiveStreams(
+        const result = await MockYouTubeLiveStreamService.getLiveStreams(
           mockInnertubeClient,
           channelId,
           { logger: mockLogger }
@@ -364,7 +364,7 @@ describe('YouTube Resolution Performance - User Experience Validation', () => {
       ]; // All listed in testChannelIds array
       // When: User triggers multiple concurrent operations
       const concurrentPromises = channelIds.map(async channelId => {
-        const result = await YouTubeLiveStreamService.getLiveStreams(
+        const result = await MockYouTubeLiveStreamService.getLiveStreams(
           mockInnertubeClient,
           channelId,
           { logger: mockLogger, timeout: 1000 }
@@ -414,7 +414,7 @@ describe('YouTube Resolution Performance - User Experience Validation', () => {
         const startTime = testClock.now();
         
         const promises = Array.from({ length: count }, () =>
-          YouTubeLiveStreamService.getLiveStreams(
+          MockYouTubeLiveStreamService.getLiveStreams(
             mockInnertubeClient,
             channelId,
             { logger: mockLogger, timeout: 1000 }
@@ -473,7 +473,7 @@ describe('YouTube Resolution Performance - User Experience Validation', () => {
       for (const channelId of internationalChannelIds) {
         const startTime = testClock.now();
         
-        const result = await YouTubeLiveStreamService.getLiveStreams(
+        const result = await MockYouTubeLiveStreamService.getLiveStreams(
           mockInnertubeClient,
           channelId,
           { logger: mockLogger }
@@ -539,7 +539,7 @@ describe('YouTube Resolution Performance - User Experience Validation', () => {
       for (let i = 0; i < complexContentOperations; i++) {
         const startTime = testClock.now();
         
-        const result = await YouTubeLiveStreamService.getLiveStreams(
+        const result = await MockYouTubeLiveStreamService.getLiveStreams(
           mockInnertubeClient,
           complexInternationalChannelId,
           { logger: mockLogger }
@@ -595,7 +595,7 @@ describe('YouTube Resolution Performance - User Experience Validation', () => {
       for (let i = 0; i < operationsWithFeedback; i++) {
         const startTime = testClock.now();
         
-        const result = await YouTubeLiveStreamService.getLiveStreams(
+        const result = await MockYouTubeLiveStreamService.getLiveStreams(
           mockInnertubeClient,
           channelId,
           { logger: mockLogger }
