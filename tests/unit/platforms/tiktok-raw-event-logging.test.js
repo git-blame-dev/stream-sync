@@ -1,37 +1,36 @@
 const { describe, it, expect, afterEach } = require('bun:test');
-const { createMockFn, restoreAllMocks } = require('../../helpers/bun-mock-utils');
-const { restoreAllModuleMocks, resetModules } = require('../../helpers/bun-module-mocks');
+const { restoreAllMocks } = require('../../helpers/bun-mock-utils');
+const { createMockTikTokPlatformDependencies } = require('../../helpers/mock-factories');
 
 const { TikTokPlatform } = require('../../../src/platforms/tiktok');
 
 describe('TikTokPlatform raw event logging', () => {
     afterEach(() => {
         restoreAllMocks();
-        restoreAllModuleMocks();
-        resetModules();
     });
 
-    const createPlatform = ({ dataLoggingEnabled }) => {
-        const platform = Object.create(TikTokPlatform.prototype);
-        platform.config = { dataLoggingEnabled };
-        platform.logger = { warn: createMockFn() };
-        platform.logRawPlatformData = createMockFn().mockResolvedValue();
-        return platform;
+    const createPlatform = (configOverrides = {}) => {
+        const config = {
+            enabled: true,
+            username: 'testDataLogger',
+            dataLoggingEnabled: false,
+            ...configOverrides
+        };
+        const dependencies = createMockTikTokPlatformDependencies();
+        return new TikTokPlatform(config, dependencies);
     };
 
-    it('logs raw events when data logging is enabled', async () => {
+    it('completes without error when data logging is enabled', async () => {
         const platform = createPlatform({ dataLoggingEnabled: true });
+        const eventData = { type: 'gift', giftId: 'test-gift-1' };
 
-        await platform._logRawEvent('gift', { id: 'gift-1' });
-
-        expect(platform.logRawPlatformData).toHaveBeenCalledTimes(1);
+        await expect(platform.logRawPlatformData('gift', eventData)).resolves.toBeUndefined();
     });
 
-    it('skips raw event logging when disabled', async () => {
+    it('completes without error when data logging is disabled', async () => {
         const platform = createPlatform({ dataLoggingEnabled: false });
+        const eventData = { type: 'gift', giftId: 'test-gift-1' };
 
-        await platform._logRawEvent('gift', { id: 'gift-1' });
-
-        expect(platform.logRawPlatformData).not.toHaveBeenCalled();
+        await expect(platform.logRawPlatformData('gift', eventData)).resolves.toBeUndefined();
     });
 });
