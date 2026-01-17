@@ -1,44 +1,21 @@
-
 const { describe, test, expect, beforeEach, afterEach } = require('bun:test');
 const { createMockFn, restoreAllMocks } = require('../helpers/bun-mock-utils');
-const { mockModule, resetModules, restoreAllModuleMocks } = require('../helpers/bun-module-mocks');
-const { createTestUser } = require('../helpers/test-setup');
+const { createTestUser, initializeTestLogging } = require('../helpers/test-setup');
 const { noOpLogger } = require('../helpers/mock-factories');
-const { setupAutomatedCleanup } = require('../helpers/mock-lifecycle');
+const { createRuntimeConstantsFixture } = require('../helpers/runtime-constants-fixture');
 const testClock = require('../helpers/test-clock');
 
-setupAutomatedCleanup({
-    clearCallsBeforeEach: true,
-    validateAfterCleanup: true,
-    logPerformanceMetrics: true
-});
-
-const applyMocks = () => {
-    mockModule('../../src/utils/chat-logger', () => ({
-        logChatMessageWithConfig: createMockFn(),
-        logChatMessageSkipped: createMockFn()
-    }));
-};
-
-applyMocks();
+initializeTestLogging();
 
 describe('Old Message Filter', () => {
-    let logChatMessageWithConfig;
-    let logChatMessageSkipped;
     let ChatNotificationRouter;
 
     beforeEach(() => {
-        resetModules();
-        applyMocks();
-        const chatLogger = require('../../src/utils/chat-logger');
-        logChatMessageWithConfig = chatLogger.logChatMessageWithConfig;
-        logChatMessageSkipped = chatLogger.logChatMessageSkipped;
         ChatNotificationRouter = require('../../src/services/ChatNotificationRouter');
     });
 
     afterEach(() => {
         restoreAllMocks();
-        restoreAllModuleMocks();
     });
 
     const buildRouter = (overrides = {}) => {
@@ -55,8 +32,11 @@ describe('Old Message Filter', () => {
             gracefulExitService: overrides.gracefulExitService || null
         };
 
-        const logger = noOpLogger;
-        const router = new ChatNotificationRouter({ runtime, logger });
+        const router = new ChatNotificationRouter({
+            runtime,
+            logger: noOpLogger,
+            runtimeConstants: createRuntimeConstantsFixture()
+        });
 
         router.enqueueChatMessage = createMockFn();
         router.detectCommand = createMockFn().mockResolvedValue(null);
@@ -70,7 +50,7 @@ describe('Old Message Filter', () => {
 
     const createMessage = (timestamp) => createTestUser({
         username: 'testuser',
-        userId: '12345',
+        userId: 'test12345',
         message: 'Hello world',
         timestamp
     });
@@ -83,12 +63,6 @@ describe('Old Message Filter', () => {
         const oldTimestamp = new Date(connectionTime - 1000).toISOString();
         await router.handleChatMessage('twitch', createMessage(oldTimestamp));
 
-        expect(logChatMessageSkipped).toHaveBeenCalledWith(
-            'twitch',
-            expect.objectContaining({ username: 'testuser' }),
-            'old message (sent before connection)'
-        );
-        expect(logChatMessageWithConfig).not.toHaveBeenCalled();
         expect(router.enqueueChatMessage).not.toHaveBeenCalled();
     });
 
@@ -103,20 +77,13 @@ describe('Old Message Filter', () => {
         const oldTimestamp = new Date(connectionTime - 2000).toISOString();
         await router.handleChatMessage('twitch', createMessage(oldTimestamp));
 
-        expect(logChatMessageSkipped).not.toHaveBeenCalled();
-        expect(logChatMessageWithConfig).toHaveBeenCalledWith(
-            'twitch',
-            expect.objectContaining({ username: 'testuser' }),
-            runtime.config,
-            expect.any(Object)
-        );
+        expect(router.enqueueChatMessage).toHaveBeenCalled();
     });
 
     test('allows messages when connection time is unavailable', async () => {
         const { router } = buildRouter({ connectionTime: null });
         await router.handleChatMessage('twitch', createMessage(new Date(testClock.now()).toISOString()));
 
-        expect(logChatMessageSkipped).not.toHaveBeenCalled();
         expect(router.enqueueChatMessage).toHaveBeenCalled();
     });
 

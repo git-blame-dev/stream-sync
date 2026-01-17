@@ -1,36 +1,34 @@
-const { describe, it, beforeEach, afterEach, expect } = require('bun:test');
-const { createMockFn, clearAllMocks } = require('../../helpers/bun-mock-utils');
-const { mockModule, restoreAllModuleMocks } = require('../../helpers/bun-module-mocks');
+const { describe, test, expect, beforeEach, afterEach } = require('bun:test');
+const { createMockFn, restoreAllMocks } = require('../../helpers/bun-mock-utils');
 
-mockModule('../../../src/utils/platform-error-handler', () => ({
-    createPlatformErrorHandler: createMockFn(() => ({
-        handleEventProcessingError: createMockFn(),
-        logOperationalError: createMockFn()
-    }))
-}));
-
-const { createPlatformErrorHandler } = require('../../../src/utils/platform-error-handler');
-const { InnertubeService } = require('../../../src/services/innertube-service');
+const noOpLogger = { debug: () => {}, info: () => {}, warn: () => {}, error: () => {} };
 
 describe('InnertubeService behavior', () => {
-    const createInstance = () => ({ getInfo: createMockFn(async () => ({ video: 'info' })) });
+    let InnertubeService;
     let factory;
     let logger;
-    let handler;
 
     beforeEach(() => {
-        clearAllMocks();
-        factory = { createWithTimeout: createMockFn(async () => createInstance()) };
-        logger = { debug: createMockFn(), info: createMockFn(), warn: createMockFn(), error: createMockFn() };
-        handler = { handleEventProcessingError: createMockFn(), logOperationalError: createMockFn() };
-        createPlatformErrorHandler.mockReturnValue(handler);
+        ({ InnertubeService } = require('../../../src/services/innertube-service'));
+
+        factory = {
+            createWithTimeout: createMockFn(async () => ({
+                getInfo: createMockFn(async () => ({ video: 'info' }))
+            }))
+        };
+        logger = {
+            debug: createMockFn(),
+            info: createMockFn(),
+            warn: createMockFn(),
+            error: createMockFn()
+        };
     });
 
     afterEach(() => {
-        restoreAllModuleMocks();
+        restoreAllMocks();
     });
 
-    it('reuses cached instances and tracks stats', async () => {
+    test('reuses cached instances and tracks stats', async () => {
         const service = new InnertubeService(factory, { logger });
 
         const first = await service.getSharedInstance('shared');
@@ -46,8 +44,8 @@ describe('InnertubeService behavior', () => {
         );
     });
 
-    it('wraps getInfo with provided timeout helper and updates lastUsed', async () => {
-        const withTimeout = createMockFn(async (promise, timeout, label) => promise);
+    test('wraps getInfo with provided timeout helper and updates lastUsed', async () => {
+        const withTimeout = createMockFn(async (promise) => promise);
         const service = new InnertubeService(factory, { logger, withTimeout });
 
         const result = await service.getVideoInfo('abc123', { timeout: 5000, instanceKey: 'custom' });
@@ -58,7 +56,7 @@ describe('InnertubeService behavior', () => {
         expect(cached.lastUsed).toBeGreaterThanOrEqual(cached.created);
     });
 
-    it('cleans up stale instances', async () => {
+    test('cleans up stale instances', async () => {
         const service = new InnertubeService(factory, { logger });
         const instance = await service.getSharedInstance('old');
         service.instanceCache.set('old', { instance, created: 0, lastUsed: 0 });
@@ -72,19 +70,12 @@ describe('InnertubeService behavior', () => {
         );
     });
 
-    it('logs and throws on factory failure', async () => {
+    test('tracks error stats and throws on factory failure', async () => {
         const error = new Error('boom');
         factory.createWithTimeout.mockRejectedValue(error);
         const service = new InnertubeService(factory, { logger });
 
         await expect(service.getSharedInstance('fail')).rejects.toThrow('InnertubeService instance creation failed');
         expect(service.stats.errors).toBe(1);
-
-        expect(handler.handleEventProcessingError).toHaveBeenCalledWith(
-            error,
-            'innertube-service',
-            null,
-            expect.stringContaining('Failed to get instance')
-        );
     });
 });

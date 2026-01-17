@@ -1,55 +1,41 @@
-const { describe, test, expect, afterEach, it } = require('bun:test');
+const { describe, test, expect, beforeEach, afterEach } = require('bun:test');
 const { createMockFn, spyOn, restoreAllMocks } = require('../../helpers/bun-mock-utils');
-const { mockModule, resetModules, restoreAllModuleMocks } = require('../../helpers/bun-module-mocks');
+const { createRuntimeConstantsFixture } = require('../../helpers/runtime-constants-fixture');
+
+const noOpLogger = { debug: () => {}, info: () => {}, warn: () => {}, error: () => {} };
 
 describe('ViewerCountSystem polling with malformed payloads', () => {
-    const originalEnv = process.env.NODE_ENV;
+    let ViewerCountSystem;
+
+    beforeEach(() => {
+        ({ ViewerCountSystem } = require('../../../src/utils/viewer-count'));
+    });
 
     afterEach(() => {
         restoreAllMocks();
-process.env.NODE_ENV = originalEnv;
-    
-        restoreAllModuleMocks();});
+    });
 
-    function createSystemReturning(value, warnSpy = null) {
-        process.env.NODE_ENV = 'test';
-
-        mockModule('../../../src/core/config', () => ({
-            configManager: {
-                getNumber: createMockFn().mockReturnValue(15)
-            }
-        }));
-
-        mockModule('../../../src/utils/timeout-validator', () => ({
-            safeSetInterval: createMockFn(),
-            safeDelay: createMockFn()
-        }));
-
-        const mockLogger = {
-            debug: createMockFn(),
-            info: createMockFn(),
-            warn: warnSpy || createMockFn(),
-            error: createMockFn()
-        };
-
+    function createSystemWithPlatformReturning(value) {
         const platform = {
             getViewerCount: createMockFn().mockResolvedValue(value)
         };
 
-        const { ViewerCountSystem } = require('../../../src/utils/viewer-count');
-        const system = new ViewerCountSystem({ platforms: { youtube: platform }, logger: mockLogger });
+        const system = new ViewerCountSystem({
+            platforms: { youtube: platform },
+            logger: noOpLogger,
+            runtimeConstants: createRuntimeConstantsFixture()
+        });
 
-        // Mark stream live so polling proceeds
         system.streamStatus.youtube = true;
 
         return { system, platform };
     }
 
-    it('warns and preserves previous count when platform returns non-numeric value', async () => {
-        const { system } = createSystemReturning('not-a-number');
+    test('warns and preserves previous count when platform returns non-numeric value', async () => {
+        const { system } = createSystemWithPlatformReturning('not-a-number');
         const warnSpy = spyOn(system.logger, 'warn');
 
-        const observer = { getObserverId: () => 'obs', onViewerCountUpdate: createMockFn() };
+        const observer = { getObserverId: () => 'testObserver1', onViewerCountUpdate: createMockFn() };
         system.addObserver(observer);
 
         await system.pollPlatform('youtube');
@@ -59,11 +45,11 @@ process.env.NODE_ENV = originalEnv;
         expect(observer.onViewerCountUpdate).not.toHaveBeenCalled();
     });
 
-    it('warns and skips update when platform returns object payload without numeric count', async () => {
-        const { system } = createSystemReturning({ count: 'unknown' });
+    test('warns and skips update when platform returns object payload without numeric count', async () => {
+        const { system } = createSystemWithPlatformReturning({ count: 'unknown' });
         const warnSpy = spyOn(system.logger, 'warn');
 
-        const observer = { getObserverId: () => 'obs2', onViewerCountUpdate: createMockFn() };
+        const observer = { getObserverId: () => 'testObserver2', onViewerCountUpdate: createMockFn() };
         system.addObserver(observer);
 
         await system.pollPlatform('youtube');
