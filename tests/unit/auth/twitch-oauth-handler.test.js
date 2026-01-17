@@ -1,43 +1,65 @@
-
 const { describe, test, expect, afterEach } = require('bun:test');
-const { createMockFn, restoreAllMocks } = require('../../helpers/bun-mock-utils');
-const { mockModule, restoreAllModuleMocks } = require('../../helpers/bun-module-mocks');
+const { restoreAllMocks } = require('../../helpers/bun-mock-utils');
 
-mockModule('../../../src/utils/platform-error-handler', () => ({
-    createPlatformErrorHandler: createMockFn(() => ({
-        handleEventProcessingError: createMockFn(),
-        logOperationalError: createMockFn()
-    }))
-}));
-
-const { createPlatformErrorHandler } = require('../../../src/utils/platform-error-handler');
+const noOpLogger = { debug: () => {}, info: () => {}, warn: () => {}, error: () => {} };
 
 describe('TwitchOAuthHandler', () => {
+    let TwitchOAuthHandler;
+
     afterEach(() => {
         restoreAllMocks();
-        restoreAllModuleMocks();
     });
 
-    const { TwitchOAuthHandler } = require('../../../src/auth/oauth-handler');
-
-    test('initializes platform error handler with provided logger', () => {
-        const mockLogger = {
-            info: createMockFn(),
-            warn: createMockFn(),
-            error: createMockFn(),
-            debug: createMockFn()
-        };
+    test('generates auth URL with required OAuth parameters', () => {
+        ({ TwitchOAuthHandler } = require('../../../src/auth/oauth-handler'));
 
         const handler = new TwitchOAuthHandler({
-            clientId: 'client',
-            clientSecret: 'secret',
-            channel: 'hero_stream'
+            clientId: 'testClientId',
+            clientSecret: 'testClientSecret',
+            channel: 'testChannel'
         }, {
-            logger: mockLogger
+            logger: noOpLogger,
+            port: 8080
         });
 
-        expect(handler).toBeDefined();
-        expect(createPlatformErrorHandler).toHaveBeenCalledWith(mockLogger, 'oauth-handler');
-        expect(handler.errorHandler).toBe(createPlatformErrorHandler.mock.results[0].value);
+        const authUrl = handler.generateAuthUrl();
+
+        expect(authUrl).toContain('https://id.twitch.tv/oauth2/authorize');
+        expect(authUrl).toContain('client_id=testClientId');
+        expect(authUrl).toContain('redirect_uri=');
+        expect(authUrl).toContain('response_type=code');
+        expect(authUrl).toContain('scope=');
+        expect(authUrl).toContain('state=');
+    });
+
+    test('constructs handler with provided configuration', () => {
+        ({ TwitchOAuthHandler } = require('../../../src/auth/oauth-handler'));
+
+        const handler = new TwitchOAuthHandler({
+            clientId: 'testClientId',
+            clientSecret: 'testSecret',
+            channel: 'testChannel'
+        }, {
+            logger: noOpLogger,
+            port: 9000
+        });
+
+        expect(handler.config.clientId).toBe('testClientId');
+        expect(handler.port).toBe(9000);
+        expect(handler.redirectUri).toBe('https://localhost:9000');
+    });
+
+    test('uses default port when not specified', () => {
+        ({ TwitchOAuthHandler } = require('../../../src/auth/oauth-handler'));
+
+        const handler = new TwitchOAuthHandler({
+            clientId: 'testClientId',
+            clientSecret: 'testSecret',
+            channel: 'testChannel'
+        }, {
+            logger: noOpLogger
+        });
+
+        expect(handler.port).toBe(3000);
     });
 });
