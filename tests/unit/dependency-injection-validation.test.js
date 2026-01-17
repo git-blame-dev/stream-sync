@@ -1,14 +1,8 @@
-
 const { describe, test, expect, beforeEach, it, afterEach } = require('bun:test');
 const { createMockFn, restoreAllMocks } = require('../helpers/bun-mock-utils');
-const { unmockModule, restoreAllModuleMocks } = require('../helpers/bun-module-mocks');
 
 const { noOpLogger } = require('../helpers/mock-factories');
 const { setupAutomatedCleanup } = require('../helpers/mock-lifecycle');
-
-unmockModule('../../src/platforms/youtube');
-unmockModule('../../src/utils/logger-utils');
-unmockModule('../../src/core/logging');
 
 setupAutomatedCleanup({
     clearCallsBeforeEach: true,
@@ -19,7 +13,6 @@ setupAutomatedCleanup({
 describe('Dependency Injection Validation', () => {
     afterEach(() => {
         restoreAllMocks();
-        restoreAllModuleMocks();
     });
 
     let mockLogger;

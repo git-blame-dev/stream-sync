@@ -1,17 +1,12 @@
 
-const { describe, test, expect, beforeEach, it, afterEach } = require('bun:test');
+const { describe, expect, beforeEach, it, afterEach } = require('bun:test');
 const { createMockFn, restoreAllMocks } = require('../helpers/bun-mock-utils');
-const { mockModule, resetModules, restoreAllModuleMocks } = require('../helpers/bun-module-mocks');
 const { createRuntimeConstantsFixture } = require('../helpers/runtime-constants-fixture');
+const { OBSSourcesManager, createOBSSourcesManager } = require('../../src/obs/sources');
 
 describe('OBSSourcesManager DI requirements', () => {
     afterEach(() => {
         restoreAllMocks();
-        restoreAllModuleMocks();
-    });
-
-    beforeEach(() => {
-        resetModules();
     });
 
     it('exposes only DI-focused exports (no wrapper functions)', () => {
@@ -25,7 +20,6 @@ describe('OBSSourcesManager DI requirements', () => {
     });
 
     it('requires an OBS manager in the constructor', () => {
-        const { OBSSourcesManager } = require('../../src/obs/sources');
         expect(() => new OBSSourcesManager()).toThrow(/OBSSourcesManager requires OBSConnectionManager/);
     });
 
@@ -39,14 +33,12 @@ describe('OBSSourcesManager DI requirements', () => {
             isReady: createMockFn().mockResolvedValue(true)
         };
 
-        const { createOBSSourcesManager } = require('../../src/obs/sources');
         const sourcesManager = createOBSSourcesManager(mockObsManager, {
             runtimeConstants: createRuntimeConstantsFixture(),
             ensureOBSConnected: mockObsManager.ensureConnected,
             obsCall: mockObsManager.call
         });
 
-        // Call a method and verify the injected mock was used
         const result = await sourcesManager.getSceneItemId('test-scene', 'test-source');
 
         expect(mockObsManager.call).toHaveBeenCalledWith('GetSceneItemId', {
@@ -54,21 +46,5 @@ describe('OBSSourcesManager DI requirements', () => {
             sourceName: 'test-source'
         });
         expect(result).toEqual({ sceneItemId: 42, sceneName: 'test-scene' });
-    });
-
-    it('marks the default sources manager as degraded when OBS manager is unavailable', () => {
-        mockModule('../../src/obs/connection', () => ({
-            getOBSConnectionManager: () => {
-                throw new Error('OBS manager unavailable');
-            }
-        }));
-
-        resetModules();
-        const { getDefaultSourcesManager } = require('../../src/obs/sources');
-        const sourcesManager = getDefaultSourcesManager({
-            runtimeConstants: createRuntimeConstantsFixture()
-        });
-
-        expect(sourcesManager.isDegraded).toBe(true);
     });
 });

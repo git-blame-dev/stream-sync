@@ -1,44 +1,24 @@
 
-// Testing Infrastructure (mandatory)
-const { describe, test, expect, beforeEach, afterEach, it } = require('bun:test');
+const { describe, expect, beforeEach, afterEach, it } = require('bun:test');
 const { createMockFn, clearAllMocks, restoreAllMocks } = require('../helpers/bun-mock-utils');
-const { mockModule, restoreAllModuleMocks } = require('../helpers/bun-module-mocks');
 const { useRealTimers } = require('../helpers/bun-timers');
 
 const {
-  initializeTestLogging,
-  createTestUser,
-  TEST_TIMEOUTS,
-  INTERNATIONAL_USERNAMES
+  initializeTestLogging
 } = require('../helpers/test-setup');
 
 const {
-  createMockNotificationDispatcher,
   noOpLogger,
-  createMockYouTubeServices,
   setupAutomatedCleanup
 } = require('../helpers/mock-factories');
 
 const {
   expectNoTechnicalArtifacts,
-  validateUserFacingString,
-  expectValidNotification,
-  expectOnlyMethodCalled,
-  expectValidPlatformBehavior
+  validateUserFacingString
 } = require('../helpers/assertion-helpers');
 
 const testClock = require('../helpers/test-clock');
 
-const MockYouTubeLiveStreamService = {
-  getLiveStreams: createMockFn(),
-  isChannelId: createMockFn()
-};
-
-mockModule('../../src/services/youtube-live-stream-service', () => ({
-  YouTubeLiveStreamService: MockYouTubeLiveStreamService
-}));
-
-// Initialize testing standards
 initializeTestLogging();
 setupAutomatedCleanup({
   clearCallsBeforeEach: true,
@@ -51,18 +31,17 @@ describe('YouTube Resolution Performance - User Experience Validation', () => {
   let mockLogger;
   let userPerformanceMetrics;
   let performanceTiming;
+  let MockYouTubeLiveStreamService;
 
   beforeEach(() => {
     useRealTimers();
     testClock.reset();
 
-    // Initialize deterministic performance timing with larger difference for clearer testing
     performanceTiming = {
-      usernameResolutionTime: 150, // ms
-      channelIdDirectTime: 15      // ms
+      usernameResolutionTime: 150,
+      channelIdDirectTime: 15
     };
 
-    // Initialize user experience performance tracking
     userPerformanceMetrics = {
       operationTimes: [],
       userSatisfactionScores: [],
@@ -70,22 +49,20 @@ describe('YouTube Resolution Performance - User Experience Validation', () => {
       totalOperations: 0
     };
 
-    // Create performance-aware mocks for user experience testing
     mockLogger = noOpLogger;
-    
+
     mockInnertubeClient = {
       getChannel: createMockFn(),
       search: createMockFn()
     };
 
-    // Define exact Channel IDs used in tests
     const testChannelIds = [
       'UC12345678901234567890',
       'UCresponsive123456789',
       'UCaliminated1234567890',
       'UCconsistent1234567890',
       'UCconcurrent0000000000',
-      'UCconcurrent0000000001', 
+      'UCconcurrent0000000001',
       'UCconcurrent0000000002',
       'UCconcurrent0000000003',
       'UCconcurrent0000000004',
@@ -101,41 +78,38 @@ describe('YouTube Resolution Performance - User Experience Validation', () => {
       'UCfeedback1234567890123'
     ];
 
-    // Mock the service to return consistent performance results
-    MockYouTubeLiveStreamService.isChannelId.mockImplementation((handle) => {
-      return testChannelIds.includes(handle);
-    });
+    MockYouTubeLiveStreamService = {
+      isChannelId: createMockFn().mockImplementation((handle) => {
+        return testChannelIds.includes(handle);
+      }),
+      getLiveStreams: createMockFn().mockImplementation(async (client, channelHandle, options = {}) => {
+        const isChannelId = testChannelIds.includes(channelHandle);
+        const responseTime = isChannelId ? performanceTiming.channelIdDirectTime : performanceTiming.usernameResolutionTime;
+        testClock.advance(responseTime);
+        userPerformanceMetrics.operationTimes.push(responseTime);
+        userPerformanceMetrics.totalOperations++;
 
-    MockYouTubeLiveStreamService.getLiveStreams.mockImplementation(async (client, channelHandle, options = {}) => {
-      // Simulate realistic timing based on whether it's a username or Channel ID
-      const isChannelId = testChannelIds.includes(channelHandle);
-      
-      const responseTime = isChannelId ? performanceTiming.channelIdDirectTime : performanceTiming.usernameResolutionTime;
-      testClock.advance(responseTime);
-      userPerformanceMetrics.operationTimes.push(responseTime);
-      userPerformanceMetrics.totalOperations++;
-
-      return {
-        success: true,
-        streams: [{
-          videoId: 'test123',
-          title: 'Test Live Stream',
-          isLive: true,
-          author: 'Test Author'
-        }],
-        count: 1,
-        hasContent: true,
-        responseTimeMs: responseTime
-      };
-    });
+        return {
+          success: true,
+          streams: [{
+            videoId: 'test123',
+            title: 'Test Live Stream',
+            isLive: true,
+            author: 'Test Author'
+          }],
+          count: 1,
+          hasContent: true,
+          responseTimeMs: responseTime
+        };
+      })
+    };
   });
 
   afterEach(() => {
-        restoreAllMocks();
+    restoreAllMocks();
     useRealTimers();
     clearAllMocks();
-  
-        restoreAllModuleMocks();});
+  });
 
   describe('User Response Time Experience Improvements', () => {
     it('should provide faster user experience when using Channel ID directly', async () => {

@@ -1,33 +1,5 @@
-
-// Mock core dependencies before importing modules
 const { describe, test, expect, beforeEach, afterEach, it } = require('bun:test');
 const { createMockFn, restoreAllMocks } = require('../helpers/bun-mock-utils');
-const { mockModule, restoreAllModuleMocks } = require('../helpers/bun-module-mocks');
-
-mockModule('../../src/core/config', () => ({
-    configManager: {
-        getSection: createMockFn().mockImplementation((section) => ({
-            viewerCountEnabled: true,
-            viewerCountSource: `${section}-viewer-count-source`
-        }))
-    },
-    config: { general: { fallbackUsername: 'Unknown User' } }
-}));
-
-const mockTextProcessing = {
-    formatViewerCount: createMockFn().mockImplementation(count => {
-        if (count >= 1000000) return `${Math.floor(count / 1000000)}M`;
-        if (count >= 1000) return `${Math.floor(count / 1000)}K`;
-        return count.toString();
-    })
-};
-
-mockModule('../../src/utils/text-processing', () => ({
-    createTextProcessingManager: createMockFn(() => mockTextProcessing),
-    TextProcessingManager: createMockFn(),
-    formatTimestampCompact: createMockFn()
-}));
-
 const { ViewerCountObserver } = require('../../src/observers/viewer-count-observer');
 const { OBSViewerCountObserver } = require('../../src/observers/obs-viewer-count-observer');
 const { ViewerCountExtractionService } = require('../../src/services/viewer-count-extraction-service');
@@ -78,7 +50,6 @@ describe('Viewer Count & OBS Observer Performance Tests', () => {
 
     afterEach(() => {
         restoreAllMocks();
-        restoreAllModuleMocks();
         // Report performance metrics if operations occurred
         const endTime = testClock.now();
         const totalTime = Math.max(1, endTime - performanceMetrics.startTime);
