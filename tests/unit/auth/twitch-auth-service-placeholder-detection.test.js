@@ -3,10 +3,8 @@ const { initializeTestLogging } = require('../../helpers/test-setup');
 const { noOpLogger } = require('../../helpers/mock-factories');
 const { setupAutomatedCleanup } = require('../../helpers/mock-lifecycle');
 
-// Initialize logging FIRST
 initializeTestLogging();
 
-// Setup automated cleanup
 setupAutomatedCleanup({
     clearCallsBeforeEach: true,
     validateAfterCleanup: true,
@@ -44,7 +42,6 @@ describe('TwitchAuthService Placeholder Token Detection', () => {
 
                 authService = new TwitchAuthService(config, { logger: mockLogger });
 
-                // This should FAIL initially - placeholder tokens should NOT be considered authenticated
                 expect(authService.isAuthenticated()).toBe(false);
             });
 
@@ -58,7 +55,6 @@ describe('TwitchAuthService Placeholder Token Detection', () => {
                 authService = new TwitchAuthService(config, { logger: mockLogger });
                 const validation = authService.validateCredentials();
 
-                // This should FAIL initially - placeholder tokens should trigger OAuth
                 expect(validation.hasToken).toBe(false);
                 expect(validation.issues).toContain('accessToken is missing or invalid');
             });
@@ -68,9 +64,9 @@ describe('TwitchAuthService Placeholder Token Detection', () => {
     describe('when real tokens are provided', () => {
         it('should accept valid-looking real tokens', () => {
             const realTokens = [
-                'abcdef1234567890abcdef1234567890',  // 32 chars
-                'oauth:abcdef1234567890abcdef1234567890',  // with oauth: prefix
-                'Bearer abcdef1234567890abcdef1234567890'  // with Bearer prefix
+                'abcdef1234567890abcdef1234567890',
+                'oauth:abcdef1234567890abcdef1234567890',
+                'Bearer abcdef1234567890abcdef1234567890'
             ];
 
             realTokens.forEach(token => {

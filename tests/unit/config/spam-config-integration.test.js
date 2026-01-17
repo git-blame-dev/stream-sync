@@ -45,10 +45,9 @@ describe('Spam Configuration Integration', () => {
         it('should be compatible with NotificationManager spam detection initialization', () => {
             const spamConfig = config.spam;
 
-            // These are the properties that NotificationManager expects
             const expectedProperties = [
                 'lowValueThreshold',
-                'spamDetectionEnabled', 
+                'spamDetectionEnabled',
                 'spamDetectionWindow',
                 'maxIndividualNotifications'
             ];
@@ -60,13 +59,10 @@ describe('Spam Configuration Integration', () => {
         });
 
         it('should be accessible via this.app.config.spam pattern', () => {
-            // Simulate the NotificationManager access pattern
             const mockApp = { config };
-            
+
             expect(mockApp.config).toBeDefined();
             expect(mockApp.config.spam).toBeDefined();
-            
-            // This is exactly how NotificationManager checks for spam config
             expect(mockApp.config && mockApp.config.spam).toBeTruthy();
         });
     });
@@ -75,7 +71,6 @@ describe('Spam Configuration Integration', () => {
         it('should expose the canonical gift configuration properties', () => {
             const giftConfig = config.gifts;
 
-            // Verify the canonical gift properties exist
             expect(giftConfig.command).toBeDefined();
             expect(giftConfig.giftVideoSource).toBeDefined();
             expect(giftConfig.giftAudioSource).toBeDefined();
@@ -87,9 +82,8 @@ describe('Spam Configuration Integration', () => {
         });
 
         it('should not break any existing functionality', () => {
-            // Test that we can still access gifts configuration normally
             const giftConfig = config.gifts;
-            
+
             expect(typeof giftConfig.lowValueThreshold).toBe('number');
             expect(typeof giftConfig.spamDetectionEnabled).toBe('boolean');
             expect(typeof giftConfig.spamDetectionWindow).toBe('number');
@@ -99,14 +93,12 @@ describe('Spam Configuration Integration', () => {
 
     describe('configuration values', () => {
         it('should reflect changes in config.ini settings', () => {
-            // Ensure the configuration reads from the [gifts] section in config.ini
             const spamConfig = config.spam;
-            
-            // Based on the current config.ini values
-            expect(spamConfig.lowValueThreshold).toBe(9);  // lowValueThreshold = 9
-            expect(spamConfig.spamDetectionEnabled).toBe(true);  // spamDetectionEnabled = true  
-            expect(spamConfig.spamDetectionWindow).toBe(5);  // spamDetectionWindow = 5
-            expect(spamConfig.maxIndividualNotifications).toBe(1);  // maxIndividualNotifications = 1
+
+            expect(spamConfig.lowValueThreshold).toBe(9);
+            expect(spamConfig.spamDetectionEnabled).toBe(true);
+            expect(spamConfig.spamDetectionWindow).toBe(5);
+            expect(spamConfig.maxIndividualNotifications).toBe(1);
         });
     });
 });

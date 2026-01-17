@@ -1,19 +1,12 @@
 
 const { describe, test, expect, beforeEach, it, afterEach } = require('bun:test');
 const { createMockFn, clearAllMocks, restoreAllMocks } = require('../../helpers/bun-mock-utils');
+const { noOpLogger } = require('../../helpers/mock-factories');
 
 const { config } = require('../../../src/core/config');
 const NotificationManager = require('../../../src/notifications/NotificationManager');
 const { createTextProcessingManager } = require('../../../src/utils/text-processing');
 
-const mockLogger = {
-    debug: createMockFn(),
-    info: createMockFn(),
-    warn: createMockFn(),
-    error: createMockFn()
-};
-
-// Mock constants with required PRIORITY_LEVELS
 const mockConstants = {
     PRIORITY_LEVELS: {
         CHAT: 1,
@@ -79,12 +72,11 @@ describe('Spam Detection Service Integration Tests - Modernized', () => {
 
     describe('when spam detection service is provided', () => {
         beforeEach(() => {
-            // Create NotificationManager with spam detector dependency
             const mockEventBus = { emit: createMockFn(), on: createMockFn(), off: createMockFn() };
-            const textProcessing = createTextProcessingManager({ logger: mockLogger });
+            const textProcessing = createTextProcessingManager({ logger: noOpLogger });
             notificationManager = new NotificationManager({
                 displayQueue: mockDisplayQueue,
-                logger: mockLogger,
+                logger: noOpLogger,
                 eventBus: mockEventBus,
                 constants: mockConstants,
                 configService,
@@ -100,7 +92,6 @@ describe('Spam Detection Service Integration Tests - Modernized', () => {
         });
 
         it('should use spam detector to filter gift notifications', async () => {
-            // BEHAVIOR: Spam detector processes each gift notification
             const giftData = {
                 userId: 'user123',
                 username: 'TestUser',
@@ -112,7 +103,6 @@ describe('Spam Detection Service Integration Tests - Modernized', () => {
 
             await notificationManager.handleNotification('platform:gift', 'tiktok', giftData);
 
-            // Should delegate to spam detector
             expect(mockSpamDetector.handleDonationSpam).toHaveBeenCalledWith(
                 'user123',
                 'TestUser',
@@ -124,7 +114,6 @@ describe('Spam Detection Service Integration Tests - Modernized', () => {
         });
 
         it('should display gift when spam detector approves', async () => {
-            // BEHAVIOR: Approved gifts added to display queue
             mockSpamDetector.handleDonationSpam.mockReturnValue({ shouldShow: true });
 
             const giftData = {
@@ -138,12 +127,10 @@ describe('Spam Detection Service Integration Tests - Modernized', () => {
 
             await notificationManager.handleNotification('platform:gift', 'tiktok', giftData);
 
-            // Should add to display queue
             expect(mockDisplayQueue.addItem).toHaveBeenCalled();
         });
 
         it('should suppress gift when spam detector rejects', async () => {
-            // BEHAVIOR: Spam gifts blocked from display queue
             mockSpamDetector.handleDonationSpam.mockReturnValue({ shouldShow: false });
 
             const giftData = {
@@ -157,7 +144,6 @@ describe('Spam Detection Service Integration Tests - Modernized', () => {
 
             const result = await notificationManager.handleNotificationInternal('platform:gift', 'tiktok', giftData, false);
 
-            // Should suppress and NOT add to display queue
             expect(result.suppressed).toBe(true);
             expect(result.reason).toBe('spam_detection');
             expect(mockDisplayQueue.addItem).not.toHaveBeenCalled();
@@ -166,18 +152,16 @@ describe('Spam Detection Service Integration Tests - Modernized', () => {
 
     describe('when spam detection service is not provided', () => {
         beforeEach(() => {
-            // Create NotificationManager WITHOUT spam detector
             const mockEventBus = { emit: createMockFn(), on: createMockFn(), off: createMockFn() };
             notificationManager = new NotificationManager({
                 displayQueue: mockDisplayQueue,
-                logger: mockLogger,
+                logger: noOpLogger,
                 eventBus: mockEventBus,
                 constants: mockConstants,
                 configService,
-                textProcessing: createTextProcessingManager({ logger: mockLogger }),
+                textProcessing: createTextProcessingManager({ logger: noOpLogger }),
                 obsGoals: { processDonationGoal: createMockFn() },
                 vfxCommandService: { getVFXConfig: createMockFn().mockResolvedValue(null) }
-                // donationSpamDetector: NOT PROVIDED
             });
         });
 
@@ -186,7 +170,6 @@ describe('Spam Detection Service Integration Tests - Modernized', () => {
         });
 
         it('should process gifts without spam detection', async () => {
-            // BEHAVIOR: Gifts processed normally when spam detection not enabled
             const giftData = {
                 userId: 'user123',
                 username: 'TestUser',
@@ -198,12 +181,10 @@ describe('Spam Detection Service Integration Tests - Modernized', () => {
 
             await notificationManager.handleNotification('platform:gift', 'tiktok', giftData);
 
-            // Should add directly to display queue (no filtering)
             expect(mockDisplayQueue.addItem).toHaveBeenCalled();
         });
 
         it('should handle rapid gifts without spam protection', async () => {
-            // BEHAVIOR: Without spam detector, all gifts are displayed
             const rapidGifts = [
                 { userId: 'user1', username: 'User1', giftType: 'Rose', giftCount: 1, amount: 1, currency: 'coins' },
                 { userId: 'user1', username: 'User1', giftType: 'Rose', giftCount: 1, amount: 1, currency: 'coins' },
@@ -214,14 +195,12 @@ describe('Spam Detection Service Integration Tests - Modernized', () => {
                 await notificationManager.handleNotification('platform:gift', 'tiktok', gift);
             }
 
-            // All gifts should be added (no spam protection)
             expect(mockDisplayQueue.addItem).toHaveBeenCalledTimes(3);
         });
     });
 
     describe('when verifying spam configuration availability', () => {
         it('should have spam configuration accessible from config module', () => {
-            // BEHAVIOR: Configuration provides spam settings for service creation
             expect(config.spam).toBeDefined();
             expect(config.spam.spamDetectionEnabled).toBeDefined();
             expect(config.spam.lowValueThreshold).toBeDefined();
@@ -230,10 +209,8 @@ describe('Spam Detection Service Integration Tests - Modernized', () => {
         });
 
         it('should use the correct spam configuration values from config.ini', () => {
-            // BEHAVIOR: Configuration loads expected values from config file
             const spamConfig = config.spam;
 
-            // These should match the values from config.ini [gifts] section
             expect(spamConfig.lowValueThreshold).toBe(9);
             expect(spamConfig.spamDetectionEnabled).toBe(true);
             expect(spamConfig.spamDetectionWindow).toBe(5);
@@ -246,19 +223,18 @@ describe('Spam Detection Service Integration Tests - Modernized', () => {
             const mockEventBus = { emit: createMockFn(), on: createMockFn(), off: createMockFn() };
             notificationManager = new NotificationManager({
                 displayQueue: mockDisplayQueue,
-                logger: mockLogger,
+                logger: noOpLogger,
                 eventBus: mockEventBus,
                 constants: mockConstants,
                 configService,
                 donationSpamDetector: mockSpamDetector,
-                textProcessing: createTextProcessingManager({ logger: mockLogger }),
+                textProcessing: createTextProcessingManager({ logger: noOpLogger }),
                 obsGoals: { processDonationGoal: createMockFn() },
                 vfxCommandService: { getVFXConfig: createMockFn().mockResolvedValue(null) }
             });
         });
 
         it('should skip spam detection for aggregated donations', async () => {
-            // BEHAVIOR: Aggregated gifts bypass spam filtering
             const aggregatedGift = {
                 userId: 'user123',
                 username: 'TestUser',
@@ -271,15 +247,11 @@ describe('Spam Detection Service Integration Tests - Modernized', () => {
 
             await notificationManager.handleNotification('platform:gift', 'tiktok', aggregatedGift);
 
-            // Should NOT call spam detector for aggregated gifts
             expect(mockSpamDetector.handleDonationSpam).not.toHaveBeenCalled();
-
-            // Should add directly to display queue
             expect(mockDisplayQueue.addItem).toHaveBeenCalled();
         });
 
         it('should handle spam detector errors gracefully', async () => {
-            // BEHAVIOR: Spam detector errors don't block gift display
             mockSpamDetector.handleDonationSpam.mockImplementation(() => {
                 throw new Error('Spam detector error');
             });
@@ -293,38 +265,33 @@ describe('Spam Detection Service Integration Tests - Modernized', () => {
                 currency: 'coins'
             };
 
-            // Should not throw
             await expect(
                 notificationManager.handleNotification('platform:gift', 'tiktok', giftData)
             ).resolves.toBeDefined();
 
-            // Gift should still be processed (graceful degradation)
             expect(mockDisplayQueue.addItem).toHaveBeenCalled();
         });
     });
 
     describe('when verifying service injection pattern', () => {
         it('should accept spam detector via constructor dependency injection', () => {
-            // BEHAVIOR: Constructor accepts spam detector as optional dependency
             const mockEventBus = { emit: createMockFn(), on: createMockFn(), off: createMockFn() };
             const nm = new NotificationManager({
                 displayQueue: mockDisplayQueue,
-                logger: mockLogger,
+                logger: noOpLogger,
                 eventBus: mockEventBus,
                 constants: mockConstants,
                 configService,
                 donationSpamDetector: mockSpamDetector,
-                textProcessing: createTextProcessingManager({ logger: mockLogger }),
+                textProcessing: createTextProcessingManager({ logger: noOpLogger }),
                 obsGoals: { processDonationGoal: createMockFn() },
                 vfxCommandService: { getVFXConfig: createMockFn().mockResolvedValue(null) }
             });
 
-            // Should store the injected dependency
             expect(nm.donationSpamDetector).toBe(mockSpamDetector);
         });
 
         it('should handle missing spam detector gracefully', () => {
-            // BEHAVIOR: Spam detector is optional, system works without it
             const localLogger = {
                 debug: createMockFn(),
                 info: createMockFn(),
@@ -339,16 +306,13 @@ describe('Spam Detection Service Integration Tests - Modernized', () => {
                 eventBus: mockEventBus,
                 constants: mockConstants,
                 configService,
-                textProcessing: createTextProcessingManager({ logger: mockLogger }),
+                textProcessing: createTextProcessingManager({ logger: noOpLogger }),
                 obsGoals: { processDonationGoal: createMockFn() },
                 vfxCommandService: { getVFXConfig: createMockFn().mockResolvedValue(null) }
-                // donationSpamDetector: NOT PROVIDED
             });
 
-            // Should be undefined (optional dependency)
             expect(nm.donationSpamDetector).toBeUndefined();
 
-            // Should warn about missing EventBus/ConfigService but NOT about spam
             const spamWarnings = localLogger.warn.mock.calls.filter(call =>
                 call[0] && call[0].toLowerCase().includes('spam')
             );
