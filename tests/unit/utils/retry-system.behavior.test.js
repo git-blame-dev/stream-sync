@@ -1,8 +1,7 @@
-const { describe, test, expect, beforeEach, it, afterEach } = require('bun:test');
+const { describe, expect, beforeEach, it, afterEach } = require('bun:test');
 const { createMockFn, spyOn, restoreAllMocks } = require('../../helpers/bun-mock-utils');
 const { resetModules } = require('../../helpers/bun-module-mocks');
-
-const noOpLogger = { debug: () => {}, info: () => {}, warn: () => {}, error: () => {} };
+const { noOpLogger } = require('../../helpers/mock-factories');
 
 let safeSetTimeoutSpy;
 let safeDelaySpy;

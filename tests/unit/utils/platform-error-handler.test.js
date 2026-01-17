@@ -1,7 +1,6 @@
 const { describe, test, expect, beforeEach } = require('bun:test');
+const { noOpLogger } = require('../../helpers/mock-factories');
 const { PlatformErrorHandler, createPlatformErrorHandler } = require('../../../src/utils/platform-error-handler');
-
-const noOpLogger = { debug: () => {}, info: () => {}, warn: () => {}, error: () => {} };
 
 describe('Platform Error Handler - User Experience Behavior', () => {
     let errorHandler;

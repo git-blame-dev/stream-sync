@@ -1,17 +1,11 @@
-const { describe, expect, beforeEach, it } = require('bun:test');
+const { describe, expect, it } = require('bun:test');
 const { createMockFn, spyOn } = require('../../helpers/bun-mock-utils');
 const { noOpLogger } = require('../../helpers/mock-factories');
 const { GlobalCommandCooldownManager } = require('../../../src/utils/global-command-cooldown');
 
 describe('GlobalCommandCooldownManager behavior', () => {
-    let mockLogger;
-
-    beforeEach(() => {
-        mockLogger = noOpLogger;
-    });
-
     it('allows execution on invalid inputs and tracks checks without blocks', () => {
-        const manager = new GlobalCommandCooldownManager(mockLogger);
+        const manager = new GlobalCommandCooldownManager(noOpLogger);
 
         const allowed = manager.isCommandOnCooldown('', 0);
 
@@ -21,7 +15,7 @@ describe('GlobalCommandCooldownManager behavior', () => {
     });
 
     it('blocks commands still within cooldown window and reports remaining time', () => {
-        const manager = new GlobalCommandCooldownManager(mockLogger);
+        const manager = new GlobalCommandCooldownManager(noOpLogger);
         const nowSpy = spyOn(Date, 'now');
 
         nowSpy.mockReturnValueOnce(1000);
@@ -39,7 +33,7 @@ describe('GlobalCommandCooldownManager behavior', () => {
     });
 
     it('allows commands after cooldown window has expired', () => {
-        const manager = new GlobalCommandCooldownManager(mockLogger);
+        const manager = new GlobalCommandCooldownManager(noOpLogger);
         const nowSpy = spyOn(Date, 'now');
 
         nowSpy.mockReturnValueOnce(1000);
@@ -53,7 +47,7 @@ describe('GlobalCommandCooldownManager behavior', () => {
     });
 
     it('clears expired cooldowns and reports removal count', () => {
-        const manager = new GlobalCommandCooldownManager(mockLogger);
+        const manager = new GlobalCommandCooldownManager(noOpLogger);
         const nowSpy = spyOn(Date, 'now');
 
         nowSpy.mockReturnValue(0);

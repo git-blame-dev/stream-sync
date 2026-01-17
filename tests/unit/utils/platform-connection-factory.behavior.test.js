@@ -1,8 +1,8 @@
-const { describe, test, expect, beforeEach } = require('bun:test');
+const { describe, test, expect } = require('bun:test');
+const { noOpLogger } = require('../../helpers/mock-factories');
 const { PlatformConnectionFactory } = require('../../../src/utils/platform-connection-factory');
 
 describe('platform-connection-factory behavior', () => {
-    const noOpLogger = { debug: () => {}, info: () => {}, warn: () => {}, error: () => {} };
 
     const createLogCollector = () => {
         const entries = [];
