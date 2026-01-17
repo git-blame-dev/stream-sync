@@ -1,6 +1,6 @@
-
 const { describe, test, expect, afterEach, it } = require('bun:test');
-const { createMockFn, restoreAllMocks } = require('../../helpers/bun-mock-utils');
+const { restoreAllMocks } = require('../../helpers/bun-mock-utils');
+const { noOpLogger } = require('../../helpers/mock-factories');
 const { useFakeTimers, useRealTimers, advanceTimersByTime } = require('../../helpers/bun-timers');
 
 const {
@@ -9,12 +9,6 @@ const {
 } = require('../../../src/utils/spam-detection');
 
 describe('SpamDetection behavior', () => {
-    const logger = {
-        debug: createMockFn(),
-        info: createMockFn(),
-        warn: createMockFn(),
-        error: createMockFn()
-    };
     let detection;
 
     afterEach(() => {
@@ -31,7 +25,7 @@ describe('SpamDetection behavior', () => {
             spamDetectionEnabled: false,
             platforms: { tiktok: { spamDetectionEnabled: false } }
         });
-        detection = createDonationSpamDetection(config, { logger, autoCleanup: false });
+        detection = createDonationSpamDetection(config, { logger: noOpLogger, autoCleanup: false });
 
         const result = detection.handleDonationSpam('u', 'User', 1, 'Rose', 1, 'tiktok');
         expect(result.shouldShow).toBe(true);
@@ -59,7 +53,7 @@ describe('SpamDetection behavior', () => {
             maxIndividualNotifications: 1,
             lowValueThreshold: 10
         });
-        detection = createDonationSpamDetection(config, { logger, autoCleanup: false });
+        detection = createDonationSpamDetection(config, { logger: noOpLogger, autoCleanup: false });
 
         expect(detection.handleDonationSpam('u', 'User', 1, 'Rose', 1, 'tiktok').shouldShow).toBe(true);
         expect(detection.handleDonationSpam('u', 'User', 1, 'Rose', 1, 'tiktok').shouldShow).toBe(false);
@@ -74,7 +68,7 @@ describe('SpamDetection behavior', () => {
             lowValueThreshold: 5,
             maxIndividualNotifications: 1
         });
-        detection = createDonationSpamDetection(config, { logger, autoCleanup: false });
+        detection = createDonationSpamDetection(config, { logger: noOpLogger, autoCleanup: false });
 
         const result = detection.handleDonationSpam('u', 'User', 20, 'Lion', 1, 'tiktok');
         expect(result.shouldShow).toBe(true);
@@ -86,7 +80,7 @@ describe('SpamDetection behavior', () => {
             maxIndividualNotifications: 1,
             platforms: { youtube: { spamDetectionEnabled: false }, tiktok: { maxIndividualNotifications: 1 } }
         });
-        detection = createDonationSpamDetection(config, { logger, autoCleanup: false });
+        detection = createDonationSpamDetection(config, { logger: noOpLogger, autoCleanup: false });
 
         const ytResult = detection.handleDonationSpam('yt', 'YTUser', 1, 'Rose', 1, 'youtube');
         const tkFirst = detection.handleDonationSpam('tk', 'TKUser', 1, 'Rose', 1, 'tiktok');

@@ -12,10 +12,8 @@ const {
 } = require('../../../src/utils/spam-detection');
 const testClock = require('../../helpers/test-clock');
 
-// Initialize logging FIRST
 initializeTestLogging();
 
-// Setup automated cleanup
 setupAutomatedCleanup({
     clearCallsBeforeEach: true,
     validateAfterCleanup: true,
@@ -28,7 +26,6 @@ describe('Spam Detection', () => {
     let config;
 
     beforeEach(() => {
-        // Create mocks using factory functions
         mockLogger = noOpLogger;
         spyOn(Date, 'now').mockImplementation(() => testClock.now());
         mockConstants = {
@@ -66,9 +63,7 @@ describe('Spam Detection', () => {
                 }
             }
         };
-        
-        // Require the spam detection module first
-        // Create configuration using SpamDetectionConfig class
+
         config = new SpamDetectionConfig(configObj, { logger: mockLogger, constants: mockConstants });
     });
 
@@ -109,7 +104,6 @@ describe('Spam Detection', () => {
         });
 
         it('should initialize platform-specific configurations', () => {
-            // Use the already created config instance from beforeEach
             expect(config.platformConfigs.tiktok.enabled).toBe(true);
             expect(config.platformConfigs.tiktok.lowValueThreshold).toBe(5);
             expect(config.platformConfigs.youtube.enabled).toBe(false);
@@ -127,7 +121,6 @@ describe('Spam Detection', () => {
                 constants: mockConstants
             });
 
-            // Should use default values for invalid inputs
             expect(spamConfig.lowValueThreshold).toBe(10);
             expect(spamConfig.spamDetectionWindow).toBe(5);
             expect(spamConfig.maxIndividualNotifications).toBe(2);
@@ -151,11 +144,11 @@ describe('Spam Detection', () => {
 
             expect(spamConfig.spamDetectionEnabled).toBe(false);
             expect(spamConfig.lowValueThreshold).toBe(20);
-            expect(spamConfig.spamDetectionWindow).toBe(5); // fallback due to invalid
+            expect(spamConfig.spamDetectionWindow).toBe(5);
             expect(spamConfig.platformConfigs.tiktok.enabled).toBe(false);
             expect(spamConfig.platformConfigs.tiktok.lowValueThreshold).toBe(5);
             expect(spamConfig.platformConfigs.youtube.enabled).toBe(true);
-            expect(spamConfig.platformConfigs.youtube.lowValueThreshold).toBe(1.00); // fallback to default USD threshold
+            expect(spamConfig.platformConfigs.youtube.lowValueThreshold).toBe(1.00);
         });
     });
 
@@ -178,16 +171,12 @@ describe('Spam Detection', () => {
                 constants: mockConstants
             });
 
-            // TikTok has lower threshold (5)
             expect(detection.isLowValueDonation(3, 'tiktok')).toBe(true);
             expect(detection.isLowValueDonation(7, 'tiktok')).toBe(false);
 
-            // Twitch has higher threshold (10)
             expect(detection.isLowValueDonation(8, 'twitch')).toBe(true);
             expect(detection.isLowValueDonation(12, 'twitch')).toBe(false);
 
-            // YouTube has USD threshold (1.00) but is disabled by default
-            // When disabled, isLowValueDonation should return false (spam detection inactive)
             expect(detection.isLowValueDonation(0.50, 'youtube')).toBe(false);
             expect(detection.isLowValueDonation(1.50, 'youtube')).toBe(false);
         });
@@ -220,7 +209,7 @@ describe('Spam Detection', () => {
             detection = createDonationSpamDetection(config, {
                 logger: mockLogger,
                 constants: mockConstants,
-                autoCleanup: false // Disable automatic periodic cleanup for tests
+                autoCleanup: false
             });
         });
 
@@ -235,13 +224,11 @@ describe('Spam Detection', () => {
 
             expect(result.shouldShow).toBe(true);
             expect(result.aggregatedMessage).toBeNull();
-                    });
+        });
 
         it('should aggregate multiple low-value donations from same user', () => {
-            // First donation
             detection.handleDonationSpam('user1', 'User1', 5, 'Rose', 1, 'tiktok');
-            
-            // Second donation within window
+
             const result = detection.handleDonationSpam('user1', 'User1', 3, 'Rose', 1, 'tiktok');
 
             expect(result.shouldShow).toBe(false);
@@ -249,26 +236,20 @@ describe('Spam Detection', () => {
         });
 
         it('should reset tracking after time window expires', () => {
-            // First donation
             detection.handleDonationSpam('user1', 'User1', 5, 'Rose', 1, 'tiktok');
-            
-            // Fast-forward time beyond window
-            testClock.advance(11000); // 11 seconds later
 
-            // Second donation after window
+            testClock.advance(11000);
+
             const result = detection.handleDonationSpam('user1', 'User1', 5, 'Rose', 1, 'tiktok');
 
             expect(result.shouldShow).toBe(true);
             expect(result.aggregatedMessage).toBeNull();
-
         });
 
         it('should keep recent entries', () => {
-            // Add donations
             detection.handleDonationSpam('user1', 'User1', 5, 'Rose', 1, 'tiktok');
             detection.handleDonationSpam('user2', 'User2', 8, 'bits', 1, 'twitch');
 
-            // Clean up immediately (should keep recent entries)
             detection.cleanupSpamDetection();
 
             const stats = detection.getStatistics();
@@ -276,7 +257,6 @@ describe('Spam Detection', () => {
         });
 
         it('should handle cleanup with no entries', () => {
-            // Ensure we start with clean state
             detection.cleanupSpamDetection();
 
             const stats = detection.getStatistics();
@@ -299,10 +279,9 @@ describe('Spam Detection', () => {
         });
 
         it('should return accurate statistics', () => {
-            // Add some test data
             detection.handleDonationSpam('user1', 'User1', 5, 'Rose', 1, 'tiktok');
             detection.handleDonationSpam('user2', 'User2', 8, 'bits', 1, 'twitch');
-            detection.handleDonationSpam('user1', 'User1', 3, 'Rose', 1, 'tiktok'); // Spam
+            detection.handleDonationSpam('user1', 'User1', 3, 'Rose', 1, 'tiktok');
 
             const stats = detection.getStatistics();
 
@@ -327,7 +306,7 @@ describe('Spam Detection', () => {
             detection = createDonationSpamDetection(config, {
                 logger: mockLogger,
                 constants: mockConstants,
-                autoCleanup: false // Disable automatic periodic cleanup for tests
+                autoCleanup: false
             });
         });
 
@@ -338,11 +317,9 @@ describe('Spam Detection', () => {
         });
 
         it('should reset all tracking data', () => {
-            // Add some test data
             detection.handleDonationSpam('user1', 'User1', 5, 'Rose', 1, 'tiktok');
             detection.handleDonationSpam('user2', 'User2', 8, 'bits', 1, 'twitch');
 
-            // Reset tracking
             detection.resetTracking();
 
             const stats = detection.getStatistics();
@@ -368,7 +345,7 @@ describe('Spam Detection', () => {
             detection = createDonationSpamDetection(config, {
                 logger: mockLogger,
                 constants: mockConstants,
-                autoCleanup: false // Disable automatic periodic cleanup for tests
+                autoCleanup: false
             });
         });
 
@@ -402,7 +379,6 @@ describe('Spam Detection', () => {
         it('should handle disabled platforms', () => {
             const result = detection.handleDonationSpam('user1', 'User1', 5, 'Rose', 1, 'youtube');
 
-            // YouTube spam detection is disabled by default
             expect(result.shouldShow).toBe(true);
             expect(result.aggregatedMessage).toBeNull();
         });
@@ -415,7 +391,7 @@ describe('Spam Detection', () => {
             detection = createDonationSpamDetection(config, {
                 logger: mockLogger,
                 constants: mockConstants,
-                autoCleanup: false // Disable automatic periodic cleanup for tests
+                autoCleanup: false
             });
         });
 
@@ -428,10 +404,8 @@ describe('Spam Detection', () => {
         it('should cleanup periodically', () => {
             detection.setupPeriodicCleanup();
 
-            // Add some test data
             detection.handleDonationSpam('user1', 'User1', 5, 'Rose', 1, 'tiktok');
 
-            // Cleanup should be scheduled
             expect(detection.cleanupInterval).toBeDefined();
         });
     });
@@ -443,7 +417,7 @@ describe('Spam Detection', () => {
             detection = createDonationSpamDetection(config, {
                 logger: mockLogger,
                 constants: mockConstants,
-                autoCleanup: false // Disable automatic periodic cleanup for tests
+                autoCleanup: false
             });
         });
 
@@ -466,7 +440,7 @@ describe('Spam Detection', () => {
 
         it('should handle multiple destroy calls', () => {
             detection.destroy();
-            detection.destroy(); // Should not throw error
+            detection.destroy();
 
             expect(detection.cleanupInterval).toBeNull();
         });

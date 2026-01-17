@@ -6,7 +6,6 @@ const { TEST_TIMEOUTS } = require('../../helpers/test-setup');
 
 const { setupAutomatedCleanup } = require('../../helpers/mock-lifecycle');
 
-// Setup automated cleanup
 setupAutomatedCleanup({
     clearCallsBeforeEach: true,
     logPerformanceMetrics: true
@@ -98,7 +97,6 @@ describe('Template Interpolation Validation', () => {
 
             const result = createNotificationData('platform:gift', 'twitch', userData, eventData);
 
-            // The key test: verify the interpolation data was populated correctly
             expect(result.displayMessage).not.toContain('{formattedGiftCountForDisplay}');
             expect(result.displayMessage).toContain('testuser');
             expect(result.displayMessage).toMatch(/(bits|100)/i);
@@ -115,11 +113,9 @@ describe('Template Interpolation Validation', () => {
 
             const result = createNotificationData('platform:gift', 'twitch', userData, eventData);
 
-            // Verify no template variables remain
             expect(result.displayMessage).not.toMatch(/\{.*\}/);
             expect(result.ttsMessage).not.toMatch(/\{.*\}/);
-            
-            // Verify actual content
+
             expect(result.displayMessage).toContain('testuser');
             expect(result.displayMessage).toMatch(/(bits|250)/i);
         }, TEST_TIMEOUTS.FAST);
