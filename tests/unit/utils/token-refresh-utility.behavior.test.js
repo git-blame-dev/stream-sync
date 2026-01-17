@@ -1,34 +1,10 @@
-
-const { describe, test, expect, beforeEach, it, afterEach } = require('bun:test');
-const { createMockFn, clearAllMocks, restoreAllMocks } = require('../../helpers/bun-mock-utils');
-const { mockModule, restoreAllModuleMocks } = require('../../helpers/bun-module-mocks');
-
-mockModule('../../../src/utils/platform-error-handler', () => ({
-    createPlatformErrorHandler: createMockFn(() => ({
-        handleEventProcessingError: createMockFn(),
-        logOperationalError: createMockFn()
-    }))
-}));
-
-const { createPlatformErrorHandler } = require('../../../src/utils/platform-error-handler');
+const { describe, test, expect, beforeEach, it } = require('bun:test');
+const { createMockFn } = require('../../helpers/bun-mock-utils');
 const TokenRefreshUtility = require('../../../src/utils/token-refresh-utility');
 
+const noOpLogger = { debug: () => {}, info: () => {}, warn: () => {}, error: () => {} };
+
 describe('TokenRefreshUtility', () => {
-    afterEach(() => {
-        restoreAllMocks();
-        restoreAllModuleMocks();
-    });
-
-    const logger = {
-        debug: createMockFn(),
-        info: createMockFn(),
-        warn: createMockFn(),
-        error: createMockFn()
-    };
-
-    beforeEach(() => {
-        });
-
     describe('executeTokenRefresh', () => {
         it('returns success with tokens using enhanced client', async () => {
             const enhancedHttpClient = {
@@ -36,7 +12,7 @@ describe('TokenRefreshUtility', () => {
                     data: { access_token: 'new', refresh_token: 'new-refresh', expires_in: 3600 }
                 })
             };
-            const util = new TokenRefreshUtility({ enhancedHttpClient, logger });
+            const util = new TokenRefreshUtility({ enhancedHttpClient, logger: noOpLogger });
 
             const result = await util.executeTokenRefresh({
                 refreshToken: 'r',
@@ -50,31 +26,31 @@ describe('TokenRefreshUtility', () => {
         });
 
         it('logs and returns failure when token response missing fields', async () => {
-        const enhancedHttpClient = {
-            post: createMockFn().mockResolvedValue({
-                data: { access_token: 'only-access' }
-            })
-        };
-        const util = new TokenRefreshUtility({ enhancedHttpClient, logger });
-        util.platformErrorHandler = {
-            handleEventProcessingError: createMockFn(),
-            logOperationalError: createMockFn()
-        };
+            const enhancedHttpClient = {
+                post: createMockFn().mockResolvedValue({
+                    data: { access_token: 'only-access' }
+                })
+            };
+            const util = new TokenRefreshUtility({ enhancedHttpClient, logger: noOpLogger });
+            util.platformErrorHandler = {
+                handleEventProcessingError: createMockFn(),
+                logOperationalError: createMockFn()
+            };
 
-        const result = await util.executeTokenRefresh({
-            refreshToken: 'r',
-            clientId: 'id',
-            clientSecret: 'secret'
+            const result = await util.executeTokenRefresh({
+                refreshToken: 'r',
+                clientId: 'id',
+                clientSecret: 'secret'
+            });
+
+            expect(result.success).toBe(false);
+            expect(util.platformErrorHandler.logOperationalError).toHaveBeenCalled();
         });
-
-        expect(result.success).toBe(false);
-        expect(util.platformErrorHandler.logOperationalError).toHaveBeenCalled();
     });
-});
 
     describe('calculateRefreshScheduling', () => {
         it('returns cannot schedule when expiresAt missing', () => {
-            const util = new TokenRefreshUtility({ logger });
+            const util = new TokenRefreshUtility({ logger: noOpLogger });
 
             const result = util.calculateRefreshScheduling(null);
 

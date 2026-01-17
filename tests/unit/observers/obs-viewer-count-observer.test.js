@@ -1,51 +1,32 @@
-
-const { describe, test, expect, beforeEach, afterEach } = require('bun:test');
-const { createMockFn, clearAllMocks, restoreAllMocks } = require('../../helpers/bun-mock-utils');
-const { mockModule, restoreAllModuleMocks } = require('../../helpers/bun-module-mocks');
-
-mockModule('../../../src/core/config', () => ({
-    configManager: {
-        getSection: createMockFn().mockImplementation((platform) => ({
-            viewerCountEnabled: true,
-            viewerCountSource: `${platform} viewer count`
-        })),
-        getPlatforms: createMockFn(() => ['twitch', 'youtube', 'tiktok'])
-    },
-    config: { general: { fallbackUsername: 'Unknown User' } }
-}));
-
-const { configManager } = require('../../../src/core/config');
+const { describe, test, expect, beforeEach } = require('bun:test');
+const { createMockFn } = require('../../helpers/bun-mock-utils');
 const { OBSViewerCountObserver } = require('../../../src/observers/obs-viewer-count-observer');
 const { ViewerCountObserver } = require('../../../src/observers/viewer-count-observer');
-
-const {
-    createMockOBSManager,
-    setupAutomatedCleanup
-} = require('../../helpers/mock-factories');
+const { createMockOBSManager } = require('../../helpers/mock-factories');
 const { expectNoTechnicalArtifacts } = require('../../helpers/behavior-validation');
 const { createSilentLogger } = require('../../helpers/test-logger');
 
 const defaultPlatforms = ['twitch', 'youtube', 'tiktok'];
-const setDefaultConfig = () => {
-    configManager.getSection = createMockFn().mockImplementation((platform) => ({
-        viewerCountEnabled: true,
-        viewerCountSource: `${platform} viewer count`
-    }));
-    configManager.getPlatforms = createMockFn().mockReturnValue(defaultPlatforms);
-};
+
+function createMockConfigManager(overrides = {}) {
+    return {
+        getSection: createMockFn().mockImplementation((platform) => ({
+            viewerCountEnabled: true,
+            viewerCountSource: `${platform} viewer count`,
+            ...overrides[platform]
+        })),
+        getPlatforms: createMockFn().mockReturnValue(defaultPlatforms)
+    };
+}
 
 describe('OBSViewerCountObserver - Behavior-Focused Testing', () => {
-    afterEach(() => {
-        restoreAllMocks();
-        restoreAllModuleMocks();
-    });
-
-    let obsManager, observer, logger;
-
-    setupAutomatedCleanup();
+    let obsManager;
+    let observer;
+    let logger;
+    let mockConfigManager;
 
     beforeEach(() => {
-        setDefaultConfig();
+        mockConfigManager = createMockConfigManager();
         logger = createSilentLogger();
 
         obsManager = createMockOBSManager('connected', {
@@ -53,7 +34,7 @@ describe('OBSViewerCountObserver - Behavior-Focused Testing', () => {
             isConnected: createMockFn().mockReturnValue(true)
         });
 
-        observer = new OBSViewerCountObserver(obsManager, logger);
+        observer = new OBSViewerCountObserver(obsManager, logger, { configManager: mockConfigManager });
     });
 
     describe('Observer Initialization & Interface Compliance', () => {
@@ -78,7 +59,7 @@ describe('OBSViewerCountObserver - Behavior-Focused Testing', () => {
         });
 
         test('should initialize with provided OBS manager dependency', () => {
-            const testObserver = new OBSViewerCountObserver(obsManager, logger);
+            const testObserver = new OBSViewerCountObserver(obsManager, logger, { configManager: mockConfigManager });
 
             expect(testObserver).toBeDefined();
             expect(testObserver.obsManager).toBe(obsManager);
@@ -86,7 +67,7 @@ describe('OBSViewerCountObserver - Behavior-Focused Testing', () => {
 
         test('should handle initialization without OBS connection gracefully', async () => {
             const disconnectedOBS = createMockOBSManager('disconnected');
-            const testObserver = new OBSViewerCountObserver(disconnectedOBS, logger);
+            const testObserver = new OBSViewerCountObserver(disconnectedOBS, logger, { configManager: mockConfigManager });
 
             const initPromise = testObserver.initialize();
 
@@ -313,7 +294,7 @@ describe('OBSViewerCountObserver - Behavior-Focused Testing', () => {
 
     describe('Configuration-Driven Behavior', () => {
         test('should respect platform-specific enable/disable settings', async () => {
-            configManager.getSection.mockReturnValue({
+            mockConfigManager.getSection.mockReturnValue({
                 viewerCountEnabled: false,
                 viewerCountSource: 'youtube viewer count'
             });
@@ -335,7 +316,7 @@ describe('OBSViewerCountObserver - Behavior-Focused Testing', () => {
                 'tiktok': { viewerCountEnabled: true, viewerCountSource: 'tt_viewers' }
             };
 
-            configManager.getSection.mockImplementation(platform => platformConfigs[platform]);
+            mockConfigManager.getSection.mockImplementation(platform => platformConfigs[platform]);
 
             for (const [platform, config] of Object.entries(platformConfigs)) {
                 obsManager.call.mockClear();
@@ -357,7 +338,7 @@ describe('OBSViewerCountObserver - Behavior-Focused Testing', () => {
         });
 
         test('should handle missing configuration gracefully', async () => {
-            configManager.getSection.mockReturnValue(null);
+            mockConfigManager.getSection.mockReturnValue(null);
 
             const updatePromise = observer.onViewerCountUpdate({
                 platform: 'unknown',
@@ -371,7 +352,7 @@ describe('OBSViewerCountObserver - Behavior-Focused Testing', () => {
         });
 
         test('should adapt to configuration changes at runtime', async () => {
-            configManager.getSection
+            mockConfigManager.getSection
                 .mockReturnValueOnce({ viewerCountEnabled: false, viewerCountSource: 'source1' })
                 .mockReturnValueOnce({ viewerCountEnabled: true, viewerCountSource: 'source2' });
 
@@ -403,7 +384,7 @@ describe('OBSViewerCountObserver - Behavior-Focused Testing', () => {
     describe('Error Recovery & Resilience', () => {
         test('should continue operating when OBS connection unavailable', async () => {
             const disconnectedOBS = createMockOBSManager('disconnected');
-            const resilientObserver = new OBSViewerCountObserver(disconnectedOBS, logger);
+            const resilientObserver = new OBSViewerCountObserver(disconnectedOBS, logger, { configManager: mockConfigManager });
 
             const updatePromise = resilientObserver.onViewerCountUpdate({
                 platform: 'youtube',
@@ -418,7 +399,7 @@ describe('OBSViewerCountObserver - Behavior-Focused Testing', () => {
         test('should handle missing OBS sources gracefully', async () => {
             obsManager.call.mockRejectedValue(new Error('Source not found'));
 
-            configManager.getSection.mockReturnValue({
+            mockConfigManager.getSection.mockReturnValue({
                 viewerCountEnabled: true,
                 viewerCountSource: 'missing_source'
             });
@@ -438,7 +419,7 @@ describe('OBSViewerCountObserver - Behavior-Focused Testing', () => {
                 .mockRejectedValueOnce(new Error('Temporary failure'))
                 .mockResolvedValueOnce({ status: 'success' });
 
-            configManager.getSection.mockReturnValue({
+            mockConfigManager.getSection.mockReturnValue({
                 viewerCountEnabled: true,
                 viewerCountSource: 'test_source'
             });
@@ -463,7 +444,7 @@ describe('OBSViewerCountObserver - Behavior-Focused Testing', () => {
         test('should maintain system stability during OBS errors', async () => {
             obsManager.call.mockRejectedValue(new Error('OBS disconnected'));
 
-            configManager.getSection.mockReturnValue({
+            mockConfigManager.getSection.mockReturnValue({
                 viewerCountEnabled: true,
                 viewerCountSource: 'test_source'
             });
@@ -514,7 +495,7 @@ describe('OBSViewerCountObserver - Behavior-Focused Testing', () => {
         });
 
         test('should validate platform names and reject invalid platforms', async () => {
-            configManager.getSection.mockReturnValue(null);
+            mockConfigManager.getSection.mockReturnValue(null);
 
             const updatePromise = observer.onViewerCountUpdate({
                 platform: 'invalid-platform',

@@ -1,42 +1,37 @@
-
-const { describe, test, expect, beforeEach, it, afterEach } = require('bun:test');
-const { createMockFn, clearAllMocks, restoreAllMocks } = require('../../helpers/bun-mock-utils');
-const { mockModule, restoreAllModuleMocks } = require('../../helpers/bun-module-mocks');
-
-mockModule('../../../src/utils/platform-error-handler', () => ({
-    createPlatformErrorHandler: createMockFn(() => ({
-        handleEventProcessingError: createMockFn(),
-        logOperationalError: createMockFn()
-    }))
-}));
-
-const { createPlatformErrorHandler } = require('../../../src/utils/platform-error-handler');
+const { describe, test, expect, beforeEach, it } = require('bun:test');
+const { createMockFn } = require('../../helpers/bun-mock-utils');
 const { PlatformInitializationManager } = require('../../../src/utils/platform-initialization-manager');
 
 describe('PlatformInitializationManager behavior edges', () => {
-    afterEach(() => {
-        restoreAllMocks();
-        restoreAllModuleMocks();
-    });
-
-    const logger = {
-        debug: createMockFn(),
-        info: createMockFn(),
-        warn: createMockFn(),
-        error: createMockFn()
-    };
+    let logger;
     let sharedHandler;
+    let mockCreateErrorHandler;
 
     beforeEach(() => {
+        logger = {
+            debug: createMockFn(),
+            info: createMockFn(),
+            warn: createMockFn(),
+            error: createMockFn()
+        };
+
         sharedHandler = {
             handleEventProcessingError: createMockFn(),
             logOperationalError: createMockFn()
         };
-        createPlatformErrorHandler.mockReturnValue(sharedHandler);
+
+        mockCreateErrorHandler = createMockFn().mockReturnValue(sharedHandler);
     });
 
+    function createManager(platformName, deps = {}) {
+        return new PlatformInitializationManager(platformName, logger, {
+            createPlatformErrorHandler: mockCreateErrorHandler,
+            ...deps
+        });
+    }
+
     it('prevents reinitialization unless forced', () => {
-        const manager = new PlatformInitializationManager('twitch', logger);
+        const manager = createManager('twitch');
 
         expect(manager.beginInitialization()).toBe(true);
         manager.markInitializationSuccess();
@@ -47,7 +42,7 @@ describe('PlatformInitializationManager behavior edges', () => {
     });
 
     it('routes initialization errors through platform error handler when max attempts exceeded', () => {
-        const manager = new PlatformInitializationManager('youtube', logger);
+        const manager = createManager('youtube');
         manager.configure({ maxAttempts: 1 });
 
         expect(manager.beginInitialization()).toBe(true);
@@ -56,7 +51,7 @@ describe('PlatformInitializationManager behavior edges', () => {
     });
 
     it('routes failures with errors through handleEventProcessingError and records state', () => {
-        const manager = new PlatformInitializationManager('tiktok', logger);
+        const manager = createManager('tiktok');
 
         manager.beginInitialization();
         manager.markInitializationFailure(new Error('boom'), { stage: 'connect' });
@@ -68,7 +63,7 @@ describe('PlatformInitializationManager behavior edges', () => {
     });
 
     it('allows forced reinitialization even after successes while respecting max attempts', () => {
-        const manager = new PlatformInitializationManager('twitch', logger);
+        const manager = createManager('twitch');
         manager.configure({ allowReinitialization: true, maxAttempts: 2 });
 
         expect(manager.beginInitialization(true)).toBe(true);
@@ -82,7 +77,7 @@ describe('PlatformInitializationManager behavior edges', () => {
     });
 
     it('logs operational error when failure is not an Error instance', () => {
-        const manager = new PlatformInitializationManager('youtube', logger);
+        const manager = createManager('youtube');
 
         manager.beginInitialization();
         manager.markInitializationFailure('string failure', { stage: 'config' });
@@ -99,7 +94,7 @@ describe('PlatformInitializationManager behavior edges', () => {
     });
 
     it('heals corrupted counters and state before beginning initialization', () => {
-        const manager = new PlatformInitializationManager('tiktok', logger);
+        const manager = createManager('tiktok');
         manager.initializationAttempts = undefined;
         manager.initializationCount = undefined;
         manager.preventedReinitializations = undefined;
@@ -115,7 +110,7 @@ describe('PlatformInitializationManager behavior edges', () => {
     });
 
     it('tracks failure state and can reset cleanly', () => {
-        const manager = new PlatformInitializationManager('tiktok', logger);
+        const manager = createManager('tiktok');
 
         manager.beginInitialization();
         manager.markInitializationFailure(new Error('fail'), { stage: 'config' });
@@ -130,19 +125,25 @@ describe('PlatformInitializationManager behavior edges', () => {
     });
 
     it('creates platform error handler lazily on first failure', () => {
-        createPlatformErrorHandler.mockReturnValueOnce(sharedHandler);
-        const manager = new PlatformInitializationManager('twitch', logger);
+        const lazyHandler = {
+            handleEventProcessingError: createMockFn(),
+            logOperationalError: createMockFn()
+        };
+        const lazyMockCreate = createMockFn().mockReturnValue(lazyHandler);
+        const manager = new PlatformInitializationManager('twitch', logger, {
+            createPlatformErrorHandler: lazyMockCreate
+        });
         manager.errorHandler = null;
 
         manager.beginInitialization();
         manager.markInitializationFailure(new Error('lazy failure'), { stage: 'lazy' });
 
-        expect(createPlatformErrorHandler).toHaveBeenCalledWith(logger, 'twitch');
-        expect(sharedHandler.handleEventProcessingError).toHaveBeenCalled();
+        expect(lazyMockCreate).toHaveBeenCalledWith(logger, 'twitch');
+        expect(lazyHandler.handleEventProcessingError).toHaveBeenCalled();
     });
 
     it('records failure and statistics even when already prevented by max attempts', () => {
-        const manager = new PlatformInitializationManager('twitch', logger);
+        const manager = createManager('twitch');
         manager.configure({ maxAttempts: 1 });
 
         manager.beginInitialization();
@@ -157,7 +158,7 @@ describe('PlatformInitializationManager behavior edges', () => {
     });
 
     it('allows forced reinitialization even when allowReinitialization is false', () => {
-        const manager = new PlatformInitializationManager('youtube', logger);
+        const manager = createManager('youtube');
 
         expect(manager.beginInitialization()).toBe(true);
         manager.markInitializationSuccess();
@@ -167,7 +168,7 @@ describe('PlatformInitializationManager behavior edges', () => {
     });
 
     it('ignores invalid maxAttempts configuration', () => {
-        const manager = new PlatformInitializationManager('tiktok', logger);
+        const manager = createManager('tiktok');
         manager.configure({ maxAttempts: 0 });
 
         expect(manager.maxAttempts).toBe(5);
@@ -175,7 +176,7 @@ describe('PlatformInitializationManager behavior edges', () => {
     });
 
     it('allows configured reinitialization without forcing after success', () => {
-        const manager = new PlatformInitializationManager('tiktok', logger);
+        const manager = createManager('tiktok');
         manager.configure({ allowReinitialization: true, maxAttempts: 2 });
 
         expect(manager.beginInitialization()).toBe(true);
@@ -187,7 +188,7 @@ describe('PlatformInitializationManager behavior edges', () => {
     });
 
     it('tracks prevented attempts in initialization state when skipping reinit', () => {
-        const manager = new PlatformInitializationManager('youtube', logger);
+        const manager = createManager('youtube');
 
         manager.beginInitialization();
         manager.markInitializationSuccess();
@@ -204,7 +205,7 @@ describe('PlatformInitializationManager behavior edges', () => {
     });
 
     it('skips initialization when platform disabled in config and records prevention', () => {
-        const manager = new PlatformInitializationManager('youtube', logger);
+        const manager = createManager('youtube');
         manager.configure({ allowReinitialization: false, maxAttempts: 3 });
 
         manager.beginInitialization();
@@ -218,7 +219,7 @@ describe('PlatformInitializationManager behavior edges', () => {
     });
 
     it('reset clears prevented attempts and state after failures', () => {
-        const manager = new PlatformInitializationManager('twitch', logger);
+        const manager = createManager('twitch');
 
         manager.beginInitialization();
         manager.markInitializationFailure(new Error('init failed'));
@@ -234,7 +235,7 @@ describe('PlatformInitializationManager behavior edges', () => {
     });
 
     it('ignores non-boolean reinit configuration and keeps prevention in place', () => {
-        const manager = new PlatformInitializationManager('youtube', logger);
+        const manager = createManager('youtube');
 
         manager.configure({ allowReinitialization: 'yes', maxAttempts: 'ten' });
 
@@ -249,7 +250,7 @@ describe('PlatformInitializationManager behavior edges', () => {
     });
 
     it('logs operational error when failure lacks Error instance', () => {
-        const manager = new PlatformInitializationManager('youtube', logger);
+        const manager = createManager('youtube');
 
         manager.beginInitialization();
         manager.markInitializationFailure(null, { stage: 'config' });
@@ -262,15 +263,21 @@ describe('PlatformInitializationManager behavior edges', () => {
     });
 
     it('creates error handler when missing and routes failure', () => {
-        const manager = new PlatformInitializationManager('twitch', logger);
+        const lazyHandler = {
+            handleEventProcessingError: createMockFn(),
+            logOperationalError: createMockFn()
+        };
+        const lazyMockCreate = createMockFn().mockReturnValue(lazyHandler);
+        const manager = new PlatformInitializationManager('twitch', logger, {
+            createPlatformErrorHandler: lazyMockCreate
+        });
         manager.errorHandler = null;
-        createPlatformErrorHandler.mockReturnValueOnce(sharedHandler);
 
         manager.beginInitialization();
         manager.markInitializationFailure(new Error('boom'), { stage: 'connect' });
 
-        expect(createPlatformErrorHandler).toHaveBeenCalledWith(logger, 'twitch');
-        expect(sharedHandler.handleEventProcessingError).toHaveBeenCalledWith(
+        expect(lazyMockCreate).toHaveBeenCalledWith(logger, 'twitch');
+        expect(lazyHandler.handleEventProcessingError).toHaveBeenCalledWith(
             expect.any(Error),
             'initialization',
             { stage: 'connect' },
@@ -280,15 +287,21 @@ describe('PlatformInitializationManager behavior edges', () => {
     });
 
     it('creates error handler for non-Error failures when missing and logs operational error', () => {
-        const manager = new PlatformInitializationManager('youtube', logger);
+        const lazyHandler = {
+            handleEventProcessingError: createMockFn(),
+            logOperationalError: createMockFn()
+        };
+        const lazyMockCreate = createMockFn().mockReturnValue(lazyHandler);
+        const manager = new PlatformInitializationManager('youtube', logger, {
+            createPlatformErrorHandler: lazyMockCreate
+        });
         manager.errorHandler = null;
-        createPlatformErrorHandler.mockReturnValueOnce(sharedHandler);
 
         manager.beginInitialization();
         manager.markInitializationFailure('string failure', { stage: 'nonerror' });
 
-        expect(createPlatformErrorHandler).toHaveBeenCalledWith(logger, 'youtube');
-        expect(sharedHandler.logOperationalError).toHaveBeenCalledWith(
+        expect(lazyMockCreate).toHaveBeenCalledWith(logger, 'youtube');
+        expect(lazyHandler.logOperationalError).toHaveBeenCalledWith(
             expect.stringContaining('Initialization failed'),
             'youtube',
             { stage: 'nonerror' }
@@ -297,19 +310,25 @@ describe('PlatformInitializationManager behavior edges', () => {
     });
 
     it('uses default error-handler context when platform name is missing', () => {
-        const manager = new PlatformInitializationManager(undefined, logger);
+        const lazyHandler = {
+            handleEventProcessingError: createMockFn(),
+            logOperationalError: createMockFn()
+        };
+        const lazyMockCreate = createMockFn().mockReturnValue(lazyHandler);
+        const manager = new PlatformInitializationManager(undefined, logger, {
+            createPlatformErrorHandler: lazyMockCreate
+        });
         manager.errorHandler = null;
-        createPlatformErrorHandler.mockReturnValueOnce(sharedHandler);
 
         manager.beginInitialization();
         manager.markInitializationFailure(new Error('missing name'), { stage: 'no-name' });
 
-        expect(createPlatformErrorHandler).toHaveBeenCalledWith(logger, 'platform-initialization');
-        expect(sharedHandler.handleEventProcessingError).toHaveBeenCalled();
+        expect(lazyMockCreate).toHaveBeenCalledWith(logger, 'platform-initialization');
+        expect(lazyHandler.handleEventProcessingError).toHaveBeenCalled();
     });
 
     it('halts forced reinitialization when max attempts exceeded', () => {
-        const manager = new PlatformInitializationManager('tiktok', logger);
+        const manager = createManager('tiktok');
         manager.configure({ allowReinitialization: true, maxAttempts: 2 });
 
         expect(manager.beginInitialization(true)).toBe(true);
@@ -322,7 +341,7 @@ describe('PlatformInitializationManager behavior edges', () => {
     });
 
     it('computes success rate in statistics', () => {
-        const manager = new PlatformInitializationManager('youtube', logger);
+        const manager = createManager('youtube');
 
         manager.beginInitialization();
         manager.markInitializationSuccess();

@@ -1,86 +1,71 @@
-const { describe, test, expect, afterEach, it } = require('bun:test');
-const { createMockFn, restoreAllMocks } = require('../../helpers/bun-mock-utils');
-const { mockModule, requireActual, resetModules, restoreAllModuleMocks } = require('../../helpers/bun-module-mocks');
+const { describe, test, expect, beforeEach, it } = require('bun:test');
+const { createMockFn } = require('../../helpers/bun-mock-utils');
+const { DisplayQueue } = require('../../../src/obs/display-queue');
+const { EventEmitter } = require('events');
 
 describe('DisplayQueue notification TTS disabled', () => {
-    const originalEnv = process.env.NODE_ENV;
+    let mockOBSManager;
+    let mockSourcesManager;
+    let updateCalls;
+    let queue;
+    let testRuntimeConstants;
 
-    afterEach(() => {
-        restoreAllMocks();
-process.env.NODE_ENV = originalEnv;
-    
-        restoreAllModuleMocks();});
+    beforeEach(() => {
+        updateCalls = [];
 
-    function setupQueue() {
-        process.env.NODE_ENV = 'test';
+        mockOBSManager = {
+            isReady: createMockFn().mockResolvedValue(true),
+            isConnected: createMockFn(() => true),
+            call: createMockFn().mockResolvedValue({})
+        };
 
-        const updateCalls = [];
+        mockSourcesManager = {
+            updateTextSource: createMockFn((_, text) => {
+                updateCalls.push(text);
+                return Promise.resolve();
+            }),
+            setSourceVisibility: createMockFn().mockResolvedValue(),
+            setPlatformLogoVisibility: createMockFn().mockResolvedValue(),
+            hideAllDisplays: createMockFn().mockResolvedValue(),
+            updateChatMsgText: createMockFn().mockResolvedValue(),
+            setNotificationPlatformLogoVisibility: createMockFn().mockResolvedValue(),
+            setGroupSourceVisibility: createMockFn().mockResolvedValue(),
+            setSourceFilterVisibility: createMockFn().mockResolvedValue(),
+            getGroupSceneItemId: createMockFn().mockResolvedValue(1),
+            setChatDisplayVisibility: createMockFn().mockResolvedValue(),
+            setNotificationDisplayVisibility: createMockFn().mockResolvedValue(),
+            getSceneItemId: createMockFn().mockResolvedValue(1)
+        };
 
-        mockModule('../../../src/obs/sources', () => {
-            const instance = {
-                updateTextSource: createMockFn((_, text) => {
-                    updateCalls.push(text);
-                    return Promise.resolve();
-                }),
-                setSourceVisibility: createMockFn(),
-                setPlatformLogoVisibility: createMockFn(),
-                hideAllDisplays: createMockFn(),
-                updateChatMsgText: createMockFn(),
-                setNotificationPlatformLogoVisibility: createMockFn(),
-                setGroupSourceVisibility: createMockFn(),
-                setSourceFilterVisibility: createMockFn(),
-                getGroupSceneItemId: createMockFn(),
-                setChatDisplayVisibility: createMockFn(),
-                setNotificationDisplayVisibility: createMockFn(),
-                getSceneItemId: createMockFn()
-            };
-            return {
-                OBSSourcesManager: class {},
-                createOBSSourcesManager: () => instance,
-                getDefaultSourcesManager: () => instance
-            };
-        });
+        testRuntimeConstants = {
+            CHAT_TRANSITION_DELAY: 0,
+            NOTIFICATION_CLEAR_DELAY: 0,
+            CHAT_MESSAGE_DURATION: 0,
+            PRIORITY_LEVELS: { CHAT: 1, MEMBER: 10 }
+        };
 
-        mockModule('../../../src/utils/timeout-validator', () => {
-            const actual = requireActual('../../../src/utils/timeout-validator');
-            return {
-                ...actual,
-                safeDelay: createMockFn().mockResolvedValue()
-            };
-        });
-
-        mockModule('../../../src/utils/message-tts-handler', () => ({
-            createTTSStages: createMockFn(() => [
-                { type: 'primary', text: 'Primary TTS', delay: 0 }
-            ])
-        }));
-
-        const { DisplayQueue } = require('../../../src/obs/display-queue');
-        const { EventEmitter } = require('events');
-
-        const queue = new DisplayQueue(
-            {},
+        queue = new DisplayQueue(
+            mockOBSManager,
             {
                 ttsEnabled: false,
-                chat: {},
-                notification: {},
-                obs: { ttsTxt: 'tts txt' }
+                chat: { sourceName: 'chat', sceneName: 'scene', groupName: 'group', platformLogos: {} },
+                notification: { sourceName: 'notif', sceneName: 'scene', groupName: 'group', platformLogos: {} },
+                obs: { ttsTxt: 'tts txt' },
+                youtube: { notificationsEnabled: true }
             },
-            { PRIORITY_LEVELS: { CHAT: 1 } },
-            new EventEmitter()
+            testRuntimeConstants,
+            new EventEmitter(),
+            testRuntimeConstants,
+            { sourcesManager: mockSourcesManager }
         );
-
-        return { queue, updateCalls };
-    }
+    });
 
     it('skips notification TTS when ttsEnabled is false', async () => {
-        const { queue, updateCalls } = setupQueue();
-
         await queue.handleNotificationEffects({
             type: 'platform:paypiggy',
             platform: 'youtube',
             data: {
-                username: 'Member',
+                username: 'testMember',
                 displayMessage: 'Welcome!',
                 ttsMessage: 'Hi member'
             }
@@ -88,5 +73,4 @@ process.env.NODE_ENV = originalEnv;
 
         expect(updateCalls).toEqual([]);
     });
-
 });

@@ -810,7 +810,7 @@ class AppRuntime {
             }
         } else {
             try {
-                const obsManager = getOBSConnectionManager();
+                const obsManager = this._getObsConnectionManager();
                 if (obsManager && obsManager.isConnected()) {
                     await obsManager.disconnect();
                     this.logger.info('Disconnected from OBS.', 'system');
@@ -965,12 +965,12 @@ class AppRuntime {
             logger.info('Displays cleared', 'AppRuntime');
             
             logger.info('Initializing goal display...', 'AppRuntime');
-            const goalsManager = getDefaultGoalsManager({ runtimeConstants: this.runtimeConstants });
+            const goalsManager = this._getDefaultGoalsManager();
             await goalsManager.initializeGoalDisplay();
             logger.info('Goal display initialized', 'AppRuntime');
-            
+
             // Register OBS observer for viewer count updates
-            const obsManager = getOBSConnectionManager();
+            const obsManager = this._getObsConnectionManager();
             const obsObserver = new OBSViewerCountObserver(obsManager, logger);
             this.viewerCountSystem.addObserver(obsObserver);
             
@@ -1393,6 +1393,20 @@ class AppRuntime {
         }
 
         handler.logOperationalError(message, logContext, payload);
+    }
+
+    _getObsConnectionManager() {
+        if (this.dependencies?.obs?.connectionManager) {
+            return this.dependencies.obs.connectionManager;
+        }
+        return getOBSConnectionManager({ runtimeConstants: this.runtimeConstants });
+    }
+
+    _getDefaultGoalsManager() {
+        if (this.dependencies?.obs?.goalsManager) {
+            return this.dependencies.obs.goalsManager;
+        }
+        return getDefaultGoalsManager({ runtimeConstants: this.runtimeConstants });
     }
 }
 

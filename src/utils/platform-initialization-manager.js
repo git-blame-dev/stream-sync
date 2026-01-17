@@ -1,14 +1,14 @@
-
-const { createPlatformErrorHandler } = require('./platform-error-handler');
+const { createPlatformErrorHandler: defaultCreateErrorHandler } = require('./platform-error-handler');
 
 class PlatformInitializationManager {
-    constructor(platformName, logger) {
+    constructor(platformName, logger, deps = {}) {
         this.platformName = platformName;
         if (!logger || typeof logger.error !== 'function') {
             throw new Error('PlatformInitializationManager requires a logger');
         }
         this.logger = logger;
-        this.errorHandler = createPlatformErrorHandler(logger, platformName || 'platform-initialization');
+        this._createPlatformErrorHandler = deps.createPlatformErrorHandler || defaultCreateErrorHandler;
+        this.errorHandler = this._createPlatformErrorHandler(logger, platformName || 'platform-initialization');
 
         // Initialization tracking state
         this.initializationCount = 0;
@@ -150,7 +150,8 @@ module.exports = {
 
 PlatformInitializationManager.prototype._handleInitializationError = function(message, error = null, payload = null) {
     if (!this.errorHandler && this.logger) {
-        this.errorHandler = createPlatformErrorHandler(this.logger, this.platformName || 'platform-initialization');
+        const createHandler = this._createPlatformErrorHandler || defaultCreateErrorHandler;
+        this.errorHandler = createHandler(this.logger, this.platformName || 'platform-initialization');
     }
 
     if (this.errorHandler && error instanceof Error) {
