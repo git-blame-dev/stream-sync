@@ -1,20 +1,10 @@
 const { describe, test, afterEach, expect } = require('bun:test');
 
-const { initializeTestLogging } = require('../helpers/test-setup');
 const { createMockFn, restoreAllMocks } = require('../helpers/bun-mock-utils');
-const { mockModule, restoreAllModuleMocks, resetModules } = require('../helpers/bun-module-mocks');
-
-initializeTestLogging();
-
-mockModule('../../src/platforms/youtube.js', () => ({}));
-
-const YouTubePlatform = require('../../src/platforms/youtube.js');
 
 describe('YouTube chat-update unified dispatch', () => {
     afterEach(() => {
         restoreAllMocks();
-        restoreAllModuleMocks();
-        resetModules();
     });
 
     test('routes paid and regular chat through handleChatMessage', async () => {
