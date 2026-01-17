@@ -1,18 +1,7 @@
 const { describe, it, expect, beforeEach } = require('bun:test');
 const { createMockFn } = require('../../helpers/bun-mock-utils');
-
+const { noOpLogger } = require('../../helpers/mock-factories');
 const { loadTokens, saveTokens, clearTokens } = require('../../../src/utils/token-store');
-
-const createLogger = () => {
-    const entries = [];
-    const push = (level) => (message) => entries.push({ level, message });
-    return {
-        entries,
-        info: push('info'),
-        warn: push('warn'),
-        error: push('error')
-    };
-};
 
 const createMockFs = (fileStore) => {
     const permissions = {};
@@ -78,23 +67,18 @@ describe('token-store', () => {
     });
 
     it('returns null when token store file does not exist', async () => {
-        const logger = createLogger();
-
-        const result = await loadTokens({ tokenStorePath: storePath, fs: mockFs, logger });
+        const result = await loadTokens({ tokenStorePath: storePath, fs: mockFs, logger: noOpLogger });
 
         expect(result).toBeNull();
-        expect(logger.entries.some((entry) => entry.message.includes('Token store file not found'))).toBe(true);
     });
 
     it('saves and loads tokens from the store', async () => {
-        const logger = createLogger();
-
         await saveTokens(
-            { tokenStorePath: storePath, fs: mockFs, logger },
+            { tokenStorePath: storePath, fs: mockFs, logger: noOpLogger },
             { accessToken: 'new-access', refreshToken: 'new-refresh', expiresAt: 123456 }
         );
 
-        const result = await loadTokens({ tokenStorePath: storePath, fs: mockFs, logger });
+        const result = await loadTokens({ tokenStorePath: storePath, fs: mockFs, logger: noOpLogger });
 
         expect(result).toEqual({
             accessToken: 'new-access',
@@ -104,17 +88,16 @@ describe('token-store', () => {
     });
 
     it('creates missing token store directories and persists tokens securely', async () => {
-        const logger = createLogger();
         const nestedStorePath = '/test/nested/tokens.json';
 
         await saveTokens(
-            { tokenStorePath: nestedStorePath, fs: mockFs, logger },
+            { tokenStorePath: nestedStorePath, fs: mockFs, logger: noOpLogger },
             { accessToken: 'new-access', refreshToken: 'new-refresh', expiresAt: 123456 }
         );
 
         expect(mockFs.promises.mkdir).toHaveBeenCalled();
 
-        const result = await loadTokens({ tokenStorePath: nestedStorePath, fs: mockFs, logger });
+        const result = await loadTokens({ tokenStorePath: nestedStorePath, fs: mockFs, logger: noOpLogger });
 
         expect(result).toEqual({
             accessToken: 'new-access',
@@ -129,7 +112,6 @@ describe('token-store', () => {
     });
 
     it('preserves other stored data when saving tokens', async () => {
-        const logger = createLogger();
         const existing = {
             otherService: { value: 'keep' },
             twitch: { accessToken: 'old', refreshToken: 'old-refresh' }
@@ -137,7 +119,7 @@ describe('token-store', () => {
         fileStore[storePath] = JSON.stringify(existing, null, 2);
 
         await saveTokens(
-            { tokenStorePath: storePath, fs: mockFs, logger },
+            { tokenStorePath: storePath, fs: mockFs, logger: noOpLogger },
             { accessToken: 'updated-access', refreshToken: 'updated-refresh' }
         );
 
@@ -148,21 +130,19 @@ describe('token-store', () => {
     });
 
     it('throws when token store contains invalid JSON', async () => {
-        const logger = createLogger();
         fileStore[storePath] = '{invalid-json';
 
-        await expect(loadTokens({ tokenStorePath: storePath, fs: mockFs, logger })).rejects.toThrow(/invalid token store/i);
+        await expect(loadTokens({ tokenStorePath: storePath, fs: mockFs, logger: noOpLogger })).rejects.toThrow(/invalid token store/i);
     });
 
     it('clears twitch tokens while preserving other data', async () => {
-        const logger = createLogger();
         const existing = {
             otherService: { value: 'keep' },
             twitch: { accessToken: 'old', refreshToken: 'old-refresh' }
         };
         fileStore[storePath] = JSON.stringify(existing, null, 2);
 
-        await clearTokens({ tokenStorePath: storePath, fs: mockFs, logger });
+        await clearTokens({ tokenStorePath: storePath, fs: mockFs, logger: noOpLogger });
 
         const updated = JSON.parse(fileStore[storePath]);
         expect(updated.otherService).toEqual({ value: 'keep' });

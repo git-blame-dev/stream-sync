@@ -1,18 +1,12 @@
-
 const { describe, test, expect, beforeEach, it, afterEach } = require('bun:test');
 const { createMockFn, restoreAllMocks } = require('../../helpers/bun-mock-utils');
-
 const { TEST_TIMEOUTS } = require('../../helpers/test-setup');
-
 const { setupAutomatedCleanup } = require('../../helpers/mock-lifecycle');
-
 const { expectNoTechnicalArtifacts } = require('../../helpers/assertion-helpers');
 const testClock = require('../../helpers/test-clock');
-
 const { normalizeTikTokMessage } = require('../../../src/utils/message-normalization');
 const { extractTikTokUserData } = require('../../../src/utils/tiktok-data-extraction');
 
-// Setup automated cleanup
 setupAutomatedCleanup({
   clearCallsBeforeEach: true,
   logPerformanceMetrics: true
@@ -43,7 +37,6 @@ describe('TikTok Unknown User Data Structure Mismatch', () => {
   describe('Message Normalization with Actual TikTok Data Structure', () => {
     describe('when TikTok data has nested structure (current production format)', () => {
       it('should extract username from nested user structure', () => {
-        // Arrange: Nested structure from TikTok event payloads
         const nestedTikTokData = {
           "comment": "Test nested message",
           "user": {
@@ -55,10 +48,8 @@ describe('TikTok Unknown User Data Structure Mismatch', () => {
           "createTime": testClock.now()
         };
 
-        // Act
         const result = normalizeTikTokMessage(nestedTikTokData, 'tiktok', timestampService);
 
-        // Assert
         expect(result.username).toBe('testUserNested');
         expect(result.userId).toBe('test_user_id_nested');
         expect(result.message).toBe('Test nested message');
@@ -69,13 +60,11 @@ describe('TikTok Unknown User Data Structure Mismatch', () => {
 
     describe('when TikTok data is malformed or empty', () => {
       it('should reject null data', () => {
-        // Act
         expect(() => normalizeTikTokMessage(null, 'tiktok', timestampService))
           .toThrow('message data');
       }, TEST_TIMEOUTS.FAST);
 
       it('should reject empty object', () => {
-        // Act
         expect(() => normalizeTikTokMessage({}, 'tiktok', timestampService))
           .toThrow('userId');
       }, TEST_TIMEOUTS.FAST);
@@ -85,7 +74,6 @@ describe('TikTok Unknown User Data Structure Mismatch', () => {
   describe('User Data Extraction with Actual TikTok Gift Structure', () => {
     describe('when gift data has nested structure (current production format)', () => {
       it('should extract user data from nested gift structure', () => {
-        // Arrange: Gift data with nested user object
         const nestedGiftData = {
           "user": {
             "uniqueId": "testGiftNestedUser",
@@ -97,10 +85,8 @@ describe('TikTok Unknown User Data Structure Mismatch', () => {
           "diamondCount": 10
         };
 
-        // Act
         const result = extractTikTokUserData(nestedGiftData);
 
-        // Assert
         expect(result.userId).toBe('test_user_id_gift_nested');
         expect(result.username).toBe('testGiftNestedUser');
       }, TEST_TIMEOUTS.FAST);
@@ -119,7 +105,6 @@ describe('TikTok Unknown User Data Structure Mismatch', () => {
 
   describe('Cross-Platform Consistency', () => {
     it('should maintain consistent user data format across platforms', () => {
-      // Arrange: TikTok data that should work
       const tikTokData = {
         "user": {
           "userId": "test_user_id_cross",
@@ -130,10 +115,8 @@ describe('TikTok Unknown User Data Structure Mismatch', () => {
         "createTime": testClock.now()
       };
 
-      // Act
       const result = normalizeTikTokMessage(tikTokData, 'tiktok', timestampService);
 
-      // Assert: Should match standard format used by other platforms
       expect(result).toHaveProperty('platform', 'tiktok');
       expect(result).toHaveProperty('userId');
       expect(result).toHaveProperty('username');
@@ -144,8 +127,6 @@ describe('TikTok Unknown User Data Structure Mismatch', () => {
       expect(result).toHaveProperty('isBroadcaster');
       expect(result).toHaveProperty('metadata');
       expect(result).toHaveProperty('rawData');
-
-      // Verify no undefined or null values in user-facing fields
       expectNoTechnicalArtifacts(result.username);
       expect(result.userId).not.toBe('undefined');
       expect(result.userId).not.toBe(null);
