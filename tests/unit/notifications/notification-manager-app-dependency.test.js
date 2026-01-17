@@ -1,19 +1,16 @@
 
 const { describe, test, expect, beforeEach, afterEach, it } = require('bun:test');
 const { createMockFn, restoreAllMocks } = require('../../helpers/bun-mock-utils');
+const { noOpLogger } = require('../../helpers/mock-factories');
 
-const { expectNoTechnicalArtifacts } = require('../../helpers/assertion-helpers');
+const { initializeTestLogging } = require('../../helpers/test-setup');
 
-const { initializeTestLogging, createMockConfig } = require('../../helpers/test-setup');
-
-// Initialize test logging BEFORE importing NotificationManager
 initializeTestLogging();
 
 const NotificationManager = require('../../../src/notifications/NotificationManager');
 
 describe('NotificationManager Service Dependency Injection - Modernized', () => {
     let mockDisplayQueue;
-    let mockLogger;
     let mockConfigService;
     let mockVFXCommandService;
     let mockTTSService;
@@ -22,20 +19,11 @@ describe('NotificationManager Service Dependency Injection - Modernized', () => 
     let notificationManager;
 
     beforeEach(() => {
-        // Mock display queue
         mockDisplayQueue = {
             addItem: createMockFn(),
             getQueueLength: createMockFn().mockReturnValue(0)
         };
 
-        mockLogger = {
-            debug: createMockFn(),
-            info: createMockFn(),
-            warn: createMockFn(),
-            error: createMockFn()
-        };
-
-        // Mock ConfigService
         mockConfigService = {
             get: createMockFn((section) => {
                 if (section !== 'general') {
@@ -58,24 +46,20 @@ describe('NotificationManager Service Dependency Injection - Modernized', () => 
             getCLIOverrides: createMockFn().mockReturnValue({})
         };
 
-        // Mock VFX Command Service
         mockVFXCommandService = {
             executeCommand: createMockFn().mockResolvedValue({ success: true }),
             getVFXConfig: createMockFn().mockResolvedValue({ filename: 'test.mp4' })
         };
 
-        // Mock TTS Service
         mockTTSService = {
             speak: createMockFn().mockResolvedValue({ success: true })
         };
 
-        // Mock User Tracking Service
         mockUserTrackingService = {
             isFirstMessage: createMockFn().mockResolvedValue(false),
             trackUser: createMockFn()
         };
 
-        // Mock EventBus
         mockEventBus = {
             emit: createMockFn(),
             on: createMockFn(),
@@ -99,11 +83,10 @@ describe('NotificationManager Service Dependency Injection - Modernized', () => 
 
     describe('Constructor Service Injection', () => {
         it('should initialize with minimal required dependencies', () => {
-            // BEHAVIOR: NotificationManager works with just displayQueue
             const mockEventBus = { emit: createMockFn(), on: createMockFn(), off: createMockFn() };
             notificationManager = new NotificationManager({
                 displayQueue: mockDisplayQueue,
-                logger: mockLogger,
+                logger: noOpLogger,
                 eventBus: mockEventBus,
                 constants: require('../../../src/core/constants'),
                 textProcessing: { formatChatMessage: createMockFn() },
@@ -117,10 +100,9 @@ describe('NotificationManager Service Dependency Injection - Modernized', () => 
         });
 
         it('should accept all service dependencies via constructor', () => {
-            // BEHAVIOR: Full service injection pattern
             notificationManager = new NotificationManager({
                 displayQueue: mockDisplayQueue,
-                logger: mockLogger,
+                logger: noOpLogger,
                 eventBus: mockEventBus,
                 constants: require('../../../src/core/constants'),
                 textProcessing: { formatChatMessage: createMockFn() },
@@ -140,10 +122,9 @@ describe('NotificationManager Service Dependency Injection - Modernized', () => 
         });
 
         it('should prevent notifications without display system', () => {
-            // BEHAVIOR: displayQueue is required
             expect(() => {
                 new NotificationManager({
-                    logger: mockLogger,
+                    logger: noOpLogger,
                     eventBus: mockEventBus,
                     constants: require('../../../src/core/constants'),
                     textProcessing: { formatChatMessage: createMockFn() },
@@ -155,10 +136,9 @@ describe('NotificationManager Service Dependency Injection - Modernized', () => 
         });
 
         it('should be ready for notifications when fully configured', () => {
-            // BEHAVIOR: Fully configured system ready for use
             notificationManager = new NotificationManager({
                 displayQueue: mockDisplayQueue,
-                logger: mockLogger,
+                logger: noOpLogger,
                 eventBus: mockEventBus,
                 constants: require('../../../src/core/constants'),
                 textProcessing: { formatChatMessage: createMockFn() },
@@ -174,11 +154,10 @@ describe('NotificationManager Service Dependency Injection - Modernized', () => 
 
     describe('Required Service Dependencies', () => {
         it('should require EventBus for event-driven architecture', () => {
-            // BEHAVIOR: EventBus is now required (not optional)
             expect(() => {
                 new NotificationManager({
                     displayQueue: mockDisplayQueue,
-                    logger: mockLogger,
+                    logger: noOpLogger,
                     constants: require('../../../src/core/constants'),
                     textProcessing: { formatChatMessage: createMockFn() },
                     obsGoals: { processDonationGoal: createMockFn() },
@@ -193,7 +172,7 @@ describe('NotificationManager Service Dependency Injection - Modernized', () => 
             expect(() => {
                 new NotificationManager({
                     displayQueue: mockDisplayQueue,
-                    logger: mockLogger,
+                    logger: noOpLogger,
                     eventBus: mockEventBus,
                     constants: require('../../../src/core/constants'),
                     textProcessing: { formatChatMessage: createMockFn() },
@@ -203,11 +182,10 @@ describe('NotificationManager Service Dependency Injection - Modernized', () => 
         });
 
         it('should work without spam detector gracefully', () => {
-            // BEHAVIOR: Spam detector is optional
             const mockEventBus = { emit: createMockFn(), on: createMockFn(), off: createMockFn() };
             notificationManager = new NotificationManager({
                 displayQueue: mockDisplayQueue,
-                logger: mockLogger,
+                logger: noOpLogger,
                 eventBus: mockEventBus,
                 constants: require('../../../src/core/constants'),
                 textProcessing: { formatChatMessage: createMockFn() },
@@ -221,11 +199,10 @@ describe('NotificationManager Service Dependency Injection - Modernized', () => 
         });
 
         it('should reject notifications without VFX services', async () => {
-            // BEHAVIOR: VFX services are required for notification processing
             const mockEventBus = { emit: createMockFn(), on: createMockFn(), off: createMockFn() };
             notificationManager = new NotificationManager({
                 displayQueue: mockDisplayQueue,
-                logger: mockLogger,
+                logger: noOpLogger,
                 eventBus: mockEventBus,
                 constants: require('../../../src/core/constants'),
                 textProcessing: { formatChatMessage: createMockFn() },
@@ -248,10 +225,9 @@ describe('NotificationManager Service Dependency Injection - Modernized', () => 
 
     describe('Notification Processing With Services', () => {
         it('should process notifications with full service integration', async () => {
-            // BEHAVIOR: Full service stack enables all features
             notificationManager = new NotificationManager({
                 displayQueue: mockDisplayQueue,
-                logger: mockLogger,
+                logger: noOpLogger,
                 eventBus: mockEventBus,
                 constants: require('../../../src/core/constants'),
                 textProcessing: { formatChatMessage: createMockFn() },
@@ -282,11 +258,10 @@ describe('NotificationManager Service Dependency Injection - Modernized', () => 
         });
 
         it('should display notifications with minimal services', async () => {
-            // BEHAVIOR: Core functionality works with minimal services
             const mockEventBus = { emit: createMockFn(), on: createMockFn(), off: createMockFn() };
             notificationManager = new NotificationManager({
                 displayQueue: mockDisplayQueue,
-                logger: mockLogger,
+                logger: noOpLogger,
                 eventBus: mockEventBus,
                 constants: require('../../../src/core/constants'),
                 textProcessing: { formatChatMessage: createMockFn() },
@@ -314,7 +289,6 @@ describe('NotificationManager Service Dependency Injection - Modernized', () => 
 
     describe('Configuration Loading via ConfigService', () => {
         it('should respect user configuration for notification frequency control', () => {
-            // BEHAVIOR: ConfigService provides notification settings
             const customConfigService = {
                 ...mockConfigService,
                 get: createMockFn((section, key, defaultValue) => {
@@ -338,7 +312,7 @@ describe('NotificationManager Service Dependency Injection - Modernized', () => 
             const mockEventBus = { emit: createMockFn(), on: createMockFn(), off: createMockFn() };
             notificationManager = new NotificationManager({
                 displayQueue: mockDisplayQueue,
-                logger: mockLogger,
+                logger: noOpLogger,
                 eventBus: mockEventBus,
                 constants: require('../../../src/core/constants'),
                 textProcessing: { formatChatMessage: createMockFn() },
@@ -355,7 +329,7 @@ describe('NotificationManager Service Dependency Injection - Modernized', () => 
             expect(() => {
                 new NotificationManager({
                     displayQueue: mockDisplayQueue,
-                    logger: mockLogger,
+                    logger: noOpLogger,
                     eventBus: mockEventBus,
                     constants: require('../../../src/core/constants'),
                     textProcessing: { formatChatMessage: createMockFn() },
@@ -367,7 +341,6 @@ describe('NotificationManager Service Dependency Injection - Modernized', () => 
 
     describe('Spam Detection Integration', () => {
         it('should use spam detector when provided', async () => {
-            // BEHAVIOR: Spam detector filters notifications
             const mockSpamDetector = {
                 handleDonationSpam: createMockFn().mockReturnValue({ shouldShow: true })
             };
@@ -375,7 +348,7 @@ describe('NotificationManager Service Dependency Injection - Modernized', () => 
             const mockEventBus = { emit: createMockFn(), on: createMockFn(), off: createMockFn() };
             notificationManager = new NotificationManager({
                 displayQueue: mockDisplayQueue,
-                logger: mockLogger,
+                logger: noOpLogger,
                 eventBus: mockEventBus,
                 constants: require('../../../src/core/constants'),
                 textProcessing: { formatChatMessage: createMockFn() },
@@ -402,11 +375,10 @@ describe('NotificationManager Service Dependency Injection - Modernized', () => 
         });
 
         it('should work without spam detector', async () => {
-            // BEHAVIOR: Spam detection is optional
             const mockEventBus = { emit: createMockFn(), on: createMockFn(), off: createMockFn() };
             notificationManager = new NotificationManager({
                 displayQueue: mockDisplayQueue,
-                logger: mockLogger,
+                logger: noOpLogger,
                 eventBus: mockEventBus,
                 constants: require('../../../src/core/constants'),
                 textProcessing: { formatChatMessage: createMockFn() },
@@ -435,11 +407,10 @@ describe('NotificationManager Service Dependency Injection - Modernized', () => 
 
     describe('Graceful Degradation', () => {
         it('should handle missing services gracefully during notification processing', async () => {
-            // BEHAVIOR: Missing optional services don't break notifications
             const mockEventBus = { emit: createMockFn(), on: createMockFn(), off: createMockFn() };
             notificationManager = new NotificationManager({
                 displayQueue: mockDisplayQueue,
-                logger: mockLogger,
+                logger: noOpLogger,
                 eventBus: mockEventBus,
                 constants: require('../../../src/core/constants'),
                 textProcessing: { formatChatMessage: createMockFn() },
@@ -471,7 +442,7 @@ describe('NotificationManager Service Dependency Injection - Modernized', () => 
             expect(() => {
                 new NotificationManager({
                     displayQueue: mockDisplayQueue,
-                    logger: mockLogger,
+                    logger: noOpLogger,
                     eventBus: mockEventBus,
                     constants: require('../../../src/core/constants'),
                     textProcessing: { formatChatMessage: createMockFn() },

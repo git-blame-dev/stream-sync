@@ -8,7 +8,6 @@ const { noOpLogger } = require('../../helpers/mock-factories');
 
 const { setupAutomatedCleanup } = require('../../helpers/mock-lifecycle');
 
-// Setup automated cleanup
 setupAutomatedCleanup({
     clearCallsBeforeEach: true,
     logPerformanceMetrics: true
@@ -100,7 +99,6 @@ describe('NotificationManager Spam Protection Behavior - Modernized', () => {
         });
 
         it('should access spam configuration for effective spam protection', () => {
-            // BEHAVIOR: Configuration provides spam settings
             const { config } = require('../../../src/core/config');
 
             // Spam configuration is available
@@ -113,7 +111,6 @@ describe('NotificationManager Spam Protection Behavior - Modernized', () => {
         });
 
         it('should use spam detector when provided via constructor', async () => {
-            // BEHAVIOR: Spam detector filters gift notifications
             const mockEventBus = { emit: createMockFn(), on: createMockFn(), off: createMockFn() };
             const notificationManager = new NotificationManager({
                 displayQueue: mockDisplayQueue,
@@ -149,7 +146,6 @@ describe('NotificationManager Spam Protection Behavior - Modernized', () => {
 
     describe('when spam detector is not provided', () => {
         it('should operate without spam protection gracefully', async () => {
-            // BEHAVIOR: System works without spam detector (optional dependency)
             const mockEventBus = { emit: createMockFn(), on: createMockFn(), off: createMockFn() };
             const notificationManager = new NotificationManager({
                 displayQueue: mockDisplayQueue,
@@ -206,7 +202,6 @@ describe('NotificationManager Spam Protection Behavior - Modernized', () => {
     describe('when checking configuration availability', () => {
         describe('and verifying spam configuration structure', () => {
             it('should provide spam config compatible with SpamDetectionConfig constructor', () => {
-                // BEHAVIOR: Config structure matches expected interface
                 const { config } = require('../../../src/core/config');
                 const spamConfig = config.spam;
 
@@ -224,7 +219,6 @@ describe('NotificationManager Spam Protection Behavior - Modernized', () => {
             });
 
             it('should have valid spam configuration values', () => {
-                // BEHAVIOR: Configuration values are valid for spam detection
                 const { config } = require('../../../src/core/config');
                 const spamConfig = config.spam;
 
@@ -240,7 +234,6 @@ describe('NotificationManager Spam Protection Behavior - Modernized', () => {
 
     describe('when spam detector filters notifications', () => {
         it('should allow gifts that pass spam detection', async () => {
-            // BEHAVIOR: Approved gifts are displayed
             mockSpamDetector.handleDonationSpam.mockReturnValue({ shouldShow: true });
 
             const mockEventBus = { emit: createMockFn(), on: createMockFn(), off: createMockFn() };
@@ -272,7 +265,6 @@ describe('NotificationManager Spam Protection Behavior - Modernized', () => {
         });
 
         it('should block gifts that fail spam detection', async () => {
-            // BEHAVIOR: Spam gifts are blocked
             mockSpamDetector.handleDonationSpam.mockReturnValue({ shouldShow: false });
 
             const mockEventBus = { emit: createMockFn(), on: createMockFn(), off: createMockFn() };
@@ -308,7 +300,6 @@ describe('NotificationManager Spam Protection Behavior - Modernized', () => {
         });
 
         it('should skip spam detection for aggregated donations', async () => {
-            // BEHAVIOR: Aggregated gifts bypass spam filtering
             const mockEventBus = { emit: createMockFn(), on: createMockFn(), off: createMockFn() };
             const notificationManager = new NotificationManager({
                 displayQueue: mockDisplayQueue,
