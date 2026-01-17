@@ -1,14 +1,16 @@
 const { describe, it, beforeEach, afterEach, expect } = require('bun:test');
 const { createMockFn, clearAllMocks } = require('../../helpers/bun-mock-utils');
 const { restoreAllModuleMocks } = require('../../helpers/bun-module-mocks');
+const { noOpLogger } = require('../../helpers/mock-factories');
+const { expectNoTechnicalArtifacts } = require('../../helpers/assertion-helpers');
 
 const { TTSService, createTTSService } = require('../../../src/services/TTSService');
 const testClock = require('../../helpers/test-clock');
+
 describe('TTSService', () => {
     let ttsService;
     let mockConfigService;
     let mockEventBus;
-    let logger;
 
     afterEach(() => {
         restoreAllModuleMocks();
@@ -17,12 +19,10 @@ describe('TTSService', () => {
     beforeEach(() => {
         clearAllMocks();
 
-        // Create mock EventBus
         mockEventBus = {
             emit: createMockFn()
         };
 
-        // Create mock ConfigService
         mockConfigService = {
             getTTSConfig: createMockFn(() => ({
                 enabled: true,
@@ -35,12 +35,11 @@ describe('TTSService', () => {
             })),
             set: createMockFn(() => true)
         };
-        logger = { debug: createMockFn(), info: createMockFn(), warn: createMockFn(), error: createMockFn() };
     });
 
     describe('Constructor', () => {
         it('should initialize with ConfigService and EventBus', () => {
-            ttsService = new TTSService(mockConfigService, mockEventBus, { logger });
+            ttsService = new TTSService(mockConfigService, mockEventBus, { logger: noOpLogger });
 
             expect(ttsService.configService).toBe(mockConfigService);
             expect(ttsService.eventBus).toBe(mockEventBus);
@@ -50,14 +49,14 @@ describe('TTSService', () => {
         });
 
         it('should initialize without EventBus', () => {
-            ttsService = new TTSService(mockConfigService, null, { logger });
+            ttsService = new TTSService(mockConfigService, null, { logger: noOpLogger });
 
             expect(ttsService.configService).toBe(mockConfigService);
             expect(ttsService.eventBus).toBeNull();
         });
 
         it('should initialize performance stats', () => {
-            ttsService = new TTSService(mockConfigService, null, { logger });
+            ttsService = new TTSService(mockConfigService, null, { logger: noOpLogger });
 
             expect(ttsService.stats).toEqual({
                 totalRequests: 0,
@@ -73,16 +72,16 @@ describe('TTSService', () => {
 
     describe('Factory Function', () => {
         it('should create TTSService instance', () => {
-            const service = createTTSService(mockConfigService, mockEventBus, { logger });
-            
+            const service = createTTSService(mockConfigService, mockEventBus, { logger: noOpLogger });
+
             expect(service).toBeInstanceOf(TTSService);
             expect(service.configService).toBe(mockConfigService);
             expect(service.eventBus).toBe(mockEventBus);
         });
 
         it('should create TTSService without EventBus', () => {
-            const service = createTTSService(mockConfigService, null, { logger });
-            
+            const service = createTTSService(mockConfigService, null, { logger: noOpLogger });
+
             expect(service).toBeInstanceOf(TTSService);
             expect(service.eventBus).toBeNull();
         });
@@ -90,13 +89,13 @@ describe('TTSService', () => {
 
     describe('speak()', () => {
         beforeEach(() => {
-            ttsService = new TTSService(mockConfigService, mockEventBus, { logger });
+            ttsService = new TTSService(mockConfigService, mockEventBus, { logger: noOpLogger });
         });
 
         it('should speak text successfully', async () => {
             const result = await ttsService.speak('Hello world');
 
-            expect(result).toBeTruthy(); // Returns request ID
+            expect(result).toBeTruthy();
             expect(ttsService.stats.totalRequests).toBe(1);
             expect(ttsService.stats.successfulSpeech).toBe(1);
         });
@@ -114,14 +113,14 @@ describe('TTSService', () => {
         it('should preserve profanity in TTS text', async () => {
             const result = await ttsService.speak('Hello funky world');
 
-            expect(result).toBeTruthy(); // Returns request ID
+            expect(result).toBeTruthy();
             expect(ttsService._cleanText('Hello funky world')).toBe('Hello funky world');
         });
 
         it('should filter out URLs', async () => {
             const result = await ttsService.speak('Check out https://example.com');
 
-            expect(result).toBeTruthy(); // Returns request ID
+            expect(result).toBeTruthy();
             expect(ttsService._cleanText('Check out https://example.com')).toBe('Check out [filtered]');
         });
 
@@ -133,21 +132,15 @@ describe('TTSService', () => {
         });
 
         it('should truncate very long text with clean output', async () => {
-            // Given: Text that exceeds TTS length limits
             const longText = 'a'.repeat(600);
-            
-            // When: User requests TTS for long text
+
             const result = await ttsService.speak(longText);
 
-            // Then: TTS is processed with properly truncated, clean text
-            expect(result).toBeTruthy(); // Returns request ID
+            expect(result).toBeTruthy();
             const expectedTruncatedText = 'a'.repeat(500) + '...';
-            
-            // And: Truncated content has no technical artifacts
-            const { expectNoTechnicalArtifacts } = require('../../helpers/assertion-helpers');
+
             expectNoTechnicalArtifacts(expectedTruncatedText);
-            
-            // And: TTS service properly processes the request  
+
             expect(ttsService.stats.totalRequests).toBe(1);
             expect(ttsService.stats.successfulSpeech).toBe(1);
         });
@@ -162,31 +155,30 @@ describe('TTSService', () => {
 
             const result = await ttsService.speak('Hello', options);
 
-            expect(result).toBeTruthy(); // Returns request ID
+            expect(result).toBeTruthy();
             expect(ttsService.stats.totalRequests).toBe(1);
         });
 
         it('should work without ConfigService', async () => {
-            ttsService = new TTSService(null, mockEventBus, { logger });
+            ttsService = new TTSService(null, mockEventBus, { logger: noOpLogger });
 
             const result = await ttsService.speak('Hello world');
 
-            expect(result).toBe(false); // TTS disabled without config
+            expect(result).toBe(false);
         });
 
         it('should work without EventBus', async () => {
-            ttsService = new TTSService(mockConfigService, null, { logger });
+            ttsService = new TTSService(mockConfigService, null, { logger: noOpLogger });
 
             const result = await ttsService.speak('Hello world');
 
-            expect(result).toBeTruthy(); // Returns request ID
-            // Should not throw errors
+            expect(result).toBeTruthy();
         });
     });
 
     describe('getStatus()', () => {
         beforeEach(() => {
-            ttsService = new TTSService(mockConfigService, mockEventBus, { logger });
+            ttsService = new TTSService(mockConfigService, mockEventBus, { logger: noOpLogger });
         });
 
         it('should return complete TTS status', () => {
@@ -235,7 +227,7 @@ describe('TTSService', () => {
 
     describe('getConfig()', () => {
         beforeEach(() => {
-            ttsService = new TTSService(mockConfigService, mockEventBus, { logger });
+            ttsService = new TTSService(mockConfigService, mockEventBus, { logger: noOpLogger });
         });
 
         it('should return TTS configuration from ConfigService', () => {
@@ -254,7 +246,7 @@ describe('TTSService', () => {
         });
 
         it('should return default config without ConfigService', () => {
-            ttsService = new TTSService(null, null, { logger });
+            ttsService = new TTSService(null, null, { logger: noOpLogger });
 
             const config = ttsService.getConfig();
 
@@ -269,7 +261,7 @@ describe('TTSService', () => {
 
     describe('updateConfig()', () => {
         beforeEach(() => {
-            ttsService = new TTSService(mockConfigService, mockEventBus, { logger });
+            ttsService = new TTSService(mockConfigService, mockEventBus, { logger: noOpLogger });
         });
 
         it('should update TTS configuration', () => {
@@ -281,7 +273,7 @@ describe('TTSService', () => {
 
             const result = ttsService.updateConfig(newConfig);
 
-            expect(result).toBeTruthy(); // Returns request ID
+            expect(result).toBeTruthy();
             expect(mockConfigService.set).toHaveBeenCalled();
             const [section, configArg] = mockConfigService.set.mock.calls[0];
             expect(section).toBe('tts');
@@ -294,12 +286,12 @@ describe('TTSService', () => {
 
             const result = ttsService.updateConfig({ enabled: false });
 
-            expect(result).toBe(false); // Should return false when set fails
+            expect(result).toBe(false);
             expect(mockEventBus.emit).not.toHaveBeenCalled();
         });
 
         it('should handle missing ConfigService', () => {
-            ttsService = new TTSService(null, mockEventBus, { logger });
+            ttsService = new TTSService(null, mockEventBus, { logger: noOpLogger });
 
             const result = ttsService.updateConfig({ enabled: false });
 
@@ -308,18 +300,18 @@ describe('TTSService', () => {
         });
 
         it('should work without EventBus', () => {
-            ttsService = new TTSService(mockConfigService, null, { logger });
+            ttsService = new TTSService(mockConfigService, null, { logger: noOpLogger });
 
             const result = ttsService.updateConfig({ enabled: false });
 
-            expect(result).toBeTruthy(); // Returns request ID
+            expect(result).toBeTruthy();
             expect(mockConfigService.set).toHaveBeenCalled();
         });
     });
 
     describe('Text Sanitization', () => {
         beforeEach(() => {
-            ttsService = new TTSService(mockConfigService, mockEventBus, { logger });
+            ttsService = new TTSService(mockConfigService, mockEventBus, { logger: noOpLogger });
         });
 
         it('should preserve profanity', () => {
@@ -367,7 +359,7 @@ describe('TTSService', () => {
 
     describe('Default Settings', () => {
         beforeEach(() => {
-            ttsService = new TTSService(mockConfigService, mockEventBus, { logger });
+            ttsService = new TTSService(mockConfigService, mockEventBus, { logger: noOpLogger });
         });
 
         it('should get default voice setting', () => {

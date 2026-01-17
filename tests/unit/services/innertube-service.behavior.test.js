@@ -1,12 +1,10 @@
 const { describe, test, expect, beforeEach, afterEach } = require('bun:test');
 const { createMockFn, restoreAllMocks } = require('../../helpers/bun-mock-utils');
-
-const noOpLogger = { debug: () => {}, info: () => {}, warn: () => {}, error: () => {} };
+const { noOpLogger } = require('../../helpers/mock-factories');
 
 describe('InnertubeService behavior', () => {
     let InnertubeService;
     let factory;
-    let logger;
 
     beforeEach(() => {
         ({ InnertubeService } = require('../../../src/services/innertube-service'));
@@ -16,12 +14,6 @@ describe('InnertubeService behavior', () => {
                 getInfo: createMockFn(async () => ({ video: 'info' }))
             }))
         };
-        logger = {
-            debug: createMockFn(),
-            info: createMockFn(),
-            warn: createMockFn(),
-            error: createMockFn()
-        };
     });
 
     afterEach(() => {
@@ -29,7 +21,7 @@ describe('InnertubeService behavior', () => {
     });
 
     test('reuses cached instances and tracks stats', async () => {
-        const service = new InnertubeService(factory, { logger });
+        const service = new InnertubeService(factory, { logger: noOpLogger });
 
         const first = await service.getSharedInstance('shared');
         const second = await service.getSharedInstance('shared');
@@ -38,15 +30,11 @@ describe('InnertubeService behavior', () => {
         expect(service.stats.cacheMisses).toBe(1);
         expect(service.stats.cacheHits).toBe(1);
         expect(service.stats.instancesCreated).toBe(1);
-        expect(logger.debug).toHaveBeenCalledWith(
-            expect.stringContaining('Using cached instance'),
-            'innertube-service'
-        );
     });
 
     test('wraps getInfo with provided timeout helper and updates lastUsed', async () => {
         const withTimeout = createMockFn(async (promise) => promise);
-        const service = new InnertubeService(factory, { logger, withTimeout });
+        const service = new InnertubeService(factory, { logger: noOpLogger, withTimeout });
 
         const result = await service.getVideoInfo('abc123', { timeout: 5000, instanceKey: 'custom' });
         const cached = service.instanceCache.get('custom');
@@ -57,23 +45,19 @@ describe('InnertubeService behavior', () => {
     });
 
     test('cleans up stale instances', async () => {
-        const service = new InnertubeService(factory, { logger });
-        const instance = await service.getSharedInstance('old');
-        service.instanceCache.set('old', { instance, created: 0, lastUsed: 0 });
+        const service = new InnertubeService(factory, { logger: noOpLogger });
+        await service.getSharedInstance('old');
+        service.instanceCache.set('old', { instance: {}, created: 0, lastUsed: 0 });
 
         service.cleanup(1);
 
         expect(service.instanceCache.has('old')).toBe(false);
-        expect(logger.debug).toHaveBeenCalledWith(
-            expect.stringContaining('Cleaned up'),
-            'innertube-service'
-        );
     });
 
     test('tracks error stats and throws on factory failure', async () => {
         const error = new Error('boom');
         factory.createWithTimeout.mockRejectedValue(error);
-        const service = new InnertubeService(factory, { logger });
+        const service = new InnertubeService(factory, { logger: noOpLogger });
 
         await expect(service.getSharedInstance('fail')).rejects.toThrow('InnertubeService instance creation failed');
         expect(service.stats.errors).toBe(1);

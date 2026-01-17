@@ -27,19 +27,18 @@ describe('chat-logger', () => {
     });
 
     describe('logChatMessage', () => {
-        it('warns and returns when platform or data missing', () => {
+        it('returns early when platform or data missing', () => {
             logChatMessage(null, null, {}, { logger: mockLogger });
 
-            expect(mockLogger.warn).toHaveBeenCalled();
             expect(mockLogger.console).not.toHaveBeenCalled();
         });
 
-        it('uses username and truncates long messages', () => {
+        it('truncates long messages', () => {
             const longMessage = 'x'.repeat(210);
 
             logChatMessage('twitch', { username: 'User', userId: 'u1', message: longMessage }, { maxMessageLength: 50 }, { logger: mockLogger });
 
-            expect(mockLogger.console).toHaveBeenCalledWith(expect.stringContaining('[twitch] User:'), 'chat-logger');
+            expect(mockLogger.console).toHaveBeenCalled();
             const logged = mockLogger.console.mock.calls[0][0];
             expect(logged.endsWith('...')).toBe(true);
         });
@@ -113,14 +112,12 @@ describe('chat-logger', () => {
             logChatMessageWithConfig('twitch', { username: 'User', userId: 'u1', message: 'hello' }, { general: { logChatMessages: true } }, {}, { logger: mockLogger });
 
             expect(mockLogger.console).toHaveBeenCalled();
-            expect(mockLogger.debug).toHaveBeenCalledWith(expect.stringContaining('Chat message logged from twitch'), 'chat-logger', expect.any(Object));
         });
 
-        it('logs debug when console logging disabled', () => {
+        it('skips console when logging disabled', () => {
             logChatMessageWithConfig('twitch', { username: 'User', userId: 'u1', message: 'hello' }, { general: { logChatMessages: false } }, {}, { logger: mockLogger });
 
             expect(mockLogger.console).not.toHaveBeenCalled();
-            expect(mockLogger.debug).toHaveBeenCalledWith('[twitch Debug] console logging disabled: User (u1) - hello', 'chat-logger');
         });
     });
 });

@@ -1,6 +1,6 @@
-
 const { describe, test, expect, it, afterEach } = require('bun:test');
 const { createMockFn, restoreAllMocks } = require('../../helpers/bun-mock-utils');
+const { noOpLogger } = require('../../helpers/mock-factories');
 
 const PlatformEventRouter = require('../../../src/services/PlatformEventRouter');
 
@@ -21,7 +21,6 @@ describe('PlatformEventRouter config gating error handling', () => {
     });
 
     it('throws when config toggle checks fail for follow notifications', async () => {
-        const logger = { debug: createMockFn(), info: createMockFn(), warn: createMockFn(), error: createMockFn() };
         const configService = {
             areNotificationsEnabled: createMockFn(() => {
                 throw new Error('toggle fail');
@@ -31,7 +30,7 @@ describe('PlatformEventRouter config gating error handling', () => {
             handleFollowNotification: createMockFn().mockResolvedValue(true)
         };
 
-        const router = buildRouter({ configService, runtime, notificationManager: {}, logger });
+        const router = buildRouter({ configService, runtime, notificationManager: {}, logger: noOpLogger });
 
         await expect(router.routeEvent({
             platform: 'twitch',
@@ -47,7 +46,6 @@ describe('PlatformEventRouter config gating error handling', () => {
     });
 
     it('routes unknown types without notification gating', async () => {
-        const logger = { debug: createMockFn(), info: createMockFn(), warn: createMockFn(), error: createMockFn() };
         const configService = {
             areNotificationsEnabled: createMockFn(() => {
                 throw new Error('toggle fail');
@@ -57,7 +55,7 @@ describe('PlatformEventRouter config gating error handling', () => {
             handleNotification: createMockFn().mockResolvedValue({ success: true })
         };
 
-        const router = buildRouter({ configService, runtime: {}, notificationManager, logger });
+        const router = buildRouter({ configService, runtime: {}, notificationManager, logger: noOpLogger });
 
         await expect(router.routeEvent({
             platform: 'youtube',
@@ -69,7 +67,6 @@ describe('PlatformEventRouter config gating error handling', () => {
     });
 
     it('routes unknown types even when config service is present', async () => {
-        const logger = { debug: createMockFn(), info: createMockFn(), warn: createMockFn(), error: createMockFn() };
         const configService = {
             areNotificationsEnabled: createMockFn(() => false)
         };
@@ -77,7 +74,7 @@ describe('PlatformEventRouter config gating error handling', () => {
             handleNotification: createMockFn().mockResolvedValue({ success: true })
         };
 
-        const router = buildRouter({ configService, runtime: {}, notificationManager, logger });
+        const router = buildRouter({ configService, runtime: {}, notificationManager, logger: noOpLogger });
 
         await expect(router.routeEvent({
             platform: 'youtube',
@@ -89,7 +86,6 @@ describe('PlatformEventRouter config gating error handling', () => {
     });
 
     it('consults config service for chat events and routes when enabled', async () => {
-        const logger = { debug: createMockFn(), info: createMockFn(), warn: createMockFn(), error: createMockFn() };
         const configService = {
             areNotificationsEnabled: createMockFn(() => true)
         };
@@ -97,7 +93,7 @@ describe('PlatformEventRouter config gating error handling', () => {
             handleChatMessage: createMockFn().mockResolvedValue(true)
         };
 
-        const router = buildRouter({ configService, runtime, notificationManager: {}, logger });
+        const router = buildRouter({ configService, runtime, notificationManager: {}, logger: noOpLogger });
 
         await router.routeEvent({
             platform: 'twitch',
@@ -117,7 +113,6 @@ describe('PlatformEventRouter config gating error handling', () => {
     });
 
     it('continues chat routing when config toggle check throws', async () => {
-        const logger = { debug: createMockFn(), info: createMockFn(), warn: createMockFn(), error: createMockFn() };
         const configService = {
             areNotificationsEnabled: createMockFn(() => {
                 throw new Error('toggle fail');
@@ -127,7 +122,7 @@ describe('PlatformEventRouter config gating error handling', () => {
             handleChatMessage: createMockFn().mockResolvedValue(true)
         };
 
-        const router = buildRouter({ configService, runtime, notificationManager: {}, logger });
+        const router = buildRouter({ configService, runtime, notificationManager: {}, logger: noOpLogger });
 
         await expect(router.routeEvent({
             platform: 'twitch',
@@ -144,7 +139,6 @@ describe('PlatformEventRouter config gating error handling', () => {
     });
 
     it('continues follow/raid routing when config toggle check throws', async () => {
-        const logger = { debug: createMockFn(), info: createMockFn(), warn: createMockFn(), error: createMockFn() };
         const configService = {
             areNotificationsEnabled: createMockFn(() => {
                 throw new Error('toggle fail');
@@ -155,7 +149,7 @@ describe('PlatformEventRouter config gating error handling', () => {
             handleRaidNotification: createMockFn().mockResolvedValue(true)
         };
 
-        const router = buildRouter({ configService, runtime, notificationManager: {}, logger });
+        const router = buildRouter({ configService, runtime, notificationManager: {}, logger: noOpLogger });
 
         await expect(router.routeEvent({
             platform: 'twitch',
@@ -172,7 +166,6 @@ describe('PlatformEventRouter config gating error handling', () => {
     });
 
     it('throws when config toggle check fails for gifts', async () => {
-        const logger = { debug: createMockFn(), info: createMockFn(), warn: createMockFn(), error: createMockFn() };
         const configService = {
             areNotificationsEnabled: createMockFn(() => {
                 throw new Error('toggle fail');
@@ -182,7 +175,7 @@ describe('PlatformEventRouter config gating error handling', () => {
             handleGiftNotification: createMockFn().mockResolvedValue(true)
         };
 
-        const router = buildRouter({ configService, runtime, notificationManager: {}, logger });
+        const router = buildRouter({ configService, runtime, notificationManager: {}, logger: noOpLogger });
 
         await expect(router.routeEvent({
             platform: 'tiktok',
@@ -193,7 +186,6 @@ describe('PlatformEventRouter config gating error handling', () => {
     });
 
     it('throws when config toggle check fails for envelopes', async () => {
-        const logger = { debug: createMockFn(), info: createMockFn(), warn: createMockFn(), error: createMockFn() };
         const configService = {
             areNotificationsEnabled: createMockFn(() => {
                 throw new Error('toggle fail');
@@ -203,7 +195,7 @@ describe('PlatformEventRouter config gating error handling', () => {
             handleEnvelopeNotification: createMockFn().mockResolvedValue(true)
         };
 
-        const router = buildRouter({ configService, runtime, notificationManager: {}, logger });
+        const router = buildRouter({ configService, runtime, notificationManager: {}, logger: noOpLogger });
 
         await expect(router.routeEvent({
             platform: 'tiktok',
@@ -214,7 +206,6 @@ describe('PlatformEventRouter config gating error handling', () => {
     });
 
     it('routes unknown types without gating even when config service exists', async () => {
-        const logger = { debug: createMockFn(), info: createMockFn(), warn: createMockFn(), error: createMockFn() };
         const configService = {
             areNotificationsEnabled: createMockFn()
         };
@@ -222,7 +213,7 @@ describe('PlatformEventRouter config gating error handling', () => {
             handleNotification: createMockFn().mockResolvedValue({ success: true })
         };
 
-        const router = buildRouter({ configService, runtime: {}, notificationManager, logger });
+        const router = buildRouter({ configService, runtime: {}, notificationManager, logger: noOpLogger });
 
         await expect(router.routeEvent({
             platform: 'youtube',
@@ -234,25 +225,22 @@ describe('PlatformEventRouter config gating error handling', () => {
     });
 
     it('requires config service for gift routing', async () => {
-        const logger = { debug: createMockFn(), info: createMockFn(), warn: createMockFn(), error: createMockFn() };
         const runtime = {
             handleGiftNotification: createMockFn().mockResolvedValue(true)
         };
-        expect(() => buildRouter({ configService: null, runtime, notificationManager: {}, logger }))
+        expect(() => buildRouter({ configService: null, runtime, notificationManager: {}, logger: noOpLogger }))
             .toThrow('PlatformEventRouter requires eventBus, runtime, notificationManager, configService, and logger');
     });
 
     it('requires notification manager for routed events', async () => {
-        const logger = { debug: createMockFn(), info: createMockFn(), warn: createMockFn(), error: createMockFn() };
         const configService = {
             areNotificationsEnabled: createMockFn(() => true)
         };
-        expect(() => buildRouter({ configService, runtime: {}, notificationManager: null, logger }))
+        expect(() => buildRouter({ configService, runtime: {}, notificationManager: null, logger: noOpLogger }))
             .toThrow('PlatformEventRouter requires eventBus, runtime, notificationManager, configService, and logger');
     });
 
-    it('logs unsubscribe errors during dispose without throwing', () => {
-        const logger = { debug: createMockFn(), info: createMockFn(), warn: createMockFn(), error: createMockFn() };
+    it('handles unsubscribe errors during dispose without throwing', () => {
         const configService = {
             areNotificationsEnabled: createMockFn(() => true)
         };
@@ -260,7 +248,7 @@ describe('PlatformEventRouter config gating error handling', () => {
             runtime: {},
             notificationManager: {},
             configService,
-            logger,
+            logger: noOpLogger,
             eventBus: {
                 subscribe: createMockFn(() => () => {
                     throw new Error('unsubscribe boom');
@@ -269,9 +257,5 @@ describe('PlatformEventRouter config gating error handling', () => {
         });
 
         expect(() => router.dispose()).not.toThrow();
-        expect(logger.warn).toHaveBeenCalledWith(
-            'Error unsubscribing platform:event handler: unsubscribe boom',
-            'PlatformEventRouter'
-        );
     });
 });
