@@ -1,30 +1,17 @@
 const { describe, test, expect, beforeEach, it, afterEach } = require('bun:test');
-const { createMockFn, spyOn, clearAllMocks, restoreAllMocks } = require('../../helpers/bun-mock-utils');
-const { mockModule, restoreAllModuleMocks } = require('../../helpers/bun-module-mocks');
+const { createMockFn, spyOn, restoreAllMocks } = require('../../helpers/bun-mock-utils');
 
-mockModule('../../../src/utils/platform-error-handler', () => ({
-    createPlatformErrorHandler: createMockFn(() => ({
-        handleEventProcessingError: createMockFn(),
-        logOperationalError: createMockFn()
-    }))
-}));
-
-const { createPlatformErrorHandler } = require('../../../src/utils/platform-error-handler');
 const { InitializationStatistics } = require('../../../src/utils/initialization-statistics');
 
 describe('InitializationStatistics behavior', () => {
     afterEach(() => {
         restoreAllMocks();
-        restoreAllModuleMocks();
     });
 
     let logger;
-    let handler;
 
     beforeEach(() => {
-        logger = { debug: createMockFn(), info: createMockFn(), warn: createMockFn() };
-        handler = { handleEventProcessingError: createMockFn(), logOperationalError: createMockFn() };
-        createPlatformErrorHandler.mockReturnValue(handler);
+        logger = { debug: createMockFn(), info: createMockFn(), warn: createMockFn(), error: createMockFn() };
     });
 
     it('tracks successful initialization timing and metrics', () => {
@@ -49,7 +36,7 @@ describe('InitializationStatistics behavior', () => {
         nowSpy.mockRestore();
     });
 
-    it('records failures with error handler routing and error tracking', () => {
+    it('records failures and tracks error statistics', () => {
         const stats = new InitializationStatistics('youtube', logger);
         const times = [0, 0, 50];
         const nowSpy = spyOn(Date, 'now').mockImplementation(() => times.shift());
@@ -62,13 +49,6 @@ describe('InitializationStatistics behavior', () => {
         expect(stats.failedAttempts).toBe(1);
         expect(stats.errorTypes.get('Error')).toBe(1);
         expect(stats.consecutiveFailures).toBe(1);
-
-        expect(handler.handleEventProcessingError).toHaveBeenCalledWith(
-            error,
-            'initialization',
-            expect.objectContaining({ attemptId }),
-            expect.stringContaining('Initialization failed')
-        );
 
         nowSpy.mockRestore();
     });

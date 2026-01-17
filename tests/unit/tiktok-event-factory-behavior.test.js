@@ -1,20 +1,15 @@
 const { describe, test, expect, it, afterEach } = require('bun:test');
 const { createMockFn, restoreAllMocks } = require('../helpers/bun-mock-utils');
-const { unmockModule, requireActual, restoreAllModuleMocks } = require('../helpers/bun-module-mocks');
 
-unmockModule('../../src/platforms/tiktok');
-unmockModule('../../src/core/logging');
-
-const logging = requireActual('../../src/core/logging');
+const logging = require('../../src/core/logging');
 logging.setConfigValidator(() => ({ logging: {} }));
 
-const { TikTokPlatform } = requireActual('../../src/platforms/tiktok');
+const { TikTokPlatform } = require('../../src/platforms/tiktok');
 const testClock = require('../helpers/test-clock');
 
 describe('TikTok eventFactory chat message behavior', () => {
     afterEach(() => {
         restoreAllMocks();
-        restoreAllModuleMocks();
     });
 
     it('builds a normalized chat event from raw TikTok data', () => {

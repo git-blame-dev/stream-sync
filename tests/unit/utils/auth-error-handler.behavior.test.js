@@ -1,21 +1,11 @@
 const { describe, test, expect, beforeEach, it, afterEach } = require('bun:test');
-const { createMockFn, clearAllMocks, restoreAllMocks } = require('../../helpers/bun-mock-utils');
-const { mockModule, restoreAllModuleMocks } = require('../../helpers/bun-module-mocks');
-
-mockModule('../../../src/utils/platform-error-handler', () => ({
-    createPlatformErrorHandler: createMockFn(() => ({
-        handleEventProcessingError: createMockFn(),
-        logOperationalError: createMockFn()
-    }))
-}));
+const { createMockFn, restoreAllMocks } = require('../../helpers/bun-mock-utils');
 
 const AuthErrorHandler = require('../../../src/utils/auth-error-handler');
-const { createPlatformErrorHandler } = require('../../../src/utils/platform-error-handler');
 
 describe('auth-error-handler behavior', () => {
     afterEach(() => {
         restoreAllMocks();
-        restoreAllModuleMocks();
     });
 
     let handler;

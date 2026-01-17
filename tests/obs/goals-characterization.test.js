@@ -1,141 +1,91 @@
 
 const { describe, test, expect, beforeEach, afterEach } = require('bun:test');
 const { createMockFn, restoreAllMocks } = require('../helpers/bun-mock-utils');
-const { mockModule, restoreAllModuleMocks } = require('../helpers/bun-module-mocks');
 
 const { TEST_TIMEOUTS } = require('../helpers/test-setup');
-const { noOpLogger, createMockOBSConnection, createMockConfigManager, createMockSourcesManager } = require('../helpers/mock-factories');
+const { noOpLogger, createMockSourcesManager } = require('../helpers/mock-factories');
 const { setupAutomatedCleanup } = require('../helpers/mock-lifecycle');
 const testClock = require('../helpers/test-clock');
+const { createOBSGoalsManager } = require('../../src/obs/goals');
 
-// Setup automated cleanup
 setupAutomatedCleanup({
     clearCallsBeforeEach: true,
     validateAfterCleanup: true,
     logPerformanceMetrics: true
 });
 
-// Mock external config dependency
-mockModule('../../src/core/config', () => ({
-    configManager: {
-        getBoolean: createMockFn(),
-        getString: createMockFn(),
-        getNumber: createMockFn()
-    },
-    config: { general: { fallbackUsername: 'Unknown User' } }
-}));
-
-// Mock external OBS connection
-mockModule('../../src/obs/connection', () => ({
-    getOBSConnectionManager: createMockFn()
-}));
-
-const mockGoalTracker = {
-    initializeGoalTracker: createMockFn().mockResolvedValue(),
-    addDonationToGoal: createMockFn().mockResolvedValue({
-        success: true,
-        formatted: '500/1000 coins',
-        current: 500,
-        target: 1000,
-        percentage: 50
-    }),
-    addPaypiggyToGoal: createMockFn().mockResolvedValue({
-        success: true,
-        formatted: '550/1000 coins',
-        current: 550,
-        target: 1000,
-        percentage: 55
-    }),
-    getGoalState: createMockFn().mockReturnValue({
-        current: 500,
-        target: 1000,
-        formatted: '500/1000 coins',
-        percentage: 50
-    }),
-    getAllGoalStates: createMockFn().mockReturnValue({
-        tiktok: { current: 500, target: 1000, formatted: '500/1000 coins' },
-        youtube: { current: 0.50, target: 1.00, formatted: '$0.50/$1.00 USD' },
-        twitch: { current: 50, target: 100, formatted: '050/100 bits' }
-    }),
-    formatGoalDisplay: createMockFn().mockReturnValue('500/1000 coins')
-};
-
-mockModule('../../src/utils/goal-tracker', () => ({
-    createGoalTracker: createMockFn(() => mockGoalTracker),
-    GoalTracker: createMockFn()
-}));
-
 describe('OBS Goals Module Characterization Tests', () => {
     afterEach(() => {
         restoreAllMocks();
-        restoreAllModuleMocks();
     });
 
     let goalsModule;
     let mockObsManager;
-    let mockLogger;
-    let mockOBSConnection;
     let mockConfigManager;
     let mockSourcesManager;
+    let mockGoalTracker;
 
     beforeEach(() => {
-        // Create mocks using factories
-        mockLogger = noOpLogger;
-        mockOBSConnection = createMockOBSConnection();
-        mockConfigManager = createMockConfigManager();
         mockSourcesManager = createMockSourcesManager();
 
-        // Setup OBS manager mock
         mockObsManager = {
             isConnected: createMockFn().mockReturnValue(true)
         };
 
-        // Setup default config responses
-        const { configManager } = require('../../src/core/config');
-        configManager.getBoolean.mockImplementation((section, key, defaultValue) => {
-            const responses = {
-                'goals.enabled': true,
-                'goals.tiktokGoalEnabled': true,
-                'goals.youtubeGoalEnabled': true,
-                'goals.twitchGoalEnabled': true
-            };
-            return responses[`${section}.${key}`] !== undefined ? responses[`${section}.${key}`] : defaultValue;
-        });
+        mockConfigManager = {
+            getBoolean: createMockFn().mockImplementation((section, key, defaultValue) => {
+                const responses = {
+                    'goals.enabled': true,
+                    'goals.tiktokGoalEnabled': true,
+                    'goals.youtubeGoalEnabled': true,
+                    'goals.twitchGoalEnabled': true
+                };
+                return responses[`${section}.${key}`] !== undefined ? responses[`${section}.${key}`] : defaultValue;
+            }),
+            getString: createMockFn().mockImplementation((section, key, defaultValue) => {
+                const responses = {
+                    'goals.tiktokGoalSource': 'tiktok goal txt',
+                    'goals.youtubeGoalSource': 'youtube goal txt',
+                    'goals.twitchGoalSource': 'twitch goal txt'
+                };
+                return responses[`${section}.${key}`] !== undefined ? responses[`${section}.${key}`] : defaultValue;
+            }),
+            getNumber: createMockFn()
+        };
 
-        configManager.getString.mockImplementation((section, key, defaultValue) => {
-            const responses = {
-                'goals.tiktokGoalSource': 'tiktok goal txt',
-                'goals.youtubeGoalSource': 'youtube goal txt',
-                'goals.twitchGoalSource': 'twitch goal txt'
-            };
-            return responses[`${section}.${key}`] !== undefined ? responses[`${section}.${key}`] : defaultValue;
-        });
+        mockGoalTracker = {
+            initializeGoalTracker: createMockFn().mockResolvedValue(),
+            addDonationToGoal: createMockFn().mockResolvedValue({
+                success: true,
+                formatted: '500/1000 coins',
+                current: 500,
+                target: 1000,
+                percentage: 50
+            }),
+            addPaypiggyToGoal: createMockFn().mockResolvedValue({
+                success: true,
+                formatted: '550/1000 coins',
+                current: 550,
+                target: 1000,
+                percentage: 55
+            }),
+            getGoalState: createMockFn().mockReturnValue({
+                current: 500,
+                target: 1000,
+                formatted: '500/1000 coins',
+                percentage: 50
+            }),
+            getAllGoalStates: createMockFn().mockReturnValue({
+                tiktok: { current: 500, target: 1000, formatted: '500/1000 coins' },
+                youtube: { current: 0.50, target: 1.00, formatted: '$0.50/$1.00 USD' },
+                twitch: { current: 50, target: 100, formatted: '050/100 bits' }
+            }),
+            formatGoalDisplay: createMockFn().mockReturnValue('500/1000 coins')
+        };
 
-        // Reset all mocks to ensure clean state
-        mockGoalTracker.getAllGoalStates.mockReset();
-        mockGoalTracker.getGoalState.mockReset();
-        mockGoalTracker.initializeGoalTracker.mockReset();
-        mockGoalTracker.addDonationToGoal.mockReset();
-        mockGoalTracker.addPaypiggyToGoal.mockReset();
-
-        // Re-configure mocks with correct return values
-        mockGoalTracker.getAllGoalStates.mockReturnValue({
-            tiktok: { current: 500, target: 1000, formatted: '500/1000 coins' },
-            youtube: { current: 0.50, target: 1.00, formatted: '$0.50/$1.00 USD' },
-            twitch: { current: 50, target: 100, formatted: '050/100 bits' }
-        });
-
-        mockGoalTracker.getGoalState.mockReturnValue({
-            current: 500,
-            target: 1000,
-            formatted: '500/1000 coins',
-            percentage: 50
-        });
-
-        const goalsDeps = require('../../src/obs/goals');
-        goalsModule = goalsDeps.createOBSGoalsManager(mockObsManager, {
-            logger: require('../../src/core/logging').logger,
-            configManager: require('../../src/core/config').configManager,
+        goalsModule = createOBSGoalsManager(mockObsManager, {
+            logger: noOpLogger,
+            configManager: mockConfigManager,
             updateTextSource: mockSourcesManager.updateTextSource,
             goalTracker: mockGoalTracker
         });
@@ -168,9 +118,8 @@ describe('OBS Goals Module Characterization Tests', () => {
 
         test('initializeGoalDisplay should return early when goals disabled', async () => {
             const { updateTextSource } = mockSourcesManager;
-            const { configManager } = require('../../src/core/config');
 
-            configManager.getBoolean.mockImplementation((section, key, defaultValue) => {
+            mockConfigManager.getBoolean.mockImplementation((section, key, defaultValue) => {
                 if (section === 'goals' && key === 'enabled') return false;
                 return defaultValue;
             });
@@ -234,16 +183,14 @@ describe('OBS Goals Module Characterization Tests', () => {
 
         test('updateGoalDisplay should handle disabled platform gracefully', async () => {
             const { updateTextSource } = mockSourcesManager;
-            const { configManager } = require('../../src/core/config');
 
-            configManager.getBoolean.mockImplementation((section, key, defaultValue) => {
+            mockConfigManager.getBoolean.mockImplementation((section, key, defaultValue) => {
                 if (section === 'goals' && key === 'youtubeGoalEnabled') return false;
                 return defaultValue;
             });
 
             await goalsModule.updateGoalDisplay('youtube');
 
-            // When disabled, updateTextSource should not be called for that platform
             expect(updateTextSource).not.toHaveBeenCalled();
         }, TEST_TIMEOUTS.FAST);
     });
@@ -337,29 +284,24 @@ describe('OBS Goals Module Characterization Tests', () => {
 
     describe('Configuration Handling', () => {
         test('should respect platform enable/disable flags', async () => {
-            const { configManager } = require('../../src/core/config');
             const { updateTextSource } = mockSourcesManager;
 
-            // Disable YouTube goals
-            configManager.getBoolean.mockImplementation((section, key, defaultValue) => {
+            mockConfigManager.getBoolean.mockImplementation((section, key, defaultValue) => {
                 if (section === 'goals' && key === 'youtubeGoalEnabled') return false;
                 return defaultValue;
             });
 
             await goalsModule.updateAllGoalDisplays();
 
-            // Should only update TikTok and Twitch
             expect(updateTextSource).toHaveBeenCalledWith('tiktok goal txt', '500/1000 coins');
             expect(updateTextSource).toHaveBeenCalledWith('twitch goal txt', '050/100 bits');
             expect(updateTextSource).not.toHaveBeenCalledWith('youtube goal txt', expect.any(String));
         }, TEST_TIMEOUTS.FAST);
 
         test('should handle missing source configurations gracefully', async () => {
-            const { configManager } = require('../../src/core/config');
             const { updateTextSource } = mockSourcesManager;
 
-            // Return undefined for source name
-            configManager.getString.mockImplementation((section, key, defaultValue) => {
+            mockConfigManager.getString.mockImplementation((section, key, defaultValue) => {
                 if (section === 'goals' && key === 'tiktokGoalSource') return undefined;
                 return defaultValue;
             });
