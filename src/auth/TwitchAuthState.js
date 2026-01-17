@@ -1,15 +1,16 @@
-const { createPlatformErrorHandler } = require('../utils/platform-error-handler');
+const { createPlatformErrorHandler: defaultCreateErrorHandler } = require('../utils/platform-error-handler');
 
 
 class TwitchAuthState {
-    constructor(logger) {
+    constructor(logger, deps = {}) {
         if (!logger || typeof logger.error !== 'function') {
             throw new Error('TwitchAuthState requires a logger');
         }
-        this.state = 'READY'  // READY, REFRESHING, ERROR
+        this.state = 'READY'
         this.waitingOperations = []
         this.logger = logger
-        this.errorHandler = createPlatformErrorHandler(this.logger, 'auth-state')
+        const createErrorHandler = deps.createPlatformErrorHandler || defaultCreateErrorHandler;
+        this.errorHandler = createErrorHandler(this.logger, 'auth-state')
     }
     
     async executeWhenReady(operation) {

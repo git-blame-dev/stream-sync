@@ -1,9 +1,14 @@
+const { logger: defaultLogger } = require('../core/logging');
+const { getOBSConnectionManager: defaultGetOBSConnectionManager } = require('./connection');
+const { getDefaultSourcesManager: defaultGetDefaultSourcesManager } = require('./sources');
 
-const { logger } = require('../core/logging');
-const { getOBSConnectionManager } = require('./connection');
-const { getDefaultSourcesManager } = require('./sources');
+async function clearStartupDisplays(config, runtimeConstants, deps = {}) {
+    const {
+        logger = defaultLogger,
+        getOBSConnectionManager = defaultGetOBSConnectionManager,
+        getDefaultSourcesManager = defaultGetDefaultSourcesManager
+    } = deps;
 
-async function clearStartupDisplays(config, runtimeConstants) {
     try {
         const resolvedRuntimeConstants = runtimeConstants
             || (process.env.NODE_ENV === 'test' ? global.__TEST_RUNTIME_CONSTANTS__ : null);
@@ -46,7 +51,6 @@ async function clearStartupDisplays(config, runtimeConstants) {
 
         logger.debug('Startup displays cleared successfully', 'OBSStartup');
     } catch (error) {
-        // Don't crash startup if display clearing fails
         logger.warn('Failed to clear startup displays', error, 'OBSStartup');
     }
 }

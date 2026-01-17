@@ -1,36 +1,25 @@
-
-const { describe, test, expect, beforeEach, it, afterEach } = require('bun:test');
-const { createMockFn, clearAllMocks, restoreAllMocks } = require('../../helpers/bun-mock-utils');
-const { mockModule, restoreAllModuleMocks } = require('../../helpers/bun-module-mocks');
-
-const mockHandler = {
-    handleEventProcessingError: createMockFn(),
-    logOperationalError: createMockFn()
-};
-
-mockModule('../../../src/utils/platform-error-handler', () => ({
-    createPlatformErrorHandler: createMockFn(() => mockHandler)
-}));
-
-const { createPlatformErrorHandler } = require('../../../src/utils/platform-error-handler');
+const { describe, test, expect, beforeEach, it } = require('bun:test');
+const { createMockFn } = require('../../helpers/bun-mock-utils');
 const { PlatformInitializationManager } = require('../../../src/utils/platform-initialization-manager');
 
-describe('PlatformInitializationManager', () => {
-    afterEach(() => {
-        restoreAllMocks();
-        restoreAllModuleMocks();
-    });
+const noOpLogger = { debug: () => {}, info: () => {}, warn: () => {}, error: () => {} };
 
-    const logger = {
-        debug: createMockFn(),
-        info: createMockFn(),
-        warn: createMockFn(),
-        error: createMockFn()
-    };
+describe('PlatformInitializationManager', () => {
+    let mockHandler;
+    let logger;
 
     beforeEach(() => {
-        mockHandler.handleEventProcessingError.mockClear();
-        mockHandler.logOperationalError.mockClear();
+        mockHandler = {
+            handleEventProcessingError: createMockFn(),
+            logOperationalError: createMockFn()
+        };
+
+        logger = {
+            debug: createMockFn(),
+            info: createMockFn(),
+            warn: createMockFn(),
+            error: createMockFn()
+        };
     });
 
     it('prevents reinitialization by default and tracks prevented attempts', () => {
@@ -60,13 +49,12 @@ describe('PlatformInitializationManager', () => {
         expect(manager.beginInitialization()).toBe(true);
 
         manager.configure({ allowReinitialization: false });
-        expect(manager.beginInitialization(true)).toBe(true); // force flag
+        expect(manager.beginInitialization(true)).toBe(true);
     });
 
     it('enforces maxAttempts and routes operational error when exceeded', () => {
         const manager = new PlatformInitializationManager('twitch', logger);
         manager.errorHandler = mockHandler;
-        const errorHandler = mockHandler;
 
         manager.configure({ maxAttempts: 1 });
 
@@ -75,7 +63,7 @@ describe('PlatformInitializationManager', () => {
 
         const proceed = manager.beginInitialization();
         expect(proceed).toBe(false);
-        expect(errorHandler.logOperationalError).toHaveBeenCalledWith(
+        expect(mockHandler.logOperationalError).toHaveBeenCalledWith(
             expect.stringContaining('Maximum initialization attempts'),
             'twitch',
             expect.objectContaining({ attempt: 2 })
@@ -85,13 +73,12 @@ describe('PlatformInitializationManager', () => {
     it('routes initialization failure errors through platform error handler', () => {
         const manager = new PlatformInitializationManager('twitch', logger);
         manager.errorHandler = mockHandler;
-        const errorHandler = mockHandler;
         const err = new Error('init failed');
 
         manager.beginInitialization();
         manager.markInitializationFailure(err, { context: 'startup' });
 
-        expect(errorHandler.handleEventProcessingError).toHaveBeenCalledWith(
+        expect(mockHandler.handleEventProcessingError).toHaveBeenCalledWith(
             err,
             'initialization',
             expect.objectContaining({ context: 'startup' }),

@@ -1,30 +1,12 @@
-const { describe, test, expect, beforeEach, it, afterEach } = require('bun:test');
-const { createMockFn, clearAllMocks, restoreAllMocks } = require('../../helpers/bun-mock-utils');
-const { mockModule, restoreAllModuleMocks } = require('../../helpers/bun-module-mocks');
-
-mockModule('../../../src/utils/platform-error-handler', () => ({
-    createPlatformErrorHandler: createMockFn(() => ({
-        handleEventProcessingError: createMockFn(),
-        logOperationalError: createMockFn()
-    }))
-}));
-
+const { describe, test, expect, beforeEach, it } = require('bun:test');
+const { createMockFn } = require('../../helpers/bun-mock-utils');
 const TwitchAuthState = require('../../../src/auth/TwitchAuthState');
-const { createPlatformErrorHandler } = require('../../../src/utils/platform-error-handler');
+
+const noOpLogger = { debug: () => {}, info: () => {}, warn: () => {}, error: () => {} };
 
 describe('TwitchAuthState behavior', () => {
-    afterEach(() => {
-        restoreAllMocks();
-        restoreAllModuleMocks();
-    });
-
-    const logger = { debug: createMockFn(), info: createMockFn(), warn: createMockFn(), error: createMockFn() };
-
-    beforeEach(() => {
-        });
-
     it('executes immediately when ready and tracks queue size', async () => {
-        const state = new TwitchAuthState(logger);
+        const state = new TwitchAuthState(noOpLogger);
         const op = createMockFn().mockResolvedValue('ok');
 
         await expect(state.executeWhenReady(op)).resolves.toBe('ok');
@@ -34,7 +16,7 @@ describe('TwitchAuthState behavior', () => {
     });
 
     it('queues during refresh and flushes on success', async () => {
-        const state = new TwitchAuthState(logger);
+        const state = new TwitchAuthState(noOpLogger);
         const op = createMockFn().mockResolvedValue('done');
         state.startRefresh();
 
@@ -48,7 +30,7 @@ describe('TwitchAuthState behavior', () => {
     });
 
     it('rejects queued operations on failure and blocks further execution', async () => {
-        const state = new TwitchAuthState(logger);
+        const state = new TwitchAuthState(noOpLogger);
         state.startRefresh();
 
         const queued = state.executeWhenReady(() => 'noop');
@@ -60,10 +42,15 @@ describe('TwitchAuthState behavior', () => {
     });
 
     it('routes errors from queued operations through platform error handler', async () => {
-        const handler = { handleEventProcessingError: createMockFn(), logOperationalError: createMockFn() };
-        createPlatformErrorHandler.mockReturnValue(handler);
+        const handler = {
+            handleEventProcessingError: createMockFn(),
+            logOperationalError: createMockFn()
+        };
+        const mockCreateErrorHandler = createMockFn().mockReturnValue(handler);
 
-        const state = new TwitchAuthState(logger);
+        const state = new TwitchAuthState(noOpLogger, {
+            createPlatformErrorHandler: mockCreateErrorHandler
+        });
         state.startRefresh();
 
         const queued = state.executeWhenReady(() => {
@@ -72,6 +59,11 @@ describe('TwitchAuthState behavior', () => {
 
         state.finishRefresh(true);
         await expect(queued).rejects.toThrow('boom');
-        expect(handler.handleEventProcessingError).toHaveBeenCalledWith(expect.any(Error), 'auth-state', null, expect.stringContaining('queued'));
+        expect(handler.handleEventProcessingError).toHaveBeenCalledWith(
+            expect.any(Error),
+            'auth-state',
+            null,
+            expect.stringContaining('queued')
+        );
     });
 });

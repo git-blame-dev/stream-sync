@@ -1,61 +1,26 @@
+const { describe, test, expect, beforeEach, it } = require('bun:test');
+const { createMockFn } = require('../helpers/bun-mock-utils');
+const { clearStartupDisplays } = require('../../src/obs/startup');
 
-const { describe, test, expect, beforeEach, it, afterEach } = require('bun:test');
-const { createMockFn, clearAllMocks, restoreAllMocks } = require('../helpers/bun-mock-utils');
-const { mockModule, resetModules, restoreAllModuleMocks } = require('../helpers/bun-module-mocks');
+const noOpLogger = { debug: () => {}, info: () => {}, warn: () => {}, error: () => {} };
 
 describe('OBS Startup Display Clearing - Detailed Behavior', () => {
-    afterEach(() => {
-        restoreAllMocks();
-        restoreAllModuleMocks();
-    });
-
     let mockOBSManager;
-    let mockConfig;
-    let clearStartupDisplays;
     let hideAllDisplays;
     let clearTextSource;
+    let mockConfig;
+    let testRuntimeConstants;
+    let deps;
 
     beforeEach(() => {
-        // Clear all mocks
-        resetModules();
-
-        // Create tracked arrays for behavior validation
-        const clearedSources = [];
-        const hideAllDisplaysCalls = [];
-
-        // Mock OBS Manager
         mockOBSManager = {
             isConnected: createMockFn(() => true),
             connected: true
         };
 
-        // Mock hideAllDisplays function
-        hideAllDisplays = createMockFn().mockImplementation((...args) => {
-            hideAllDisplaysCalls.push(args);
-            return Promise.resolve();
-        });
+        hideAllDisplays = createMockFn().mockResolvedValue();
+        clearTextSource = createMockFn().mockResolvedValue();
 
-        // Mock clearTextSource function
-        clearTextSource = createMockFn().mockImplementation((sourceName) => {
-            clearedSources.push(sourceName);
-            return Promise.resolve();
-        });
-
-        // Mock dependencies
-        mockModule('../../src/obs/connection', () => ({
-            getOBSConnectionManager: () => mockOBSManager
-        }));
-
-        mockModule('../../src/obs/sources', () => {
-            const instance = { hideAllDisplays, clearTextSource };
-            return {
-                OBSSourcesManager: class {},
-                createOBSSourcesManager: () => instance,
-                getDefaultSourcesManager: () => instance
-            };
-        });
-
-        // Create test config
         mockConfig = {
             general: {
                 chatMsgScene: 'stream pkmn switch',
@@ -68,18 +33,28 @@ describe('OBS Startup Display Clearing - Detailed Behavior', () => {
             }
         };
 
-        // Import the actual clearStartupDisplays utility
-        const obsStartup = require('../../src/obs/startup');
-        clearStartupDisplays = (config, runtimeConstants) => obsStartup.clearStartupDisplays(config || mockConfig, runtimeConstants);
+        testRuntimeConstants = {
+            CHAT_PLATFORM_LOGOS: {
+                twitch: 'twitch-img',
+                youtube: 'youtube-img',
+                tiktok: 'tiktok-img'
+            },
+            NOTIFICATION_PLATFORM_LOGOS: {
+                twitch: 'twitch-img',
+                youtube: 'youtube-img',
+                tiktok: 'tiktok-img'
+            }
+        };
 
-        // Expose tracking arrays for test verification
-        clearStartupDisplays.clearedSources = clearedSources;
-        clearStartupDisplays.hideAllDisplaysCalls = hideAllDisplaysCalls;
+        deps = {
+            logger: noOpLogger,
+            getOBSConnectionManager: () => mockOBSManager,
+            getDefaultSourcesManager: () => ({ hideAllDisplays, clearTextSource })
+        };
     });
 
     describe('Behavior', () => {
         it('should call hideAllDisplays with correct parameters based on current config.ini', async () => {
-            // Given: Current config.ini structure
             const currentConfig = {
                 general: {
                     chatMsgScene: 'stream pkmn switch',
@@ -92,69 +67,49 @@ describe('OBS Startup Display Clearing - Detailed Behavior', () => {
                 }
             };
 
-            // When: Running current clearStartupDisplays implementation
-            await clearStartupDisplays(currentConfig);
+            await clearStartupDisplays(currentConfig, testRuntimeConstants, deps);
 
-            // Then: hideAllDisplays should be called with current config values
             expect(hideAllDisplays).toHaveBeenCalledWith(
-                'stream pkmn switch',           // From general.chatMsgScene
-                'stream pkmn switch',           // From obs.notificationScene  
-                {
-                    twitch: 'twitch-img',
-                    youtube: 'youtube-img',
-                    tiktok: 'tiktok-img'
-                },                              // Chat platform logos from runtime constants
-                {
-                    twitch: 'twitch-img',
-                    youtube: 'youtube-img', 
-                    tiktok: 'tiktok-img'
-                },                              // Notification platform logos from runtime constants
-                'tts txt',                      // From obs.ttsTxt
-                'notification streamlabs'       // From obs.notificationTxt
+                'stream pkmn switch',
+                'stream pkmn switch',
+                testRuntimeConstants.CHAT_PLATFORM_LOGOS,
+                testRuntimeConstants.NOTIFICATION_PLATFORM_LOGOS,
+                'tts txt',
+                'notification streamlabs'
             );
         });
 
         it('should not clear text sources directly on startup', async () => {
-            // Given: Standard config
             const config = {
                 general: { chatMsgScene: 'stream pkmn switch' },
                 obs: { notificationScene: 'stream pkmn switch', ttsTxt: 'tts txt', notificationTxt: 'notification streamlabs' }
             };
 
-            // When: Running clearStartupDisplays
-            await clearStartupDisplays(config);
+            await clearStartupDisplays(config, testRuntimeConstants, deps);
 
-            // Then: Should not call direct text source clearing
             expect(clearTextSource).not.toHaveBeenCalled();
         });
 
         it('should skip clearing when config sections are missing', async () => {
-            // Given: Empty config (missing sections)
             const emptyConfig = {};
 
-            // When: Running clearStartupDisplays
-            await clearStartupDisplays(emptyConfig);
+            await clearStartupDisplays(emptyConfig, testRuntimeConstants, deps);
 
-            // Then: Should skip clearing
             expect(hideAllDisplays).not.toHaveBeenCalled();
         });
 
         it('should skip clearing when required obs fields are missing', async () => {
-            // Given: Missing required obs fields
             const missingFieldsConfig = {
                 general: { chatMsgScene: 'stream pkmn switch' },
                 obs: { notificationScene: 'stream pkmn switch' }
             };
 
-            // When: Running clearStartupDisplays
-            await clearStartupDisplays(missingFieldsConfig);
+            await clearStartupDisplays(missingFieldsConfig, testRuntimeConstants, deps);
 
-            // Then: Should skip clearing
             expect(hideAllDisplays).not.toHaveBeenCalled();
         });
 
         it('should skip operations when OBS is not connected', async () => {
-            // Given: OBS is not connected
             mockOBSManager.isConnected = createMockFn(() => false);
 
             const config = {
@@ -162,16 +117,13 @@ describe('OBS Startup Display Clearing - Detailed Behavior', () => {
                 obs: { notificationScene: 'stream pkmn switch' }
             };
 
-            // When: Running clearStartupDisplays
-            await clearStartupDisplays(config);
+            await clearStartupDisplays(config, testRuntimeConstants, deps);
 
-            // Then: Should skip all OBS operations
             expect(hideAllDisplays).not.toHaveBeenCalled();
             expect(clearTextSource).not.toHaveBeenCalled();
         });
 
         it('should not crash startup if entire clearing fails', async () => {
-            // Given: hideAllDisplays will fail
             hideAllDisplays.mockRejectedValue(new Error('OBS connection lost'));
 
             const config = {
@@ -179,14 +131,11 @@ describe('OBS Startup Display Clearing - Detailed Behavior', () => {
                 obs: { notificationScene: 'stream pkmn switch' }
             };
 
-            // When: Running clearStartupDisplays
-            // Then: Should not throw error (resolves without exception)
-            await expect(clearStartupDisplays(config)).resolves.toBeUndefined();
+            await expect(clearStartupDisplays(config, testRuntimeConstants, deps)).resolves.toBeUndefined();
         });
 
         it('should use provided runtime constants for platform logos', async () => {
-            // Given: Runtime constants override
-            const runtimeConstants = {
+            const customRuntimeConstants = {
                 CHAT_PLATFORM_LOGOS: {
                     twitch: 'custom-twitch',
                     youtube: 'custom-youtube',
@@ -199,15 +148,13 @@ describe('OBS Startup Display Clearing - Detailed Behavior', () => {
                 }
             };
 
-            // When: Running clearStartupDisplays with runtime constants
-            await clearStartupDisplays(undefined, runtimeConstants);
+            await clearStartupDisplays(mockConfig, customRuntimeConstants, deps);
 
-            // Then: Should use the provided runtime constants
             expect(hideAllDisplays).toHaveBeenCalledWith(
                 'stream pkmn switch',
                 'stream pkmn switch',
-                runtimeConstants.CHAT_PLATFORM_LOGOS,
-                runtimeConstants.NOTIFICATION_PLATFORM_LOGOS,
+                customRuntimeConstants.CHAT_PLATFORM_LOGOS,
+                customRuntimeConstants.NOTIFICATION_PLATFORM_LOGOS,
                 'tts txt',
                 'notification streamlabs'
             );

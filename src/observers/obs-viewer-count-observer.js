@@ -1,18 +1,18 @@
-
 const { ViewerCountObserver } = require('./viewer-count-observer');
-const { configManager } = require('../core/config');
+const { configManager: defaultConfigManager } = require('../core/config');
 const { createTextProcessingManager } = require('../utils/text-processing');
 const { VIEWER_COUNT_CONSTANTS } = require('../core/constants');
 const { createPlatformErrorHandler } = require('../utils/platform-error-handler');
 
 class OBSViewerCountObserver extends ViewerCountObserver {
-    constructor(obsManager, logger) {
+    constructor(obsManager, logger, deps = {}) {
         super();
         if (!logger || typeof logger.error !== 'function') {
             throw new Error('OBSViewerCountObserver requires a logger');
         }
         this.obsManager = obsManager;
         this.logger = logger;
+        this.configManager = deps.configManager || defaultConfigManager;
         this.textProcessing = createTextProcessingManager({ logger: this.logger });
         this.errorHandler = createPlatformErrorHandler(logger, VIEWER_COUNT_CONSTANTS.LOG_CONTEXT.OBS_OBSERVER);
     }
@@ -121,7 +121,7 @@ class OBSViewerCountObserver extends ViewerCountObserver {
             return;
         }
 
-        const platformConfig = configManager.getSection(platformName.toLowerCase());
+        const platformConfig = this.configManager.getSection(platformName.toLowerCase());
         if (!platformConfig || !platformConfig.viewerCountEnabled) {
             this.logger.debug(`Viewer count not enabled for ${platformName}`, VIEWER_COUNT_CONSTANTS.LOG_CONTEXT.OBS_OBSERVER);
             return;
