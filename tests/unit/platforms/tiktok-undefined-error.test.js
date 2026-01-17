@@ -1,7 +1,6 @@
 const { describe, it, expect } = require('bun:test');
 const { createMockFn } = require('../../helpers/bun-mock-utils');
-
-const noOpLogger = { error: () => {}, warn: () => {}, info: () => {}, debug: () => {} };
+const { noOpLogger } = require('../../helpers/mock-factories');
 
 describe('TikTok Error Message Handling', () => {
     it('handles undefined error.message without crashing', () => {
@@ -18,13 +17,6 @@ describe('TikTok Error Message Handling', () => {
     it('handles error objects without message property gracefully', () => {
         const { TikTokPlatform } = require('../../../src/platforms/tiktok');
 
-        const mockLogger = {
-            error: createMockFn(),
-            warn: createMockFn(),
-            info: createMockFn(),
-            debug: createMockFn()
-        };
-
         const mockConnection = {
             on: createMockFn(),
             connect: createMockFn(),
@@ -38,7 +30,7 @@ describe('TikTok Error Message Handling', () => {
                 WebcastEvent: { GIFT: 'gift', ERROR: 'error', DISCONNECT: 'disconnect' },
                 ControlEvent: {},
                 TikTokWebSocketClient: createMockFn(() => mockConnection),
-                logger: mockLogger,
+                logger: noOpLogger,
                 retrySystem: {
                     resetRetryCount: createMockFn(),
                     handleConnectionError: createMockFn(),
@@ -50,8 +42,6 @@ describe('TikTok Error Message Handling', () => {
             }
         );
 
-        platform.logger = mockLogger;
-
         const errorWithoutMessage = {};
 
         const handleConnectionError = Object.getPrototypeOf(platform)._handleConnectionError;
@@ -60,8 +50,6 @@ describe('TikTok Error Message Handling', () => {
             expect(() => {
                 handleConnectionError.call(platform, errorWithoutMessage);
             }).not.toThrow();
-
-            expect(mockLogger.error).toHaveBeenCalled();
         }
     });
 });

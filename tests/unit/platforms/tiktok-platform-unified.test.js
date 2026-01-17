@@ -1,13 +1,11 @@
 const { describe, it, expect, beforeEach, afterEach } = require('bun:test');
 const { createMockFn, restoreAllMocks } = require('../../helpers/bun-mock-utils');
-const { restoreAllModuleMocks, resetModules } = require('../../helpers/bun-module-mocks');
+const { noOpLogger } = require('../../helpers/mock-factories');
 
 const PlatformEventRouter = require('../../../src/services/PlatformEventRouter');
 const { PlatformEvents } = require('../../../src/interfaces/PlatformEvents');
 const { TikTokPlatform } = require('../../../src/platforms/tiktok');
 const testClock = require('../../helpers/test-clock');
-
-const noOpLogger = { debug: () => {}, info: () => {}, warn: () => {}, error: () => {} };
 
 describe('TikTokPlatform unified event contract (expected behavior)', () => {
     let platform;
@@ -16,8 +14,6 @@ describe('TikTokPlatform unified event contract (expected behavior)', () => {
 
     afterEach(() => {
         restoreAllMocks();
-        restoreAllModuleMocks();
-        resetModules();
     });
 
     beforeEach(() => {
