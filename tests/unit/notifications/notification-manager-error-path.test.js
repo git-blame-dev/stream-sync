@@ -1,5 +1,6 @@
 const { describe, test, expect, it, afterEach } = require('bun:test');
 const { createMockFn, restoreAllMocks } = require('../../helpers/bun-mock-utils');
+const { noOpLogger } = require('../../helpers/mock-factories');
 
 const NotificationManager = require('../../../src/notifications/NotificationManager');
 const constants = require('../../../src/core/constants');
@@ -34,8 +35,6 @@ const createConfigServiceStub = () => ({
     isDebugEnabled: () => false,
     getTTSConfig: () => ({ enabled: false })
 });
-
-const noOpLogger = { debug: () => {}, info: () => {}, warn: () => {}, error: () => {} };
 
 describe('NotificationManager monetization error path', () => {
     afterEach(() => {

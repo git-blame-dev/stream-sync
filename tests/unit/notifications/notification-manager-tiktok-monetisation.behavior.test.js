@@ -1,11 +1,10 @@
 
 const { describe, test, expect, beforeEach, it, afterEach } = require('bun:test');
 const { createMockFn, restoreAllMocks } = require('../../helpers/bun-mock-utils');
+const { noOpLogger } = require('../../helpers/mock-factories');
 
 const EventEmitter = require('events');
 const NotificationManager = require('../../../src/notifications/NotificationManager');
-
-const noOpLogger = { debug: () => {}, info: () => {}, warn: () => {}, error: () => {} };
 
 describe('NotificationManager TikTok monetisation behavior', () => {
     afterEach(() => {

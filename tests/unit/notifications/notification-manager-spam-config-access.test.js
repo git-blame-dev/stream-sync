@@ -76,7 +76,6 @@ describe('NotificationManager Spam Protection Behavior - Modernized', () => {
             })
         };
 
-        // Import NotificationManager after mocks are set up
         NotificationManager = require('../../../src/notifications/NotificationManager');
     });
 
@@ -101,11 +100,9 @@ describe('NotificationManager Spam Protection Behavior - Modernized', () => {
         it('should access spam configuration for effective spam protection', () => {
             const { config } = require('../../../src/core/config');
 
-            // Spam configuration is available
             expect(config).toBeDefined();
             expect(config.spam).toBeDefined();
 
-            // Configuration structure supports protection
             const hasSpamConfig = config && config.spam;
             expect(hasSpamConfig).toBeTruthy();
         });
@@ -124,10 +121,8 @@ describe('NotificationManager Spam Protection Behavior - Modernized', () => {
                 vfxCommandService: { getVFXConfig: createMockFn().mockResolvedValue(null) }
             });
 
-            // Spam detector should be available
             expect(notificationManager.donationSpamDetector).toBe(mockSpamDetector);
 
-            // Process a gift and verify spam detection is used
             const giftData = {
                 userId: 'user123',
                 username: 'TestUser',
@@ -139,7 +134,6 @@ describe('NotificationManager Spam Protection Behavior - Modernized', () => {
 
             await notificationManager.handleNotification('platform:gift', 'tiktok', giftData);
 
-            // Should have called spam detector
             expect(mockSpamDetector.handleDonationSpam).toHaveBeenCalled();
         });
     });
@@ -156,13 +150,10 @@ describe('NotificationManager Spam Protection Behavior - Modernized', () => {
                 textProcessing: { formatChatMessage: createMockFn() },
                 obsGoals: { processDonationGoal: createMockFn() },
                 vfxCommandService: { getVFXConfig: createMockFn().mockResolvedValue(null) }
-                // donationSpamDetector: NOT PROVIDED
             });
 
-            // No spam detector available
             expect(notificationManager.donationSpamDetector).toBeUndefined();
 
-            // Process gift without spam detection
             const giftData = {
                 userId: 'user123',
                 username: 'TestUser',
@@ -172,12 +163,10 @@ describe('NotificationManager Spam Protection Behavior - Modernized', () => {
                 currency: 'coins'
             };
 
-            // Should not throw
             await expect(
                 notificationManager.handleNotification('platform:gift', 'tiktok', giftData)
             ).resolves.toBeDefined();
 
-            // Gift should be added to queue (no filtering)
             expect(mockDisplayQueue.addItem).toHaveBeenCalled();
         });
 
@@ -205,13 +194,11 @@ describe('NotificationManager Spam Protection Behavior - Modernized', () => {
                 const { config } = require('../../../src/core/config');
                 const spamConfig = config.spam;
 
-                // These are the properties expected by SpamDetectionConfig
                 expect(spamConfig.spamDetectionEnabled).toBeDefined();
                 expect(spamConfig.spamDetectionWindow).toBeDefined();
                 expect(spamConfig.maxIndividualNotifications).toBeDefined();
                 expect(spamConfig.lowValueThreshold).toBeDefined();
 
-                // Properties should have correct types
                 expect(typeof spamConfig.spamDetectionEnabled).toBe('boolean');
                 expect(typeof spamConfig.spamDetectionWindow).toBe('number');
                 expect(typeof spamConfig.maxIndividualNotifications).toBe('number');
@@ -222,7 +209,6 @@ describe('NotificationManager Spam Protection Behavior - Modernized', () => {
                 const { config } = require('../../../src/core/config');
                 const spamConfig = config.spam;
 
-                // Verify the config is structured correctly
                 expect(spamConfig).toBeTruthy();
                 expect(spamConfig.spamDetectionEnabled).toBeDefined();
                 expect(spamConfig.spamDetectionWindow).toBeGreaterThan(0);
@@ -260,7 +246,6 @@ describe('NotificationManager Spam Protection Behavior - Modernized', () => {
 
             await notificationManager.handleNotification('platform:gift', 'tiktok', giftData);
 
-            // Should add to display queue
             expect(mockDisplayQueue.addItem).toHaveBeenCalled();
         });
 
@@ -291,11 +276,8 @@ describe('NotificationManager Spam Protection Behavior - Modernized', () => {
 
             const result = await notificationManager.handleNotificationInternal('platform:gift', 'tiktok', giftData, false);
 
-            // Should be suppressed
             expect(result.suppressed).toBe(true);
             expect(result.reason).toBe('spam_detection');
-
-            // Should NOT add to display queue
             expect(mockDisplayQueue.addItem).not.toHaveBeenCalled();
         });
 
@@ -325,7 +307,6 @@ describe('NotificationManager Spam Protection Behavior - Modernized', () => {
 
             await notificationManager.handleNotification('platform:gift', 'tiktok', aggregatedGift);
 
-            // Should NOT call spam detector for aggregated gifts
             expect(mockSpamDetector.handleDonationSpam).not.toHaveBeenCalled();
         });
     });
