@@ -1,5 +1,6 @@
 const { describe, test, expect, beforeEach, afterEach } = require('bun:test');
 const { createMockFn, restoreAllMocks } = require('../../helpers/bun-mock-utils');
+const { noOpLogger } = require('../../helpers/mock-factories');
 
 const NotificationManager = require('../../../src/notifications/NotificationManager');
 const constants = require('../../../src/core/constants');
@@ -8,16 +9,8 @@ describe('NotificationManager error handling', () => {
     let manager;
     let mockDisplayQueue;
     let mockEventBus;
-    let mockLogger;
 
     beforeEach(() => {
-        mockLogger = {
-            info: createMockFn(),
-            debug: createMockFn(),
-            warn: createMockFn(),
-            error: createMockFn()
-        };
-
         mockDisplayQueue = {
             addItem: createMockFn(),
             addToQueue: createMockFn(),
@@ -52,7 +45,7 @@ describe('NotificationManager error handling', () => {
         };
 
         manager = new NotificationManager({
-            logger: mockLogger,
+            logger: noOpLogger,
             displayQueue: mockDisplayQueue,
             eventBus: mockEventBus,
             constants,
