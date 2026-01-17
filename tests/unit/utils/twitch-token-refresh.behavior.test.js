@@ -1,5 +1,6 @@
 const { describe, expect, beforeEach, afterEach, it } = require('bun:test');
 const { createMockFn, spyOn, restoreAllMocks } = require('../../helpers/bun-mock-utils');
+const { noOpLogger } = require('../../helpers/mock-factories');
 
 const testClock = require('../../helpers/test-clock');
 const TwitchTokenRefresh = require('../../../src/utils/twitch-token-refresh');
@@ -14,8 +15,6 @@ describe('TwitchTokenRefresh behavior edges', () => {
     };
 
     let dateNowSpy;
-
-    const noOpLogger = { debug: () => {}, info: () => {}, warn: () => {}, error: () => {} };
 
     const createMockErrorHandler = () => ({
         handleEventProcessingError: createMockFn(),

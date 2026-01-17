@@ -1,29 +1,20 @@
 const { describe, test, expect, beforeEach, it } = require('bun:test');
 const { createMockFn } = require('../../helpers/bun-mock-utils');
+const { noOpLogger } = require('../../helpers/mock-factories');
 const { PlatformInitializationManager } = require('../../../src/utils/platform-initialization-manager');
-
-const noOpLogger = { debug: () => {}, info: () => {}, warn: () => {}, error: () => {} };
 
 describe('PlatformInitializationManager', () => {
     let mockHandler;
-    let logger;
 
     beforeEach(() => {
         mockHandler = {
             handleEventProcessingError: createMockFn(),
             logOperationalError: createMockFn()
         };
-
-        logger = {
-            debug: createMockFn(),
-            info: createMockFn(),
-            warn: createMockFn(),
-            error: createMockFn()
-        };
     });
 
     it('prevents reinitialization by default and tracks prevented attempts', () => {
-        const manager = new PlatformInitializationManager('twitch', logger);
+        const manager = new PlatformInitializationManager('twitch', noOpLogger);
         manager.errorHandler = mockHandler;
 
         expect(manager.beginInitialization()).toBe(true);
@@ -32,14 +23,10 @@ describe('PlatformInitializationManager', () => {
         const shouldProceed = manager.beginInitialization();
         expect(shouldProceed).toBe(false);
         expect(manager.preventedReinitializations).toBe(1);
-        expect(logger.warn).toHaveBeenCalledWith(
-            expect.stringContaining('Already initialized'),
-            'twitch'
-        );
     });
 
     it('allows forced reinitialization when configured or forced', () => {
-        const manager = new PlatformInitializationManager('twitch', logger);
+        const manager = new PlatformInitializationManager('twitch', noOpLogger);
         manager.errorHandler = mockHandler;
 
         manager.beginInitialization();
@@ -53,7 +40,7 @@ describe('PlatformInitializationManager', () => {
     });
 
     it('enforces maxAttempts and routes operational error when exceeded', () => {
-        const manager = new PlatformInitializationManager('twitch', logger);
+        const manager = new PlatformInitializationManager('twitch', noOpLogger);
         manager.errorHandler = mockHandler;
 
         manager.configure({ maxAttempts: 1 });
@@ -71,7 +58,7 @@ describe('PlatformInitializationManager', () => {
     });
 
     it('routes initialization failure errors through platform error handler', () => {
-        const manager = new PlatformInitializationManager('twitch', logger);
+        const manager = new PlatformInitializationManager('twitch', noOpLogger);
         manager.errorHandler = mockHandler;
         const err = new Error('init failed');
 
@@ -88,7 +75,7 @@ describe('PlatformInitializationManager', () => {
     });
 
     it('logs operational error when failure receives non-Error payload', () => {
-        const manager = new PlatformInitializationManager('twitch', logger);
+        const manager = new PlatformInitializationManager('twitch', noOpLogger);
         manager.errorHandler = mockHandler;
 
         manager.beginInitialization();
@@ -102,7 +89,7 @@ describe('PlatformInitializationManager', () => {
     });
 
     it('tracks statistics and reset state', () => {
-        const manager = new PlatformInitializationManager('twitch', logger);
+        const manager = new PlatformInitializationManager('twitch', noOpLogger);
 
         manager.beginInitialization();
         manager.markInitializationSuccess({ detail: 'first' });

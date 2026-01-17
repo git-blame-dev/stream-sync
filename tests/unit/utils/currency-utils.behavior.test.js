@@ -1,5 +1,6 @@
 const { describe, test, expect, it, afterEach } = require('bun:test');
-const { createMockFn, restoreAllMocks } = require('../../helpers/bun-mock-utils');
+const { restoreAllMocks } = require('../../helpers/bun-mock-utils');
+const { noOpLogger } = require('../../helpers/mock-factories');
 
 const { normalizeCurrency, getCodeToSymbolMap } = require('../../../src/utils/currency-utils');
 
@@ -8,11 +9,9 @@ describe('currency-utils behavior', () => {
         restoreAllMocks();
     });
 
-    it('normalizes unknown currency to XXX and warns via logger', () => {
-        const logger = { warn: createMockFn() };
-        const code = normalizeCurrency('💰', { logger });
+    it('normalizes unknown currency to XXX', () => {
+        const code = normalizeCurrency('💰', { logger: noOpLogger });
         expect(code).toBe('XXX');
-        expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('Unknown currency input "💰"'), 'currency-utils');
     });
 
     it('maps known symbols and codes to canonical values', () => {

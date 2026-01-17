@@ -1,8 +1,7 @@
 const { describe, test, expect, beforeEach, it } = require('bun:test');
 const { createMockFn } = require('../../helpers/bun-mock-utils');
+const { noOpLogger } = require('../../helpers/mock-factories');
 const TwitchAuthState = require('../../../src/auth/TwitchAuthState');
-
-const noOpLogger = { debug: () => {}, info: () => {}, warn: () => {}, error: () => {} };
 
 describe('TwitchAuthState behavior', () => {
     it('executes immediately when ready and tracks queue size', async () => {
