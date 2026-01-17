@@ -1,18 +1,8 @@
-
 const { describe, test, expect, beforeEach, afterEach } = require('bun:test');
 const { restoreAllMocks } = require('../../helpers/bun-mock-utils');
-
 const { TEST_TIMEOUTS } = require('../../helpers/test-setup');
 const { noOpLogger, createMockFileSystem } = require('../../helpers/mock-factories');
-const { setupAutomatedCleanup } = require('../../helpers/mock-lifecycle');
 const testClock = require('../../helpers/test-clock');
-
-// Setup automated cleanup
-setupAutomatedCleanup({
-    clearCallsBeforeEach: true,
-    validateAfterCleanup: true,
-    logPerformanceMetrics: true
-});
 
 describe('Goal Tracker - Core Functionality', () => {
     afterEach(() => {
@@ -21,15 +11,10 @@ describe('Goal Tracker - Core Functionality', () => {
 
     let goalTracker;
     let mockConfig;
-    let mockLogger;
     let mockFileSystem;
 
     beforeEach(() => {
-        // Create mocks using factories
-        mockLogger = noOpLogger;
         mockFileSystem = createMockFileSystem();
-
-        // Mock configuration
         mockConfig = {
             enabled: true,
             goalScene: 'v efx goals',
@@ -52,7 +37,7 @@ describe('Goal Tracker - Core Functionality', () => {
 
         const { GoalTracker } = require('../../../src/utils/goal-tracker');
         goalTracker = new GoalTracker({
-            logger: mockLogger,
+            logger: noOpLogger,
             config: { goals: mockConfig },
             fileSystem: mockFileSystem
         });
@@ -226,28 +211,24 @@ describe('Goal Tracker - Core Functionality', () => {
         test('should handle the exact scenario: $0.50, 50 bits, 500 coins', async () => {
             await goalTracker.initializeGoalTracker();
 
-            // Test scenario 1: $0.50 YouTube Super Chat
             const youtubeResult = await goalTracker.addDonationToGoal('youtube', 0.50);
             expect(youtubeResult.success).toBe(true);
             expect(youtubeResult.newTotal).toBe(0.50);
             expect(youtubeResult.formatted).toBe('$0.50/$1.00 USD');
             expect(youtubeResult.percentage).toBe(50);
 
-            // Test scenario 2: 50 Twitch bits
             const twitchResult = await goalTracker.addDonationToGoal('twitch', 50);
             expect(twitchResult.success).toBe(true);
             expect(twitchResult.newTotal).toBe(50);
             expect(twitchResult.formatted).toBe('050/100 bits');
             expect(twitchResult.percentage).toBe(50);
 
-            // Test scenario 3: 500 TikTok coins
             const tiktokResult = await goalTracker.addDonationToGoal('tiktok', 500);
             expect(tiktokResult.success).toBe(true);
             expect(tiktokResult.newTotal).toBe(500);
             expect(tiktokResult.formatted).toBe('0500/1000 coins');
             expect(tiktokResult.percentage).toBe(50);
 
-            // Verify final state
             const finalState = goalTracker.getAllGoalStates();
             expect(finalState.tiktok.current).toBe(500);
             expect(finalState.youtube.current).toBe(0.50);

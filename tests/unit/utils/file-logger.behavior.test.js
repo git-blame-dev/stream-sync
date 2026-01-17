@@ -1,4 +1,4 @@
-const { describe, expect, beforeEach, it, afterEach } = require('bun:test');
+const { describe, expect, it, afterEach } = require('bun:test');
 const { createMockFn, spyOn, restoreAllMocks } = require('../../helpers/bun-mock-utils');
 
 const { FileLogger } = require('../../../src/utils/file-logger');
@@ -44,13 +44,11 @@ describe('file-logger behavior', () => {
         mockFs._files['logs/app.log'] = 'x'.repeat(15);
 
         const logger = new FileLogger({ logDir: 'logs', filename: 'app.log', maxSize: 10, maxFiles: 2 }, { fs: mockFs });
-        const rotateFileSpy = spyOn(logger, 'rotateFile');
 
         logger.log('new-line');
 
-        expect(rotateFileSpy).toHaveBeenCalledWith('logs/app.log');
+        expect(mockFs.renameSync).toHaveBeenCalledWith('logs/app.log', 'logs/app.1.log');
         expect(mockFs.appendFileSync).toHaveBeenCalledWith('logs/app.log', 'new-line\n');
-        rotateFileSpy.mockRestore();
     });
 
     it('writes error to stderr when append fails', () => {

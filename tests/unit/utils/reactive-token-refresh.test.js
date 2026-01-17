@@ -1,9 +1,8 @@
 const { describe, test, expect, beforeEach } = require('bun:test');
 const { createMockFn } = require('../../helpers/bun-mock-utils');
+const { noOpLogger } = require('../../helpers/mock-factories');
 const ReactiveTokenRefresh = require('../../../src/utils/reactive-token-refresh');
 const { TokenRefreshError, NetworkError } = require('../../../src/utils/auth-errors');
-
-const noOpLogger = { debug: () => {}, info: () => {}, warn: () => {}, error: () => {} };
 
 describe('ReactiveTokenRefresh', () => {
     let mockErrorHandler;
