@@ -1,21 +1,19 @@
-
-const { safeSetInterval } = require('./timeout-validator');
+const timeoutValidator = require('./timeout-validator');
 
 class IntervalManager {
-    constructor(platformName, logger) {
+    constructor(platformName, logger, dependencies = {}) {
         this.platformName = platformName;
         this.logger = logger;
-        
-        // Interval tracking
-        this.activeIntervals = new Map(); // name -> { id, type, startTime, config }
-        this.intervalHistory = []; // Historical record of intervals
-        this.cleanupHistory = []; // Record of cleaned up intervals
-        
-        // Statistics
+        this.safeSetInterval = dependencies.safeSetInterval || timeoutValidator.safeSetInterval;
+
+        this.activeIntervals = new Map();
+        this.intervalHistory = [];
+        this.cleanupHistory = [];
+
         this.intervalCount = 0;
         this.totalIntervalsCreated = 0;
         this.totalIntervalsCleaned = 0;
-        
+
         this.logger.debug('IntervalManager initialized', this.platformName);
     }
     
@@ -38,8 +36,7 @@ class IntervalManager {
             );
         }
         
-        // Create interval
-        const intervalId = safeSetInterval(callback, intervalMs);
+        const intervalId = this.safeSetInterval(callback, intervalMs);
         this.totalIntervalsCreated++;
         this.intervalCount++;
         

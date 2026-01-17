@@ -6,7 +6,7 @@ const { TwitchApiClient } = require('../utils/api-clients/twitch-api-client');
 const { ViewerCountProviderFactory } = require('../utils/viewer-count-providers');
 const { PlatformEvents } = require('../interfaces/PlatformEvents');
 const { createPlatformErrorHandler } = require('../utils/platform-error-handler');
-const { normalizeTwitchMessage, validateNormalizedMessage } = require('../utils/message-normalization');
+const messageNormalization = require('../utils/message-normalization');
 const { createMonetizationErrorPayload } = require('../utils/monetization-error-utils');
 const { getSystemTimestampISO } = require('../utils/validation');
 const TimestampExtractionService = require('../services/TimestampExtractionService');
@@ -52,10 +52,11 @@ class TwitchPlatform extends EventEmitter {
             config: this.config
         });
         
-        // Initialize self-message detection service via dependency injection
         this.selfMessageDetectionService = dependencies.selfMessageDetectionService || null;
-        
-        // Internal state
+
+        this.normalizeTwitchMessage = dependencies.normalizeTwitchMessage || messageNormalization.normalizeTwitchMessage;
+        this.validateNormalizedMessage = dependencies.validateNormalizedMessage || messageNormalization.validateNormalizedMessage;
+
         this.platformName = 'twitch';
         this.eventSub = null;
         this.eventSubListeners = [];
@@ -235,10 +236,9 @@ class TwitchPlatform extends EventEmitter {
             };
 
             // Normalize message data using standardized utility
-            const normalizedData = normalizeTwitchMessage(user, message, context, this.platformName, this.timestampService);
+            const normalizedData = this.normalizeTwitchMessage(user, message, context, this.platformName, this.timestampService);
 
-            // Validate normalized data
-            const validation = validateNormalizedMessage(normalizedData);
+            const validation = this.validateNormalizedMessage(normalizedData);
             
             if (!validation.isValid) {
                 this.logger.warn('Message normalization validation failed', 'twitch', {

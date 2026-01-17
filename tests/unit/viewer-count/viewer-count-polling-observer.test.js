@@ -1,29 +1,17 @@
 const { describe, test, expect, afterEach, it } = require('bun:test');
 const { createMockFn, restoreAllMocks } = require('../../helpers/bun-mock-utils');
-const { mockModule, resetModules, restoreAllModuleMocks } = require('../../helpers/bun-module-mocks');
+const { createRuntimeConstantsFixture } = require('../../helpers/runtime-constants-fixture');
 
 describe('ViewerCountSystem polling observer notifications', () => {
     const originalEnv = process.env.NODE_ENV;
 
     afterEach(() => {
         restoreAllMocks();
-process.env.NODE_ENV = originalEnv;
-    
-        restoreAllModuleMocks();});
+        process.env.NODE_ENV = originalEnv;
+    });
 
     function createSystemWithPlatform(counts = [5, 7], platforms = { youtube: {} }, warnSpy = null, errorSpy = null) {
         process.env.NODE_ENV = 'test';
-
-        mockModule('../../../src/core/config', () => ({
-            configManager: {
-                getNumber: createMockFn().mockReturnValue(15)
-            }
-        }));
-
-        mockModule('../../../src/utils/timeout-validator', () => ({
-            safeSetInterval: createMockFn(),
-            safeDelay: createMockFn()
-        }));
 
         const mockLogger = {
             debug: createMockFn(),
@@ -41,10 +29,10 @@ process.env.NODE_ENV = originalEnv;
         const { ViewerCountSystem } = require('../../../src/utils/viewer-count');
         const system = new ViewerCountSystem({
             platforms: { ...platforms, youtube: platform },
-            logger: mockLogger
+            logger: mockLogger,
+            runtimeConstants: createRuntimeConstantsFixture()
         });
 
-        // Mark stream live so polling proceeds
         system.streamStatus.youtube = true;
 
         return { system, platform };
@@ -59,8 +47,8 @@ process.env.NODE_ENV = originalEnv;
             onViewerCountUpdate: createMockFn((payload) => updates.push(payload))
         });
 
-        await system.pollPlatform('youtube'); // first poll
-        await system.pollPlatform('youtube'); // second poll
+        await system.pollPlatform('youtube');
+        await system.pollPlatform('youtube');
 
         expect(updates).toHaveLength(2);
         expect(updates[0]).toEqual(expect.objectContaining({

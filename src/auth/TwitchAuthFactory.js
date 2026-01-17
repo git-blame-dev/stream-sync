@@ -1,21 +1,18 @@
-
-const TwitchAuthManager = require('./TwitchAuthManager');
+const TwitchAuthManagerDefault = require('./TwitchAuthManager');
 const { getUnifiedLogger } = require('../core/logging');
 const { createPlatformErrorHandler } = require('../utils/platform-error-handler');
 
 class TwitchAuthFactory {
     constructor(config, dependencies = {}) {
-        // Deep copy configuration to ensure complete isolation between instances
         this.config = JSON.parse(JSON.stringify(config));
         this.authManager = null;
         this.initialized = false;
         this.lastError = null;
         this.logger = dependencies.logger || getUnifiedLogger();
         this.errorHandler = createPlatformErrorHandler(this.logger, 'auth-factory');
+        this.TwitchAuthManager = dependencies.TwitchAuthManager || TwitchAuthManagerDefault;
 
-        // Validate configuration on creation
         this.validateConfig();
-
     }
     
     validateConfig() {
@@ -49,7 +46,7 @@ class TwitchAuthFactory {
     
     createAuthManager() {
         try {
-            this.authManager = TwitchAuthManager.getInstance(this.config, { logger: this.logger });
+            this.authManager = this.TwitchAuthManager.getInstance(this.config, { logger: this.logger });
             return this.authManager;
         } catch (error) {
             this.lastError = error;

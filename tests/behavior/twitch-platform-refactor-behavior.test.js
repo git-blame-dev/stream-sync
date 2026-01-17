@@ -1,10 +1,10 @@
 const { describe, it, expect, beforeEach, afterEach } = require('bun:test');
 const { createMockFn, restoreAllMocks } = require('../helpers/bun-mock-utils');
-const { mockModule, unmockModule, requireActual, resetModules, restoreAllModuleMocks } = require('../helpers/bun-module-mocks');
 
 const noOpLogger = { debug: () => {}, info: () => {}, warn: () => {}, error: () => {} };
 
-const actualMessageNormalization = require('../../src/utils/message-normalization');
+const { TwitchPlatform } = require('../../src/platforms/twitch');
+const TwitchEventSub = require('../../src/platforms/twitch-eventsub');
 
 const createAuthManager = (overrides = {}) => {
     const requiredScopes = overrides.scopes || [
@@ -36,20 +36,11 @@ const baseConfig = {
 };
 
 describe('Twitch platform refactor behaviors', () => {
-    beforeEach(() => {
-        resetModules();
-        unmockModule('../../src/platforms/twitch');
-        unmockModule('../../src/platforms/twitch-eventsub');
-    });
-
     afterEach(() => {
         restoreAllMocks();
-        restoreAllModuleMocks();
-        resetModules();
     });
 
     it('accepts centralized auth for EventSub validation without raw tokens', async () => {
-        const TwitchEventSub = requireActual('../../src/platforms/twitch-eventsub');
         const MockWebSocket = class { constructor() {} };
         const eventSub = new TwitchEventSub(
             { enabled: true, eventsub_enabled: true },
@@ -68,7 +59,6 @@ describe('Twitch platform refactor behaviors', () => {
     });
 
     it('keeps stream lifecycle transitions from crashing when polling hooks are missing', async () => {
-        const { TwitchPlatform } = requireActual('../../src/platforms/twitch');
         const platform = new TwitchPlatform(baseConfig, {
             authManager: createAuthManager({ userId: TEST_USER_ID }),
             logger: noOpLogger
@@ -80,7 +70,6 @@ describe('Twitch platform refactor behaviors', () => {
     });
 
     it('emits raid events with normalized user shape and metadata', async () => {
-        const { TwitchPlatform } = requireActual('../../src/platforms/twitch');
         const platform = new TwitchPlatform(baseConfig, {
             authManager: createAuthManager({ userId: TEST_USER_ID }),
             logger: noOpLogger
@@ -103,27 +92,25 @@ describe('Twitch platform refactor behaviors', () => {
     });
 
     it('emits chat events even when normalization validation fails', async () => {
-        mockModule('../../src/utils/message-normalization', () => ({
-            ...actualMessageNormalization,
-            normalizeTwitchMessage: createMockFn(() => ({
-                userId: 'chat-1',
-                username: 'chatter',
-                message: 'Hello world',
-                timestamp: '2024-01-01T00:00:00Z',
-                isMod: false,
-                isSubscriber: false,
-                isBroadcaster: false
-            })),
-            validateNormalizedMessage: createMockFn(() => ({
-                isValid: false,
-                issues: ['missing badge data']
-            }))
+        const mockNormalizeTwitchMessage = createMockFn(() => ({
+            userId: 'chat-1',
+            username: 'chatter',
+            message: 'Hello world',
+            timestamp: '2024-01-01T00:00:00Z',
+            isMod: false,
+            isSubscriber: false,
+            isBroadcaster: false
+        }));
+        const mockValidateNormalizedMessage = createMockFn(() => ({
+            isValid: false,
+            issues: ['missing badge data']
         }));
 
-        const { TwitchPlatform } = requireActual('../../src/platforms/twitch');
         const platform = new TwitchPlatform(baseConfig, {
             authManager: createAuthManager({ userId: TEST_USER_ID }),
-            logger: noOpLogger
+            logger: noOpLogger,
+            normalizeTwitchMessage: mockNormalizeTwitchMessage,
+            validateNormalizedMessage: mockValidateNormalizedMessage
         });
 
         const events = [];
@@ -141,7 +128,6 @@ describe('Twitch platform refactor behaviors', () => {
     });
 
     it('returns user-friendly errors when sending without an EventSub connection', async () => {
-        const { TwitchPlatform } = requireActual('../../src/platforms/twitch');
         const platform = new TwitchPlatform(baseConfig, {
             authManager: createAuthManager({ userId: TEST_USER_ID }),
             logger: noOpLogger
@@ -160,7 +146,6 @@ describe('Twitch platform refactor behaviors', () => {
             }
         }
 
-        const { TwitchPlatform } = requireActual('../../src/platforms/twitch');
         const platform = new TwitchPlatform(
             { ...baseConfig, dataLoggingEnabled: true },
             {

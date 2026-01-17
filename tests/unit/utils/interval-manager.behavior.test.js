@@ -1,33 +1,25 @@
 const { describe, test, expect, beforeEach, afterAll, it, afterEach } = require('bun:test');
 const { createMockFn, spyOn, clearAllMocks, restoreAllMocks } = require('../../helpers/bun-mock-utils');
-const { mockModule, restoreAllModuleMocks } = require('../../helpers/bun-module-mocks');
 
-let intervalId = 0;
-
-mockModule('../../../src/utils/timeout-validator', () => {
-    let intervalId = 0;
-    return {
-        safeSetInterval: createMockFn((callback) => {
-            intervalId += 1;
-            return { id: `interval-${intervalId}`, callback };
-        })
-    };
-});
-
-const { safeSetInterval } = require('../../../src/utils/timeout-validator');
 const { IntervalManager } = require('../../../src/utils/interval-manager');
 const testClock = require('../../helpers/test-clock');
 
 describe('IntervalManager behavior', () => {
     afterEach(() => {
         restoreAllMocks();
-        restoreAllModuleMocks();
     });
 
     let logger;
+    let intervalIdCounter;
+    let mockSafeSetInterval;
     const clearIntervalSpy = spyOn(global, 'clearInterval').mockImplementation(() => {});
 
     beforeEach(() => {
+        intervalIdCounter = 0;
+        mockSafeSetInterval = createMockFn((callback) => {
+            intervalIdCounter += 1;
+            return { id: `interval-${intervalIdCounter}`, callback };
+        });
         logger = { debug: createMockFn(), info: createMockFn(), warn: createMockFn() };
     });
 
@@ -36,7 +28,7 @@ describe('IntervalManager behavior', () => {
     });
 
     it('creates intervals with tracking and warns on out-of-range durations', () => {
-        const manager = new IntervalManager('platform', logger);
+        const manager = new IntervalManager('platform', logger, { safeSetInterval: mockSafeSetInterval });
         const callback = createMockFn();
 
         expect(() => manager.createInterval('poll', callback, 50)).not.toThrow();
@@ -49,7 +41,7 @@ describe('IntervalManager behavior', () => {
     });
 
     it('clears intervals individually and in bulk with stats updates', () => {
-        const manager = new IntervalManager('platform', logger);
+        const manager = new IntervalManager('platform', logger, { safeSetInterval: mockSafeSetInterval });
         manager.createPollingInterval('p1', () => {}, 2000);
         manager.createMonitoringInterval('m1', () => {}, 2000);
 
@@ -66,9 +58,8 @@ describe('IntervalManager behavior', () => {
     });
 
     it('reports health including long-running intervals', () => {
-        const manager = new IntervalManager('platform', logger);
+        const manager = new IntervalManager('platform', logger, { safeSetInterval: mockSafeSetInterval });
         manager.createInterval('old', () => {}, 1000, 'monitoring');
-        // force start time to 2 hours ago to trigger long-running detection
         const info = manager.getIntervalInfo('old');
         info.startTime = new Date(testClock.now() - 7200000).toISOString();
 

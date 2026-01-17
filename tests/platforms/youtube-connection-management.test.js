@@ -1,41 +1,23 @@
-
 const { describe, test, expect, beforeEach, it, afterEach } = require('bun:test');
 const { createMockFn, restoreAllMocks } = require('../helpers/bun-mock-utils');
-const { mockModule, restoreAllModuleMocks } = require('../helpers/bun-module-mocks');
-
-const { initializeTestLogging } = require('../helpers/test-setup');
-
-const mockErrorHandler = {
-    handleEventProcessingError: createMockFn(),
-    logOperationalError: createMockFn()
-};
-
-mockModule('../../src/utils/platform-error-handler', () => ({
-    createPlatformErrorHandler: createMockFn(() => mockErrorHandler)
-}));
-
-const { createPlatformErrorHandler } = require('../../src/utils/platform-error-handler');
-
-// Initialize logging for tests
-initializeTestLogging();
 
 const { YouTubeConnectionManager } = require('../../src/utils/youtube-connection-manager');
 
 describe('YouTube Connection Manager - Lifecycle Behavior', () => {
     afterEach(() => {
         restoreAllMocks();
-        restoreAllModuleMocks();
     });
 
     let connectionManager;
     let mockLogger;
     let mockConnection;
+    let mockErrorHandler;
 
     beforeEach(() => {
-        // Reset platform error handler mocks
-        mockErrorHandler.handleEventProcessingError.mockReset();
-        mockErrorHandler.logOperationalError.mockReset();
-        createPlatformErrorHandler.mockClear();
+        mockErrorHandler = {
+            handleEventProcessingError: createMockFn(),
+            logOperationalError: createMockFn()
+        };
 
         mockLogger = {
             debug: createMockFn(),
@@ -44,7 +26,6 @@ describe('YouTube Connection Manager - Lifecycle Behavior', () => {
             error: createMockFn()
         };
 
-        // Create mock connection
         mockConnection = {
             id: 'test-connection-1',
             videoId: 'test-video-id',
@@ -54,7 +35,6 @@ describe('YouTube Connection Manager - Lifecycle Behavior', () => {
             isReady: createMockFn().mockReturnValue(false)
         };
 
-        // Create connection manager instance
         connectionManager = new YouTubeConnectionManager(mockLogger);
         connectionManager.errorHandler = mockErrorHandler;
     });
