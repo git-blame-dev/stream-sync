@@ -1,10 +1,10 @@
 const { describe, test, expect } = require('bun:test');
+const { noOpLogger } = require('../../helpers/mock-factories');
 
 const TwitchEventSub = require('../../../src/platforms/twitch-eventsub');
 const { StreamElementsPlatform } = require('../../../src/platforms/streamelements');
 
 describe('platform config parsing behavior', () => {
-    const noOpLogger = { info: () => {}, error: () => {}, warn: () => {}, debug: () => {} };
 
     class MockWebSocket {
         constructor() {

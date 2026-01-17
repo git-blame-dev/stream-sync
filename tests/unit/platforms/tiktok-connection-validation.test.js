@@ -1,8 +1,7 @@
 const { describe, it, expect } = require('bun:test');
 const { createMockFn } = require('../../helpers/bun-mock-utils');
+const { noOpLogger } = require('../../helpers/mock-factories');
 const { PlatformConnectionFactory } = require('../../../src/utils/platform-connection-factory');
-
-const noOpLogger = { debug: () => {}, info: () => {}, warn: () => {}, error: () => {} };
 
 describe('TikTok connection creation', () => {
   it('wraps connector instances so they expose EventEmitter methods for listener setup', async () => {
