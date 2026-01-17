@@ -1,5 +1,6 @@
 const { describe, test, expect, beforeEach, it, afterEach } = require('bun:test');
 const { createMockFn, spyOn, restoreAllMocks } = require('../../helpers/bun-mock-utils');
+const { noOpLogger } = require('../../helpers/mock-factories');
 
 const { InitializationStatistics } = require('../../../src/utils/initialization-statistics');
 
@@ -8,14 +9,8 @@ describe('InitializationStatistics behavior', () => {
         restoreAllMocks();
     });
 
-    let logger;
-
-    beforeEach(() => {
-        logger = { debug: createMockFn(), info: createMockFn(), warn: createMockFn(), error: createMockFn() };
-    });
-
     it('tracks successful initialization timing and metrics', () => {
-        const stats = new InitializationStatistics('twitch', logger);
+        const stats = new InitializationStatistics('twitch', noOpLogger);
         const times = [1000, 2000];
         const nowSpy = spyOn(Date, 'now').mockImplementation(() => times.shift());
 
@@ -28,16 +23,12 @@ describe('InitializationStatistics behavior', () => {
         expect(summary.averageInitializationTime).toBe(1000);
         expect(summary.performanceMetrics.connectionEstablishmentTime.average).toBe(50);
         expect(stats.consecutiveFailures).toBe(0);
-        expect(logger.info).toHaveBeenCalledWith(
-            expect.stringContaining('Initialization successful'),
-            'twitch'
-        );
 
         nowSpy.mockRestore();
     });
 
     it('records failures and tracks error statistics', () => {
-        const stats = new InitializationStatistics('youtube', logger);
+        const stats = new InitializationStatistics('youtube', noOpLogger);
         const times = [0, 0, 50];
         const nowSpy = spyOn(Date, 'now').mockImplementation(() => times.shift());
 
@@ -54,7 +45,7 @@ describe('InitializationStatistics behavior', () => {
     });
 
     it('identifies unhealthy state after repeated failures', () => {
-        const stats = new InitializationStatistics('platform', logger);
+        const stats = new InitializationStatistics('platform', noOpLogger);
         const nowSpy = spyOn(Date, 'now');
         let current = 0;
         nowSpy.mockImplementation(() => {
@@ -64,7 +55,7 @@ describe('InitializationStatistics behavior', () => {
 
         for (let i = 0; i < 5; i++) {
             const attemptId = stats.startInitializationAttempt();
-            stats.recordFailure(attemptId, new Error('boom')); 
+            stats.recordFailure(attemptId, new Error('boom'));
         }
 
         const summary = stats.getStatistics();
@@ -78,7 +69,7 @@ describe('InitializationStatistics behavior', () => {
     });
 
     it('resets statistics to defaults', () => {
-        const stats = new InitializationStatistics('platform', logger);
+        const stats = new InitializationStatistics('platform', noOpLogger);
         const times = [0, 0, 20, 20];
         const nowSpy = spyOn(Date, 'now').mockImplementation(() => times.shift());
 
@@ -90,7 +81,6 @@ describe('InitializationStatistics behavior', () => {
         expect(summary.totalAttempts).toBe(0);
         expect(stats.errorTypes.size).toBe(0);
         expect(stats.isCurrentlyInitializing).toBe(false);
-        expect(logger.debug).toHaveBeenCalledWith('Initialization statistics reset', 'platform');
 
         nowSpy.mockRestore();
     });

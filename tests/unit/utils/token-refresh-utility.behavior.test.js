@@ -1,8 +1,7 @@
 const { describe, test, expect, beforeEach, it } = require('bun:test');
 const { createMockFn } = require('../../helpers/bun-mock-utils');
+const { noOpLogger } = require('../../helpers/mock-factories');
 const TokenRefreshUtility = require('../../../src/utils/token-refresh-utility');
-
-const noOpLogger = { debug: () => {}, info: () => {}, warn: () => {}, error: () => {} };
 
 describe('TokenRefreshUtility', () => {
     describe('executeTokenRefresh', () => {

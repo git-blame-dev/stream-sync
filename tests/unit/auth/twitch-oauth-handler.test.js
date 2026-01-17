@@ -1,7 +1,6 @@
 const { describe, test, expect, afterEach } = require('bun:test');
 const { restoreAllMocks } = require('../../helpers/bun-mock-utils');
-
-const noOpLogger = { debug: () => {}, info: () => {}, warn: () => {}, error: () => {} };
+const { noOpLogger } = require('../../helpers/mock-factories');
 
 describe('TwitchOAuthHandler', () => {
     let TwitchOAuthHandler;

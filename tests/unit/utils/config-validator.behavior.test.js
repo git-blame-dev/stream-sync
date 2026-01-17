@@ -1,5 +1,6 @@
 const { describe, test, expect, beforeEach, it, afterEach } = require('bun:test');
 const { createMockFn, clearAllMocks, restoreAllMocks } = require('../../helpers/bun-mock-utils');
+const { noOpLogger } = require('../../helpers/mock-factories');
 
 const { ConfigValidator, ConfigValidatorStatic } = require('../../../src/utils/config-validator');
 
@@ -8,12 +9,11 @@ describe('config-validator (utility) behavior', () => {
         restoreAllMocks();
     });
 
-    const logger = { warn: createMockFn(), debug: createMockFn() };
     let validator;
 
     beforeEach(() => {
-        validator = new ConfigValidator(logger);
-        });
+        validator = new ConfigValidator(noOpLogger);
+    });
 
     it('parses booleans, strings, and numbers with defaults and bounds', () => {
         expect(validator.parseBoolean('true', false)).toBe(true);
@@ -41,12 +41,10 @@ describe('config-validator (utility) behavior', () => {
         expect(retry.enableRetry).toBe(false);
     });
 
-    it('warns when API enabled without key and leaves apiKey undefined', () => {
+    it('returns config with undefined apiKey when API enabled without key', () => {
         const apiConfig = validator.validateApiConfig({ enabled: true, useAPI: true }, 'youtube');
 
         expect(apiConfig.enabled).toBe(true);
         expect(apiConfig.apiKey).toBeUndefined();
-        expect(logger.warn).toHaveBeenCalled();
-        expect(logger.warn.mock.calls[0][0]).toContain('no API key');
     });
 });

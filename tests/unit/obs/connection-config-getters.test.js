@@ -1,10 +1,9 @@
 const { describe, test, expect, beforeEach, afterEach } = require('bun:test');
 const { createMockFn, clearAllMocks, restoreAllMocks } = require('../../helpers/bun-mock-utils');
+const { noOpLogger } = require('../../helpers/mock-factories');
 
 const { initializeTestLogging } = require('../../helpers/test-setup');
 const { OBSConnectionManager, initializeOBSConnection } = require('../../../src/obs/connection');
-
-const noOpLogger = { debug: () => {}, info: () => {}, warn: () => {}, error: () => {} };
 
 initializeTestLogging();
 
