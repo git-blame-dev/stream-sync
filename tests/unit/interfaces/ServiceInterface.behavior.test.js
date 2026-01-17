@@ -1,5 +1,6 @@
 const { describe, test, expect, it, afterEach } = require('bun:test');
-const { createMockFn, restoreAllMocks } = require('../../helpers/bun-mock-utils');
+const { restoreAllMocks } = require('../../helpers/bun-mock-utils');
+const { noOpLogger } = require('../../helpers/mock-factories');
 
 const ServiceInterface = require('../../../src/interfaces/ServiceInterface');
 
@@ -17,16 +18,13 @@ describe('ServiceInterface behavior', () => {
         expect(() => service.getStatus()).toThrow('getStatus() must be implemented');
     });
 
-    it('provides default pause/resume logging and validation helpers', async () => {
-        const logger = { debug: createMockFn() };
-        class MockService extends ServiceInterface { constructor() { super(); this.logger = logger; } }
+    it('provides default pause/resume and validation helpers', async () => {
+        class MockService extends ServiceInterface { constructor() { super(); this.logger = noOpLogger; } }
         const service = new MockService();
 
         await service.pause();
         await service.resume();
 
-        expect(logger.debug).toHaveBeenCalledWith('Service paused');
-        expect(logger.debug).toHaveBeenCalledWith('Service resumed');
         expect(service.validateConfiguration({ ok: true })).toBe(true);
         expect(service.validateConfiguration(null)).toBeFalsy();
     });

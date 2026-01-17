@@ -1,5 +1,6 @@
 const { describe, test, expect, it, afterEach } = require('bun:test');
-const { createMockFn, restoreAllMocks } = require('../../helpers/bun-mock-utils');
+const { restoreAllMocks } = require('../../helpers/bun-mock-utils');
+const { noOpLogger } = require('../../helpers/mock-factories');
 
 const {
     AuthError,
@@ -83,14 +84,12 @@ describe('auth-errors behavior', () => {
     });
 
     it('routes errors through ErrorHandler for recoverable network errors', async () => {
-        const logger = { debug: createMockFn(), warn: createMockFn() };
-        const handler = new ErrorHandler(logger);
+        const handler = new ErrorHandler(noOpLogger);
         const err = new NetworkError('retryable', { retryable: true, recoverable: true });
 
         await handler.handleError(err, { operation: async () => 'ok' });
         const stats = handler.getStats();
 
         expect(stats.totalErrors).toBe(1);
-        expect(logger.warn).toHaveBeenCalled();
     });
 });

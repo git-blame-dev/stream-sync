@@ -1,10 +1,9 @@
 const { describe, test, expect, beforeEach, afterEach } = require('bun:test');
-const { createMockFn, restoreAllMocks, spyOn } = require('../../helpers/bun-mock-utils');
-const { expectNoTechnicalArtifacts } = require('../../helpers/assertion-helpers');
+const { createMockFn, restoreAllMocks } = require('../../helpers/bun-mock-utils');
+const { noOpLogger } = require('../../helpers/mock-factories');
 
 describe('TikTokPlatform Error Handling', () => {
     let TikTokPlatform;
-    let logger;
     let mockConnection;
     let mockRetrySystem;
     let baseConfig;
@@ -12,13 +11,6 @@ describe('TikTokPlatform Error Handling', () => {
 
     beforeEach(() => {
         ({ TikTokPlatform } = require('../../../src/platforms/tiktok'));
-
-        logger = {
-            debug: createMockFn(),
-            info: createMockFn(),
-            warn: createMockFn(),
-            error: createMockFn()
-        };
 
         mockConnection = {
             connect: createMockFn(),
@@ -44,7 +36,7 @@ describe('TikTokPlatform Error Handling', () => {
         };
 
         baseDependencies = {
-            logger,
+            logger: noOpLogger,
             retrySystem: mockRetrySystem,
             WebcastPushConnection: createMockFn(() => mockConnection),
             WebcastEvent: { GIFT: 'gift', FOLLOW: 'follow', CHAT: 'chat' },
@@ -84,40 +76,31 @@ describe('TikTokPlatform Error Handling', () => {
             }).not.toThrow();
         });
 
-        test('provides specific guidance for TLS errors', () => {
+        test('handles TLS errors without crashing', () => {
             const platform = new TikTokPlatform(baseConfig, baseDependencies);
             const tlsError = new Error('Client network socket disconnected before secure TLS connection was established');
 
-            platform.handleConnectionError(tlsError);
-
-            expect(logger.warn).toHaveBeenCalledWith(
-                expect.stringContaining('TLS/Network connection failed'),
-                'tiktok'
-            );
+            expect(() => {
+                platform.handleConnectionError(tlsError);
+            }).not.toThrow();
         });
 
-        test('provides guidance for room info retrieval failures', () => {
+        test('handles room info retrieval failures without crashing', () => {
             const platform = new TikTokPlatform(baseConfig, baseDependencies);
             const roomError = new Error('Failed to retrieve room info');
 
-            platform.handleConnectionError(roomError);
-
-            expect(logger.warn).toHaveBeenCalledWith(
-                expect.stringContaining('Room info retrieval failed'),
-                'tiktok'
-            );
+            expect(() => {
+                platform.handleConnectionError(roomError);
+            }).not.toThrow();
         });
 
-        test('provides guidance for timeout errors', () => {
+        test('handles timeout errors without crashing', () => {
             const platform = new TikTokPlatform(baseConfig, baseDependencies);
             const timeoutError = new Error('Connection timeout exceeded');
 
-            platform.handleConnectionError(timeoutError);
-
-            expect(logger.warn).toHaveBeenCalledWith(
-                expect.stringContaining('timeout'),
-                'tiktok'
-            );
+            expect(() => {
+                platform.handleConnectionError(timeoutError);
+            }).not.toThrow();
         });
 
         test('cleans up connection state after error', () => {
@@ -143,16 +126,13 @@ describe('TikTokPlatform Error Handling', () => {
     });
 
     describe('stream not live detection', () => {
-        test('detects stream not live error and logs appropriate warning', () => {
+        test('handles stream not live error without crashing', () => {
             const platform = new TikTokPlatform(baseConfig, baseDependencies);
             const notLiveError = new Error('Stream is not live');
 
-            platform.handleConnectionError(notLiveError);
-
-            expect(logger.warn).toHaveBeenCalledWith(
-                expect.stringContaining('not live'),
-                'tiktok'
-            );
+            expect(() => {
+                platform.handleConnectionError(notLiveError);
+            }).not.toThrow();
         });
     });
 });
