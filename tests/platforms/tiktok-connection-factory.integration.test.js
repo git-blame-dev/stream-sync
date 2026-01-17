@@ -7,6 +7,14 @@ const { EventEmitter } = require('events');
 const { DependencyFactory } = require('../../src/utils/dependency-factory');
 const { TikTokPlatform } = require('../../src/platforms/tiktok');
 
+const noOpLogger = { debug: () => {}, info: () => {}, warn: () => {}, error: () => {} };
+
+const mockRetrySystem = {
+    resetRetryCount: () => {},
+    handleConnectionError: () => {},
+    delay: () => Promise.resolve()
+};
+
 describe('TikTokPlatform connection factory integration', () => {
     afterEach(() => {
         restoreAllModuleMocks();
@@ -33,14 +41,18 @@ describe('TikTokPlatform connection factory integration', () => {
         }
 
         const factory = new DependencyFactory();
-        const dependencies = factory.createTiktokDependencies(config, { TikTokWebSocketClient: MockTikTokWebSocketClient });
+        const dependencies = factory.createTiktokDependencies(config, {
+            TikTokWebSocketClient: MockTikTokWebSocketClient,
+            logger: noOpLogger,
+            retrySystem: mockRetrySystem
+        });
         return new TikTokPlatform(config, dependencies);
     };
 
     it('creates an event-emitter-capable connection when connecting', async () => {
         const platform = createPlatform();
 
-        await expect(platform.initialize({})).resolves.not.toThrow();
+        await platform.initialize({});
 
         expect(typeof platform.connection.on).toBe('function');
         expect(typeof platform.connection.removeAllListeners).toBe('function');

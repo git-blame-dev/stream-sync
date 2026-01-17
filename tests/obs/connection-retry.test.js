@@ -10,13 +10,9 @@ describe('OBSConnectionManager reconnection behavior', () => {
     let identifiedCallback;
     let connectionClosedCallback;
 
-    const runPendingTimers = async () => {
-        if (typeof jest.runOnlyPendingTimersAsync === 'function') {
-            await runOnlyPendingTimers();
-        } else {
-            runOnlyPendingTimers();
-            await Promise.resolve();
-        }
+    const advanceTimers = async () => {
+        runOnlyPendingTimers();
+        await Promise.resolve();
     };
 
     beforeEach(() => {
@@ -61,7 +57,7 @@ describe('OBSConnectionManager reconnection behavior', () => {
 
         await manager.connect().catch(() => {});
 
-        await runPendingTimers();
+        await advanceTimers();
 
         expect(mockOBS.connect).toHaveBeenCalledTimes(2);
 
@@ -81,7 +77,7 @@ describe('OBSConnectionManager reconnection behavior', () => {
             connectionClosedCallback({ code: 1006, reason: 'test' });
         }
 
-        await runPendingTimers();
+        await advanceTimers();
 
         expect(mockOBS.connect).toHaveBeenCalledTimes(2);
     });

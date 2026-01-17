@@ -125,9 +125,11 @@ class TwitchAuthManager {
             // Validate configuration
             this.validateConfig();
             
-            // Create TwitchAuth services using new architecture
-            this.twitchAuthService = new TwitchAuthService(this.config, { logger: this.logger });
-            this.twitchAuthInitializer = new TwitchAuthInitializer({ 
+            const TwitchAuthServiceClass = this.dependencies.TwitchAuthService || TwitchAuthService;
+            const TwitchAuthInitializerClass = this.dependencies.TwitchAuthInitializer || TwitchAuthInitializer;
+
+            this.twitchAuthService = new TwitchAuthServiceClass(this.config, { logger: this.logger });
+            this.twitchAuthInitializer = new TwitchAuthInitializerClass({
                 logger: this.logger,
                 axios: this.axios || this.dependencies?.axios,
                 mockOAuthHandler: this.dependencies?.mockOAuthHandler,

@@ -95,8 +95,7 @@ class DependencyFactory {
         }
 
         try {
-            // Create standardized logger
-            const logger = this.createValidatedLogger('tiktok');
+            const logger = options.logger || this.createValidatedLogger('tiktok');
             const {
                 TikTokWebSocketClient,
                 WebcastEvent,
