@@ -1,6 +1,6 @@
-const { describe, test, expect, beforeEach, it, afterEach } = require('bun:test');
+const { describe, expect, beforeEach, it, afterEach } = require('bun:test');
 const { createMockFn, clearAllMocks, restoreAllMocks } = require('../../helpers/bun-mock-utils');
-
+const { noOpLogger } = require('../../helpers/mock-factories');
 const {
     WebSocketMessageSimulator,
     CrossPlatformIntegrationTester,
@@ -22,7 +22,7 @@ describe('e2e-testing-infrastructure behavior', () => {
 
     describe('WebSocketMessageSimulator', () => {
         it('processes messages through platform handler and emits success event', async () => {
-            const simulator = new WebSocketMessageSimulator({ platform: 'twitch', logger: { debug: () => {} } });
+            const simulator = new WebSocketMessageSimulator({ platform: 'twitch', logger: noOpLogger });
             const platform = fakePlatform({ processed: true });
             const processedSpy = createMockFn();
             simulator.on('messageProcessed', processedSpy);
@@ -35,7 +35,7 @@ describe('e2e-testing-infrastructure behavior', () => {
         });
 
         it('routes errors through platform error handler and emits error event', async () => {
-            const simulator = new WebSocketMessageSimulator({ platform: 'yt', logger: { debug: () => {} } });
+            const simulator = new WebSocketMessageSimulator({ platform: 'yt', logger: noOpLogger });
             const platform = { handleWebSocketMessage: createMockFn(async () => { throw new Error('boom'); }) };
             const errorSpy = createMockFn();
             simulator.on('messageProcessingError', errorSpy);
@@ -53,7 +53,7 @@ describe('e2e-testing-infrastructure behavior', () => {
 
     describe('CrossPlatformIntegrationTester', () => {
         it('processes simultaneous events across platforms and returns per-platform results', async () => {
-            const tester = new CrossPlatformIntegrationTester({ twitch: fakePlatform('t-ok') }, { logger: { debug: () => {} } });
+            const tester = new CrossPlatformIntegrationTester({ twitch: fakePlatform('t-ok') }, { logger: noOpLogger });
 
             const outcome = await tester.processSimultaneousEvents({ twitch: { foo: 'bar' } });
 
@@ -63,7 +63,7 @@ describe('e2e-testing-infrastructure behavior', () => {
         });
 
         it('throws when platform is missing from registry', async () => {
-            const tester = new CrossPlatformIntegrationTester({}, { logger: { debug: () => {} } });
+            const tester = new CrossPlatformIntegrationTester({}, { logger: noOpLogger });
 
             await expect(tester.processSimultaneousEvents({ twitch: { foo: 'bar' } })).rejects.toThrow('Platform twitch not available');
         });
@@ -71,7 +71,7 @@ describe('e2e-testing-infrastructure behavior', () => {
 
     describe('UserJourneyValidator', () => {
         it('validates journey success through all stages', async () => {
-            const validator = new UserJourneyValidator({ logger: { debug: () => {} } });
+            const validator = new UserJourneyValidator({ logger: noOpLogger });
             const journey = await validator.validateCompleteUserJourney(
                 { platform: 'twitch', rawWebSocketData: { subscription_type: 'chat', event: {} } },
                 { obsDisplay: true, ttsOutput: true, logOutput: true }
@@ -83,7 +83,7 @@ describe('e2e-testing-infrastructure behavior', () => {
         });
 
         it('flags content quality failures for missing content and malicious links', async () => {
-            const validator = new UserJourneyValidator({ logger: { debug: () => {} } });
+            const validator = new UserJourneyValidator({ logger: noOpLogger });
             const result = await validator.validateContentQualityInFlow({ message: 'visit https://malicious-site.example.invalid' });
 
             expect(result.passed).toBe(false);

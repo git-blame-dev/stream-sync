@@ -1,23 +1,16 @@
 const { describe, expect, it, afterEach } = require('bun:test');
 const { createMockFn, restoreAllMocks } = require('../../helpers/bun-mock-utils');
-
+const { noOpLogger } = require('../../helpers/mock-factories');
 const { EnhancedHttpClient } = require('../../../src/utils/enhanced-http-client');
 
 describe('EnhancedHttpClient behavior', () => {
-    const createLogger = () => ({
-        debug: createMockFn(),
-        info: createMockFn(),
-        warn: createMockFn(),
-        error: createMockFn()
-    });
-
     afterEach(() => {
         restoreAllMocks();
     });
 
     it('rotates user agents across requests', () => {
         const axios = { get: createMockFn().mockResolvedValue({ status: 200 }) };
-        const logger = createLogger();
+        const logger = noOpLogger;
 
         const client = new EnhancedHttpClient({ axios, logger });
         client.userAgents = ['testAgentA', 'testAgentB'];
@@ -33,7 +26,7 @@ describe('EnhancedHttpClient behavior', () => {
 
     it('uses explicit timeout when provided', () => {
         const axios = { get: createMockFn().mockResolvedValue({ status: 200 }) };
-        const logger = createLogger();
+        const logger = noOpLogger;
 
         const client = new EnhancedHttpClient({ axios, logger });
         const config = client.buildRequestConfig({ timeout: 5000 });
@@ -43,7 +36,7 @@ describe('EnhancedHttpClient behavior', () => {
 
     it('uses default timeout when no explicit timeout provided', () => {
         const axios = { get: createMockFn().mockResolvedValue({ status: 200 }) };
-        const logger = createLogger();
+        const logger = noOpLogger;
 
         const client = new EnhancedHttpClient({ axios, logger, timeout: 3000 });
         const config = client.buildRequestConfig({});
@@ -53,7 +46,7 @@ describe('EnhancedHttpClient behavior', () => {
 
     it('wraps requests with retry system when platform is provided', async () => {
         const axios = { get: createMockFn().mockResolvedValue({ status: 204 }) };
-        const logger = createLogger();
+        const logger = noOpLogger;
         let executedThroughRetry = false;
 
         const retrySystem = {
@@ -72,7 +65,7 @@ describe('EnhancedHttpClient behavior', () => {
 
     it('bypasses retry system when disableRetry is true', async () => {
         const axios = { get: createMockFn().mockRejectedValue(new Error('testNetworkError')) };
-        const logger = createLogger();
+        const logger = noOpLogger;
         const retrySystem = {
             executeWithRetry: createMockFn(async (_platform, handler) => handler())
         };
@@ -94,7 +87,7 @@ describe('EnhancedHttpClient behavior', () => {
                 return { status: 201 };
             })
         };
-        const logger = createLogger();
+        const logger = noOpLogger;
         const client = new EnhancedHttpClient({ axios, logger });
 
         const response = await client.post('https://example.com', { a: 1, b: 'two' }, {
@@ -110,7 +103,7 @@ describe('EnhancedHttpClient behavior', () => {
 
     it('returns false when reachability check fails', async () => {
         const axios = { get: createMockFn().mockRejectedValue(new Error('testNetworkFailure')) };
-        const logger = createLogger();
+        const logger = noOpLogger;
         const client = new EnhancedHttpClient({ axios, logger });
 
         const reachable = await client.isReachable('https://example.com');
@@ -120,7 +113,7 @@ describe('EnhancedHttpClient behavior', () => {
 
     it('builds auth headers for bearer tokens', () => {
         const axios = { get: createMockFn() };
-        const logger = createLogger();
+        const logger = noOpLogger;
         const client = new EnhancedHttpClient({ axios, logger });
 
         const bearerHeaders = client.buildAuthHeaders('testToken123', 'bearer');
