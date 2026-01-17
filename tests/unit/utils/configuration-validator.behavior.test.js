@@ -1,7 +1,4 @@
-const { describe, test, expect, beforeEach, it, afterEach } = require('bun:test');
-const { restoreAllMocks } = require('../../helpers/bun-mock-utils');
-const { restoreAllModuleMocks } = require('../../helpers/bun-module-mocks');
-
+const { describe, expect, it } = require('bun:test');
 const {
     validateDisplayConfig,
     isGroupsEnabled,
@@ -10,11 +7,6 @@ const {
 } = require('../../../src/utils/configuration-validator');
 
 describe('configuration-validator behavior', () => {
-    afterEach(() => {
-        restoreAllMocks();
-        restoreAllModuleMocks();
-    });
-
     describe('validateDisplayConfig', () => {
         it('accepts valid config with groups enabled', () => {
             const result = validateDisplayConfig({ sourceName: 'text', sceneName: 'main', groupName: 'grp' }, 'chat');

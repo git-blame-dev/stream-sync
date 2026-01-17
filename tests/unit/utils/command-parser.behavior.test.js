@@ -1,25 +1,18 @@
-const { describe, test, expect, beforeEach, afterEach, it, jest } = require('bun:test');
-const { restoreAllMocks } = require('../../helpers/bun-mock-utils');
-const { restoreAllModuleMocks } = require('../../helpers/bun-module-mocks');
+const { describe, expect, beforeEach, afterEach, it, jest } = require('bun:test');
 const { useFakeTimers, useRealTimers } = require('../../helpers/bun-timers');
+const parser = require('../../../src/utils/command-parser');
 
 describe('command-parser behavior', () => {
-    const loadModule = () => {
-return require('../../../src/utils/command-parser');
-    };
-
     beforeEach(() => {
         useFakeTimers();
         jest.setSystemTime(new Date('2024-01-01T00:00:00Z'));
     });
 
     afterEach(() => {
-        restoreAllMocks();
         useRealTimers();
-restoreAllModuleMocks();});
+    });
 
     it('applies per-user cooldowns and heavy limit escalation', () => {
-        const parser = loadModule();
         const userCommandTimestamps = {};
         const userHeavyLimit = {};
 
@@ -36,8 +29,6 @@ restoreAllModuleMocks();});
     });
 
     it('tracks global cooldowns with remaining time and cleanup', () => {
-        const parser = loadModule();
-
         parser.updateGlobalCommandCooldown('!wave');
         expect(parser.checkGlobalCommandCooldown('!wave', 5000)).toBe(true);
         expect(parser.getRemainingGlobalCooldown('!wave', 5000)).toBeGreaterThan(0);
@@ -52,7 +43,6 @@ restoreAllModuleMocks();});
     });
 
     it('leaves cooldown manager idle when no commands are tracked', () => {
-        const parser = loadModule();
         const stats = parser.getGlobalCooldownStats();
 
         expect(stats.totalTrackedCommands).toBe(0);

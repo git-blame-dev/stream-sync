@@ -1,14 +1,8 @@
-const { describe, test, expect, beforeEach, it, afterEach } = require('bun:test');
-const { createMockFn, clearAllMocks, restoreAllMocks } = require('../../helpers/bun-mock-utils');
+const { describe, expect, beforeEach, it } = require('bun:test');
 const { noOpLogger } = require('../../helpers/mock-factories');
-
 const { ConfigValidator, ConfigValidatorStatic } = require('../../../src/utils/config-validator');
 
 describe('config-validator (utility) behavior', () => {
-    afterEach(() => {
-        restoreAllMocks();
-    });
-
     let validator;
 
     beforeEach(() => {
