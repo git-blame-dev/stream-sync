@@ -1,12 +1,11 @@
 const { describe, it, expect, beforeEach, afterEach } = require('bun:test');
 const { createMockFn, restoreAllMocks } = require('../../helpers/bun-mock-utils');
 const { unmockModule, restoreAllModuleMocks, resetModules } = require('../../helpers/bun-module-mocks');
+const { noOpLogger } = require('../../helpers/mock-factories');
 
 unmockModule('../../../src/platforms/youtube');
 
 const { YouTubePlatform } = require('../../../src/platforms/youtube');
-
-const noOpLogger = { debug: () => {}, info: () => {}, warn: () => {}, error: () => {} };
 
 const createTimestampService = () => ({
     extractTimestamp: createMockFn().mockReturnValue('2024-01-01T00:00:00.000Z')

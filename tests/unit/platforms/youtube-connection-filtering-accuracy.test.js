@@ -1,9 +1,7 @@
 const { describe, test, expect, beforeEach, afterEach } = require('bun:test');
 const { createMockFn } = require('../../helpers/bun-mock-utils');
-
+const { noOpLogger } = require('../../helpers/mock-factories');
 const { YouTubePlatform } = require('../../../src/platforms/youtube');
-
-const noOpLogger = { debug: () => {}, info: () => {}, warn: () => {}, error: () => {} };
 
 const createConnectionManager = (overrides = {}) => ({
     connections: new Map(),
