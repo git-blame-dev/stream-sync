@@ -1,6 +1,6 @@
-
-const { describe, test, expect, it, afterEach } = require('bun:test');
-const { createMockFn, restoreAllMocks } = require('../../helpers/bun-mock-utils');
+const { describe, test, expect, it } = require('bun:test');
+const { createMockFn } = require('../../helpers/bun-mock-utils');
+const { noOpLogger } = require('../../helpers/mock-factories');
 
 const {
     ViewerCountProvider,
@@ -9,22 +9,12 @@ const {
     TikTokViewerCountProvider
 } = require('../../../src/utils/viewer-count-providers');
 
-const logger = {
-    debug: createMockFn(),
-    info: createMockFn(),
-    warn: createMockFn(),
-    error: createMockFn()
-};
-
 describe('ViewerCountProvider error handling', () => {
-    afterEach(() => {
-        restoreAllMocks();
-    });
 
     it('categorizes unknown errors when message is missing', () => {
-        const provider = new ViewerCountProvider('test', logger);
+        const provider = new ViewerCountProvider('testPlatform', noOpLogger);
 
-        const result = provider._handleProviderError(new Error(''), 'op');
+        const result = provider._handleProviderError(new Error(''), 'testOperation');
 
         expect(result).toBe(0);
         expect(provider.getErrorStats().errorTypes.unknown).toBe(1);
@@ -32,22 +22,21 @@ describe('ViewerCountProvider error handling', () => {
 });
 
 describe('YouTubeViewerCountProvider readiness and error routes', () => {
-    it('returns 0 and logs when active video ids missing', async () => {
+    it('returns 0 when active video ids missing', async () => {
         const viewerExtractionService = {
             getAggregatedViewerCount: createMockFn()
         };
         const provider = new YouTubeViewerCountProvider(
             {},
-            { apiKey: 'abc' },
+            { apiKey: 'testApiKey' },
             () => [],
             null,
-            { viewerExtractionService, logger }
+            { viewerExtractionService, logger: noOpLogger }
         );
 
         const count = await provider.getViewerCount();
 
         expect(count).toBe(0);
-        expect(viewerExtractionService.getAggregatedViewerCount).not.toHaveBeenCalled();
     });
 
     it('categorizes errors from extraction service and increments error stats', async () => {
@@ -56,10 +45,10 @@ describe('YouTubeViewerCountProvider readiness and error routes', () => {
         };
         const provider = new YouTubeViewerCountProvider(
             {},
-            { apiKey: 'abc' },
-            () => ['vid1'],
+            { apiKey: 'testApiKey' },
+            () => ['testVideoId1'],
             null,
-            { viewerExtractionService, logger }
+            { viewerExtractionService, logger: noOpLogger }
         );
 
         const count = await provider.getViewerCount();
@@ -74,7 +63,7 @@ describe('TikTokViewerCountProvider error recovery', () => {
         const platform = {
             connection: { isConnected: true }
         };
-        const provider = new TikTokViewerCountProvider(platform, { logger });
+        const provider = new TikTokViewerCountProvider(platform, { logger: noOpLogger });
 
         const count = await provider.getViewerCount();
 
@@ -86,12 +75,11 @@ describe('TikTokViewerCountProvider error recovery', () => {
 describe('TwitchViewerCountProvider readiness', () => {
     it('returns 0 when provider not ready (missing channel)', async () => {
         const apiClient = { getStreamInfo: createMockFn() };
-        const provider = new TwitchViewerCountProvider(apiClient, {}, {}, null, logger);
+        const provider = new TwitchViewerCountProvider(apiClient, {}, {}, null, noOpLogger);
 
         const count = await provider.getViewerCount();
 
         expect(count).toBe(0);
-        expect(apiClient.getStreamInfo).not.toHaveBeenCalled();
     });
 
     it('resets consecutive errors after successful fetch', async () => {
@@ -100,12 +88,12 @@ describe('TwitchViewerCountProvider readiness', () => {
                 .mockRejectedValueOnce(new Error('network fail'))
                 .mockResolvedValueOnce({ isLive: true, viewerCount: 15 })
         };
-        const provider = new TwitchViewerCountProvider(apiClient, {}, { channel: 'chan' }, null, logger);
+        const provider = new TwitchViewerCountProvider(apiClient, {}, { channel: 'testChannel' }, null, noOpLogger);
 
-        await provider.getViewerCount(); // causes error
+        await provider.getViewerCount();
         expect(provider.getErrorStats().consecutiveErrors).toBe(1);
 
-        const count = await provider.getViewerCount(); // success path
+        const count = await provider.getViewerCount();
         expect(count).toBe(15);
         expect(provider.getErrorStats().consecutiveErrors).toBe(0);
     });

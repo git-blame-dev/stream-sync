@@ -1,12 +1,6 @@
-
-const { describe, test, expect, beforeEach, it, afterEach } = require('bun:test');
-const { createMockFn, clearAllMocks, restoreAllMocks } = require('../../helpers/bun-mock-utils');
-
-const logger = {
-    debug: createMockFn(),
-    info: createMockFn(),
-    warn: createMockFn()
-};
+const { describe, test, expect, beforeEach, it } = require('bun:test');
+const { createMockFn, clearAllMocks } = require('../../helpers/bun-mock-utils');
+const { noOpLogger } = require('../../helpers/mock-factories');
 
 const {
     ViewerCountProvider,
@@ -16,15 +10,8 @@ const {
 } = require('../../../src/utils/viewer-count-providers');
 
 describe('ViewerCountProvider base behavior', () => {
-    afterEach(() => {
-        restoreAllMocks();
-    });
-
-    beforeEach(() => {
-        });
-
     it('tracks error stats and categorizes network errors', () => {
-        const provider = new ViewerCountProvider('test', logger);
+        const provider = new ViewerCountProvider('testPlatform', noOpLogger);
         const result = provider._handleProviderError(new Error('Network timeout'), 'fetch');
 
         expect(result).toBe(0);
@@ -36,10 +23,10 @@ describe('ViewerCountProvider base behavior', () => {
     });
 
     it('categorizes auth, rate limit, and resource errors', () => {
-        const provider = new ViewerCountProvider('test', logger);
-        provider._handleProviderError(new Error('auth failure'), 'fetch');
-        provider._handleProviderError(new Error('rate limit exceeded'), 'fetch');
-        provider._handleProviderError(new Error('stream not found'), 'fetch');
+        const provider = new ViewerCountProvider('testPlatform', noOpLogger);
+        provider._handleProviderError(new Error('auth failure'), 'testOperation');
+        provider._handleProviderError(new Error('rate limit exceeded'), 'testOperation');
+        provider._handleProviderError(new Error('stream not found'), 'testOperation');
 
         const stats = provider.getErrorStats();
         expect(stats.errorTypes.authentication).toBe(1);
@@ -48,9 +35,9 @@ describe('ViewerCountProvider base behavior', () => {
     });
 
     it('converts error type map to plain object and tracks unknown errors', () => {
-        const provider = new ViewerCountProvider('test', logger);
+        const provider = new ViewerCountProvider('testPlatform', noOpLogger);
 
-        provider._handleProviderError(new Error('weird failure'), 'fetch');
+        provider._handleProviderError(new Error('weird failure'), 'testOperation');
         const stats = provider.getErrorStats();
 
         expect(stats.errorTypes.unknown).toBe(1);
@@ -58,9 +45,9 @@ describe('ViewerCountProvider base behavior', () => {
     });
 
     it('handles non-Error inputs without message gracefully', () => {
-        const provider = new ViewerCountProvider('test', logger);
+        const provider = new ViewerCountProvider('testPlatform', noOpLogger);
 
-        const result = provider._handleProviderError({}, 'fetch');
+        const result = provider._handleProviderError({}, 'testOperation');
 
         expect(result).toBe(0);
         const stats = provider.getErrorStats();
@@ -75,7 +62,7 @@ describe('TwitchViewerCountProvider', () => {
     });
 
     it('returns 0 when not ready', async () => {
-        const provider = new TwitchViewerCountProvider({ getStreamInfo: createMockFn() }, {}, {}, null, logger);
+        const provider = new TwitchViewerCountProvider({ getStreamInfo: createMockFn() }, {}, {}, null, noOpLogger);
 
         await expect(provider.getViewerCount()).resolves.toBe(0);
     });
@@ -84,9 +71,9 @@ describe('TwitchViewerCountProvider', () => {
         const provider = new TwitchViewerCountProvider(
             { getStreamInfo: createMockFn().mockResolvedValue({ isLive: true, viewerCount: 42 }) },
             {},
-            { channel: 'streamer' },
+            { channel: 'testStreamer' },
             null,
-            logger
+            noOpLogger
         );
 
         const count = await provider.getViewerCount();
@@ -102,7 +89,7 @@ describe('YouTubeViewerCountProvider', () => {
     });
 
     it('returns 0 when required dependencies are missing', async () => {
-        const provider = new YouTubeViewerCountProvider({}, {}, null, null, { logger });
+        const provider = new YouTubeViewerCountProvider({}, {}, null, null, { logger: noOpLogger });
 
         await expect(provider.getViewerCount()).resolves.toBe(0);
     });
@@ -117,10 +104,10 @@ describe('YouTubeViewerCountProvider', () => {
         };
         const provider = new YouTubeViewerCountProvider(
             {},
-            { apiKey: 'abc' },
-            () => ['video1'],
+            { apiKey: 'testApiKey' },
+            () => ['testVideoId1'],
             null,
-            { viewerExtractionService, logger }
+            { viewerExtractionService, logger: noOpLogger }
         );
 
         const count = await provider.getViewerCount();
@@ -136,10 +123,10 @@ describe('YouTubeViewerCountProvider', () => {
         };
         const provider = new YouTubeViewerCountProvider(
             {},
-            { apiKey: 'abc' },
-            () => ['video1'],
+            { apiKey: 'testApiKey' },
+            () => ['testVideoId1'],
             null,
-            { viewerExtractionService, logger }
+            { viewerExtractionService, logger: noOpLogger }
         );
 
         const count = await provider.getViewerCount();
@@ -150,10 +137,10 @@ describe('YouTubeViewerCountProvider', () => {
     it('returns 0 without incrementing errors when no active streams', async () => {
         const provider = new YouTubeViewerCountProvider(
             {},
-            { apiKey: 'abc' },
+            { apiKey: 'testApiKey' },
             () => [],
             null,
-            { viewerExtractionService: { getAggregatedViewerCount: createMockFn() }, logger }
+            { viewerExtractionService: { getAggregatedViewerCount: createMockFn() }, logger: noOpLogger }
         );
 
         const count = await provider.getViewerCount();
@@ -170,10 +157,10 @@ describe('YouTubeViewerCountProvider', () => {
         };
         const provider = new YouTubeViewerCountProvider(
             {},
-            { apiKey: 'abc' },
-            () => ['video1'],
+            { apiKey: 'testApiKey' },
+            () => ['testVideoId1'],
             null,
-            { viewerExtractionService, logger }
+            { viewerExtractionService, logger: noOpLogger }
         );
 
         await provider.getViewerCount();
@@ -192,7 +179,7 @@ describe('TikTokViewerCountProvider', () => {
     });
 
     it('handles missing platform gracefully', async () => {
-        const provider = new TikTokViewerCountProvider(null, { logger });
+        const provider = new TikTokViewerCountProvider(null, { logger: noOpLogger });
 
         const count = await provider.getViewerCount();
         expect(count).toBe(0);
@@ -204,7 +191,7 @@ describe('TikTokViewerCountProvider', () => {
             connection: { isConnected: true },
             getViewerCount: createMockFn().mockResolvedValue(33)
         };
-        const provider = new TikTokViewerCountProvider(platform, { logger });
+        const provider = new TikTokViewerCountProvider(platform, { logger: noOpLogger });
 
         const count = await provider.getViewerCount();
         expect(count).toBe(33);
@@ -218,7 +205,7 @@ describe('TikTokViewerCountProvider', () => {
                 .mockRejectedValueOnce(new Error('network'))
                 .mockResolvedValueOnce(10)
         };
-        const provider = new TikTokViewerCountProvider(platform, { logger });
+        const provider = new TikTokViewerCountProvider(platform, { logger: noOpLogger });
 
         await provider.getViewerCount();
         expect(provider.errorStats.consecutiveErrors).toBe(1);
@@ -229,7 +216,7 @@ describe('TikTokViewerCountProvider', () => {
     });
 
     it('is not ready when connection missing or disconnected', () => {
-        const provider = new TikTokViewerCountProvider({ connection: { connected: false } }, { logger });
+        const provider = new TikTokViewerCountProvider({ connection: { connected: false } }, { logger: noOpLogger });
 
         expect(provider.isReady()).toBe(false);
     });

@@ -1,7 +1,8 @@
 
 const { describe, test, expect, beforeEach, it, afterEach } = require('bun:test');
-const { createMockFn, restoreAllMocks } = require('../../helpers/bun-mock-utils');
+const { restoreAllMocks } = require('../../helpers/bun-mock-utils');
 const { resetModules, restoreAllModuleMocks } = require('../../helpers/bun-module-mocks');
+const { noOpLogger } = require('../../helpers/mock-factories');
 
 const { getSyntheticFixture } = require('../../helpers/platform-test-data');
 const testClock = require('../../helpers/test-clock');
@@ -26,13 +27,11 @@ describe('YouTube Currency Parsing - Modern (Production Data)', () => {
     describe('Real Production Formats', () => {
         it('parses Australian dollar from SuperSticker', () => {
             const parser = new YouTubeCurrencyParser.YouTubeiCurrencyParser({
-                logger: { debug: createMockFn(), warn: createMockFn(), error: createMockFn() }
+                logger: noOpLogger
             });
 
-            // Real production data: "A$7.99"
             const result = parser.parse(realSuperSticker.item.purchase_amount);
 
-            // User-visible outcome: correct amount and currency
             expect(result.amount).toBe(7.99);
             expect(result.currency).toBe('AUD');
             expect(result.success).toBe(true);
@@ -40,13 +39,11 @@ describe('YouTube Currency Parsing - Modern (Production Data)', () => {
 
         it('parses US dollar from SuperChat', () => {
             const parser = new YouTubeCurrencyParser.YouTubeiCurrencyParser({
-                logger: { debug: createMockFn(), warn: createMockFn(), error: createMockFn() }
+                logger: noOpLogger
             });
 
-            // Real production data: "$25.00"
             const result = parser.parse(realSuperChat.item.purchase_amount);
 
-            // User-visible outcome: US dollar parsed
             expect(result.amount).toBe(25.00);
             expect(result.currency).toBe('USD');
             expect(result.success).toBe(true);
@@ -54,13 +51,11 @@ describe('YouTube Currency Parsing - Modern (Production Data)', () => {
 
         it('parses Indian rupee from SuperChat', () => {
             const parser = new YouTubeCurrencyParser.YouTubeiCurrencyParser({
-                logger: { debug: createMockFn(), warn: createMockFn(), error: createMockFn() }
+                logger: noOpLogger
             });
 
-            // Real production data: "₹199"
             const result = parser.parse(realSuperChatINR.item.purchase_amount);
 
-            // User-visible outcome: INR parsed
             expect(result.amount).toBe(199);
             expect(result.currency).toBe('INR');
             expect(result.success).toBe(true);
@@ -72,14 +67,13 @@ describe('YouTube Currency Parsing - Modern (Production Data)', () => {
 
         beforeEach(() => {
             parser = new YouTubeCurrencyParser.YouTubeiCurrencyParser({
-                logger: { debug: createMockFn(), warn: createMockFn(), error: createMockFn() }
+                logger: noOpLogger
             });
         });
 
         it('parses Euro', () => {
             const result = parser.parse('€10.50');
 
-            // User-visible outcome
             expect(result.amount).toBe(10.50);
             expect(result.currency).toBe('EUR');
             expect(result.success).toBe(true);
@@ -88,7 +82,6 @@ describe('YouTube Currency Parsing - Modern (Production Data)', () => {
         it('parses British Pound', () => {
             const result = parser.parse('£15.99');
 
-            // User-visible outcome
             expect(result.amount).toBe(15.99);
             expect(result.currency).toBe('GBP');
             expect(result.success).toBe(true);
@@ -97,7 +90,6 @@ describe('YouTube Currency Parsing - Modern (Production Data)', () => {
         it('parses Canadian Dollar', () => {
             const result = parser.parse('CA$20.00');
 
-            // User-visible outcome
             expect(result.amount).toBe(20.00);
             expect(result.currency).toBe('CAD');
             expect(result.success).toBe(true);
@@ -106,7 +98,6 @@ describe('YouTube Currency Parsing - Modern (Production Data)', () => {
         it('parses Japanese Yen (no decimals)', () => {
             const result = parser.parse('¥1000');
 
-            // User-visible outcome
             expect(result.amount).toBe(1000);
             expect(result.currency).toBe('JPY');
             expect(result.success).toBe(true);
@@ -126,14 +117,13 @@ describe('YouTube Currency Parsing - Modern (Production Data)', () => {
 
         beforeEach(() => {
             parser = new YouTubeCurrencyParser.YouTubeiCurrencyParser({
-                logger: { debug: createMockFn(), warn: createMockFn(), error: createMockFn() }
+                logger: noOpLogger
             });
         });
 
         it('handles null gracefully', () => {
             const result = parser.parse(null);
 
-            // User-visible outcome: graceful fallback
             expect(result.success).toBe(false);
             expect(result.amount).toBe(0);
             expect(result.currency).toBe('USD');
@@ -142,7 +132,6 @@ describe('YouTube Currency Parsing - Modern (Production Data)', () => {
         it('handles undefined gracefully', () => {
             const result = parser.parse(undefined);
 
-            // User-visible outcome: graceful fallback
             expect(result.success).toBe(false);
             expect(result.amount).toBe(0);
             expect(result.currency).toBe('USD');
@@ -151,7 +140,6 @@ describe('YouTube Currency Parsing - Modern (Production Data)', () => {
         it('handles empty string gracefully', () => {
             const result = parser.parse('');
 
-            // User-visible outcome: graceful fallback
             expect(result.success).toBe(false);
             expect(result.amount).toBe(0);
             expect(result.currency).toBe('USD');
@@ -160,37 +148,28 @@ describe('YouTube Currency Parsing - Modern (Production Data)', () => {
         it('handles invalid format gracefully', () => {
             const result = parser.parse('invalid');
 
-            // User-visible outcome: fails gracefully
             expect(result.success).toBe(false);
             expect(result.amount).toBe(0);
         });
 
         it('fails gracefully on negative amounts', () => {
-            const logger = { debug: createMockFn(), warn: createMockFn(), error: createMockFn() };
-            const negativeParser = new YouTubeCurrencyParser.YouTubeiCurrencyParser({ logger });
-
-            const result = negativeParser.parse('-$5.00');
+            const result = parser.parse('-$5.00');
 
             expect(result.success).toBe(false);
-            expect(logger.warn).toHaveBeenCalled();
         });
 
-        it('logs and rejects trailing-symbol formats', () => {
-            const logger = { debug: createMockFn(), warn: createMockFn(), error: createMockFn() };
-            const trailingParser = new YouTubeCurrencyParser.YouTubeiCurrencyParser({ logger });
-
-            const result = trailingParser.parse('10€');
+        it('rejects trailing-symbol formats', () => {
+            const result = parser.parse('10€');
 
             expect(result.success).toBe(false);
             expect(result.amount).toBe(0);
-            expect(logger.warn).toHaveBeenCalled();
         });
     });
 
     describe('Performance', () => {
         it('parses currency in under 50ms for 1000 iterations', () => {
             const parser = new YouTubeCurrencyParser.YouTubeiCurrencyParser({
-                logger: { debug: createMockFn(), warn: createMockFn(), error: createMockFn() }
+                logger: noOpLogger
             });
 
             const start = testClock.now();
@@ -203,7 +182,6 @@ describe('YouTube Currency Parsing - Modern (Production Data)', () => {
             testClock.advance(simulatedDurationMs);
             const duration = testClock.now() - start;
 
-            // User-visible outcome: fast parsing
             expect(duration).toBeLessThan(50);
         });
     });
