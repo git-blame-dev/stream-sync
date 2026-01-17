@@ -1,60 +1,56 @@
-const { describe, test, expect, beforeEach, it, afterEach } = require('bun:test');
-const { createMockFn, spyOn, restoreAllMocks } = require('../../helpers/bun-mock-utils');
-
+const { describe, expect, beforeEach, it, afterEach } = require('bun:test');
+const { restoreAllMocks } = require('../../helpers/bun-mock-utils');
+const { noOpLogger } = require('../../helpers/mock-factories');
 const { DependencyFactory } = require('../../../src/utils/dependency-factory');
 
 describe('DependencyFactory behavior', () => {
-    afterEach(() => {
-        restoreAllMocks();
-    });
-
     let factory;
 
     beforeEach(() => {
         factory = new DependencyFactory();
-        spyOn(factory, '_validateConfiguration').mockImplementation(() => {});
-        spyOn(factory, '_validateOptions').mockImplementation(() => {});
-        spyOn(factory, 'createValidatedLogger').mockReturnValue({
-            debug: createMockFn(),
-            info: createMockFn(),
-            warn: createMockFn(),
-            error: createMockFn()
+    });
+
+    afterEach(() => {
+        restoreAllMocks();
+    });
+
+    describe('YouTube dependency validation', () => {
+        it('requires API key when YouTube API is enabled', () => {
+            expect(() => factory.createYoutubeDependencies({
+                enableAPI: true,
+                username: 'channel'
+            }, { logger: noOpLogger })).toThrow(/YouTube API key is required/);
         });
 
-        factory._createInnertubeFactory = createMockFn().mockReturnValue('innertube-factory');
-        factory._createInnertubeService = createMockFn().mockReturnValue('innertube-service');
-        factory._createViewerExtractionService = createMockFn().mockReturnValue('viewer-extraction');
-        factory._createYouTubeStreamDetectionService = createMockFn().mockReturnValue('stream-detection');
-        factory._createYouTubeApiClient = createMockFn().mockReturnValue('api-client');
-        factory._createYouTubeConnectionManager = createMockFn().mockReturnValue('connection-manager');
-        factory._createTikTokConnectionFactory = createMockFn().mockReturnValue('tiktok-factory');
-        factory._createTikTokStateManager = createMockFn().mockReturnValue('tiktok-state');
+        it('creates dependencies object with expected structure when config is valid', () => {
+            const deps = factory.createYoutubeDependencies({
+                enableAPI: false,
+                username: 'channel',
+                apiKey: 'testKey'
+            }, { logger: noOpLogger });
+
+            expect(deps).toHaveProperty('apiClient');
+            expect(deps).toHaveProperty('connectionManager');
+            expect(deps).toHaveProperty('innertubeFactory');
+        });
     });
 
-    it('requires API key when YouTube API is enabled', () => {
-        expect(() => factory.createYoutubeDependencies({
-            enableAPI: true,
-            username: 'channel'
-        }, {})).toThrow(/YouTube API key is required/);
+    describe('TikTok dependency validation', () => {
+        it('requires TikTok username', () => {
+            expect(() => factory.createTiktokDependencies({}, { logger: noOpLogger }))
+                .toThrow(/TikTok username is required/);
+        });
     });
 
-    it('creates normalized YouTube dependencies when config is valid', () => {
-        const deps = factory.createYoutubeDependencies({
-            enableAPI: false,
-            username: 'channel',
-            apiKey: 'KEY'
-        }, { logger: { debug() {}, info() {}, warn() {}, error() {} } });
+    describe('Twitch dependency validation', () => {
+        it('requires Twitch channel', () => {
+            expect(() => factory.createTwitchDependencies({ apiKey: 'token' }, { logger: noOpLogger }))
+                .toThrow(/Twitch channel is required/);
+        });
 
-        expect(deps.apiClient).toBe('api-client');
-        expect(deps.connectionManager).toBe('connection-manager');
-        expect(deps.innertubeFactory).toBe('innertube-factory');
-        expect(factory._createYouTubeApiClient).toHaveBeenCalledWith(expect.objectContaining({ apiKey: 'KEY' }), expect.any(Object));
-    });
-
-    it('validates TikTok and Twitch required config fields', () => {
-        expect(() => factory.createTiktokDependencies({}, {})).toThrow(/TikTok username is required/);
-
-        expect(() => factory.createTwitchDependencies({ apiKey: 'token' }, {})).toThrow(/Twitch channel is required/);
-        expect(() => factory.createTwitchDependencies({ channel: 'me' }, {})).toThrow(/Twitch API key is required/);
+        it('requires Twitch API key', () => {
+            expect(() => factory.createTwitchDependencies({ channel: 'me' }, { logger: noOpLogger }))
+                .toThrow(/Twitch API key is required/);
+        });
     });
 });

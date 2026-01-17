@@ -114,7 +114,7 @@ describe('ChatNotificationRouter', () => {
         expect(greetingItem?.data?.userId).toBe(baseMessage.userId);
     });
 
-    it('checks both user and global cooldowns when running commands', async () => {
+    it('queues command when cooldowns pass', async () => {
         const { router, runtime } = createRouter({
             runtime: {
                 commandParser: {
@@ -125,8 +125,10 @@ describe('ChatNotificationRouter', () => {
 
         await router.handleChatMessage('twitch', { ...baseMessage });
 
-        expect(runtime.commandCooldownService.checkUserCooldown).toHaveBeenCalled();
-        expect(runtime.commandCooldownService.checkGlobalCooldown).toHaveBeenCalledWith('!testboom', expect.any(Number));
+        const queuedItems = runtime.displayQueue.addItem.mock.calls.map(c => c[0]);
+        const commandItem = queuedItems.find(item => item.type === 'command');
+        expect(commandItem).toBeDefined();
+        expect(commandItem.vfxConfig.command).toBe('!testboom');
     });
 
     it('skips old messages prior to platform connection', async () => {
@@ -165,19 +167,29 @@ describe('ChatNotificationRouter', () => {
         expect(runtime.displayQueue.addItem).toHaveBeenCalled();
     });
 
-    it('resolves greeting VFX via commandParser helper', async () => {
-        const greetingVfx = { vfxCommand: '!testgreeting', media: 'greeting.mp4' };
+    it('includes VFX data in greeting when vfxCommandService returns VFX config', async () => {
+        const greetingVfx = {
+            command: '!testgreeting',
+            commandKey: 'greetings',
+            filename: 'greeting.mp4',
+            mediaSource: 'local',
+            vfxFilePath: '/vfx/greeting.mp4',
+            duration: 5000
+        };
         const { router, runtime } = createRouter({
             runtime: {
                 isFirstMessage: createMockFn().mockReturnValue(true),
-                commandParser: {
-                    getVFXConfig: createMockFn().mockReturnValue(greetingVfx)
+                vfxCommandService: {
+                    getVFXConfig: createMockFn().mockResolvedValue(greetingVfx)
                 }
             }
         });
 
         await router.handleChatMessage('twitch', { ...baseMessage });
 
-        expect(runtime.commandParser.getVFXConfig).toHaveBeenCalled();
+        const queuedItems = runtime.displayQueue.addItem.mock.calls.map(c => c[0]);
+        const greetingItem = queuedItems.find(item => item.type === 'greeting');
+        expect(greetingItem).toBeDefined();
+        expect(greetingItem.vfxConfig.command).toBe('!testgreeting');
     });
 });

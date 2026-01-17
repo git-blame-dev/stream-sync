@@ -1,23 +1,23 @@
 const { describe, it, beforeEach, afterAll, expect } = require('bun:test');
 const { createMockFn, clearAllMocks } = require('../../helpers/bun-mock-utils');
-
 const { createRuntimeConstantsFixture } = require('../../helpers/runtime-constants-fixture');
 const ManagerModule = require('../../../src/services/innertube-instance-manager');
 
-const runtimeConstants = createRuntimeConstantsFixture();
-ManagerModule.setRuntimeConstants(runtimeConstants);
-const InnertubeInstanceManager = ManagerModule.getInstance().constructor;
-
-const resetManager = async () => {
-    await ManagerModule.cleanup();
-    ManagerModule._resetInstance();
-};
-
 describe('InnertubeInstanceManager behavior', () => {
+    let runtimeConstants;
+    let InnertubeInstanceManager;
+
+    const resetManager = async () => {
+        await ManagerModule.cleanup();
+        ManagerModule._resetInstance();
+    };
+
     beforeEach(async () => {
         clearAllMocks();
+        runtimeConstants = createRuntimeConstantsFixture();
         ManagerModule.setRuntimeConstants(runtimeConstants);
         await resetManager();
+        InnertubeInstanceManager = ManagerModule.getInstance().constructor;
     });
 
     afterAll(async () => {

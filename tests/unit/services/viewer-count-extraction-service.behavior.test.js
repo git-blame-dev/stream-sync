@@ -1,8 +1,7 @@
 const { describe, it, beforeEach, expect } = require('bun:test');
 const { createMockFn } = require('../../helpers/bun-mock-utils');
+const { noOpLogger } = require('../../helpers/mock-factories');
 const { ViewerCountExtractionService } = require('../../../src/services/viewer-count-extraction-service');
-
-const noOpLogger = { debug: () => {} };
 
 describe('ViewerCountExtractionService', () => {
     let mockInnertube;

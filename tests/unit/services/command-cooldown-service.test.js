@@ -1,10 +1,9 @@
 const { describe, it, beforeEach, afterEach, expect } = require('bun:test');
 const { createMockFn, clearAllMocks, restoreAllMocks, spyOn } = require('../../helpers/bun-mock-utils');
+const { noOpLogger } = require('../../helpers/mock-factories');
 const CommandCooldownService = require('../../../src/services/CommandCooldownService');
 const { createRuntimeConstantsFixture } = require('../../helpers/runtime-constants-fixture');
 const testClock = require('../../helpers/test-clock');
-
-const noOpLogger = { debug: () => {}, info: () => {}, warn: () => {}, error: () => {} };
 
 describe('CommandCooldownService', () => {
     let service;
