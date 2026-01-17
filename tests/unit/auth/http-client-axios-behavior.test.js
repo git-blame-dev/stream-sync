@@ -1,6 +1,7 @@
 
 const { describe, test, expect, beforeEach, afterEach } = require('bun:test');
 const { createMockFn, clearAllMocks, restoreAllMocks } = require('../../helpers/bun-mock-utils');
+const { noOpLogger } = require('../../helpers/mock-factories');
 
 describe('HTTP Client Axios Response Behavior', () => {
     afterEach(() => {
@@ -9,24 +10,14 @@ describe('HTTP Client Axios Response Behavior', () => {
 
     let TwitchAuthInitializer;
     let mockAuthService;
-    let mockLogger;
     let mockEnhancedHttpClient;
     let mockAxios;
-    
+
     beforeEach(() => {
-        mockLogger = {
-            debug: createMockFn(),
-            info: createMockFn(),
-            error: createMockFn(),
-            warn: createMockFn()
-        };
-        
-        // Mock enhanced HTTP client with axios-compatible responses
         mockEnhancedHttpClient = {
             post: createMockFn()
         };
-        
-        // Mock axios for token validation
+
         mockAxios = {
             get: createMockFn()
         };
@@ -56,7 +47,6 @@ describe('HTTP Client Axios Response Behavior', () => {
     
     describe('when making token refresh requests', () => {
         test('should handle axios response structure correctly', async () => {
-            // Given: Enhanced HTTP client returns axios-compatible response
             const axiosResponse = {
                 data: {
                     access_token: 'new_access_token_12345',
@@ -72,15 +62,13 @@ describe('HTTP Client Axios Response Behavior', () => {
             mockEnhancedHttpClient.post.mockResolvedValue(axiosResponse);
             
             const authInitializer = new TwitchAuthInitializer({
-                logger: mockLogger,
+                logger: noOpLogger,
                 enhancedHttpClient: mockEnhancedHttpClient,
                 axios: mockAxios
             });
-            
-            // When: Refreshing token
+
             const result = await authInitializer.refreshToken(mockAuthService);
-            
-            // Then: Should handle axios response structure and succeed
+
             expect(result).toBe(true);
             expect(mockEnhancedHttpClient.post).toHaveBeenCalledWith(
                 'https://id.twitch.tv/oauth2/token',
@@ -98,7 +86,6 @@ describe('HTTP Client Axios Response Behavior', () => {
         });
         
         test('should extract token data from nested axios response', async () => {
-            // Given: Response with nested data structure
             const nestedResponse = {
                 data: {
                     access_token: 'extracted_token_123',
@@ -112,22 +99,19 @@ describe('HTTP Client Axios Response Behavior', () => {
             mockEnhancedHttpClient.post.mockResolvedValue(nestedResponse);
             
             const authInitializer = new TwitchAuthInitializer({
-                logger: mockLogger,
+                logger: noOpLogger,
                 enhancedHttpClient: mockEnhancedHttpClient,
                 axios: mockAxios
             });
-            
-            // When: Token refresh completes
+
             const result = await authInitializer.refreshToken(mockAuthService);
-            
-            // Then: Should extract tokens from response.data correctly
+
             expect(result).toBe(true);
             expect(mockAuthService.config.accessToken).toBe('extracted_token_123');
             expect(mockAuthService.config.refreshToken).toBe('extracted_refresh_456');
         });
         
         test('should handle HTTP client errors with proper axios error structure', async () => {
-            // Given: Enhanced HTTP client returns axios error structure
             const axiosError = {
                 response: {
                     status: 400,
@@ -143,21 +127,19 @@ describe('HTTP Client Axios Response Behavior', () => {
             mockEnhancedHttpClient.post.mockRejectedValue(axiosError);
             
             const authInitializer = new TwitchAuthInitializer({
-                logger: mockLogger,
+                logger: noOpLogger,
                 enhancedHttpClient: mockEnhancedHttpClient,
                 axios: mockAxios
             });
-            
-            // When: Token refresh encounters error
+
             const result = await authInitializer.refreshToken(mockAuthService);
-            
+
             expect(result).toBe(false);
         });
     });
-    
+
     describe('when validating tokens with axios', () => {
         test('should work with axios get requests and response structure', async () => {
-            // Given: Axios returns proper response structure
             const validationResponse = {
                 data: {
                     user_id: '123456789',
@@ -171,15 +153,13 @@ describe('HTTP Client Axios Response Behavior', () => {
             mockAxios.get.mockResolvedValue(validationResponse);
             
             const authInitializer = new TwitchAuthInitializer({
-                logger: mockLogger,
+                logger: noOpLogger,
                 enhancedHttpClient: mockEnhancedHttpClient,
                 axios: mockAxios
             });
-            
-            // When: Initializing authentication with valid token
+
             const result = await authInitializer.initializeAuthentication(mockAuthService);
-            
-            // Then: Should validate token using axios and succeed
+
             expect(result).toBe(true);
             expect(mockAxios.get).toHaveBeenCalledWith(
                 'https://id.twitch.tv/oauth2/validate',
@@ -198,7 +178,6 @@ describe('HTTP Client Axios Response Behavior', () => {
         });
         
         test('should handle axios validation errors correctly', async () => {
-            // Given: Axios validation returns 401 error
             const validationError = {
                 response: {
                     status: 401,
@@ -209,8 +188,7 @@ describe('HTTP Client Axios Response Behavior', () => {
                 message: 'Request failed with status code 401',
                 isAxiosError: true
             };
-            
-            // Setup sequence: First call fails with 401, retry succeeds
+
             mockAxios.get.mockRejectedValueOnce(validationError).mockResolvedValueOnce({
                 data: {
                     user_id: '123456789',
@@ -218,8 +196,7 @@ describe('HTTP Client Axios Response Behavior', () => {
                     expires_in: 14400
                 }
             });
-            
-            // And: Refresh should succeed
+
             const refreshResponse = {
                 data: {
                     access_token: 'refreshed_token_123',
@@ -230,24 +207,21 @@ describe('HTTP Client Axios Response Behavior', () => {
             mockEnhancedHttpClient.post.mockResolvedValue(refreshResponse);
             
             const authInitializer = new TwitchAuthInitializer({
-                logger: mockLogger,
+                logger: noOpLogger,
                 enhancedHttpClient: mockEnhancedHttpClient,
                 axios: mockAxios
             });
-            
-            // When: Authentication with expired token
+
             const result = await authInitializer.initializeAuthentication(mockAuthService);
-            
-            // Then: Should handle 401, refresh token, and succeed
+
             expect(result).toBe(true);
-            expect(mockEnhancedHttpClient.post).toHaveBeenCalled(); // Token refresh
-            expect(mockAxios.get).toHaveBeenCalledTimes(2); // Initial + retry
+            expect(mockEnhancedHttpClient.post).toHaveBeenCalled();
+            expect(mockAxios.get).toHaveBeenCalledTimes(2);
         });
     });
-    
+
     describe('when HTTP client dependencies are properly injected', () => {
         test('should use injected enhanced HTTP client for requests', async () => {
-            // Given: Custom enhanced HTTP client with tracking
             const customHttpClient = {
                 post: createMockFn().mockResolvedValue({
                     data: {
@@ -259,15 +233,13 @@ describe('HTTP Client Axios Response Behavior', () => {
             };
             
             const authInitializer = new TwitchAuthInitializer({
-                logger: mockLogger,
+                logger: noOpLogger,
                 enhancedHttpClient: customHttpClient,
                 axios: mockAxios
             });
-            
-            // When: Performing token refresh
+
             const result = await authInitializer.refreshToken(mockAuthService);
-            
-            // Then: Should use the injected HTTP client
+
             expect(result).toBe(true);
             expect(customHttpClient.post).toHaveBeenCalledWith(
                 expect.stringContaining('oauth2/token'),
@@ -279,27 +251,24 @@ describe('HTTP Client Axios Response Behavior', () => {
         });
         
         test('should use injected axios for token validation', async () => {
-            // Given: Custom axios instance with tracking
             const customAxios = {
                 get: createMockFn().mockResolvedValue({
                     data: {
                         user_id: '987654321',
-                        login: 'testchannel', // Must match authService.config.channel
+                        login: 'testchannel',
                         expires_in: 3600
                     }
                 })
             };
-            
+
             const authInitializer = new TwitchAuthInitializer({
-                logger: mockLogger,
+                logger: noOpLogger,
                 enhancedHttpClient: mockEnhancedHttpClient,
                 axios: customAxios
             });
-            
-            // When: Initializing authentication
+
             const result = await authInitializer.initializeAuthentication(mockAuthService);
-            
-            // Then: Should use the injected axios instance
+
             expect(result).toBe(true);
             expect(customAxios.get).toHaveBeenCalledWith(
                 'https://id.twitch.tv/oauth2/validate',

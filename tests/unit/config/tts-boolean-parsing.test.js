@@ -105,7 +105,6 @@ describe('TTS Configuration Boolean Parsing', () => {
     
     describe('main.js config parsing', () => {
         it('should properly parse ttsEnabled from INI config object', () => {
-            // Test the actual parsing logic used in main.js
             const testConfigs = [
                 { input: { general: { ttsEnabled: 'false' } }, expected: false },
                 { input: { general: { ttsEnabled: 'true' } }, expected: true },
@@ -115,10 +114,9 @@ describe('TTS Configuration Boolean Parsing', () => {
                 { input: { general: { ttsEnabled: '' } }, expected: false },
                 { input: { general: { ttsEnabled: null } }, expected: false }
             ];
-            
+
             testConfigs.forEach(({ input, expected }) => {
                 const config = input;
-                // This is the fixed logic from main.js
                 const ttsEnabled = config.general.ttsEnabled === true || config.general.ttsEnabled === 'true';
                 expect(ttsEnabled).toBe(expected);
             });

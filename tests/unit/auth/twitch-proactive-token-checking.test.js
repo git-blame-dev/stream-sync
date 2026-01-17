@@ -2,13 +2,13 @@
 const { describe, test, expect, beforeEach, afterEach } = require('bun:test');
 const { createMockFn, spyOn, clearAllMocks, restoreAllMocks } = require('../../helpers/bun-mock-utils');
 const { resetModules, restoreAllModuleMocks } = require('../../helpers/bun-module-mocks');
+const { noOpLogger } = require('../../helpers/mock-factories');
 
 const testClock = require('../../helpers/test-clock');
 
 describe('Twitch Proactive Token Checking', () => {
     let TwitchAuthInitializer;
     let TwitchAuthService;
-    let mockLogger;
     let mockAxios;
     let authInitializer;
     let authService;
@@ -17,23 +17,13 @@ describe('Twitch Proactive Token Checking', () => {
         resetModules();
         spyOn(Date, 'now').mockImplementation(() => testClock.now());
 
-        mockLogger = {
-            info: createMockFn(),
-            debug: createMockFn(),
-            error: createMockFn(),
-            warn: createMockFn()
-        };
-
-        // Mock axios
         mockAxios = {
             get: createMockFn()
         };
 
-        // Load modules
         TwitchAuthInitializer = require('../../../src/auth/TwitchAuthInitializer');
         TwitchAuthService = require('../../../src/auth/TwitchAuthService');
 
-        // Create test instances
         const config = {
             clientId: 'test-client-id',
             clientSecret: 'test-client-secret',
@@ -42,9 +32,9 @@ describe('Twitch Proactive Token Checking', () => {
             channel: 'test-channel'
         };
 
-        authService = new TwitchAuthService(config, { logger: mockLogger });
+        authService = new TwitchAuthService(config, { logger: noOpLogger });
         authInitializer = new TwitchAuthInitializer({
-            logger: mockLogger,
+            logger: noOpLogger,
             axios: mockAxios
         });
     });

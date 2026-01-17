@@ -7,14 +7,11 @@ const TwitchAuthInitializer = require('../../../src/auth/TwitchAuthInitializer')
 const TwitchAuthService = require('../../../src/auth/TwitchAuthService');
 
 describe('Authentication Integration Behavior', () => {
-    let mockLogger;
     let mockAxios;
     let mockEnhancedHttpClient;
     let mockFileSystem;
 
     beforeEach(() => {
-        mockLogger = noOpLogger;
-
         mockAxios = {
             get: createMockFn(),
             post: createMockFn()
@@ -44,7 +41,7 @@ describe('Authentication Integration Behavior', () => {
                 channel: 'test-integration-user'
             };
 
-            const authService = new TwitchAuthService(authConfig, { logger: mockLogger });
+            const authService = new TwitchAuthService(authConfig, { logger: noOpLogger });
 
             const mockResponse = {
                 data: {
@@ -56,7 +53,7 @@ describe('Authentication Integration Behavior', () => {
             mockAxios.get.mockResolvedValue(mockResponse);
 
             const authInitializer = new TwitchAuthInitializer({
-                logger: mockLogger,
+                logger: noOpLogger,
                 enhancedHttpClient: mockEnhancedHttpClient,
                 axios: mockAxios,
                 fs: mockFileSystem
@@ -78,7 +75,7 @@ describe('Authentication Integration Behavior', () => {
                 channel: 'test-state-user'
             };
 
-            const authService = new TwitchAuthService(authConfig, { logger: mockLogger });
+            const authService = new TwitchAuthService(authConfig, { logger: noOpLogger });
 
             const mockResponse = {
                 data: {
@@ -90,7 +87,7 @@ describe('Authentication Integration Behavior', () => {
             mockAxios.get.mockResolvedValue(mockResponse);
 
             const authInitializer = new TwitchAuthInitializer({
-                logger: mockLogger,
+                logger: noOpLogger,
                 enhancedHttpClient: mockEnhancedHttpClient,
                 axios: mockAxios,
                 fs: mockFileSystem
@@ -116,9 +113,8 @@ describe('Authentication Integration Behavior', () => {
                 channel: 'test-refresh-user'
             };
 
-            const authService = new TwitchAuthService(authConfig, { logger: mockLogger });
+            const authService = new TwitchAuthService(authConfig, { logger: noOpLogger });
 
-            // Token validation fails initially (401), then succeeds after refresh
             mockAxios.get
                 .mockRejectedValueOnce({
                     response: { status: 401 },
@@ -141,7 +137,7 @@ describe('Authentication Integration Behavior', () => {
             });
 
             const authInitializer = new TwitchAuthInitializer({
-                logger: mockLogger,
+                logger: noOpLogger,
                 enhancedHttpClient: mockEnhancedHttpClient,
                 axios: mockAxios,
                 fs: mockFileSystem
@@ -166,7 +162,7 @@ describe('Authentication Integration Behavior', () => {
                 channel: 'test-fallback-user'
             };
 
-            const authService = new TwitchAuthService(authConfig, { logger: mockLogger });
+            const authService = new TwitchAuthService(authConfig, { logger: noOpLogger });
 
             mockAxios.get.mockRejectedValue({
                 response: { status: 401 },
@@ -186,7 +182,7 @@ describe('Authentication Integration Behavior', () => {
 
             try {
                 const authInitializer = new TwitchAuthInitializer({
-                    logger: mockLogger,
+                    logger: noOpLogger,
                     enhancedHttpClient: mockEnhancedHttpClient,
                     axios: mockAxios,
                     fs: mockFileSystem
@@ -212,9 +208,8 @@ describe('Authentication Integration Behavior', () => {
                 channel: 'test-network-user'
             };
 
-            const authService = new TwitchAuthService(authConfig, { logger: mockLogger });
+            const authService = new TwitchAuthService(authConfig, { logger: noOpLogger });
 
-            // Network error on first try, success on retry after refresh
             mockAxios.get
                 .mockRejectedValueOnce(new Error('ECONNREFUSED'))
                 .mockResolvedValueOnce({
@@ -234,7 +229,7 @@ describe('Authentication Integration Behavior', () => {
             });
 
             const authInitializer = new TwitchAuthInitializer({
-                logger: mockLogger,
+                logger: noOpLogger,
                 enhancedHttpClient: mockEnhancedHttpClient,
                 axios: mockAxios,
                 fs: mockFileSystem
@@ -257,7 +252,7 @@ describe('Authentication Integration Behavior', () => {
                 channel: 'test-config-user'
             };
 
-            const authService = new TwitchAuthService(authConfig, { logger: mockLogger });
+            const authService = new TwitchAuthService(authConfig, { logger: noOpLogger });
 
             mockAxios.get
                 .mockRejectedValueOnce({
@@ -280,7 +275,7 @@ describe('Authentication Integration Behavior', () => {
             mockEnhancedHttpClient.post.mockResolvedValue({ data: newTokens });
 
             const authInitializer = new TwitchAuthInitializer({
-                logger: mockLogger,
+                logger: noOpLogger,
                 enhancedHttpClient: mockEnhancedHttpClient,
                 axios: mockAxios,
                 fs: mockFileSystem

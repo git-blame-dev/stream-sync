@@ -1,20 +1,11 @@
 const { describe, test, expect, beforeEach, afterEach, it } = require('bun:test');
 const { createMockFn, clearAllMocks, restoreAllMocks } = require('../../helpers/bun-mock-utils');
+const { noOpLogger } = require('../../helpers/mock-factories');
 
 const TwitchAuthManager = require('../../../src/auth/TwitchAuthManager');
 
 describe('TwitchAuthManager OAuth handling', () => {
-    let logger;
     const originalEnv = { ...process.env };
-
-    beforeEach(() => {
-        logger = {
-            debug: createMockFn(),
-            info: createMockFn(),
-            warn: createMockFn(),
-            error: createMockFn()
-        };
-    });
 
     afterEach(() => {
         restoreAllMocks();
@@ -39,7 +30,7 @@ describe('TwitchAuthManager OAuth handling', () => {
             channel: 'channel-name',
             accessToken: null,
             refreshToken: null
-        }, { logger, mockOAuthHandler });
+        }, { logger: noOpLogger, mockOAuthHandler });
 
         await manager.initialize();
 
