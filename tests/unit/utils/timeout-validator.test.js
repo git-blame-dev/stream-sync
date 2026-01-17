@@ -75,19 +75,16 @@ describe('Timeout Validator', () => {
 
         test('should cap delays at maxDelay', () => {
             const result = validateExponentialBackoff(10000, 2, 10, 50000);
-            expect(result).toBe(50000); // Should be capped at 50000
+            expect(result).toBe(50000);
         });
 
         test('should handle invalid inputs gracefully', () => {
-            // Invalid base delay
             expect(validateExponentialBackoff(undefined, 2, 1)).toBeGreaterThan(0);
             expect(validateExponentialBackoff(NaN, 2, 1)).toBeGreaterThan(0);
-            
-            // Invalid multiplier
+
             expect(validateExponentialBackoff(1000, undefined, 1)).toBeGreaterThan(0);
             expect(validateExponentialBackoff(1000, NaN, 1)).toBeGreaterThan(0);
-            
-            // Invalid attempt number
+
             expect(validateExponentialBackoff(1000, 2, undefined)).toBe(1000);
             expect(validateExponentialBackoff(1000, 2, NaN)).toBe(1000);
             expect(validateExponentialBackoff(1000, 2, -1)).toBe(1000);
@@ -174,32 +171,30 @@ describe('Timeout Validator', () => {
 
     describe('Integration with actual components', () => {
         test('should prevent NaN timeouts in stream detector pattern', () => {
-            // Simulate the problematic calculation from stream-detector
             const invalidConfig = undefined;
             const attemptNumber = 1;
-            
+
             const safeDelay = validateExponentialBackoff(invalidConfig, 2, attemptNumber, 300000);
-            
+
             expect(isNaN(safeDelay)).toBe(false);
             expect(safeDelay).toBeGreaterThan(0);
             expect(safeDelay).toBeLessThanOrEqual(300000);
         });
 
         test('should prevent NaN timeouts in retry system pattern', () => {
-            // Simulate retry system calculation with corrupted config
             const corruptedConfig = {
                 BASE_DELAY: NaN,
                 BACKOFF_MULTIPLIER: undefined,
                 MAX_DELAY: "invalid"
             };
-            
+
             const safeDelay = validateExponentialBackoff(
                 corruptedConfig.BASE_DELAY,
                 corruptedConfig.BACKOFF_MULTIPLIER,
                 2,
                 corruptedConfig.MAX_DELAY
             );
-            
+
             expect(isNaN(safeDelay)).toBe(false);
             expect(safeDelay).toBeGreaterThan(0);
         });

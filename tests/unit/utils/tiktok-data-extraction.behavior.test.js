@@ -1,5 +1,6 @@
 const { describe, test, expect, it, afterEach } = require('bun:test');
 const { createMockFn, restoreAllMocks } = require('../../helpers/bun-mock-utils');
+const { noOpLogger } = require('../../helpers/mock-factories');
 
 const {
     extractTikTokUserData,
@@ -34,7 +35,6 @@ describe('logTikTokGiftData behavior', () => {
     it('routes writer errors through platform error handler when logging enabled', async () => {
         const errorHandler = { handleDataLoggingError: createMockFn() };
         const writer = createMockFn().mockRejectedValue(new Error('disk full'));
-        const logger = { info: createMockFn(), error: createMockFn(), warn: createMockFn(), debug: createMockFn() };
         const configProvider = () => ({ tiktok: { giftLoggingEnabled: true } });
 
         await logTikTokGiftData(
@@ -45,7 +45,7 @@ describe('logTikTokGiftData behavior', () => {
             },
             { username: 'TestUserAlpha', giftType: 'TestGiftAlpha', giftCount: 3, amount: 3, currency: 'coins' },
             'testUserAlpha-TestGiftAlpha',
-            { writer, errorHandler, logger, configProvider }
+            { writer, errorHandler, logger: noOpLogger, configProvider }
         );
 
         expect(writer).toHaveBeenCalledTimes(1);
@@ -58,7 +58,6 @@ describe('logTikTokGiftData behavior', () => {
 
     it('reports missing gift logging path when enabled without writer', async () => {
         const errorHandler = { handleDataLoggingError: createMockFn() };
-        const logger = { info: createMockFn(), error: createMockFn(), warn: createMockFn(), debug: createMockFn() };
         const configProvider = () => ({ tiktok: { giftLoggingEnabled: true } });
 
         await logTikTokGiftData(
@@ -69,7 +68,7 @@ describe('logTikTokGiftData behavior', () => {
             },
             { username: 'TestUserAlpha', giftType: 'TestGiftAlpha', giftCount: 3, amount: 3, currency: 'coins' },
             'testUserAlpha-TestGiftAlpha',
-            { errorHandler, logger, configProvider }
+            { errorHandler, logger: noOpLogger, configProvider }
         );
 
         expect(errorHandler.handleDataLoggingError).toHaveBeenCalledWith(

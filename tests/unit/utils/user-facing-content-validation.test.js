@@ -1,16 +1,9 @@
-
 const { describe, test, expect, beforeEach, afterEach } = require('bun:test');
 const { resetModules, restoreAllModuleMocks } = require('../../helpers/bun-module-mocks');
-
 const { TEST_TIMEOUTS } = require('../../helpers/test-setup');
-
 const { setupAutomatedCleanup } = require('../../helpers/mock-lifecycle');
+const { expectNoTechnicalArtifacts } = require('../../helpers/behavior-validation');
 
-const {
-    expectNoTechnicalArtifacts
-} = require('../../helpers/behavior-validation');
-
-// Setup automated cleanup
 setupAutomatedCleanup({
     clearCallsBeforeEach: true,
     logPerformanceMetrics: true
@@ -44,16 +37,11 @@ describe('User-Facing Content Validation', () => {
 
                     expect(result.displayMessage).not.toMatch(/\{[^}]*\}/);
                     expect(result.ttsMessage).not.toMatch(/\{[^}]*\}/);
-                    
-                    // Must contain actual readable content
                     expect(result.displayMessage).toContain('testuser');
                     expect(result.displayMessage.length).toBeGreaterThan(5);
-                    
-                    // Should not contain technical artifacts
                     expect(result.displayMessage).not.toContain('undefined');
                     expect(result.displayMessage).not.toContain('null');
                     expect(result.displayMessage).not.toContain('NaN');
-                    
                 }, TEST_TIMEOUTS.FAST);
             });
         });
@@ -84,23 +72,18 @@ describe('User-Facing Content Validation', () => {
 
             testCases.forEach(testCase => {
                 const result = createNotificationData(
-                    testCase.type, 
-                    'twitch', 
-                    testCase.userData, 
+                    testCase.type,
+                    'twitch',
+                    testCase.userData,
                     testCase.eventData
                 );
 
-                // No template artifacts
                 expect(result.displayMessage).not.toMatch(/\{.*\}/);
-                
-                // Contains expected content patterns
                 testCase.expectedPatterns.forEach(pattern => {
                     expect(result.displayMessage).toMatch(pattern);
                 });
-                
-                // Professional formatting
-                expect(result.displayMessage).not.toMatch(/^\s|\s$/); // No leading/trailing whitespace
-                expect(result.displayMessage).not.toMatch(/\s{2,}/); // No multiple spaces
+                expect(result.displayMessage).not.toMatch(/^\s|\s$/);
+                expect(result.displayMessage).not.toMatch(/\s{2,}/);
             });
         }, TEST_TIMEOUTS.FAST);
 
@@ -154,11 +137,11 @@ describe('User-Facing Content Validation', () => {
     describe('Internationalization Support', () => {
         test('should handle international usernames without exposing placeholders', () => {
             const internationalUsernames = [
-                '中文用户', // Chinese
-                'ユーザー', // Japanese  
-                'пользователь', // Russian
-                'usuario_español', // Spanish with underscore
-                'émoji_user_🎮' // With emoji
+                '中文用户',
+                'ユーザー',
+                'пользователь',
+                'usuario_español',
+                'émoji_user_🎮'
             ];
 
             internationalUsernames.forEach(username => {
@@ -167,11 +150,8 @@ describe('User-Facing Content Validation', () => {
                     { giftCount: 1, giftType: 'bits', amount: 1, currency: 'bits' }
                 );
 
-                // No template placeholders regardless of username complexity
                 expect(result.displayMessage).not.toMatch(/\{.*\}/);
                 expect(result.ttsMessage).not.toMatch(/\{.*\}/);
-                
-                // Should contain the username (may be sanitized for TTS)
                 expect(result.displayMessage).toContain(username);
             });
         }, TEST_TIMEOUTS.FAST);

@@ -1,16 +1,9 @@
-
-// Initialize logging first
 const { describe, test, expect, beforeEach, afterEach, it } = require('bun:test');
 const { spyOn, restoreAllMocks } = require('../../helpers/bun-mock-utils');
-
-const { 
-    initializeTestLogging, 
-    createTestUser, 
-    TEST_TIMEOUTS
-} = require('../../helpers/test-setup');
+const { initializeTestLogging, createTestUser, TEST_TIMEOUTS } = require('../../helpers/test-setup');
 initializeTestLogging();
 
-const { 
+const {
     translateError,
     formatErrorForConsole,
     formatErrorForLog,
@@ -19,22 +12,14 @@ const {
     ERROR_MESSAGES,
     TECHNICAL_ERROR_PATTERNS
 } = require('../../../src/utils/user-friendly-errors');
-
-const { 
+const {
     expectNoTechnicalArtifacts,
     validateUserFacingString,
     expectContentReadabilityForAudience
 } = require('../../helpers/assertion-helpers');
+const { setupAutomatedCleanup } = require('../../helpers/mock-lifecycle');
+const { noOpLogger } = require('../../helpers/mock-factories');
 
-const { 
-    setupAutomatedCleanup
-} = require('../../helpers/mock-lifecycle');
-
-const {
-    noOpLogger
-} = require('../../helpers/mock-factories');
-
-// Setup automated cleanup
 setupAutomatedCleanup({
     clearCallsBeforeEach: true,
     logPerformanceMetrics: true
@@ -94,7 +79,6 @@ describe('User-Friendly Error System', () => {
                 
                 expect(friendlyError.title).toBe('Settings File Problem');
                 expectNoTechnicalArtifacts(friendlyError.message);
-                // Config-related actions can reference configuration files
                 expectNoTechnicalArtifacts(friendlyError.action);
             });
 
@@ -189,9 +173,9 @@ describe('User-Friendly Error System', () => {
                 const technicalError = 'Internal server error 500';
                 
                 const friendlyError = translateError(technicalError, { includeTechnical: true });
-                
+
                 expect(friendlyError.technicalDetails).toBe(technicalError);
-                expectNoTechnicalArtifacts(friendlyError.message); // User message should still be clean
+                expectNoTechnicalArtifacts(friendlyError.message);
             });
         });
     });
@@ -397,42 +381,33 @@ describe('User-Friendly Error System', () => {
         it('should validate all predefined error messages for content quality', () => {
             Object.keys(ERROR_MESSAGES).forEach(errorKey => {
                 const errorMessage = ERROR_MESSAGES[errorKey];
-                
-                // Validate title
+
                 expectNoTechnicalArtifacts(errorMessage.title);
                 validateUserFacingString(errorMessage.title, {
                     minLength: 5,
                     mustNotContain: ['API', 'config', 'OAuth', 'WebSocket', 'HTTP']
                 });
-                
-                // Validate message content
+
                 expectNoTechnicalArtifacts(errorMessage.message);
                 validateUserFacingString(errorMessage.message);
-                // Allow configuration file references for config-related errors
                 if (errorMessage.category !== 'configuration') {
                     expectContentReadabilityForAudience(errorMessage.message, 'user');
                 }
-                
-                // Validate action (if present)
+
                 if (errorMessage.action) {
                     expectNoTechnicalArtifacts(errorMessage.action);
                     validateUserFacingString(errorMessage.action);
-                    // Allow configuration file references for config-related errors
                     if (errorMessage.category !== 'configuration') {
                         expectContentReadabilityForAudience(errorMessage.action, 'user');
                     }
                 }
-                
-                // Validate severity is appropriate
+
                 expect(['error', 'warning', 'info']).toContain(errorMessage.severity);
-                
-                // Validate category is appropriate
                 expect(['authentication', 'configuration', 'connection', 'system']).toContain(errorMessage.category);
             });
         });
 
         it('should ensure technical error patterns are comprehensive', () => {
-            // Test that each error message has at least one pattern that can trigger it
             Object.keys(ERROR_MESSAGES).forEach(errorKey => {
                 const hasPattern = TECHNICAL_ERROR_PATTERNS.some(patternGroup => 
                     patternGroup.errorKey === errorKey
