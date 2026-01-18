@@ -114,10 +114,11 @@ describe('TwitchOAuthHandler behavior', () => {
         expect(handler.server.close).toHaveBeenCalled();
     });
 
-    it('skips browser opening in test environment', () => {
-        process.env.NODE_ENV = 'test';
-        process.env.TWITCH_DISABLE_AUTH = 'true';
-        const handler = new TwitchOAuthHandler({ clientId: 'test-client-abc' }, { logger });
+    it('skips browser opening when skipBrowserOpen is true', () => {
+        const handler = new TwitchOAuthHandler(
+            { clientId: 'test-client-abc' },
+            { logger, skipBrowserOpen: true }
+        );
 
         handler.openBrowser('https://example.com');
     });

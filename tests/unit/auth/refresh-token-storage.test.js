@@ -62,7 +62,7 @@ describe('Refresh Token Storage and Update Handling (Twitch Best Practices)', ()
         fsPromises.readFile.mockResolvedValue(mockConfigContent);
         fsPromises.writeFile.mockResolvedValue();
 
-        tokenRefresh = new TwitchTokenRefresh(mockConfig, { fs });
+        tokenRefresh = new TwitchTokenRefresh(mockConfig, { fs, retryAttempts: 1, retryDelay: 0 });
         tokenRefresh.logger = mockLogger;
 
         authService = new TwitchAuthService(mockConfig, { logger: mockLogger });

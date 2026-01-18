@@ -18,18 +18,14 @@ class TwitchTokenRefresh {
         this.fs = dependencies.fs || fs;
         this.logger = this._resolveLogger(dependencies.logger);
         this.isRefreshing = false;
-        
-        // Enhanced error handling
         this.errorHandler = new ErrorHandler(this.logger);
         
-        // Performance and reliability tracking
         this.lastRefreshTime = null;
         this.refreshSuccessCount = 0;
         this.refreshFailureCount = 0;
-        
-        // Enhanced error recovery features (disabled in test environment for test predictability)
-        this._retryAttempts = process.env.NODE_ENV === 'test' ? 1 : 3;
-        this._retryDelay = process.env.NODE_ENV === 'test' ? 0 : 1000;
+
+        this._retryAttempts = dependencies.retryAttempts ?? 3;
+        this._retryDelay = dependencies.retryDelay ?? 1000;
 
         this.platformErrorHandler = createPlatformErrorHandler(this.logger, 'twitch-token-refresh');
     }
@@ -149,7 +145,6 @@ class TwitchTokenRefresh {
             return false;
         }
 
-        // Store original values for enhanced rollback capability
         const originalTokens = {
             accessToken: this.config.accessToken,
             refreshToken: this.config.refreshToken,
@@ -157,9 +152,8 @@ class TwitchTokenRefresh {
         };
 
         try {
-            // Update config in memory first (maintaining original pattern)
             this.config.accessToken = tokenData.access_token;
-            this.config.apiKey = tokenData.access_token; // apiKey is used as the OAuth token
+            this.config.apiKey = tokenData.access_token;
             if (tokenData.refresh_token) {
                 this.config.refreshToken = tokenData.refresh_token;
             }
@@ -167,38 +161,22 @@ class TwitchTokenRefresh {
                 this.config.tokenExpiresAt = Date.now() + (tokenData.expires_in * 1000);
             }
 
-            // Persist tokens with enhanced retry logic
             await this._persistTokensWithRetry(tokenData);
-            
-            // Track successful refresh for performance monitoring
+
             this.refreshSuccessCount++;
             this.lastRefreshTime = Date.now();
-            
-            // Log in test-compatible format for backwards compatibility
+
             this.logger.info('Configuration updated with new tokens', 'twitch');
-            
-            // Enhanced logging for debugging (when not in test environment)
-            if (process.env.NODE_ENV !== 'test') {
-                this.logger.debug('Enhanced config update details', 'twitch', {
-                    hasRefreshToken: Boolean(tokenData.refresh_token),
-                    successCount: this.refreshSuccessCount,
-                    failureCount: this.refreshFailureCount,
-                    tokenUpdatePattern: 'memory-first-then-file'
-                });
-            }
-            
+
             return true;
-            
+
         } catch (error) {
-            // Enhanced error handling with automatic rollback
             this.refreshFailureCount++;
-            
-            // Rollback memory changes to ensure consistency
+
             this.config.accessToken = originalTokens.accessToken;
             this.config.refreshToken = originalTokens.refreshToken;
             this.config.apiKey = originalTokens.apiKey;
-            
-            // Create standardized config error
+
             const configError = new ConfigError('Token configuration update failed', {
                 originalError: error,
                 code: 'CONFIG_UPDATE_FAILED',
@@ -210,8 +188,7 @@ class TwitchTokenRefresh {
                 },
                 recoverable: false
             });
-            
-            // Log in test-compatible format first
+
             this._handleTokenRefreshError(
                 'Error updating configuration with new tokens',
                 configError,
@@ -222,15 +199,7 @@ class TwitchTokenRefresh {
                     rollbackApplied: true
                 }
             );
-            
-            // Enhanced error logging for debugging (when not in test environment)
-            if (process.env.NODE_ENV !== 'test') {
-                this.logger.debug('Enhanced error recovery details', 'twitch', {
-                    recoveryActions: configError.getRecoveryActions(),
-                    technicalDetails: configError.getTechnicalDetails()
-                });
-            }
-            
+
             throw configError;
         }
     }
@@ -290,14 +259,7 @@ class TwitchTokenRefresh {
                     errorCode: configError.code
                 }
             );
-            
-            if (process.env.NODE_ENV !== 'test') {
-                this.logger.debug('Enhanced error recovery details', 'twitch', {
-                    recoveryActions: configError.getRecoveryActions(),
-                    technicalDetails: configError.getTechnicalDetails()
-                });
-            }
-            
+
             throw configError;
         }
     }
@@ -334,7 +296,6 @@ class TwitchTokenRefresh {
             }
         }
 
-        // All attempts failed
         this._handleTokenRefreshError(
             `All ${this._retryAttempts} token store update attempts failed`,
             lastError,
@@ -406,8 +367,6 @@ class TwitchTokenRefresh {
         
         try {
             const currentToken = this.config.accessToken || this.config.apiKey;
-            
-            // Check if refresh is needed
             const refreshNeeded = await this.needsRefresh(currentToken);
             if (!refreshNeeded) {
                 this.logger.debug('Token is still valid, no refresh needed', 'twitch', {
@@ -421,8 +380,7 @@ class TwitchTokenRefresh {
                 refreshFailureCount: this.refreshFailureCount,
                 lastRefreshTime: this.lastRefreshTime
             });
-            
-            // Attempt token refresh with enhanced error handling
+
             const tokenData = await this.refreshToken(this.config.refreshToken);
             if (!tokenData) {
                 this._handleTokenRefreshError(
@@ -437,7 +395,6 @@ class TwitchTokenRefresh {
                 return true;
             }
 
-            // Update configuration with enhanced reliability
             const updateSuccess = await this.updateConfig(tokenData);
             if (!updateSuccess) {
                 this._handleTokenRefreshError(
@@ -484,15 +441,7 @@ class TwitchTokenRefresh {
                     retryable: categorizedError.retryable
                 }
             );
-            
-            // Enhanced error logging for debugging (when not in test environment)
-            if (process.env.NODE_ENV !== 'test') {
-                this.logger.debug('Token refresh recovery suggestions', 'twitch', {
-                    recoveryActions: categorizedError.getRecoveryActions(),
-                    technicalDetails: categorizedError.getTechnicalDetails()
-                });
-            }
-            
+
             return true;
         }
     }
@@ -569,8 +518,7 @@ class TwitchTokenRefresh {
         this.lastRefreshTime = null;
         this.refreshSuccessCount = 0;
         this.refreshFailureCount = 0;
-        
-        // Clean up error handler
+
         if (this.errorHandler) {
             this.errorHandler.cleanup();
         }

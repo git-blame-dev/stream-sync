@@ -34,7 +34,6 @@ class NotificationManager extends EventEmitter {
             throw new Error('NotificationManager requires obsGoals dependency');
         }
         
-        // New service dependencies (NO MORE APP DEPENDENCY)
         this.eventBus = dependencies.eventBus;
         this.configService = dependencies.configService;
         this.ttsService = dependencies.ttsService;
@@ -42,64 +41,44 @@ class NotificationManager extends EventEmitter {
         this.userTrackingService = dependencies.userTrackingService;
         this.displayQueue = dependencies.displayQueue;
 
-        // Validation for required services
         if (!this.displayQueue) {
             throw new Error('NotificationManager requires displayQueue dependency');
         }
         if (!this.configService) {
             throw new Error('NotificationManager requires ConfigService dependency');
         }
-        
-        // MODERNIZATION: Pure service-based architecture
-        // All dependencies injected via constructor for better testability and modularity
-        this.logger.debug('[NotificationManager] Initializing with pure service-based architecture', 'notification-manager', {
-            hasEventBus: !!this.eventBus,
-            hasConfigService: !!this.configService,
-            hasVFXCommandService: !!this.vfxCommandService,
-            hasTTSService: !!this.ttsService,
-            hasUserTrackingService: !!this.userTrackingService
-        });
-        
-        // Initialize donation spam detection (simplified - will be configured later)
-        this.donationSpamDetector = dependencies.donationSpamDetector; // Support dependency injection, undefined if not provided
 
-        // Per-user notification suppression system
+        this.logger.debug('[NotificationManager] Initialized', 'notification-manager');
+        
+        this.donationSpamDetector = dependencies.donationSpamDetector;
+
         this.userNotificationSuppression = new Map();
         this.suppressionConfig = {
-            // Disable in test environment to prevent resource leaks
-            enabled: process.env.NODE_ENV !== 'test',
+            enabled: dependencies.suppressionEnabled !== false,
             maxNotificationsPerUser: 5,
-            suppressionWindowMs: 60000, // 1 minute
-            suppressionDurationMs: 300000, // 5 minutes
-            cleanupIntervalMs: 300000 // 5 minutes
+            suppressionWindowMs: 60000,
+            suppressionDurationMs: 300000,
+            cleanupIntervalMs: 300000
         };
 
-        // Load suppression configuration from ConfigService or app config
         this._loadSuppressionConfig();
-        
-        // Validate required services for event-driven architecture
+
         if (!this.eventBus) {
-            throw new Error('NotificationManager requires EventBus dependency for event-driven architecture');
+            throw new Error('NotificationManager requires EventBus dependency');
         }
-        
+
         if (!this.configService) {
             throw new Error('NotificationManager requires ConfigService dependency');
         }
         
         const { PRIORITY_LEVELS, NOTIFICATION_CONFIGS } = this.constants;
         this.PRIORITY_LEVELS = PRIORITY_LEVELS;
-        
         this.NOTIFICATION_CONFIGS = NOTIFICATION_CONFIGS;
-        
-        // Use NotificationBuilder for modern notification creation
         this.NotificationBuilder = require('../utils/notification-builder');
-        
+
         const { processDonationGoal } = this.obsGoals;
         this.processDonationGoal = processDonationGoal;
-        
-        this.logger.debug('[NotificationManager] Unified notification system initialized');
 
-        // Start cleanup interval for suppression tracking
         this.startSuppressionCleanup();
         this.errorHandler = null;
     }
