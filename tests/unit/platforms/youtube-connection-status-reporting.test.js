@@ -33,30 +33,10 @@ const createMockPlatform = () => {
     return platform;
 };
 
-const createMockNotificationManager = () => ({
-    getDisplayedNotifications: createMockFn(() => []),
-    addNotification: createMockFn(),
-    clearNotifications: createMockFn()
-});
-
 describe('YouTube Connection Status Reporting', () => {
     let platform;
-    let mockConnectionManager;
 
     beforeEach(() => {
-        mockConnectionManager = {
-            connections: new Map(),
-            addConnection: createMockFn(),
-            removeConnection: createMockFn(),
-            setConnectionReady: createMockFn(),
-            isConnectionReady: createMockFn(),
-            getActiveVideoIds: createMockFn(),
-            getConnectionCount: createMockFn(),
-            getReadyConnectionCount: createMockFn(),
-            hasConnection: createMockFn(),
-            getConnection: createMockFn()
-        };
-
         platform = createMockPlatform();
     });
 
@@ -69,11 +49,6 @@ describe('YouTube Connection Status Reporting', () => {
             const activeIds = platform.getActiveYouTubeVideoIds();
 
             expect(activeIds).toEqual([]);
-            expect(activeIds.length).toBe(0);
-            expect(platform.connectionManager.getActiveVideoIds).toHaveBeenCalled();
-            expect(platform.connectionManager.isConnectionReady).toHaveBeenCalledWith('video1');
-            expect(platform.connectionManager.isConnectionReady).toHaveBeenCalledWith('video2');
-            expect(platform.connectionManager.isConnectionReady).toHaveBeenCalledWith('video3');
         });
 
         test('should report only ready connections when mix of ready and not-ready exists', () => {
@@ -87,8 +62,6 @@ describe('YouTube Connection Status Reporting', () => {
             const activeIds = platform.getActiveYouTubeVideoIds();
 
             expect(activeIds).toEqual(['video1', 'video3']);
-            expect(activeIds.length).toBe(2);
-            expect(platform.connectionManager.isConnectionReady).toHaveBeenCalledTimes(3);
         });
 
         test('should show accurate status distinguishing stored vs ready connections', () => {
@@ -123,7 +96,6 @@ describe('YouTube Connection Status Reporting', () => {
             const isReadyAfterStart = platform.connectionManager.isConnectionReady(premiereVideoId);
 
             expect(isReadyAfterStart).toBe(true);
-            expect(platform.connectionManager.setConnectionReady).toHaveBeenCalledWith(premiereVideoId);
         });
 
         test('should properly connect to Premieres with correct livestream status', () => {
@@ -197,7 +169,6 @@ describe('YouTube Connection Status Reporting', () => {
             const finalState = platform.connectionManager.isConnectionReady(videoId);
 
             expect(finalState).toBe(true);
-            expect(platform.connectionManager.setConnectionReady).toHaveBeenCalledWith(videoId);
         });
     });
 

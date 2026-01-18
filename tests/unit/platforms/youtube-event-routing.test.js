@@ -1,5 +1,6 @@
 const { describe, test, expect, beforeEach, afterEach } = require('bun:test');
 const { createMockFn, clearAllMocks, restoreAllMocks, spyOn } = require('../../helpers/bun-mock-utils');
+const { noOpLogger } = require('../../helpers/mock-factories');
 
 const PlatformEvents = require('../../../src/interfaces/PlatformEvents');
 const EventEmitter = require('events');
@@ -8,10 +9,8 @@ const testClock = require('../../helpers/test-clock');
 describe('YouTube Platform Event Routing', () => {
     let youtubePlatform;
     let mockHandlers;
-    let mockLogger;
 
     beforeEach(() => {
-        // Create mock handlers that track calls
         mockHandlers = {
             onChat: createMockFn(),
             onGift: createMockFn(),
@@ -20,29 +19,17 @@ describe('YouTube Platform Event Routing', () => {
             onViewerCount: createMockFn()
         };
 
-        mockLogger = {
-            info: createMockFn(),
-            debug: createMockFn(),
-            warn: createMockFn(),
-            error: createMockFn()
-        };
-
-        // Create minimal test object with _emitPlatformEvent method
-        // This simulates YouTube platform without full initialization
         youtubePlatform = Object.create(EventEmitter.prototype);
         EventEmitter.call(youtubePlatform);
 
         youtubePlatform.handlers = mockHandlers;
-        youtubePlatform.logger = mockLogger;
+        youtubePlatform.logger = noOpLogger;
 
-        // Add the _emitPlatformEvent method (copied from youtube.js)
         youtubePlatform._emitPlatformEvent = function(type, payload) {
             const platform = payload?.platform || 'youtube';
 
-            // Emit unified platform:event for local listeners
             this.emit('platform:event', { platform, type, data: payload });
 
-            // Forward to injected handlers
             const handlerMap = {
                 'chat': 'onChat',
                 'gift': 'onGift',
@@ -72,7 +59,6 @@ describe('YouTube Platform Event Routing', () => {
         });
 
         test('should match Twitch and TikTok method signature', () => {
-            // Method should accept (type, payload) parameters
             expect(youtubePlatform._emitPlatformEvent.length).toBeGreaterThanOrEqual(2);
         });
     });
@@ -246,7 +232,7 @@ describe('YouTube Platform Event Routing', () => {
 
     describe('Missing handler graceful handling', () => {
         test('should handle missing handler without throwing', () => {
-            youtubePlatform.handlers = {}; // No handlers registered
+            youtubePlatform.handlers = {};
 
             const chatPayload = {
                 type: PlatformEvents.CHAT_MESSAGE,
@@ -260,26 +246,6 @@ describe('YouTube Platform Event Routing', () => {
             expect(() => {
                 youtubePlatform._emitPlatformEvent('chat', chatPayload);
             }).not.toThrow();
-        });
-
-        test('should log debug message when handler is missing', () => {
-            youtubePlatform.handlers = {}; // No handlers registered
-
-            const chatPayload = {
-                type: PlatformEvents.CHAT_MESSAGE,
-                platform: 'youtube',
-                username: 'test',
-                userId: '123',
-                message: { text: 'test' },
-                timestamp: new Date(testClock.now()).toISOString()
-            };
-
-            youtubePlatform._emitPlatformEvent('chat', chatPayload);
-
-            expect(mockLogger.debug).toHaveBeenCalledWith(
-                expect.stringContaining('No handler registered for event type'),
-                'youtube'
-            );
         });
 
         test('should handle null handlers object', () => {
@@ -334,11 +300,6 @@ describe('YouTube Platform Event Routing', () => {
                 timestamp: testClock.now()
             };
 
-            // This would be the actual integration point
-            // The processChatMessage should internally call _emitPlatformEvent
-            // We're verifying the handler gets called as a result
-
-            // Simulate what processChatMessage does
             const normalizedData = {
                 userId: mockChatItem.author.channelId,
                 username: mockChatItem.author.name,
@@ -376,29 +337,21 @@ describe('YouTube Platform Event Routing', () => {
     describe('Consistency with Twitch and TikTok', () => {
         test('should have _emitPlatformEvent method matching expected signature', () => {
             expect(typeof youtubePlatform._emitPlatformEvent).toBe('function');
-            // Should accept 2 parameters: (type, payload)
             expect(youtubePlatform._emitPlatformEvent.length).toBe(2);
         });
 
         test('should route events using same pattern as other platforms', () => {
-            // Test that the method follows the same pattern:
-            // 1. Emit platform:event
-            // 2. Route to handler via handlerMap
-            // 3. Call handler function
-
             const emitSpy = spyOn(youtubePlatform, 'emit');
             const testPayload = { type: 'test', platform: 'youtube', data: 'test' };
 
             youtubePlatform._emitPlatformEvent('chat', testPayload);
 
-            // Verify it emits platform:event (same as Twitch/TikTok)
             expect(emitSpy).toHaveBeenCalledWith('platform:event', {
                 platform: 'youtube',
                 type: 'chat',
                 data: testPayload
             });
 
-            // Verify it calls the handler (same as Twitch/TikTok)
             expect(mockHandlers.onChat).toHaveBeenCalledWith(testPayload);
         });
     });

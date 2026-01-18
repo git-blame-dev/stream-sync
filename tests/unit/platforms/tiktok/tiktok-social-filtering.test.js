@@ -3,12 +3,8 @@ const { createMockFn, restoreAllMocks } = require('../../../helpers/bun-mock-uti
 const { restoreAllModuleMocks, resetModules } = require('../../../helpers/bun-module-mocks');
 const { initializeTestLogging } = require('../../../helpers/test-setup');
 
-// Initialize logging before requiring TikTokPlatform (which depends on logging)
 initializeTestLogging();
 
-// Note: This test requires the real TikTokPlatform, not the mock from bun.setup.js.
-// Run standalone with: bun test tests/unit/platforms/tiktok/tiktok-social-filtering.test.js
-// Skip in main suite since global mock intercepts the require.
 const { TikTokPlatform } = require('../../../../src/platforms/tiktok');
 const isPreloadMocked = !TikTokPlatform || !TikTokPlatform.prototype || !TikTokPlatform.prototype.handleTikTokSocial;
 const { createMockTikTokPlatformDependencies, noOpLogger } = require('../../../helpers/mock-factories');

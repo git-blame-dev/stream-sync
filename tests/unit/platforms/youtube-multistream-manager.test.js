@@ -1,5 +1,6 @@
 const { describe, test, expect } = require('bun:test');
 const { createMockFn } = require('../../helpers/bun-mock-utils');
+const { noOpLogger } = require('../../helpers/mock-factories');
 
 const { createYouTubeMultiStreamManager } = require('../../../src/platforms/youtube/streams/youtube-multistream-manager');
 
@@ -24,11 +25,7 @@ describe('YouTube multi-stream manager', () => {
             _logMultiStreamStatus: createMockFn(),
             _handleProcessingError: createMockFn(),
             _handleError: createMockFn(),
-            logger: {
-                info: createMockFn(),
-                debug: createMockFn(),
-                warn: createMockFn()
-            },
+            logger: noOpLogger,
             _emitPlatformEvent: createMockFn(),
             ...overrides
         };
