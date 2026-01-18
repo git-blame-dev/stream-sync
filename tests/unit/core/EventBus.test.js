@@ -49,8 +49,7 @@ describe('EventBus', () => {
         test('should bind methods to preserve context', () => {
             const bus = new EventBus();
             const { emit, subscribe, unsubscribe } = bus;
-            
-            // Methods should still work when extracted
+
             expect(() => emit('test')).not.toThrow();
             expect(() => subscribe('test', () => {})).not.toThrow();
         });
@@ -91,7 +90,6 @@ describe('EventBus', () => {
             eventBus.emit('test-event');
             
             expect(handler).toHaveBeenCalled();
-            // Verify context was properly bound - handler should have access to this.value
         });
 
         test('should return unsubscribe function from subscription', () => {
@@ -164,8 +162,7 @@ describe('EventBus', () => {
             
             eventBus.subscribe('async-event', asyncHandler);
             eventBus.emit('async-event', 'hello');
-            
-            // Give async handler time to complete
+
             await waitForDelay(50);
             
             expect(asyncHandler).toHaveBeenCalledTimes(1);
@@ -181,8 +178,7 @@ describe('EventBus', () => {
             
             eventBus.subscribe('error-event', errorHandler);
             eventBus.emit('error-event');
-            
-            // Give async handler time to complete and fail
+
             await waitForDelay(50);
             
             const stats = eventBus.getEventStats();
@@ -196,8 +192,7 @@ describe('EventBus', () => {
             
             eventBus.subscribe('promise-event', promiseHandler);
             eventBus.emit('promise-event');
-            
-            // Give promise time to resolve
+
             await waitForDelay(50);
             
             expect(promiseHandler).toHaveBeenCalled();
@@ -221,7 +216,6 @@ describe('EventBus', () => {
             
             eventBus.emit('test-event', 'data');
             
-            // Give handlers time to execute
             await waitForDelay(50);
             
             expect(goodHandler).toHaveBeenCalledTimes(1);
@@ -244,7 +238,6 @@ describe('EventBus', () => {
             
             eventBus.emit('test-event', 'data');
             
-            // Give handlers time to execute
             await waitForDelay(50);
             
             expect(errorEventHandler).toHaveBeenCalledTimes(1);
@@ -279,8 +272,7 @@ describe('EventBus', () => {
             
             eventBus.subscribe('test-event', errorHandler, { context });
             eventBus.emit('test-event');
-            
-            // Give handler time to execute and fail
+
             await waitForDelay(50);
             
             const stats = eventBus.getEventStats();
@@ -299,7 +291,6 @@ describe('EventBus', () => {
             
             eventBus.emit('test-event', longObject);
             
-            // Give handlers time to execute
             await waitForDelay(50);
             
             expect(errorEventHandler).toHaveBeenCalledTimes(1);
@@ -363,21 +354,18 @@ describe('EventBus', () => {
             
             eventBus.subscribe('test-event', handler, { context: context1 });
             eventBus.subscribe('test-event', handler, { context: context2 });
-            eventBus.subscribe('test-event', handler); // No context
+            eventBus.subscribe('test-event', handler);
             
             expect(eventBus.listenerCount('test-event')).toBe(3);
-            
-            // Unsubscribe with context1
+
             const result1 = eventBus.unsubscribe('test-event', handler, context1);
             expect(result1).toBe(true);
             expect(eventBus.listenerCount('test-event')).toBe(2);
-            
-            // Unsubscribe without context
+
             const result2 = eventBus.unsubscribe('test-event', handler);
             expect(result2).toBe(true);
             expect(eventBus.listenerCount('test-event')).toBe(1);
-            
-            // context2 should still be subscribed
+
             eventBus.emit('test-event', 'data');
             expect(handler).toHaveBeenCalledTimes(1);
         });
@@ -426,7 +414,6 @@ describe('EventBus', () => {
             eventBus.emit('test-event');
             
             expect(handler).toHaveBeenCalled();
-            // The handler should have been called with the correct context
         });
 
         test('should handle context constructor name correctly', () => {
@@ -474,8 +461,7 @@ describe('EventBus', () => {
             eventBus.subscribe('test-event', handler);
             
             eventBus.emit('test-event', 'data');
-            
-            // Give handler time to execute
+
             await waitForDelay(10);
             
             expect(handler).toHaveBeenCalledTimes(1);
@@ -530,7 +516,6 @@ describe('EventBus', () => {
             
             eventBus.emit('test-event');
             
-            // Give handlers time to execute
             await waitForDelay(50);
             
             const stats = eventBus.getEventStats();
@@ -548,7 +533,6 @@ describe('EventBus', () => {
             eventBus.emit('test-event');
             eventBus.emit('test-event');
             
-            // Give handlers time to execute
             await waitForDelay(100);
             
             const stats = eventBus.getEventStats();
@@ -586,8 +570,7 @@ describe('EventBus', () => {
         test('should handle max listeners warning', () => {
             const smallBus = new EventBus({ maxListeners: 2 });
             const handler = createMockFn();
-            
-            // This should not exceed max listeners
+
             smallBus.subscribe('test-event', handler);
             smallBus.subscribe('test-event', handler);
             
@@ -645,8 +628,7 @@ describe('EventBus', () => {
             eventBus.subscribe('rapid-event', handler);
             
             const startTime = testClock.now();
-            
-            // Emit 100 events rapidly
+
             for (let i = 0; i < 100; i++) {
                 eventBus.emit('rapid-event', i);
             }
@@ -654,12 +636,11 @@ describe('EventBus', () => {
             const simulatedEmissionMs = 25;
             testClock.advance(simulatedEmissionMs);
             const emissionTime = testClock.now() - startTime;
-            
-            // Give handlers time to complete
+
             await waitForDelay(100);
             
             expect(handler).toHaveBeenCalledTimes(100);
-            expect(emissionTime).toBeLessThan(100); // Should be fast
+            expect(emissionTime).toBeLessThan(100);
             
             const stats = eventBus.getEventStats();
             expect(stats['rapid-event'].success).toBe(100);
@@ -702,8 +683,7 @@ describe('EventBus', () => {
                 throw new Error('Test error');
             });
             const errorEventHandler = createMockFn();
-            
-            // Create circular reference
+
             const obj = { name: 'test' };
             obj.self = obj;
             
@@ -712,14 +692,13 @@ describe('EventBus', () => {
             
             eventBus.emit('test-event', obj);
             
-            // Give handlers time to execute
             await waitForDelay(50);
             
             expect(errorEventHandler).toHaveBeenCalledTimes(1);
             const errorEventArgs = errorEventHandler.mock.calls[0][0];
             expect(errorEventArgs.eventName).toBe('test-event');
             expect(errorEventArgs.error).toBeInstanceOf(Error);
-            expect(errorEventArgs.args[0]).toBe('[Circular Object]'); // Should replace circular reference with placeholder
+            expect(errorEventArgs.args[0]).toBe('[Circular Object]');
         });
 
         test('should handle undefined and null arguments', () => {
@@ -739,8 +718,7 @@ describe('EventBus', () => {
             
             eventBus.subscribe('slow-event', slowHandler);
             eventBus.emit('slow-event');
-            
-            // Give handler time to complete
+
             await waitForDelay(delayMs + 50);
             
             const stats = eventBus.getEventStats();
@@ -761,8 +739,7 @@ describe('EventBus', () => {
             eventBus.subscribe('mixed-event', promiseHandler);
             
             eventBus.emit('mixed-event', 'data');
-            
-            // Give async handlers time to complete
+
             await waitForDelay(50);
             
             expect(syncHandler).toHaveBeenCalledTimes(1);

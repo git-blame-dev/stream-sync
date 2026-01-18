@@ -1,7 +1,6 @@
 const { describe, test, expect } = require('bun:test');
 const { initializeTestLogging } = require('../../helpers/test-setup');
 
-// Initialize logging for tests
 initializeTestLogging();
 
 describe('Centralized Endpoints Configuration', () => {
@@ -115,21 +114,17 @@ describe('Centralized Endpoints Configuration', () => {
 
     describe('Environment-Specific Configuration', () => {
         test('should support environment override for development', () => {
-            // This test documents future environment-specific URL support
             const originalEnv = process.env.NODE_ENV;
             process.env.NODE_ENV = 'development';
-            
-            // For now, URLs should remain the same regardless of environment
-            // In the future, this could point to dev/staging APIs
+
             expect(TWITCH.API_BASE).toBe('https://api.twitch.tv/helix');
-            
+
             process.env.NODE_ENV = originalEnv;
         });
     });
 
     describe('Backward Compatibility', () => {
         test('should export individual platform configurations for migration', () => {
-            // These exports help with gradual migration from hardcoded URLs
             expect(TWITCH).toBeDefined();
             expect(YOUTUBE).toBeDefined();
             expect(STREAMELEMENTS).toBeDefined();

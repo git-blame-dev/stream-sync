@@ -3,10 +3,8 @@ const { initializeTestLogging, createTestUser, TEST_TIMEOUTS } = require('../../
 const { noOpLogger, createMockConfig } = require('../../helpers/mock-factories');
 const { setupAutomatedCleanup } = require('../../helpers/mock-lifecycle');
 
-// Initialize logging first
 initializeTestLogging();
 
-// Setup automated cleanup
 setupAutomatedCleanup({
     clearCallsBeforeEach: true,
     logPerformanceMetrics: true
@@ -39,12 +37,11 @@ describe('CommandParser Keyword vs Command Display Fix', () => {
                 message: 'I am a mod'
             };
 
-            // Test keyword "mod" matching should return command "!mod"
             const result = commandParser.parse(chatData, false);
 
             expect(result).not.toBeNull();
             expect(result.type).toBe('vfx');
-            expect(result.command).toBe('!mod'); // Should be !mod, not mod
+            expect(result.command).toBe('!mod');
             expect(result.filename).toBe('im-a-mod');
         });
 
@@ -56,12 +53,11 @@ describe('CommandParser Keyword vs Command Display Fix', () => {
                 message: 'hello everyone'
             };
 
-            // Test keyword "hello" matching should return first command trigger "!hello"
             const result = commandParser.parse(chatData, false);
 
             expect(result).not.toBeNull();
             expect(result.type).toBe('vfx');
-            expect(result.command).toBe('!hello'); // Should be !hello, not hello
+            expect(result.command).toBe('!hello');
             expect(result.filename).toBe('hello-world');
         });
 
@@ -78,18 +74,13 @@ describe('CommandParser Keyword vs Command Display Fix', () => {
                 message: 'that was a blast'
             };
 
-            // Test both direct command and keyword matching return same command
             const directResult = commandParser.parse(directChatData, false);
             const keywordResult = commandParser.parse(keywordChatData, false);
 
             expect(directResult).not.toBeNull();
             expect(keywordResult).not.toBeNull();
-            
-            // Both should return the same command trigger
             expect(directResult.command).toBe('!boom');
-            expect(keywordResult.command).toBe('!boom'); // Currently fails - returns 'blast'
-            
-            // Both should have same VFX config
+            expect(keywordResult.command).toBe('!boom');
             expect(directResult.filename).toBe(keywordResult.filename);
         });
     });
@@ -103,7 +94,6 @@ describe('CommandParser Keyword vs Command Display Fix', () => {
                 message: '!mod'
             };
 
-            // Direct command usage should work as before
             const result = commandParser.parse(chatData, false);
 
             expect(result).not.toBeNull();
@@ -122,16 +112,14 @@ describe('CommandParser Keyword vs Command Display Fix', () => {
                 message: '!hi'
             };
 
-            // Test second trigger !hi should still return !hello (first trigger)  
             const result = commandParser.parse(chatData, false);
 
             expect(result).not.toBeNull();
             expect(result.type).toBe('vfx');
-            expect(result.command).toBe('!hello'); // Should be first trigger
+            expect(result.command).toBe('!hello');
         });
 
         it('should handle case where no keywords are defined', () => {
-            // Add command with no keywords
             mockConfig = createMockConfig({
                 commands: {
                     'simple-command': '!simple, vfx center'

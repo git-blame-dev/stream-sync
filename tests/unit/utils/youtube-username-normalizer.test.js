@@ -54,20 +54,13 @@ describe('YouTube Username Normalization', () => {
         });
 
         test('should handle international usernames correctly', () => {
-            // East Asian Scripts
             expect(normalizeYouTubeUsername(`@${INTERNATIONAL_USERNAMES.chinese}`)).toBe(INTERNATIONAL_USERNAMES.chinese);
             expect(normalizeYouTubeUsername(`@${INTERNATIONAL_USERNAMES.japanese}`)).toBe(INTERNATIONAL_USERNAMES.japanese);
             expect(normalizeYouTubeUsername(`@${INTERNATIONAL_USERNAMES.korean}`)).toBe(INTERNATIONAL_USERNAMES.korean);
-            
-            // Arabic and RTL Scripts
             expect(normalizeYouTubeUsername(`@${INTERNATIONAL_USERNAMES.arabic}`)).toBe(INTERNATIONAL_USERNAMES.arabic);
             expect(normalizeYouTubeUsername(`@${INTERNATIONAL_USERNAMES.hebrew}`)).toBe(INTERNATIONAL_USERNAMES.hebrew);
-            
-            // European Scripts
             expect(normalizeYouTubeUsername(`@${INTERNATIONAL_USERNAMES.russian}`)).toBe(INTERNATIONAL_USERNAMES.russian);
             expect(normalizeYouTubeUsername(`@${INTERNATIONAL_USERNAMES.german}`)).toBe(INTERNATIONAL_USERNAMES.german);
-            
-            // Emoji usernames
             expect(normalizeYouTubeUsername(`@${INTERNATIONAL_USERNAMES.emoji}`)).toBe(INTERNATIONAL_USERNAMES.emoji);
             expect(normalizeYouTubeUsername(`@${INTERNATIONAL_USERNAMES.emojiMixed}`)).toBe(INTERNATIONAL_USERNAMES.emojiMixed);
         });
@@ -78,15 +71,10 @@ describe('YouTube Username Normalization', () => {
         });
 
         test('should handle boundary condition usernames', () => {
-            // Empty and minimal cases
-            expect(normalizeYouTubeUsername('@')).toBeNull(); // Just @ sign
+            expect(normalizeYouTubeUsername('@')).toBeNull();
             expect(normalizeYouTubeUsername(`@${BOUNDARY_CONDITIONS.singleChar}`)).toBe(BOUNDARY_CONDITIONS.singleChar);
-            
-            // Whitespace variations
             expect(normalizeYouTubeUsername(`@${BOUNDARY_CONDITIONS.singleSpace}`)).toBeNull();
             expect(normalizeYouTubeUsername(`@${BOUNDARY_CONDITIONS.multipleSpaces}`)).toBeNull();
-            
-            // Special characters
             expect(normalizeYouTubeUsername(`@user${BOUNDARY_CONDITIONS.specialChars}`)).toBe(`user${BOUNDARY_CONDITIONS.specialChars}`);
         });
     });
@@ -192,15 +180,12 @@ describe('YouTube Username Normalization', () => {
         });
 
         test('should handle comprehensive international edge cases', () => {
-            // Test with mathematical unicode characters
             const mathResult = normalizeYouTubeUserInfo(`@${INTERNATIONAL_USERNAMES.mathematical}`);
             expect(mathResult.username).toBe(INTERNATIONAL_USERNAMES.mathematical);
-            
-            // Test with zalgo text (heavily accented)
+
             const zalgoResult = normalizeYouTubeUserInfo(`@${INTERNATIONAL_USERNAMES.zalgo}`);
             expect(zalgoResult.username).toBe(INTERNATIONAL_USERNAMES.zalgo);
-            
-            // Test performance with very long usernames
+
             const longResult = normalizeYouTubeUserInfo(`@${BOUNDARY_CONDITIONS.longText}`);
             expect(longResult.username).toBe(BOUNDARY_CONDITIONS.longText);
         });
@@ -210,42 +195,38 @@ describe('YouTube Username Normalization', () => {
         test('should handle high-volume international username processing', () => {
             const internationalUsernames = Object.values(INTERNATIONAL_USERNAMES);
             const startTime = testClock.now();
-            
-            // Process 1000 international usernames
+
             const results = [];
             for (let i = 0; i < 1000; i++) {
                 const username = `@${internationalUsernames[i % internationalUsernames.length]}${i}`;
                 results.push(normalizeYouTubeUsername(username));
             }
-            
+
             const simulatedProcessingMs = 150;
             testClock.advance(simulatedProcessingMs);
             const endTime = testClock.now();
             const processingTime = endTime - startTime;
-            
+
             expect(results).toHaveLength(1000);
-            expect(processingTime).toBeLessThan(1000); // Should complete within 1 second
+            expect(processingTime).toBeLessThan(1000);
         });
 
         test('should maintain memory efficiency with international strings', () => {
             const initialMemory = process.memoryUsage().heapUsed;
-            
-            // Process various international usernames
+
             Object.values(INTERNATIONAL_USERNAMES).forEach(username => {
                 for (let i = 0; i < 100; i++) {
                     normalizeYouTubeUsername(`@${username}${i}`);
                 }
             });
-            
+
             const finalMemory = process.memoryUsage().heapUsed;
             const memoryIncrease = finalMemory - initialMemory;
-            
-            // Should not use excessive memory (less than 10MB)
+
             expect(memoryIncrease).toBeLessThan(10 * 1024 * 1024);
         });
 
         test('should handle all international username categories', () => {
-            // Verify all categories from INTERNATIONAL_USERNAMES work correctly
             const categories = [
                 'chinese', 'chineseTraditional', 'japanese', 'korean',
                 'arabic', 'hebrew', 'persian',

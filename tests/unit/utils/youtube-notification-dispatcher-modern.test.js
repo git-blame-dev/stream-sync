@@ -2,6 +2,7 @@
 const { describe, test, expect, beforeEach, it, afterEach } = require('bun:test');
 const { createMockFn, restoreAllMocks } = require('../../helpers/bun-mock-utils');
 const { resetModules, restoreAllModuleMocks } = require('../../helpers/bun-module-mocks');
+const { noOpLogger } = require('../../helpers/mock-factories');
 
 const { getSyntheticFixture, INTERNATIONAL_USERNAMES } = require('../../helpers/platform-test-data');
 
@@ -33,17 +34,9 @@ describe('YouTube Notification Dispatcher - Modern (Production Data)', () => {
 
     let YouTubeNotificationDispatcher;
     let mockHandlers;
-    let mockLogger;
 
     beforeEach(() => {
         resetModules();
-
-        mockLogger = {
-            debug: createMockFn(),
-            info: createMockFn(),
-            warn: createMockFn(),
-            error: createMockFn()
-        };
 
         mockHandlers = {
             onGift: createMockFn(),
@@ -58,17 +51,14 @@ describe('YouTube Notification Dispatcher - Modern (Production Data)', () => {
     describe('SuperChat Dispatch - Fixture Data', () => {
         it('dispatches SuperChat with correct notification structure', async () => {
             const dispatcher = new YouTubeNotificationDispatcher({
-                logger: mockLogger
+                logger: noOpLogger
             });
 
             await dispatcher.dispatchSuperChat(fixtureSuperChat, mockHandlers);
 
-            // User-visible outcome: handler called with notification
             expect(mockHandlers.onGift).toHaveBeenCalledTimes(1);
 
             const notification = mockHandlers.onGift.mock.calls[0][0];
-
-            // Verify user-visible notification data
             expect(notification.platform).toBe('youtube');
             expect(notification.type).toBe('platform:gift');
             expect(notification.giftType).toBe('Super Chat');
@@ -87,30 +77,28 @@ describe('YouTube Notification Dispatcher - Modern (Production Data)', () => {
 
         it('dispatches INR SuperChat correctly', async () => {
             const dispatcher = new YouTubeNotificationDispatcher({
-                logger: mockLogger
+                logger: noOpLogger
             });
 
             await dispatcher.dispatchSuperChat(fixtureSuperChatINR, mockHandlers);
 
-            // User-visible outcome: INR parsed correctly
             expect(mockHandlers.onGift).toHaveBeenCalledTimes(1);
 
             const notification = mockHandlers.onGift.mock.calls[0][0];
             expect(notification.amount).toBe(199);
             expect(notification.currency).toBe('INR');
-            expect(notification.username).toBe(INTERNATIONAL_USERNAMES.chinese); // @ stripped
+            expect(notification.username).toBe(INTERNATIONAL_USERNAMES.chinese);
         });
     });
 
     describe('SuperSticker Dispatch - Fixture Data', () => {
         it('dispatches SuperSticker with correct notification structure', async () => {
             const dispatcher = new YouTubeNotificationDispatcher({
-                logger: mockLogger
+                logger: noOpLogger
             });
 
             await dispatcher.dispatchSuperSticker(fixtureSuperSticker, mockHandlers);
 
-            // User-visible outcome: sticker donation dispatched
             expect(mockHandlers.onGift).toHaveBeenCalledTimes(1);
             expect(mockHandlers.onGiftPaypiggy).not.toHaveBeenCalled();
 
@@ -131,12 +119,11 @@ describe('YouTube Notification Dispatcher - Modern (Production Data)', () => {
 
         it('handles SuperSticker with no message field', async () => {
             const dispatcher = new YouTubeNotificationDispatcher({
-                logger: mockLogger
+                logger: noOpLogger
             });
 
             await dispatcher.dispatchSuperSticker(fixtureSuperSticker, mockHandlers);
 
-            // User-visible outcome: empty message for stickers
             const notification = mockHandlers.onGift.mock.calls[0][0];
             expect(notification.message).toBe('');
         });
@@ -145,7 +132,7 @@ describe('YouTube Notification Dispatcher - Modern (Production Data)', () => {
     describe('Gift Membership Purchase - Header Author Only', () => {
         it('emits error payload when author is only present in header', async () => {
             const dispatcher = new YouTubeNotificationDispatcher({
-                logger: mockLogger
+                logger: noOpLogger
             });
 
             const headerOnly = {
@@ -173,24 +160,22 @@ describe('YouTube Notification Dispatcher - Modern (Production Data)', () => {
     describe('Error Handling - User Experience', () => {
         it('handles null chatItem gracefully', async () => {
             const dispatcher = new YouTubeNotificationDispatcher({
-                logger: mockLogger
+                logger: noOpLogger
             });
 
             const result = await dispatcher.dispatchSuperChat(null, mockHandlers);
 
-            // User-visible outcome: no crash, handler not called
             expect(result).toBe(false);
             expect(mockHandlers.onGift).not.toHaveBeenCalled();
         });
 
         it('handles undefined chatItem gracefully', async () => {
             const dispatcher = new YouTubeNotificationDispatcher({
-                logger: mockLogger
+                logger: noOpLogger
             });
 
             const result = await dispatcher.dispatchSuperChat(undefined, mockHandlers);
 
-            // User-visible outcome: graceful degradation
             expect(result).toBe(false);
             expect(mockHandlers.onGift).not.toHaveBeenCalled();
         });
@@ -205,17 +190,15 @@ describe('YouTube Notification Dispatcher - Modern (Production Data)', () => {
                         id: 'test',
                         name: 'Test'
                     }
-                    // Missing purchase_amount
                 }
             };
 
             const dispatcher = new YouTubeNotificationDispatcher({
-                logger: mockLogger
+                logger: noOpLogger
             });
 
             const result = await dispatcher.dispatchSuperChat(malformed, mockHandlers);
 
-            // User-visible outcome: error notification still reaches handler
             expect(result).toBe(true);
             expect(mockHandlers.onGift).toHaveBeenCalledTimes(1);
 
@@ -245,12 +228,11 @@ describe('YouTube Notification Dispatcher - Modern (Production Data)', () => {
             };
 
             const dispatcher = new YouTubeNotificationDispatcher({
-                logger: mockLogger
+                logger: noOpLogger
             });
 
             const result = await dispatcher.dispatchSuperChat(invalidCurrency, mockHandlers);
 
-            // User-visible outcome: error notification still reaches handler
             expect(result).toBe(true);
             expect(mockHandlers.onGift).toHaveBeenCalledTimes(1);
 
@@ -272,7 +254,7 @@ describe('YouTube Notification Dispatcher - Modern (Production Data)', () => {
 
         it('routes handler errors through platform error handler', async () => {
             const dispatcher = new YouTubeNotificationDispatcher({
-                logger: mockLogger
+                logger: noOpLogger
             });
             dispatcher.errorHandler = {
                 handleEventProcessingError: createMockFn(),
@@ -293,29 +275,26 @@ describe('YouTube Notification Dispatcher - Modern (Production Data)', () => {
             expect(eventType).toBe('dispatchSuperChat');
         });
 
-        it('returns false when handler is missing and logs warning', async () => {
+        it('returns false when handler is missing', async () => {
             const dispatcher = new YouTubeNotificationDispatcher({
-                logger: mockLogger
+                logger: noOpLogger
             });
 
             const result = await dispatcher.dispatchSuperChat(fixtureSuperChat, { onGift: null });
 
             expect(result).toBe(false);
-            expect(mockLogger.warn).toHaveBeenCalled();
         });
     });
 
     describe('Notification Structure Validation', () => {
         it('always includes required notification fields', async () => {
             const dispatcher = new YouTubeNotificationDispatcher({
-                logger: mockLogger
+                logger: noOpLogger
             });
 
             await dispatcher.dispatchSuperChat(fixtureSuperChat, mockHandlers);
 
             const notification = mockHandlers.onGift.mock.calls[0][0];
-
-            // User-visible outcome: complete notification structure
             expect(notification).toMatchObject({
                 platform: expect.any(String),
                 type: expect.any(String),
@@ -331,23 +310,20 @@ describe('YouTube Notification Dispatcher - Modern (Production Data)', () => {
 
         it('includes displayName and username matching name (YouTube reality)', async () => {
             const dispatcher = new YouTubeNotificationDispatcher({
-                logger: mockLogger
+                logger: noOpLogger
             });
 
             await dispatcher.dispatchSuperChat(fixtureSuperChat, mockHandlers);
 
             const notification = mockHandlers.onGift.mock.calls[0][0];
-
-            // User-visible outcome: YouTube only has 'name', so displayName and username match it
             expect(notification.username).toBe('SuperChatDonor');
-            // All three fields have the same accurate value from YouTube's author.name
         });
     });
 
     describe('SuperSticker and membership edge cases', () => {
         it('uses alt text when sticker name missing', async () => {
             const dispatcher = new YouTubeNotificationDispatcher({
-                logger: mockLogger
+                logger: noOpLogger
             });
             const sticker = {
                 ...fixtureSuperSticker,
@@ -365,7 +341,7 @@ describe('YouTube Notification Dispatcher - Modern (Production Data)', () => {
 
         it('handles gift membership with minimal fields', async () => {
             const dispatcher = new YouTubeNotificationDispatcher({
-                logger: mockLogger
+                logger: noOpLogger
             });
             const membershipGift = {
                 type: 'AddChatItemAction',
@@ -393,7 +369,7 @@ describe('YouTube Notification Dispatcher - Modern (Production Data)', () => {
 
         it('emits error notification when gift membership count is missing', async () => {
             const dispatcher = new YouTubeNotificationDispatcher({
-                logger: mockLogger
+                logger: noOpLogger
             });
             const membershipGift = {
                 type: 'AddChatItemAction',

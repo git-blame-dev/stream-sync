@@ -15,7 +15,6 @@ const {
 } = require('../../helpers/mock-lifecycle');
 const testClock = require('../../helpers/test-clock');
 
-// Setup automated cleanup
 setupAutomatedCleanup({
     clearCallsBeforeEach: true,
     validateAfterCleanup: true
@@ -255,8 +254,6 @@ describe('YouTube Turkish Lira (TRY) Currency Parsing', () => {
 
             it('should NOT parse as zero when format is unrecognized', () => {
                 const result = parser.parse('TRY 219.99');
-                
-                // Should not return 0 for a valid TRY amount
                 expect(result.amount).not.toBe(0);
             });
         });
@@ -301,7 +298,7 @@ describe('YouTube Turkish Lira (TRY) Currency Parsing', () => {
                     userId: 'user123',
                     giftType: 'Super Chat',
                     giftCount: 1,
-                    amount: 219.99, // Should be parsed correctly
+                    amount: 219.99,
                     currency: 'TRY',
                     message: 'Merhaba!',
                     displayString: 'TRY 219.99'
@@ -313,7 +310,6 @@ describe('YouTube Turkish Lira (TRY) Currency Parsing', () => {
                     superChatData
                 );
 
-                // Should NOT be filtered
                 expect(result.success).toBe(true);
                 expect(result.filtered).not.toBe(true);
                 expect(result.reason).not.toBe('Zero amount not displayed');
@@ -326,7 +322,7 @@ describe('YouTube Turkish Lira (TRY) Currency Parsing', () => {
                     userId: 'user456',
                     giftType: 'Super Chat',
                     giftCount: 1,
-                    amount: 0, // Actually zero
+                    amount: 0,
                     currency: 'USD',
                     message: 'Test'
                 };
@@ -337,7 +333,6 @@ describe('YouTube Turkish Lira (TRY) Currency Parsing', () => {
                     zeroGiftData
                 );
 
-                // Should be filtered
                 expect(result.success).toBe(false);
                 expect(result.filtered).toBe(true);
                 expect(result.reason).toBe('Zero amount not displayed');
@@ -350,7 +345,7 @@ describe('YouTube Turkish Lira (TRY) Currency Parsing', () => {
                     userId: 'user789',
                     giftType: 'Super Chat',
                     giftCount: 1,
-                    amount: null, // Failed to parse
+                    amount: null,
                     currency: 'UNKNOWN',
                     displayString: 'XYZ 100.00',
                     message: 'Test message'
@@ -362,7 +357,6 @@ describe('YouTube Turkish Lira (TRY) Currency Parsing', () => {
                     superChatData
                 );
 
-                // Should handle gracefully - not crash, but may be filtered
                 expect(result).toBeDefined();
                 expect(result.success).toBeDefined();
             });
@@ -406,7 +400,6 @@ describe('YouTube Turkish Lira (TRY) Currency Parsing', () => {
                     const addedNotification = mockDisplayQueue.addItem.mock.calls[0][0];
                     expect(addedNotification).toBeDefined();
                     expect(addedNotification.data).toBeDefined();
-                    // Check that the amount is preserved in the notification data
                     expect(addedNotification.data.amount).toBe(amount);
                 });
             });
@@ -415,7 +408,6 @@ describe('YouTube Turkish Lira (TRY) Currency Parsing', () => {
 
     describe('End-to-End Integration Test', () => {
         it('should correctly process a Turkish Lira SuperChat from YouTube event', async () => {
-            // Simulate the full flow from YouTube event to notification display
             const youtubeEvent = {
                 type: 'superchat',
                 data: {
@@ -424,22 +416,19 @@ describe('YouTube Turkish Lira (TRY) Currency Parsing', () => {
                         channelId: 'UC123456'
                     },
                     superchat: {
-                        amount: 'TRY 219.99', // Raw format from YouTube
-                        message: 'Harika yayın!' // "Great stream!" in Turkish
+                        amount: 'TRY 219.99',
+                        message: 'Harika yayın!'
                     }
                 }
             };
 
-            // Parse currency
             const parser = new YouTubeiCurrencyParser();
             const parseResult = parser.parse(youtubeEvent.data.superchat.amount);
-            
-            // Verify parsing succeeded
+
             expect(parseResult.success).toBe(true);
             expect(parseResult.amount).toBe(219.99);
             expect(parseResult.currency).toBe('TRY');
 
-            // Create notification data
             const notificationData = {
                 username: youtubeEvent.data.author.name,
                 userId: youtubeEvent.data.author.channelId,
@@ -451,8 +440,7 @@ describe('YouTube Turkish Lira (TRY) Currency Parsing', () => {
                 displayString: youtubeEvent.data.superchat.amount
             };
 
-            // Process through notification manager
-            const mockDisplayQueue = { 
+            const mockDisplayQueue = {
                 add: createMockFn().mockReturnValue(true),
                 addItem: createMockFn().mockReturnValue(true),
                 getQueueLength: createMockFn().mockReturnValue(0)
@@ -480,7 +468,6 @@ describe('YouTube Turkish Lira (TRY) Currency Parsing', () => {
                 notificationData
             );
 
-            // Verify notification was NOT filtered
             expect(result.success).toBe(true);
             expect(result.filtered).not.toBe(true);
         });
