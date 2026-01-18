@@ -33,7 +33,7 @@ describe('DisplayQueue priority ordering', () => {
     };
 
     const createQueue = () => {
-        const queue = new DisplayQueue(createMockOBSManager('connected'), config, constants);
+        const queue = new DisplayQueue(createMockOBSManager('connected'), config, constants, null, constants);
         queue.getDuration = createMockFn().mockReturnValue(0);
         return queue;
     };

@@ -43,6 +43,9 @@ describe('OBS Connection Race Condition - User Experience Validation', () => {
                 address: 'ws://localhost:4455',  
                 password: 'test123',
                 enabled: true
+            },
+            runtimeConstants: {
+                OBS_CONNECTION_TIMEOUT: 5000
             }
         });
     });

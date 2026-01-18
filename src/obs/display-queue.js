@@ -20,17 +20,12 @@ function resolveRuntimeConstants(runtimeConstants, constants) {
     if (runtimeConstants) {
         return runtimeConstants;
     }
-    if (process.env.NODE_ENV === 'test') {
-        if (constants && (
-            constants.CHAT_TRANSITION_DELAY !== undefined ||
-            constants.NOTIFICATION_CLEAR_DELAY !== undefined ||
-            constants.CHAT_MESSAGE_DURATION !== undefined
-        )) {
-            return constants;
-        }
-        if (global.__TEST_RUNTIME_CONSTANTS__) {
-            return global.__TEST_RUNTIME_CONSTANTS__;
-        }
+    if (constants && (
+        constants.CHAT_TRANSITION_DELAY !== undefined ||
+        constants.NOTIFICATION_CLEAR_DELAY !== undefined ||
+        constants.CHAT_MESSAGE_DURATION !== undefined
+    )) {
+        return constants;
     }
     return null;
 }

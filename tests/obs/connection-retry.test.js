@@ -40,6 +40,9 @@ describe('OBSConnectionManager reconnection behavior', () => {
                 address: 'ws://localhost:4455',
                 password: 'test-password',
                 enabled: true
+            },
+            runtimeConstants: {
+                OBS_CONNECTION_TIMEOUT: 5000
             }
         });
     });

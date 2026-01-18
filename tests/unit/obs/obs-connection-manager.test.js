@@ -9,12 +9,10 @@ describe('OBSConnectionManager', () => {
     beforeEach(() => {
         originalNodeEnv = process.env.NODE_ENV;
         process.env.NODE_ENV = 'test';
-        global.__TEST_RUNTIME_CONSTANTS__ = {
-            OBS_CONNECTION_TIMEOUT: 50
-        };
     });
 
     afterEach(() => {
+        process.env.NODE_ENV = originalNodeEnv;
         restoreAllMocks();
     });
 
@@ -26,6 +24,9 @@ describe('OBSConnectionManager', () => {
                 address: 'ws://localhost:4455',
                 password: 'testPassword',
                 enabled: true
+            },
+            runtimeConstants: {
+                OBS_CONNECTION_TIMEOUT: 50
             },
             isTestEnvironment: overrides.isTestEnvironment ?? true,
             testConnectionBehavior: overrides.testConnectionBehavior ?? true

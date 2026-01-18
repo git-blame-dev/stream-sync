@@ -9,12 +9,10 @@ describe('OBSConnectionManager behavior', () => {
     beforeEach(() => {
         originalNodeEnv = process.env.NODE_ENV;
         process.env.NODE_ENV = 'test';
-        global.__TEST_RUNTIME_CONSTANTS__ = {
-            OBS_CONNECTION_TIMEOUT: 50
-        };
     });
 
     afterEach(() => {
+        process.env.NODE_ENV = originalNodeEnv;
         restoreAllMocks();
     });
 
@@ -31,6 +29,9 @@ describe('OBSConnectionManager behavior', () => {
         constants: {
             OBS_CONNECTION_TIMEOUT: 50,
             ERROR_MESSAGES: { OBS_CONNECTION_TIMEOUT: 'Timed out' }
+        },
+        runtimeConstants: {
+            OBS_CONNECTION_TIMEOUT: 50
         },
         isTestEnvironment: true,
         ...overrides

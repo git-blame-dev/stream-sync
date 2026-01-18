@@ -24,7 +24,7 @@ describe('DisplayQueue share priority mapping', () => {
             }
         };
 
-        displayQueue = new DisplayQueue(obsManager, { autoProcess: false }, constants);
+        displayQueue = new DisplayQueue(obsManager, { autoProcess: false }, constants, null, constants);
     });
 
     test('share notifications use SHARE priority level', () => {
