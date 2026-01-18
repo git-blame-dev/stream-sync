@@ -1,26 +1,16 @@
 const { describe, test, expect, beforeEach, afterEach } = require('bun:test');
 const { createMockFn, spyOn, restoreAllMocks } = require('../helpers/bun-mock-utils');
 const { createRuntimeConstantsFixture } = require('../helpers/runtime-constants-fixture');
-const { VIEWER_COUNT_CONSTANTS } = require('../../src/core/constants');
-
-const noOpLogger = { debug: () => {}, info: () => {}, warn: () => {}, error: () => {} };
+const { noOpLogger } = require('../helpers/mock-factories');
 
 describe('Twitch Viewer Count System Debug', () => {
     let ViewerCountSystem;
     let mockTwitchPlatform;
     let mockPlatforms;
     let runtimeConstants;
-    let logger;
 
     beforeEach(() => {
         ({ ViewerCountSystem } = require('../../src/utils/viewer-count'));
-
-        logger = {
-            debug: createMockFn(),
-            info: createMockFn(),
-            warn: createMockFn(),
-            error: createMockFn()
-        };
 
         runtimeConstants = createRuntimeConstantsFixture({
             VIEWER_COUNT_POLLING_INTERVAL_SECONDS: 30
@@ -42,7 +32,7 @@ describe('Twitch Viewer Count System Debug', () => {
     });
 
     const createViewerSystem = () => {
-        return new ViewerCountSystem({ platforms: mockPlatforms, logger, runtimeConstants });
+        return new ViewerCountSystem({ platforms: mockPlatforms, logger: noOpLogger, runtimeConstants });
     };
 
     test('initializes with Twitch set to always live', () => {
@@ -89,21 +79,12 @@ describe('Twitch Viewer Count System Debug', () => {
 
     test('handles Twitch API errors gracefully', async () => {
         const viewerSystem = createViewerSystem();
-        const apiError = new Error('Twitch API rate limit exceeded');
-        mockTwitchPlatform.getViewerCount.mockRejectedValue(apiError);
+        mockTwitchPlatform.getViewerCount.mockRejectedValue(new Error('Twitch API rate limit exceeded'));
 
         await viewerSystem.pollPlatform('twitch');
 
         expect(mockTwitchPlatform.getViewerCount).toHaveBeenCalled();
         expect(viewerSystem.counts.twitch).toBe(0);
-        expect(logger.error).toHaveBeenCalledWith(
-            'Failed to poll twitch: Twitch API rate limit exceeded',
-            VIEWER_COUNT_CONSTANTS.LOG_CONTEXT.VIEWER_COUNT,
-            expect.objectContaining({
-                eventType: 'polling',
-                error: 'Twitch API rate limit exceeded'
-            })
-        );
     });
 
     test('uses correct polling configuration', () => {

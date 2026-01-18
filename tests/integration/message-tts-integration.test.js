@@ -20,7 +20,6 @@ describe('MessageTTS Integration', () => {
                 }
             );
 
-            // Test user-visible behavior: notification has message and TTS format
             expect(notificationData.message).toBe('Thanks for the stream!');
             expect(notificationData.ttsMessage).toContain('SuperChatUser sent');
             expect(notificationData.ttsMessage).toContain('5 US dollars');
@@ -43,7 +42,6 @@ describe('MessageTTS Integration', () => {
 
             const ttsStages = MessageTTSHandler.createTTSStages(notificationData);
 
-            // NotificationBuilder includes message in the primary TTS
             expect(ttsStages).toHaveLength(1);
             expect(ttsStages[0]).toEqual({
                 text: expect.stringContaining('SuperChatUser sent'),
@@ -85,7 +83,6 @@ describe('MessageTTS Integration', () => {
                 }
             );
 
-            // Test user-visible behavior
             expect(notificationData.message).toBe('Happy to support!');
             expect(notificationData.type).toBe('platform:paypiggy');
         });
@@ -128,7 +125,6 @@ describe('MessageTTS Integration', () => {
                 }
             );
 
-            // Test user-visible behavior
             expect(notificationData.message).toBe('Love this channel!');
             expect(notificationData.type).toBe('platform:paypiggy');
         });
@@ -176,7 +172,6 @@ describe('MessageTTS Integration', () => {
                 }
             );
 
-            // Test user-visible behavior
             expect(notificationData.message).toBe('Great stream!');
             expect(notificationData.type).toBe('platform:gift');
             expect(notificationData.currency).toBe('bits');
@@ -199,7 +194,6 @@ describe('MessageTTS Integration', () => {
 
             const ttsStages = MessageTTSHandler.createTTSStages(notificationData);
 
-            // NotificationBuilder includes message in the primary bits TTS
             expect(ttsStages).toHaveLength(1);
             expect(ttsStages[0].text).toContain('BitUser');
             expect(ttsStages[0].text).toContain('Great stream');
@@ -218,7 +212,6 @@ describe('MessageTTS Integration', () => {
                 }
             );
 
-            // Test user-visible behavior
             expect(notificationData.message).toBe('Cool stream!');
             expect(notificationData.type).toBe('chat');
         });
@@ -235,7 +228,6 @@ describe('MessageTTS Integration', () => {
 
             const ttsStages = MessageTTSHandler.createTTSStages(notificationData);
 
-            // NotificationBuilder generates chat TTS as primary message
             expect(ttsStages).toHaveLength(1);
             expect(ttsStages[0].text).toBe('Cool stream!');
             expect(ttsStages[0].type).toBe('primary');
@@ -251,7 +243,6 @@ describe('MessageTTS Integration', () => {
                 { message: 'This should be ignored' }
             );
 
-            // Follow notifications use canonical platform:follow type
             expect(notificationData.type).toBe('platform:follow');
         });
 
@@ -283,7 +274,6 @@ describe('MessageTTS Integration', () => {
                 }
             );
 
-            // TikTok gifts use canonical platform:gift type
             expect(notificationData.type).toBe('platform:gift');
         });
     });
@@ -345,7 +335,6 @@ describe('MessageTTS Integration', () => {
 
             const ttsStages = MessageTTSHandler.createTTSStages(notificationData);
 
-            // NotificationBuilder includes trimmed message in primary TTS
             expect(ttsStages).toHaveLength(1);
             expect(ttsStages[0].text).toContain('Thanks for the stream');
         });
@@ -368,7 +357,6 @@ describe('MessageTTS Integration', () => {
 
             const ttsStages = MessageTTSHandler.createTTSStages(notificationData);
 
-            // NotificationBuilder includes message in primary TTS
             expect(ttsStages).toHaveLength(1);
             expect(ttsStages[0].text).toContain('10 euros');
             expect(ttsStages[0].text).toContain('Greetings from Europe');
@@ -390,7 +378,6 @@ describe('MessageTTS Integration', () => {
 
             const ttsStages = MessageTTSHandler.createTTSStages(notificationData);
 
-            // NotificationBuilder includes message in primary TTS
             expect(ttsStages).toHaveLength(1);
             expect(ttsStages[0].text).toContain('7 British pounds');
             expect(ttsStages[0].text).toContain('Cheers from the UK');
@@ -414,7 +401,6 @@ describe('MessageTTS Integration', () => {
 
             const ttsStages = MessageTTSHandler.createTTSStages(notificationData);
 
-            // NotificationBuilder sanitizes username and includes message in primary TTS
             expect(ttsStages).toHaveLength(1);
             expect(ttsStages[0].text).toContain('SuperLongUsernameWithEmojis');
             expect(ttsStages[0].text).toContain('Hello world');

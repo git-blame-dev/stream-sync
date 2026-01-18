@@ -1,6 +1,7 @@
 
 const { describe, test, beforeEach, afterEach, expect } = require('bun:test');
 const { createMockFn, clearAllMocks, restoreAllMocks } = require('../helpers/bun-mock-utils');
+const { noOpLogger } = require('../helpers/mock-factories');
 const { createEventBus } = require('../../src/core/EventBus');
 const { createOBSEventService } = require('../../src/obs/obs-event-service');
 const { createSceneManagementService } = require('../../src/obs/scene-management-service');
@@ -12,13 +13,10 @@ describe('OBS Event-Driven Integration', () => {
     let sceneManagementService;
     let mockOBSConnection;
     let mockObsSources;
-    let mockLogger;
 
     beforeEach(() => {
-        // Create event bus
         eventBus = createEventBus({ debugEnabled: false });
 
-        // Mock OBS connection
         mockOBSConnection = {
             connect: createMockFn().mockResolvedValue(true),
             disconnect: createMockFn().mockResolvedValue(undefined),
@@ -33,32 +31,23 @@ describe('OBS Event-Driven Integration', () => {
             }))
         };
 
-        // Mock OBS sources
         mockObsSources = {
             updateTextSource: createMockFn().mockResolvedValue(undefined),
             setSourceVisibility: createMockFn().mockResolvedValue(undefined),
             clearTextSource: createMockFn().mockResolvedValue(undefined)
         };
 
-        mockLogger = {
-            debug: createMockFn(),
-            info: createMockFn(),
-            warn: createMockFn(),
-            error: createMockFn()
-        };
-
-        // Create services
         obsEventService = createOBSEventService({
             eventBus,
             obsConnection: mockOBSConnection,
             obsSources: mockObsSources,
-            logger: mockLogger
+            logger: noOpLogger
         });
 
         sceneManagementService = createSceneManagementService({
             eventBus,
             obsConnection: mockOBSConnection,
-            logger: mockLogger
+            logger: noOpLogger
         });
     });
 
@@ -72,7 +61,6 @@ describe('OBS Event-Driven Integration', () => {
 
     describe('End-to-End Event Flow', () => {
         test('text update flows through EventBus to OBS', async () => {
-            // Emit text update event
             eventBus.emit('obs:update-text', {
                 sourceName: 'ChatMessage',
                 text: 'Hello from EventBus!'
@@ -87,7 +75,6 @@ describe('OBS Event-Driven Integration', () => {
         });
 
         test('scene switch flows through EventBus to OBS', async () => {
-            // Emit scene switch event
             eventBus.emit('scene:switch', {
                 sceneName: 'GameplayScene'
             });
@@ -101,7 +88,6 @@ describe('OBS Event-Driven Integration', () => {
         });
 
         test('multiple services can handle events independently', async () => {
-            // Emit both types of events
             eventBus.emit('obs:update-text', {
                 sourceName: 'Status',
                 text: 'Live'
@@ -122,7 +108,6 @@ describe('OBS Event-Driven Integration', () => {
         test('errors in one service do not affect other services', async () => {
             mockObsSources.updateTextSource.mockRejectedValue(new Error('Text update failed'));
 
-            // Emit both events
             eventBus.emit('obs:update-text', {
                 sourceName: 'Broken',
                 text: 'Test'
@@ -157,7 +142,6 @@ describe('OBS Event-Driven Integration', () => {
         test('handles rapid event bursts without memory leaks', async () => {
             const initialMemory = process.memoryUsage().heapUsed;
 
-            // Send 200 rapid events
             for (let i = 0; i < 200; i++) {
                 eventBus.emit('obs:update-text', {
                     sourceName: 'Message',
@@ -176,7 +160,6 @@ describe('OBS Event-Driven Integration', () => {
             const finalMemory = process.memoryUsage().heapUsed;
             const memoryIncrease = (finalMemory - initialMemory) / 1024 / 1024;
 
-            // Memory increase should be minimal (< 10MB)
             expect(memoryIncrease).toBeLessThan(10);
         });
 
@@ -200,7 +183,6 @@ describe('OBS Event-Driven Integration', () => {
 
             const avgLatency = latencies.reduce((a, b) => a + b, 0) / latencies.length;
 
-            // Keep latency under a single animation frame on typical CI hardware
             expect(avgLatency).toBeLessThan(30);
         });
     });
@@ -209,7 +191,6 @@ describe('OBS Event-Driven Integration', () => {
         test('services share EventBus correctly', () => {
             const listeners = eventBus.getListenerSummary();
 
-            // Both services should have registered listeners
             expect(listeners['obs:update-text']).toBeGreaterThan(0);
             expect(listeners['scene:switch']).toBeGreaterThan(0);
         });
@@ -219,10 +200,7 @@ describe('OBS Event-Driven Integration', () => {
 
             const listeners = eventBus.getListenerSummary();
 
-            // OBS event listeners should be gone
             expect(listeners['obs:update-text']).toBeUndefined();
-
-            // Scene listeners should still exist
             expect(listeners['scene:switch']).toBeGreaterThan(0);
         });
 
