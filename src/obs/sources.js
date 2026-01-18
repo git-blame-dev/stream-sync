@@ -608,8 +608,7 @@ function getDefaultSourcesManager(dependencies = {}) {
     if (!defaultInstance) {
         const { logger } = require('../core/logging');
         const { ensureOBSConnected, obsCall, getOBSConnectionManager } = require('./connection');
-        const runtimeConstants = dependencies.runtimeConstants
-            || (process.env.NODE_ENV === 'test' ? global.__TEST_RUNTIME_CONSTANTS__ : null);
+        const { runtimeConstants } = dependencies;
         if (!runtimeConstants) {
             throw new Error('getDefaultSourcesManager requires runtimeConstants');
         }

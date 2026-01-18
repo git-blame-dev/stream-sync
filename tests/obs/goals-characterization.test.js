@@ -87,7 +87,8 @@ describe('OBS Goals Module Characterization Tests', () => {
             logger: noOpLogger,
             configManager: mockConfigManager,
             updateTextSource: mockSourcesManager.updateTextSource,
-            goalTracker: mockGoalTracker
+            goalTracker: mockGoalTracker,
+            runtimeConstants: { NOTIFICATION_PLATFORM_LOGOS: {}, CHAT_PLATFORM_LOGOS: {} }
         });
     });
 

@@ -78,6 +78,22 @@ describe('OBS Startup Display Clearing - Detailed Behavior', () => {
             );
         });
 
+        it('should warn and skip when runtimeConstants missing', async () => {
+            const warnSpy = createMockFn();
+            const warnDeps = {
+                ...deps,
+                logger: { ...deps.logger, warn: warnSpy }
+            };
+
+            await clearStartupDisplays(mockConfig, null, warnDeps);
+
+            expect(hideAllDisplays).not.toHaveBeenCalled();
+            expect(warnSpy).toHaveBeenCalledWith(
+                'clearStartupDisplays requires runtimeConstants; skipping display clearing',
+                'OBSStartup'
+            );
+        });
+
         it('should not clear text sources directly on startup', async () => {
             const config = {
                 general: { chatMsgScene: 'stream pkmn switch' },

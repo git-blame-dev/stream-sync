@@ -22,14 +22,16 @@ function buildGoalsManager(obsManager, dependencies = {}) {
     const { logger } = dependencies.logger ? { logger: dependencies.logger } : require('../core/logging');
     const configManager = dependencies.configManager || require('../core/config').configManager;
     const config = dependencies.config || require('../core/config').config;
-    const runtimeConstants = dependencies.runtimeConstants
-        || (process.env.NODE_ENV === 'test' ? global.__TEST_RUNTIME_CONSTANTS__ : null);
+    const runtimeConstants = dependencies.runtimeConstants;
     const updateTextSource = dependencies.updateTextSource || (() => {
         if (!runtimeConstants) {
             throw new Error('OBSGoalsManager requires runtimeConstants when updateTextSource is not provided');
         }
         return require('./sources').getDefaultSourcesManager({ runtimeConstants }).updateTextSource;
     })();
+    if (!runtimeConstants) {
+        throw new Error('OBSGoalsManager requires runtimeConstants');
+    }
     const { createGoalTracker } = require('../utils/goal-tracker');
     const goalTracker = dependencies.goalTracker || createGoalTracker({ logger, config });
     const initializeGoalTracker = goalTracker.initializeGoalTracker.bind(goalTracker);
@@ -398,8 +400,7 @@ function getDefaultGoalsManager(dependencies = {}) {
         const { configManager, config } = require('../core/config');
         const { getDefaultSourcesManager } = require('./sources');
         const { createGoalTracker } = require('../utils/goal-tracker');
-        const runtimeConstants = dependencies.runtimeConstants
-            || (process.env.NODE_ENV === 'test' ? global.__TEST_RUNTIME_CONSTANTS__ : null);
+        const { runtimeConstants } = dependencies;
         if (!runtimeConstants) {
             throw new Error('getDefaultGoalsManager requires runtimeConstants');
         }
