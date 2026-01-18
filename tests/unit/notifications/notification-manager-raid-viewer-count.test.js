@@ -1,6 +1,6 @@
-
 const { describe, test, expect, afterEach } = require('bun:test');
 const { createMockFn, restoreAllMocks } = require('../../helpers/bun-mock-utils');
+const { noOpLogger } = require('../../helpers/mock-factories');
 
 const EventEmitter = require('events');
 const NotificationManager = require('../../../src/notifications/NotificationManager');
@@ -11,13 +11,6 @@ describe('NotificationManager raid viewer count fallback', () => {
     });
 
     const createManager = () => {
-        const logger = {
-            debug: createMockFn(),
-            info: createMockFn(),
-            warn: createMockFn(),
-            error: createMockFn()
-        };
-
         const displayQueue = {
             addToQueue: createMockFn(),
             processQueue: createMockFn(),
@@ -43,7 +36,7 @@ describe('NotificationManager raid viewer count fallback', () => {
         };
 
         return new NotificationManager({
-            logger,
+            logger: noOpLogger,
             displayQueue,
             eventBus: new EventEmitter(),
             configService,
