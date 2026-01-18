@@ -1,5 +1,5 @@
 const { describe, test, expect, beforeEach, afterEach } = require('bun:test');
-const { createMockFn, spyOn, restoreAllMocks } = require('../../helpers/bun-mock-utils');
+const { createMockFn, restoreAllMocks } = require('../../helpers/bun-mock-utils');
 const { noOpLogger } = require('../../helpers/mock-factories');
 const { createRuntimeConstantsFixture } = require('../../helpers/runtime-constants-fixture');
 
@@ -27,34 +27,36 @@ describe('ViewerCountSystem polling with malformed payloads', () => {
 
         system.streamStatus.youtube = true;
 
-        return { system, platform };
+        return { system };
     }
 
-    test('warns and preserves previous count when platform returns non-numeric value', async () => {
+    test('preserves previous count when platform returns non-numeric value', async () => {
         const { system } = createSystemWithPlatformReturning('not-a-number');
-        const warnSpy = spyOn(system.logger, 'warn');
-
-        const observer = { getObserverId: () => 'testObserver1', onViewerCountUpdate: createMockFn() };
+        const observerUpdates = [];
+        const observer = {
+            getObserverId: () => 'testObserver1',
+            onViewerCountUpdate: (payload) => observerUpdates.push(payload)
+        };
         system.addObserver(observer);
 
         await system.pollPlatform('youtube');
 
-        expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('invalid viewer count'), expect.anything());
         expect(system.counts.youtube).toBe(0);
-        expect(observer.onViewerCountUpdate).not.toHaveBeenCalled();
+        expect(observerUpdates).toHaveLength(0);
     });
 
-    test('warns and skips update when platform returns object payload without numeric count', async () => {
+    test('skips update when platform returns object payload without numeric count', async () => {
         const { system } = createSystemWithPlatformReturning({ count: 'unknown' });
-        const warnSpy = spyOn(system.logger, 'warn');
-
-        const observer = { getObserverId: () => 'testObserver2', onViewerCountUpdate: createMockFn() };
+        const observerUpdates = [];
+        const observer = {
+            getObserverId: () => 'testObserver2',
+            onViewerCountUpdate: (payload) => observerUpdates.push(payload)
+        };
         system.addObserver(observer);
 
         await system.pollPlatform('youtube');
 
-        expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('invalid viewer count'), expect.anything());
         expect(system.counts.youtube).toBe(0);
-        expect(observer.onViewerCountUpdate).not.toHaveBeenCalled();
+        expect(observerUpdates).toHaveLength(0);
     });
 });

@@ -1,28 +1,10 @@
-
-const { describe, test, expect, beforeEach, afterEach, it } = require('bun:test');
+const { describe, expect, beforeEach, afterEach, it } = require('bun:test');
 const { createMockFn, restoreAllMocks } = require('../helpers/bun-mock-utils');
-
-const { 
-    initializeTestLogging,
-    createTestUser, 
-    TEST_TIMEOUTS 
-} = require('../helpers/test-setup');
-
-const { 
-    noOpLogger,
-    createMockNotificationManager 
-} = require('../helpers/mock-factories');
-
-const { 
-    setupAutomatedCleanup 
-} = require('../helpers/mock-lifecycle');
-
+const { createTestUser, TEST_TIMEOUTS } = require('../helpers/test-setup');
+const { noOpLogger, createMockNotificationManager } = require('../helpers/mock-factories');
+const { setupAutomatedCleanup } = require('../helpers/mock-lifecycle');
 const PlatformEventRouter = require('../../src/services/PlatformEventRouter');
 
-// Initialize logging FIRST
-initializeTestLogging();
-
-// Setup automated cleanup
 setupAutomatedCleanup({
     clearCallsBeforeEach: true,
     validateAfterCleanup: true,
@@ -156,21 +138,11 @@ describe('Bits Goal Counter Fix', () => {
 
                 const notificationData = mockAppRuntime.handleGiftNotification.mock.calls[0][2];
 
-                // When display-queue processes this notification:
-                // individualCoinValue = notificationData.amount = 100
-                // giftCount = notificationData.giftCount = 1  
-                // totalGiftValue = 100 × 1 = 100 (CORRECT)
-                // 
-                // Previous broken behavior would have been:
-                // giftCount = 100 (incorrectly set to bit amount)
-                // totalGiftValue = 100 × 100 = 10,000 (WRONG)
-
                 expect(notificationData.giftCount).toBe(1);
                 expect(notificationData.amount).toBe(100);
-                
-                // Simulate the goal calculation that happens in display-queue.js
+
                 const simulatedGoalValue = notificationData.amount * notificationData.giftCount;
-                expect(simulatedGoalValue).toBe(100); // Should be 100, not 10,000
+                expect(simulatedGoalValue).toBe(100);
             }, TEST_TIMEOUTS.FAST);
         });
 
@@ -194,7 +166,7 @@ describe('Bits Goal Counter Fix', () => {
                 expect(notificationData.currency).toBe('bits');
 
                 const simulatedGoalValue = notificationData.amount * notificationData.giftCount;
-                expect(simulatedGoalValue).toBe(50); // Should be 50, not 2,500
+                expect(simulatedGoalValue).toBe(50);
             }, TEST_TIMEOUTS.FAST);
         });
 
@@ -218,7 +190,7 @@ describe('Bits Goal Counter Fix', () => {
                 expect(notificationData.currency).toBe('bits');
 
                 const simulatedGoalValue = notificationData.amount * notificationData.giftCount;
-                expect(simulatedGoalValue).toBe(1000); // Should be 1000, not 1,000,000
+                expect(simulatedGoalValue).toBe(1000);
             }, TEST_TIMEOUTS.FAST);
         });
     });
@@ -239,8 +211,7 @@ describe('Bits Goal Counter Fix', () => {
             
             expect(notificationData.giftCount).toBe(1);
             expect(notificationData.amount).toBe(largeBitsAmount);
-            
-            // Goal value should be the bit amount, not bit amount squared
+
             const simulatedGoalValue = notificationData.amount * notificationData.giftCount;
             expect(simulatedGoalValue).toBe(largeBitsAmount);
         }, TEST_TIMEOUTS.FAST);

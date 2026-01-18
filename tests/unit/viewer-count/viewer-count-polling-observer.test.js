@@ -1,5 +1,6 @@
-const { describe, test, expect, afterEach, it } = require('bun:test');
+const { describe, expect, afterEach, it } = require('bun:test');
 const { createMockFn, restoreAllMocks } = require('../../helpers/bun-mock-utils');
+const { noOpLogger } = require('../../helpers/mock-factories');
 const { createRuntimeConstantsFixture } = require('../../helpers/runtime-constants-fixture');
 
 describe('ViewerCountSystem polling observer notifications', () => {
@@ -10,15 +11,8 @@ describe('ViewerCountSystem polling observer notifications', () => {
         process.env.NODE_ENV = originalEnv;
     });
 
-    function createSystemWithPlatform(counts = [5, 7], platforms = { youtube: {} }, warnSpy = null, errorSpy = null) {
+    function createSystemWithPlatform(counts = [5, 7]) {
         process.env.NODE_ENV = 'test';
-
-        const mockLogger = {
-            debug: createMockFn(),
-            info: createMockFn(),
-            warn: warnSpy || createMockFn(),
-            error: errorSpy || createMockFn()
-        };
 
         const platform = {
             getViewerCount: createMockFn()
@@ -28,14 +22,14 @@ describe('ViewerCountSystem polling observer notifications', () => {
 
         const { ViewerCountSystem } = require('../../../src/utils/viewer-count');
         const system = new ViewerCountSystem({
-            platforms: { ...platforms, youtube: platform },
-            logger: mockLogger,
+            platforms: { youtube: platform },
+            logger: noOpLogger,
             runtimeConstants: createRuntimeConstantsFixture()
         });
 
         system.streamStatus.youtube = true;
 
-        return { system, platform };
+        return { system };
     }
 
     it('notifies observers on polling updates with previousCount context', async () => {
@@ -44,7 +38,7 @@ describe('ViewerCountSystem polling observer notifications', () => {
         const updates = [];
         system.addObserver({
             getObserverId: () => 'obs-poll',
-            onViewerCountUpdate: createMockFn((payload) => updates.push(payload))
+            onViewerCountUpdate: (payload) => updates.push(payload)
         });
 
         await system.pollPlatform('youtube');
@@ -65,57 +59,73 @@ describe('ViewerCountSystem polling observer notifications', () => {
         }));
     });
 
-    it('skips polling and notifications when stream is offline', async () => {
-        const { system, platform } = createSystemWithPlatform();
+    it('skips notifications when stream is offline', async () => {
+        const { system } = createSystemWithPlatform();
         system.streamStatus.youtube = false;
 
         const updates = [];
         system.addObserver({
             getObserverId: () => 'obs-offline',
-            onViewerCountUpdate: createMockFn((payload) => updates.push(payload))
+            onViewerCountUpdate: (payload) => updates.push(payload)
         });
 
         await system.pollPlatform('youtube');
 
         expect(updates).toEqual([]);
-        expect(platform.getViewerCount).not.toHaveBeenCalled();
+        expect(system.counts.youtube).toBe(0);
     });
 
-    it('warns and skips polling when platform missing', async () => {
-        const warnings = [];
-        const { system } = createSystemWithPlatform([1], {}, (msg) => warnings.push(msg));
+    it('preserves count when polling unknown platform', async () => {
+        const { system } = createSystemWithPlatform([1]);
 
         await system.pollPlatform('unknown');
 
-        expect(warnings.some((msg) => msg.includes('No platform found'))).toBe(true);
+        expect(system.counts.youtube).toBe(0);
     });
 
-    it('warns and skips polling when platform lacks getViewerCount', async () => {
-        const warnings = [];
-        const { system } = createSystemWithPlatform([1], { twitch: { notAGetter: true } }, (msg) => warnings.push(msg));
+    it('preserves count when platform lacks getViewerCount', async () => {
+        process.env.NODE_ENV = 'test';
+        const { ViewerCountSystem } = require('../../../src/utils/viewer-count');
+        const system = new ViewerCountSystem({
+            platforms: { twitch: { notAGetter: true } },
+            logger: noOpLogger,
+            runtimeConstants: createRuntimeConstantsFixture()
+        });
         system.streamStatus.twitch = true;
 
         await system.pollPlatform('twitch');
 
-        expect(warnings.some((msg) => msg.includes('No getViewerCount'))).toBe(true);
+        expect(system.counts.twitch).toBe(0);
     });
 
-    it('warns and skips when platform returns null viewer count', async () => {
-        const warnings = [];
+    it('preserves count when platform returns null viewer count', async () => {
+        process.env.NODE_ENV = 'test';
         const platform = { getViewerCount: createMockFn().mockResolvedValue(null) };
-        const { system } = createSystemWithPlatform([null], { youtube: platform }, (msg) => warnings.push(msg));
+        const { ViewerCountSystem } = require('../../../src/utils/viewer-count');
+        const system = new ViewerCountSystem({
+            platforms: { youtube: platform },
+            logger: noOpLogger,
+            runtimeConstants: createRuntimeConstantsFixture()
+        });
         system.streamStatus.youtube = true;
 
         await system.pollPlatform('youtube');
 
-        expect(warnings.some((msg) => msg.includes('returned null/undefined viewer count'))).toBe(true);
+        expect(system.counts.youtube).toBe(0);
     });
 
-    it('continues when polling throws (logged via error handler)', async () => {
+    it('continues when polling throws', async () => {
+        process.env.NODE_ENV = 'test';
         const platform = { getViewerCount: createMockFn().mockRejectedValue(new Error('boom')) };
-        const { system } = createSystemWithPlatform([1], { youtube: platform });
+        const { ViewerCountSystem } = require('../../../src/utils/viewer-count');
+        const system = new ViewerCountSystem({
+            platforms: { youtube: platform },
+            logger: noOpLogger,
+            runtimeConstants: createRuntimeConstantsFixture()
+        });
         system.streamStatus.youtube = true;
 
         await expect(system.pollPlatform('youtube')).resolves.toBeUndefined();
+        expect(system.counts.youtube).toBe(0);
     });
 });

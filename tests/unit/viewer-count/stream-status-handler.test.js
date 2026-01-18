@@ -1,3 +1,4 @@
+const { describe, it, expect } = require('bun:test');
 const wireStreamStatusHandlers = require('../../../src/viewer-count/stream-status-handler');
 
 function createEventBus() {

@@ -1,16 +1,8 @@
-
 const { describe, test, expect, beforeEach } = require('bun:test');
-
-const { initializeTestLogging, createTestUser } = require('../helpers/test-setup');
-const { noOpLogger, createMockNotificationBuilder } = require('../helpers/mock-factories');
+const { createTestUser } = require('../helpers/test-setup');
 const { setupAutomatedCleanup } = require('../helpers/mock-lifecycle');
-const { expectValidNotification } = require('../helpers/assertion-helpers');
 const testClock = require('../helpers/test-clock');
 
-// Initialize logging FIRST (required for all tests)
-initializeTestLogging();
-
-// Setup automated cleanup (no manual mock management)
 setupAutomatedCleanup({
     clearCallsBeforeEach: true,
     validateAfterCleanup: true,
@@ -24,7 +16,6 @@ describe('Command Integration System', () => {
     let mockConfig;
 
     beforeEach(() => {
-        // Use data builders for configuration
         mockConfig = {
             commands: {
                 'hello-there': '!hello, vfx bottom green',
@@ -84,7 +75,6 @@ describe('Command Integration System', () => {
 
     describe('Command Parsing', () => {
         test('should detect VFX commands by trigger', () => {
-            // Use data builders instead of hardcoded data
             const data = createTestUser({
                 comment: '!hello everyone!',
                 username: 'testuser',
@@ -282,13 +272,10 @@ describe('Command Integration System', () => {
 
         test('should handle case-insensitive farewell matching', () => {
             const farewellMatch = commandParser.getMatchingFarewell('!BYE everyone!', '!BYE');
-            
+
             expect(farewellMatch).toBe('!BYE');
         });
     });
-
-    // Random Command Selection tests removed - getRandomCommand() method removed
-    // Functionality now handled by VFXCommandService.selectVFXCommand()
 
     describe('Edge Cases and Error Handling', () => {
         test('should handle very long messages', () => {
@@ -381,13 +368,11 @@ describe('Command Integration System', () => {
             testClock.advance(simulatedProcessingMs);
             const endTime = testClock.now();
             const processingTime = endTime - startTime;
-            
-            // Should process 1000 commands in under 100ms
+
             expect(processingTime).toBeLessThan(100);
         });
 
         test('should handle large command configuration efficiently', () => {
-            // Create a large command configuration
             const largeConfig = { commands: {} };
             for (let i = 0; i < 100; i++) {
                 largeConfig.commands[`command-${i}`] = `!cmd${i}, vfx top, keyword${i}`;
@@ -410,7 +395,7 @@ describe('Command Integration System', () => {
             const endTime = testClock.now();
             
             expect(result).toBeTruthy();
-            expect(endTime - startTime).toBeLessThan(10); // Should be very fast
+            expect(endTime - startTime).toBeLessThan(10);
         });
     });
 });
