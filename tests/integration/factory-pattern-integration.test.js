@@ -15,7 +15,6 @@ describe('Factory Pattern Integration', () => {
 
     afterEach(async () => {
         await InnertubeInstanceManager.cleanup();
-        delete global.__TEST_RUNTIME_CONSTANTS__;
         clearAllMocks();
         restoreAllMocks();
     });

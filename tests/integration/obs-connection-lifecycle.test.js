@@ -50,7 +50,6 @@ describe('OBS Connection Lifecycle Integration', () => {
             await viewerCountSystem.cleanup();
         }
 
-        delete global.__TEST_RUNTIME_CONSTANTS__;
         clearAllMocks();
         restoreAllMocks();
     });

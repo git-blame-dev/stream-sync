@@ -59,7 +59,6 @@ function setConfigValidator(validator) {
 
 function getValidateLoggingConfig() {
     if (!validateLoggingConfig) {
-        // In test environment, auto-initialize with default test config
         if (process.env.NODE_ENV === 'test') {
             validateLoggingConfig = () => DEFAULT_TEST_CONFIG;
             return validateLoggingConfig;

@@ -42,7 +42,6 @@ describe('System Resilience and Error Recovery Integration', () => {
             await viewerCountSystem.cleanup();
         }
         await InnertubeInstanceManager.cleanup();
-        delete global.__TEST_RUNTIME_CONSTANTS__;
         clearAllMocks();
         restoreAllMocks();
     });

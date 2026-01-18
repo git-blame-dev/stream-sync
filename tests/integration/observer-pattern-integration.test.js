@@ -51,7 +51,6 @@ describe('Observer Pattern Integration', () => {
             viewerCountSystem.stopPolling();
             await viewerCountSystem.cleanup();
         }
-        delete global.__TEST_RUNTIME_CONSTANTS__;
         clearAllMocks();
         restoreAllMocks();
     });
@@ -181,9 +180,22 @@ describe('Observer Pattern Integration', () => {
     });
 
     describe('OBS Observer Integration', () => {
+        const createMockConfigManager = () => ({
+            get: createMockFn().mockReturnValue({}),
+            getBoolean: createMockFn().mockReturnValue(false),
+            getString: createMockFn().mockReturnValue(''),
+            getNumber: createMockFn().mockReturnValue(0),
+            getSection: createMockFn().mockReturnValue({
+                viewerCountEnabled: true,
+                viewerCountSource: 'test-viewer-count-source'
+            })
+        });
+
         test('should integrate OBS observer with ViewerCountSystem', async () => {
             const obsManager = createMockOBSManager();
-            const obsObserver = new OBSViewerCountObserver(obsManager, createSilentLogger());
+            const obsObserver = new OBSViewerCountObserver(obsManager, createSilentLogger(), {
+                configManager: createMockConfigManager()
+            });
             viewerCountSystem.addObserver(obsObserver);
 
             await viewerCountSystem.updateStreamStatus('youtube', true);
@@ -201,7 +213,9 @@ describe('Observer Pattern Integration', () => {
 
         test('should handle OBS observer initialization and cleanup', async () => {
             const obsManager = createMockOBSManager();
-            const obsObserver = new OBSViewerCountObserver(obsManager, createSilentLogger());
+            const obsObserver = new OBSViewerCountObserver(obsManager, createSilentLogger(), {
+                configManager: createMockConfigManager()
+            });
 
             viewerCountSystem.addObserver(obsObserver);
             await viewerCountSystem.initializeObservers();

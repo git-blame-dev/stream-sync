@@ -23,8 +23,6 @@ describe('OBS Sources Module Characterization Tests', () => {
     let sourcesModule;
 
     beforeEach(() => {
-        process.env.NODE_ENV = 'test';
-
         mockEnsureConnected = createMockFn().mockResolvedValue();
         mockObsCall = createMockFn();
         mockSanitizeDisplayName = createMockFn((name, limit) => name.substring(0, limit));
@@ -51,7 +49,6 @@ describe('OBS Sources Module Characterization Tests', () => {
 
     afterEach(() => {
         restoreAllMocks();
-        delete process.env.NODE_ENV;
     });
 
     describe('Text Source Management', () => {

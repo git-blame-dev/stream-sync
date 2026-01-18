@@ -31,12 +31,18 @@ describe('Critical Startup Flow', () => {
         }
     });
 
-    test('startup fails fast when config file does not exist', () => {
-        const nonExistentPath = path.join(tempDir, 'does-not-exist.ini');
-        configManager.configPath = nonExistentPath;
-        configManager.isLoaded = false;
+    test('startup fails fast when config file does not exist in production', () => {
+        const originalNodeEnv = process.env.NODE_ENV;
+        process.env.NODE_ENV = 'production';
+        try {
+            const nonExistentPath = path.join(tempDir, 'does-not-exist.ini');
+            configManager.configPath = nonExistentPath;
+            configManager.isLoaded = false;
 
-        expect(() => configManager.load()).toThrow('Configuration file not found');
+            expect(() => configManager.load()).toThrow('Configuration file not found');
+        } finally {
+            process.env.NODE_ENV = originalNodeEnv;
+        }
     });
 
     test('startup fails fast when required sections are missing', () => {
@@ -48,13 +54,19 @@ describe('Critical Startup Flow', () => {
         expect(() => configManager.load()).toThrow('Missing required configuration sections');
     });
 
-    test('config path override via environment variable takes precedence', () => {
-        const overridePath = path.join(tempDir, 'override.ini');
-        process.env.CHAT_BOT_CONFIG_PATH = overridePath;
-        configManager.configPath = './default.ini';
-        configManager.isLoaded = false;
+    test('config path override via environment variable takes precedence in production', () => {
+        const originalNodeEnv = process.env.NODE_ENV;
+        process.env.NODE_ENV = 'production';
+        try {
+            const overridePath = path.join(tempDir, 'override.ini');
+            process.env.CHAT_BOT_CONFIG_PATH = overridePath;
+            configManager.configPath = './default.ini';
+            configManager.isLoaded = false;
 
-        expect(() => configManager.load()).toThrow(overridePath);
+            expect(() => configManager.load()).toThrow(overridePath);
+        } finally {
+            process.env.NODE_ENV = originalNodeEnv;
+        }
     });
 
     test('logging system exports required initialization functions', () => {

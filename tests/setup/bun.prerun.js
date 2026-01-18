@@ -1,5 +1,5 @@
-// Preserve original process.exit and replace it with a safe stub to prevent
-// worker shutdowns triggered by modules that call process.exit during import.
+process.env.NODE_ENV = 'test';
+
 const originalProcessExit = process.exit;
 
 function noopProcessExit(code = 0) {

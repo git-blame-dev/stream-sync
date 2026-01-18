@@ -15,7 +15,6 @@ class ConfigManager {
 
     load() {
         try {
-            // If already loaded, don't load again unless forced
             if (this.isLoaded) {
                 return;
             }
@@ -25,8 +24,12 @@ class ConfigManager {
                 this.configPath = overridePath.trim();
             }
 
-            // Try to load the config file
             if (!fs.existsSync(this.configPath)) {
+                if (process.env.NODE_ENV === 'test') {
+                    this.config = this._getTestDefaultConfig();
+                    this.isLoaded = true;
+                    return;
+                }
                 throw new Error(`Configuration file not found: ${this.configPath}`);
             }
 
@@ -34,17 +37,14 @@ class ConfigManager {
             this.config = ini.parse(configContent);
             this.isLoaded = true;
             this.validate();
-            
-            // Only log config loading success in production, suppress in test environment
+
             if (process.env.NODE_ENV !== 'test') {
-                // Use process.stdout.write for critical system messages to avoid circular dependency
                 const debugEnabled = this.getBoolean('general', 'debugEnabled', false);
                 if (debugEnabled) {
                     process.stdout.write(`[INFO] [Config] Successfully loaded configuration from ${this.configPath}\n`);
                 }
             }
         } catch (error) {
-            // Show user-friendly error message for config issues
             if (error.code === 'ENOENT') {
                 const configError = new Error(`Configuration file not found: ${this.configPath}`);
                 handleUserFacingError(configError, {
@@ -67,6 +67,63 @@ class ConfigManager {
             }
             throw error;
         }
+    }
+
+    _getTestDefaultConfig() {
+        return {
+            general: {
+                debugEnabled: false,
+                cmdCoolDown: 60,
+                globalCmdCoolDown: 60,
+                viewerCountPollingInterval: 60,
+                chatMsgGroup: 'test-chat-grp',
+                maxMessageLength: 500
+            },
+            obs: {
+                enabled: false,
+                address: 'ws://localhost:4455',
+                connectionTimeoutMs: 5000,
+                notificationMsgGroup: 'test-notification-grp',
+                chatPlatformLogoTwitch: 'test-twitch-img',
+                chatPlatformLogoYouTube: 'test-youtube-img',
+                chatPlatformLogoTikTok: 'test-tiktok-img',
+                notificationPlatformLogoTwitch: 'test-twitch-img',
+                notificationPlatformLogoYouTube: 'test-youtube-img',
+                notificationPlatformLogoTikTok: 'test-tiktok-img'
+            },
+            timing: {
+                fadeDuration: 750,
+                transitionDelay: 200,
+                chatMessageDuration: 4000,
+                notificationClearDelay: 500
+            },
+            handcam: {
+                glowEnabled: false,
+                sourceName: 'test-handcam',
+                sceneName: 'test-handcam-scene',
+                glowFilterName: 'Glow',
+                maxSize: 50,
+                rampUpDuration: 0.5,
+                holdDuration: 8.0,
+                rampDownDuration: 0.5,
+                totalSteps: 30,
+                incrementPercent: 3.33,
+                easingEnabled: true,
+                animationInterval: 16
+            },
+            cooldowns: {
+                defaultCooldown: 60,
+                heavyCommandCooldown: 300,
+                heavyCommandThreshold: 4,
+                heavyCommandWindow: 360,
+                maxEntries: 1000
+            },
+            commands: { enabled: false },
+            tiktok: { enabled: false },
+            twitch: { enabled: false },
+            youtube: { enabled: false },
+            http: {}
+        };
     }
 
     validate() {
