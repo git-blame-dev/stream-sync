@@ -496,8 +496,7 @@ function formatErrorForLog(friendlyError) {
 function showUserFriendlyError(technicalError, context = {}, options = {}) {
     const friendlyError = translateError(technicalError, context);
     const consoleMessage = formatErrorForConsole(friendlyError, options);
-    
-    // Always show user-friendly message
+
     if (context.logger && typeof context.logger.console === 'function') {
         context.logger.console(consoleMessage, 'user-friendly-errors');
     } else {
