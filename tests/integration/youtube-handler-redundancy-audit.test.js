@@ -1,10 +1,9 @@
 const { describe, test, beforeEach, afterEach, expect } = require('bun:test');
 
-const { initializeTestLogging, createMockConfig, createMockPlatformDependencies } = require('../helpers/test-setup');
+const { createMockConfig, createMockPlatformDependencies } = require('../helpers/test-setup');
+const { noOpLogger } = require('../helpers/mock-factories');
 const testClock = require('../helpers/test-clock');
 const { createMockFn, restoreAllMocks } = require('../helpers/bun-mock-utils');
-
-initializeTestLogging();
 
 const { YouTubePlatform } = require('../../src/platforms/youtube');
 
@@ -32,7 +31,7 @@ describe('YouTube Handler Redundancy Audit', () => {
             dataLoggingPath: '/tmp/test-data.log'
         });
 
-        mockDependencies = createMockPlatformDependencies('youtube');
+        mockDependencies = createMockPlatformDependencies('youtube', { logger: noOpLogger });
 
         mockHandlers = {
             onGift: createMockFn(),

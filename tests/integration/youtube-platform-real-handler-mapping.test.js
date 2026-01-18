@@ -1,6 +1,7 @@
 const { describe, test, beforeEach, afterEach, expect } = require('bun:test');
 
 const { createMockFn, restoreAllMocks } = require('../helpers/bun-mock-utils');
+const { noOpLogger } = require('../helpers/mock-factories');
 
 describe('YouTube Platform Real Handler Method Mapping', () => {
     let platform;
@@ -45,11 +46,7 @@ describe('YouTube Platform Real Handler Method Mapping', () => {
             }),
             notificationDispatcher: mockNotificationDispatcher,
             handlers: mockHandlers,
-            logger: {
-                debug: createMockFn(),
-                warn: createMockFn(),
-                error: createMockFn()
-            }
+            logger: noOpLogger
         };
     });
 

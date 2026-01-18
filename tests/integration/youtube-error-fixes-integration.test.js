@@ -1,11 +1,11 @@
 const { describe, test, beforeEach, afterEach, expect } = require('bun:test');
 
 const { createTestSetup } = require('../helpers/test-setup');
+const { noOpLogger } = require('../helpers/mock-factories');
 const { createMockFn, restoreAllMocks, spyOn } = require('../helpers/bun-mock-utils');
 
 describe('YouTube Error Fixes Integration', () => {
     let testSetup;
-    let logger;
     let mockApp;
     let youtubePlatform;
 
@@ -15,20 +15,17 @@ describe('YouTube Error Fixes Integration', () => {
 
     beforeEach(() => {
         testSetup = createTestSetup();
-        logger = testSetup.logger;
 
-        // Mock app with gift notification handler
         mockApp = {
             handleGiftNotification: createMockFn()
         };
 
-        // Create YouTube platform with realistic configuration
         const { YouTubePlatform } = require('../../src/platforms/youtube');
         const config = {
             enabled: true,
             username: 'testchannel',
-            apiKey: 'fake-api-key',
-            enableAPI: 'false' // String from INI file, should be parsed as boolean
+            apiKey: 'test-api-key',
+            enableAPI: 'false'
         };
 
         const dependencies = {
@@ -37,11 +34,11 @@ describe('YouTube Error Fixes Integration', () => {
             Innertube: testSetup.mockInnertube,
             axios: testSetup.mockAxios,
             app: mockApp,
-            logger: testSetup.logger,
+            logger: noOpLogger,
             notificationManager: {
-                emit: createMockFn().mockImplementation((event, data) => true),
-                on: createMockFn().mockImplementation((event, handler) => true),
-                removeListener: createMockFn().mockImplementation((event, handler) => true)
+                emit: createMockFn().mockImplementation(() => true),
+                on: createMockFn().mockImplementation(() => true),
+                removeListener: createMockFn().mockImplementation(() => true)
             },
             streamDetectionService: {
                 detectLiveStreams: createMockFn().mockResolvedValue({ success: true, videoIds: [] })
@@ -49,13 +46,11 @@ describe('YouTube Error Fixes Integration', () => {
         };
 
         youtubePlatform = new YouTubePlatform(config, dependencies);
-        
-        // Set up handlers to simulate the main app integration
+
         youtubePlatform.handlers = {
             onGift: (data) => mockApp.handleGiftNotification('youtube', data.username, data)
         };
-        
-        // Mock the handleSuperChat method for testing (since it may not be directly exposed)
+
         youtubePlatform.handleSuperChat = createMockFn((event) => {
             if (youtubePlatform.handlers?.onGift) {
                 const amount = parseFloat(event.item.purchase_amount.replace(/[^\d.]/g, ''));
@@ -72,19 +67,16 @@ describe('YouTube Error Fixes Integration', () => {
                 });
             }
         });
-        
-        // Mock the executeWithAPIFallback method for testing (if it doesn't exist)
+
         if (typeof youtubePlatform.executeWithAPIFallback === 'function') {
             spyOn(youtubePlatform, 'executeWithAPIFallback').mockImplementation(async (context, apiFn, scrapeFn, fallbackValue) => {
-                // If enableAPI is false (or undefined, which means false), skip API and go to scraping
                 const enableAPI = youtubePlatform.config?.enableAPI;
                 if (!enableAPI && scrapeFn) {
                     return await scrapeFn();
                 }
-                // Otherwise try API first
                 try {
                     return await apiFn();
-                } catch (error) {
+                } catch {
                     if (scrapeFn) {
                         return await scrapeFn();
                     }
@@ -93,15 +85,13 @@ describe('YouTube Error Fixes Integration', () => {
             });
         } else {
             youtubePlatform.executeWithAPIFallback = createMockFn(async (context, apiFn, scrapeFn, fallbackValue) => {
-                // If enableAPI is false (or undefined, which means false), skip API and go to scraping
                 const enableAPI = youtubePlatform.config?.enableAPI;
                 if (!enableAPI && scrapeFn) {
                     return await scrapeFn();
                 }
-                // Otherwise try API first
                 try {
                     return await apiFn();
-                } catch (error) {
+                } catch {
                     if (scrapeFn) {
                         return await scrapeFn();
                     }
@@ -113,52 +103,43 @@ describe('YouTube Error Fixes Integration', () => {
 
     describe('Configuration Processing', () => {
         test('should properly parse enableAPI string from config to boolean', () => {
-            // The platform was created successfully, which means configuration processing worked
             expect(youtubePlatform).toBeDefined();
             expect(typeof youtubePlatform).toBe('object');
-            
-            // The constructor accepted the enableAPI: 'false' string without throwing an error
-            // This means the configuration normalization is working properly
-            // We can verify this by checking that the platform has the expected methods
             expect(typeof youtubePlatform.handleSuperChat).toBe('function');
         });
     });
 
     describe('Super Chat Error Scenarios', () => {
         test('should handle Super Chat with no message gracefully', () => {
-            // Arrange - Super Chat event with no message (reproduces the error from logs)
             const superChatEvent = {
                 item: {
                     type: 'LiveChatPaidMessage',
                     id: 'test-superchat-id',
                     purchase_amount: 'CA$2.00',
                     author: {
-                        id: 'UCEXAMPLECHANID000000001',
-                        name: 'Zapnard',
+                        id: 'UCTestChannel000000001',
+                        name: 'TestUser',
                         thumbnails: [{ url: 'https://example.com/avatar.jpg' }],
                         badges: []
                     }
-                    // No message field - this was causing the error
                 },
                 videoId: 'test-video-id'
             };
 
-            // Act & Assert - Should not throw error
             expect(() => {
                 youtubePlatform.handleSuperChat(superChatEvent);
             }).not.toThrow();
 
-            // Should call handler with proper data
             expect(mockApp.handleGiftNotification).toHaveBeenCalledWith(
                 'youtube',
-                'Zapnard',
+                'TestUser',
                 expect.objectContaining({
                     type: 'platform:gift',
                     giftType: 'Super Chat',
                     giftCount: 1,
                     amount: 2,
                     currency: 'CA$',
-                    message: '' // Should default to empty string
+                    message: ''
                 })
             );
         });
@@ -205,7 +186,6 @@ describe('YouTube Error Fixes Integration', () => {
                     })
                 );
 
-                // Clear mock for next iteration
                 mockApp.handleGiftNotification.mockClear();
             });
         });
@@ -213,22 +193,18 @@ describe('YouTube Error Fixes Integration', () => {
 
     describe('API Fallback Behavior', () => {
         test('should skip API calls when enableAPI is false', async () => {
-            // Create a spy on the YouTube API to ensure it's not called
             const mockApiCall = createMockFn().mockRejectedValue(new Error('API should not be called'));
-            
-            // Mock the _getYouTubeApi method to return our spy
+
             youtubePlatform._getYouTubeApi = createMockFn().mockReturnValue({
                 videos: { list: mockApiCall }
             });
 
-            // Act - Try to get viewer count (this normally would call API first)
             const result = await youtubePlatform.executeWithAPIFallback(
                 'test-context',
                 () => mockApiCall(),
-                () => Promise.resolve(1000) // Mock scraping result
+                () => Promise.resolve(1000)
             );
 
-            // Assert - API should not have been called, scraping result should be returned
             expect(mockApiCall).not.toHaveBeenCalled();
             expect(result).toBe(1000);
         });
@@ -236,20 +212,19 @@ describe('YouTube Error Fixes Integration', () => {
 
     describe('End-to-End Super Chat Processing', () => {
         test('should process complete Super Chat workflow without errors', () => {
-            // Arrange - Complete Super Chat event similar to production logs
-            const realWorldSuperChatEvent = {
+            const superChatEvent = {
                 item: {
                     type: 'LiveChatPaidMessage',
-                    id: 'ChwKGkNPUGQwdENnMTQ0REZmTzdyZ1VkNFU4RjV3',
+                    id: 'test-superchat-complete-id',
                     purchase_amount: 'ARS$500.00',
                     message: {
-                        text: 'Did you hear about the Sister hong case',
-                        runs: [{ text: 'Did you hear about the Sister hong case' }],
+                        text: 'Test complete message',
+                        runs: [{ text: 'Test complete message' }],
                         rtl: false
                     },
                     author: {
-                        id: 'UCEXAMPLECHANID000000002',
-                        name: 'Example Person',
+                        id: 'UCTestChannel000000002',
+                        name: 'TestPerson',
                         thumbnails: [
                             { url: 'https://example.com/avatar64.jpg', width: 64, height: 64 },
                             { url: 'https://example.com/avatar32.jpg', width: 32, height: 32 }
@@ -257,29 +232,26 @@ describe('YouTube Error Fixes Integration', () => {
                         badges: []
                     }
                 },
-                videoId: 'EXVID123456'
+                videoId: 'test-video-123'
             };
 
-            // Act
-            youtubePlatform.handleSuperChat(realWorldSuperChatEvent);
+            youtubePlatform.handleSuperChat(superChatEvent);
 
-            // Assert - Complete notification should be processed correctly
             expect(mockApp.handleGiftNotification).toHaveBeenCalledWith(
                 'youtube',
-                'Example Person',
+                'TestPerson',
                 expect.objectContaining({
                     type: 'platform:gift',
                     giftType: 'Super Chat',
                     giftCount: 1,
                     amount: 500,
                     currency: 'ARS$',
-                    message: 'Did you hear about the Sister hong case',
-                    username: 'Example Person',
-                    userId: 'UCEXAMPLECHANID000000002'
+                    message: 'Test complete message',
+                    username: 'TestPerson',
+                    userId: 'UCTestChannel000000002'
                 })
             );
 
-            // Verify no "Unknown Gift" appears anywhere in the call
             const callArgs = mockApp.handleGiftNotification.mock.calls[0];
             const stringifiedArgs = JSON.stringify(callArgs);
             expect(stringifiedArgs).not.toContain('Unknown Gift');

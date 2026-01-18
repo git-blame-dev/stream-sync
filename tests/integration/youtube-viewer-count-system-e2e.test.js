@@ -1,9 +1,6 @@
 const { describe, test, beforeEach, afterEach, expect } = require('bun:test');
 
 const { createMockFn, restoreAllMocks } = require('../helpers/bun-mock-utils');
-const { initializeTestLogging } = require('../helpers/test-setup');
-
-initializeTestLogging();
 
 const { ViewerCountSystem } = require('../../src/utils/viewer-count');
 const { YouTubeViewerExtractor } = require('../../src/extractors/youtube-viewer-extractor');

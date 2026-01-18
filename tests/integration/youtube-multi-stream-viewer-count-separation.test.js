@@ -2,11 +2,8 @@ const { describe, test, beforeEach, afterEach, expect } = require('bun:test');
 
 const { createMockFn, restoreAllMocks } = require('../helpers/bun-mock-utils');
 const { mockModule, restoreAllModuleMocks } = require('../helpers/bun-module-mocks');
-const { initializeTestLogging } = require('../helpers/test-setup');
 const { noOpLogger, createMockNotificationManager, setupAutomatedCleanup } = require('../helpers/mock-factories');
 const { expectNoTechnicalArtifacts } = require('../helpers/behavior-validation');
-
-initializeTestLogging();
 
 mockModule('youtubei.js', () => ({
     Innertube: {
@@ -15,6 +12,8 @@ mockModule('youtubei.js', () => ({
 }));
 
 describe('YouTube Multi-Stream Viewer Count Separation', () => {
+    let mockNotificationManager, cleanup;
+
     afterEach(async () => {
         restoreAllMocks();
         restoreAllModuleMocks();
@@ -22,8 +21,6 @@ describe('YouTube Multi-Stream Viewer Count Separation', () => {
             await cleanup();
         }
     });
-
-    let mockLogger, mockNotificationManager, cleanup;
 
     const createMultiStreamScenario = (streamConfigs) => {
         const totalViewers = streamConfigs
@@ -83,7 +80,7 @@ describe('YouTube Multi-Stream Viewer Count Separation', () => {
                 enabled: true
             }
         }, {
-            logger: mockLogger,
+            logger: noOpLogger,
             notificationManager: mockNotificationManager,
             viewerExtractionService: mockViewerExtractionService,
             streamDetectionService: {
@@ -113,7 +110,6 @@ describe('YouTube Multi-Stream Viewer Count Separation', () => {
 
     beforeEach(async () => {
         cleanup = setupAutomatedCleanup();
-        mockLogger = noOpLogger;
         mockNotificationManager = createMockNotificationManager();
     });
 

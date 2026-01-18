@@ -8,20 +8,18 @@ const { expectNoTechnicalArtifacts } = require('../helpers/assertion-helpers');
 const testClock = require('../helpers/test-clock');
 
 describe('YouTube YouTubei Stream Detection Integration - Regression', () => {
+    let mockConfig;
+    let streamDetector;
+    let mockYouTubeService;
+
     afterEach(() => {
         restoreAllMocks();
         restoreAllModuleMocks();
     });
 
-    let mockLogger;
-    let mockConfig;
-    let streamDetector;
-    let mockYouTubeService;
-
     beforeEach(() => {
         resetModules();
         testClock.reset();
-        mockLogger = noOpLogger;
         mockConfig = createMockConfig();
         mockYouTubeService = {
             detectLiveStreams: createMockFn(),
@@ -43,7 +41,7 @@ describe('YouTube YouTubei Stream Detection Integration - Regression', () => {
             streamMaxRetries: 3,
             continuousMonitoringInterval: 60
         }, {
-            logger: mockLogger,
+            logger: noOpLogger,
             youtubeDetectionService: mockYouTubeService
         });
     });

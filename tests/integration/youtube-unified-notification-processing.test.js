@@ -1,6 +1,7 @@
 const { describe, test, beforeEach, afterEach, expect } = require('bun:test');
 
 const { createMockConfig, createMockPlatformDependencies } = require('../helpers/test-setup');
+const { noOpLogger } = require('../helpers/mock-factories');
 const { createMockFn, restoreAllMocks } = require('../helpers/bun-mock-utils');
 
 const { YouTubePlatform } = require('../../src/platforms/youtube');
@@ -23,12 +24,7 @@ describe('YouTube Unified Notification Processing Implementation', () => {
         };
         platform = new YouTubePlatform(mockConfig, mockDependencies);
         platform.handlers = mockHandlers;
-        platform.logger = {
-            debug: createMockFn(),
-            info: createMockFn(),
-            warn: createMockFn(),
-            error: createMockFn()
-        };
+        platform.logger = noOpLogger;
         platform.notificationDispatcher = {
             dispatchSuperChat: createMockFn(),
             dispatchMembership: createMockFn()
