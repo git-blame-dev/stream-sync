@@ -10,9 +10,7 @@ async function clearStartupDisplays(config, runtimeConstants, deps = {}) {
     } = deps;
 
     try {
-        const resolvedRuntimeConstants = runtimeConstants
-            || (process.env.NODE_ENV === 'test' ? global.__TEST_RUNTIME_CONSTANTS__ : null);
-        if (!resolvedRuntimeConstants) {
+        if (!runtimeConstants) {
             logger.warn('clearStartupDisplays requires runtimeConstants; skipping display clearing', 'OBSStartup');
             return;
         }
@@ -21,8 +19,8 @@ async function clearStartupDisplays(config, runtimeConstants, deps = {}) {
             return;
         }
 
-        const { hideAllDisplays } = getDefaultSourcesManager({ runtimeConstants: resolvedRuntimeConstants });
-        const obsManager = getOBSConnectionManager({ runtimeConstants: resolvedRuntimeConstants });
+        const { hideAllDisplays } = getDefaultSourcesManager({ runtimeConstants });
+        const obsManager = getOBSConnectionManager({ runtimeConstants });
         if (!obsManager || !obsManager.isConnected()) {
             logger.debug('OBS not connected, skipping display clearing', 'OBSStartup');
             return;
@@ -30,8 +28,8 @@ async function clearStartupDisplays(config, runtimeConstants, deps = {}) {
 
         const chatSceneName = config.general.chatMsgScene;
         const notificationSceneName = config.obs.notificationScene;
-        const chatPlatformLogos = resolvedRuntimeConstants.CHAT_PLATFORM_LOGOS;
-        const notificationPlatformLogos = resolvedRuntimeConstants.NOTIFICATION_PLATFORM_LOGOS;
+        const chatPlatformLogos = runtimeConstants.CHAT_PLATFORM_LOGOS;
+        const notificationPlatformLogos = runtimeConstants.NOTIFICATION_PLATFORM_LOGOS;
         const ttsSourceName = config.obs.ttsTxt;
         const notificationSourceName = config.obs.notificationTxt;
 

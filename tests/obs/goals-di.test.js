@@ -55,7 +55,8 @@ describe('OBSGoalsManager DI requirements', () => {
             logger: noOpLogger,
             configManager: { getBoolean: () => true, getString: () => 'goal-source', getNumber: () => 0 },
             updateTextSource: createMockFn(),
-            goalTracker: mockGoalTracker
+            goalTracker: mockGoalTracker,
+            runtimeConstants: { NOTIFICATION_PLATFORM_LOGOS: {}, CHAT_PLATFORM_LOGOS: {} }
         });
 
         const status = await goalsManager.getCurrentGoalStatus('tiktok');

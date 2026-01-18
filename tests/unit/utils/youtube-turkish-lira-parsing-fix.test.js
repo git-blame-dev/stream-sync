@@ -277,7 +277,12 @@ describe('YouTube Turkish Lira (TRY) Currency Parsing', () => {
             const mockEventBus = { emit: createMockFn(), on: createMockFn(), off: createMockFn() };
             const constants = require('../../../src/core/constants');
             const textProcessing = createTextProcessingManager({ logger: mockLogger });
-            const obsGoals = require('../../../src/obs/goals').getDefaultGoalsManager();
+            const obsGoals = require('../../../src/obs/goals').getDefaultGoalsManager({
+                runtimeConstants: {
+                    CHAT_PLATFORM_LOGOS: {},
+                    NOTIFICATION_PLATFORM_LOGOS: {}
+                }
+            });
             const vfxCommandService = { getVFXConfig: createMockFn().mockResolvedValue(null) };
             notificationManager = new NotificationManager({
                 displayQueue: mockDisplayQueue,
@@ -449,7 +454,12 @@ describe('YouTube Turkish Lira (TRY) Currency Parsing', () => {
             const constants = require('../../../src/core/constants');
             const logger = noOpLogger;
             const textProcessing = createTextProcessingManager({ logger });
-            const obsGoals = require('../../../src/obs/goals').getDefaultGoalsManager();
+            const obsGoals = require('../../../src/obs/goals').getDefaultGoalsManager({
+                runtimeConstants: {
+                    CHAT_PLATFORM_LOGOS: {},
+                    NOTIFICATION_PLATFORM_LOGOS: {}
+                }
+            });
             const vfxCommandService = { getVFXConfig: createMockFn().mockResolvedValue(null) };
             const notificationManager = new NotificationManager({
                 displayQueue: mockDisplayQueue,
