@@ -10,12 +10,10 @@ setupAutomatedCleanup({
     logPerformanceMetrics: true
 });
 
-// Import modules under test
 const { ConnectionState, ConnectionStateFactory } = require('../../src/utils/platform-connection-state');
 const { TwitchApiClient } = require('../../src/utils/api-clients/twitch-api-client');
 const { TwitchViewerCountProvider } = require('../../src/utils/viewer-count-providers');
 
-// Mock TwitchPlatform to avoid browser authentication
 class TwitchPlatform {
     constructor(config, dependencies) {
         this.config = config;
@@ -24,19 +22,19 @@ class TwitchPlatform {
         this.enhancedHttpClient = dependencies.enhancedHttpClient;
         this.apiClient = null;
         this.viewerCountProvider = null;
-        this.mockLogger = noOpLogger;
+        this.logger = noOpLogger;
     }
 
     async initialize(handlers) {
-        this.apiClient = new TwitchApiClient(this.authManager, { clientId: this.config.clientId }, this.mockLogger, {
+        this.apiClient = new TwitchApiClient(this.authManager, { clientId: this.config.clientId }, this.logger, {
             enhancedHttpClient: this.enhancedHttpClient
         });
         this.viewerCountProvider = new TwitchViewerCountProvider(
-            this.apiClient, 
-            ConnectionStateFactory, 
+            this.apiClient,
+            ConnectionStateFactory,
             this.config,
-            null, // getCurrentEventSub
-            this.mockLogger
+            null,
+            this.logger
         );
         if (this.eventSub.initialize) {
             await this.eventSub.initialize();
@@ -64,7 +62,6 @@ describe('TwitchPlatform Modular Refactor', () => {
     describe('ConnectionState Module', () => {
         describe('when creating connection state', () => {
             it('should provide consistent interface across platforms', () => {
-                // Arrange
                 const params = {
                     isConnected: true,
                     platform: 'twitch',
@@ -72,10 +69,8 @@ describe('TwitchPlatform Modular Refactor', () => {
                     username: 'test_user'
                 };
 
-                // Act
                 const state = new ConnectionState(params);
 
-                // Assert
                 expect(state.isConnected).toBe(true);
                 expect(state.platform).toBe('twitch');
                 expect(state.channel).toBe('test_channel');
@@ -84,7 +79,6 @@ describe('TwitchPlatform Modular Refactor', () => {
             });
 
             it('should identify when not ready for API calls', () => {
-                // Arrange
                 const params = {
                     isConnected: false,
                     platform: 'twitch',
@@ -92,24 +86,19 @@ describe('TwitchPlatform Modular Refactor', () => {
                     username: 'test_user'
                 };
 
-                // Act
                 const state = new ConnectionState(params);
 
-                // Assert
                 expect(state.isApiReady()).toBe(false);
             });
         });
 
         describe('when using ConnectionStateFactory', () => {
             it('should create Twitch state correctly', () => {
-                // Arrange
                 const config = { channel: 'test_channel', username: 'test_user' };
                 const mockEventSub = { isActive: () => true };
 
-                // Act
                 const state = ConnectionStateFactory.createTwitchState(config, mockEventSub);
 
-                // Assert
                 expect(state.isConnected).toBe(true);
                 expect(state.platform).toBe('twitch');
                 expect(state.channel).toBe('test_channel');
@@ -117,14 +106,11 @@ describe('TwitchPlatform Modular Refactor', () => {
             });
 
             it('should handle disconnected EventSub', () => {
-                // Arrange
                 const config = { channel: 'test_channel', username: 'test_user' };
                 const mockEventSub = { isActive: () => false };
 
-                // Act
                 const state = ConnectionStateFactory.createTwitchState(config, mockEventSub);
 
-                // Assert
                 expect(state.isConnected).toBe(false);
                 expect(state.isApiReady()).toBe(false);
             });
@@ -154,7 +140,6 @@ describe('TwitchPlatform Modular Refactor', () => {
 
         describe('when making API requests', () => {
             it('should include proper authentication headers', async () => {
-                // Arrange
                 const mockAxiosResponse = {
                     data: { data: [] },
                     status: 200,
@@ -162,13 +147,10 @@ describe('TwitchPlatform Modular Refactor', () => {
                     headers: {},
                     config: {}
                 };
-
                 mockHttpClient.get.mockResolvedValue(mockAxiosResponse);
 
-                // Act
                 await apiClient.makeRequest('/test');
 
-                // Assert
                 expect(mockHttpClient.get).toHaveBeenCalledWith(
                     'https://api.twitch.tv/helix/test',
                     expect.objectContaining({
@@ -180,23 +162,19 @@ describe('TwitchPlatform Modular Refactor', () => {
             });
 
             it('should handle API errors gracefully', async () => {
-                // Arrange
                 const error = new Error('Request failed with status code 401');
                 error.response = {
                     status: 401,
                     statusText: 'Unauthorized'
                 };
-
                 mockHttpClient.get.mockRejectedValue(error);
 
-                // Act & Assert
                 await expect(apiClient.makeRequest('/test')).rejects.toThrow('Request failed with status code 401');
             });
         });
 
         describe('when getting stream info', () => {
             it('should return correct stream data for live stream', async () => {
-                // Arrange
                 const mockAxiosResponse = {
                     data: {
                         data: [{
@@ -209,24 +187,19 @@ describe('TwitchPlatform Modular Refactor', () => {
                     headers: {},
                     config: {}
                 };
-
                 mockHttpClient.get.mockResolvedValue(mockAxiosResponse);
 
-                // Act
                 const result = await apiClient.getStreamInfo('test_channel');
 
-                // Assert
                 expect(result.isLive).toBe(true);
                 expect(result.viewerCount).toBe(42);
                 expect(result.stream).toEqual(expect.objectContaining({
                     viewer_count: 42,
                     user_name: 'test_channel'
                 }));
-
             });
 
             it('should return offline status for no stream data', async () => {
-                // Arrange
                 const mockAxiosResponse = {
                     data: { data: [] },
                     status: 200,
@@ -234,17 +207,13 @@ describe('TwitchPlatform Modular Refactor', () => {
                     headers: {},
                     config: {}
                 };
-
                 mockHttpClient.get.mockResolvedValue(mockAxiosResponse);
 
-                // Act
                 const result = await apiClient.getStreamInfo('test_channel');
 
-                // Assert
                 expect(result.isLive).toBe(false);
                 expect(result.viewerCount).toBe(0);
                 expect(result.stream).toBe(null);
-
             });
         });
     });
@@ -269,47 +238,38 @@ describe('TwitchPlatform Modular Refactor', () => {
 
         describe('when provider is ready', () => {
             it('should return viewer count from API', async () => {
-                // Arrange
                 mockApiClient.getStreamInfo.mockResolvedValue({
                     isLive: true,
                     viewerCount: 123
                 });
 
-                // Act
                 const count = await provider.getViewerCount();
 
-                // Assert
                 expect(count).toBe(123);
                 expect(mockApiClient.getStreamInfo).toHaveBeenCalledWith('test_channel');
             });
 
             it('should return 0 for offline stream', async () => {
-                // Arrange
                 mockApiClient.getStreamInfo.mockResolvedValue({
                     isLive: false,
                     viewerCount: 0
                 });
 
-                // Act
                 const count = await provider.getViewerCount();
 
-                // Assert
                 expect(count).toBe(0);
             });
         });
 
         describe('when provider is not ready', () => {
             beforeEach(() => {
-                // Remove channel to make provider not ready
                 const notReadyConfig = { ...mockConfig, channel: null };
                 provider = new TwitchViewerCountProvider(mockApiClient, ConnectionStateFactory, notReadyConfig, null, mockLogger);
             });
 
             it('should return 0 without making API call', async () => {
-                // Act
                 const count = await provider.getViewerCount();
 
-                // Assert
                 expect(count).toBe(0);
                 expect(mockApiClient.getStreamInfo).not.toHaveBeenCalled();
             });
@@ -317,13 +277,10 @@ describe('TwitchPlatform Modular Refactor', () => {
 
         describe('when API call fails', () => {
             it('should return 0 and handle error gracefully', async () => {
-                // Arrange
                 mockApiClient.getStreamInfo.mockRejectedValue(new Error('API Error'));
 
-                // Act
                 const count = await provider.getViewerCount();
 
-                // Assert
                 expect(count).toBe(0);
             });
         });
@@ -365,10 +322,8 @@ describe('TwitchPlatform Modular Refactor', () => {
 
         describe('when platform initializes', () => {
             it('should create all modular components', async () => {
-                // Act
                 await twitchPlatform.initialize({});
 
-                // Assert
                 expect(twitchPlatform.apiClient).toBeDefined();
                 expect(twitchPlatform.viewerCountProvider).toBeDefined();
                 expect(twitchPlatform.eventSub).toBeDefined();
@@ -381,10 +336,8 @@ describe('TwitchPlatform Modular Refactor', () => {
             });
 
             it('should use modular connection state factory', () => {
-                // Act
                 const state = twitchPlatform.getConnectionState();
 
-                // Assert
                 expect(state).toHaveProperty('isConnected', true);
                 expect(state).toHaveProperty('platform', 'twitch');
                 expect(state).toHaveProperty('channel', 'test_channel');
@@ -408,21 +361,16 @@ describe('TwitchPlatform Modular Refactor', () => {
             });
 
             it('should delegate to viewer count provider', async () => {
-                // Act
                 const count = await twitchPlatform.getViewerCount();
 
-                // Assert
                 expect(count).toBe(456);
             });
 
             it('should return 0 when provider not initialized', async () => {
-                // Arrange
                 twitchPlatform.viewerCountProvider = null;
 
-                // Act
                 const count = await twitchPlatform.getViewerCount();
 
-                // Assert
                 expect(count).toBe(0);
             });
         });
@@ -430,33 +378,25 @@ describe('TwitchPlatform Modular Refactor', () => {
 
     describe('DRY Principle Validation', () => {
         it('should reuse connection state logic across platforms', () => {
-            // Arrange
             const config = { channel: 'test', username: 'test' };
-            
-            // Act - Create different platform states using same factory
+
             const twitchState = ConnectionStateFactory.createTwitchState(config, { isActive: () => true });
             const youtubeState = ConnectionStateFactory.createYouTubeState(config, { stream1: {} });
-            
-            // Assert - Both should have same interface
+
             expect(twitchState).toHaveProperty('isConnected');
             expect(twitchState).toHaveProperty('platform');
             expect(youtubeState).toHaveProperty('isConnected');
             expect(youtubeState).toHaveProperty('platform');
-            
             expect(typeof twitchState.isApiReady).toBe('function');
             expect(typeof youtubeState.isApiReady).toBe('function');
         });
 
         it('should provide consistent viewer count interface', () => {
-            // Arrange
-            const mockLogger = noOpLogger;
             const mockApiClient = { getStreamInfo: createMockFn() };
             const config = { channel: 'test', eventSub: { isActive: () => true } };
-            
-            // Act
-            const provider = new TwitchViewerCountProvider(mockApiClient, ConnectionStateFactory, config, null, mockLogger);
-            
-            // Assert - Provider should have standard interface
+
+            const provider = new TwitchViewerCountProvider(mockApiClient, ConnectionStateFactory, config, null, noOpLogger);
+
             expect(typeof provider.getViewerCount).toBe('function');
             expect(typeof provider.isReady).toBe('function');
             expect(provider.platform).toBe('twitch');

@@ -1,13 +1,13 @@
 
 const { describe, test, expect, it, afterEach } = require('bun:test');
 const { createMockFn, restoreAllMocks } = require('../helpers/bun-mock-utils');
-const { unmockModule, requireActual, resetModules, restoreAllModuleMocks } = require('../helpers/bun-module-mocks');
+const { unmockModule, requireActual, restoreAllModuleMocks } = require('../helpers/bun-module-mocks');
+const { noOpLogger, createMockNotificationManager } = require('../helpers/mock-factories');
 
 unmockModule('../../src/platforms/youtube');
 const { YouTubePlatform } = requireActual('../../src/platforms/youtube');
-const { createMockNotificationManager } = require('../helpers/mock-factories');
 
-const createPlatform = (provider = null, logger = null) => {
+const createPlatform = (provider = null) => {
     const notificationManager = createMockNotificationManager();
     const platform = new YouTubePlatform(
         {
@@ -16,7 +16,7 @@ const createPlatform = (provider = null, logger = null) => {
             channel: 'test-channel'
         },
         {
-            logger: logger || { debug: createMockFn(), warn: createMockFn(), error: createMockFn(), info: createMockFn() },
+            logger: noOpLogger,
             notificationManager,
             streamDetectionService: {
                 detectLiveStreams: createMockFn().mockResolvedValue({ success: true, videoIds: [] })
@@ -66,12 +66,7 @@ describe('YouTubePlatform viewer count behavior', () => {
         const provider = {
             getViewerCountForVideo: createMockFn().mockRejectedValue(new Error('network'))
         };
-        const platform = createPlatform(provider, {
-            debug: createMockFn(),
-            warn: createMockFn(),
-            error: createMockFn(),
-            info: createMockFn()
-        });
+        const platform = createPlatform(provider);
 
         const result = await platform.getViewerCountForVideo('video-123');
 

@@ -2,8 +2,7 @@ const { describe, test, expect, beforeEach, afterEach } = require('bun:test');
 const { EventEmitter } = require('events');
 
 const TwitchEventSub = require('../../src/platforms/twitch-eventsub');
-
-const noOpLogger = { debug: () => {}, info: () => {}, warn: () => {}, error: () => {} };
+const { noOpLogger } = require('../helpers/mock-factories');
 
 describe('TwitchEventSub Resubscription Notification Fix', () => {
     let eventSub;

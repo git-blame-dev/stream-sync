@@ -1,5 +1,6 @@
 const { describe, test, expect, it, afterEach } = require('bun:test');
 const { createMockFn, restoreAllMocks } = require('../helpers/bun-mock-utils');
+const { noOpLogger } = require('../helpers/mock-factories');
 
 const logging = require('../../src/core/logging');
 logging.setConfigValidator(() => ({ logging: {} }));
@@ -13,7 +14,7 @@ describe('YouTubeNotificationDispatcher membership routing', () => {
 
     it('dispatches membership notifications to onMembership with months/level preserved', async () => {
         const dispatcher = new YouTubeNotificationDispatcher({
-            logger: { debug: () => {}, info: () => {}, warn: () => {}, error: () => {} }
+            logger: noOpLogger
         });
         const onMembership = createMockFn();
         const chatItem = {

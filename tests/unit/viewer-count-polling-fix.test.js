@@ -1,8 +1,7 @@
 const { describe, test, expect, beforeEach, afterEach } = require('bun:test');
 const { createMockFn, restoreAllMocks } = require('../helpers/bun-mock-utils');
 const { createRuntimeConstantsFixture } = require('../helpers/runtime-constants-fixture');
-
-const noOpLogger = { debug: () => {}, info: () => {}, warn: () => {}, error: () => {} };
+const { noOpLogger } = require('../helpers/mock-factories');
 
 describe('Viewer Count Polling System Fix', () => {
     let ViewerCountSystem;
