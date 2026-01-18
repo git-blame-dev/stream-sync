@@ -5,7 +5,6 @@ const { OBSViewerCountObserver } = require('../../src/observers/obs-viewer-count
 const { ViewerCountExtractionService } = require('../../src/services/viewer-count-extraction-service');
 const testClock = require('../helpers/test-clock');
 
-// Mock constants for testing
 const VIEWER_COUNT_CONSTANTS = {
     OBSERVER: {
         DEFAULT_OBS_OBSERVER_ID: 'obs-observer-1'
@@ -32,7 +31,6 @@ describe('Viewer Count & OBS Observer Performance Tests', () => {
         testClock.reset();
         pendingDelayMs = 0;
         delayFlushScheduled = false;
-        // Capture baseline metrics
         memoryBaseline = process.memoryUsage();
         performanceMetrics = {
             startTime: testClock.now(),
@@ -43,25 +41,22 @@ describe('Viewer Count & OBS Observer Performance Tests', () => {
             updateTimes: []
         };
 
-        // Create mock OBS manager for testing
         mockOBSManager = createMockOBSManager();
         mockLogger = noOpLogger;
     });
 
     afterEach(() => {
         restoreAllMocks();
-        // Report performance metrics if operations occurred
         const endTime = testClock.now();
         const totalTime = Math.max(1, endTime - performanceMetrics.startTime);
         const memoryFinal = process.memoryUsage();
-        
+
         if (performanceMetrics.operations > 0) {
-            const avgResponseTime = performanceMetrics.responseTimes.length > 0 
-                ? performanceMetrics.responseTimes.reduce((a, b) => a + b, 0) / performanceMetrics.responseTimes.length 
+            const avgResponseTime = performanceMetrics.responseTimes.length > 0
+                ? performanceMetrics.responseTimes.reduce((a, b) => a + b, 0) / performanceMetrics.responseTimes.length
                 : 0;
             const throughput = (performanceMetrics.operations / (totalTime / 1000)).toFixed(2);
-            
-            // Only log detailed metrics for performance-critical tests
+
             if (performanceMetrics.operations >= 100) {
                 console.log(`Performance Report:
                     Total Time: ${totalTime.toFixed(2)}ms
@@ -77,83 +72,72 @@ describe('Viewer Count & OBS Observer Performance Tests', () => {
 
     describe('High-Volume Observer Notification Performance Tests', () => {
         it('should handle 50+ observers receiving simultaneous notifications efficiently', async () => {
-            // Given: System with 50 observers
             const observerCount = 50;
             const observers = createMultipleObservers(observerCount);
             const notificationManager = createNotificationManager(observers);
-            
-            // When: Broadcasting notification to all observers
+
             const startTime = testClock.now();
             const viewerUpdate = createViewerCountUpdate('twitch', 1250, true);
-            
+
             await notificationManager.broadcastUpdate(viewerUpdate);
             const endTime = testClock.now();
-            
-            // Then: Performance meets targets
+
             const totalTime = endTime - startTime;
             const avgTimePerObserver = totalTime / observerCount;
-            
-            expect(avgTimePerObserver).toBeLessThan(10); // <10ms per notification target
+
+            expect(avgTimePerObserver).toBeLessThan(10);
             expect(getAllObserversReceivedUpdate(observers, viewerUpdate)).toBe(true);
             expect(getNoObserverErrors(observers)).toBe(true);
-            
+
             performanceMetrics.operations = observerCount;
             performanceMetrics.responseTimes.push(totalTime);
         }, 5000);
 
         it('should maintain notification throughput with 100+ rapid updates', async () => {
-            // Given: Observer system setup
             const observer = new OBSViewerCountObserver(mockOBSManager, mockLogger);
             const updateCount = 100;
-            
-            // When: Processing rapid viewer count updates
+
             const startTime = testClock.now();
             const updates = createRapidViewerUpdates(updateCount);
-            
+
             for (const update of updates) {
                 await observer.onViewerCountUpdate(update);
             }
             const endTime = testClock.now();
-            
-            // Then: System handles high throughput efficiently
+
             const totalTime = endTime - startTime;
             const avgTimePerUpdate = totalTime / updateCount;
             const throughput = (updateCount / (totalTime / 1000)).toFixed(2);
-            
-            expect(avgTimePerUpdate).toBeLessThan(50); // <50ms per update target
-            expect(parseFloat(throughput)).toBeGreaterThan(20); // >20 updates/sec
-            // Verify system behavior: observer processed all updates without errors
+
+            expect(avgTimePerUpdate).toBeLessThan(50);
+            expect(parseFloat(throughput)).toBeGreaterThan(20);
             const obsUpdateCount = getOBSUpdateCount(mockOBSManager);
-            expect(mockOBSManager.isConnected()).toBe(true); // OBS connection maintained
-            expect(typeof obsUpdateCount).toBe('number'); // Update count is tracked
-            
-            // Performance behavior: all updates were processed efficiently
-            const allUpdatesProcessed = updates.every(update => update.isStreamLive); // All were live stream updates
-            expect(allUpdatesProcessed).toBe(true); // System handled all live stream updates
+            expect(mockOBSManager.isConnected()).toBe(true);
+            expect(typeof obsUpdateCount).toBe('number');
+
+            const allUpdatesProcessed = updates.every(update => update.isStreamLive);
+            expect(allUpdatesProcessed).toBe(true);
             
             performanceMetrics.operations = updateCount;
             performanceMetrics.responseTimes.push(totalTime);
         }, 5000);
 
         it('should handle concurrent observer registration without performance degradation', async () => {
-            // Given: Observer management system
             const observerManager = createObserverManager();
             const registrationCount = 25;
-            
-            // When: Concurrent observer registration
+
             const startTime = testClock.now();
-            const registrationPromises = Array.from({ length: registrationCount }, (_, i) => 
+            const registrationPromises = Array.from({ length: registrationCount }, (_, i) =>
                 observerManager.registerObserver(createTestObserver(`observer-${i}`))
             );
-            
+
             await Promise.all(registrationPromises);
             const endTime = testClock.now();
-            
-            // Then: Registration completes efficiently
+
             const totalTime = endTime - startTime;
             const avgRegistrationTime = totalTime / registrationCount;
-            
-            expect(avgRegistrationTime).toBeLessThan(20); // <20ms per registration
+
+            expect(avgRegistrationTime).toBeLessThan(20);
             expect(observerManager.getObserverCount()).toBe(registrationCount);
             expect(observerManager.areAllObserversActive()).toBe(true);
             

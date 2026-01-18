@@ -1,11 +1,8 @@
-const { describe, test, beforeEach, afterEach, expect } = require('bun:test');
+const { describe, test, afterEach, expect } = require('bun:test');
 
 const { createMockFn, restoreAllMocks } = require('../helpers/bun-mock-utils');
 const { mockModule, restoreAllModuleMocks } = require('../helpers/bun-module-mocks');
-const { initializeTestLogging } = require('../helpers/test-setup');
 const { noOpLogger } = require('../helpers/mock-factories');
-
-initializeTestLogging();
 
 mockModule('youtubei.js', () => ({
     Innertube: {
@@ -18,8 +15,6 @@ describe('YouTube Multi-Stream Aggregation', () => {
         restoreAllMocks();
         restoreAllModuleMocks();
     });
-
-    let mockLogger;
 
     const createStreamScenario = (streamData) => ({
         name: `${streamData.length} streams with ${streamData.reduce((sum, s) => sum + s.viewers, 0)} total viewers`,
@@ -67,7 +62,7 @@ describe('YouTube Multi-Stream Aggregation', () => {
                 enabled: true
             }
         }, {
-            logger: mockLogger,
+            logger: noOpLogger,
             notificationManager: mockNotificationManager,
             viewerExtractionService: mockViewerExtractionService,
             streamDetectionService: {
@@ -81,10 +76,6 @@ describe('YouTube Multi-Stream Aggregation', () => {
         platform.Innertube = { create: createMockFn() };
         return platform;
     };
-
-    beforeEach(() => {
-        mockLogger = noOpLogger;
-    });
 
     describe('Multi-Stream Aggregation Success Scenarios', () => {
         test('should aggregate viewer counts from 3 active streams correctly', async () => {

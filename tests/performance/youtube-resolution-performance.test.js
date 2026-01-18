@@ -1,11 +1,6 @@
-
 const { describe, expect, beforeEach, afterEach, it } = require('bun:test');
 const { createMockFn, clearAllMocks, restoreAllMocks } = require('../helpers/bun-mock-utils');
 const { useRealTimers } = require('../helpers/bun-timers');
-
-const {
-  initializeTestLogging
-} = require('../helpers/test-setup');
 
 const {
   noOpLogger,
@@ -19,7 +14,6 @@ const {
 
 const testClock = require('../helpers/test-clock');
 
-initializeTestLogging();
 setupAutomatedCleanup({
   clearCallsBeforeEach: true,
   validateAfterCleanup: true,
@@ -113,40 +107,33 @@ describe('YouTube Resolution Performance - User Experience Validation', () => {
 
   describe('User Response Time Experience Improvements', () => {
     it('should provide faster user experience when using Channel ID directly', async () => {
-      // Given: User has choice between username and Channel ID input
       const username = 'testchannel';
-      const channelId = 'UC12345678901234567890'; // Listed in testChannelIds array
-      
-      // When: User performs operation with username (slower path)
+      const channelId = 'UC12345678901234567890';
+
       const usernameStartTime = testClock.now();
       const usernameResult = await MockYouTubeLiveStreamService.getLiveStreams(
         mockInnertubeClient,
         username,
         { logger: mockLogger, timeout: 2000 }
       );
-      const usernameResponseTime = testClock.now() - usernameStartTime; // Should be ~75ms
+      const usernameResponseTime = testClock.now() - usernameStartTime;
 
-      // When: User performs operation with Channel ID (faster path)
       const channelIdStartTime = testClock.now();
       const channelIdResult = await MockYouTubeLiveStreamService.getLiveStreams(
         mockInnertubeClient,
         channelId,
         { logger: mockLogger, timeout: 2000 }
       );
-      const channelIdResponseTime = testClock.now() - channelIdStartTime; // Should be ~5ms
+      const channelIdResponseTime = testClock.now() - channelIdStartTime;
 
-      // Then: User experiences significantly faster response with Channel ID
       expect(channelIdResult.success).toBe(true);
       expect(usernameResult.success).toBe(true);
       expect(channelIdResponseTime).toBeLessThan(usernameResponseTime);
-      
-      // User Performance: Channel ID provides measurably better user experience
+
       const performanceImprovement = (usernameResponseTime - channelIdResponseTime) / usernameResponseTime;
-      
-      // Allow for timing variations while ensuring significant improvement
-      expect(performanceImprovement).toBeGreaterThan(0.8); // At least 80% faster for users (150ms vs 15ms = ~90% improvement)
-      
-      // User Experience: Both paths provide clean results
+
+      expect(performanceImprovement).toBeGreaterThan(0.8);
+
       expectNoTechnicalArtifacts(channelIdResult.streams[0].title);
       expectNoTechnicalArtifacts(usernameResult.streams[0].title);
     });
