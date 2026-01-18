@@ -53,7 +53,12 @@ describe('Cross-Platform Goal Calculation', () => {
             NOTIFICATION_FADE_DURATION: 1000
         };
 
-        displayQueue = new DisplayQueue(mockOBSManager, mockConfig, mockConstants);
+        const runtimeConstants = {
+            NOTIFICATION_CLEAR_DELAY: 200,
+            NOTIFICATION_FADE_DURATION: 1000
+        };
+
+        displayQueue = new DisplayQueue(mockOBSManager, mockConfig, mockConstants, null, runtimeConstants);
         const goalTotals = {};
         displayQueue.goalsManager = {
             processDonationGoal: createMockFn(async (platform, amount) => {

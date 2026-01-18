@@ -48,7 +48,7 @@ describe('DisplayQueue lingering chat visibility', () => {
     });
 
     it('treats lingering chat as displayed when queue is empty and no active display', () => {
-        const displayQueue = new DisplayQueue(createMockOBSManager('connected'), config, constants);
+        const displayQueue = new DisplayQueue(createMockOBSManager('connected'), config, constants, null, constants);
         displayQueue.currentDisplay = null;
         displayQueue.queue = [];
         displayQueue.lastChatItem = buildChatItem();
@@ -67,7 +67,7 @@ describe('DisplayQueue lingering chat visibility', () => {
     });
 
     it('does not report lingering chat as displayed when a notification is active', () => {
-        const displayQueue = new DisplayQueue(createMockOBSManager('connected'), config, constants);
+        const displayQueue = new DisplayQueue(createMockOBSManager('connected'), config, constants, null, constants);
         displayQueue.queue = [];
         displayQueue.lastChatItem = buildChatItem();
         displayQueue.currentDisplay = {
@@ -88,7 +88,7 @@ describe('DisplayQueue lingering chat visibility', () => {
     });
 
     it('does not surface lingering chat while queued items remain', () => {
-        const displayQueue = new DisplayQueue(createMockOBSManager('connected'), config, constants);
+        const displayQueue = new DisplayQueue(createMockOBSManager('connected'), config, constants, null, constants);
         displayQueue.lastChatItem = buildChatItem();
         displayQueue.queue = [
             {

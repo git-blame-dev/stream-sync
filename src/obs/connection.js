@@ -11,8 +11,7 @@ class OBSConnectionManager {
         this.logger = logger;
         this.log = logger;
         this.constants = dependencies.constants || { ERROR_MESSAGES: DEFAULT_ERROR_MESSAGES };
-        this.runtimeConstants = dependencies.runtimeConstants
-            || (process.env.NODE_ENV === 'test' ? global.__TEST_RUNTIME_CONSTANTS__ : null);
+        this.runtimeConstants = dependencies.runtimeConstants;
         if (!this.runtimeConstants) {
             throw new Error('OBSConnectionManager requires runtimeConstants');
         }
