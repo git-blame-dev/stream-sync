@@ -1,5 +1,6 @@
 const { describe, it, expect, afterEach } = require('bun:test');
 const { createMockFn, clearAllMocks } = require('../../helpers/bun-mock-utils');
+const { noOpLogger } = require('../../helpers/mock-factories');
 const PlatformEventRouter = require('../../../src/services/PlatformEventRouter');
 
 describe('PlatformEventRouter chat normalization', () => {
@@ -20,10 +21,9 @@ describe('PlatformEventRouter chat normalization', () => {
             ...runtimeOverrides
         };
         const eventBus = { subscribe: createMockFn(() => createMockFn()), emit: createMockFn() };
-        const logger = { debug: createMockFn(), info: createMockFn(), warn: createMockFn(), error: createMockFn() };
         const configService = { areNotificationsEnabled: createMockFn(() => true) };
         const notificationManager = { handleNotification: createMockFn() };
-        return { router: new PlatformEventRouter({ runtime, eventBus, notificationManager, configService, logger }), runtime };
+        return { router: new PlatformEventRouter({ runtime, eventBus, notificationManager, configService, logger: noOpLogger }), runtime };
     };
 
     it('flattens nested user/message fields so chat handler receives username', async () => {
@@ -32,9 +32,9 @@ describe('PlatformEventRouter chat normalization', () => {
         const event = {
             ...baseEvent,
             data: {
-                username: 'ExampleUser',
-                userId: '13945',
-                message: { text: 'It is not blackmail' },
+                username: 'testUsername',
+                userId: 'testUserId',
+                message: { text: 'testMessageText' },
                 timestamp: '2025-11-20T12:18:40.192Z',
                 isMod: false,
                 isSubscriber: false,
@@ -47,9 +47,9 @@ describe('PlatformEventRouter chat normalization', () => {
         expect(runtime.handleChatMessage).toHaveBeenCalledTimes(1);
         const [calledPlatform, normalized] = runtime.handleChatMessage.mock.calls[0];
         expect(calledPlatform).toBe(platform);
-        expect(normalized.username).toBe('ExampleUser');
-        expect(normalized.userId).toBe('13945');
-        expect(normalized.message).toBe('It is not blackmail');
+        expect(normalized.username).toBe('testUsername');
+        expect(normalized.userId).toBe('testUserId');
+        expect(normalized.message).toBe('testMessageText');
         expect(normalized.timestamp).toBe('2025-11-20T12:18:40.192Z');
         expect(normalized.isMod).toBe(false);
         expect(normalized.isSubscriber).toBe(false);
@@ -61,9 +61,9 @@ describe('PlatformEventRouter chat normalization', () => {
         const event = {
             ...baseEvent,
             data: {
-                userId: 'abc123',
-                username: 'stringuser',
-                message: { text: 'Plain text message' },
+                userId: 'testUserId123',
+                username: 'testStringUser',
+                message: { text: 'testPlainMessage' },
                 timestamp: '2025-11-20T14:00:00.000Z',
                 isMod: true,
                 metadata: {}
@@ -74,9 +74,9 @@ describe('PlatformEventRouter chat normalization', () => {
 
         expect(runtime.handleChatMessage).toHaveBeenCalledTimes(1);
         const [, normalized] = runtime.handleChatMessage.mock.calls[0];
-        expect(normalized.username).toBe('stringuser');
-        expect(normalized.userId).toBe('abc123');
-        expect(normalized.message).toBe('Plain text message');
+        expect(normalized.username).toBe('testStringUser');
+        expect(normalized.userId).toBe('testUserId123');
+        expect(normalized.message).toBe('testPlainMessage');
         expect(normalized.timestamp).toBe('2025-11-20T14:00:00.000Z');
         expect(normalized.isMod).toBe(true);
     });

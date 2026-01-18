@@ -36,7 +36,6 @@ describe('GracefulExitService additional behavior', () => {
 
         await service.triggerExit();
 
-        // Observable behavior: shutdown should not be called again
         expect(runtime.shutdown).not.toHaveBeenCalled();
     });
 
@@ -46,10 +45,8 @@ describe('GracefulExitService additional behavior', () => {
         const service = new GracefulExitService(runtime, 1);
         service.incrementMessageCount();
 
-        // Should not throw - errors are handled gracefully
         await service.triggerExit();
 
-        // Observable behavior: service should enter shutdown state
         expect(service.isShuttingDown).toBe(true);
     });
 

@@ -4,7 +4,6 @@ const { createTwitchEventSubSubscriptions } = require('../../../../src/platforms
 describe('Twitch EventSub subscriptions', () => {
     test('builds subscription definitions with correct conditions and handlers', () => {
         const subscriptions = createTwitchEventSubSubscriptions();
-
         const byType = (type) => subscriptions.find((sub) => sub.type === type);
 
         expect(byType('channel.chat.message').handler).toBe('handleChatMessage');
@@ -17,20 +16,20 @@ describe('Twitch EventSub subscriptions', () => {
         expect(byType('stream.online').handler).toBe('handleStreamOnline');
         expect(byType('stream.offline').handler).toBe('handleStreamOffline');
 
-        expect(byType('channel.chat.message').getCondition('123')).toEqual({
-            broadcaster_user_id: '123',
-            user_id: '123'
+        const testUserId = 'test-user-123';
+        expect(byType('channel.chat.message').getCondition(testUserId)).toEqual({
+            broadcaster_user_id: testUserId,
+            user_id: testUserId
         });
-        expect(byType('channel.follow').getCondition('123')).toEqual({
-            broadcaster_user_id: '123',
-            moderator_user_id: '123'
+        expect(byType('channel.follow').getCondition(testUserId)).toEqual({
+            broadcaster_user_id: testUserId,
+            moderator_user_id: testUserId
         });
-        expect(byType('channel.raid').getCondition('123')).toEqual({
-            to_broadcaster_user_id: '123'
+        expect(byType('channel.raid').getCondition(testUserId)).toEqual({
+            to_broadcaster_user_id: testUserId
         });
-        expect(byType('stream.online').getCondition('123')).toEqual({
-            broadcaster_user_id: '123'
+        expect(byType('stream.online').getCondition(testUserId)).toEqual({
+            broadcaster_user_id: testUserId
         });
     });
 });
-

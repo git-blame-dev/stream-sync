@@ -1,5 +1,6 @@
 const { describe, test, expect } = require('bun:test');
 const { createMockFn } = require('../../../helpers/bun-mock-utils');
+const { noOpLogger } = require('../../../helpers/mock-factories');
 const { EventEmitter } = require('events');
 
 const { createTwitchEventSubWsLifecycle } = require('../../../../src/platforms/twitch-eventsub/ws/twitch-eventsub-ws-lifecycle');
@@ -18,14 +19,10 @@ class MockWebSocket extends EventEmitter {
 
 describe('Twitch EventSub WS lifecycle', () => {
     const createState = (overrides = {}) => ({
-        logger: {
-            debug: createMockFn(),
-            info: createMockFn(),
-            warn: createMockFn()
-        },
+        logger: noOpLogger,
         authManager: { getState: createMockFn(() => 'READY') },
-        config: { accessToken: 'tok', clientId: 'cid' },
-        userId: '1',
+        config: { accessToken: 'testAccessToken', clientId: 'testClientId' },
+        userId: 'testUserId',
         ws: null,
         welcomeTimer: null,
         connectionStartTime: null,
@@ -68,7 +65,7 @@ describe('Twitch EventSub WS lifecycle', () => {
                 metadata: { message_type: 'session_welcome' },
                 payload: {
                     session: {
-                        id: 'sess-123',
+                        id: 'test-session-123',
                         keepalive_timeout_seconds: 30,
                         status: 'connected',
                         connected_at: '2024-01-01T00:00:00Z'
@@ -79,9 +76,9 @@ describe('Twitch EventSub WS lifecycle', () => {
 
         await connectPromise;
 
-        expect(state.sessionId).toBe('sess-123');
+        expect(state.sessionId).toBe('test-session-123');
         expect(state._isConnected).toBe(true);
-        expect(state.emit.mock.calls.some(([event, payload]) => event === 'eventSubConnected' && payload.sessionId === 'sess-123')).toBe(true);
+        expect(state.emit.mock.calls.some(([event, payload]) => event === 'eventSubConnected' && payload.sessionId === 'test-session-123')).toBe(true);
     });
 
     test('connectWebSocket rejects on connection timeout when no welcome message arrives', async () => {
@@ -159,12 +156,11 @@ describe('Twitch EventSub WS lifecycle', () => {
         const state = createState();
         lifecycle.handleReconnectRequest(state, {
             session: {
-                reconnect_url: 'wss://eventsub.wss.twitch.tv/ws?token=abc'
+                reconnect_url: 'wss://eventsub.wss.twitch.tv/ws?token=test-reconnect-token'
             }
         });
 
-        expect(state.reconnectUrl).toBe('wss://eventsub.wss.twitch.tv/ws?token=abc');
+        expect(state.reconnectUrl).toBe('wss://eventsub.wss.twitch.tv/ws?token=test-reconnect-token');
         expect(state._scheduleReconnect).toHaveBeenCalled();
     });
 });
-
