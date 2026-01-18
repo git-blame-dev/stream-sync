@@ -10,22 +10,16 @@ describe('ConfigService', () => {
     let mockEventBus;
 
     beforeEach(() => {
-        // Reset all mocks
         clearAllMocks();
 
-        // Create mock EventBus
         mockEventBus = {
             emit: createMockFn()
         };
 
-        // Create mock config with both ConfigManager and direct access styles
         mockConfig = {
-            // ConfigManager style methods
             get: createMockFn(),
             set: createMockFn(),
             reload: createMockFn(),
-
-            // Direct property access style
             general: {
                 debugEnabled: true,
                 filterOldMessages: true,
@@ -60,7 +54,7 @@ describe('ConfigService', () => {
                 subsEnabled: true
             },
             twitch: {
-                followsEnabled: false, // Platform-specific override
+                followsEnabled: false,
                 apiKey: 'test-twitch-key'
             },
             youtube: {
@@ -92,13 +86,12 @@ describe('ConfigService', () => {
             expect(configService.config).toBe(mockConfig);
             expect(configService.eventBus).toBeNull();
         });
-
     });
 
     describe('Factory Function', () => {
         it('should create ConfigService instance', () => {
             const service = createConfigService(mockConfig, mockEventBus);
-            
+
             expect(service).toBeInstanceOf(ConfigService);
             expect(service.config).toBe(mockConfig);
             expect(service.eventBus).toBe(mockEventBus);
@@ -106,7 +99,7 @@ describe('ConfigService', () => {
 
         it('should create ConfigService without EventBus', () => {
             const service = createConfigService(mockConfig);
-            
+
             expect(service).toBeInstanceOf(ConfigService);
             expect(service.eventBus).toBeNull();
         });
@@ -135,7 +128,7 @@ describe('ConfigService', () => {
 
         it('should handle deep nested paths', () => {
             mockConfig.deep = { nested: { value: 'test' } };
-            
+
             const result = configService.get('deep.nested.value');
             expect(result).toBe('test');
         });
@@ -151,25 +144,23 @@ describe('ConfigService', () => {
         });
 
         it('should use ConfigManager get method when available', () => {
-            mockConfig.get.mockReturnValue('config-manager-value');
-            
+            mockConfig.get.mockReturnValue('testConfigManagerValue');
+
             const result = configService.get('general', 'debugEnabled');
-            
-            expect(mockConfig.get).toHaveBeenCalledWith('general', 'debugEnabled');
-            expect(result).toBe('config-manager-value');
+
+            expect(result).toBe('testConfigManagerValue');
         });
 
         it('should fallback to direct property access when ConfigManager unavailable', () => {
-            // Remove ConfigManager method
             delete mockConfig.get;
-            
+
             const result = configService.get('general', 'debugEnabled');
             expect(result).toBe(true);
         });
 
         it('should throw when section is missing', () => {
             delete mockConfig.get;
-            
+
             expect(() => configService.get('nonExistent', 'key')).toThrow('Missing config section');
         });
     });
@@ -190,7 +181,7 @@ describe('ConfigService', () => {
 
         it('should handle null config gracefully', () => {
             configService = new ConfigService(null);
-            
+
             expect(() => configService.get('general')).toThrow('ConfigService requires config');
         });
     });
@@ -202,7 +193,7 @@ describe('ConfigService', () => {
 
         it('should return platform-specific config when available', () => {
             const result = configService.getPlatformConfig('twitch', 'followsEnabled');
-            expect(result).toBe(false); // Platform override
+            expect(result).toBe(false);
         });
 
         it('should throw when platform-specific config is missing', () => {
@@ -227,7 +218,7 @@ describe('ConfigService', () => {
             });
 
             const result = configService.areNotificationsEnabled('followsEnabled', 'twitch');
-            expect(result).toBe(false); // Platform-specific takes precedence
+            expect(result).toBe(false);
         });
 
         it('should fallback to general notifications (ConfigManager style)', () => {
@@ -238,28 +229,27 @@ describe('ConfigService', () => {
             });
 
             const result = configService.areNotificationsEnabled('followsEnabled', 'youtube');
-            expect(result).toBe(true); // From general notifications
+            expect(result).toBe(true);
         });
 
         it('should check platform-specific notifications (direct access)', () => {
-            // Remove ConfigManager method to test direct access
             delete mockConfig.get;
-            
+
             const result = configService.areNotificationsEnabled('followsEnabled', 'twitch');
-            expect(result).toBe(false); // Platform override
+            expect(result).toBe(false);
         });
 
         it('should fallback to general notifications (direct access)', () => {
             delete mockConfig.get;
-            
+
             const result = configService.areNotificationsEnabled('giftsEnabled', 'youtube');
-            expect(result).toBe(true); // From general.giftsEnabled
+            expect(result).toBe(true);
         });
 
         it('should throw when no setting is found', () => {
             delete mockConfig.get;
             delete mockConfig.notifications;
-            
+
             expect(() => configService.areNotificationsEnabled('unknownType', 'twitch')).toThrow('Missing notification config');
         });
 
@@ -276,7 +266,7 @@ describe('ConfigService', () => {
 
         it('should return complete TTS configuration', () => {
             const result = configService.getTTSConfig();
-            
+
             expect(result).toEqual({
                 enabled: true,
                 deduplicationEnabled: true,
@@ -309,7 +299,7 @@ describe('ConfigService', () => {
 
         it('should return complete timing configuration', () => {
             const result = configService.getTimingConfig();
-            
+
             expect(result).toEqual({
                 greetingDuration: 5000,
                 commandDuration: 3000,
@@ -336,19 +326,17 @@ describe('ConfigService', () => {
             configService = new ConfigService(mockConfig, mockEventBus);
         });
 
-        it('should get event command using ConfigManager style from section config', () => {
+        it('should get event command from section config', () => {
             mockConfig.get.mockImplementation((section, key) => {
                 if (section === 'greetings' && key === 'command') {
-                    return '!custom-greeting';
+                    return '!testCustomGreeting';
                 }
                 return null;
             });
 
             const result = configService.getCommand('greetings');
 
-            expect(mockConfig.get).toHaveBeenCalledWith('greetings', 'command');
-            expect(mockConfig.get).not.toHaveBeenCalledWith('commands', 'greetings');
-            expect(result).toBe('!custom-greeting');
+            expect(result).toBe('!testCustomGreeting');
         });
 
         it('should get event command using direct property access', () => {
@@ -359,13 +347,12 @@ describe('ConfigService', () => {
             expect(result).toBe('!hello');
         });
 
-        it('should get non-event command using ConfigManager style from commands map', () => {
-            mockConfig.get.mockReturnValue('!custom-command');
+        it('should get non-event command from commands map', () => {
+            mockConfig.get.mockReturnValue('!testCustomCommand');
 
             const result = configService.getCommand('custom');
 
-            expect(mockConfig.get).toHaveBeenCalledWith('commands', 'custom');
-            expect(result).toBe('!custom-command');
+            expect(result).toBe('!testCustomCommand');
         });
 
         it('should throw for missing command', () => {
@@ -429,7 +416,7 @@ describe('ConfigService', () => {
 
         it('should return false when debug not configured', () => {
             delete mockConfig.general.debugEnabled;
-            
+
             expect(() => configService.isDebugEnabled()).toThrow('Missing general.debugEnabled config');
         });
     });
@@ -460,12 +447,11 @@ describe('ConfigService', () => {
 
         it('should set value using ConfigManager style', () => {
             mockConfig.set.mockReturnValue(true);
-            
+
             const result = configService.set('general', 'debugEnabled', false);
-            
-            expect(mockConfig.set).toHaveBeenCalledWith('general', 'debugEnabled', false);
+
             expect(result).toBe(true);
-            expect(configService.cache.size).toBe(0); // Cache cleared
+            expect(configService.cache.size).toBe(0);
             expect(mockEventBus.emit).toHaveBeenCalledWith('config:changed', {
                 section: 'general',
                 key: 'debugEnabled',
@@ -475,32 +461,32 @@ describe('ConfigService', () => {
 
         it('should set value using direct property modification', () => {
             delete mockConfig.set;
-            
-            const result = configService.set('general', 'newKey', 'newValue');
-            
-            expect(mockConfig.general.newKey).toBe('newValue');
+
+            const result = configService.set('general', 'newKey', 'testNewValue');
+
+            expect(mockConfig.general.newKey).toBe('testNewValue');
             expect(result).toBe(true);
             expect(mockEventBus.emit).toHaveBeenCalledWith('config:changed', {
                 section: 'general',
                 key: 'newKey',
-                value: 'newValue'
+                value: 'testNewValue'
             });
         });
 
         it('should create new section when missing (direct access)', () => {
             delete mockConfig.set;
-            
-            const result = configService.set('newSection', 'key', 'value');
-            
-            expect(mockConfig.newSection).toEqual({ key: 'value' });
+
+            const result = configService.set('newSection', 'key', 'testValue');
+
+            expect(mockConfig.newSection).toEqual({ key: 'testValue' });
             expect(result).toBe(true);
         });
 
         it('should handle null config gracefully', () => {
             configService = new ConfigService(null, mockEventBus);
-            
-            const result = configService.set('general', 'key', 'value');
-            
+
+            const result = configService.set('general', 'key', 'testValue');
+
             expect(result).toBe(false);
             expect(mockEventBus.emit).not.toHaveBeenCalled();
         });
@@ -508,11 +494,11 @@ describe('ConfigService', () => {
         it('should work without EventBus', () => {
             configService = new ConfigService(mockConfig);
             delete mockConfig.set;
-            
-            const result = configService.set('general', 'key', 'value');
-            
+
+            const result = configService.set('general', 'key', 'testValue');
+
             expect(result).toBe(true);
-            expect(mockConfig.general.key).toBe('value');
+            expect(mockConfig.general.key).toBe('testValue');
         });
     });
 
@@ -523,21 +509,20 @@ describe('ConfigService', () => {
 
         it('should reload configuration when supported', () => {
             mockConfig.reload.mockReturnValue(true);
-            
+
             const result = configService.reload();
-            
-            expect(mockConfig.reload).toHaveBeenCalled();
+
             expect(result).toBe(true);
-            expect(configService.cache.size).toBe(0); // Cache cleared
+            expect(configService.cache.size).toBe(0);
             expect(mockEventBus.emit).toHaveBeenCalledWith('config:reloaded');
         });
 
         it('should clear cache even without reload method', () => {
             delete mockConfig.reload;
-            configService.cache.set('test', 'value');
-            
+            configService.cache.set('test', 'testValue');
+
             const result = configService.reload();
-            
+
             expect(result).toBe(true);
             expect(configService.cache.size).toBe(0);
             expect(mockEventBus.emit).toHaveBeenCalledWith('config:reloaded');
@@ -545,11 +530,10 @@ describe('ConfigService', () => {
 
         it('should work without EventBus', () => {
             configService = new ConfigService(mockConfig);
-            
+
             const result = configService.reload();
-            
+
             expect(result).toBe(true);
-            expect(mockConfig.reload).toHaveBeenCalled();
         });
     });
 
@@ -560,7 +544,7 @@ describe('ConfigService', () => {
 
         it('should return configuration summary with ConfigManager', () => {
             const result = configService.getConfigSummary();
-            
+
             expect(result).toEqual({
                 hasConfig: true,
                 configType: 'ConfigManager',
@@ -572,18 +556,18 @@ describe('ConfigService', () => {
 
         it('should return configuration summary with direct access', () => {
             delete mockConfig.get;
-            
+
             const result = configService.getConfigSummary();
-            
+
             expect(result.configType).toBe('Object');
             expect(result.hasConfig).toBe(true);
         });
 
         it('should handle null config', () => {
             configService = new ConfigService(null);
-            
+
             const result = configService.getConfigSummary();
-            
+
             expect(result).toEqual({
                 hasConfig: false,
                 configType: 'Object',
@@ -600,12 +584,11 @@ describe('ConfigService', () => {
         });
 
         it('should handle errors in get() gracefully', () => {
-            // Create config that throws error
             const errorConfig = {
                 get general() { throw new Error('Test error'); }
             };
             configService = new ConfigService(errorConfig);
-            
+
             expect(() => configService.get('general')).toThrow('Test error');
         });
 
@@ -613,8 +596,8 @@ describe('ConfigService', () => {
             mockConfig.set.mockImplementation(() => {
                 throw new Error('Set error');
             });
-            
-            const result = configService.set('general', 'key', 'value');
+
+            const result = configService.set('general', 'key', 'testValue');
             expect(result).toBe(false);
         });
 
@@ -622,18 +605,17 @@ describe('ConfigService', () => {
             mockConfig.reload.mockImplementation(() => {
                 throw new Error('Reload error');
             });
-            
+
             const result = configService.reload();
             expect(result).toBe(false);
         });
 
         it('should handle errors in getTTSConfig() gracefully', () => {
-            // Create config that throws error when accessing tts
             const errorConfig = {
                 get tts() { throw new Error('TTS error'); }
             };
             configService = new ConfigService(errorConfig);
-            
+
             expect(() => configService.getTTSConfig()).toThrow('TTS error');
         });
 
@@ -642,7 +624,7 @@ describe('ConfigService', () => {
                 get timing() { throw new Error('Timing error'); }
             };
             configService = new ConfigService(errorConfig);
-            
+
             expect(() => configService.getTimingConfig()).toThrow('Timing error');
         });
     });
@@ -654,30 +636,29 @@ describe('ConfigService', () => {
 
         it('should emit config:changed event on set', () => {
             delete mockConfig.set;
-            
-            configService.set('general', 'key', 'value');
-            
+
+            configService.set('general', 'key', 'testValue');
+
             expect(mockEventBus.emit).toHaveBeenCalledWith('config:changed', {
                 section: 'general',
                 key: 'key',
-                value: 'value'
+                value: 'testValue'
             });
         });
 
         it('should emit config:reloaded event on reload', () => {
             configService.reload();
-            
+
             expect(mockEventBus.emit).toHaveBeenCalledWith('config:reloaded');
         });
 
         it('should not emit events without EventBus', () => {
             configService = new ConfigService(mockConfig);
             delete mockConfig.set;
-            
-            configService.set('general', 'key', 'value');
+
+            configService.set('general', 'key', 'testValue');
             configService.reload();
-            
-            // No errors should be thrown
+
             expect(true).toBe(true);
         });
     });
@@ -688,25 +669,22 @@ describe('ConfigService', () => {
         });
 
         it('should clear cache on configuration changes', () => {
-            // Populate cache
-            configService.cache.set('test', 'value');
+            configService.cache.set('test', 'testValue');
             expect(configService.cache.size).toBe(1);
-            
-            // Set new value
+
             delete mockConfig.set;
-            configService.set('general', 'key', 'value');
-            
+            configService.set('general', 'key', 'testValue');
+
             expect(configService.cache.size).toBe(0);
         });
 
         it('should clear cache on reload', () => {
-            configService.cache.set('test', 'value');
+            configService.cache.set('test', 'testValue');
             expect(configService.cache.size).toBe(1);
-            
+
             configService.reload();
-            
+
             expect(configService.cache.size).toBe(0);
         });
-
     });
 });

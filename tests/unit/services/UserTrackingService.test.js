@@ -6,8 +6,8 @@ describe('UserTrackingService', () => {
     it('returns true for first message and false for repeats', () => {
         const service = new UserTrackingService();
 
-        expect(service.isFirstMessage('user-1', { platform: 'twitch' })).toBe(true);
-        expect(service.isFirstMessage('user-1', { platform: 'twitch' })).toBe(false);
+        expect(service.isFirstMessage('testUserId1', { platform: 'twitch' })).toBe(true);
+        expect(service.isFirstMessage('testUserId1', { platform: 'twitch' })).toBe(false);
     });
 
     it('returns false when userId is missing', () => {
@@ -21,7 +21,7 @@ describe('UserTrackingService', () => {
         const eventBus = { emit: createMockFn() };
         const service = new UserTrackingService(eventBus);
 
-        service.isFirstMessage('user-2', { username: 'Viewer', platform: 'twitch' });
+        service.isFirstMessage('testUserId2', { username: 'testViewer', platform: 'twitch' });
 
         expect(eventBus.emit).not.toHaveBeenCalled();
     });

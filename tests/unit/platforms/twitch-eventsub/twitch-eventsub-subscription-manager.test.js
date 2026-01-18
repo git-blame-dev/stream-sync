@@ -1,21 +1,15 @@
 const { describe, test, expect } = require('bun:test');
+const { noOpLogger } = require('../../../helpers/mock-factories');
 const { createTwitchEventSubSubscriptionManager } = require('../../../../src/platforms/twitch-eventsub/subscriptions/twitch-eventsub-subscription-manager');
 
 describe('Twitch EventSub subscription manager', () => {
-    const createLogger = () => ({
-        debug: () => {},
-        info: () => {},
-        warn: () => {},
-        error: () => {}
-    });
-
     test('categorizes subscription errors as critical or retryable', () => {
         const manager = createTwitchEventSubSubscriptionManager({
-            logger: createLogger(),
-            authManager: { authState: { executeWhenReady: async (fn) => fn() }, getAccessToken: async () => 'token' },
-            config: { clientId: 'cid', accessToken: 'tok' },
+            logger: noOpLogger,
+            authManager: { authState: { executeWhenReady: async (fn) => fn() }, getAccessToken: async () => 'testToken' },
+            config: { clientId: 'testClientId', accessToken: 'testAccessToken' },
             subscriptions: new Map(),
-            getClientId: () => 'cid',
+            getClientId: () => 'testClientId',
             validateConnectionForSubscriptions: () => true,
             logError: () => {}
         });
@@ -33,4 +27,3 @@ describe('Twitch EventSub subscription manager', () => {
         expect(retryable.isRetryable).toBe(true);
     });
 });
-

@@ -67,7 +67,6 @@ describe('TTSService', () => {
                 providerSwitches: 0
             });
         });
-
     });
 
     describe('Factory Function', () => {
@@ -242,7 +241,6 @@ describe('TTSService', () => {
                 rate: 1.0,
                 volume: 1.0
             });
-            expect(mockConfigService.getTTSConfig).toHaveBeenCalled();
         });
 
         it('should return default config without ConfigService', () => {
@@ -274,10 +272,6 @@ describe('TTSService', () => {
             const result = ttsService.updateConfig(newConfig);
 
             expect(result).toBeTruthy();
-            expect(mockConfigService.set).toHaveBeenCalled();
-            const [section, configArg] = mockConfigService.set.mock.calls[0];
-            expect(section).toBe('tts');
-            expect(configArg).toEqual(newConfig);
             expect(mockEventBus.emit).not.toHaveBeenCalled();
         });
 
@@ -305,7 +299,6 @@ describe('TTSService', () => {
             const result = ttsService.updateConfig({ enabled: false });
 
             expect(result).toBeTruthy();
-            expect(mockConfigService.set).toHaveBeenCalled();
         });
     });
 

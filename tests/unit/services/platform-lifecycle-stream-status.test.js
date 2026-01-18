@@ -1,6 +1,5 @@
 const { describe, test, expect, afterEach } = require('bun:test');
 const { createMockFn, clearAllMocks } = require('../../helpers/bun-mock-utils');
-const { EventEmitter } = require('events');
 const PlatformLifecycleService = require('../../../src/services/PlatformLifecycleService');
 
 describe('PlatformLifecycleService stream status events', () => {

@@ -1,19 +1,13 @@
 const { describe, test, expect } = require('bun:test');
+const { noOpLogger } = require('../../../helpers/mock-factories');
 const { createTwitchEventSubEventRouter } = require('../../../../src/platforms/twitch-eventsub/events/twitch-eventsub-event-router');
 
 describe('Twitch EventSub event router', () => {
-    const createLogger = () => ({
-        debug: () => {},
-        info: () => {},
-        warn: () => {},
-        error: () => {}
-    });
-
     test('emits chat message payloads with preserved timestamps for old-message filtering', () => {
         const emitted = [];
         const router = createTwitchEventSubEventRouter({
             config: { channel: 'streamer', dataLoggingEnabled: false },
-            logger: createLogger(),
+            logger: noOpLogger,
             emit: (type, payload) => emitted.push({ type, payload }),
             logRawPlatformData: async () => {},
             logError: () => {}
@@ -38,7 +32,7 @@ describe('Twitch EventSub event router', () => {
         const emitted = [];
         const router = createTwitchEventSubEventRouter({
             config: { dataLoggingEnabled: false },
-            logger: createLogger(),
+            logger: noOpLogger,
             emit: (type, payload) => emitted.push({ type, payload }),
             logRawPlatformData: async () => {},
             logError: () => {}
@@ -57,7 +51,7 @@ describe('Twitch EventSub event router', () => {
         const emitted = [];
         const router = createTwitchEventSubEventRouter({
             config: { dataLoggingEnabled: false },
-            logger: createLogger(),
+            logger: noOpLogger,
             emit: (type, payload) => emitted.push({ type, payload }),
             logRawPlatformData: async () => {},
             logError: () => {}
@@ -94,7 +88,7 @@ describe('Twitch EventSub event router', () => {
         const emitted = [];
         const router = createTwitchEventSubEventRouter({
             config: { dataLoggingEnabled: false },
-            logger: createLogger(),
+            logger: noOpLogger,
             emit: (type, payload) => emitted.push({ type, payload }),
             logRawPlatformData: async () => {},
             logError: () => {}
@@ -127,7 +121,7 @@ describe('Twitch EventSub event router', () => {
         const emitted = [];
         const router = createTwitchEventSubEventRouter({
             config: { dataLoggingEnabled: false },
-            logger: createLogger(),
+            logger: noOpLogger,
             emit: (type, payload) => emitted.push({ type, payload }),
             logRawPlatformData: async () => {},
             logError: () => {}
@@ -162,7 +156,7 @@ describe('Twitch EventSub event router', () => {
         const emitted = [];
         const router = createTwitchEventSubEventRouter({
             config: { dataLoggingEnabled: false },
-            logger: createLogger(),
+            logger: noOpLogger,
             emit: (type, payload) => emitted.push({ type, payload }),
             logRawPlatformData: async () => {},
             logError: () => {}
