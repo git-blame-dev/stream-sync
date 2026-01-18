@@ -6,7 +6,7 @@ const PlatformEventRouter = require('../../src/services/PlatformEventRouter');
 const NotificationManager = require('../../src/notifications/NotificationManager');
 const { DisplayQueue } = require('../../src/obs/display-queue');
 const constants = require('../../src/core/constants');
-const { createMockOBSConnection } = require('../helpers/mock-factories');
+const { createMockOBSConnection, noOpLogger } = require('../helpers/mock-factories');
 const { createRuntimeConstantsFixture } = require('../helpers/runtime-constants-fixture');
 const { createTextProcessingManager } = require('../../src/utils/text-processing');
 const { PlatformEvents } = require('../../src/interfaces/PlatformEvents');
@@ -65,7 +65,22 @@ describe('Monetisation pipeline integration', () => {
         displayQueue = new DisplayQueue(mockObs, config, constants, eventBus, runtimeConstants);
         displayQueue.playGiftVideoAndAudio = createMockFn().mockResolvedValue();
         displayQueue.isTTSEnabled = createMockFn(() => false);
+        displayQueue.getDuration = createMockFn(() => 0);
         spyOn(displayQueue, 'addItem');
+
+        displayQueue.processQueue = createMockFn(async () => {
+            while (displayQueue.queue.length > 0) {
+                const item = displayQueue.queue.shift();
+                const commandKey = item.data?.commandKey || (item.type === 'platform:paypiggy' ? 'paypiggies' : 'gifts');
+                eventBus.emit(PlatformEvents.VFX_COMMAND_RECEIVED, {
+                    commandKey,
+                    username: item.data?.username,
+                    platform: item.platform,
+                    userId: item.data?.userId,
+                    context: { source: 'display-queue' }
+                });
+            }
+        });
 
         const vfxCommandService = {
             executeCommand: createMockFn(),
@@ -75,7 +90,7 @@ describe('Monetisation pipeline integration', () => {
                 filename: `${commandKey}.mp4`,
                 mediaSource: 'vfx top',
                 vfxFilePath: '/test/vfx/path',
-                duration: 5000
+                duration: 10
             }))
         };
 
@@ -101,16 +116,10 @@ describe('Monetisation pipeline integration', () => {
             isDebugEnabled: createMockFn(() => false)
         };
 
-        const logger = {
-            info: createMockFn(),
-            debug: createMockFn(),
-            warn: createMockFn(),
-            error: createMockFn()
-        };
-        const textProcessing = createTextProcessingManager({ logger });
+        const textProcessing = createTextProcessingManager({ logger: noOpLogger });
 
         notificationManager = new NotificationManager({
-            logger,
+            logger: noOpLogger,
             constants,
             textProcessing,
             obsGoals: { processDonationGoal: createMockFn() },
@@ -142,12 +151,7 @@ describe('Monetisation pipeline integration', () => {
             runtime,
             notificationManager,
             configService,
-            logger: {
-                info: createMockFn(),
-                debug: createMockFn(),
-                warn: createMockFn(),
-                error: createMockFn()
-            }
+            logger: noOpLogger
         });
     });
 
