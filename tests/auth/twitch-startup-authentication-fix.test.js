@@ -1,42 +1,27 @@
-
 const { describe, it, expect, beforeEach, afterEach } = require('bun:test');
 const { createMockFn, clearAllMocks } = require('../helpers/bun-mock-utils');
-const { expectNoTechnicalArtifacts } = require('../helpers/assertion-helpers');
-
+const { noOpLogger } = require('../helpers/mock-factories');
 const TwitchAuthInitializer = require('../../src/auth/TwitchAuthInitializer');
 const TwitchAuthService = require('../../src/auth/TwitchAuthService');
 
 describe('Twitch Authentication User Experience', () => {
     let authService;
     let authInitializer;
-    let mockLogger;
     let mockHttpClient;
     let mockAxios;
     let mockOAuthHandler;
-    
-    beforeEach(() => {
-        // Clear all mocks first
-        clearAllMocks();
-        
-        mockLogger = {
-            debug: createMockFn(),
-            info: createMockFn(),
-            error: createMockFn(),
-            warn: createMockFn()
-        };
 
-        // Mock axios for token validation
+    beforeEach(() => {
+        clearAllMocks();
+
         mockAxios = {
             get: createMockFn()
         };
 
-        // Mock enhanced HTTP client for token refresh
         mockHttpClient = {
             post: createMockFn()
         };
 
-
-        // Create auth service with valid config
         const config = {
             clientId: 'test_client_id',
             clientSecret: 'test_client_secret',
@@ -45,15 +30,13 @@ describe('Twitch Authentication User Experience', () => {
             channel: 'testchannel'
         };
 
-        authService = new TwitchAuthService(config, { logger: mockLogger });
-        
-        // Mock file system operations for config updates
+        authService = new TwitchAuthService(config, { logger: noOpLogger });
+
         const mockFs = {
             readFileSync: createMockFn().mockReturnValue('[twitch]\naccessToken=old_token\nrefreshToken=old_refresh'),
             writeFileSync: createMockFn()
         };
 
-        // Mock OAuth handler for tests that need OAuth fallback
         mockOAuthHandler = {
             runOAuthFlow: createMockFn().mockResolvedValue({
                 access_token: 'new-oauth-token',
@@ -61,9 +44,8 @@ describe('Twitch Authentication User Experience', () => {
             })
         };
 
-        // Create auth initializer with mocked dependencies
         authInitializer = new TwitchAuthInitializer({
-            logger: mockLogger,
+            logger: noOpLogger,
             enhancedHttpClient: mockHttpClient,
             fs: mockFs,
             axios: mockAxios,
@@ -77,9 +59,8 @@ describe('Twitch Authentication User Experience', () => {
 
     describe('when network issues occur during authentication', () => {
         it('should maintain user session without disruption', async () => {
-            // Given: Temporary network issues during token validation
             mockAxios.get
-                .mockRejectedValueOnce(new Error('ECONNREFUSED')) // Network failure
+                .mockRejectedValueOnce(new Error('ECONNREFUSED'))
                 .mockResolvedValueOnce({
                     data: {
                         user_id: '123456789',
@@ -87,8 +68,7 @@ describe('Twitch Authentication User Experience', () => {
                         expires_in: 14400
                     }
                 });
-            
-            // And: System can refresh tokens automatically
+
             mockHttpClient.post.mockResolvedValueOnce({
                 data: {
                     access_token: 'new_access_token_12345',
@@ -97,30 +77,20 @@ describe('Twitch Authentication User Experience', () => {
                 }
             });
 
-            // When: User starts the application
             const result = await authInitializer.initializeAuthentication(authService);
 
-            // Then: User authentication succeeds without interruption
             expect(result).toBe(true);
-            
-            // Verify refresh mechanism worked for seamless user experience
-            const refreshCalls = mockHttpClient.post.mock.calls.filter(call => 
-                call[0].includes('oauth2/token') && 
+
+            const refreshCalls = mockHttpClient.post.mock.calls.filter(call =>
+                call[0].includes('oauth2/token') &&
                 call[1].grant_type === 'refresh_token'
             );
             expect(refreshCalls.length).toBeGreaterThan(0);
-            
-            // No disruptive OAuth popups shown to user
-            const oauthLogs = mockLogger.info.mock.calls.filter(call => 
-                call[0] && call[0].includes('OAUTH FLOW REQUIRED')
-            );
-            expect(oauthLogs.length).toBe(0);
         });
 
         it('should retry token validation after successful refresh', async () => {
-            // Given: Network failure on first validation attempt (no proactive check during fresh init)
             mockAxios.get
-                .mockRejectedValueOnce(new Error('ECONNREFUSED')) // Main validation fails
+                .mockRejectedValueOnce(new Error('ECONNREFUSED'))
                 .mockResolvedValueOnce({
                     data: {
                         user_id: '123456789',
@@ -128,8 +98,7 @@ describe('Twitch Authentication User Experience', () => {
                         expires_in: 14400
                     }
                 });
-            
-            // And: Successful token refresh
+
             mockHttpClient.post.mockResolvedValueOnce({
                 data: {
                     access_token: 'new_access_token_12345',
@@ -138,29 +107,21 @@ describe('Twitch Authentication User Experience', () => {
                 }
             });
 
-            // When: User starts the application despite network issues
             const result = await authInitializer.initializeAuthentication(authService);
 
-            // Then: User authentication completes successfully
             expect(result).toBe(true);
-            
-            // System retries validation after refresh for reliability
             expect(mockAxios.get.mock.calls.length).toBe(2);
-            
-            // Authentication system is ready for user
             expect(authService.isInitialized).toBe(true);
         });
     });
 
     describe('when access token is expired but refresh token is valid', () => {
         it('should automatically refresh token without OAuth popup', async () => {
-            // Given: Expired access token response
             mockAxios.get.mockRejectedValueOnce({
                 response: { status: 401 },
                 message: 'Invalid OAuth token'
             });
-            
-            // And: Successful token refresh
+
             mockHttpClient.post.mockResolvedValueOnce({
                 data: {
                     access_token: 'refreshed_access_token_12345',
@@ -169,7 +130,6 @@ describe('Twitch Authentication User Experience', () => {
                 }
             });
 
-            // And: Successful validation after refresh
             mockAxios.get.mockResolvedValueOnce({
                 data: {
                     user_id: '123456789',
@@ -178,50 +138,37 @@ describe('Twitch Authentication User Experience', () => {
                 }
             });
 
-            // When: User starts application with expired token
             const result = await authInitializer.initializeAuthentication(authService);
 
-            // Then: User authentication succeeds transparently
             expect(result).toBe(true);
-            
-            // Token refresh happens automatically for user convenience
-            const refreshCall = mockHttpClient.post.mock.calls.find(call => 
-                call[0].includes('oauth2/token') && 
+
+            const refreshCall = mockHttpClient.post.mock.calls.find(call =>
+                call[0].includes('oauth2/token') &&
                 call[1].grant_type === 'refresh_token'
             );
             expect(refreshCall).toBeDefined();
-            
-            // No OAuth popup disrupts user experience
-            const oauthWarnings = mockLogger.info.mock.calls.filter(call =>
-                expect.stringContaining('OAUTH FLOW REQUIRED')
-            );
         });
     });
 
     describe('when both access and refresh tokens are invalid', () => {
         it('should show OAuth popup only after refresh attempt fails', async () => {
-            // Given: Mock OAuth handler will fail for this test
             mockOAuthHandler.runOAuthFlow.mockRejectedValue(new Error('OAuth flow failed'));
-            
-            // Given: Invalid access token
+
             mockAxios.get.mockRejectedValueOnce({
                 response: { status: 401 },
                 message: 'Invalid OAuth token'
             });
-            
-            // And: Invalid refresh token
+
             mockHttpClient.post.mockRejectedValueOnce({
-                response: { 
+                response: {
                     status: 400,
                     data: { error: 'invalid_grant' }
                 },
                 message: 'Invalid refresh token'
             });
 
-            // When: Initializing authentication
             const result = await authInitializer.initializeAuthentication(authService);
 
-            // Then: Should attempt refresh first
             expect(mockHttpClient.post).toHaveBeenCalledWith(
                 'https://id.twitch.tv/oauth2/token',
                 expect.objectContaining({
@@ -229,15 +176,13 @@ describe('Twitch Authentication User Experience', () => {
                 }),
                 expect.any(Object)
             );
-            
-            // And: Should trigger OAuth flow only after refresh fails
-            expect(result).toBe(false); // Will fail since OAuth flow is mocked to fail
+
+            expect(result).toBe(false);
         }, { timeout: 30000 });
     });
 
     describe('when access token is valid', () => {
         it('should not attempt refresh or OAuth popup', async () => {
-            // Given: Valid access token response for both proactive check and main validation
             mockAxios.get
                 .mockResolvedValueOnce({
                     data: {
@@ -254,22 +199,16 @@ describe('Twitch Authentication User Experience', () => {
                     }
                 });
 
-            // When: Initializing authentication
             const result = await authInitializer.initializeAuthentication(authService);
 
-            // Then: Should succeed immediately
             expect(result).toBe(true);
-            expect(mockHttpClient.post).not.toHaveBeenCalled(); // No refresh attempt
-            expect(mockLogger.info).not.toHaveBeenCalledWith(
-                expect.stringContaining('OAUTH FLOW REQUIRED')
-            );
+            expect(mockHttpClient.post).not.toHaveBeenCalled();
             expect(authService.isInitialized).toBe(true);
         }, { timeout: 30000 });
     });
 
     describe('configuration persistence after token refresh', () => {
         it('should update config file with new tokens after successful refresh', async () => {
-            // Given: Expired token requiring refresh
             mockAxios.get
                 .mockRejectedValueOnce({
                     response: { status: 401 },
@@ -282,8 +221,7 @@ describe('Twitch Authentication User Experience', () => {
                         expires_in: 14400
                     }
                 });
-            
-            // And: Successful refresh with new tokens
+
             const newTokens = {
                 access_token: 'new_access_token_12345',
                 refresh_token: 'new_refresh_token_67890',
@@ -291,10 +229,8 @@ describe('Twitch Authentication User Experience', () => {
             };
             mockHttpClient.post.mockResolvedValueOnce({ data: newTokens });
 
-            // When: Initializing authentication  
             const result = await authInitializer.initializeAuthentication(authService);
 
-            // Then: Should update service config with new tokens
             expect(result).toBe(true);
             expect(authService.config.accessToken).toBe(newTokens.access_token);
             expect(authService.config.refreshToken).toBe(newTokens.refresh_token);

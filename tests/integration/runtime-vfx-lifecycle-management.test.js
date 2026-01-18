@@ -1,7 +1,5 @@
-
 const { describe, test, beforeEach, afterEach, expect } = require('bun:test');
 const { clearAllMocks, createMockFn, restoreAllMocks } = require('../helpers/bun-mock-utils');
-
 const { TEST_TIMEOUTS } = require('../helpers/test-setup');
 const { setupAutomatedCleanup } = require('../helpers/mock-lifecycle');
 const { AppRuntime } = require('../../src/main');
@@ -16,8 +14,6 @@ setupAutomatedCleanup({
     logPerformanceMetrics: true
 });
 
-// OBS auto-mocks in test environment (see src/obs/connection.js line 45-56)
-
 describe('AppRuntime VFXCommandService Lifecycle Management', () => {
     let runtime;
     let config;
@@ -25,7 +21,6 @@ describe('AppRuntime VFXCommandService Lifecycle Management', () => {
     beforeEach(() => {
         clearAllMocks();
 
-        // Minimal config for VFX testing
         config = {
             general: {
                 greetingsEnabled: true,
@@ -52,14 +47,11 @@ describe('AppRuntime VFXCommandService Lifecycle Management', () => {
 
     describe('VFXCommandService Initialization', () => {
         test('should initialize VFXCommandService during AppRuntime startup', async () => {
-            // GIVEN: AppRuntime with VFX configuration
             const { dependencies } = createAppRuntimeTestDependencies();
             runtime = new AppRuntime(config, dependencies);
 
-            // WHEN: AppRuntime starts
             await runtime.start();
 
-            // THEN: VFXCommandService should be available
             expect(runtime.vfxCommandService).toBeDefined();
             expect(runtime.vfxCommandService).not.toBeNull();
             expect(typeof runtime.vfxCommandService.executeCommand).toBe('function');
@@ -68,12 +60,10 @@ describe('AppRuntime VFXCommandService Lifecycle Management', () => {
 
     describe('EventBus VFX Command Integration', () => {
         test('should execute VFX commands via EventBus', async () => {
-            // GIVEN: Running AppRuntime with VFXCommandService
             const { dependencies } = createAppRuntimeTestDependencies();
             runtime = new AppRuntime(config, dependencies);
             await runtime.start();
 
-            // Track VFX execution
             let vfxExecuted = false;
             const originalExecuteCommand = runtime.vfxCommandService.executeCommand;
             runtime.vfxCommandService.executeCommand = createMockFn(async (...args) => {
@@ -81,7 +71,6 @@ describe('AppRuntime VFXCommandService Lifecycle Management', () => {
                 return originalExecuteCommand.apply(runtime.vfxCommandService, args);
             });
 
-            // WHEN: VFX command event is emitted
             runtime.eventBus.emit(PlatformEvents.VFX_COMMAND_RECEIVED, {
                 command: '!hello',
                 username: 'TestUser',
@@ -90,25 +79,20 @@ describe('AppRuntime VFXCommandService Lifecycle Management', () => {
                 context: { skipCooldown: true, correlationId: 'corr-1' }
             });
 
-            // Allow async processing
             await new Promise(resolve => setImmediate(resolve));
 
-            // THEN: VFX should execute
             expect(vfxExecuted).toBe(true);
         }, { timeout: TEST_TIMEOUTS.INTEGRATION });
 
         test('should handle VFX command errors gracefully', async () => {
-            // GIVEN: Running AppRuntime
             const { dependencies } = createAppRuntimeTestDependencies();
             runtime = new AppRuntime(config, dependencies);
             await runtime.start();
 
-            // Mock executeCommand to throw error
             runtime.vfxCommandService.executeCommand = createMockFn().mockRejectedValue(
                 new Error('VFX execution failed')
             );
 
-            // WHEN: VFX command event is emitted
             runtime.eventBus.emit(PlatformEvents.VFX_COMMAND_RECEIVED, {
                 command: '!invalid',
                 username: 'TestUser',
@@ -117,23 +101,18 @@ describe('AppRuntime VFXCommandService Lifecycle Management', () => {
                 context: { skipCooldown: true, correlationId: 'corr-2' }
             });
 
-            // Allow async processing
             await new Promise(resolve => setImmediate(resolve));
 
-            // THEN: System should continue (no crash)
             expect(runtime.vfxCommandService.executeCommand).toHaveBeenCalledTimes(1);
         }, { timeout: TEST_TIMEOUTS.INTEGRATION });
 
         test('should ignore events emitted by VFXCommandService to prevent recursion', async () => {
-            // GIVEN: Running AppRuntime
             const { dependencies } = createAppRuntimeTestDependencies();
             runtime = new AppRuntime(config, dependencies);
             await runtime.start();
 
-            // AND: Spy on executeCommand
             runtime.vfxCommandService.executeCommand = createMockFn();
 
-            // WHEN: EventBus receives event sourced from VFX service
             runtime.eventBus.emit(PlatformEvents.VFX_COMMAND_RECEIVED, {
                 command: '!hello',
                 username: 'LoopTester',
@@ -145,7 +124,6 @@ describe('AppRuntime VFXCommandService Lifecycle Management', () => {
 
             await new Promise(resolve => setImmediate(resolve));
 
-            // THEN: AppRuntime should ignore the event to avoid infinite loops
             expect(runtime.vfxCommandService.executeCommand).not.toHaveBeenCalled();
         }, { timeout: TEST_TIMEOUTS.INTEGRATION });
 
@@ -243,7 +221,6 @@ describe('AppRuntime VFXCommandService Lifecycle Management', () => {
             runtime = new AppRuntime(config, dependencies);
             await runtime.start();
 
-            // Simulate missing VFX service (e.g., initialization failure)
             runtime.vfxCommandService = null;
 
             runtime.eventBus.emit(PlatformEvents.VFX_COMMAND_RECEIVED, {
@@ -256,7 +233,6 @@ describe('AppRuntime VFXCommandService Lifecycle Management', () => {
 
             await new Promise(resolve => setImmediate(resolve));
 
-            // No VFX service means nothing executes, but handler should not crash
             expect(runtime.vfxCommandService).toBeNull();
         }, { timeout: TEST_TIMEOUTS.INTEGRATION });
 
@@ -345,18 +321,14 @@ describe('AppRuntime VFXCommandService Lifecycle Management', () => {
 
     describe('AppRuntime Lifecycle Management', () => {
         test('should maintain VFXCommandService throughout AppRuntime lifecycle', async () => {
-            // GIVEN: AppRuntime startup
             const { dependencies } = createAppRuntimeTestDependencies();
             runtime = new AppRuntime(config, dependencies);
             await runtime.start();
 
             const vfxServiceBeforeStop = runtime.vfxCommandService;
 
-            // WHEN: AppRuntime lifecycle continues
-            // (simulate runtime operation)
             await safeDelay(100);
 
-            // THEN: VFXCommandService should remain available
             expect(runtime.vfxCommandService).toBe(vfxServiceBeforeStop);
             expect(runtime.vfxCommandService).toBeDefined();
         }, { timeout: TEST_TIMEOUTS.INTEGRATION });
