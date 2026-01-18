@@ -1,22 +1,11 @@
-
 const { describe, test, expect, afterEach } = require('bun:test');
 const { createMockFn, restoreAllMocks } = require('../helpers/bun-mock-utils');
-const { restoreAllModuleMocks } = require('../helpers/bun-module-mocks');
-
 const { createMockNotificationManager } = require('../helpers/mock-factories');
-const { setupAutomatedCleanup } = require('../helpers/mock-lifecycle');
 const { createTestAppRuntime } = require('../helpers/runtime-test-harness');
-
-setupAutomatedCleanup({
-    clearCallsBeforeEach: true,
-    validateAfterCleanup: true,
-    logPerformanceMetrics: true
-});
 
 describe('SuperSticker Notification Handling', () => {
     afterEach(() => {
         restoreAllMocks();
-        restoreAllModuleMocks();
     });
 
     test('routes SuperSticker payloads through handleGiftNotification', async () => {

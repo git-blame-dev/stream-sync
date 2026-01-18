@@ -1,20 +1,6 @@
-
 const { describe, test, expect } = require('bun:test');
-
-const { initializeTestLogging } = require('../helpers/test-setup');
-const { setupAutomatedCleanup } = require('../helpers/mock-lifecycle');
 const NotificationBuilder = require('../../src/utils/notification-builder');
 const { generateLogMessage, createNotificationData } = require('../helpers/notification-test-utils');
-
-// Initialize logging FIRST (required for all tests)
-initializeTestLogging();
-
-// Setup automated cleanup (no manual mock management)
-setupAutomatedCleanup({
-    clearCallsBeforeEach: true,
-    validateAfterCleanup: true,
-    logPerformanceMetrics: true
-});
 
 describe('Greeting Notification Console Output', () => {
     test('generates console log text for greeting notifications using NotificationBuilder output', () => {
