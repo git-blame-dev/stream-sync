@@ -1,5 +1,5 @@
 const { describe, test, expect } = require('bun:test');
-const { createMockFn } = require('../../../helpers/bun-mock-utils');
+const { noOpLogger } = require('../../../helpers/mock-factories');
 const { ConfigValidator } = require('../../../../src/utils/config-validator');
 
 const {
@@ -8,12 +8,7 @@ const {
 } = require('../../../../src/platforms/tiktok/config/tiktok-config');
 
 describe('TikTok config helpers', () => {
-    const logger = {
-        debug: createMockFn(),
-        info: createMockFn(),
-        warn: createMockFn(),
-        error: createMockFn()
-    };
+    const logger = noOpLogger;
 
     test('normalizes TikTok config values while dropping unsupported keys', () => {
         const configValidator = new ConfigValidator(logger);

@@ -1,5 +1,6 @@
 const { describe, test, expect } = require('bun:test');
 const { createMockFn } = require('../../../helpers/bun-mock-utils');
+const { noOpLogger } = require('../../../helpers/mock-factories');
 const {
     createTikTokGiftAggregator
 } = require('../../../../src/platforms/tiktok/gifts/tiktok-gift-aggregator');
@@ -20,7 +21,7 @@ describe('TikTok gift aggregator', () => {
         const platform = {
             giftAggregation: {},
             giftAggregationDelay: 2000,
-            logger: { debug: createMockFn(), info: createMockFn(), warn: createMockFn() },
+            logger: noOpLogger,
             errorHandler: { handleEventProcessingError: createMockFn() },
             _handleGift: async () => undefined
         };

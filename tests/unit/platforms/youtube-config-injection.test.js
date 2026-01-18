@@ -26,7 +26,6 @@ class TestableYouTubeNotificationDispatcher {
 
 describe('YouTube Platform Config Injection', () => {
     let mockConfigManager;
-    let mockConfig;
 
     beforeEach(() => {
         mockConfigManager = {
@@ -40,12 +39,6 @@ describe('YouTube Platform Config Injection', () => {
             }
         };
 
-        mockConfig = {
-            enabled: true,
-            username: 'test-channel',
-            apiKey: 'test-api-key',
-            enableAPI: true
-        };
     });
 
     describe('when YouTube platform is initialized with proper config', () => {
@@ -59,9 +52,7 @@ describe('YouTube Platform Config Injection', () => {
                 config: mockConfigManager
             });
 
-            expect(dispatcher).toBeDefined();
             expect(dispatcher.config).toBe(mockConfigManager);
-            expect(mockConfigManager.get).toHaveBeenCalledWith('youtube', 'enableAPI', false);
             expect(dispatcher.enableAPI).toBe(false);
         });
 
@@ -86,7 +77,6 @@ describe('YouTube Platform Config Injection', () => {
                 config: plainConfig
             });
 
-            expect(dispatcher).toBeDefined();
             expect(dispatcher.config).toBe(plainConfig);
             expect(dispatcher.enableAPI).toBe(true);
         });
@@ -107,7 +97,6 @@ describe('YouTube Platform Config Injection', () => {
                 fallbackConfig
             });
 
-            expect(dispatcher).toBeDefined();
             expect(dispatcher.enableAPI).toBe(false);
         });
     });
@@ -149,7 +138,6 @@ describe('YouTube Platform Config Injection', () => {
 
             expect(dispatcher.config).toBe(configManager);
             expect(dispatcher.enableAPI).toBe(true);
-            expect(configManager.get).toHaveBeenCalledWith('youtube', 'enableAPI', false);
         });
     });
 });

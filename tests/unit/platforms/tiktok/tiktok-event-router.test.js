@@ -1,5 +1,6 @@
 const { describe, test, expect, afterEach } = require('bun:test');
 const { createMockFn, restoreAllMocks } = require('../../../helpers/bun-mock-utils');
+const { noOpLogger } = require('../../../helpers/mock-factories');
 const {
     setupTikTokEventListeners
 } = require('../../../../src/platforms/tiktok/events/tiktok-event-router');
@@ -46,11 +47,7 @@ describe('TikTok event router', () => {
             timestampService: null,
             selfMessageDetectionService: null,
             config: { dataLoggingEnabled: false },
-            logger: {
-                debug: createMockFn(),
-                info: createMockFn(),
-                warn: createMockFn()
-            },
+            logger: noOpLogger,
             errorHandler: {
                 handleConnectionError: createMockFn(),
                 handleEventProcessingError: createMockFn(),

@@ -1,5 +1,6 @@
 const { describe, test, expect } = require('bun:test');
 const { createMockFn } = require('../../../helpers/bun-mock-utils');
+const { noOpLogger } = require('../../../helpers/mock-factories');
 const {
     createTikTokConnectionOrchestrator
 } = require('../../../../src/platforms/tiktok/connection/tiktok-connection-orchestrator');
@@ -7,7 +8,7 @@ const {
 describe('TikTok connection orchestrator', () => {
     test('connect is a no-op when connection prerequisites fail', async () => {
         const platform = {
-            logger: { debug: createMockFn(), info: createMockFn(), warn: createMockFn() },
+            logger: noOpLogger,
             config: { username: '' },
             connectingPromise: null,
             connectionActive: false,

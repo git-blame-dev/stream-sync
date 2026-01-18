@@ -1,19 +1,12 @@
 const { describe, test, expect } = require('bun:test');
 const { createMockFn } = require('../../helpers/bun-mock-utils');
+const { noOpLogger } = require('../../helpers/mock-factories');
 
 const { createYouTubeConnectionFactory } = require('../../../src/platforms/youtube/connections/youtube-connection-factory');
 
-const createLogger = () => ({
-    debug: createMockFn(),
-    info: createMockFn(),
-    warn: createMockFn(),
-    error: createMockFn()
-});
-
 const createFactory = ({ validationResult, liveChatBehavior }) => {
-    const logger = createLogger();
     const platform = {
-        logger,
+        logger: noOpLogger,
         _validateVideoForConnection: createMockFn().mockReturnValue(validationResult)
     };
 
