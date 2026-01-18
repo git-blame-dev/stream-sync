@@ -24,7 +24,7 @@ function _resetDependencies() {
 let handcamGlowErrorHandler = null;
 
 function handleHandcamGlowError(message, error, payload = null) {
-    const logger = moduleDeps.logger;
+    const { logger } = moduleDeps;
     if (!handcamGlowErrorHandler && logger) {
         handcamGlowErrorHandler = createPlatformErrorHandler(logger, 'handcam-glow');
     }
