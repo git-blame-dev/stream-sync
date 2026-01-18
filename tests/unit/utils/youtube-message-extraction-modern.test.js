@@ -24,8 +24,6 @@ describe('YouTube Message Extraction - Modern (Production Data)', () => {
     describe('Chat Message Text Extraction', () => {
         it('extracts plain text from chat message', () => {
             const text = YouTubeMessageExtractor.extractMessageText(realChatMessage.item.message);
-
-            // User-visible outcome: message text extracted
             expect(text).toBe('Test chat message');
         });
 
@@ -38,8 +36,6 @@ describe('YouTube Message Extraction - Modern (Production Data)', () => {
             };
 
             const text = YouTubeMessageExtractor.extractMessageText(message);
-
-            // User-visible outcome: text from runs
             expect(text).toBe('Full message text');
         });
 
@@ -53,8 +49,6 @@ describe('YouTube Message Extraction - Modern (Production Data)', () => {
             };
 
             const text = YouTubeMessageExtractor.extractMessageText(message);
-
-            // User-visible outcome: all runs combined
             expect(text).toBe('Hello world!');
         });
     });
@@ -62,32 +56,23 @@ describe('YouTube Message Extraction - Modern (Production Data)', () => {
     describe('SuperChat Message Extraction', () => {
         it('extracts message from SuperChat', () => {
             const text = YouTubeMessageExtractor.extractMessageText(realSuperChat.item.message);
-
-            // User-visible outcome: SuperChat message extracted
             expect(text).toBe('Thanks for the stream!');
         });
     });
 
     describe('SuperSticker Handling', () => {
         it('returns empty string for SuperSticker (no message field)', () => {
-            // SuperStickers don't have messages in real YouTube API
             const text = YouTubeMessageExtractor.extractMessageText(realSuperSticker.item.message);
-
-            // User-visible outcome: no message for stickers
             expect(text).toBe('');
         });
 
         it('handles undefined message gracefully', () => {
             const text = YouTubeMessageExtractor.extractMessageText(undefined);
-
-            // User-visible outcome: graceful fallback
             expect(text).toBe('');
         });
 
         it('handles null message gracefully', () => {
             const text = YouTubeMessageExtractor.extractMessageText(null);
-
-            // User-visible outcome: graceful fallback
             expect(text).toBe('');
         });
     });
@@ -100,8 +85,6 @@ describe('YouTube Message Extraction - Modern (Production Data)', () => {
             };
 
             const text = YouTubeMessageExtractor.extractMessageText(message);
-
-            // User-visible outcome: empty string
             expect(text).toBe('');
         });
 
@@ -112,21 +95,17 @@ describe('YouTube Message Extraction - Modern (Production Data)', () => {
             };
 
             const text = YouTubeMessageExtractor.extractMessageText(message);
-
-            // User-visible outcome: whitespace preserved (YouTube's choice)
             expect(text).toBe('   ');
         });
 
         it('handles missing text property', () => {
             const message = {
                 runs: [
-                    { bold: true }  // No text property
+                    { bold: true }
                 ]
             };
 
             const text = YouTubeMessageExtractor.extractMessageText(message);
-
-            // User-visible outcome: empty when no text
             expect(text).toBe('');
         });
     });
@@ -142,8 +121,6 @@ describe('YouTube Message Extraction - Modern (Production Data)', () => {
             const simulatedDurationMs = 25;
             testClock.advance(simulatedDurationMs);
             const duration = testClock.now() - start;
-
-            // User-visible outcome: fast extraction
             expect(duration).toBeLessThan(50);
         });
     });
