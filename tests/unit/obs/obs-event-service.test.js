@@ -1,7 +1,6 @@
-
 const { describe, test, expect, beforeEach, afterEach } = require('bun:test');
 const { createMockFn, restoreAllMocks } = require('../../helpers/bun-mock-utils');
-
+const { noOpLogger } = require('../../helpers/mock-factories');
 const { createEventBus } = require('../../../src/core/EventBus');
 const testClock = require('../../helpers/test-clock');
 
@@ -12,10 +11,8 @@ describe('OBSEventService', () => {
     let mockObsSources;
 
     beforeEach(() => {
-        // Create fresh event bus
         eventBus = createEventBus({ debugEnabled: false });
 
-        // Mock OBS connection
         mockOBSConnection = {
             connect: createMockFn().mockResolvedValue(true),
             disconnect: createMockFn().mockResolvedValue(undefined),
@@ -32,25 +29,18 @@ describe('OBSEventService', () => {
             })
         };
 
-        // Mock OBS sources
         mockObsSources = {
             updateTextSource: createMockFn().mockResolvedValue(undefined),
             setSourceVisibility: createMockFn().mockResolvedValue(undefined),
             clearTextSource: createMockFn().mockResolvedValue(undefined)
         };
 
-        // Import OBSEventService after mocks are set up
         const { createOBSEventService } = require('../../../src/obs/obs-event-service');
         obsEventService = createOBSEventService({
             eventBus,
             obsConnection: mockOBSConnection,
             obsSources: mockObsSources,
-            logger: {
-                debug: createMockFn(),
-                info: createMockFn(),
-                warn: createMockFn(),
-                error: createMockFn()
-            },
+            logger: noOpLogger,
             reconnectConfig: {
                 maxAttempts: 3,
                 baseDelay: 10,
@@ -241,7 +231,6 @@ describe('OBSEventService', () => {
 
     describe('Error Recovery', () => {
         test('attempts automatic reconnection after connection loss', async () => {
-            // Simulate connection loss
             await obsEventService.connect();
             eventBus.emit('obs:connection-lost');
 
@@ -251,7 +240,6 @@ describe('OBSEventService', () => {
         });
 
         test('reconnects successfully after connection loss', async () => {
-            // Simulate connection loss and recovery
             await obsEventService.connect();
             eventBus.emit('obs:connection-lost');
             await waitForDelay(100);
@@ -261,17 +249,9 @@ describe('OBSEventService', () => {
         });
 
         test('stops reconnect attempts after max retries', async () => {
-            // First establish a successful connection
             await obsEventService.connect();
-
-            // Now make all future connection attempts fail
             mockOBSConnection.connect.mockRejectedValue(new Error('Connection refused'));
-
-            // Simulate connection loss
             eventBus.emit('obs:connection-lost');
-
-            // Wait for all reconnection attempts to complete
-            // 3 attempts with exponential backoff: 10ms, 20ms, 40ms = ~100ms total
             await waitForDelay(200);
 
             const state = obsEventService.getConnectionState();
@@ -299,7 +279,6 @@ describe('OBSEventService', () => {
         test('maintains memory footprint under 200MB during operations', async () => {
             const initialMemory = process.memoryUsage().heapUsed;
 
-            // Perform multiple operations
             for (let i = 0; i < 100; i++) {
                 eventBus.emit('obs:update-text', {
                     sourceName: 'ChatMessage',
@@ -312,7 +291,7 @@ describe('OBSEventService', () => {
             const finalMemory = process.memoryUsage().heapUsed;
             const memoryIncrease = (finalMemory - initialMemory) / 1024 / 1024;
 
-            expect(memoryIncrease).toBeLessThan(10); // Should not increase by more than 10MB
+            expect(memoryIncrease).toBeLessThan(10);
         });
     });
 

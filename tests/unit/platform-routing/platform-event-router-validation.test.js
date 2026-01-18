@@ -1,5 +1,6 @@
 const { describe, test, expect, it, afterEach } = require('bun:test');
 const { createMockFn, restoreAllMocks } = require('../../helpers/bun-mock-utils');
+const { noOpLogger } = require('../../helpers/mock-factories');
 
 const PlatformEventRouter = require('../../../src/services/PlatformEventRouter');
 
@@ -32,12 +33,6 @@ describe('PlatformEventRouter validation', () => {
             subscribe: createMockFn(() => createMockFn()),
             emit: createMockFn()
         };
-        const logger = {
-            debug: createMockFn(),
-            info: createMockFn(),
-            warn: createMockFn(),
-            error: createMockFn()
-        };
 
         return {
             router: new PlatformEventRouter({
@@ -45,7 +40,7 @@ describe('PlatformEventRouter validation', () => {
                 eventBus,
                 notificationManager,
                 configService,
-                logger
+                logger: noOpLogger
             }),
             runtime,
             notificationManager

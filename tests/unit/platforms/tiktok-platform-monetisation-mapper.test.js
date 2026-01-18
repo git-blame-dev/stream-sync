@@ -1,7 +1,7 @@
-
 const { describe, it, expect, beforeEach, afterEach } = require('bun:test');
 const { mockModule, restoreAllModuleMocks, resetModules } = require('../../helpers/bun-module-mocks');
 const { restoreAllMocks } = require('../../helpers/bun-mock-utils');
+const { noOpLogger } = require('../../helpers/mock-factories');
 
 const EventEmitter = require('events');
 const { TikTokPlatform } = require('../../../src/platforms/tiktok');
@@ -24,9 +24,9 @@ describe('TikTokPlatform monetisation mapping', () => {
         };
 
         platform = new TikTokPlatform(
-            { username: 'tester', enabled: false }, // disable to bypass heavy deps while keeping eventFactory
+            { username: 'tester', enabled: false },
             {
-                logger: { debug: () => {}, info: () => {}, warn: () => {}, error: () => {} },
+                logger: noOpLogger,
                 eventBus,
                 observerFactory: () => new EventEmitter(),
                 TikTokWebSocketClient: function () {},

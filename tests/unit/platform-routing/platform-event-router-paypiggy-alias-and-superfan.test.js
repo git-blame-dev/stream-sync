@@ -1,6 +1,6 @@
-
 const { describe, test, expect, beforeEach, it, afterEach } = require('bun:test');
 const { createMockFn, restoreAllMocks } = require('../../helpers/bun-mock-utils');
+const { noOpLogger } = require('../../helpers/mock-factories');
 
 const PlatformEventRouter = require('../../../src/services/PlatformEventRouter');
 
@@ -17,7 +17,7 @@ describe('PlatformEventRouter paypiggy months handling', () => {
         runtime,
         notificationManager: { handleNotification: createMockFn() },
         configService,
-        logger: { debug: () => {}, info: () => {}, warn: () => {}, error: () => {} }
+        logger: noOpLogger
     });
 
     beforeEach(() => {

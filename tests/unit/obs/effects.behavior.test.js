@@ -4,7 +4,6 @@ const { noOpLogger } = require('../../helpers/mock-factories');
 const { OBSEffectsManager } = require('../../../src/obs/effects');
 
 describe('obs effects behavior', () => {
-    let mockLogger;
     let mockObsManager;
 
     const createObsManager = () => ({
@@ -15,12 +14,11 @@ describe('obs effects behavior', () => {
     });
 
     beforeEach(() => {
-        mockLogger = noOpLogger;
         mockObsManager = createObsManager();
     });
 
     it('plays media and triggers OBS calls with fire-and-forget mode', async () => {
-        const manager = new OBSEffectsManager(mockObsManager, { logger: mockLogger });
+        const manager = new OBSEffectsManager(mockObsManager, { logger: noOpLogger });
 
         await manager.playMediaInOBS({ mediaSource: 'testSrc', filename: 'testFile', vfxFilePath: '/test/path' }, false);
 
@@ -31,7 +29,7 @@ describe('obs effects behavior', () => {
 
     it('throws error when OBS calls fail', async () => {
         mockObsManager.call.mockRejectedValueOnce(new Error('OBS connection failed'));
-        const manager = new OBSEffectsManager(mockObsManager, { logger: mockLogger });
+        const manager = new OBSEffectsManager(mockObsManager, { logger: noOpLogger });
 
         await expect(
             manager.playMediaInOBS({ mediaSource: 'testSrc', filename: 'testFile', vfxFilePath: '/test/path' }, false)
@@ -39,7 +37,7 @@ describe('obs effects behavior', () => {
     });
 
     it('resolves when no obs manager present during waitForMediaCompletion', async () => {
-        const manager = new OBSEffectsManager(mockObsManager, { logger: mockLogger });
+        const manager = new OBSEffectsManager(mockObsManager, { logger: noOpLogger });
         manager.obsManager = null;
 
         await expect(manager.waitForMediaCompletion('testSrc')).resolves.toBeUndefined();

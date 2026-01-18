@@ -1,7 +1,6 @@
-
 const { describe, test, expect, beforeEach, afterEach } = require('bun:test');
 const { createMockFn, restoreAllMocks } = require('../../helpers/bun-mock-utils');
-
+const { noOpLogger } = require('../../helpers/mock-factories');
 const { createEventBus } = require('../../../src/core/EventBus');
 const testClock = require('../../helpers/test-clock');
 
@@ -9,32 +8,21 @@ describe('SceneManagementService', () => {
     let sceneService;
     let eventBus;
     let mockOBSConnection;
-    let mockLogger;
 
     beforeEach(() => {
-        // Create fresh event bus
         eventBus = createEventBus({ debugEnabled: false });
 
-        // Mock OBS connection
         mockOBSConnection = {
             call: createMockFn().mockResolvedValue({}),
             isConnected: createMockFn().mockReturnValue(true),
             isReady: createMockFn().mockResolvedValue(true)
         };
 
-        mockLogger = {
-            debug: createMockFn(),
-            info: createMockFn(),
-            warn: createMockFn(),
-            error: createMockFn()
-        };
-
-        // Import SceneManagementService after mocks are set up
         const { createSceneManagementService } = require('../../../src/obs/scene-management-service');
         sceneService = createSceneManagementService({
             eventBus,
             obsConnection: mockOBSConnection,
-            logger: mockLogger
+            logger: noOpLogger
         });
     });
 
@@ -61,7 +49,6 @@ describe('SceneManagementService', () => {
 
             eventBus.emit('scene:switch', { sceneName: 'InvalidScene' });
 
-            // Wait for retries to complete (3 retries * 100ms delay + buffer)
             await waitForDelay(400);
 
             const state = sceneService.getSceneState();
@@ -107,7 +94,6 @@ describe('SceneManagementService', () => {
         });
 
         test('limits scene history to prevent memory leaks', async () => {
-            // Emit 150 scene switches
             for (let i = 0; i < 150; i++) {
                 eventBus.emit('scene:switch', { sceneName: `Scene${i}` });
             }
@@ -116,7 +102,6 @@ describe('SceneManagementService', () => {
 
             const history = sceneService.getSceneHistory();
 
-            // Should limit to 100 entries
             expect(history.length).toBeLessThanOrEqual(100);
         });
     });
@@ -167,12 +152,10 @@ describe('SceneManagementService', () => {
                 return Promise.resolve({});
             });
 
-            // Multiple validation calls should return consistent results
             const result1 = await sceneService.validateScene('GameplayScene');
             const result2 = await sceneService.validateScene('GameplayScene');
             const result3 = await sceneService.validateScene('InvalidScene');
 
-            // Verify user-visible outcomes: correct validation results
             expect(result1).toBe(true);
             expect(result2).toBe(true);
             expect(result3).toBe(false);
@@ -217,7 +200,6 @@ describe('SceneManagementService', () => {
 
             eventBus.emit('scene:switch', { sceneName: 'GameplayScene', retry: true });
 
-            // Wait for retry to complete
             await waitForDelay(200);
             testClock.advance(200);
 
@@ -225,7 +207,6 @@ describe('SceneManagementService', () => {
 
             const state = sceneService.getSceneState();
             expect(state.currentScene).toBe('GameplayScene');
-            // 2. Took extra time because retry occurred (> 100ms delay for retry)
             expect(duration).toBeGreaterThan(100);
         });
 
@@ -243,7 +224,6 @@ describe('SceneManagementService', () => {
 
             const state = sceneService.getSceneState();
             expect(state.currentScene).not.toBe('GameplayScene');
-            // Failed quickly (< 150ms) because no retries occurred
             expect(duration).toBeLessThan(150);
         });
     });
@@ -264,7 +244,6 @@ describe('SceneManagementService', () => {
         test('maintains memory footprint during rapid scene switches', async () => {
             const initialMemory = process.memoryUsage().heapUsed;
 
-            // Perform 100 rapid scene switches
             for (let i = 0; i < 100; i++) {
                 eventBus.emit('scene:switch', { sceneName: `Scene${i % 5}` });
             }
@@ -274,7 +253,7 @@ describe('SceneManagementService', () => {
             const finalMemory = process.memoryUsage().heapUsed;
             const memoryIncrease = (finalMemory - initialMemory) / 1024 / 1024;
 
-            expect(memoryIncrease).toBeLessThan(10); // Should not increase by more than 10MB
+            expect(memoryIncrease).toBeLessThan(10);
         });
     });
 
