@@ -1,10 +1,9 @@
 
 const { describe, test, expect, beforeEach, afterEach } = require('bun:test');
 const { createMockFn, spyOn, restoreAllMocks } = require('../helpers/bun-mock-utils');
-
+const { noOpLogger } = require('../helpers/mock-factories');
 const { initializeTestLogging, createMockPlatformDependencies, createMockConfig } = require('../helpers/test-setup');
 
-// Initialize logging for tests
 initializeTestLogging();
 
 const { YouTubePlatform } = require('../../src/platforms/youtube');
@@ -25,12 +24,11 @@ describe('YouTube Platform Configuration Validation', () => {
             const configWithCamelCase = createMockConfig('youtube', {
                 enabled: true,
                 username: 'testuser',
-                apiKey: 'valid-api-key-here' // Config uses camelCase
+                apiKey: 'valid-api-key-here'
             });
-            
+
             const platform = new YouTubePlatform(configWithCamelCase, mockDependencies);
-            
-            // Test that platform was created successfully with valid config
+
             expect(platform).toBeDefined();
             expect(typeof platform).toBe('object');
         });
@@ -41,12 +39,10 @@ describe('YouTube Platform Configuration Validation', () => {
             const configWithoutApiKey = createMockConfig('youtube', {
                 enabled: true,
                 username: 'testuser'
-                // No apiKey
             });
-            
+
             const platform = new YouTubePlatform(configWithoutApiKey, mockDependencies);
-            
-            // Should create platform but not throw error with missing API key
+
             expect(platform).toBeDefined();
             expect(typeof platform).toBe('object');
         });
@@ -57,24 +53,21 @@ describe('YouTube Platform Configuration Validation', () => {
                 username: 'testuser',
                 apiKey: 'valid-api-key'
             });
-            
+
             const platform = new YouTubePlatform(disabledConfig, mockDependencies);
-            
-            // Should create platform successfully even when disabled
+
             expect(platform).toBeDefined();
             expect(typeof platform).toBe('object');
         });
-        
+
         test('should handle missing username', async () => {
             const configWithoutUsername = createMockConfig('youtube', {
                 enabled: true,
                 apiKey: 'valid-api-key'
-                // No username
             });
-            
+
             const platform = new YouTubePlatform(configWithoutUsername, mockDependencies);
-            
-            // Should handle missing username appropriately
+
             expect(platform).toBeDefined();
             expect(typeof platform).toBe('object');
         });
@@ -128,21 +121,13 @@ describe('YouTube Platform Configuration Validation', () => {
         });
 
         test('initializes disabled platform without errors', async () => {
-            const logger = {
-                debug: createMockFn(),
-                info: createMockFn(),
-                warn: createMockFn(),
-                error: createMockFn()
-            };
-
             const platform = new YouTubePlatform(
                 createMockConfig('youtube', { enabled: false, username: '' }),
-                { ...mockDependencies, logger }
+                { ...mockDependencies, logger: noOpLogger }
             );
 
             await platform.initialize();
 
-            // Should initialize without errors and not start monitoring
             expect(platform.isInitialized).toBe(true);
             expect(platform.monitoringInterval).toBeFalsy();
         });

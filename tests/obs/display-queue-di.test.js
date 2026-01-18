@@ -16,7 +16,7 @@ describe('DisplayQueue DI requirements', () => {
 
     beforeEach(() => {
         resetModules();
-        initializeTestLogging(); // Re-init after resetModules clears state
+        initializeTestLogging();
     });
 
     it('requires an OBS manager in the constructor', () => {
@@ -37,14 +37,12 @@ describe('DisplayQueue DI requirements', () => {
             CHAT_MESSAGE_DURATION: 4500
         }, null, createRuntimeConstantsFixture());
 
-        // Verify the queue was created and can accept items
         expect(() => queue.addItem({
             type: 'chat',
             platform: 'twitch',
             data: { username: 'TestUser', message: 'Hello' }
         })).not.toThrow();
 
-        // Verify item was added (queue.queue is internal but accessible for testing)
         expect(queue.queue.length).toBe(1);
     });
 });

@@ -1,7 +1,8 @@
 
 const { describe, test, expect, beforeEach, it, afterEach } = require('bun:test');
 const { createMockFn, restoreAllMocks } = require('../helpers/bun-mock-utils');
-const { mockModule, resetModules, restoreAllModuleMocks } = require('../helpers/bun-module-mocks');
+const { resetModules, restoreAllModuleMocks } = require('../helpers/bun-module-mocks');
+const { noOpLogger } = require('../helpers/mock-factories');
 const { initializeTestLogging } = require('../helpers/test-setup');
 
 initializeTestLogging();
@@ -14,7 +15,7 @@ describe('OBSGoalsManager DI requirements', () => {
 
     beforeEach(() => {
         resetModules();
-        initializeTestLogging(); // Re-init after resetModules clears state
+        initializeTestLogging();
     });
 
     it('exposes only DI-focused exports (no wrapper functions)', () => {
@@ -51,13 +52,12 @@ describe('OBSGoalsManager DI requirements', () => {
 
         const { createOBSGoalsManager } = require('../../src/obs/goals');
         const goalsManager = createOBSGoalsManager(mockObsManager, {
-            logger: require('../../src/core/logging').logger,
+            logger: noOpLogger,
             configManager: { getBoolean: () => true, getString: () => 'goal-source', getNumber: () => 0 },
             updateTextSource: createMockFn(),
             goalTracker: mockGoalTracker
         });
 
-        // Call a method and verify the injected mock was used
         const status = await goalsManager.getCurrentGoalStatus('tiktok');
 
         expect(mockGoalTracker.getGoalState).toHaveBeenCalledWith('tiktok');

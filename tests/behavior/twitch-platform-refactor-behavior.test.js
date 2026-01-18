@@ -1,7 +1,6 @@
 const { describe, it, expect, beforeEach, afterEach } = require('bun:test');
 const { createMockFn, restoreAllMocks } = require('../helpers/bun-mock-utils');
-
-const noOpLogger = { debug: () => {}, info: () => {}, warn: () => {}, error: () => {} };
+const { noOpLogger } = require('../helpers/mock-factories');
 
 const { TwitchPlatform } = require('../../src/platforms/twitch');
 const TwitchEventSub = require('../../src/platforms/twitch-eventsub');

@@ -2,19 +2,13 @@
 const { PlatformEvents, PlatformEventValidator, PlatformEventBuilder } = require('../../src/interfaces/PlatformEvents');
 
 describe('Platform Event Interface Design', () => {
-    
-    // ============================================================================
-    // PLATFORM EVENT SCHEMA VALIDATION BEHAVIORS
-    // ============================================================================
-    
     describe('Platform Event Schema Validation', () => {
         let validator;
         
         beforeEach(() => {
             validator = new PlatformEventValidator();
         });
-        
-        // Platform Events
+
         describe('Chat and Communication Events', () => {
             it('should validate platform:chat-message event with required fields', () => {
             const event = {
@@ -35,8 +29,7 @@ describe('Platform Event Interface Design', () => {
                 const event = {
                     type: 'platform:chat-message',
                     platform: 'twitch'
-                // Missing username, message, metadata, timestamp
-            };
+                };
                 const result = validator.validate(event);
                 expect(result.valid).toBe(false);
                 expect(result.errors).toContain('Missing required field: username');
@@ -409,11 +402,7 @@ describe('Platform Event Interface Design', () => {
             });
         });
     });
-    
-    // ============================================================================
-    // CROSS-PLATFORM EVENT NORMALIZATION BEHAVIORS
-    // ============================================================================
-    
+
     describe('Cross-Platform Event Normalization', () => {
         let builder;
         
@@ -532,18 +521,13 @@ describe('Platform Event Interface Design', () => {
         
         it('should handle missing or malformed data gracefully during normalization', () => {
             const malformedData = {
-                // Missing required fields
                 someRandomField: 'value'
             };
             const normalize = () => builder.normalizeMessage('twitch', malformedData);
             expect(normalize).toThrow('username');
         });
     });
-    
-    // ============================================================================
-    // EVENT BUILDER CONSISTENCY BEHAVIORS
-    // ============================================================================
-    
+
     describe('Platform Event Builder Consistency', () => {
         let builder;
         
@@ -615,7 +599,6 @@ describe('Platform Event Interface Design', () => {
         it('should validate event parameters before building', () => {
             const invalidParams = {
                 platform: 'twitch'
-                // Missing username and message
             };
             const buildEvent = () => builder.createChatMessage(invalidParams);
             expect(buildEvent).toThrow('Missing required parameter: username');
@@ -647,11 +630,7 @@ describe('Platform Event Interface Design', () => {
             expect(event.timestamp).toBe(customTimestamp);
         });
     });
-    
-    // ============================================================================
-    // EVENT SCHEMA COMPLIANCE BEHAVIORS
-    // ============================================================================
-    
+
     describe('Event Schema Compliance Validation', () => {
         let validator;
         
@@ -714,11 +693,7 @@ describe('Platform Event Interface Design', () => {
             expect(result.valid).toBe(true);
         });
     });
-    
-    // ============================================================================
-    // ERROR HANDLING AND EDGE CASES
-    // ============================================================================
-    
+
     describe('Event Interface Error Handling', () => {
         let validator, builder;
         
@@ -785,8 +760,6 @@ describe('Platform Event Interface Design', () => {
             const youtubeResult = validator.validate(youtubeEvent);
             expect(twitchResult.valid).toBe(true);
             expect(youtubeResult.valid).toBe(true);
-            
-            // Should have same structure regardless of platform
             expect(Object.keys(twitchEvent).sort()).toEqual(Object.keys(youtubeEvent).sort());
         });
     });
