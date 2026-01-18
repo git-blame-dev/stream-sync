@@ -12,6 +12,10 @@ const {
     validateNormalizedMessage
 } = require('../../../src/utils/message-normalization');
 
+beforeEach(() => {
+    testClock.reset();
+});
+
 const buildTimestampService = () => ({
     extractTimestamp: (platform, data) => {
         if (platform === 'twitch') {

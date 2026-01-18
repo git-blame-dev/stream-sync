@@ -186,22 +186,34 @@ userAgents = test-agent-1|test-agent-2
         });
 
         it('should provide helpful error messages for missing config files', () => {
-            fs.existsSync = createMockFn(() => false);
+            const originalNodeEnv = process.env.NODE_ENV;
+            process.env.NODE_ENV = 'production';
+            try {
+                fs.existsSync = createMockFn(() => false);
 
-            expect(() => {
-                reloadConfig();
-            }).toThrow(/Configuration file not found/);
+                expect(() => {
+                    reloadConfig();
+                }).toThrow(/Configuration file not found/);
+            } finally {
+                process.env.NODE_ENV = originalNodeEnv;
+            }
         });
 
         it('should not fall back when the configured path is missing', () => {
-            fs.existsSync = createMockFn((path) => path === '/default/config.ini');
+            const originalNodeEnv = process.env.NODE_ENV;
+            process.env.NODE_ENV = 'production';
+            try {
+                fs.existsSync = createMockFn((path) => path === '/default/config.ini');
 
-            configManager.configPath = '/nonexistent/config.ini';
-            configManager.defaultConfigPath = '/default/config.ini';
-            configManager.isLoaded = false;
-            configManager.config = null;
+                configManager.configPath = '/nonexistent/config.ini';
+                configManager.defaultConfigPath = '/default/config.ini';
+                configManager.isLoaded = false;
+                configManager.config = null;
 
-            expect(() => configManager.load()).toThrow(/Configuration file not found/);
+                expect(() => configManager.load()).toThrow(/Configuration file not found/);
+            } finally {
+                process.env.NODE_ENV = originalNodeEnv;
+            }
         });
     });
 
@@ -434,20 +446,26 @@ userAgents = test-agent-1|test-agent-2
 
     describe('Error Recovery Behavior', () => {
         it('should surface missing config errors without fallback', () => {
-            const fallbackPath = '/fallback/config.ini';
+            const originalNodeEnv = process.env.NODE_ENV;
+            process.env.NODE_ENV = 'production';
+            try {
+                const fallbackPath = '/fallback/config.ini';
 
-            fs.existsSync = createMockFn((path) => path === fallbackPath);
-            fs.readFileSync = createMockFn((path) => {
-                if (path === fallbackPath) return testConfigContent;
-                throw new Error(`ENOENT: no such file: ${path}`);
-            });
+                fs.existsSync = createMockFn((path) => path === fallbackPath);
+                fs.readFileSync = createMockFn((path) => {
+                    if (path === fallbackPath) return testConfigContent;
+                    throw new Error(`ENOENT: no such file: ${path}`);
+                });
 
-            configManager.configPath = '/nonexistent/missing.ini';
-            configManager.defaultConfigPath = fallbackPath;
-            configManager.isLoaded = false;
-            configManager.config = null;
+                configManager.configPath = '/nonexistent/missing.ini';
+                configManager.defaultConfigPath = fallbackPath;
+                configManager.isLoaded = false;
+                configManager.config = null;
 
-            expect(() => configManager.load()).toThrow(/Configuration file not found/);
+                expect(() => configManager.load()).toThrow(/Configuration file not found/);
+            } finally {
+                process.env.NODE_ENV = originalNodeEnv;
+            }
         });
 
         it('should provide helpful errors for corrupted config files', () => {

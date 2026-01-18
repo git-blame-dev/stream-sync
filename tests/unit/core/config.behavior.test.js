@@ -96,13 +96,19 @@ describe('ConfigManager behavior', () => {
         restoreAllModuleMocks();
     });
 
-    it('throws user-friendly error when config file is missing', () => {
-        fs.existsSync = createMockFn(() => false);
-        configManager.config = null;
-        configManager.isLoaded = false;
-        configManager.configPath = '/tmp/non-existent-config.ini';
+    it('throws user-friendly error when config file is missing in non-test environment', () => {
+        const originalNodeEnv = process.env.NODE_ENV;
+        process.env.NODE_ENV = 'production';
+        try {
+            fs.existsSync = createMockFn(() => false);
+            configManager.config = null;
+            configManager.isLoaded = false;
+            configManager.configPath = '/tmp/non-existent-config.ini';
 
-        expect(() => configManager.load()).toThrow(/Configuration file not found/);
+            expect(() => configManager.load()).toThrow(/Configuration file not found/);
+        } finally {
+            process.env.NODE_ENV = originalNodeEnv;
+        }
     });
 
     it('throws error when required sections are missing', () => {

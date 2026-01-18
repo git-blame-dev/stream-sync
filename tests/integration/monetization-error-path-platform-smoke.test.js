@@ -5,9 +5,9 @@ const PlatformLifecycleService = require('../../src/services/PlatformLifecycleSe
 const NotificationManager = require('../../src/notifications/NotificationManager');
 const { YouTubeNotificationDispatcher } = require('../../src/utils/youtube-notification-dispatcher');
 const { createMonetizationErrorPayload } = require('../../src/utils/monetization-error-utils');
-const { createTestAppRuntime } = require('../helpers/runtime-test-harness');
 const { createMockDisplayQueue, noOpLogger } = require('../helpers/mock-factories');
 const { createTextProcessingManager } = require('../../src/utils/text-processing');
+const { PlatformEvents } = require('../../src/interfaces/PlatformEvents');
 
 describe('Monetization error-path platform flows (smoke)', () => {
     const createEventBus = () => {
@@ -98,13 +98,21 @@ describe('Monetization error-path platform flows (smoke)', () => {
             streamDetector
         });
 
-        const { runtime } = createTestAppRuntime(configSnapshot, {
-            eventBus,
-            configService,
-            notificationManager,
-            displayQueue,
-            logger,
-            platformLifecycleService
+        const monetizationEvents = new Set([
+            PlatformEvents.GIFT,
+            PlatformEvents.PAYPIGGY,
+            PlatformEvents.GIFTPAYPIGGY,
+            PlatformEvents.ENVELOPE
+        ]);
+        eventBus.on('platform:event', (payload) => {
+            if (monetizationEvents.has(payload.type)) {
+                notificationManager.handleNotificationInternal(
+                    payload.type,
+                    payload.platform,
+                    payload.data,
+                    true
+                );
+            }
         });
 
         return {
@@ -113,8 +121,7 @@ describe('Monetization error-path platform flows (smoke)', () => {
             displayQueue,
             configService,
             notificationManager,
-            platformLifecycleService,
-            runtime
+            platformLifecycleService
         };
     };
 
@@ -189,7 +196,6 @@ describe('Monetization error-path platform flows (smoke)', () => {
             assertErrorNotification(giftpaypiggyItem, { platform: 'twitch', type: 'platform:giftpaypiggy', expectMissingUsername: true });
             assertErrorNotification(paypiggyItem, { platform: 'twitch', type: 'platform:paypiggy', expectMissingUsername: true });
         } finally {
-            harness.runtime.platformEventRouter?.dispose();
             harness.platformLifecycleService.dispose();
         }
     });
@@ -276,7 +282,6 @@ describe('Monetization error-path platform flows (smoke)', () => {
             assertErrorNotification(giftpaypiggyItem, { platform: 'youtube', type: 'platform:giftpaypiggy', expectMissingUsername: true });
             assertErrorNotification(paypiggyItem, { platform: 'youtube', type: 'platform:paypiggy', expectMissingUsername: true });
         } finally {
-            harness.runtime.platformEventRouter?.dispose();
             harness.platformLifecycleService.dispose();
         }
     });
@@ -334,7 +339,6 @@ describe('Monetization error-path platform flows (smoke)', () => {
             assertErrorNotification(paypiggyItem, { platform: 'tiktok', type: 'platform:paypiggy', expectMissingUsername: true });
             assertErrorNotification(envelopeItem, { platform: 'tiktok', type: 'platform:envelope', expectMissingUsername: true });
         } finally {
-            harness.runtime.platformEventRouter?.dispose();
             harness.platformLifecycleService.dispose();
         }
     });

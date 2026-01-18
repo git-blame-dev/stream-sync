@@ -15,8 +15,6 @@ describe('OBSConnectionManager', () => {
     });
 
     afterEach(() => {
-        process.env.NODE_ENV = originalNodeEnv;
-        delete global.__TEST_RUNTIME_CONSTANTS__;
         restoreAllMocks();
     });
 
