@@ -430,7 +430,7 @@ const generalConfig = {
     get fallbackUsername() { return resolveFallbackUsername(); },
 
     // Per-user notification suppression defaults
-    get userSuppressionEnabled() { return configManager.getBoolean('general', 'userSuppressionEnabled', process.env.NODE_ENV !== 'test'); },
+    get userSuppressionEnabled() { return configManager.getBoolean('general', 'userSuppressionEnabled', true); },
     get maxNotificationsPerUser() { return configManager.getNumber('general', 'maxNotificationsPerUser', 5); },
     get suppressionWindowMs() { return configManager.getNumber('general', 'suppressionWindowMs', 60000); },
     get suppressionDurationMs() { return configManager.getNumber('general', 'suppressionDurationMs', 300000); },

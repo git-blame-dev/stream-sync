@@ -19,8 +19,8 @@ class TwitchOAuthHandler {
         this.port = options.port || OAUTH_SERVER_CONFIG.DEFAULT_PORT;
         this.redirectUri = `https://localhost:${this.port}`;
         this.sslCerts = null;
-        
-        // Use centralized OAuth scopes for consistency
+        this._autoFindPort = options.autoFindPort === true;
+        this._skipBrowserOpen = options.skipBrowserOpen === true;
         this.scopes = TWITCH_OAUTH_SCOPES;
     }
 
@@ -54,7 +54,6 @@ class TwitchOAuthHandler {
             
             server.on('error', (err) => {
                 if (err.code === 'EADDRINUSE') {
-                    // Port is in use, try next one
                     if (startPort < OAUTH_SERVER_CONFIG.PORT_RANGE.END) {
                         this.findAvailablePort(startPort + 1).then(resolve).catch(reject);
                     } else {
@@ -87,26 +86,23 @@ class TwitchOAuthHandler {
     }
 
     async startCallbackServer() {
-        // Find an available port if in test environment
-        if (process.env.NODE_ENV === 'test') {
+        if (this._autoFindPort) {
             this.port = await this.findAvailablePort(this.port);
             this.redirectUri = `https://localhost:${this.port}`;
         }
         
         return new Promise((resolve, reject) => {
-            // Create self-signed certificate for HTTPS
             const options = {
                 key: this.generateSelfSignedCert().key,
                 cert: this.generateSelfSignedCert().cert
             };
-            
+
             this.server = https.createServer(options, (req, res) => {
                 const parsedUrl = url.parse(req.url, true);
-                
+
                 if (parsedUrl.pathname === '/' || parsedUrl.pathname === '/callback') {
                     this.handleCallback(req, res, parsedUrl.query, resolve, reject);
                 } else {
-                    // Handle other requests
                     res.writeHead(404, { 'Content-Type': 'text/plain' });
                     res.end('Not Found');
                 }
@@ -132,14 +128,11 @@ class TwitchOAuthHandler {
 
     async handleCallback(req, res, query, resolve, reject) {
         try {
-            // Check for authorization code
             if (query.code) {
                 this.logger.info('Received authorization code, exchanging for tokens...', 'oauth-handler');
-                
-                // Exchange code for tokens
+
                 const tokens = await this.exchangeCodeForTokens(query.code);
-                
-                // Send success response to browser
+
                 res.writeHead(200, { 'Content-Type': 'text/html' });
                 res.end(`
                     <html>
@@ -151,15 +144,13 @@ class TwitchOAuthHandler {
                         </body>
                     </html>
                 `);
-                
-                // Close server
+
                 this.server.close();
                 resolve(tokens);
-                
+
             } else if (query.error) {
-                // Handle OAuth errors
                 this._logOAuthError(`OAuth error: ${query.error}`);
-                
+
                 res.writeHead(400, { 'Content-Type': 'text/html' });
                 res.end(`
                     <html>
@@ -171,11 +162,10 @@ class TwitchOAuthHandler {
                         </body>
                     </html>
                 `);
-                
+
                 this.server.close();
                 reject(new Error(`OAuth error: ${query.error} - ${query.error_description || 'Unknown error'}`));
             } else {
-                // Invalid callback
                 res.writeHead(400, { 'Content-Type': 'text/html' });
                 res.end(`
                     <html>
@@ -297,9 +287,8 @@ class TwitchOAuthHandler {
 
     openBrowser(url) {
         const disableAuth = (process.env.TWITCH_DISABLE_AUTH || '').toLowerCase();
-        const nodeEnv = (process.env.NODE_ENV || '').toLowerCase();
-        if (disableAuth === 'true' || nodeEnv === 'test') {
-            this.logger.info('Skipping automatic browser opening in test/disabled environment', 'oauth-handler');
+        if (disableAuth === 'true' || this._skipBrowserOpen) {
+            this.logger.info('Skipping automatic browser opening', 'oauth-handler');
             this.logger.info('Please copy the authorization URL manually if you still need to authenticate.', 'oauth-handler');
             return;
         }
@@ -348,21 +337,12 @@ class TwitchOAuthHandler {
 
     async runOAuthFlow() {
         try {
-            // Generate authorization URL
             const authUrl = this.generateAuthUrl();
-            
-            // Start callback server
             const tokenPromise = this.startCallbackServer();
-            
-            // Display instructions and open browser
             this.displayOAuthInstructions(authUrl);
-            
-            // Wait for callback
             const tokens = await tokenPromise;
-            
-            // Persist tokens to token store
             await this.persistTokens(tokens);
-            
+
             return tokens;
             
         } catch (error) {
@@ -411,8 +391,7 @@ class TwitchOAuthHandler {
         this.logger.console('WAITING FOR AUTHENTICATION...', 'oauth-handler'); // USER_INTERFACE: Authentication prompt
         this.logger.console('Please complete the authentication in your browser.', 'oauth-handler'); // USER_INTERFACE: Authentication prompt
         this.logger.console('='.repeat(80), 'oauth-handler'); // USER_INTERFACE: Authentication prompt
-        
-        // Open browser
+
         this.openBrowser(authUrl);
     }
 

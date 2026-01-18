@@ -159,7 +159,7 @@ describe('NotificationManager Service Dependency Injection - Modernized', () => 
                     obsGoals: { processDonationGoal: createMockFn() },
                     configService: mockConfigService
                 });
-            }).toThrow('NotificationManager requires EventBus dependency for event-driven architecture');
+            }).toThrow('NotificationManager requires EventBus dependency');
         });
 
         it('should require ConfigService for notification setup', () => {
