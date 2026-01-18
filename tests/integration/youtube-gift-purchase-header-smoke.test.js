@@ -1,8 +1,8 @@
 const { describe, test, afterEach, expect } = require('bun:test');
-
 const { YouTubeNotificationDispatcher } = require('../../src/utils/youtube-notification-dispatcher');
 const { getSyntheticFixture } = require('../helpers/platform-test-data');
 const { createMockFn, restoreAllMocks } = require('../helpers/bun-mock-utils');
+const { noOpLogger } = require('../helpers/mock-factories');
 
 const giftPurchaseHeaderOnly = getSyntheticFixture('youtube', 'gift-purchase-header');
 const giftPurchaseTimestamp = new Date(
@@ -15,8 +15,7 @@ describe('YouTube Gift Purchase Smoke (Canonical Author)', () => {
     });
 
     test('routes gift purchase through dispatcher to handler', async () => {
-        const mockLogger = { debug: () => {}, info: () => {}, warn: () => {}, error: () => {} };
-        const dispatcher = new YouTubeNotificationDispatcher({ logger: mockLogger });
+        const dispatcher = new YouTubeNotificationDispatcher({ logger: noOpLogger });
         const onGiftPaypiggy = createMockFn();
 
         const result = await dispatcher.dispatchGiftMembership(giftPurchaseHeaderOnly, { onGiftPaypiggy });

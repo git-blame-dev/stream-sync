@@ -1,12 +1,13 @@
-
 const { describe, it, afterEach, expect } = require('bun:test');
 const { createMockFn, restoreAllMocks } = require('../helpers/bun-mock-utils');
+const { noOpLogger } = require('../helpers/mock-factories');
 const PlatformLifecycleService = require('../../src/services/PlatformLifecycleService');
 
 describe('PlatformLifecycleService stream detection routing (smoke)', () => {
     afterEach(() => {
         restoreAllMocks();
     });
+
     it('initializes YouTube directly and routes other platforms through StreamDetector', async () => {
         const streamDetector = {
             startStreamDetection: createMockFn().mockImplementation(async (_platform, _config, connect) => {
@@ -19,7 +20,8 @@ describe('PlatformLifecycleService stream detection routing (smoke)', () => {
                 youtube: { enabled: true, username: 'channel' },
                 custom: { enabled: true }
             },
-            streamDetector
+            streamDetector,
+            logger: noOpLogger
         });
 
         const youtubeInit = createMockFn().mockResolvedValue(true);
