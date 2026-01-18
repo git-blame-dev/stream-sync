@@ -1,8 +1,7 @@
 const { describe, test, expect, beforeEach, it } = require('bun:test');
 const { createMockFn } = require('../helpers/bun-mock-utils');
+const { noOpLogger } = require('../helpers/mock-factories');
 const { clearStartupDisplays } = require('../../src/obs/startup');
-
-const noOpLogger = { debug: () => {}, info: () => {}, warn: () => {}, error: () => {} };
 
 describe('OBS Startup Display Clearing - Detailed Behavior', () => {
     let mockOBSManager;

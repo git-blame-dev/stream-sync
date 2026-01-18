@@ -1,6 +1,6 @@
 const { describe, expect, it, beforeEach, afterEach } = require('bun:test');
 const { createMockFn, restoreAllMocks } = require('../helpers/bun-mock-utils');
-
+const { noOpLogger } = require('../helpers/mock-factories');
 const { TwitchApiClient } = require('../../src/utils/api-clients/twitch-api-client');
 
 describe('TwitchApiClient authentication', () => {
@@ -8,8 +8,6 @@ describe('TwitchApiClient authentication', () => {
     let mockHttpClient;
     let mockAuthManager;
     let apiClient;
-
-    const noOpLogger = { debug: () => {}, info: () => {}, warn: () => {}, error: () => {} };
 
     const createMockHttpClient = () => ({
         get: createMockFn(),

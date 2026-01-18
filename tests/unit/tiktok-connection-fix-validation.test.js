@@ -1,9 +1,7 @@
 const { describe, test, expect, afterEach } = require('bun:test');
 const EventEmitter = require('events');
-
+const { noOpLogger } = require('../helpers/mock-factories');
 const { TikTokPlatform } = require('../../src/platforms/tiktok');
-
-const noOpLogger = { debug: () => {}, info: () => {}, warn: () => {}, error: () => {} };
 
 describe('TikTok Connection State Management', () => {
     let platform;
