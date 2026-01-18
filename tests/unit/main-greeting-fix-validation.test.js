@@ -1,17 +1,6 @@
-
 const { describe, test, expect, beforeEach, afterEach } = require('bun:test');
 const { createMockFn, restoreAllMocks } = require('../helpers/bun-mock-utils');
-
-const { noOpLogger } = require('../helpers/mock-factories');
-const { setupAutomatedCleanup } = require('../helpers/mock-lifecycle');
 const NotificationBuilder = require('../../src/utils/notification-builder');
-
-// Setup automated cleanup (no manual mock management)
-setupAutomatedCleanup({
-    clearCallsBeforeEach: true,
-    validateAfterCleanup: true,
-    logPerformanceMetrics: true
-});
 
 describe('Main.js Greeting Username Extraction Fix', () => {
     afterEach(() => {
@@ -30,12 +19,10 @@ describe('Main.js Greeting Username Extraction Fix', () => {
             warn: createMockFn(),
             error: createMockFn()
         };
-        
-        // Create a mock AppRuntime context with the actual updated methods from main.js
+
         const runtimeContext = {
             logger: mockLogger,
-            
-            // The actual updated extractUsernameFromNotificationData method from main.js
+
             extractUsernameFromNotificationData: function(data) {
                 if (!data || typeof data.username !== 'string') {
                     return null;
@@ -44,16 +31,13 @@ describe('Main.js Greeting Username Extraction Fix', () => {
                 const username = data.username.trim();
                 return username ? username : null;
             },
-            
-            // The actual updated logNotificationToConsole method from main.js
+
             logNotificationToConsole: function(type, platform, data) {
-                // Extract username using comprehensive fallback logic
                 const username = this.extractUsernameFromNotificationData(data);
                 if (!username) {
                     return;
                 }
-                
-                // Compose a user-friendly message for each notification type
+
                 let msg = '';
                 switch (type) {
                     case 'follow':
@@ -88,46 +72,38 @@ describe('Main.js Greeting Username Extraction Fix', () => {
                 }
             }
         };
-        
-        // Bind the methods to preserve 'this' context
+
         extractUsernameFromNotificationData = runtimeContext.extractUsernameFromNotificationData.bind(runtimeContext);
         logNotificationToConsole = runtimeContext.logNotificationToConsole.bind(runtimeContext);
     });
 
     test('should extract username from notification data', () => {
-        // Given: A greeting notification created by NotificationBuilder
         const greetingData = NotificationBuilder.build({
             type: 'greeting',
             platform: 'twitch',
             username: 'TestUser'
         });
 
-        // Verify that NotificationBuilder creates the expected structure
         expect(greetingData).toMatchObject({
             type: 'greeting',
             platform: 'twitch',
             username: 'TestUser'
         });
 
-        // When: Calling the actual extractUsernameFromNotificationData method
         const extractedUsername = extractUsernameFromNotificationData(greetingData);
 
-        // Then: Should extract the username from the payload
         expect(extractedUsername).toBe('TestUser');
     });
 
     test('should properly log greeting notification with correct username', () => {
-        // Given: A greeting notification
         const greetingData = NotificationBuilder.build({
             type: 'greeting',
             platform: 'twitch',
             username: 'TestUser'
         });
 
-        // When: Logging the greeting notification using the updated logNotificationToConsole method
         logNotificationToConsole('greeting', 'twitch', greetingData);
 
-        // Then: The logger should be called with a message containing the correct username
         expect(mockLogger.console).toHaveBeenCalledWith(
             '[twitch] Greeting: TestUser',
             'notification'
@@ -140,35 +116,25 @@ describe('Main.js Greeting Username Extraction Fix', () => {
     });
 
     test('returns null for invalid data', () => {
-        // Test null data
         expect(extractUsernameFromNotificationData(null)).toBeNull();
-
-        // Test undefined data
         expect(extractUsernameFromNotificationData(undefined)).toBeNull();
-
-        // Test empty object
         expect(extractUsernameFromNotificationData({})).toBeNull();
-
-        // Test empty user object
         expect(extractUsernameFromNotificationData({ user: {} })).toBeNull();
     });
 
     test('should fix all notification types using the same username extraction pattern', () => {
-        // Given: A notification with username
         const notificationData = NotificationBuilder.build({
             type: 'platform:follow',
             platform: 'twitch',
             username: 'TestFollower'
         });
 
-        // Test each notification type to ensure they all use the improved extraction
         const notificationTypes = ['platform:follow', 'platform:paypiggy', 'platform:raid', 'platform:gift', 'redemption', 'farewell'];
-        
+
         notificationTypes.forEach(type => {
             mockLogger.console.mockClear();
             logNotificationToConsole(type, 'twitch', notificationData);
-            
-            // All calls should contain the correct username, not "undefined"
+
             const loggedMessage = mockLogger.console.mock.calls[0][0];
             expect(loggedMessage).toContain('TestFollower');
             expect(loggedMessage).not.toContain('undefined');

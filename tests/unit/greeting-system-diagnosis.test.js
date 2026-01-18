@@ -1,16 +1,7 @@
-
 const { describe, test, expect, afterEach } = require('bun:test');
 const { createMockFn, restoreAllMocks } = require('../helpers/bun-mock-utils');
-
-const { setupAutomatedCleanup } = require('../helpers/mock-lifecycle');
 const { noOpLogger } = require('../helpers/mock-factories');
 const ChatNotificationRouter = require('../../src/services/ChatNotificationRouter');
-
-setupAutomatedCleanup({
-    clearCallsBeforeEach: true,
-    validateAfterCleanup: true,
-    logPerformanceMetrics: true
-});
 
 describe('Greeting System Diagnosis', () => {
     afterEach(() => {

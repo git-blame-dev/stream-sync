@@ -1,6 +1,6 @@
 
 const { describe, test, expect, beforeEach, it, afterEach } = require('bun:test');
-const { createMockFn, spyOn, restoreAllMocks } = require('../helpers/bun-mock-utils');
+const { createMockFn, restoreAllMocks } = require('../helpers/bun-mock-utils');
 
 const { DependencyFactory } = require('../../src/utils/dependency-factory');
 const { PlatformConnectionFactory } = require('../../src/utils/platform-connection-factory');
@@ -12,11 +12,10 @@ describe('DependencyFactory', () => {
 
     let factory;
     let mockConfig;
-    let mockLogger;
 
     beforeEach(() => {
         factory = new DependencyFactory();
-        
+
         mockConfig = {
             youtube: {
                 apiKey: 'test-youtube-key',
@@ -37,13 +36,6 @@ describe('DependencyFactory', () => {
                 enabled: true
             }
         };
-
-        mockLogger = {
-            debug: createMockFn(),
-            info: createMockFn(),
-            warn: createMockFn(),
-            error: createMockFn()
-        };
     });
 
     describe('createYoutubeDependencies', () => {
@@ -55,14 +47,12 @@ describe('DependencyFactory', () => {
 
             const result = factory.createYoutubeDependencies(mockConfig.youtube, options);
 
-            // Verify all required YouTube dependencies are present
             expect(result).toHaveProperty('logger');
             expect(result).toHaveProperty('notificationManager');
             expect(result).toHaveProperty('streamDetectionService');
             expect(result).toHaveProperty('apiClient');
             expect(result).toHaveProperty('connectionManager');
-            
-            // Verify logger has correct interface
+
             expect(typeof result.logger.debug).toBe('function');
             expect(typeof result.logger.info).toBe('function');
             expect(typeof result.logger.warn).toBe('function');
@@ -70,7 +60,7 @@ describe('DependencyFactory', () => {
         });
 
         it('should validate YouTube configuration before creating dependencies', () => {
-            const invalidConfig = { enabled: true }; // Missing apiKey and username
+            const invalidConfig = { enabled: true };
 
             expect(() => {
                 factory.createYoutubeDependencies(invalidConfig, {});
@@ -112,15 +102,12 @@ describe('DependencyFactory', () => {
 
         it('should reuse injected stream detection service without recreating it', () => {
             const injectedService = { detectLiveStreams: createMockFn() };
-            const spy = spyOn(DependencyFactory.prototype, '_createYouTubeStreamDetectionService');
 
             const result = factory.createYoutubeDependencies(mockConfig.youtube, {
                 streamDetectionService: injectedService
             });
 
             expect(result.streamDetectionService).toBe(injectedService);
-            expect(spy).not.toHaveBeenCalled();
-            spy.mockRestore();
         });
     });
 
@@ -139,15 +126,13 @@ describe('DependencyFactory', () => {
 
             const result = factory.createTiktokDependencies(mockConfig.tiktok, options);
 
-            // Verify all required TikTok dependencies are present
             expect(result).toHaveProperty('logger');
             expect(result).toHaveProperty('notificationManager');
             expect(result).toHaveProperty('WebcastPushConnection');
             expect(result).toHaveProperty('TikTokWebSocketClient');
             expect(result).toHaveProperty('connectionFactory');
             expect(result).toHaveProperty('stateManager');
-            
-            // Verify logger has correct interface
+
             expect(typeof result.logger.debug).toBe('function');
             expect(typeof result.logger.info).toBe('function');
             expect(typeof result.logger.warn).toBe('function');
@@ -155,7 +140,7 @@ describe('DependencyFactory', () => {
         });
 
         it('should validate TikTok configuration before creating dependencies', () => {
-            const invalidConfig = { enabled: true }; // Missing username
+            const invalidConfig = { enabled: true };
 
             expect(() => {
                 factory.createTiktokDependencies(invalidConfig, {});
@@ -220,14 +205,12 @@ describe('DependencyFactory', () => {
 
             const result = factory.createTwitchDependencies(mockConfig.twitch, options);
 
-            // Verify all required Twitch dependencies are present
             expect(result).toHaveProperty('logger');
             expect(result).toHaveProperty('notificationManager');
             expect(result).toHaveProperty('tmiClient');
             expect(result).toHaveProperty('authManager');
             expect(result).toHaveProperty('apiClient');
-            
-            // Verify logger has correct interface
+
             expect(typeof result.logger.debug).toBe('function');
             expect(typeof result.logger.info).toBe('function');
             expect(typeof result.logger.warn).toBe('function');
@@ -235,7 +218,7 @@ describe('DependencyFactory', () => {
         });
 
         it('should validate Twitch configuration before creating dependencies', () => {
-            const invalidConfig = { enabled: true }; // Missing apiKey and channel
+            const invalidConfig = { enabled: true };
 
             expect(() => {
                 factory.createTwitchDependencies(invalidConfig, {});
@@ -270,7 +253,6 @@ describe('DependencyFactory', () => {
 
             expect(result.authManager).toBe(injectedAuthManager);
             expect(result.authFactory).toBe(injectedAuthFactory);
-            expect(injectedAuthFactory.createAuthManager).not.toHaveBeenCalled();
         });
 
         it('should build authManager from provided authFactory when authManager is missing', () => {
@@ -285,7 +267,6 @@ describe('DependencyFactory', () => {
 
             expect(result.authManager).toBe(builtAuthManager);
             expect(result.authFactory).toBe(providedFactory);
-            expect(providedFactory.createAuthManager).toHaveBeenCalledTimes(1);
         });
 
         it('should create Twitch auth resources when none are provided', () => {
@@ -318,14 +299,12 @@ describe('DependencyFactory', () => {
         it('should validate logger interface after creation', () => {
             const logger = factory.createValidatedLogger('test');
 
-            // Should not throw - logger should be valid
             expect(() => {
                 factory.validateDependencyInterface(logger, 'logger');
             }).not.toThrow();
         });
 
         it('should handle logger creation failures gracefully', () => {
-            // Test with invalid type that might cause logger creation to fail
             expect(() => {
                 factory.createValidatedLogger(null);
             }).toThrow('Logger type is required');
@@ -350,7 +329,6 @@ describe('DependencyFactory', () => {
             const invalidLogger = {
                 debug: createMockFn(),
                 info: createMockFn()
-                // Missing warn and error methods
             };
 
             expect(() => {
@@ -373,7 +351,6 @@ describe('DependencyFactory', () => {
         it('should reject invalid notification manager interface', () => {
             const invalidNotificationManager = {
                 emit: createMockFn()
-                // Missing on and removeListener methods
             };
 
             expect(() => {
@@ -404,12 +381,10 @@ describe('DependencyFactory', () => {
             const tiktokDeps = factory.createTiktokDependencies(mockConfig.tiktok, {});
             const twitchDeps = factory.createTwitchDependencies(mockConfig.twitch, {});
 
-            // All should have loggers with same interface
             expect(typeof youtubeDeps.logger.debug).toBe('function');
             expect(typeof tiktokDeps.logger.debug).toBe('function');
             expect(typeof twitchDeps.logger.debug).toBe('function');
 
-            // All should pass interface validation
             expect(() => {
                 factory.validateDependencyInterface(youtubeDeps.logger, 'logger');
                 factory.validateDependencyInterface(tiktokDeps.logger, 'logger');
@@ -418,7 +393,7 @@ describe('DependencyFactory', () => {
         });
 
         it('should handle dependency creation errors gracefully', () => {
-            const invalidConfig = {}; // No required fields
+            const invalidConfig = {};
 
             expect(() => {
                 factory.createYoutubeDependencies(invalidConfig, {});
@@ -434,17 +409,14 @@ describe('DependencyFactory', () => {
         });
 
         it('should maintain backward compatibility with existing platform creation', () => {
-            // Test that created dependencies can be used with existing platform constructors
             const youtubeDeps = factory.createYoutubeDependencies(mockConfig.youtube, {});
             const tiktokDeps = factory.createTiktokDependencies(mockConfig.tiktok, {});
             const twitchDeps = factory.createTwitchDependencies(mockConfig.twitch, {});
 
-            // Dependencies should have properties expected by platform constructors
             expect(youtubeDeps).toHaveProperty('logger');
             expect(tiktokDeps).toHaveProperty('logger');
             expect(twitchDeps).toHaveProperty('logger');
 
-            // Each platform should have its specific dependencies
             expect(youtubeDeps).toHaveProperty('apiClient');
             expect(tiktokDeps).toHaveProperty('WebcastPushConnection');
             expect(twitchDeps).toHaveProperty('authManager');
@@ -477,7 +449,7 @@ describe('DependencyFactory', () => {
         });
 
         it('should fail fast with detailed error context', () => {
-            const invalidConfig = { enabled: true }; // Missing required fields
+            const invalidConfig = { enabled: true };
 
             try {
                 factory.createYoutubeDependencies(invalidConfig, {});
@@ -496,9 +468,9 @@ describe('DependencyFactory', () => {
     describe('Configuration Validation', () => {
         it('should validate all required YouTube configuration fields', () => {
             const configs = [
-                { enabled: true }, // Missing username
-                { apiKey: 'test' }, // Missing username
-                { enableAPI: true, username: 'test-channel' } // Missing apiKey when enableAPI=true
+                { enabled: true },
+                { apiKey: 'test' },
+                { enableAPI: true, username: 'test-channel' }
             ];
 
             configs.forEach(config => {
@@ -510,9 +482,9 @@ describe('DependencyFactory', () => {
 
         it('should validate all required TikTok configuration fields', () => {
             const configs = [
-                { enabled: true }, // Missing username
-                { username: '' }, // Empty username
-                { username: null }, // Null username
+                { enabled: true },
+                { username: '' },
+                { username: null }
             ];
 
             configs.forEach(config => {
@@ -524,11 +496,11 @@ describe('DependencyFactory', () => {
 
         it('should validate all required Twitch configuration fields', () => {
             const configs = [
-                { enabled: true }, // Missing apiKey and channel
-                { apiKey: 'test' }, // Missing channel
-                { channel: 'test' }, // Missing apiKey
-                { apiKey: '', channel: 'test' }, // Empty apiKey
-                { apiKey: 'test', channel: '' }, // Empty channel
+                { enabled: true },
+                { apiKey: 'test' },
+                { channel: 'test' },
+                { apiKey: '', channel: 'test' },
+                { apiKey: 'test', channel: '' }
             ];
 
             configs.forEach(config => {

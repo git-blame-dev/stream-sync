@@ -1,11 +1,6 @@
-
 const { describe, test, expect } = require('bun:test');
-
-const { initializeTestLogging } = require('../helpers/test-setup');
 const NotificationBuilder = require('../../src/utils/notification-builder');
 const { generateLogMessage } = require('../helpers/notification-test-utils');
-
-initializeTestLogging();
 
 describe('Gift Display Details', () => {
     const buildGift = (overrides = {}) => NotificationBuilder.build({
@@ -29,7 +24,6 @@ describe('Gift Display Details', () => {
 
         const logMessage = generateLogMessage('platform:gift', notification);
 
-        // NotificationBuilder format: "TikTok Gift: 4x Rose (4 coins) from GiftUser"
         expect(logMessage).toContain('GiftUser');
         expect(logMessage).toContain('4x Rose');
         expect(logMessage).toContain('coin');
