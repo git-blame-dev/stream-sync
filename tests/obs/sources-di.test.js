@@ -2,6 +2,7 @@
 const { describe, expect, beforeEach, it, afterEach } = require('bun:test');
 const { createMockFn, restoreAllMocks } = require('../helpers/bun-mock-utils');
 const { createRuntimeConstantsFixture } = require('../helpers/runtime-constants-fixture');
+const { noOpLogger } = require('../helpers/mock-factories');
 const { OBSSourcesManager, createOBSSourcesManager } = require('../../src/obs/sources');
 
 describe('OBSSourcesManager DI requirements', () => {
@@ -34,6 +35,7 @@ describe('OBSSourcesManager DI requirements', () => {
         };
 
         const sourcesManager = createOBSSourcesManager(mockObsManager, {
+            logger: noOpLogger,
             runtimeConstants: createRuntimeConstantsFixture(),
             ensureOBSConnected: mockObsManager.ensureConnected,
             obsCall: mockObsManager.call

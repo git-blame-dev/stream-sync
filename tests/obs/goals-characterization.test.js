@@ -139,12 +139,10 @@ describe('OBS Goals Module Characterization Tests', () => {
 
         test('initializeGoalDisplay should handle errors from updateAllGoalDisplays gracefully', async () => {
             const obsError = new Error('OBS not connected');
-            // Make updateAllGoalDisplays throw by making getAllGoalStates throw
             mockGoalTracker.getAllGoalStates.mockImplementationOnce(() => {
                 throw obsError;
             });
 
-            // updateAllGoalDisplays catches the error internally - should not throw
             await expect(goalsModule.initializeGoalDisplay()).resolves.toBeUndefined();
         }, TEST_TIMEOUTS.FAST);
     });
@@ -199,10 +197,8 @@ describe('OBS Goals Module Characterization Tests', () => {
         test('processDonationGoal should process donation and update display', async () => {
             const { updateTextSource } = mockSourcesManager;
 
-            // Ensure OBS is connected for this test
             mockObsManager.isConnected.mockReturnValue(true);
 
-            // Ensure addDonationToGoal returns the expected structure
             mockGoalTracker.addDonationToGoal.mockResolvedValue({
                 success: true,
                 formatted: '500/1000 coins',
@@ -211,7 +207,6 @@ describe('OBS Goals Module Characterization Tests', () => {
                 percentage: 50
             });
 
-            // Ensure updateTextSource doesn't throw an error
             updateTextSource.mockResolvedValue();
 
             const result = await goalsModule.processDonationGoal('tiktok', 100);
@@ -224,10 +219,8 @@ describe('OBS Goals Module Characterization Tests', () => {
         test('processPaypiggyGoal should process paypiggy and update display', async () => {
             const { updateTextSource } = mockSourcesManager;
 
-            // Ensure OBS is connected for this test
             mockObsManager.isConnected.mockReturnValue(true);
 
-            // Ensure addPaypiggyToGoal returns the expected structure
             mockGoalTracker.addPaypiggyToGoal.mockResolvedValue({
                 success: true,
                 formatted: '500/1000 coins',
@@ -236,7 +229,6 @@ describe('OBS Goals Module Characterization Tests', () => {
                 percentage: 50
             });
 
-            // Ensure updateTextSource doesn't throw an error
             updateTextSource.mockResolvedValue();
 
             const result = await goalsModule.processPaypiggyGoal('tiktok');
@@ -250,7 +242,6 @@ describe('OBS Goals Module Characterization Tests', () => {
             const error = new Error('Donation processing failed');
             mockGoalTracker.addDonationToGoal.mockRejectedValueOnce(error);
 
-            // The implementation returns error objects instead of throwing
             const result = await goalsModule.processDonationGoal('tiktok', 100);
             expect(result.success).toBe(false);
             expect(result.error).toContain('Donation processing failed');
@@ -316,10 +307,8 @@ describe('OBS Goals Module Characterization Tests', () => {
         test('should handle OBS connection errors gracefully', async () => {
             const { updateTextSource } = mockSourcesManager;
 
-            // Mock OBS connection failure
             updateTextSource.mockRejectedValueOnce(new Error('OBS connection failed'));
 
-            // This should not throw, but handle the error gracefully
             await expect(goalsModule.updateGoalDisplay('tiktok')).resolves.toBeUndefined();
         }, TEST_TIMEOUTS.FAST);
 
@@ -335,31 +324,27 @@ describe('OBS Goals Module Characterization Tests', () => {
 
     describe('Performance Tests', () => {
         test('should handle rapid goal updates efficiently', async () => {
-            const { updateTextSource } = mockSourcesManager;
             const startTime = testClock.now();
 
-            // Make multiple rapid updates
             for (let i = 0; i < 10; i++) {
                 await goalsModule.updateGoalDisplay('tiktok');
             }
 
             testClock.advance(10);
             const duration = testClock.now() - startTime;
-            expect(duration).toBeLessThan(1000); // Should complete quickly
+            expect(duration).toBeLessThan(1000);
         }, TEST_TIMEOUTS.MEDIUM);
 
         test('should handle multiple platform updates efficiently', async () => {
-            const { updateTextSource } = mockSourcesManager;
             const startTime = testClock.now();
 
-            // Update all platforms multiple times
             for (let i = 0; i < 5; i++) {
                 await goalsModule.updateAllGoalDisplays();
             }
 
             testClock.advance(15);
             const duration = testClock.now() - startTime;
-            expect(duration).toBeLessThan(1000); // Should complete quickly
+            expect(duration).toBeLessThan(1000);
         }, TEST_TIMEOUTS.MEDIUM);
     });
 });

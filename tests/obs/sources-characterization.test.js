@@ -16,7 +16,6 @@ setupAutomatedCleanup({
 });
 
 describe('OBS Sources Module Characterization Tests', () => {
-    let mockLogger;
     let mockObsManager;
     let mockEnsureConnected;
     let mockObsCall;
@@ -25,13 +24,6 @@ describe('OBS Sources Module Characterization Tests', () => {
 
     beforeEach(() => {
         process.env.NODE_ENV = 'test';
-
-        mockLogger = {
-            debug: createMockFn(),
-            info: createMockFn(),
-            warn: createMockFn(),
-            error: createMockFn()
-        };
 
         mockEnsureConnected = createMockFn().mockResolvedValue();
         mockObsCall = createMockFn();
@@ -47,7 +39,7 @@ describe('OBS Sources Module Characterization Tests', () => {
         };
 
         sourcesModule = createOBSSourcesManager(mockObsManager, {
-            logger: mockLogger,
+            logger: noOpLogger,
             runtimeConstants: createRuntimeConstantsFixture(),
             ensureOBSConnected: mockEnsureConnected,
             obsCall: mockObsCall,

@@ -1,13 +1,12 @@
 const { describe, test, expect, it, afterEach } = require('bun:test');
 const { unmockModule, restoreAllModuleMocks } = require('../helpers/bun-module-mocks');
+const { noOpLogger } = require('../helpers/mock-factories');
 
 unmockModule('../../src/platforms/tiktok');
 
 const { EventEmitter } = require('events');
 const { DependencyFactory } = require('../../src/utils/dependency-factory');
 const { TikTokPlatform } = require('../../src/platforms/tiktok');
-
-const noOpLogger = { debug: () => {}, info: () => {}, warn: () => {}, error: () => {} };
 
 const mockRetrySystem = {
     resetRetryCount: () => {},
