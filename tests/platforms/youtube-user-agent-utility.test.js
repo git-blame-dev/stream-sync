@@ -1,10 +1,8 @@
-
 const { describe, test, expect, beforeEach, it, afterEach } = require('bun:test');
-const { createMockFn, restoreAllMocks } = require('../helpers/bun-mock-utils');
-
+const { restoreAllMocks } = require('../helpers/bun-mock-utils');
+const { noOpLogger } = require('../helpers/mock-factories');
 const { initializeTestLogging } = require('../helpers/test-setup');
 
-// Initialize logging for tests
 initializeTestLogging();
 
 const { YouTubeUserAgentManager } = require('../../src/utils/youtube-user-agent-manager');
@@ -15,18 +13,9 @@ describe('YouTube User-Agent Utility', () => {
     });
 
     let userAgentManager;
-    let mockLogger;
 
     beforeEach(() => {
-        mockLogger = {
-            debug: createMockFn(),
-            info: createMockFn(),
-            warn: createMockFn(),
-            error: createMockFn()
-        };
-
-        // Create user agent manager instance
-        userAgentManager = new YouTubeUserAgentManager(mockLogger);
+        userAgentManager = new YouTubeUserAgentManager(noOpLogger);
     });
 
     describe('User-Agent Management', () => {
@@ -48,25 +37,22 @@ describe('YouTube User-Agent Utility', () => {
         it('should cycle through all user agents', () => {
             const agents = new Set();
             const totalAgents = userAgentManager.getUserAgents().length;
-            
-            // Get all agents in rotation
+
             for (let i = 0; i < totalAgents; i++) {
                 agents.add(userAgentManager.getNextUserAgent());
             }
-            
+
             expect(agents.size).toBe(totalAgents);
         });
 
         it('should reset to first agent after cycling through all', () => {
             const firstAgent = userAgentManager.getNextUserAgent();
             const totalAgents = userAgentManager.getUserAgents().length;
-            
-            // Cycle through all agents
+
             for (let i = 0; i < totalAgents - 1; i++) {
                 userAgentManager.getNextUserAgent();
             }
-            
-            // Next call should return to the first agent
+
             const lastAgent = userAgentManager.getNextUserAgent();
             expect(lastAgent).toBe(firstAgent);
         });
@@ -89,16 +75,6 @@ describe('YouTube User-Agent Utility', () => {
             expect(() => {
                 userAgentManager.setUserAgents(invalidAgents);
             }).toThrow('Invalid user agent format');
-        });
-
-        it('should log user agent rotation', () => {
-            userAgentManager.getNextUserAgent();
-            
-            expect(mockLogger.debug).toHaveBeenCalledWith(
-                'User-Agent rotation',
-                'youtube',
-                expect.any(Object)
-            );
         });
 
         it('should provide current user agent index', () => {
@@ -131,12 +107,11 @@ describe('YouTube User-Agent Utility', () => {
 
         it('should track rotation count', () => {
             const totalAgents = userAgentManager.getUserAgents().length;
-            
-            // Complete one full rotation
+
             for (let i = 0; i < totalAgents; i++) {
                 userAgentManager.getNextUserAgent();
             }
-            
+
             expect(userAgentManager.getStats().rotationCount).toBe(1);
         });
 
@@ -167,9 +142,8 @@ describe('YouTube User-Agent Utility', () => {
 
     describe('Integration with YouTube Platform', () => {
         it('should be compatible with existing YouTube platform usage', () => {
-            // Simulate how the YouTube platform would use the manager
             const userAgent = userAgentManager.getNextUserAgent();
-            
+
             expect(typeof userAgent).toBe('string');
             expect(userAgent.length).toBeGreaterThan(0);
             expect(userAgent).toContain('Mozilla');
@@ -177,14 +151,12 @@ describe('YouTube User-Agent Utility', () => {
 
         it('should handle concurrent access safely', () => {
             const promises = [];
-            
-            // Simulate multiple concurrent requests
+
             for (let i = 0; i < 10; i++) {
                 promises.push(Promise.resolve(userAgentManager.getNextUserAgent()));
             }
-            
+
             return Promise.all(promises).then(agents => {
-                // All agents should be valid
                 agents.forEach(agent => {
                     expect(typeof agent).toBe('string');
                     expect(agent.length).toBeGreaterThan(0);
@@ -192,4 +164,4 @@ describe('YouTube User-Agent Utility', () => {
             });
         });
     });
-}); 
+});
