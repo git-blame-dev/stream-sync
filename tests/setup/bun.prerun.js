@@ -10,6 +10,17 @@ noopProcessExit.calls = [];
 
 process.exit = noopProcessExit;
 
-// Expose original reference so setup can restore it
 global.__ORIGINAL_PROCESS_EXIT__ = originalProcessExit;
 global.__NOOP_PROCESS_EXIT__ = noopProcessExit;
+
+const originalStderrWrite = process.stderr.write.bind(process.stderr);
+const stderrCapture = [];
+
+process.stderr.write = (chunk, encoding, callback) => {
+    stderrCapture.push(chunk);
+    if (typeof callback === 'function') callback();
+    return true;
+};
+
+global.__ORIGINAL_STDERR_WRITE__ = originalStderrWrite;
+global.__STDERR_CAPTURE__ = stderrCapture;

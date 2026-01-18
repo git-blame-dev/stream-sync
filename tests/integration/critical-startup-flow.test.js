@@ -33,6 +33,8 @@ describe('Critical Startup Flow', () => {
 
     test('startup fails fast when config file does not exist in production', () => {
         const originalNodeEnv = process.env.NODE_ENV;
+        const originalStderrWrite = process.stderr.write;
+        process.stderr.write = () => {};
         process.env.NODE_ENV = 'production';
         try {
             const nonExistentPath = path.join(tempDir, 'does-not-exist.ini');
@@ -42,20 +44,29 @@ describe('Critical Startup Flow', () => {
             expect(() => configManager.load()).toThrow('Configuration file not found');
         } finally {
             process.env.NODE_ENV = originalNodeEnv;
+            process.stderr.write = originalStderrWrite;
         }
     });
 
     test('startup fails fast when required sections are missing', () => {
-        const configPath = path.join(tempDir, 'incomplete.ini');
-        fs.writeFileSync(configPath, '[minimal]\nkey=value\n');
-        configManager.configPath = configPath;
-        configManager.isLoaded = false;
+        const originalStderrWrite = process.stderr.write;
+        process.stderr.write = () => {};
+        try {
+            const configPath = path.join(tempDir, 'incomplete.ini');
+            fs.writeFileSync(configPath, '[minimal]\nkey=value\n');
+            configManager.configPath = configPath;
+            configManager.isLoaded = false;
 
-        expect(() => configManager.load()).toThrow('Missing required configuration sections');
+            expect(() => configManager.load()).toThrow('Missing required configuration sections');
+        } finally {
+            process.stderr.write = originalStderrWrite;
+        }
     });
 
     test('config path override via environment variable takes precedence in production', () => {
         const originalNodeEnv = process.env.NODE_ENV;
+        const originalStderrWrite = process.stderr.write;
+        process.stderr.write = () => {};
         process.env.NODE_ENV = 'production';
         try {
             const overridePath = path.join(tempDir, 'override.ini');
@@ -66,6 +77,7 @@ describe('Critical Startup Flow', () => {
             expect(() => configManager.load()).toThrow(overridePath);
         } finally {
             process.env.NODE_ENV = originalNodeEnv;
+            process.stderr.write = originalStderrWrite;
         }
     });
 

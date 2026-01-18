@@ -142,22 +142,31 @@ describe('Configuration System Behavior Tests', () => {
         });
 
         it('should prevent system startup when required sections are missing', () => {
-            const incompleteConfig = `
+            const originalStderrWrite = process.stderr.write;
+            process.stderr.write = () => {};
+            try {
+                const incompleteConfig = `
 [general]
 debugEnabled = true
 
 [obs]
 enabled = true
 `;
-            setupConfigMocks(incompleteConfig);
+                setupConfigMocks(incompleteConfig);
 
-            expect(() => {
-                reloadConfig();
-            }).toThrow(/Missing required configuration sections/);
+                expect(() => {
+                    reloadConfig();
+                }).toThrow(/Missing required configuration sections/);
+            } finally {
+                process.stderr.write = originalStderrWrite;
+            }
         });
 
         it('should prevent startup when an enabled platform is missing a username', () => {
-            const missingUsernameConfig = `
+            const originalStderrWrite = process.stderr.write;
+            process.stderr.write = () => {};
+            try {
+                const missingUsernameConfig = `
 ${testConfigContent}
 
 [twitch]
@@ -178,15 +187,21 @@ innertubeInstanceTtlMs = 300000
 innertubeMinTtlMs = 60000
 userAgents = test-agent-1|test-agent-2
 `;
-            setupConfigMocks(missingUsernameConfig);
+                setupConfigMocks(missingUsernameConfig);
 
-            expect(() => {
-                reloadConfig();
-            }).toThrow(/Twitch.*username/i);
+                expect(() => {
+                    reloadConfig();
+                }).toThrow(/Twitch.*username/i);
+            } finally {
+                process.stderr.write = originalStderrWrite;
+            }
         });
 
         it('should provide helpful error messages for missing config files', () => {
             const originalNodeEnv = process.env.NODE_ENV;
+            const originalStderrWrite = process.stderr.write;
+            const stderrOutput = [];
+            process.stderr.write = (msg) => stderrOutput.push(msg);
             process.env.NODE_ENV = 'production';
             try {
                 fs.existsSync = createMockFn(() => false);
@@ -194,13 +209,17 @@ userAgents = test-agent-1|test-agent-2
                 expect(() => {
                     reloadConfig();
                 }).toThrow(/Configuration file not found/);
+                expect(stderrOutput.join('')).toContain('SETTINGS FILE MISSING');
             } finally {
                 process.env.NODE_ENV = originalNodeEnv;
+                process.stderr.write = originalStderrWrite;
             }
         });
 
         it('should not fall back when the configured path is missing', () => {
             const originalNodeEnv = process.env.NODE_ENV;
+            const originalStderrWrite = process.stderr.write;
+            process.stderr.write = () => {};
             process.env.NODE_ENV = 'production';
             try {
                 fs.existsSync = createMockFn((path) => path === '/default/config.ini');
@@ -213,6 +232,7 @@ userAgents = test-agent-1|test-agent-2
                 expect(() => configManager.load()).toThrow(/Configuration file not found/);
             } finally {
                 process.env.NODE_ENV = originalNodeEnv;
+                process.stderr.write = originalStderrWrite;
             }
         });
     });
@@ -447,6 +467,8 @@ userAgents = test-agent-1|test-agent-2
     describe('Error Recovery Behavior', () => {
         it('should surface missing config errors without fallback', () => {
             const originalNodeEnv = process.env.NODE_ENV;
+            const originalStderrWrite = process.stderr.write;
+            process.stderr.write = () => {};
             process.env.NODE_ENV = 'production';
             try {
                 const fallbackPath = '/fallback/config.ini';
@@ -465,22 +487,29 @@ userAgents = test-agent-1|test-agent-2
                 expect(() => configManager.load()).toThrow(/Configuration file not found/);
             } finally {
                 process.env.NODE_ENV = originalNodeEnv;
+                process.stderr.write = originalStderrWrite;
             }
         });
 
         it('should provide helpful errors for corrupted config files', () => {
-            const corruptedConfig = `
+            const originalStderrWrite = process.stderr.write;
+            process.stderr.write = () => {};
+            try {
+                const corruptedConfig = `
 [general
 debugEnabled = true
 broken syntax here
 [obs]
 enabled =
 `;
-            setupConfigMocks(corruptedConfig);
+                setupConfigMocks(corruptedConfig);
 
-            expect(() => {
-                reloadConfig();
-            }).toThrow();
+                expect(() => {
+                    reloadConfig();
+                }).toThrow();
+            } finally {
+                process.stderr.write = originalStderrWrite;
+            }
         });
 
         it('should maintain system stability during config errors', () => {
@@ -698,19 +727,28 @@ maxMessageLength = 500
 
     describe('Configuration Schema Validation Behavior', () => {
         it('should validate required sections exist for system operation', () => {
-            const minimalConfig = `
+            const originalStderrWrite = process.stderr.write;
+            process.stderr.write = () => {};
+            try {
+                const minimalConfig = `
 [general]
 debugEnabled = true
 `;
-            setupConfigMocks(minimalConfig);
+                setupConfigMocks(minimalConfig);
 
-            expect(() => {
-                reloadConfig();
-            }).toThrow(/Missing required configuration sections.*obs.*commands/);
+                expect(() => {
+                    reloadConfig();
+                }).toThrow(/Missing required configuration sections.*obs.*commands/);
+            } finally {
+                process.stderr.write = originalStderrWrite;
+            }
         });
 
         it('should provide guidance for incomplete platform configuration', () => {
-            const incompleteConfig = `
+            const originalStderrWrite = process.stderr.write;
+            process.stderr.write = () => {};
+            try {
+                const incompleteConfig = `
 ${testConfigContent}
 
 [youtube]
@@ -721,11 +759,14 @@ innertubeInstanceTtlMs = 300000
 innertubeMinTtlMs = 60000
 userAgents = test-agent-1|test-agent-2
 `;
-            setupConfigMocks(incompleteConfig);
+                setupConfigMocks(incompleteConfig);
 
-            expect(() => {
-                reloadConfig();
-            }).toThrow(/YouTube.*username/i);
+                expect(() => {
+                    reloadConfig();
+                }).toThrow(/YouTube.*username/i);
+            } finally {
+                process.stderr.write = originalStderrWrite;
+            }
         });
 
         it('should handle numeric configuration values for timing behavior', () => {

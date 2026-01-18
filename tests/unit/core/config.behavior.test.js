@@ -98,6 +98,9 @@ describe('ConfigManager behavior', () => {
 
     it('throws user-friendly error when config file is missing in non-test environment', () => {
         const originalNodeEnv = process.env.NODE_ENV;
+        const originalStderrWrite = process.stderr.write;
+        const stderrOutput = [];
+        process.stderr.write = (msg) => stderrOutput.push(msg);
         process.env.NODE_ENV = 'production';
         try {
             fs.existsSync = createMockFn(() => false);
@@ -106,22 +109,33 @@ describe('ConfigManager behavior', () => {
             configManager.configPath = '/tmp/non-existent-config.ini';
 
             expect(() => configManager.load()).toThrow(/Configuration file not found/);
+            expect(stderrOutput.join('')).toContain('SETTINGS FILE MISSING');
         } finally {
             process.env.NODE_ENV = originalNodeEnv;
+            process.stderr.write = originalStderrWrite;
         }
     });
 
     it('throws error when required sections are missing', () => {
-        setupConfigMocks('[general]\ndebugEnabled = true\n');
-        configManager.config = null;
-        configManager.isLoaded = false;
-        configManager.configPath = testConfigPath;
+        const originalStderrWrite = process.stderr.write;
+        process.stderr.write = () => {};
+        try {
+            setupConfigMocks('[general]\ndebugEnabled = true\n');
+            configManager.config = null;
+            configManager.isLoaded = false;
+            configManager.configPath = testConfigPath;
 
-        expect(() => configManager.load()).toThrow(/Missing required configuration sections/);
+            expect(() => configManager.load()).toThrow(/Missing required configuration sections/);
+        } finally {
+            process.stderr.write = originalStderrWrite;
+        }
     });
 
     it('throws error when runtime config keys are missing', () => {
-        const incompleteConfig = `
+        const originalStderrWrite = process.stderr.write;
+        process.stderr.write = () => {};
+        try {
+            const incompleteConfig = `
 [general]
 chatMsgGroup = statusbar chat grp
 viewerCountPollingInterval = 60
@@ -179,12 +193,15 @@ cheermoteDefaultType = cheer
 [commands]
 enabled = true
 `;
-        setupConfigMocks(incompleteConfig);
-        configManager.config = null;
-        configManager.isLoaded = false;
-        configManager.configPath = testConfigPath;
+            setupConfigMocks(incompleteConfig);
+            configManager.config = null;
+            configManager.isLoaded = false;
+            configManager.configPath = testConfigPath;
 
-        expect(() => configManager.load()).toThrow(/obs.connectionTimeoutMs/);
+            expect(() => configManager.load()).toThrow(/obs.connectionTimeoutMs/);
+        } finally {
+            process.stderr.write = originalStderrWrite;
+        }
     });
 
     it('parses booleans/numbers with safe defaults when keys are missing or invalid', () => {
@@ -345,29 +362,41 @@ enabled = true
     });
 
     it('throws error when StreamElements enabled without channel IDs', () => {
-        setupConfigMocks(buildConfig({
-            streamelementsSection: `enabled = true
+        const originalStderrWrite = process.stderr.write;
+        process.stderr.write = () => {};
+        try {
+            setupConfigMocks(buildConfig({
+                streamelementsSection: `enabled = true
 jwtToken = se-jwt-token`
-        }));
-        configManager.config = null;
-        configManager.isLoaded = false;
-        configManager.configPath = testConfigPath;
+            }));
+            configManager.config = null;
+            configManager.isLoaded = false;
+            configManager.configPath = testConfigPath;
 
-        expect(() => configManager.load()).toThrow(/StreamElements channel ID/);
+            expect(() => configManager.load()).toThrow(/StreamElements channel ID/);
+        } finally {
+            process.stderr.write = originalStderrWrite;
+        }
     });
 
     it('throws error when YouTube API usage is enabled without apiKey', () => {
-        setupConfigMocks(buildConfig({
-            youtubeSection: `enabled = true
+        const originalStderrWrite = process.stderr.write;
+        process.stderr.write = () => {};
+        try {
+            setupConfigMocks(buildConfig({
+                youtubeSection: `enabled = true
  username = TestChannel
  enableAPI = true
  streamDetectionMethod = youtubei
  viewerCountMethod = youtubei`
-        }));
-        configManager.config = null;
-        configManager.isLoaded = false;
-        configManager.configPath = testConfigPath;
+            }));
+            configManager.config = null;
+            configManager.isLoaded = false;
+            configManager.configPath = testConfigPath;
 
-        expect(() => configManager.load()).toThrow(/YouTube API key/);
+            expect(() => configManager.load()).toThrow(/YouTube API key/);
+        } finally {
+            process.stderr.write = originalStderrWrite;
+        }
     });
 });
