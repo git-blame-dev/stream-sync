@@ -1,6 +1,6 @@
 const { describe, test, expect, it, afterEach } = require('bun:test');
 const { createMockFn, restoreAllMocks } = require('../helpers/bun-mock-utils');
-
+const { noOpLogger } = require('../helpers/mock-factories');
 const logging = require('../../src/core/logging');
 logging.setConfigValidator(() => ({ logging: {} }));
 
@@ -13,7 +13,6 @@ describe('TikTok eventFactory chat message behavior', () => {
     });
 
     it('builds a normalized chat event from raw TikTok data', () => {
-        const logger = { info: () => {}, debug: () => {}, warn: () => {}, error: () => {} };
         const connectionFactory = {
             createConnection: () => ({
                 connect: createMockFn(),
@@ -27,7 +26,7 @@ describe('TikTok eventFactory chat message behavior', () => {
             {
                 WebcastEvent: {},
                 ControlEvent: {},
-                logger,
+                logger: noOpLogger,
                 connectionFactory,
                 timestampService: {
                     extractTimestamp: createMockFn(() => new Date(testClock.now()).toISOString())

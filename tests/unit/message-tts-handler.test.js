@@ -166,7 +166,7 @@ describe('MessageTTSHandler', () => {
             expect(stages).toHaveLength(2);
             expect(stages[1]).toEqual({
                 text: 'TikTokUser says Cool stream!',
-                delay: 0, // Immediate for chat comments
+                delay: 0,
                 type: 'message'
             });
         });
@@ -234,8 +234,8 @@ describe('MessageTTSHandler', () => {
             const stages = MessageTTSHandler.createTTSStages(notification);
             
             expect(stages).toHaveLength(2);
-            expect(stages[1].text).toContain('VeryLongUser says'); // Username should be truncated
-            expect(stages[1].text.length).toBeLessThan(600); // Should be reasonable length
+            expect(stages[1].text).toContain('VeryLongUser says');
+            expect(stages[1].text.length).toBeLessThan(600);
         });
     });
 

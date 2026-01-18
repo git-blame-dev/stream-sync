@@ -2,8 +2,7 @@ const { describe, test, expect, afterEach } = require('bun:test');
 
 const { RetrySystem } = require('../../src/utils/retry-system');
 const { safeDelay } = require('../../src/utils/timeout-validator');
-
-const noOpLogger = { debug: () => {}, info: () => {}, warn: () => {}, error: () => {} };
+const { noOpLogger } = require('../helpers/mock-factories');
 
 describe('RetrySystem.handleConnectionError', () => {
     let retrySystem;
