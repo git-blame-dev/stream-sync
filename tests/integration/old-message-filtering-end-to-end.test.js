@@ -3,7 +3,7 @@ const { clearAllMocks, createMockFn, restoreAllMocks } = require('../helpers/bun
 const { mockModule, resetModules, restoreAllModuleMocks } = require('../helpers/bun-module-mocks');
 
 const { TEST_TIMEOUTS, createMockConfig } = require('../helpers/test-setup');
-const { createMockNotificationDispatcher, setupAutomatedCleanup } = require('../helpers/mock-factories');
+const { createMockNotificationDispatcher, setupAutomatedCleanup, noOpLogger } = require('../helpers/mock-factories');
 const { expectNoTechnicalArtifacts } = require('../helpers/assertion-helpers');
 const { createRuntimeConstantsFixture } = require('../helpers/runtime-constants-fixture');
 const { processIncomingMessage } = require('../helpers/old-message-filtering-helper');
@@ -15,7 +15,6 @@ setupAutomatedCleanup({
     logPerformanceMetrics: true
 });
 
-// Helper function to create test config for AppRuntime
 const createAppRuntimeTestConfig = () => ({
     general: {
         streamDetectionEnabled: false,
@@ -70,7 +69,6 @@ const setPlatformConnectionTime = (platformLifecycleService, platform, timestamp
     }
 };
 
-// Helper function to create test dependencies for AppRuntime
 const createAppRuntimeTestDependencies = () => {
     const platformLifecycleService = createMockPlatformLifecycleService();
     const eventEmitter = new (require('events'))();
@@ -95,7 +93,7 @@ const createAppRuntimeTestDependencies = () => {
         authManager: {
             validateAllConfigs: createMockFn().mockResolvedValue(true)
         },
-        logger: { debug: createMockFn(), info: createMockFn(), warn: createMockFn(), error: createMockFn() },
+        logger: noOpLogger,
         platformLifecycleService,
         eventBus: {
             emit: eventEmitter.emit.bind(eventEmitter),
@@ -176,11 +174,8 @@ describe('Old Message Filtering End-to-End Behavior', () => {
 
     describe('User Experience: Old Messages Are Not Announced', () => {
         it('should filter old TikTok messages and not announce them to users via TTS', async () => {
-            // Given: Bot connects to TikTok at a specific time
             const botConnectionTime = testStartTime;
-            
-            // And: There's an old cached message sent 5 minutes before bot connected
-            const oldMessageTime = botConnectionTime - (5 * 60 * 1000); // 5 minutes ago
+            const oldMessageTime = botConnectionTime - (5 * 60 * 1000);
             const oldMessage = {
                 createTime: oldMessageTime,
                 user: {
@@ -190,21 +185,15 @@ describe('Old Message Filtering End-to-End Behavior', () => {
                 },
                 comment: 'This is an old cached message'
             };
-            
-            // When: The old message is processed by the system
+
             const { platformLifecycleService, timestampService } = createAppRuntimeTestDependencies();
             setPlatformConnectionTime(platformLifecycleService, 'tiktok', botConnectionTime);
-
             const result = await processIncomingMessage('tiktok', oldMessage, timestampService, platformLifecycleService);
-            
-            
-            // Then: User does not see or hear the old message
+
             expect(result.wasFiltered).toBe(true);
             expect(result.reason).toContain('old message');
             expect(result.userExperienced?.ttsGenerated).toBe(false);
             expect(result.userExperienced?.notificationShown).toBe(false);
-            
-            // And: No technical artifacts in any user-facing content
             if (result.userMessage) {
                 expectNoTechnicalArtifacts(result.userMessage);
             }
@@ -233,11 +222,8 @@ describe('Old Message Filtering End-to-End Behavior', () => {
         });
 
         it('should filter old YouTube messages and not announce them to users', async () => {
-            // Given: Bot connects to YouTube at a specific time
             const botConnectionTime = testStartTime;
-            
-            // And: There's an old cached message with timestamp in microseconds (YouTube format)
-            const oldMessageTime = botConnectionTime - (3 * 60 * 1000); // 3 minutes ago
+            const oldMessageTime = botConnectionTime - (3 * 60 * 1000);
             const oldMessage = {
                 item: {
                     author: {
@@ -248,17 +234,14 @@ describe('Old Message Filtering End-to-End Behavior', () => {
                     message: {
                         text: 'This is an old YouTube message'
                     },
-                    timestamp: (oldMessageTime * 1000).toString() // Convert to microseconds string
+                    timestamp: (oldMessageTime * 1000).toString()
                 }
             };
-            
-            // When: The old message is processed by the system
+
             const { platformLifecycleService, timestampService } = createAppRuntimeTestDependencies();
             setPlatformConnectionTime(platformLifecycleService, 'youtube', botConnectionTime);
-
             const result = await processIncomingMessage('youtube', oldMessage, timestampService, platformLifecycleService);
-            
-            // Then: User does not see or hear the old message
+
             expect(result.wasFiltered).toBe(true);
             expect(result.reason).toContain('old message');
             expect(result.userExperienced?.ttsGenerated).toBe(false);
@@ -266,11 +249,8 @@ describe('Old Message Filtering End-to-End Behavior', () => {
         });
 
         it('should filter old Twitch messages and not announce them to users', async () => {
-            // Given: Bot connects to Twitch at a specific time
             const botConnectionTime = testStartTime;
-            
-            // And: There's an old cached message with TMI timestamp
-            const oldMessageTime = botConnectionTime - (7 * 60 * 1000); // 7 minutes ago
+            const oldMessageTime = botConnectionTime - (7 * 60 * 1000);
             const oldMessage = {
                 user: {
                     username: 'TestUser',
@@ -283,14 +263,11 @@ describe('Old Message Filtering End-to-End Behavior', () => {
                     username: 'TestUser'
                 }
             };
-            
-            // When: The old message is processed by the system
+
             const { platformLifecycleService, timestampService } = createAppRuntimeTestDependencies();
             setPlatformConnectionTime(platformLifecycleService, 'twitch', botConnectionTime);
-
             const result = await processIncomingMessage('twitch', oldMessage, timestampService, platformLifecycleService);
-            
-            // Then: User does not see or hear the old message
+
             expect(result.wasFiltered).toBe(true);
             expect(result.reason).toContain('old message');
             expect(result.userExperienced?.ttsGenerated).toBe(false);
@@ -300,11 +277,8 @@ describe('Old Message Filtering End-to-End Behavior', () => {
 
     describe('User Experience: Recent Messages Are Processed Normally', () => {
         it('should process recent TikTok messages and announce them to users', async () => {
-            // Given: Bot connects to TikTok at a specific time
             const botConnectionTime = testStartTime;
-            
-            // And: There's a recent message sent after bot connected
-            const recentMessageTime = botConnectionTime + (30 * 1000); // 30 seconds after connection
+            const recentMessageTime = botConnectionTime + (30 * 1000);
             const recentMessage = {
                 createTime: recentMessageTime,
                 user: {
@@ -314,32 +288,24 @@ describe('Old Message Filtering End-to-End Behavior', () => {
                 },
                 comment: 'This is a new live message'
             };
-            
-            // When: The recent message is processed by the system
+
             const { platformLifecycleService, timestampService } = createAppRuntimeTestDependencies();
             setPlatformConnectionTime(platformLifecycleService, 'tiktok', botConnectionTime);
-
             const result = await processIncomingMessage('tiktok', recentMessage, timestampService, platformLifecycleService);
-            
-            // Then: User sees and hears the message
+
             expect(result.wasFiltered).toBe(false);
             expect(result.wasProcessed).toBe(true);
             expect(result.userMessage).toContain('This is a new live message');
             expect(result.userMessage).toContain('testuser');
-            
-            // And: Content is high quality with no technical artifacts
             expectNoTechnicalArtifacts(result.userMessage);
-            expect(result.userMessage).not.toMatch(/\{.*\}/); // No template placeholders
+            expect(result.userMessage).not.toMatch(/\{.*\}/);
             expect(result.userMessage).not.toContain('undefined');
             expect(result.userMessage).not.toContain('null');
         });
 
         it('should process recent YouTube messages and announce them to users', async () => {
-            // Given: Bot connects to YouTube at a specific time
             const botConnectionTime = testStartTime;
-            
-            // And: There's a recent message with proper timestamp
-            const recentMessageTime = botConnectionTime + (60 * 1000); // 1 minute after connection
+            const recentMessageTime = botConnectionTime + (60 * 1000);
             const recentMessage = {
                 item: {
                     author: {
@@ -350,30 +316,24 @@ describe('Old Message Filtering End-to-End Behavior', () => {
                     message: {
                         text: 'This is a new YouTube message'
                     },
-                    timestamp: (recentMessageTime * 1000).toString() // Convert to microseconds string
+                    timestamp: (recentMessageTime * 1000).toString()
                 }
             };
-            
-            // When: The recent message is processed by the system
+
             const { platformLifecycleService, timestampService } = createAppRuntimeTestDependencies();
             setPlatformConnectionTime(platformLifecycleService, 'youtube', botConnectionTime);
-
             const result = await processIncomingMessage('youtube', recentMessage, timestampService, platformLifecycleService);
-            
-            // Then: User sees and hears the message
+
             expect(result.wasFiltered).toBe(false);
             expect(result.wasProcessed).toBe(true);
             expect(result.userMessage).toContain('This is a new YouTube message');
             expect(result.userMessage).toContain('TestUser');
-            
-            // And: Content is high quality with no technical artifacts
             expectNoTechnicalArtifacts(result.userMessage);
         });
     });
 
     describe('Edge Cases: Missing or Invalid Timestamps', () => {
         it('should handle TikTok messages with missing timestamps gracefully', async () => {
-            // Given: Bot is connected and there's a message without timestamp
             const botConnectionTime = testStartTime;
             const messageWithoutTimestamp = {
                 user: {
@@ -382,16 +342,12 @@ describe('Old Message Filtering End-to-End Behavior', () => {
                     nickname: 'Test User'
                 },
                 comment: 'Message with no timestamp'
-                // No createTime field
             };
-            
-            // When: The message is processed
+
             const { platformLifecycleService, timestampService } = createAppRuntimeTestDependencies();
             setPlatformConnectionTime(platformLifecycleService, 'tiktok', botConnectionTime);
-
             const result = await processIncomingMessage('tiktok', messageWithoutTimestamp, timestampService, platformLifecycleService);
-            
-            // Then: System handles it gracefully but rejects missing timestamps
+
             expect(result.wasProcessed).toBe(false);
             expect(result.errorHandledGracefully).toBe(true);
             expect(result.error).toContain('Missing TikTok timestamp');
@@ -399,7 +355,6 @@ describe('Old Message Filtering End-to-End Behavior', () => {
         });
 
         it('should handle invalid timestamp formats gracefully across platforms', async () => {
-            // Given: Messages with invalid timestamp formats
             const invalidTimestampMessages = [
                 {
                     platform: 'tiktok',
@@ -440,12 +395,9 @@ describe('Old Message Filtering End-to-End Behavior', () => {
             setPlatformConnectionTime(platformLifecycleService, 'tiktok', testStartTime);
             setPlatformConnectionTime(platformLifecycleService, 'youtube', testStartTime);
             setPlatformConnectionTime(platformLifecycleService, 'twitch', testStartTime);
-            
-            // When: Each message with invalid timestamp is processed
+
             for (const { platform, data } of invalidTimestampMessages) {
                 const result = await processIncomingMessage(platform, data, timestampService, platformLifecycleService);
-                
-                // Then: System handles each gracefully and rejects invalid timestamps
                 expect(result.errorHandledGracefully).toBe(true);
                 expect(result.wasProcessed).toBe(false);
                 expect(result.error).toBeDefined();
@@ -455,7 +407,6 @@ describe('Old Message Filtering End-to-End Behavior', () => {
 
     describe('Performance: Timestamp Processing Within Targets', () => {
         it('should process timestamp extraction within performance targets', async () => {
-            // Given: A typical message processing scenario
             const botConnectionTime = testStartTime;
             const message = {
                 createTime: botConnectionTime + 1000,
@@ -466,23 +417,18 @@ describe('Old Message Filtering End-to-End Behavior', () => {
                 },
                 comment: 'Performance test message'
             };
-            
-            // When: Message is processed and timing is measured
+
             const { platformLifecycleService, timestampService } = createAppRuntimeTestDependencies();
             setPlatformConnectionTime(platformLifecycleService, 'tiktok', botConnectionTime);
-
             const startTime = testClock.now();
             const result = await processIncomingMessage('tiktok', message, timestampService, platformLifecycleService);
             const simulatedProcessingMs = 5;
             testClock.advance(simulatedProcessingMs);
             const endTime = testClock.now();
             const processingTimeMs = endTime - startTime;
-            
-            // Then: Processing is within performance targets
-            expect(processingTimeMs).toBeLessThan(10); // <10ms total processing time
-            expect(result.processingMetrics?.timestampExtractionTime).toBeLessThan(5); // <5ms for timestamp extraction
-            
-            // And: User experience is maintained
+
+            expect(processingTimeMs).toBeLessThan(10);
+            expect(result.processingMetrics?.timestampExtractionTime).toBeLessThan(5);
             expect(result.wasProcessed).toBe(true);
             expectNoTechnicalArtifacts(result.userMessage);
         });
@@ -490,15 +436,12 @@ describe('Old Message Filtering End-to-End Behavior', () => {
 
     describe('Cross-Platform Consistency', () => {
         it('should provide consistent filtering behavior across all platforms', async () => {
-            // Given: Bot connected to all platforms at the same time
             const botConnectionTime = testStartTime;
-            
-            // And: Old messages from each platform (all sent before connection)
             const oldMessages = [
                 {
                     platform: 'tiktok',
                     data: {
-                        createTime: botConnectionTime - (2 * 60 * 1000), // 2 minutes ago
+                        createTime: botConnectionTime - (2 * 60 * 1000),
                         user: {
                             userId: 'tt-user-6',
                             uniqueId: 'tiktokuser',
@@ -511,7 +454,7 @@ describe('Old Message Filtering End-to-End Behavior', () => {
                     platform: 'youtube',
                     data: {
                         item: {
-                            timestamp: ((botConnectionTime - (2 * 60 * 1000)) * 1000).toString(), // 2 minutes ago in microseconds
+                            timestamp: ((botConnectionTime - (2 * 60 * 1000)) * 1000).toString(),
                             author: { name: 'YouTubeUser', id: 'yt123' },
                             message: { text: 'Old YouTube message' }
                         }
@@ -525,36 +468,31 @@ describe('Old Message Filtering End-to-End Behavior', () => {
                             userId: 'tw123'
                         },
                         message: 'Old Twitch message',
-                        context: { 'tmi-sent-ts': (botConnectionTime - (2 * 60 * 1000)).toString() } // 2 minutes ago
+                        context: { 'tmi-sent-ts': (botConnectionTime - (2 * 60 * 1000)).toString() }
                     }
                 }
             ];
-            
+
             const { platformLifecycleService, timestampService } = createAppRuntimeTestDependencies();
             setPlatformConnectionTime(platformLifecycleService, 'tiktok', botConnectionTime);
             setPlatformConnectionTime(platformLifecycleService, 'youtube', botConnectionTime);
             setPlatformConnectionTime(platformLifecycleService, 'twitch', botConnectionTime);
-            
-            // When: All old messages are processed
+
             const results = [];
             for (const { platform, data } of oldMessages) {
                 const result = await processIncomingMessage(platform, data, timestampService, platformLifecycleService);
                 results.push({ platform, result });
             }
-            
-            // Then: All platforms consistently filter old messages
+
             for (const { platform, result } of results) {
                 expect(result.wasFiltered).toBe(true);
                 expect(result.reason).toContain('old message');
                 expect(result.platform).toBe(platform);
-                
-                // And: User experience is consistent across platforms
                 if (result.userMessage) {
                     expectNoTechnicalArtifacts(result.userMessage);
                 }
             }
-            
-            // And: No user notifications or TTS generated for any old message
+
             for (const { result } of results) {
                 expect(result.userExperienced?.ttsGenerated).toBe(false);
                 expect(result.userExperienced?.notificationShown).toBe(false);

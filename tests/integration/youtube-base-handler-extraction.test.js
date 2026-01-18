@@ -2,6 +2,7 @@ const { describe, test, beforeEach, afterEach, expect } = require('bun:test');
 
 const { createMockConfig, createMockPlatformDependencies } = require('../helpers/test-setup');
 const { createMockFn, restoreAllMocks } = require('../helpers/bun-mock-utils');
+const { noOpLogger } = require('../helpers/mock-factories');
 
 const { YouTubePlatform } = require('../../src/platforms/youtube');
 
@@ -31,12 +32,7 @@ describe('YouTube Base Handler Class Extraction Implementation', () => {
         platform = new YouTubePlatform(mockConfig, mockDependencies);
         platform.handlers = mockHandlers;
 
-        platform.logger = {
-            debug: createMockFn(),
-            info: createMockFn(),
-            warn: createMockFn(),
-            error: createMockFn()
-        };
+        platform.logger = noOpLogger;
 
         platform.notificationDispatcher = {
             dispatchSuperChat: createMockFn(),

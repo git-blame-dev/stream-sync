@@ -1,6 +1,7 @@
 const { describe, test, afterEach, expect } = require('bun:test');
 
 const { createMockFn, restoreAllMocks } = require('../helpers/bun-mock-utils');
+const { noOpLogger } = require('../helpers/mock-factories');
 
 describe('YouTube chat-update unified dispatch', () => {
     afterEach(() => {
@@ -21,7 +22,7 @@ describe('YouTube chat-update unified dispatch', () => {
 
         const youtubePlatform = new (class {
             constructor() {
-                this.logger = { debug: createMockFn(), info: createMockFn(), warn: createMockFn(), error: createMockFn() };
+                this.logger = noOpLogger;
                 this.handleChatMessage = mockHandleChatMessage;
                 this._extractMessagesFromChatItem = (chatItem) => [chatItem];
                 this._shouldSkipMessage = () => false;

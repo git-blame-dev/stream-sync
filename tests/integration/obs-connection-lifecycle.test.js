@@ -3,7 +3,7 @@ const { createMockFn, clearAllMocks, restoreAllMocks } = require('../helpers/bun
 const { ViewerCountSystem } = require('../../src/utils/viewer-count');
 const { OBSViewerCountObserver } = require('../../src/observers/obs-viewer-count-observer');
 const { createOBSConnectionManager } = require('../../src/obs/connection');
-const { createSilentLogger } = require('../helpers/test-logger');
+const { noOpLogger } = require('../helpers/mock-factories');
 const { createRuntimeConstantsFixture } = require('../helpers/runtime-constants-fixture');
 
 describe('OBS Connection Lifecycle Integration', () => {
@@ -36,7 +36,7 @@ describe('OBS Connection Lifecycle Integration', () => {
         };
 
         viewerCountSystem = new ViewerCountSystem({ platforms: mockPlatforms, runtimeConstants });
-        obsObserver = new OBSViewerCountObserver(obsManager, createSilentLogger());
+        obsObserver = new OBSViewerCountObserver(obsManager, noOpLogger);
 
         await viewerCountSystem.initialize();
     });
