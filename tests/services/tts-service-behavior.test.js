@@ -1,6 +1,7 @@
 const { describe, test, expect, beforeEach, afterEach, it } = require('bun:test');
 const { createMockFn, restoreAllMocks } = require('../helpers/bun-mock-utils');
 const { useFakeTimers, useRealTimers, runOnlyPendingTimers } = require('../helpers/bun-timers');
+const { noOpLogger } = require('../helpers/mock-factories');
 
 const { TTSService } = require('../../src/services/TTSService');
 const { EventBus } = require('../../src/core/EventBus');
@@ -14,7 +15,6 @@ describe('TTS Service behavior', () => {
     let mockConfigService;
     let primaryProvider;
     let fallbackProvider;
-    let logger;
 
     beforeEach(() => {
         useFakeTimers();
@@ -44,8 +44,6 @@ describe('TTS Service behavior', () => {
             stop: createMockFn(async () => true),
             dispose: createMockFn(async () => true)
         };
-
-        logger = { debug: createMockFn(), info: createMockFn(), warn: createMockFn(), error: createMockFn() };
     });
 
     afterEach(async () => {
@@ -57,7 +55,7 @@ describe('TTS Service behavior', () => {
     });
 
     it('uses the primary provider when it is available', async () => {
-        ttsService = new TTSService(mockConfigService, eventBus, { logger, provider: primaryProvider });
+        ttsService = new TTSService(mockConfigService, eventBus, { logger: noOpLogger, provider: primaryProvider });
 
         const result = await ttsService.speak('Hello world');
 
@@ -73,7 +71,7 @@ describe('TTS Service behavior', () => {
     it('switches to the fallback provider when the primary provider fails', async () => {
         primaryProvider.speak = createMockFn().mockRejectedValue(new Error('primary down'));
         ttsService = new TTSService(mockConfigService, eventBus, {
-            logger,
+            logger: noOpLogger,
             provider: primaryProvider,
             fallbackProvider
         });
@@ -92,7 +90,7 @@ describe('TTS Service behavior', () => {
         primaryProvider.speak = createMockFn().mockRejectedValue(new Error('primary down'));
         fallbackProvider.speak = createMockFn().mockRejectedValue(new Error('fallback down'));
         ttsService = new TTSService(mockConfigService, eventBus, {
-            logger,
+            logger: noOpLogger,
             provider: primaryProvider,
             fallbackProvider
         });
@@ -115,7 +113,7 @@ describe('TTS Service behavior', () => {
             }
         });
 
-        ttsService = new TTSService(mockConfigService, eventBus, { logger, provider: primaryProvider });
+        ttsService = new TTSService(mockConfigService, eventBus, { logger: noOpLogger, provider: primaryProvider });
 
         eventBus.emit(PlatformEvents.TTS_SPEECH_REQUESTED, {
             text: 'Should not speak',

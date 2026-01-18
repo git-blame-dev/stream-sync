@@ -1,6 +1,6 @@
-
 const { describe, test, expect, beforeEach, afterEach } = require('bun:test');
-const { createMockFn, restoreAllMocks } = require('../helpers/bun-mock-utils');
+const { restoreAllMocks } = require('../helpers/bun-mock-utils');
+const { noOpLogger } = require('../helpers/mock-factories');
 
 const { YouTubeConnectionManager } = require('../../src/utils/youtube-connection-manager');
 
@@ -10,26 +10,19 @@ describe('YouTube Connection Manager - Missing Methods', () => {
     });
 
     let connectionManager;
-    let mockLogger;
-    
+
     beforeEach(() => {
-        mockLogger = {
-            debug: createMockFn(),
-            info: createMockFn(),
-            warn: createMockFn(),
-            error: createMockFn()
-        };
-        connectionManager = new YouTubeConnectionManager(mockLogger);
+        connectionManager = new YouTubeConnectionManager(noOpLogger);
     });
     
     describe('Required Methods', () => {
         test('should have getConnectionStatus method', async () => {
             const mockConnection = {};
             await connectionManager.connectToStream('test-video-id', async () => mockConnection);
-            connectionManager.setConnectionReady('test-video-id'); // Mark as ready using proper API
-            
+            connectionManager.setConnectionReady('test-video-id');
+
             expect(typeof connectionManager.getConnectionStatus).toBe('function');
-            
+
             const status = connectionManager.getConnectionStatus('test-video-id');
             expect(status).toEqual(expect.objectContaining({
                 ready: true
@@ -73,14 +66,12 @@ describe('YouTube Connection Manager - Missing Methods', () => {
         test('getConnectionStatus should provide same info as other methods', async () => {
             const mockConnection = { someProperty: 'test' };
             await connectionManager.connectToStream('test-video', async () => mockConnection);
-            connectionManager.setConnectionReady('test-video'); // Mark as ready using proper API
-            
+            connectionManager.setConnectionReady('test-video');
+
             const status = connectionManager.getConnectionStatus('test-video');
             const isReady = connectionManager.isConnectionReady('test-video');
-            const connection = connectionManager.getConnection('test-video');
-            
+
             expect(status.ready).toBe(isReady);
-            // The status.ready should match isConnectionReady(), but connection.ready might not exist
             expect(status.ready).toBe(true);
             expect(isReady).toBe(true);
         });
