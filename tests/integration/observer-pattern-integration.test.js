@@ -24,7 +24,6 @@ describe('Observer Pattern Integration', () => {
     beforeEach(async () => {
         testClock.reset();
         runtimeConstants = createRuntimeConstantsFixture();
-        global.__TEST_RUNTIME_CONSTANTS__ = runtimeConstants;
         logger = createSilentLogger();
         platforms = {
             youtube: {

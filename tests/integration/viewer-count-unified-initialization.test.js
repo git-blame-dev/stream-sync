@@ -2,6 +2,7 @@ const { describe, test, afterEach, expect } = require('bun:test');
 const { createMockFn, restoreAllMocks } = require('../helpers/bun-mock-utils');
 const { createMockPlatform, createMockNotificationManager, noOpLogger } = require('../helpers/mock-factories');
 const { ViewerCountSystem } = require('../../src/utils/viewer-count');
+const { createRuntimeConstantsFixture } = require('../helpers/runtime-constants-fixture');
 
 const createViewerCountSystemWithBehaviors = (platformBehaviors = {}) => {
     const defaultPlatformBehaviors = {
@@ -23,7 +24,8 @@ const createViewerCountSystemWithBehaviors = (platformBehaviors = {}) => {
 
     const system = new ViewerCountSystem({
         platforms,
-        logger: noOpLogger
+        logger: noOpLogger,
+        runtimeConstants: createRuntimeConstantsFixture()
     });
 
     return { system, platforms };
