@@ -1,6 +1,6 @@
 const { describe, test, expect } = require('bun:test');
 const { noOpLogger } = require('../../../helpers/mock-factories');
-const { createTwitchEventSubWiring } = require('../../../../src/platforms/twitch/eventsub/twitch-eventsub-wiring');
+const { createTwitchEventSubWiring } = require('../../../../src/platforms/twitch/eventsub/wiring');
 
 describe('Twitch EventSub wiring', () => {
     const createEventSub = ({ useOff = true } = {}) => {
