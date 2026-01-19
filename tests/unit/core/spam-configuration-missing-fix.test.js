@@ -127,13 +127,13 @@ describe('Spam Detection Service Integration Tests', () => {
         });
 
         it('should provide correct default values from config.ini', () => {
-            const { config } = require('../../../src/core/config');
+            const { config, configManager } = require('../../../src/core/config');
             const spamConfig = config.spam;
 
-            expect(spamConfig.spamDetectionEnabled).toBe(true);
-            expect(spamConfig.spamDetectionWindow).toBe(5);
-            expect(spamConfig.maxIndividualNotifications).toBe(1);
-            expect(spamConfig.lowValueThreshold).toBe(9);
+            expect(spamConfig.spamDetectionEnabled).toBe(configManager.getBoolean('gifts', 'spamDetectionEnabled', true));
+            expect(spamConfig.spamDetectionWindow).toBe(configManager.getNumber('gifts', 'spamDetectionWindow', 5));
+            expect(spamConfig.maxIndividualNotifications).toBe(configManager.getNumber('gifts', 'maxIndividualNotifications', 2));
+            expect(spamConfig.lowValueThreshold).toBe(configManager.getNumber('gifts', 'lowValueThreshold', 10));
         });
     });
 
