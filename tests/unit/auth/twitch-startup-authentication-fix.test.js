@@ -1,8 +1,8 @@
 const { describe, it, expect, beforeEach, afterEach } = require('bun:test');
-const { createMockFn, clearAllMocks } = require('../helpers/bun-mock-utils');
-const { noOpLogger } = require('../helpers/mock-factories');
-const TwitchAuthInitializer = require('../../src/auth/TwitchAuthInitializer');
-const TwitchAuthService = require('../../src/auth/TwitchAuthService');
+const { createMockFn, clearAllMocks } = require('../../helpers/bun-mock-utils');
+const { noOpLogger } = require('../../helpers/mock-factories');
+const TwitchAuthInitializer = require('../../../src/auth/TwitchAuthInitializer');
+const TwitchAuthService = require('../../../src/auth/TwitchAuthService');
 
 describe('Twitch Authentication User Experience', () => {
     let authService;

@@ -1,8 +1,8 @@
 
 const { describe, test, expect, beforeEach, afterEach, it } = require('bun:test');
-const { createMockFn, clearAllMocks, restoreAllMocks } = require('../helpers/bun-mock-utils');
+const { createMockFn, clearAllMocks, restoreAllMocks } = require('../../helpers/bun-mock-utils');
 
-const { OBSConnectionManager } = require('../../src/obs/connection');
+const { OBSConnectionManager } = require('../../../src/obs/connection');
 
 describe('OBS Connection Race Condition - User Experience Validation', () => {
     let mockOBS;

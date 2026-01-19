@@ -1,8 +1,8 @@
 const { describe, test, expect, beforeEach, afterEach, it } = require('bun:test');
-const { createMockFn, clearAllMocks, restoreAllMocks } = require('../helpers/bun-mock-utils');
-const { useFakeTimers, useRealTimers, runOnlyPendingTimers } = require('../helpers/bun-timers');
+const { createMockFn, clearAllMocks, restoreAllMocks } = require('../../helpers/bun-mock-utils');
+const { useFakeTimers, useRealTimers, runOnlyPendingTimers } = require('../../helpers/bun-timers');
 
-const { OBSConnectionManager } = require('../../src/obs/connection');
+const { OBSConnectionManager } = require('../../../src/obs/connection');
 
 describe('OBSConnectionManager reconnection behavior', () => {
     let mockOBS;

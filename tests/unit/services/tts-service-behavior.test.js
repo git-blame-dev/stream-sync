@@ -1,11 +1,11 @@
 const { describe, test, expect, beforeEach, afterEach, it } = require('bun:test');
-const { createMockFn, restoreAllMocks } = require('../helpers/bun-mock-utils');
-const { useFakeTimers, useRealTimers, runOnlyPendingTimers } = require('../helpers/bun-timers');
-const { noOpLogger } = require('../helpers/mock-factories');
+const { createMockFn, restoreAllMocks } = require('../../helpers/bun-mock-utils');
+const { useFakeTimers, useRealTimers, runOnlyPendingTimers } = require('../../helpers/bun-timers');
+const { noOpLogger } = require('../../helpers/mock-factories');
 
-const { TTSService } = require('../../src/services/TTSService');
-const { EventBus } = require('../../src/core/EventBus');
-const { PlatformEvents } = require('../../src/interfaces/PlatformEvents');
+const { TTSService } = require('../../../src/services/TTSService');
+const { EventBus } = require('../../../src/core/EventBus');
+const { PlatformEvents } = require('../../../src/interfaces/PlatformEvents');
 
 const flushPromises = () => Promise.resolve();
 

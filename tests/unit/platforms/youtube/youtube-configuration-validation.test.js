@@ -1,12 +1,12 @@
 
 const { describe, test, expect, beforeEach, afterEach } = require('bun:test');
-const { createMockFn, spyOn, restoreAllMocks } = require('../helpers/bun-mock-utils');
-const { noOpLogger } = require('../helpers/mock-factories');
-const { initializeTestLogging, createMockPlatformDependencies, createMockConfig } = require('../helpers/test-setup');
+const { createMockFn, spyOn, restoreAllMocks } = require('../../../helpers/bun-mock-utils');
+const { noOpLogger } = require('../../../helpers/mock-factories');
+const { initializeTestLogging, createMockPlatformDependencies, createMockConfig } = require('../../../helpers/test-setup');
 
 initializeTestLogging();
 
-const { YouTubePlatform } = require('../../src/platforms/youtube');
+const { YouTubePlatform } = require('../../../../src/platforms/youtube');
 
 describe('YouTube Platform Configuration Validation', () => {
     afterEach(() => {

@@ -1,12 +1,12 @@
 
 const { describe, test, expect, beforeEach, afterEach } = require('bun:test');
-const { createMockFn, restoreAllMocks } = require('../helpers/bun-mock-utils');
+const { createMockFn, restoreAllMocks } = require('../../helpers/bun-mock-utils');
 
-const { TEST_TIMEOUTS } = require('../helpers/test-setup');
-const { noOpLogger, createMockSourcesManager } = require('../helpers/mock-factories');
-const { setupAutomatedCleanup } = require('../helpers/mock-lifecycle');
-const testClock = require('../helpers/test-clock');
-const { createOBSGoalsManager } = require('../../src/obs/goals');
+const { TEST_TIMEOUTS } = require('../../helpers/test-setup');
+const { noOpLogger, createMockSourcesManager } = require('../../helpers/mock-factories');
+const { setupAutomatedCleanup } = require('../../helpers/mock-lifecycle');
+const testClock = require('../../helpers/test-clock');
+const { createOBSGoalsManager } = require('../../../src/obs/goals');
 
 setupAutomatedCleanup({
     clearCallsBeforeEach: true,

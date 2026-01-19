@@ -4,7 +4,7 @@ const {
     normalizeTwitchConfig,
     normalizeTikTokConfig,
     validateRequiredKeys
-} = require('../../src/utils/config-normalizer');
+} = require('../../../src/utils/config-normalizer');
 
 describe('Configuration Normalizer', () => {
     describe('normalizeYouTubeConfig', () => {

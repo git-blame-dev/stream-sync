@@ -1,9 +1,9 @@
 const { describe, it, expect, beforeEach, afterEach } = require('bun:test');
-const { createMockFn, restoreAllMocks } = require('../helpers/bun-mock-utils');
-const { noOpLogger } = require('../helpers/mock-factories');
+const { createMockFn, restoreAllMocks } = require('../../../helpers/bun-mock-utils');
+const { noOpLogger } = require('../../../helpers/mock-factories');
 
-const { TwitchPlatform } = require('../../src/platforms/twitch');
-const TwitchEventSub = require('../../src/platforms/twitch-eventsub');
+const { TwitchPlatform } = require('../../../../src/platforms/twitch');
+const TwitchEventSub = require('../../../../src/platforms/twitch-eventsub');
 
 const createAuthManager = (overrides = {}) => {
     const requiredScopes = overrides.scopes || [

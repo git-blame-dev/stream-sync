@@ -1,11 +1,11 @@
 const { describe, test, expect, beforeEach, it, afterEach } = require('bun:test');
-const { restoreAllMocks } = require('../helpers/bun-mock-utils');
-const { noOpLogger } = require('../helpers/mock-factories');
-const { initializeTestLogging } = require('../helpers/test-setup');
+const { restoreAllMocks } = require('../../helpers/bun-mock-utils');
+const { noOpLogger } = require('../../helpers/mock-factories');
+const { initializeTestLogging } = require('../../helpers/test-setup');
 
 initializeTestLogging();
 
-const { YouTubeUserAgentManager } = require('../../src/utils/youtube-user-agent-manager');
+const { YouTubeUserAgentManager } = require('../../../src/utils/youtube-user-agent-manager');
 
 describe('YouTube User-Agent Utility', () => {
     afterEach(() => {

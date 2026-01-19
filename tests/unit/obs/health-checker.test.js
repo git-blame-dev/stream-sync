@@ -1,11 +1,11 @@
 
 const { describe, test, expect, beforeEach, afterEach, it } = require('bun:test');
-const { createMockFn, clearAllMocks, restoreAllMocks } = require('../helpers/bun-mock-utils');
-const { resetModules, restoreAllModuleMocks } = require('../helpers/bun-module-mocks');
-const { useRealTimers } = require('../helpers/bun-timers');
+const { createMockFn, clearAllMocks, restoreAllMocks } = require('../../helpers/bun-mock-utils');
+const { resetModules, restoreAllModuleMocks } = require('../../helpers/bun-module-mocks');
+const { useRealTimers } = require('../../helpers/bun-timers');
 
-const { createTestUser, createMockConfig } = require('../helpers/test-setup');
-const testClock = require('../helpers/test-clock');
+const { createTestUser, createMockConfig } = require('../../helpers/test-setup');
+const testClock = require('../../helpers/test-clock');
 
 describe('OBSHealthChecker', () => {
     let OBSHealthChecker;
@@ -25,7 +25,7 @@ describe('OBSHealthChecker', () => {
             call: createMockFn()
         };
 
-        OBSHealthChecker = require('../../src/obs/health-checker');
+        OBSHealthChecker = require('../../../src/obs/health-checker');
     });
 
     afterEach(() => {

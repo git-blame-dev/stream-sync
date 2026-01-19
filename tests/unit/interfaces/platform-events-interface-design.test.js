@@ -1,5 +1,5 @@
 
-const { PlatformEvents, PlatformEventValidator, PlatformEventBuilder } = require('../../src/interfaces/PlatformEvents');
+const { PlatformEvents, PlatformEventValidator, PlatformEventBuilder } = require('../../../src/interfaces/PlatformEvents');
 
 describe('Platform Event Interface Design', () => {
     describe('Platform Event Schema Validation', () => {
