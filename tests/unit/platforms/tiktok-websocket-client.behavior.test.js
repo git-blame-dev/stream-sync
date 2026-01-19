@@ -1,5 +1,6 @@
-const { describe, test, expect, beforeEach, afterEach, jest } = require('bun:test');
+const { describe, test, expect, beforeEach, afterEach } = require('bun:test');
 const { EventEmitter } = require('events');
+const { useFakeTimers, useRealTimers, advanceTimersByTime } = require('../../helpers/bun-timers');
 
 class MockWebSocket extends EventEmitter {
     static CONNECTING = 0;
@@ -26,7 +27,7 @@ describe('TikTokWebSocketClient (behavior)', () => {
     let client;
 
     beforeEach(() => {
-        jest.useFakeTimers();
+        useFakeTimers();
         ({ TikTokWebSocketClient } = require('../../../src/platforms/tiktok-websocket-client'));
         mockWs = null;
         const CapturingWebSocket = class extends MockWebSocket {
@@ -39,7 +40,7 @@ describe('TikTokWebSocketClient (behavior)', () => {
     });
 
     afterEach(() => {
-        jest.useRealTimers();
+        useRealTimers();
         if (client && client.disconnect) {
             client.disconnect();
         }
@@ -114,7 +115,7 @@ describe('TikTokWebSocketClient (behavior)', () => {
         const connectPromise = client.connect();
         mockWs.emit('open');
 
-        jest.advanceTimersByTime(16000);
+        advanceTimersByTime(16000);
 
         await expect(connectPromise).rejects.toThrow(/timeout/i);
     });

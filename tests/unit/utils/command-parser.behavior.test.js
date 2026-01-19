@@ -1,11 +1,11 @@
-const { describe, expect, beforeEach, afterEach, it, jest } = require('bun:test');
-const { useFakeTimers, useRealTimers } = require('../../helpers/bun-timers');
+const { describe, expect, beforeEach, afterEach, it } = require('bun:test');
+const { useFakeTimers, useRealTimers, setSystemTime } = require('../../helpers/bun-timers');
 const parser = require('../../../src/utils/command-parser');
 
 describe('command-parser behavior', () => {
     beforeEach(() => {
         useFakeTimers();
-        jest.setSystemTime(new Date('2024-01-01T00:00:00Z'));
+        setSystemTime(new Date('2024-01-01T00:00:00Z'));
     });
 
     afterEach(() => {
@@ -23,7 +23,7 @@ describe('command-parser behavior', () => {
         expect(userHeavyLimit.user1).toBe(true);
         expect(parser.checkCommandCooldown('user1', 500, 5000, userCommandTimestamps, userHeavyLimit)).toBe(true);
 
-        jest.setSystemTime(new Date('2024-01-01T00:05:30Z'));
+        setSystemTime(new Date('2024-01-01T00:05:30Z'));
         expect(parser.checkCommandCooldown('user1', 500, 5000, userCommandTimestamps, userHeavyLimit)).toBe(false);
         expect(userHeavyLimit.user1).toBe(false);
     });
@@ -33,11 +33,11 @@ describe('command-parser behavior', () => {
         expect(parser.checkGlobalCommandCooldown('!wave', 5000)).toBe(true);
         expect(parser.getRemainingGlobalCooldown('!wave', 5000)).toBeGreaterThan(0);
 
-        jest.setSystemTime(new Date('2024-01-01T00:02:00Z'));
+        setSystemTime(new Date('2024-01-01T00:02:00Z'));
         expect(parser.checkGlobalCommandCooldown('!wave', 5000)).toBe(false);
         expect(parser.getRemainingGlobalCooldown('!wave', 5000)).toBe(0);
 
-        jest.setSystemTime(new Date('2024-01-01T01:00:00Z'));
+        setSystemTime(new Date('2024-01-01T01:00:00Z'));
         expect(parser.clearExpiredGlobalCooldowns(300000)).toBe(1);
         expect(parser.getGlobalCooldownStats().totalTrackedCommands).toBe(0);
     });

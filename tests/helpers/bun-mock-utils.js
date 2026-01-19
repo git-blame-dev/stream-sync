@@ -1,6 +1,6 @@
-const { jest, spyOn } = require('bun:test');
+const { vi } = require('bun:test');
 
-const createMockFn = (implementation) => jest.fn(implementation);
+const createMockFn = (implementation) => vi.fn(implementation);
 
 const isMockFunction = (value) => Boolean(value && value.mock && Array.isArray(value.mock.calls));
 
@@ -30,9 +30,9 @@ const resetMock = (fn) => {
     }
 };
 
-const clearAllMocks = () => jest.clearAllMocks();
-const restoreAllMocks = () => jest.restoreAllMocks();
-const resetAllMocks = () => jest.resetAllMocks();
+const clearAllMocks = () => vi.clearAllMocks();
+const restoreAllMocks = () => vi.restoreAllMocks();
+const resetAllMocks = () => vi.resetAllMocks();
 
 module.exports = {
     createMockFn,
@@ -44,5 +44,5 @@ module.exports = {
     clearAllMocks,
     restoreAllMocks,
     resetAllMocks,
-    spyOn
+    spyOn: (...args) => vi.spyOn(...args)
 };

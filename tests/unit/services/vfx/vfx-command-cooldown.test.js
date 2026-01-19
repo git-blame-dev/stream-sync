@@ -1,7 +1,7 @@
 
-const { describe, test, expect, beforeEach, afterEach, jest } = require('bun:test');
+const { describe, test, expect, beforeEach, afterEach } = require('bun:test');
 const { createMockFn } = require('../../../helpers/bun-mock-utils');
-const { useFakeTimers, useRealTimers, advanceTimersByTime } = require('../../../helpers/bun-timers');
+const { useFakeTimers, useRealTimers, advanceTimersByTime, setSystemTime } = require('../../../helpers/bun-timers');
 
 const { VFXCommandService } = require('../../../../src/services/VFXCommandService');
 
@@ -141,7 +141,7 @@ describe('VFXCommandService cooldown handling', () => {
 
     test('applies global cooldown across users using configured duration', async () => {
         useFakeTimers();
-        jest.setSystemTime(new Date(0));
+        setSystemTime(new Date(0));
         try {
             const service = new VFXCommandService(createConfigService('!spark', {
                 cmdCoolDown: 0,
@@ -184,7 +184,7 @@ describe('VFXCommandService cooldown handling', () => {
 
     test('honors configured cooldown duration from config service', async () => {
         useFakeTimers();
-        jest.setSystemTime(new Date(1000));
+        setSystemTime(new Date(1000));
         try {
             const service = new VFXCommandService(createConfigService('!one', {
                 cmdCoolDown: 1,
