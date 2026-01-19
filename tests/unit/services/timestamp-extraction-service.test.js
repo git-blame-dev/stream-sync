@@ -1,6 +1,6 @@
-const { describe, it, beforeAll, beforeEach, afterEach, expect, jest } = require('bun:test');
+const { describe, it, beforeAll, beforeEach, afterEach, expect } = require('bun:test');
 const { createMockFn, clearAllMocks } = require('../../helpers/bun-mock-utils');
-const { useFakeTimers, useRealTimers } = require('../../helpers/bun-timers');
+const { useFakeTimers, useRealTimers, setSystemTime } = require('../../helpers/bun-timers');
 const { initializeTestLogging, TEST_TIMEOUTS } = require('../../helpers/test-setup');
 const { noOpLogger, setupAutomatedCleanup } = require('../../helpers/mock-factories');
 const { expectNoTechnicalArtifacts } = require('../../helpers/assertion-helpers');
@@ -32,7 +32,7 @@ describe('TimestampExtractionService Behavior', () => {
             recordExtraction: createMockFn()
         };
         useFakeTimers();
-        jest.setSystemTime(new Date(testClock.now()));
+        setSystemTime(new Date(testClock.now()));
 
         if (TimestampExtractionService) {
             service = new TimestampExtractionService({

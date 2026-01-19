@@ -1,4 +1,4 @@
-const { jest } = require('bun:test');
+const { setSystemTime, vi } = require('bun:test');
 
 const timerState = {
     installed: false,
@@ -79,9 +79,9 @@ const restoreTimerTracking = () => {
     timerState.installed = false;
 };
 
-const useFakeTimers = (...args) => jest.useFakeTimers(...args);
+const useFakeTimers = (...args) => vi.useFakeTimers(...args);
 
-const useRealTimers = (...args) => jest.useRealTimers(...args);
+const useRealTimers = (...args) => vi.useRealTimers(...args);
 
 module.exports = {
     installTimerTracking,
@@ -89,9 +89,10 @@ module.exports = {
     restoreTimerTracking,
     useFakeTimers,
     useRealTimers,
-    advanceTimersByTime: (...args) => jest.advanceTimersByTime(...args),
-    runOnlyPendingTimers: (...args) => jest.runOnlyPendingTimers(...args),
-    runAllTimers: (...args) => jest.runAllTimers(...args),
-    clearAllTimers: (...args) => jest.clearAllTimers(...args),
-    getTimerCount: () => jest.getTimerCount()
+    setSystemTime: (...args) => setSystemTime(...args),
+    advanceTimersByTime: (...args) => vi.advanceTimersByTime(...args),
+    runOnlyPendingTimers: (...args) => vi.runOnlyPendingTimers(...args),
+    runAllTimers: (...args) => vi.runAllTimers(...args),
+    clearAllTimers: (...args) => vi.clearAllTimers(...args),
+    getTimerCount: () => vi.getTimerCount()
 };
