@@ -2,7 +2,6 @@ const { beforeAll, beforeEach, afterEach, afterAll, expect, mock } = require('bu
 const { waitForDelay, scheduleTimeout, scheduleInterval } = require('../helpers/time-utils');
 const testClock = require('../helpers/test-clock');
 const { initializeTestLogging } = require('../helpers/test-setup');
-const { createRuntimeConstantsFixture } = require('../helpers/runtime-constants-fixture');
 
 // Initialize logging FIRST at module load time, before any test files import modules
 // This ensures getUnifiedLogger() works when production code falls back to it
@@ -172,10 +171,6 @@ beforeAll(() => {
     process.env.TWITCH_API_KEY = 'test_mock_key';
     process.env.YOUTUBE_API_KEY = 'test_mock_key';
     process.env.TIKTOK_API_KEY = 'test_mock_key';
-
-    if (!global.__TEST_RUNTIME_CONSTANTS__) {
-        global.__TEST_RUNTIME_CONSTANTS__ = createRuntimeConstantsFixture();
-    }
 
     global.__TEST_LOGGER__ = createLoggerMock();
 
