@@ -1,6 +1,6 @@
 const { describe, test, expect, beforeEach, afterEach } = require('bun:test');
-const { createMockFn } = require('../helpers/bun-mock-utils');
-const { noOpLogger } = require('../helpers/mock-factories');
+const { createMockFn } = require('../../helpers/bun-mock-utils');
+const { noOpLogger } = require('../../helpers/mock-factories');
 
 describe('TwitchAuthManager', () => {
     let TwitchAuthManager;
@@ -45,11 +45,11 @@ describe('TwitchAuthManager', () => {
         MockTwitchAuthService = createMockFn().mockImplementation(() => mockAuthServiceInstance);
         MockTwitchAuthInitializer = createMockFn().mockImplementation(() => mockAuthInitializerInstance);
 
-        TwitchAuthManager = require('../../src/auth/TwitchAuthManager');
+        TwitchAuthManager = require('../../../src/auth/TwitchAuthManager');
     });
 
     afterEach(() => {
-        delete require.cache[require.resolve('../../src/auth/TwitchAuthManager')];
+        delete require.cache[require.resolve('../../../src/auth/TwitchAuthManager')];
     });
 
     function createManager(config = mockConfig, extraDeps = {}) {

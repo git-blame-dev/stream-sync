@@ -1,7 +1,7 @@
 const { describe, test, expect, beforeEach, afterEach } = require('bun:test');
-const { createMockFn, restoreAllMocks } = require('../helpers/bun-mock-utils');
+const { createMockFn, restoreAllMocks } = require('../../helpers/bun-mock-utils');
 
-const TwitchAuthFactory = require('../../src/auth/TwitchAuthFactory');
+const TwitchAuthFactory = require('../../../src/auth/TwitchAuthFactory');
 
 const createMockTwitchAuthManager = () => {
     let currentConfig = {};

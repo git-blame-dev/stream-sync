@@ -1,5 +1,5 @@
-const { extractTikTokGiftData } = require('../../src/utils/tiktok-data-extraction');
-const testClock = require('../helpers/test-clock');
+const { extractTikTokGiftData } = require('../../../src/utils/tiktok-data-extraction');
+const testClock = require('../../helpers/test-clock');
 
 describe('TikTok Gift Count Field Normalization', () => {
     describe('Real TikTok API Gift Events', () => {

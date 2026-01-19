@@ -1,10 +1,10 @@
 
 const { describe, test, expect, afterEach } = require('bun:test');
-const { createMockFn, restoreAllMocks } = require('../helpers/bun-mock-utils');
+const { createMockFn, restoreAllMocks } = require('../../../helpers/bun-mock-utils');
 
-const { YouTubePlatform } = require('../../src/platforms/youtube');
-const { createYouTubeSuperChatEvent } = require('../helpers/youtube-test-data');
-const { createMockPlatformDependencies, createMockConfig } = require('../helpers/test-setup');
+const { YouTubePlatform } = require('../../../../src/platforms/youtube');
+const { createYouTubeSuperChatEvent } = require('../../../helpers/youtube-test-data');
+const { createMockPlatformDependencies, createMockConfig } = require('../../../helpers/test-setup');
 
 describe('YouTube monetized notification pipeline', () => {
     afterEach(() => {

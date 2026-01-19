@@ -1,8 +1,8 @@
 const { describe, test, expect, beforeEach, afterEach } = require('bun:test');
-const { restoreAllMocks } = require('../helpers/bun-mock-utils');
-const { noOpLogger } = require('../helpers/mock-factories');
+const { restoreAllMocks } = require('../../helpers/bun-mock-utils');
+const { noOpLogger } = require('../../helpers/mock-factories');
 
-const { YouTubeConnectionManager } = require('../../src/utils/youtube-connection-manager');
+const { YouTubeConnectionManager } = require('../../../src/utils/youtube-connection-manager');
 
 describe('YouTube Connection Manager - Missing Methods', () => {
     afterEach(() => {

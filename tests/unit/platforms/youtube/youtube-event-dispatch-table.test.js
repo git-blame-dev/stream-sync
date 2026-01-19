@@ -1,13 +1,13 @@
 const { describe, test, expect, afterEach } = require('bun:test');
-const { createMockFn, restoreAllMocks } = require('../helpers/bun-mock-utils');
+const { createMockFn, restoreAllMocks } = require('../../../helpers/bun-mock-utils');
 
-const { YouTubePlatform } = require('../../src/platforms/youtube');
-const { getSyntheticFixture } = require('../helpers/platform-test-data');
+const { YouTubePlatform } = require('../../../../src/platforms/youtube');
+const { getSyntheticFixture } = require('../../../helpers/platform-test-data');
 const {
     initializeTestLogging,
     createMockConfig,
     createMockPlatformDependencies
-} = require('../helpers/test-setup');
+} = require('../../../helpers/test-setup');
 
 initializeTestLogging();
 
