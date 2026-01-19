@@ -1,9 +1,9 @@
 
 const { describe, test, expect, beforeEach, afterEach } = require('bun:test');
-const { createMockFn } = require('../../helpers/bun-mock-utils');
+const { createMockFn } = require('../../../helpers/bun-mock-utils');
 
 const crypto = require('crypto');
-const { VFXCommandService } = require('../../../src/services/VFXCommandService');
+const { VFXCommandService } = require('../../../../src/services/VFXCommandService');
 
 describe('VFXCommandService random variant selection', () => {
     const originalRandomInt = crypto.randomInt;

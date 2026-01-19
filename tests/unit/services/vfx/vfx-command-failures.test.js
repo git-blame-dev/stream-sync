@@ -1,5 +1,5 @@
 const { describe, expect, afterEach, it, beforeEach } = require('bun:test');
-const { createMockFn, restoreAllMocks } = require('../../helpers/bun-mock-utils');
+const { createMockFn, restoreAllMocks } = require('../../../helpers/bun-mock-utils');
 
 describe('VFXCommandService failure paths', () => {
     let VFXCommandService;
@@ -18,7 +18,7 @@ describe('VFXCommandService failure paths', () => {
     });
 
     beforeEach(() => {
-        ({ VFXCommandService } = require('../../../src/services/VFXCommandService'));
+        ({ VFXCommandService } = require('../../../../src/services/VFXCommandService'));
     });
 
     afterEach(() => {

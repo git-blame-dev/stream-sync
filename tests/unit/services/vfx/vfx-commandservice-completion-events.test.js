@@ -1,9 +1,9 @@
 
 const { describe, test, expect, beforeEach, afterEach } = require('bun:test');
-const { createMockFn } = require('../../helpers/bun-mock-utils');
+const { createMockFn } = require('../../../helpers/bun-mock-utils');
 
-const { PlatformEvents } = require('../../../src/interfaces/PlatformEvents');
-const { VFXCommandService } = require('../../../src/services/VFXCommandService');
+const { PlatformEvents } = require('../../../../src/interfaces/PlatformEvents');
+const { VFXCommandService } = require('../../../../src/services/VFXCommandService');
 
 describe('VFXCommandService completion events', () => {
     let eventBus;

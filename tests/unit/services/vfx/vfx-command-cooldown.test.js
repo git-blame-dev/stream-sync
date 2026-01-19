@@ -1,9 +1,9 @@
 
 const { describe, test, expect, beforeEach, afterEach, jest } = require('bun:test');
-const { createMockFn } = require('../../helpers/bun-mock-utils');
-const { useFakeTimers, useRealTimers, advanceTimersByTime } = require('../../helpers/bun-timers');
+const { createMockFn } = require('../../../helpers/bun-mock-utils');
+const { useFakeTimers, useRealTimers, advanceTimersByTime } = require('../../../helpers/bun-timers');
 
-const { VFXCommandService } = require('../../../src/services/VFXCommandService');
+const { VFXCommandService } = require('../../../../src/services/VFXCommandService');
 
 describe('VFXCommandService cooldown handling', () => {
     let mockEffectsManager;
