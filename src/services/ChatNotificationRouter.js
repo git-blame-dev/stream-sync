@@ -11,8 +11,7 @@ class ChatNotificationRouter {
     constructor({ runtime, logger, runtimeConstants }) {
         this.runtime = runtime;
         this.logger = logger;
-        this.runtimeConstants = runtimeConstants
-            || (process.env.NODE_ENV === 'test' ? global.__TEST_RUNTIME_CONSTANTS__ : null);
+        this.runtimeConstants = runtimeConstants;
         if (!this.runtimeConstants) {
             throw new Error('ChatNotificationRouter requires runtimeConstants');
         }

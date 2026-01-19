@@ -10,8 +10,7 @@ let defaultInnertubeImporter = null;
 
 function resolveRuntimeConstants(runtimeConstants) {
     const resolved = runtimeConstants
-        || defaultRuntimeConstants
-        || (process.env.NODE_ENV === 'test' ? global.__TEST_RUNTIME_CONSTANTS__ : null);
+        || defaultRuntimeConstants;
     if (!resolved || !resolved.PLATFORM_TIMEOUTS) {
         throw new Error('InnertubeInstanceManager requires runtimeConstants.PLATFORM_TIMEOUTS');
     }

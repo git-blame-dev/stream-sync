@@ -1,6 +1,7 @@
 const { describe, test, expect, afterEach } = require('bun:test');
 const { createMockFn, restoreAllMocks } = require('../helpers/bun-mock-utils');
 const { noOpLogger } = require('../helpers/mock-factories');
+const { createRuntimeConstantsFixture } = require('../helpers/runtime-constants-fixture');
 const ChatNotificationRouter = require('../../src/services/ChatNotificationRouter');
 
 describe('Greeting System Diagnosis', () => {
@@ -18,7 +19,11 @@ describe('Greeting System Diagnosis', () => {
             vfxCommandService: overrides.vfxCommandService || null
         };
 
-        return new ChatNotificationRouter({ runtime, logger });
+        return new ChatNotificationRouter({
+            runtime,
+            logger,
+            runtimeConstants: createRuntimeConstantsFixture()
+        });
     };
 
     test('queueGreeting enqueues greeting items with username preserved', async () => {

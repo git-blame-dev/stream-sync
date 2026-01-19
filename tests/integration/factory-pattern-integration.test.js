@@ -8,7 +8,7 @@ const { createRuntimeConstantsFixture } = require('../helpers/runtime-constants-
 describe('Factory Pattern Integration', () => {
     beforeEach(async () => {
         testClock.reset();
-        global.__TEST_RUNTIME_CONSTANTS__ = createRuntimeConstantsFixture();
+        InnertubeInstanceManager.setRuntimeConstants(createRuntimeConstantsFixture());
         await InnertubeInstanceManager.cleanup();
         InnertubeInstanceManager._resetInstance();
     });
