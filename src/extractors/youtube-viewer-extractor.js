@@ -196,7 +196,7 @@ class YouTubeViewerExtractor {
                 }
                 
                 // Only extract if video is live
-                if (videoInfo.basic_info.is_live && videoInfo.basic_info.view_count) {
+                if (videoInfo.basic_info.is_live && videoInfo.basic_info.view_count !== undefined && videoInfo.basic_info.view_count !== null) {
                     const count = parseInt(videoInfo.basic_info.view_count, 10);
                     if (!isNaN(count) && count >= 0) {
                         result.count = count;
