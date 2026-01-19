@@ -10,8 +10,7 @@ class CommandCooldownService {
         this.eventBus = options.eventBus || null;
         this.configService = options.configService || null;
         this.logger = options.logger || logger;
-        this.runtimeConstants = options.runtimeConstants
-            || (process.env.NODE_ENV === 'test' ? global.__TEST_RUNTIME_CONSTANTS__ : null);
+        this.runtimeConstants = options.runtimeConstants;
         if (!this.runtimeConstants) {
             throw new Error('CommandCooldownService requires runtimeConstants');
         }

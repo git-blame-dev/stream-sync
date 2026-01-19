@@ -16,7 +16,7 @@ describe('System Resilience and Error Recovery Integration', () => {
     let platforms, obsManager, viewerCountSystem;
 
     beforeEach(async () => {
-        global.__TEST_RUNTIME_CONSTANTS__ = createRuntimeConstantsFixture();
+        InnertubeInstanceManager.setRuntimeConstants(createRuntimeConstantsFixture());
         platforms = {
             youtube: {
                 getViewerCount: createMockFn().mockResolvedValue(1000),
