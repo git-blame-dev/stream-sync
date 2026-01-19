@@ -36,8 +36,7 @@ class ViewerCountSystem {
         validateLoggerInterface(resolvedLogger);
         this.logger = resolvedLogger;
         this.platformProvider = this._createPlatformProvider(dependencies);
-        this.runtimeConstants = dependencies.runtimeConstants
-            || (process.env.NODE_ENV === 'test' ? global.__TEST_RUNTIME_CONSTANTS__ : null);
+        this.runtimeConstants = dependencies.runtimeConstants;
         if (!this.runtimeConstants) {
             throw new Error('ViewerCountSystem requires runtimeConstants');
         }

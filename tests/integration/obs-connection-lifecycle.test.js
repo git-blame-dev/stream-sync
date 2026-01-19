@@ -14,7 +14,6 @@ describe('OBS Connection Lifecycle Integration', () => {
 
     beforeEach(async () => {
         runtimeConstants = createRuntimeConstantsFixture();
-        global.__TEST_RUNTIME_CONSTANTS__ = runtimeConstants;
         mockOBSWebSocket = createMockOBSWebSocket();
 
         obsManager = createOBSConnectionManager({
