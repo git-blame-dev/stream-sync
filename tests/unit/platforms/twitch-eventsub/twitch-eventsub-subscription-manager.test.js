@@ -1,6 +1,6 @@
 const { describe, test, expect } = require('bun:test');
 const { noOpLogger } = require('../../../helpers/mock-factories');
-const { createTwitchEventSubSubscriptionManager } = require('../../../../src/platforms/twitch-eventsub/subscriptions/twitch-eventsub-subscription-manager');
+const { createTwitchEventSubSubscriptionManager } = require('../../../../src/platforms/twitch/eventsub/subscription-manager');
 
 describe('Twitch EventSub subscription manager', () => {
     test('categorizes subscription errors as critical or retryable', () => {
