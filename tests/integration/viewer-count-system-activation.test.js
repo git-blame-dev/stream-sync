@@ -93,7 +93,6 @@ describe('ViewerCount System Activation Integration', () => {
             },
             twitch: {
                 enabled: true,
-                apiKey: 'test-twitch-key',
                 viewerCountEnabled: true,
                 viewerCountSource: 'twitch-viewer-count'
             },

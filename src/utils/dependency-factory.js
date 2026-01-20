@@ -148,13 +148,8 @@ class DependencyFactory {
         this._validateConfiguration(config, 'Twitch');
         this._validateOptions(options);
 
-        // Validate Twitch-specific configuration - handle different field naming conventions
-        const apiKey = config.apiKey;
+        // Validate Twitch-specific configuration
         const channel = config.channel;
-
-        if (!apiKey || typeof apiKey !== 'string' || apiKey.trim() === '') {
-            throw new Error('Twitch API key is required and must be a non-empty string (use "apiKey" field)');
-        }
 
         if (!channel || typeof channel !== 'string' || channel.trim() === '') {
             throw new Error('Twitch channel is required and must be a non-empty string (use "channel" field)');
@@ -167,13 +162,13 @@ class DependencyFactory {
             // Create normalized config
             const normalizedConfig = {
                 ...config,
-                apiKey: apiKey,
                 channel: channel,
                 clientId: config.clientId,
                 clientSecret: config.clientSecret,
                 accessToken: config.accessToken,
                 refreshToken: config.refreshToken
             };
+            delete normalizedConfig.apiKey;
 
             const sanitizedOptions = { ...options };
             const injectedAuthManager = sanitizedOptions.authManager;

@@ -44,13 +44,13 @@ describe('DependencyFactory behavior', () => {
 
     describe('Twitch dependency validation', () => {
         it('requires Twitch channel', () => {
-            expect(() => factory.createTwitchDependencies({ apiKey: 'token' }, { logger: noOpLogger }))
+            expect(() => factory.createTwitchDependencies({}, { logger: noOpLogger }))
                 .toThrow(/Twitch channel is required/);
         });
 
-        it('requires Twitch API key', () => {
+        it('requires Twitch client credentials for auth manager', () => {
             expect(() => factory.createTwitchDependencies({ channel: 'me' }, { logger: noOpLogger }))
-                .toThrow(/Twitch API key is required/);
+                .toThrow(/missing fields \[clientId, clientSecret\]/);
         });
     });
 });

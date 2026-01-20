@@ -171,7 +171,7 @@ describe('secret-manager', () => {
         configManager.load();
         logger = createCapturingLogger();
 
-        ['TIKTOK_API_KEY', 'TWITCH_CLIENT_ID', 'TWITCH_CLIENT_SECRET', 'TWITCH_API_KEY', 'OBS_PASSWORD', 'STREAMELEMENTS_JWT_TOKEN', 'YOUTUBE_API_KEY'].forEach((key) => {
+        ['TIKTOK_API_KEY', 'TWITCH_CLIENT_ID', 'TWITCH_CLIENT_SECRET', 'OBS_PASSWORD', 'STREAMELEMENTS_JWT_TOKEN', 'YOUTUBE_API_KEY'].forEach((key) => {
             originalEnv[key] = process.env[key];
             delete process.env[key];
         });
@@ -201,7 +201,6 @@ describe('secret-manager', () => {
         process.env.TIKTOK_API_KEY = 'env_tiktok_key';
         process.env.TWITCH_CLIENT_ID = 'env_client_id';
         process.env.TWITCH_CLIENT_SECRET = 'env_client_secret';
-        process.env.TWITCH_API_KEY = 'env_api_key';
         process.env.OBS_PASSWORD = 'env_obs_password';
         process.env.STREAMELEMENTS_JWT_TOKEN = 'env_jwt_token';
 
@@ -236,7 +235,6 @@ describe('secret-manager', () => {
             TIKTOK_API_KEY: 'prompt_tiktok',
             TWITCH_CLIENT_ID: 'prompt_client_id',
             TWITCH_CLIENT_SECRET: 'prompt_client_secret',
-            TWITCH_API_KEY: 'prompt_api_key',
             OBS_PASSWORD: 'prompt_obs_password',
             STREAMELEMENTS_JWT_TOKEN: 'prompt_jwt'
         };
@@ -267,7 +265,7 @@ describe('secret-manager', () => {
         expect(envContent).toContain('OBS_PASSWORD=prompt_obs_password');
         expect(configManager.getSection('twitch').clientSecret).toBe('prompt_client_secret');
         expect(result.persisted.sort()).toEqual(
-            expect.arrayContaining(['TIKTOK_API_KEY', 'TWITCH_CLIENT_ID', 'TWITCH_CLIENT_SECRET', 'TWITCH_API_KEY', 'OBS_PASSWORD', 'STREAMELEMENTS_JWT_TOKEN'])
+            expect.arrayContaining(['TIKTOK_API_KEY', 'TWITCH_CLIENT_ID', 'TWITCH_CLIENT_SECRET', 'OBS_PASSWORD', 'STREAMELEMENTS_JWT_TOKEN'])
         );
         expect(logger.entries.some((entry) => entry.message.includes('prompt_client_secret'))).toBe(false);
     });
@@ -279,7 +277,6 @@ describe('secret-manager', () => {
             TIKTOK_API_KEY: 'prompt_tiktok',
             TWITCH_CLIENT_ID: 'prompt_client_id',
             TWITCH_CLIENT_SECRET: 'prompt_client_secret',
-            TWITCH_API_KEY: 'prompt_api_key',
             OBS_PASSWORD: 'prompt_obs_password',
             STREAMELEMENTS_JWT_TOKEN: 'prompt_jwt'
         };
@@ -317,7 +314,6 @@ describe('secret-manager', () => {
             TIKTOK_API_KEY: 'prompt_tiktok',
             TWITCH_CLIENT_ID: 'prompt_client_id',
             TWITCH_CLIENT_SECRET: 'prompt_client_secret',
-            TWITCH_API_KEY: 'prompt_api_key',
             OBS_PASSWORD: 'prompt_obs_password',
             STREAMELEMENTS_JWT_TOKEN: 'prompt_jwt'
         };
@@ -360,7 +356,6 @@ describe('secret-manager', () => {
         const twitchSection = configManager.getSection('twitch');
         twitchSection.clientId = 'config_client_id';
         twitchSection.clientSecret = 'config_client_secret';
-        twitchSection.apiKey = 'config_api_key';
 
         await expect(ensureSecrets({
             configManager,

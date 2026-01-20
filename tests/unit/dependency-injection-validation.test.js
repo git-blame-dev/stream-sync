@@ -257,7 +257,6 @@ describe('Dependency Injection Validation', () => {
             const testMultiplePlatforms = () => {
                 const config = {
                     youtube: { apiKey: 'test-key' },
-                    twitch: { apiKey: 'test-key' },
                     tiktok: { apiKey: 'test-key' }
                 };
 

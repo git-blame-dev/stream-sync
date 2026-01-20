@@ -324,13 +324,15 @@ function createPlatformConfig(platformName) {
         get dataLoggingEnabled() { return configManager.getBoolean(platformName, 'dataLoggingEnabled', false); }
     };
 
-    // Unified apiKey for all platforms
-    Object.defineProperty(platformConfig, 'apiKey', {
-        get: function() { 
-            return resolveSecretValue(platformName, 'apiKey');
-        },
-        enumerable: true
-    });
+    if (platformName !== 'twitch') {
+        // Unified apiKey for all platforms except Twitch (token-only auth)
+        Object.defineProperty(platformConfig, 'apiKey', {
+            get: function() { 
+                return resolveSecretValue(platformName, 'apiKey');
+            },
+            enumerable: true
+        });
+    }
 
     // Add notification flags with fallback
     const notificationFlags = [
@@ -472,15 +474,6 @@ function getTwitchConfig() {
             get eventsub_enabled() { return configManager.getBoolean('twitch', 'eventsub_enabled', false); },
             get clientId() {
                 return resolveSecretValue('twitch', 'clientId');
-            },
-            get clientSecret() {
-                return resolveSecretValue('twitch', 'clientSecret');
-            },
-            get accessToken() {
-                return resolveSecretValue('twitch', 'accessToken');
-            },
-            get refreshToken() {
-                return resolveSecretValue('twitch', 'refreshToken');
             },
             get tokenStorePath() {
                 const tokenStorePath = configManager.getString('twitch', 'tokenStorePath', './data/twitch-tokens.json');

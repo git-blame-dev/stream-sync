@@ -290,15 +290,12 @@ class TwitchAuthManager {
         
         const beforeSync = {
             accessToken: this.config.accessToken,
-            refreshToken: this.config.refreshToken,
-            apiKey: this.config.apiKey
+            refreshToken: this.config.refreshToken
         };
         
         // Update tokens in our config to match the auth service
         this.config.accessToken = this.twitchAuthService.config.accessToken;
         this.config.refreshToken = this.twitchAuthService.config.refreshToken;
-        // Keep apiKey in sync with accessToken (used for chat/API access)
-        this.config.apiKey = this.twitchAuthService.config.accessToken;
         
         const tokensChanged = (
             beforeSync.accessToken !== this.config.accessToken ||

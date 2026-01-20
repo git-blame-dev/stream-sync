@@ -27,7 +27,6 @@ describe('DependencyFactory', () => {
                 enabled: true
             },
             twitch: {
-                apiKey: 'test-twitch-key',
                 channel: 'test-channel',
                 clientId: 'client-id',
                 clientSecret: 'client-secret',
@@ -222,7 +221,7 @@ describe('DependencyFactory', () => {
 
             expect(() => {
                 factory.createTwitchDependencies(invalidConfig, {});
-            }).toThrow('Twitch API key is required');
+            }).toThrow('Twitch channel is required');
         });
 
         it('should create Twitch dependencies with proper validation', () => {
@@ -435,7 +434,7 @@ describe('DependencyFactory', () => {
 
             expect(() => {
                 factory.createTwitchDependencies({}, {});
-            }).toThrow('Twitch API key is required');
+            }).toThrow('Twitch channel is required');
         });
 
         it('should provide clear error messages for invalid options', () => {
@@ -497,10 +496,9 @@ describe('DependencyFactory', () => {
         it('should validate all required Twitch configuration fields', () => {
             const configs = [
                 { enabled: true },
-                { apiKey: 'test' },
                 { channel: 'test' },
-                { apiKey: '', channel: 'test' },
-                { apiKey: 'test', channel: '' }
+                { channel: 'test', clientId: 'test-client' },
+                { channel: '', clientId: 'test-client', clientSecret: 'test-secret' }
             ];
 
             configs.forEach(config => {

@@ -47,7 +47,6 @@ describe('Refresh Token Storage and Update Handling (Twitch Best Practices)', ()
             clientSecret: 'test_client_secret',
             accessToken: 'old_access_token_123',
             refreshToken: 'old_refresh_token_456',
-            apiKey: 'old_access_token_123',
             tokenStorePath
         };
 
@@ -81,7 +80,6 @@ describe('Refresh Token Storage and Update Handling (Twitch Best Practices)', ()
             expect(result).toBe(true);
             expect(mockConfig.refreshToken).toBe('new_refresh_token_012');
             expect(mockConfig.accessToken).toBe('new_access_token_789');
-            expect(mockConfig.apiKey).toBe('new_access_token_789');
         });
 
         test('should replace old refresh token, not duplicate it', async () => {
@@ -114,7 +112,6 @@ describe('Refresh Token Storage and Update Handling (Twitch Best Practices)', ()
 
             expect(mockConfig.accessToken).toBe('new_access_789');
             expect(mockConfig.refreshToken).toBe('new_refresh_012');
-            expect(mockConfig.apiKey).toBe('new_access_789');
 
             const writtenPayload = JSON.parse(fsPromises.writeFile.mock.calls[0][1]);
             expect(writtenPayload.twitch.accessToken).toBe('new_access_789');
@@ -256,7 +253,6 @@ describe('Refresh Token Storage and Update Handling (Twitch Best Practices)', ()
                 operationOrder.push('memory_update_start');
 
                 this.config.accessToken = tokenData.access_token;
-                this.config.apiKey = tokenData.access_token;
                 if (tokenData.refresh_token) {
                     this.config.refreshToken = tokenData.refresh_token;
                 }
@@ -292,8 +288,7 @@ describe('Refresh Token Storage and Update Handling (Twitch Best Practices)', ()
 
             const originalTokens = {
                 accessToken: mockConfig.accessToken,
-                refreshToken: mockConfig.refreshToken,
-                apiKey: mockConfig.apiKey
+                refreshToken: mockConfig.refreshToken
             };
 
             const newTokenData = {
@@ -307,7 +302,6 @@ describe('Refresh Token Storage and Update Handling (Twitch Best Practices)', ()
 
             expect(mockConfig.accessToken).toBe(originalTokens.accessToken);
             expect(mockConfig.refreshToken).toBe(originalTokens.refreshToken);
-            expect(mockConfig.apiKey).toBe(originalTokens.apiKey);
         });
     });
 
