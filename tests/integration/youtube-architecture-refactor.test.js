@@ -70,20 +70,27 @@ describe('YouTube Architecture Refactoring', () => {
             const testEvents = [
                 {
                     chatItem: {
-                        item: { type: 'LiveChatPaidMessage', purchase_amount: '$5.00' },
-                        author: { name: 'testSuperChatUser' }
+                        item: {
+                            type: 'LiveChatPaidMessage',
+                            purchase_amount: '$5.00',
+                            author: { name: 'testSuperChatUser', id: 'test-user-1' }
+                        }
                     }
                 },
                 {
                     chatItem: {
-                        item: { type: 'LiveChatMembershipItem' },
-                        author: { name: 'testMemberUser' }
+                        item: {
+                            type: 'LiveChatMembershipItem',
+                            author: { name: 'testMemberUser', id: 'test-user-2' }
+                        }
                     }
                 },
                 {
                     chatItem: {
-                        item: { type: 'LiveChatSponsorshipsGiftPurchaseAnnouncement' },
-                        author: { name: 'testGiftPurchaser' }
+                        item: {
+                            type: 'LiveChatSponsorshipsGiftPurchaseAnnouncement',
+                            author: { name: 'testGiftPurchaser', id: 'test-user-3' }
+                        }
                     }
                 }
             ];
@@ -125,8 +132,11 @@ describe('YouTube Architecture Refactoring', () => {
             };
 
             const testEvent = {
-                item: { type: 'LiveChatPaidMessage', purchase_amount: '$10.00' },
-                author: { name: 'testUser' }
+                item: {
+                    type: 'LiveChatPaidMessage',
+                    purchase_amount: '$10.00',
+                    author: { name: 'testUser', id: 'test-user-4' }
+                }
             };
 
             platform.handleChatMessage(testEvent);
@@ -293,8 +303,11 @@ describe('YouTube Architecture Refactoring', () => {
             };
 
             const testEvent = {
-                item: { type: 'LiveChatPaidMessage', purchase_amount: '$5.00' },
-                author: { name: 'testUser' }
+                item: {
+                    type: 'LiveChatPaidMessage',
+                    purchase_amount: '$5.00',
+                    author: { id: 'test-user-5', name: 'testUser' }
+                }
             };
 
             methodCalls.length = 0;

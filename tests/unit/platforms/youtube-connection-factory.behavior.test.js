@@ -4,10 +4,11 @@ const { noOpLogger } = require('../../helpers/mock-factories');
 
 const { createYouTubeConnectionFactory } = require('../../../src/platforms/youtube/connections/youtube-connection-factory');
 
-const createFactory = ({ validationResult, liveChatBehavior }) => {
+const createFactory = ({ validationResult, liveChatBehavior, platformOverrides } = {}) => {
     const platform = {
         logger: noOpLogger,
-        _validateVideoForConnection: createMockFn().mockReturnValue(validationResult)
+        _validateVideoForConnection: createMockFn().mockReturnValue(validationResult),
+        ...(platformOverrides || {})
     };
 
     const liveChat = liveChatBehavior?.value || null;
@@ -78,5 +79,51 @@ describe('YouTube connection factory', () => {
         await expect(factory.createConnection('video-2')).rejects.toThrow(
             'Stream validation failed: Video is not live content (replay/VOD)'
         );
+    });
+
+    test('normalizes direct chat-update payloads before handleChatMessage', async () => {
+        const handleChatMessage = createMockFn();
+        const processRegularChatMessage = createMockFn();
+        const chatUpdateHandlers = {};
+
+        const { factory } = createFactory({
+            validationResult: { shouldConnect: true },
+            platformOverrides: {
+                handleChatMessage,
+                _processRegularChatMessage: processRegularChatMessage,
+                _extractMessagesFromChatItem: createMockFn().mockReturnValue([]),
+                _shouldSkipMessage: createMockFn().mockReturnValue(false),
+                logRawPlatformData: createMockFn().mockResolvedValue(),
+                setYouTubeConnectionReady: createMockFn(),
+                config: { dataLoggingEnabled: false }
+            }
+        });
+
+        const connection = {
+            on: createMockFn((event, handler) => {
+                chatUpdateHandlers[event] = handler;
+            }),
+            start: createMockFn(),
+            removeAllListeners: createMockFn()
+        };
+
+        await factory.setupConnectionEventListeners(connection, 'video-1');
+
+        chatUpdateHandlers['chat-update']({
+            author: { id: 'UC_TEST_1', name: 'TestUser' },
+            text: 'hello there'
+        });
+
+        expect(processRegularChatMessage).toHaveBeenCalledTimes(0);
+        const [handleCall] = handleChatMessage.mock.calls;
+        expect(handleCall).toBeTruthy();
+        expect(handleCall[0]).toMatchObject({
+            item: {
+                type: 'LiveChatTextMessage',
+                author: { id: 'UC_TEST_1', name: 'TestUser' },
+                message: { text: 'hello there' }
+            },
+            videoId: 'video-1'
+        });
     });
 });

@@ -1,4 +1,6 @@
 const { YOUTUBE } = require('../../../core/endpoints');
+const { getFallbackUsername } = require('../../../utils/fallback-username');
+const { normalizeYouTubeUsername } = require('../../../utils/youtube-username-normalizer');
 
 function createYouTubeConnectionFactory(options = {}) {
     const {
@@ -129,31 +131,58 @@ function createYouTubeConnectionFactory(options = {}) {
             }
 
             if (chatItem.author && chatItem.text) {
-                const authorName = typeof chatItem.author?.name === 'string'
+                const rawAuthorName = typeof chatItem.author?.name === 'string'
                     ? chatItem.author.name
-                    : (typeof chatItem.author === 'string' ? chatItem.author : null);
-                if (!authorName || !authorName.trim()) {
+                    : (typeof chatItem.author === 'string' ? chatItem.author : '');
+                const authorName = normalizeYouTubeUsername(rawAuthorName);
+                const authorId = typeof chatItem.author?.id === 'string'
+                    ? chatItem.author.id.trim()
+                    : '';
+
+                if (!authorName || !authorId) {
                     platform.logger.debug(
                         `Skipping chat-update for ${videoId}: missing author`,
                         'youtube',
-                        { eventType: chatItem.item?.type || chatItem.type || null }
+                        {
+                            eventType: chatItem.type || null,
+                            author: authorName || getFallbackUsername()
+                        }
                     );
                     return;
                 }
-                const messageText = chatItem.text || 'No text';
 
-                platform.logger.debug(`Direct YouTube.js message for ${videoId}: ${authorName} - ${messageText}`, 'youtube');
+                const messageText = typeof chatItem.text === 'string' ? chatItem.text.trim() : '';
+                if (!messageText) {
+                    platform.logger.debug(
+                        `Skipping chat-update for ${videoId}: missing message`,
+                        'youtube',
+                        { author: authorName }
+                    );
+                    return;
+                }
 
-                const normalizedData = {
-                    platform: 'youtube',
-                    username: authorName,
-                    userId: chatItem.author.id || null,
-                    message: messageText,
-                    timestamp: new Date().toISOString(),
+                const rawTimestamp = chatItem.timestampUsec ?? chatItem.timestamp_usec ?? chatItem.timestamp;
+                const normalizedChatItem = {
+                    item: {
+                        type: 'LiveChatTextMessage',
+                        ...(chatItem.id ? { id: chatItem.id } : {}),
+                        ...(rawTimestamp ? { timestampUsec: rawTimestamp } : {}),
+                        author: {
+                            id: authorId,
+                            name: rawAuthorName.trim()
+                        },
+                        message: {
+                            text: messageText
+                        }
+                    },
                     videoId
                 };
 
-                platform._processRegularChatMessage(normalizedData, authorName);
+                platform.logger.debug(
+                    `Direct YouTube.js message for ${videoId}: ${authorName} - ${messageText}`,
+                    'youtube'
+                );
+                platform.handleChatMessage(normalizedChatItem);
                 return;
             }
 
@@ -172,21 +201,19 @@ function createYouTubeConnectionFactory(options = {}) {
                     videoId
                 };
 
-                const authorName = typeof enhancedMessage?.item?.author?.name === 'string'
-                    ? enhancedMessage.item.author.name
-                    : (typeof enhancedMessage?.author?.name === 'string' ? enhancedMessage.author.name : null);
-                if (!authorName || !authorName.trim()) {
+                const authorName = platform._resolveChatItemAuthorName(enhancedMessage);
+                if (!authorName) {
                     platform.logger.debug(
                         `Skipping chat-update for ${videoId}: missing author`,
                         'youtube',
-                        { eventType: enhancedMessage?.item?.type || enhancedMessage?.type || null }
+                        {
+                            eventType: enhancedMessage?.item?.type || enhancedMessage?.type || null,
+                            author: getFallbackUsername()
+                        }
                     );
                     continue;
                 }
-                const messageText = enhancedMessage?.message?.text ||
-                    enhancedMessage?.item?.message?.text ||
-                    enhancedMessage?.text ||
-                    'No text';
+                const messageText = enhancedMessage?.item?.message?.text || 'No text';
 
                 platform.logger.debug(
                     `Single chat-update event received for ${videoId}: ${authorName} - ${messageText}`,

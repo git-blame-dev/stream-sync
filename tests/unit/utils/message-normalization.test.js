@@ -281,7 +281,7 @@ describe('Message Normalization', () => {
             const incompleteChatItem = {};
 
             expect(() => normalizeYouTubeMessage(incompleteChatItem, 'youtube', timestampService))
-                .toThrow('author');
+                .toThrow('Missing YouTube chat item payload');
         });
     });
 

@@ -1,3 +1,5 @@
+const GIFT_PURCHASE_EVENT_TYPE = 'LiveChatSponsorshipsGiftPurchaseAnnouncement';
+
 function normalizeYouTubeChatItem(chatItem) {
     if (!chatItem || typeof chatItem !== 'object') {
         return {
@@ -9,35 +11,103 @@ function normalizeYouTubeChatItem(chatItem) {
         };
     }
 
+    let normalizedChatItem = null;
+    let eventType = null;
+    let structure = null;
+
     if (chatItem.item) {
+        normalizedChatItem = chatItem;
+        eventType = chatItem.item.type;
+        structure = 'wrapped';
+    } else if (chatItem.type) {
+        normalizedChatItem = { item: chatItem };
+        eventType = chatItem.type;
+        structure = 'direct';
+    }
+
+    if (!normalizedChatItem || !eventType) {
         return {
-            normalizedChatItem: chatItem,
-            eventType: chatItem.item.type,
+            normalizedChatItem: null,
             debugMetadata: {
-                structure: 'wrapped',
-                eventType: chatItem.item.type
+                reason: 'unrecognized_structure',
+                hasItem: Boolean(chatItem.item),
+                hasType: Boolean(chatItem.type),
+                keys: Object.keys(chatItem)
             }
         };
     }
 
-    if (chatItem.type) {
+    if (eventType === GIFT_PURCHASE_EVENT_TYPE) {
+        const hydratedGiftPurchase = hydrateGiftPurchaseAuthor(normalizedChatItem);
+        if (!hydratedGiftPurchase) {
+            return {
+                normalizedChatItem: null,
+                eventType,
+                debugMetadata: {
+                    reason: 'missing_gift_purchase_author',
+                    eventType,
+                    structure
+                }
+            };
+        }
         return {
-            normalizedChatItem: { item: chatItem },
-            eventType: chatItem.type,
+            normalizedChatItem: hydratedGiftPurchase,
+            eventType,
             debugMetadata: {
-                structure: 'direct',
-                eventType: chatItem.type
+                structure,
+                eventType
             }
         };
     }
 
     return {
-        normalizedChatItem: null,
+        normalizedChatItem,
+        eventType,
         debugMetadata: {
-            reason: 'unrecognized_structure',
-            hasItem: Boolean(chatItem.item),
-            hasType: Boolean(chatItem.type),
-            keys: Object.keys(chatItem)
+            structure,
+            eventType
+        }
+    };
+}
+
+function hydrateGiftPurchaseAuthor(normalizedChatItem) {
+    const item = normalizedChatItem.item;
+    if (!item || typeof item !== 'object') {
+        return null;
+    }
+
+    const authorId = typeof item.author?.id === 'string' ? item.author.id.trim() : '';
+    const authorName = typeof item.author?.name === 'string' ? item.author.name.trim() : '';
+    if (authorId && authorName) {
+        return normalizedChatItem;
+    }
+
+    const header = item.header;
+    const headerName = typeof header?.author_name?.text === 'string'
+        ? header.author_name.text.trim()
+        : '';
+    const headerId = typeof item.author_external_channel_id === 'string'
+        ? item.author_external_channel_id.trim()
+        : '';
+
+    if (!headerName || !headerId) {
+        return null;
+    }
+
+    const headerPhoto = Array.isArray(header?.author_photo) ? header.author_photo : [];
+    const headerBadges = Array.isArray(header?.author_badges) ? header.author_badges : [];
+    const hydratedAuthor = {
+        id: headerId,
+        name: headerName,
+        thumbnails: headerPhoto,
+        badges: headerBadges
+    };
+
+    return {
+        ...normalizedChatItem,
+        item: {
+            ...item,
+            author: hydratedAuthor
         }
     };
 }
@@ -45,4 +115,3 @@ function normalizeYouTubeChatItem(chatItem) {
 module.exports = {
     normalizeYouTubeChatItem
 };
-

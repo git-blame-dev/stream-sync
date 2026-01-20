@@ -11,7 +11,7 @@ class UnifiedNotificationProcessor {
         this.textProcessing = platform.textProcessing || createTextProcessingManager({ logger: this.logger });
         this.messageExtractor = {
             extractMessage: (chatItem) => this.textProcessing.extractMessageText(
-                chatItem?.item?.message || chatItem?.message || ''
+                chatItem?.item?.message || ''
             )
         };
         this.shouldSuppressNotification = shouldSuppressYouTubeNotification;
@@ -101,8 +101,10 @@ class UnifiedNotificationProcessor {
 }
 
 function extractYouTubeNotificationId(chatItem) {
-    const item = chatItem?.item && typeof chatItem.item === 'object' ? chatItem.item : chatItem;
-    const rawId = item?.id;
+    if (!chatItem || typeof chatItem !== 'object' || !chatItem.item || typeof chatItem.item !== 'object') {
+        return null;
+    }
+    const rawId = chatItem.item.id;
     if (rawId === undefined || rawId === null) {
         return null;
     }
@@ -111,8 +113,10 @@ function extractYouTubeNotificationId(chatItem) {
 }
 
 function extractYouTubeTimestamp(chatItem) {
-    const item = chatItem?.item && typeof chatItem.item === 'object' ? chatItem.item : chatItem;
-    const rawTimestamp = item?.timestampUsec;
+    if (!chatItem || typeof chatItem !== 'object' || !chatItem.item || typeof chatItem.item !== 'object') {
+        return null;
+    }
+    const rawTimestamp = chatItem.item.timestampUsec;
     if (rawTimestamp === undefined || rawTimestamp === null) {
         return null;
     }

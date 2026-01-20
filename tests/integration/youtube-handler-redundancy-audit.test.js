@@ -110,9 +110,9 @@ describe('YouTube Handler Redundancy Audit', () => {
             const superChatEvent = {
                 item: {
                     type: 'LiveChatPaidMessage',
-                    purchase_amount: '$5.00'
-                },
-                author: { name: 'SuperChatUser' }
+                    purchase_amount: '$5.00',
+                    author: { id: 'test-user-1', name: 'SuperChatUser' }
+                }
             };
 
             platform.handleSuperChat(superChatEvent);
@@ -125,9 +125,9 @@ describe('YouTube Handler Redundancy Audit', () => {
             const superChatEvent = {
                 item: {
                     type: 'LiveChatPaidMessage',
-                    purchase_amount: '$10.00'
-                },
-                author: { name: 'DualPathUser' }
+                    purchase_amount: '$10.00',
+                    author: { id: 'test-user-2', name: 'DualPathUser' }
+                }
             };
 
             platform.handleSuperChat(superChatEvent);
@@ -150,15 +150,20 @@ describe('YouTube Handler Redundancy Audit', () => {
                 {
                     handler: 'handleSuperChat',
                     event: {
-                        item: { type: 'LiveChatPaidMessage', purchase_amount: '$5.00' },
-                        author: { name: 'User1' }
+                        item: {
+                            type: 'LiveChatPaidMessage',
+                            purchase_amount: '$5.00',
+                            author: { id: 'test-user-3', name: 'User1' }
+                        }
                     }
                 },
                 {
                     handler: 'handleMembership',
                     event: {
-                        item: { type: 'LiveChatMembershipItem' },
-                        author: { name: 'User2' }
+                        item: {
+                            type: 'LiveChatMembershipItem',
+                            author: { id: 'test-user-4', name: 'User2' }
+                        }
                     }
                 }
             ];
@@ -175,8 +180,7 @@ describe('YouTube Handler Redundancy Audit', () => {
     describe('Phase 2: Notification Building Pattern Analysis', () => {
         test('should detect inconsistent notification building patterns', () => {
             const membershipEvent = {
-                item: { type: 'LiveChatMembershipItem' },
-                author: { name: 'MemberUser' }
+                item: { type: 'LiveChatMembershipItem', author: { id: 'test-user-5', name: 'MemberUser' } }
             };
 
             platform.handleMembership(membershipEvent);
@@ -194,8 +198,10 @@ describe('YouTube Handler Redundancy Audit', () => {
 
         test('should validate gift vs membership notification type consistency', () => {
             const giftPurchaseEvent = {
-                item: { type: 'LiveChatSponsorshipsGiftPurchaseAnnouncement' },
-                author: { name: 'GiftPurchaser' }
+                item: {
+                    type: 'LiveChatSponsorshipsGiftPurchaseAnnouncement',
+                    author: { id: 'test-user-6', name: 'GiftPurchaser' }
+                }
             };
 
             platform.handleGiftMembershipPurchase(giftPurchaseEvent);
@@ -208,8 +214,7 @@ describe('YouTube Handler Redundancy Audit', () => {
     describe('Phase 2: Error Handling Consistency Analysis', () => {
         test('should handle errors consistently across all handlers', () => {
             const problematicEvent = {
-                item: { type: 'LiveChatPaidMessage' },
-                author: null
+                item: { type: 'LiveChatPaidMessage', author: null }
             };
 
             expect(() => platform.handleSuperChat(problematicEvent)).not.toThrow();
@@ -219,8 +224,11 @@ describe('YouTube Handler Redundancy Audit', () => {
 
         test('should validate suppression logic consistency', () => {
             const anonymousEvent = {
-                item: { type: 'LiveChatPaidMessage', purchase_amount: '$1.00' },
-                author: { name: 'Anonymous' }
+                item: {
+                    type: 'LiveChatPaidMessage',
+                    purchase_amount: '$1.00',
+                    author: { id: 'test-user-7', name: 'Anonymous' }
+                }
             };
 
             platform.handleSuperChat(anonymousEvent);
@@ -233,8 +241,7 @@ describe('YouTube Handler Redundancy Audit', () => {
     describe('Phase 2: Handler Method Signature Analysis', () => {
         test('should validate all handlers accept consistent parameters', () => {
             const testEvent = {
-                item: { type: 'LiveChatTextMessage', text: 'test' },
-                author: { name: 'TestUser' }
+                item: { type: 'LiveChatTextMessage', text: 'test', author: { id: 'test-user-8', name: 'TestUser' } }
             };
 
             const handlerMethods = [

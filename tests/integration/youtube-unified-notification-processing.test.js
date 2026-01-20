@@ -180,17 +180,17 @@ describe('YouTube Unified Notification Processing Implementation', () => {
                 {
                     handlerName: 'handleSuperChat',
                     eventType: 'gift',
-                    chatItem: { item: { type: 'LiveChatPaidMessage' }, author: { name: 'TestUser' } }
+                    chatItem: { item: { type: 'LiveChatPaidMessage', author: { id: 'test-user-1', name: 'TestUser' } } }
                 },
                 {
                     handlerName: 'handleMembership',
                     eventType: 'membership',
-                    chatItem: { item: { type: 'LiveChatMembershipItem' }, author: { name: 'TestUser' } }
+                    chatItem: { item: { type: 'LiveChatMembershipItem', author: { id: 'test-user-2', name: 'TestUser' } } }
                 },
                 {
                     handlerName: 'handleTickerSponsor',
                     eventType: 'membership',
-                    chatItem: { item: { type: 'LiveChatSponsorshipsGiftPurchaseAnnouncement' }, author: { name: 'TestUser' } }
+                    chatItem: { item: { type: 'LiveChatSponsorshipsGiftPurchaseAnnouncement', author: { id: 'test-user-3', name: 'TestUser' } } }
                 }
             ];
 
@@ -203,8 +203,11 @@ describe('YouTube Unified Notification Processing Implementation', () => {
 
         test('should maintain backward compatibility with existing handlers', () => {
             const testEvent = {
-                item: { type: 'LiveChatPaidMessage', purchase_amount: '$5.00' },
-                author: { name: 'SuperChatUser' }
+                item: {
+                    type: 'LiveChatPaidMessage',
+                    purchase_amount: '$5.00',
+                    author: { id: 'test-user-4', name: 'SuperChatUser' }
+                }
             };
             const mockProcessor = {
                 processNotification: createMockFn()
@@ -221,15 +224,18 @@ describe('YouTube Unified Notification Processing Implementation', () => {
     describe('Optimize Unified Notification Processing', () => {
         test('should measure performance improvement from unified processing', () => {
             const testEvents = Array.from({ length: 100 }, (_, i) => ({
-                item: { type: 'LiveChatPaidMessage', purchase_amount: '$1.00' },
-                author: { name: `PerfUser${i}` }
+                item: {
+                    type: 'LiveChatPaidMessage',
+                    purchase_amount: '$1.00',
+                    author: { id: `perf-user-${i}`, name: `PerfUser${i}` }
+                }
             }));
             const startTime = process.hrtime.bigint();
             testEvents.forEach(event => {
                 platform.NotificationBuilder.build({
                     platform: 'youtube',
                     type: 'platform:gift',
-                    username: event.author.name,
+                    username: event.item.author.name,
                     message: 'Test message'
                 });
             });

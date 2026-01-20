@@ -86,8 +86,11 @@ function normalizeYouTubeMessage(chatItem, platformName = 'youtube', timestampSe
         if (!chatItem || typeof chatItem !== 'object') {
             throw new Error('Missing YouTube chat item');
         }
-        const messageData = chatItem.item || chatItem;
-        const author = messageData.author || chatItem.author;
+        if (!chatItem.item || typeof chatItem.item !== 'object') {
+            throw new Error('Missing YouTube chat item payload');
+        }
+        const messageData = chatItem.item;
+        const author = messageData.author;
         if (!author || typeof author !== 'object') {
             throw new Error('Missing YouTube author data');
         }
@@ -104,7 +107,7 @@ function normalizeYouTubeMessage(chatItem, platformName = 'youtube', timestampSe
         if (messageData.superchat) {
             message = extractYouTubeMessageText(messageData.superchat.message);
         } else {
-            message = extractYouTubeMessageText(messageData.message || chatItem.message);
+            message = extractYouTubeMessageText(messageData.message);
         }
 
         const normalizedMessage = typeof message === 'string' ? message.trim() : '';
@@ -127,11 +130,11 @@ function normalizeYouTubeMessage(chatItem, platformName = 'youtube', timestampSe
             isSubscriber: Boolean(author.isMember),
             isBroadcaster: Boolean(author.isOwner),
             metadata: {
-                uniqueId: messageData.id || chatItem.id || null,
-                isSuperChat: Boolean(messageData.superchat || chatItem.superchat),
-                isSuperSticker: Boolean(messageData.supersticker || chatItem.supersticker),
-                isMembership: Boolean(messageData.isMembership || chatItem.isMembership),
-                authorPhoto: author?.thumbnails?.[0]?.url || author?.photo || null
+                uniqueId: messageData.id || null,
+                isSuperChat: Boolean(messageData.superchat),
+                isSuperSticker: Boolean(messageData.supersticker),
+                isMembership: Boolean(messageData.isMembership),
+                authorPhoto: author?.thumbnails?.[0]?.url || null
             },
             rawData: { chatItem }
         };
@@ -139,7 +142,9 @@ function normalizeYouTubeMessage(chatItem, platformName = 'youtube', timestampSe
         logger.debug(`Normalized YouTube message from ${normalized.username}`, 'message-normalization');
         return normalized;
     } catch (error) {
-        handleNormalizationError(`Failed to normalize YouTube message: ${error.message}`, error, 'youtube', { author: chatItem?.author?.name });
+        handleNormalizationError(`Failed to normalize YouTube message: ${error.message}`, error, 'youtube', {
+            author: chatItem?.item?.author?.name
+        });
         throw error;
     }
 }

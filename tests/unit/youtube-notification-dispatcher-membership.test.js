@@ -25,8 +25,7 @@ describe('YouTubeNotificationDispatcher membership routing', () => {
                 headerPrimaryText: { runs: [{ text: 'Member' }] },
                 headerSubtext: { runs: [{ text: 'Welcome back!' }] },
                 memberMilestoneDurationInMonths: 3
-            },
-            author: { name: 'MemberUser', channelId: 'chan123' }
+            }
         };
 
         await dispatcher.dispatchMembership(chatItem, { onMembership });

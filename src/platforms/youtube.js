@@ -569,15 +569,21 @@ class YouTubePlatform extends EventEmitter {
         const { normalizedChatItem, eventType, debugMetadata } = normalizeYouTubeChatItem(chatItem);
         const resolvedEventType = eventType || modernEventType;
         if (!normalizedChatItem) {
+            if (debugMetadata?.reason === 'missing_gift_purchase_author') {
+                this._handleMissingGiftPurchaseAuthor(chatItem, debugMetadata);
+                return;
+            }
             this.logger.debug('Chat item has no recognizable structure, skipping', 'youtube', debugMetadata);
             return;
         }
+
+        const authorForLog = this._resolveChatItemAuthorNameForLog(normalizedChatItem);
 
         // Skip events that should be filtered
         if (this._shouldSkipEvent(normalizedChatItem)) {
             this.logger.debug('Skipping filtered event', 'youtube', {
                 eventType: resolvedEventType,
-                author: normalizedChatItem.author?.name || normalizedChatItem.item?.author?.name
+                author: authorForLog
             });
             return;
         }
@@ -596,7 +602,7 @@ class YouTubePlatform extends EventEmitter {
         
         this.logger.debug('YouTube event routing', 'youtube', {
             eventType: resolvedEventType,
-            author: normalizedChatItem.author?.name || normalizedChatItem.item?.author?.name
+            author: authorForLog
         });
         
         try {
@@ -643,7 +649,7 @@ class YouTubePlatform extends EventEmitter {
         // Skip empty messages
         if (!normalizedData.message || normalizedData.message.trim() === '') {
             this.logger.debug('Skipping empty message', 'youtube', {
-                author: chatItem.author?.name,
+                author: this._resolveChatItemAuthorNameForLog(chatItem),
                 extractedMessage: normalizedData.message
             });
             return;
@@ -695,8 +701,9 @@ class YouTubePlatform extends EventEmitter {
     }
     
     async handleLowPriorityEvent(chatItem, eventType) {
-        const author = chatItem.author?.name || chatItem.item?.author?.name || '';
-        const authorLabel = author ? ` from ${author}` : '';
+        const author = this._resolveChatItemAuthorName(chatItem);
+        const resolvedAuthor = author || getFallbackUsername();
+        const authorLabel = ` from ${resolvedAuthor}`;
         
         if (this.logger) {
             this.logger.debug(
@@ -704,7 +711,7 @@ class YouTubePlatform extends EventEmitter {
                 'youtube',
                 {
                     eventType,
-                    author: author || null,
+                    author: resolvedAuthor,
                     action: 'ignored_intentionally',
                     reason: 'not_critical_for_core_functionality'
                 }
@@ -734,7 +741,7 @@ class YouTubePlatform extends EventEmitter {
             return;
         }
 
-        const author = chatItem.author?.name || chatItem.item?.author?.name || null;
+        const author = this._resolveChatItemAuthorName(chatItem) || getFallbackUsername();
         this.logger.debug(`ignored duplicate ${eventType}`, 'youtube', {
             eventType,
             author,
@@ -743,9 +750,48 @@ class YouTubePlatform extends EventEmitter {
     }
 
     _getGiftRedemptionRecipientName(chatItem) {
-        const rawName = chatItem?.item?.author?.name || chatItem?.author?.name || '';
+        const rawName = chatItem?.item?.author?.name || '';
         const normalizedName = normalizeYouTubeUsername(rawName);
         return normalizedName || getFallbackUsername();
+    }
+
+    _handleMissingGiftPurchaseAuthor(chatItem, debugMetadata) {
+        const giftCount = chatItem?.item?.giftMembershipsCount;
+        const resolvedGiftCount = Number.isFinite(Number(giftCount)) ? giftCount : undefined;
+
+        this.logger.warn('Gift membership purchase missing author data; sending error notification', 'youtube', {
+            eventType: debugMetadata?.eventType || 'LiveChatSponsorshipsGiftPurchaseAnnouncement',
+            giftCount: resolvedGiftCount
+        });
+
+        if (!this.notificationDispatcher || typeof this.notificationDispatcher.dispatchErrorNotification !== 'function') {
+            return;
+        }
+
+        Promise.resolve(
+            this.notificationDispatcher.dispatchErrorNotification(
+                chatItem,
+                'platform:giftpaypiggy',
+                this.handlers?.onGiftPaypiggy,
+                'onGiftPaypiggy',
+                { giftCount: resolvedGiftCount }
+            )
+        ).catch((error) => {
+            this._handleProcessingError(
+                `Failed to dispatch gift purchase error notification: ${error.message}`,
+                error,
+                'gift-membership'
+            );
+        });
+    }
+
+    _resolveChatItemAuthorName(chatItem) {
+        const rawName = chatItem?.item?.author?.name;
+        return normalizeYouTubeUsername(rawName);
+    }
+
+    _resolveChatItemAuthorNameForLog(chatItem) {
+        return this._resolveChatItemAuthorName(chatItem) || getFallbackUsername();
     }
 
     _isIgnoredDuplicateEventType(eventType) {
@@ -1215,19 +1261,16 @@ class YouTubePlatform extends EventEmitter {
                         messages.push({
                             type: action.addChatItemAction.item.type || 'unknown',
                             item: action.addChatItemAction.item,
-                            author: action.addChatItemAction.item.author,
-                            message: action.addChatItemAction.item.message,
                             originalChatItem: chatItem
                         });
                     }
                 }
             } else {
                 // Single message - wrap in standardized format
+                const item = chatItem.item || chatItem;
                 messages.push({
-                    type: chatItem.type || 'unknown',
-                    item: chatItem.item || chatItem,
-                    author: chatItem.item?.author || chatItem.author,
-                    message: chatItem.item?.message || chatItem.message,
+                    type: item.type || chatItem.type || 'unknown',
+                    item,
                     originalChatItem: chatItem
                 });
             }
@@ -1293,7 +1336,7 @@ class YouTubePlatform extends EventEmitter {
 
     _handleMissingChatEvent(eventType, chatItem) {
         const resolvedEventType = eventType || 'unknown';
-        const author = chatItem.author?.name || chatItem.item?.author?.name || null;
+        const author = this._resolveChatItemAuthorName(chatItem) || getFallbackUsername();
         this.logger?.debug?.(`Unknown event type: ${resolvedEventType}`, 'youtube', {
             eventType: resolvedEventType,
             author

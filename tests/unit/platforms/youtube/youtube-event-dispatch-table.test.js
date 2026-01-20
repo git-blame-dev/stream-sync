@@ -12,7 +12,10 @@ const {
 initializeTestLogging();
 
 const flushPromises = () => new Promise((resolve) => setImmediate(resolve));
-const getDebugMessages = (logger) => logger.debug.mock.calls.map(([message]) => message);
+const getDebugCalls = (logger) => logger.debug.mock.calls.map(([message, _scope, metadata]) => ({
+    message,
+    metadata: metadata || null
+}));
 
 describe('YouTubePlatform dispatch table behavior', () => {
     afterEach(() => {
@@ -78,9 +81,16 @@ describe('YouTubePlatform dispatch table behavior', () => {
         await flushPromises();
 
         expect(giftEvents).toHaveLength(0);
-        const debugMessages = getDebugMessages(platform.logger);
-        expect(debugMessages.some((message) => message.includes('ignored gifted membership announcement for GiftedViewer')))
-            .toBe(true);
+        const debugCalls = getDebugCalls(platform.logger);
+        const giftLog = debugCalls.find(({ message }) =>
+            message.includes('ignored gifted membership announcement for GiftedViewer')
+        );
+        expect(giftLog).toBeTruthy();
+        expect(giftLog.metadata).toMatchObject({
+            action: 'ignored_gifted_membership_announcement',
+            recipient: 'GiftedViewer',
+            eventType: 'LiveChatSponsorshipsGiftRedemptionAnnouncement'
+        });
     });
 
     test('uses fallback username when gift redemption recipient is missing', async () => {
@@ -100,9 +110,16 @@ describe('YouTubePlatform dispatch table behavior', () => {
         });
         await flushPromises();
 
-        const debugMessages = getDebugMessages(platform.logger);
-        expect(debugMessages.some((message) => message.includes('ignored gifted membership announcement for Unknown User')))
-            .toBe(true);
+        const debugCalls = getDebugCalls(platform.logger);
+        const giftLog = debugCalls.find(({ message }) =>
+            message.includes('ignored gifted membership announcement for Unknown User')
+        );
+        expect(giftLog).toBeTruthy();
+        expect(giftLog.metadata).toMatchObject({
+            action: 'ignored_gifted_membership_announcement',
+            recipient: 'Unknown User',
+            eventType: 'LiveChatSponsorshipsGiftRedemptionAnnouncement'
+        });
     });
 
     test('logs ignored duplicates for renderer variants without unknown-event logging', async () => {
@@ -124,8 +141,15 @@ describe('YouTubePlatform dispatch table behavior', () => {
         await flushPromises();
 
         expect(platform.logUnknownEvent).toHaveBeenCalledTimes(0);
-        const debugMessages = getDebugMessages(platform.logger);
-        expect(debugMessages.some((message) => message.includes('ignored duplicate LiveChatPaidMessageRenderer')))
-            .toBe(true);
+        const debugCalls = getDebugCalls(platform.logger);
+        const duplicateLog = debugCalls.find(({ message }) =>
+            message.includes('ignored duplicate LiveChatPaidMessageRenderer')
+        );
+        expect(duplicateLog).toBeTruthy();
+        expect(duplicateLog.metadata).toMatchObject({
+            action: 'ignored_duplicate',
+            eventType: 'LiveChatPaidMessageRenderer',
+            author: 'RendererUser'
+        });
     });
 });
