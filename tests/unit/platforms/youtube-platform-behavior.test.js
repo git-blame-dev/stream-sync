@@ -97,6 +97,14 @@ const createPlatform = (overrides = {}) => {
     return { platform, logger, streamDetectionService, timestampService };
 };
 
+const getDebugMessages = (logger) => logger.debug.mock.calls.map(([message]) => message);
+const createLogger = () => ({
+    debug: createMockFn(),
+    info: createMockFn(),
+    warn: createMockFn(),
+    error: createMockFn()
+});
+
 describe('YouTubePlatform modern architecture', () => {
     afterEach(() => {
         restoreAllMocks();
@@ -223,6 +231,54 @@ describe('YouTubePlatform modern architecture', () => {
                 })
             ])
         );
+    });
+
+    it('ignores gift redemption announcements with fallback logging', async () => {
+        const logger = createLogger();
+        const { platform } = createPlatform({ logger });
+        platform.logUnknownEvent = createMockFn().mockResolvedValue();
+
+        platform.handleChatMessage({
+            type: 'AddChatItemAction',
+            item: {
+                type: 'LiveChatSponsorshipsGiftRedemptionAnnouncement',
+                id: 'test-gift-redemption-unknown',
+                timestampUsec: '1704067203000000',
+                author: {
+                    id: 'UC_TEST_CHANNEL_000100',
+                    name: 'N/A'
+                }
+            }
+        });
+
+        expect(platform.logUnknownEvent).toHaveBeenCalledTimes(0);
+        const debugMessages = getDebugMessages(logger);
+        expect(debugMessages.some((message) => message.includes('ignored gifted membership announcement for Unknown User')))
+            .toBe(true);
+    });
+
+    it('logs renderer variants as ignored duplicates', async () => {
+        const logger = createLogger();
+        const { platform } = createPlatform({ logger });
+        platform.logUnknownEvent = createMockFn().mockResolvedValue();
+
+        platform.handleChatMessage({
+            type: 'AddChatItemAction',
+            item: {
+                type: 'LiveChatPaidMessageRenderer',
+                id: 'test-renderer-duplicate',
+                timestampUsec: '1704067204000000',
+                author: {
+                    id: 'UC_TEST_CHANNEL_000200',
+                    name: '@testRenderer'
+                }
+            }
+        });
+
+        expect(platform.logUnknownEvent).toHaveBeenCalledTimes(0);
+        const debugMessages = getDebugMessages(logger);
+        expect(debugMessages.some((message) => message.includes('ignored duplicate LiveChatPaidMessageRenderer')))
+            .toBe(true);
     });
 
     it('emits stream-status when the first YouTube stream becomes live', async () => {
