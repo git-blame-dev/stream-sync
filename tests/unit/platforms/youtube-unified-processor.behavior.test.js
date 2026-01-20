@@ -4,6 +4,7 @@ const { restoreAllModuleMocks, resetModules } = require('../../helpers/bun-modul
 const { noOpLogger } = require('../../helpers/mock-factories');
 const { shouldSuppressYouTubeNotification } = require('../../../src/utils/youtube-message-extractor');
 const { YouTubePlatform } = require('../../../src/platforms/youtube');
+const { PlatformEvents } = require('../../../src/interfaces/PlatformEvents');
 
 const createStreamDetectionService = () => ({
     detectLiveStreams: createMockFn().mockResolvedValue({
@@ -34,6 +35,13 @@ const createPlatformInstance = (overrides = {}) => {
     const platform = new YouTubePlatform({ enabled: true, username: 'test-channel' }, dependencies);
     return { platform, dependencies, logger };
 };
+
+const createLogger = () => ({
+    debug: createMockFn(),
+    info: createMockFn(),
+    warn: createMockFn(),
+    error: createMockFn()
+});
 
 describe('shouldSuppressYouTubeNotification', () => {
     it('suppresses when author is null', () => {
@@ -99,10 +107,10 @@ describe('YouTubeBaseEventHandler error handling', () => {
         ).resolves.toBeUndefined();
     });
 
-    it('uses platform error handler for event processing errors', async () => {
+    it('uses base error handler for event processing errors', async () => {
         const { platform } = createPlatformInstance();
         const errorHandlerSpy = createMockFn();
-        platform.errorHandler.handleEventProcessingError = errorHandlerSpy;
+        platform.baseEventHandler.errorHandler.handleEventProcessingError = errorHandlerSpy;
 
         platform.notificationDispatcher.dispatchSuperChat = createMockFn().mockRejectedValue(new Error('boom'));
 
@@ -115,5 +123,45 @@ describe('YouTubeBaseEventHandler error handling', () => {
         const [error, eventType] = errorHandlerSpy.mock.calls[0];
         expect(error.message).toBe('boom');
         expect(eventType).toBe('superchat');
+    });
+
+    it('emits a platform error when the dispatcher method is missing', async () => {
+        const logger = createLogger();
+        const { platform } = createPlatformInstance({ logger });
+        platform.notificationDispatcher = {};
+        platform._emitPlatformEvent = createMockFn();
+
+        await platform.baseEventHandler.handleEvent({ payload: true }, {
+            eventType: 'superchat',
+            dispatchMethod: 'dispatchSuperChat'
+        });
+
+        expect(platform._emitPlatformEvent).toHaveBeenCalledTimes(1);
+        const [eventType, payload] = platform._emitPlatformEvent.mock.calls[0];
+        expect(eventType).toBe(PlatformEvents.ERROR);
+        expect(payload).toMatchObject({
+            type: PlatformEvents.ERROR,
+            platform: 'youtube'
+        });
+        const processedLog = logger.debug.mock.calls.find(([message]) =>
+            message.includes('processed via')
+        );
+        expect(processedLog).toBeUndefined();
+    });
+
+    it('skips processed logging when dispatch returns false', async () => {
+        const logger = createLogger();
+        const { platform } = createPlatformInstance({ logger });
+        platform.notificationDispatcher.dispatchSuperChat = createMockFn().mockResolvedValue(false);
+
+        await platform.baseEventHandler.handleEvent({ payload: true }, {
+            eventType: 'superchat',
+            dispatchMethod: 'dispatchSuperChat'
+        });
+
+        const processedLog = logger.debug.mock.calls.find(([message]) =>
+            message.includes('processed via')
+        );
+        expect(processedLog).toBeUndefined();
     });
 });

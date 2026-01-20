@@ -107,6 +107,7 @@ const createLogger = () => ({
     warn: createMockFn(),
     error: createMockFn()
 });
+const flushPromises = () => new Promise((resolve) => setImmediate(resolve));
 
 describe('YouTubePlatform modern architecture', () => {
     afterEach(() => {
@@ -299,6 +300,44 @@ describe('YouTubePlatform modern architecture', () => {
             eventType: 'LiveChatPaidMessageRenderer',
             author: 'testRenderer'
         });
+    });
+
+    it('routes async handler failures through _handleProcessingError', async () => {
+        const logger = createLogger();
+        const { platform } = createPlatform({ logger });
+        const handlerError = new Error('dispatch failed');
+        platform._cachedEventDispatchTable = {
+            LiveChatPaidMessage: () => Promise.reject(handlerError)
+        };
+        platform._handleProcessingError = createMockFn();
+
+        const unhandled = [];
+        const listener = (error) => unhandled.push(error);
+        process.on('unhandledRejection', listener);
+
+        try {
+            await platform.handleChatMessage({
+                item: {
+                    type: 'LiveChatPaidMessage',
+                    id: 'LCC.test-async-error',
+                    timestampUsec: '1704067205000000',
+                    author: {
+                        id: 'UC_TEST_CHANNEL_000400',
+                        name: 'AsyncTester'
+                    }
+                }
+            });
+            await flushPromises();
+        } finally {
+            process.off('unhandledRejection', listener);
+        }
+
+        expect(platform._handleProcessingError).toHaveBeenCalledTimes(1);
+        const [message, error, eventType] = platform._handleProcessingError.mock.calls[0];
+        expect(message).toContain('Error handling event type LiveChatPaidMessage');
+        expect(error).toBe(handlerError);
+        expect(eventType).toBe('LiveChatPaidMessage');
+        expect(unhandled).toHaveLength(0);
     });
 
     it('emits error notification when gift purchase header author is missing', () => {
