@@ -863,23 +863,6 @@ class YouTubePlatform extends EventEmitter {
         return this.chatFileLoggingService.logRawPlatformData('youtube', eventType, data, this.config);
     }
 
-    async logUnknownEvent(eventType, chatItem, author) {
-        const resolvedVideoId = chatItem?.videoId ||
-            chatItem?.item?.videoId ||
-            this.currentVideoId ||
-            'unknown';
-
-        const enhancedData = {
-            ...chatItem,
-            author,
-            metadata: {
-                handler: 'handleActions',
-                videoId: resolvedVideoId
-            }
-        };
-        // Delegate to centralized service
-        return this.chatFileLoggingService.logUnknownEvent('youtube', eventType, enhancedData, this.config);
-    }
 
     getConnectionState() {
         const activeConnections = this.getActiveYouTubeVideoIds();
@@ -1328,24 +1311,46 @@ class YouTubePlatform extends EventEmitter {
             return;
         }
 
-        this.errorHandler?.logOperationalError(message, eventType, {
-            eventData,
-            error: error?.message || error
-        });
+        const errorMessage = error && error.message ? error.message : error;
+        if (this.errorHandler && typeof this.errorHandler.logOperationalError === 'function') {
+            this.errorHandler.logOperationalError(message, eventType, {
+                eventData,
+                error: errorMessage
+            });
+        }
     }
 
     _handleMissingChatEvent(eventType, chatItem) {
         const resolvedEventType = eventType || 'unknown';
         const author = this._resolveChatItemAuthorName(chatItem) || getFallbackUsername();
-        this.logger?.debug?.(`Unknown event type: ${resolvedEventType}`, 'youtube', {
-            eventType: resolvedEventType,
-            author
-        });
-        if (typeof this.logUnknownEvent === 'function') {
-            this.logUnknownEvent(resolvedEventType, chatItem, author).catch((error) => {
-                this.logger?.debug?.(`Failed to log unknown event: ${error.message}`, 'youtube');
+        if (this.logger && typeof this.logger.debug === 'function') {
+            this.logger.debug(`Unknown event type: ${resolvedEventType}`, 'youtube', {
+                eventType: resolvedEventType,
+                author
             });
         }
+        const chatItemVideoId = chatItem && typeof chatItem === 'object'
+            ? chatItem.videoId
+            : undefined;
+        const nestedVideoId = chatItem && typeof chatItem.item === 'object'
+            ? chatItem.item.videoId
+            : undefined;
+        const resolvedVideoId = chatItemVideoId || nestedVideoId || this.currentVideoId || 'unknown';
+
+        const enhancedData = {
+            ...chatItem,
+            author,
+            metadata: {
+                handler: 'handleActions',
+                videoId: resolvedVideoId
+            }
+        };
+
+        this.logRawPlatformData(resolvedEventType, enhancedData).catch((error) => {
+            if (this.logger && typeof this.logger.debug === 'function') {
+                this.logger.debug(`Failed to log unknown event: ${error.message}`, 'youtube');
+            }
+        });
     }
 
     _handleConnectionErrorLogging(message, error, action = 'operation') {
@@ -1354,9 +1359,12 @@ class YouTubePlatform extends EventEmitter {
             return;
         }
 
-        this.errorHandler?.logOperationalError(message, action, {
-            error: error?.message || error
-        });
+        const errorMessage = error && error.message ? error.message : error;
+        if (this.errorHandler && typeof this.errorHandler.logOperationalError === 'function') {
+            this.errorHandler.logOperationalError(message, action, {
+                error: errorMessage
+            });
+        }
     }
 
     _handleCleanupErrorLogging(message, error, resource = 'resource') {
@@ -1365,9 +1373,12 @@ class YouTubePlatform extends EventEmitter {
             return;
         }
 
-        this.errorHandler?.logOperationalError(message, resource, {
-            error: error?.message || error
-        });
+        const errorMessage = error && error.message ? error.message : error;
+        if (this.errorHandler && typeof this.errorHandler.logOperationalError === 'function') {
+            this.errorHandler.logOperationalError(message, resource, {
+                error: errorMessage
+            });
+        }
     }
 }
 

@@ -10,6 +10,8 @@ const { createTwitchEventSubSubscriptionManager } = require('./twitch/eventsub/s
 const { createTwitchEventSubWsLifecycle } = require('./twitch/eventsub/ws-lifecycle');
 const { validateLoggerInterface } = require('../utils/dependency-validator');
 
+const DEFAULT_LOG_DIRECTORY = './logs';
+
 class TwitchEventSub extends EventEmitter {
     constructor(config, dependencies = {}) {
         super(); // Call EventEmitter constructor
@@ -18,7 +20,7 @@ class TwitchEventSub extends EventEmitter {
         this.config = {
             ...config,
             dataLoggingEnabled: ConfigValidatorStatic.parseBoolean(config.dataLoggingEnabled, false),
-            dataLoggingPath: config.dataLoggingPath || './logs',
+            dataLoggingPath: DEFAULT_LOG_DIRECTORY,
         };
         validateLoggerInterface(dependencies.logger);
         this.logger = dependencies.logger;
@@ -270,8 +272,7 @@ class TwitchEventSub extends EventEmitter {
 
         // Optional fields
         const optionalFields = {
-            dataLoggingEnabled: { type: 'boolean', default: false },
-            dataLoggingPath: { type: 'string', default: './logs' }
+            dataLoggingEnabled: { type: 'boolean', default: false }
         };
 
         Object.entries(optionalFields).forEach(([field, config]) => {

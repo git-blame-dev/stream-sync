@@ -22,13 +22,15 @@ const dropUndefinedValues = (valueMap) => Object.fromEntries(
     Object.entries(valueMap).filter(([, value]) => value !== undefined)
 );
 
+const DEFAULT_LOG_DIRECTORY = './logs';
+
 const DEFAULT_YOUTUBE_CONFIG = {
     retryAttempts: 3,
     maxStreams: 5,
     streamPollingInterval: 60,
     fullCheckInterval: 300000,
     dataLoggingEnabled: false,
-    dataLoggingPath: './logs'
+    dataLoggingPath: DEFAULT_LOG_DIRECTORY
 };
 
 function normalizeYouTubeConfig(config) {
@@ -53,10 +55,6 @@ function normalizeYouTubeConfig(config) {
     const streamPollingInterval = normalizeOptionalNumber(config.streamPollingInterval, { min: 1 });
     const fullCheckInterval = normalizeOptionalNumber(config.fullCheckInterval, { min: 1 });
     const maxStreams = normalizeOptionalNumber(config.maxStreams, { min: 0 });
-    const trimmedDataLoggingPath = typeof config.dataLoggingPath === 'string'
-        ? config.dataLoggingPath.trim()
-        : config.dataLoggingPath;
-
     const normalized = {
         enabled: normalizeOptionalBoolean(config.enabled),
         username: config.username,
@@ -78,7 +76,7 @@ function normalizeYouTubeConfig(config) {
         ignoreSelfMessages: normalizeOptionalBoolean(config.ignoreSelfMessages),
         pollInterval: normalizeOptionalNumber(config.pollInterval, { min: 1 }),
         dataLoggingEnabled: dataLoggingEnabled ?? DEFAULT_YOUTUBE_CONFIG.dataLoggingEnabled,
-        dataLoggingPath: trimmedDataLoggingPath || DEFAULT_YOUTUBE_CONFIG.dataLoggingPath,
+        dataLoggingPath: DEFAULT_LOG_DIRECTORY,
         retryAttempts: retryAttempts ?? DEFAULT_YOUTUBE_CONFIG.retryAttempts,
         streamPollingInterval: streamPollingInterval ?? DEFAULT_YOUTUBE_CONFIG.streamPollingInterval,
         fullCheckInterval: fullCheckInterval ?? DEFAULT_YOUTUBE_CONFIG.fullCheckInterval,
@@ -100,7 +98,7 @@ function normalizeTwitchConfig(config) {
         tokenExpiresAt: config.tokenExpiresAt,
         eventsub_enabled: normalizeOptionalBoolean(config.eventsub_enabled),
         dataLoggingEnabled: normalizeOptionalBoolean(config.dataLoggingEnabled),
-        dataLoggingPath: config.dataLoggingPath,
+        dataLoggingPath: DEFAULT_LOG_DIRECTORY,
         viewerCountEnabled: normalizeOptionalBoolean(config.viewerCountEnabled),
         viewerCountSource: config.viewerCountSource,
         messagesEnabled: normalizeOptionalBoolean(config.messagesEnabled),
@@ -131,9 +129,7 @@ function normalizeTikTokConfig(config) {
         greetingsEnabled: normalizeOptionalBoolean(config.greetingsEnabled),
         giftAggregationEnabled: normalizeOptionalBoolean(config.giftAggregationEnabled),
         dataLoggingEnabled: normalizeOptionalBoolean(config.dataLoggingEnabled),
-        dataLoggingPath: config.dataLoggingPath,
-        giftLoggingEnabled: normalizeOptionalBoolean(config.giftLoggingEnabled),
-        giftLoggingPath: config.giftLoggingPath,
+        dataLoggingPath: DEFAULT_LOG_DIRECTORY,
         messagesEnabled: normalizeOptionalBoolean(config.messagesEnabled),
         commandsEnabled: normalizeOptionalBoolean(config.commandsEnabled),
         farewellsEnabled: normalizeOptionalBoolean(config.farewellsEnabled),

@@ -3,6 +3,8 @@ const fs = require('fs').promises;
 const path = require('path');
 const { createPlatformErrorHandler } = require('../utils/platform-error-handler');
 
+const DEFAULT_LOG_DIRECTORY = './logs';
+
 class ChatFileLoggingService {
     constructor(dependencies = {}) {
         this.logger = dependencies.logger || require('../core/logging').logger;
@@ -24,18 +26,11 @@ class ChatFileLoggingService {
                 data
             };
 
-            // Get log file path - use platform config or default
-            const logDir = this._resolveLogDirectory(platform, platformConfig);
-            if (!logDir) {
-                return;
-            }
             const logFileName = `${platform}-data-log.txt`;
-            const logFilePath = path.join(logDir, logFileName);
+            const logFilePath = path.join(DEFAULT_LOG_DIRECTORY, logFileName);
 
-            // Ensure log directory exists
-            await this.ensureDirectoryExists(logDir);
+            await this.ensureDirectoryExists(DEFAULT_LOG_DIRECTORY);
 
-            // Append to log file
             const logLine = JSON.stringify(logEntry) + '\n';
             await fs.appendFile(logFilePath, logLine, 'utf8');
 
@@ -43,45 +38,7 @@ class ChatFileLoggingService {
                 this.logger.debug(`Logged ${eventType} data for ${platform} to ${logFilePath}`, 'ChatFileLoggingService');
             }
         } catch (error) {
-            // Log error but don't throw - we don't want logging failures to break the platform
             this._handleLoggingError(`Error logging platform data for ${platform}: ${error.message}`, error);
-        }
-    }
-
-    async logUnknownEvent(platform, eventType, data, platformConfig = {}) {
-        if (!platformConfig.dataLoggingEnabled) {
-            return;
-        }
-
-        try {
-            const timestamp = new Date().toISOString();
-            const logEntry = {
-                timestamp,
-                eventType,
-                data,
-                metadata: {
-                    logged: 'unknown_event',
-                    platform
-                }
-            };
-
-            const logDir = this._resolveLogDirectory(platform, platformConfig);
-            if (!logDir) {
-                return;
-            }
-            const logFileName = `${platform}-unknown-events.txt`;
-            const logFilePath = path.join(logDir, logFileName);
-
-            await this.ensureDirectoryExists(logDir);
-
-            const logLine = JSON.stringify(logEntry) + '\n';
-            await fs.appendFile(logFilePath, logLine, 'utf8');
-
-            if (platformConfig.dataLoggingVerbose) {
-                this.logger.debug(`Logged unknown event type '${eventType}' for ${platform}`, 'ChatFileLoggingService');
-            }
-        } catch (error) {
-            this._handleLoggingError(`Error logging unknown event for ${platform}: ${error.message}`, error, 'unknown-event');
         }
     }
 
@@ -99,15 +56,8 @@ class ChatFileLoggingService {
 
     async getLogStatistics(platform, platformConfig = {}) {
         try {
-            const logDir = platformConfig.dataLoggingPath;
-            if (!logDir) {
-                return {
-                    error: 'Data logging path not configured',
-                    exists: false
-                };
-            }
             const logFileName = `${platform}-data-log.txt`;
-            const logFilePath = path.join(logDir, logFileName);
+            const logFilePath = path.join(DEFAULT_LOG_DIRECTORY, logFileName);
 
             const stats = await fs.stat(logFilePath);
             return {
@@ -121,19 +71,6 @@ class ChatFileLoggingService {
                 exists: false
             };
         }
-    }
-
-    _resolveLogDirectory(platform, platformConfig) {
-        const logDir = platformConfig.dataLoggingPath;
-        if (!logDir) {
-            const error = new Error('dataLoggingPath is required when dataLoggingEnabled is true');
-            this._handleLoggingError(
-                `Data logging enabled but dataLoggingPath not configured for ${platform}`,
-                error
-            );
-            return null;
-        }
-        return logDir;
     }
 
     _handleLoggingError(message, error, dataType = 'platform-data') {

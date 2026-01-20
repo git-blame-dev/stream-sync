@@ -1,5 +1,5 @@
 const { describe, it, beforeEach, afterEach, expect } = require('bun:test');
-const { createMockFn, clearAllMocks, restoreAllMocks, spyOn } = require('../../helpers/bun-mock-utils');
+const { clearAllMocks, restoreAllMocks, spyOn } = require('../../helpers/bun-mock-utils');
 const { noOpLogger } = require('../../helpers/mock-factories');
 const fs = require('fs').promises;
 const path = require('path');
@@ -7,107 +7,70 @@ const ChatFileLoggingService = require('../../../src/services/ChatFileLoggingSer
 
 describe('ChatFileLoggingService - Behavior-Focused Regression Tests', () => {
     let service;
-    let testConfig;
-    let tempLogDir;
+    let appendSpy;
+    let accessSpy;
+    let mkdirSpy;
+    let statSpy;
+    const logDir = './logs';
 
-    beforeEach(async () => {
-        tempLogDir = path.join(process.cwd(), 'logs', 'test-platform-data');
-        testConfig = {
-            dataLoggingEnabled: true,
-            dataLoggingPath: tempLogDir
-        };
+    beforeEach(() => {
+        appendSpy = spyOn(fs, 'appendFile').mockResolvedValue();
+        accessSpy = spyOn(fs, 'access').mockResolvedValue();
+        mkdirSpy = spyOn(fs, 'mkdir').mockResolvedValue();
+        statSpy = spyOn(fs, 'stat').mockResolvedValue({
+            size: 123,
+            mtime: new Date('2024-01-01T00:00:00.000Z')
+        });
 
         service = new ChatFileLoggingService({
             logger: noOpLogger,
-            config: testConfig
+            config: { dataLoggingEnabled: true }
         });
-
-        await fs.mkdir(tempLogDir, { recursive: true });
     });
 
-    afterEach(async () => {
-        try {
-            await fs.rm(tempLogDir, { recursive: true, force: true });
-        } catch {
-        }
+    afterEach(() => {
         restoreAllMocks();
         clearAllMocks();
     });
 
     describe('User-Observable Platform Logging Behavior', () => {
-        it('should create platform-specific log files for streamers to debug', async () => {
+        it('writes platform data to the default logs directory', async () => {
             const chatData = { username: 'TestUser', message: 'Hello stream!' };
 
-            await service.logRawPlatformData('twitch', 'chat', chatData, testConfig);
-            await service.logRawPlatformData('youtube', 'chat', chatData, testConfig);
-            await service.logRawPlatformData('tiktok', 'chat', chatData, testConfig);
+            await service.logRawPlatformData('twitch', 'chat', chatData, { dataLoggingEnabled: true });
+            await service.logRawPlatformData('youtube', 'chat', chatData, { dataLoggingEnabled: true });
+            await service.logRawPlatformData('tiktok', 'chat', chatData, { dataLoggingEnabled: true });
 
-            const twitchFile = await fs.readFile(path.join(tempLogDir, 'twitch-data-log.txt'), 'utf8');
-            const youtubeFile = await fs.readFile(path.join(tempLogDir, 'youtube-data-log.txt'), 'utf8');
-            const tiktokFile = await fs.readFile(path.join(tempLogDir, 'tiktok-data-log.txt'), 'utf8');
+            expect(appendSpy.mock.calls).toHaveLength(3);
 
-            expect(twitchFile).toContain('TestUser');
-            expect(youtubeFile).toContain('TestUser');
-            expect(tiktokFile).toContain('TestUser');
-            expect(twitchFile).toContain('chat');
-            expect(youtubeFile).toContain('chat');
-            expect(tiktokFile).toContain('chat');
+            const [twitchCall, youtubeCall, tiktokCall] = appendSpy.mock.calls;
+            expect(twitchCall[0]).toBe(path.join(logDir, 'twitch-data-log.txt'));
+            expect(youtubeCall[0]).toBe(path.join(logDir, 'youtube-data-log.txt'));
+            expect(tiktokCall[0]).toBe(path.join(logDir, 'tiktok-data-log.txt'));
+
+            const twitchEntry = JSON.parse(twitchCall[1]);
+            expect(twitchEntry).toMatchObject({ eventType: 'chat', data: chatData });
         });
 
-        it('should not log when platform logging is disabled for user privacy', async () => {
-            const disabledConfig = { dataLoggingEnabled: false };
+        it('does not log when platform logging is disabled for user privacy', async () => {
             const sensitiveData = { username: 'PrivateUser', message: 'Personal info' };
 
-            await service.logRawPlatformData('twitch', 'chat', sensitiveData, disabledConfig);
+            await service.logRawPlatformData('twitch', 'chat', sensitiveData, { dataLoggingEnabled: false });
 
-            const files = await fs.readdir(tempLogDir).catch(() => []);
-            const logFiles = files.filter(f => f.includes('twitch-data-log'));
-            expect(logFiles).toHaveLength(0);
+            expect(appendSpy.mock.calls).toHaveLength(0);
         });
 
-        it('should handle filesystem errors gracefully without breaking chat', async () => {
-            const readOnlyConfig = {
-                dataLoggingEnabled: true,
-                dataLoggingPath: tempLogDir
-            };
-            const appendSpy = spyOn(fs, 'appendFile').mockRejectedValue(new Error('Disk full'));
+        it('handles filesystem errors gracefully without breaking chat', async () => {
+            appendSpy.mockRejectedValueOnce(new Error('Disk full'));
 
             await expect(
-                service.logRawPlatformData('twitch', 'chat', { msg: 'test' }, readOnlyConfig)
+                service.logRawPlatformData('twitch', 'chat', { msg: 'test' }, { dataLoggingEnabled: true })
             ).resolves.toBeUndefined();
-
-            appendSpy.mockRestore();
-        });
-
-        it('should not create files when log path is missing', async () => {
-            const missingPathConfig = { dataLoggingEnabled: true };
-
-            await service.logRawPlatformData('twitch', 'chat', { msg: 'test' }, missingPathConfig);
-
-            const files = await fs.readdir(tempLogDir).catch(() => []);
-            expect(files).toHaveLength(0);
-        });
-
-        it('should log unknown events for streamer troubleshooting', async () => {
-            const unknownEventData = {
-                type: 'mystery_event',
-                payload: { unusual: 'data' }
-            };
-
-            await service.logUnknownEvent('youtube', 'mystery_event', unknownEventData, testConfig);
-
-            const unknownFile = await fs.readFile(path.join(tempLogDir, 'youtube-unknown-events.txt'), 'utf8');
-            expect(unknownFile).toContain('mystery_event');
-            expect(unknownFile).toContain('unusual');
-
-            const logEntry = JSON.parse(unknownFile);
-            expect(logEntry.metadata.platform).toBe('youtube');
-            expect(logEntry.metadata.logged).toBe('unknown_event');
         });
     });
 
     describe('Service Extraction Compatibility', () => {
-        it('should maintain JSON format for consistent parsing by admins', async () => {
+        it('maintains JSON format for consistent parsing by admins', async () => {
             const giftData = {
                 giftType: 'Rose',
                 giftCount: 1,
@@ -116,54 +79,37 @@ describe('ChatFileLoggingService - Behavior-Focused Regression Tests', () => {
                 username: 'Supporter123'
             };
 
-            await service.logRawPlatformData('tiktok', 'gift', giftData, testConfig);
+            await service.logRawPlatformData('tiktok', 'gift', giftData, { dataLoggingEnabled: true });
 
-            const logContent = await fs.readFile(path.join(tempLogDir, 'tiktok-data-log.txt'), 'utf8');
-            const logEntry = JSON.parse(logContent);
+            const [[, logLine]] = appendSpy.mock.calls;
+            const logEntry = JSON.parse(logLine);
 
             expect(logEntry).toHaveProperty('timestamp');
             expect(logEntry).toHaveProperty('eventType', 'gift');
             expect(logEntry.data).toEqual(giftData);
         });
 
-        it('should provide statistics for monitoring system health', async () => {
-            await service.logRawPlatformData('youtube', 'chat', { test: 'data' }, testConfig);
+        it('provides statistics for monitoring system health', async () => {
+            const stats = await service.getLogStatistics('youtube', { dataLoggingEnabled: true });
 
-            const stats = await service.getLogStatistics('youtube', testConfig);
-
-            expect(stats).toHaveProperty('size');
-            expect(stats).toHaveProperty('lastModified');
-            expect(stats).toHaveProperty('path');
-            expect(stats.size).toBeGreaterThan(0);
+            expect(statSpy.mock.calls).toHaveLength(1);
+            expect(statSpy.mock.calls[0][0]).toBe(path.join(logDir, 'youtube-data-log.txt'));
+            expect(stats).toMatchObject({
+                size: 123,
+                path: path.join(logDir, 'youtube-data-log.txt')
+            });
         });
     });
 
     describe('Error Recovery User Experience', () => {
-        it('should provide helpful error information when log files missing', async () => {
-            const stats = await service.getLogStatistics('nonexistent', testConfig);
+        it('creates the log directory when missing', async () => {
+            accessSpy.mockRejectedValueOnce(new Error('missing'));
 
-            expect(stats).toHaveProperty('error');
-            expect(stats).toHaveProperty('exists', false);
-        });
+            await service.logRawPlatformData('twitch', 'chat', { msg: 'test' }, { dataLoggingEnabled: true });
 
-        it('should ensure directory creation for new installations', async () => {
-            const newDirConfig = {
-                dataLoggingEnabled: true,
-                dataLoggingPath: path.join(tempLogDir, 'new', 'nested', 'dir')
-            };
-
-            await service.logRawPlatformData('twitch', 'chat', { msg: 'test' }, newDirConfig);
-
-            const dirExists = await fs.access(newDirConfig.dataLoggingPath)
-                .then(() => true)
-                .catch(() => false);
-            expect(dirExists).toBe(true);
-
-            const logFile = path.join(newDirConfig.dataLoggingPath, 'twitch-data-log.txt');
-            const fileExists = await fs.access(logFile)
-                .then(() => true)
-                .catch(() => false);
-            expect(fileExists).toBe(true);
+            expect(mkdirSpy.mock.calls).toHaveLength(1);
+            expect(mkdirSpy.mock.calls[0][0]).toBe(logDir);
+            expect(mkdirSpy.mock.calls[0][1]).toEqual({ recursive: true });
         });
     });
 });

@@ -242,7 +242,7 @@ describe('YouTubePlatform modern architecture', () => {
     it('ignores gift redemption announcements with fallback logging', async () => {
         const logger = createLogger();
         const { platform } = createPlatform({ logger });
-        platform.logUnknownEvent = createMockFn().mockResolvedValue();
+        platform.logRawPlatformData = createMockFn().mockResolvedValue();
 
         platform.handleChatMessage({
             type: 'AddChatItemAction',
@@ -257,7 +257,7 @@ describe('YouTubePlatform modern architecture', () => {
             }
         });
 
-        expect(platform.logUnknownEvent).toHaveBeenCalledTimes(0);
+        expect(platform.logRawPlatformData).toHaveBeenCalledTimes(0);
         const debugCalls = getDebugCalls(logger);
         const giftLog = debugCalls.find(({ message }) =>
             message.includes('ignored gifted membership announcement for Unknown User')
@@ -273,7 +273,7 @@ describe('YouTubePlatform modern architecture', () => {
     it('logs renderer variants as ignored duplicates', async () => {
         const logger = createLogger();
         const { platform } = createPlatform({ logger });
-        platform.logUnknownEvent = createMockFn().mockResolvedValue();
+        platform.logRawPlatformData = createMockFn().mockResolvedValue();
 
         platform.handleChatMessage({
             type: 'AddChatItemAction',
@@ -288,7 +288,7 @@ describe('YouTubePlatform modern architecture', () => {
             }
         });
 
-        expect(platform.logUnknownEvent).toHaveBeenCalledTimes(0);
+        expect(platform.logRawPlatformData).toHaveBeenCalledTimes(0);
         const debugCalls = getDebugCalls(logger);
         const duplicateLog = debugCalls.find(({ message }) =>
             message.includes('ignored duplicate LiveChatPaidMessageRenderer')

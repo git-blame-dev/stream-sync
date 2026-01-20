@@ -5,6 +5,8 @@ const { handleUserFacingError } = require('../utils/user-friendly-errors');
 const { createRuntimeConstants } = require('./runtime-constants');
 const { DEFAULT_HTTP_USER_AGENTS, parseUserAgentList } = require('./http-config');
 
+const DEFAULT_LOG_DIRECTORY = './logs';
+
 class ConfigManager {
     constructor(defaultConfigPath = './config.ini') {
         this.defaultConfigPath = defaultConfigPath;
@@ -322,7 +324,8 @@ function createPlatformConfig(platformName) {
             }
             return generalConfig.viewerCountPollingIntervalMs;
         },
-        get dataLoggingEnabled() { return configManager.getBoolean(platformName, 'dataLoggingEnabled', false); }
+        get dataLoggingEnabled() { return configManager.getBoolean('logging', 'platformDataLoggingEnabled', false); },
+        get dataLoggingPath() { return DEFAULT_LOG_DIRECTORY; }
     };
 
     if (platformName !== 'twitch') {
@@ -576,8 +579,8 @@ const streamElementsConfig = {
     get youtubeChannelId() { return resolveConfigValue('streamelements', 'youtubeChannelId'); },
     get twitchChannelId() { return resolveConfigValue('streamelements', 'twitchChannelId'); },
     get jwtToken() { return resolveSecretValue('STREAMELEMENTS_JWT_TOKEN'); },
-    get dataLoggingEnabled() { return configManager.getBoolean('streamelements', 'dataLoggingEnabled', false); },
-    get dataLoggingPath() { return configManager.getString('streamelements', 'dataLoggingPath', './logs'); }
+    get dataLoggingEnabled() { return configManager.getBoolean('logging', 'streamelementsDataLoggingEnabled', false); },
+    get dataLoggingPath() { return DEFAULT_LOG_DIRECTORY; }
 };
 
 // Timing configuration
@@ -735,14 +738,14 @@ function validateNewFeaturesConfig(config) {
 
 const DEFAULT_LOGGING_CONFIG = {
     console: { enabled: true, level: 'console' }, // Only user-facing messages (chat, notifications, errors)
-    file: { enabled: true, level: 'debug' },      // All logs for troubleshooting
+    file: { enabled: true, level: 'debug', directory: DEFAULT_LOG_DIRECTORY },
     debug: { enabled: false },
-    platforms: { 
-        twitch: { enabled: true, fileLogging: true }, 
-        youtube: { enabled: true, fileLogging: true }, 
-        tiktok: { enabled: true, fileLogging: true } 
+    platforms: {
+        twitch: { enabled: true, fileLogging: true },
+        youtube: { enabled: true, fileLogging: true },
+        tiktok: { enabled: true, fileLogging: true }
     },
-    chat: { enabled: true, separateFiles: true }
+    chat: { enabled: true, separateFiles: true, directory: DEFAULT_LOG_DIRECTORY }
 };
 
 function validateLoggingConfig(userConfig = {}) {
@@ -754,7 +757,7 @@ function validateLoggingConfig(userConfig = {}) {
     }
     
     // Backward compatibility mapping
-    if (userConfig.general?.debugEnabled !== undefined) {
+    if (userConfig.general && userConfig.general.debugEnabled !== undefined) {
         // Only apply config file debug setting if not already set by command line
         const { getDebugMode } = require('./logging');
         const debugAlreadySetByCommandLine = getDebugMode();
@@ -772,10 +775,6 @@ function validateLoggingConfig(userConfig = {}) {
             // Command line debug flag was used, ensure console level is debug
             config.console.level = 'debug';
         }
-    }
-    
-    if (userConfig.general?.logChatMessages !== undefined) {
-        config.chat.enabled = userConfig.general.logChatMessages;
     }
     
     // Validate log levels
@@ -799,6 +798,11 @@ function validateLoggingConfig(userConfig = {}) {
             config.file.enabled = userConfig.logging.fileLoggingEnabled;
         }
     }
+
+    config.file.directory = DEFAULT_LOG_DIRECTORY;
+    config.chat.enabled = config.file.enabled;
+    config.chat.separateFiles = true;
+    config.chat.directory = DEFAULT_LOG_DIRECTORY;
     
     return config;
 }

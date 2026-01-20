@@ -54,6 +54,6 @@ describe('platform config parsing behavior', () => {
         expect(platform.config.jwtToken).toBeUndefined();
         expect(platform.config.youtubeChannelId).toBeUndefined();
         expect(platform.config.twitchChannelId).toBeUndefined();
-        expect(platform.config.dataLoggingPath).toBeUndefined();
+        expect(platform.config.dataLoggingPath).toBe('./logs');
     });
 });

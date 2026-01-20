@@ -15,7 +15,7 @@ const { createMonetizationErrorPayload } = require('../utils/monetization-error-
 const { createRetrySystem } = require('../utils/retry-system');
 const TimestampExtractionService = require('../services/TimestampExtractionService');
 const { getSystemTimestampISO } = require('../utils/validation');
-const { extractTikTokUserData, extractTikTokGiftData, logTikTokGiftData, formatCoinAmount } = require('../utils/tiktok-data-extraction');
+const { extractTikTokUserData, extractTikTokGiftData, formatCoinAmount } = require('../utils/tiktok-data-extraction');
 const { validateNotificationManagerInterface } = require('../utils/dependency-validator');
 const { normalizeTikTokMessage } = require('../utils/message-normalization');
 const { normalizeTikTokPlatformConfig, validateTikTokPlatformConfig } = require('./tiktok/config/tiktok-config');
@@ -1056,19 +1056,6 @@ class TikTokPlatform extends EventEmitter {
     }
 
     async handleOfficialGift(identityKey, username, giftType, giftCount, unitAmount, amount, currency, isStreakCompleted, originalData) {
-        // Log gift data for analysis
-        const processedData = {
-            username,
-            giftType: giftType,
-            giftCount: giftCount,
-            amount,
-            currency
-        };
-        await logTikTokGiftData(originalData, processedData, `${identityKey}-${giftType}`, {
-            logger: this.logger,
-            errorHandler: this.errorHandler
-        });
-
         // Create gift message with streak indication
         let giftMessage = isStreakCompleted 
             ? `${username} completed a streak of ${giftCount}x ${giftType}`

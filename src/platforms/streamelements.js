@@ -6,6 +6,8 @@ const { ConfigValidatorStatic } = require('../utils/config-validator');
 const { createRetrySystem } = require('../utils/retry-system');
 const { STREAMELEMENTS } = require('../core/endpoints');
 
+const DEFAULT_LOG_DIRECTORY = './logs';
+
 
 class StreamElementsPlatform extends EventEmitter {
     constructor(config = {}, dependencies = {}) {
@@ -35,7 +37,7 @@ class StreamElementsPlatform extends EventEmitter {
             twitchChannelId: trimToUndefined(config.twitchChannelId),
             jwtToken: trimToUndefined(config.jwtToken),
             dataLoggingEnabled: ConfigValidatorStatic.parseBoolean(config.dataLoggingEnabled, false),
-            dataLoggingPath: trimToUndefined(config.dataLoggingPath)
+            dataLoggingPath: DEFAULT_LOG_DIRECTORY
         };
         
         this.connection = null;
@@ -424,14 +426,6 @@ class StreamElementsPlatform extends EventEmitter {
     async logRawPlatformData(eventType, data) {
         if (!this.config.dataLoggingEnabled) {
             return; // Exit early if logging disabled
-        }
-
-        if (!this.config.dataLoggingPath) {
-            this.errorHandler.logOperationalError(
-                'dataLoggingPath is required when dataLoggingEnabled is true',
-                'streamelements'
-            );
-            return;
         }
 
         try {

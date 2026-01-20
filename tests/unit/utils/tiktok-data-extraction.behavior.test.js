@@ -1,83 +1,10 @@
 const { describe, test, expect, it, afterEach } = require('bun:test');
-const { createMockFn, restoreAllMocks } = require('../../helpers/bun-mock-utils');
-const { noOpLogger } = require('../../helpers/mock-factories');
-
 const {
     extractTikTokUserData,
     extractTikTokGiftData,
     extractTikTokViewerCount,
-    formatCoinAmount,
-    logTikTokGiftData
+    formatCoinAmount
 } = require('../../../src/utils/tiktok-data-extraction');
-
-describe('logTikTokGiftData behavior', () => {
-    afterEach(() => {
-        restoreAllMocks();
-    });
-
-    it('does not write to disk when gift logging is not explicitly enabled', async () => {
-        const writer = createMockFn().mockResolvedValue();
-
-        await logTikTokGiftData(
-            {
-                giftDetails: { giftName: 'TestGiftAlpha', diamondCount: 1 },
-                repeatCount: 3,
-                user: { userId: 'test_user_id_alpha', uniqueId: 'testUserAlpha' }
-            },
-            { username: 'TestUserAlpha', giftType: 'TestGiftAlpha', giftCount: 3, amount: 3, currency: 'coins' },
-            'testUserAlpha-TestGiftAlpha',
-            { writer }
-        );
-
-        expect(writer).not.toHaveBeenCalled();
-    });
-
-    it('routes writer errors through platform error handler when logging enabled', async () => {
-        const errorHandler = { handleDataLoggingError: createMockFn() };
-        const writer = createMockFn().mockRejectedValue(new Error('disk full'));
-        const configProvider = () => ({ tiktok: { giftLoggingEnabled: true } });
-
-        await logTikTokGiftData(
-            {
-                giftDetails: { giftName: 'TestGiftAlpha', diamondCount: 1 },
-                repeatCount: 3,
-                user: { userId: 'test_user_id_alpha', uniqueId: 'testUserAlpha' }
-            },
-            { username: 'TestUserAlpha', giftType: 'TestGiftAlpha', giftCount: 3, amount: 3, currency: 'coins' },
-            'testUserAlpha-TestGiftAlpha',
-            { writer, errorHandler, logger: noOpLogger, configProvider }
-        );
-
-        expect(writer).toHaveBeenCalledTimes(1);
-        expect(errorHandler.handleDataLoggingError).toHaveBeenCalledWith(
-            expect.any(Error),
-            'tiktok-gift',
-            expect.stringContaining('Error logging TikTok gift data')
-        );
-    });
-
-    it('reports missing gift logging path when enabled without writer', async () => {
-        const errorHandler = { handleDataLoggingError: createMockFn() };
-        const configProvider = () => ({ tiktok: { giftLoggingEnabled: true } });
-
-        await logTikTokGiftData(
-            {
-                giftDetails: { giftName: 'TestGiftAlpha', diamondCount: 1 },
-                repeatCount: 3,
-                user: { userId: 'test_user_id_alpha', uniqueId: 'testUserAlpha' }
-            },
-            { username: 'TestUserAlpha', giftType: 'TestGiftAlpha', giftCount: 3, amount: 3, currency: 'coins' },
-            'testUserAlpha-TestGiftAlpha',
-            { errorHandler, logger: noOpLogger, configProvider }
-        );
-
-        expect(errorHandler.handleDataLoggingError).toHaveBeenCalledWith(
-            expect.any(Error),
-            'tiktok-gift',
-            expect.stringContaining('giftLoggingPath')
-        );
-    });
-});
 
 describe('extractTikTokUserData', () => {
     it('throws when payload is missing', () => {

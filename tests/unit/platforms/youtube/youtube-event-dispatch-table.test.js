@@ -124,7 +124,7 @@ describe('YouTubePlatform dispatch table behavior', () => {
 
     test('logs ignored duplicates for renderer variants without unknown-event logging', async () => {
         const platform = createPlatform();
-        platform.logUnknownEvent = createMockFn().mockResolvedValue();
+        platform.logRawPlatformData = createMockFn().mockResolvedValue();
 
         platform.handleChatMessage({
             type: 'AddChatItemAction',
@@ -140,7 +140,7 @@ describe('YouTubePlatform dispatch table behavior', () => {
         });
         await flushPromises();
 
-        expect(platform.logUnknownEvent).toHaveBeenCalledTimes(0);
+        expect(platform.logRawPlatformData).toHaveBeenCalledTimes(0);
         const debugCalls = getDebugCalls(platform.logger);
         const duplicateLog = debugCalls.find(({ message }) =>
             message.includes('ignored duplicate LiveChatPaidMessageRenderer')
