@@ -12,6 +12,7 @@ const {
 initializeTestLogging();
 
 const flushPromises = () => new Promise((resolve) => setImmediate(resolve));
+const getDebugMessages = (logger) => logger.debug.mock.calls.map(([message]) => message);
 
 describe('YouTubePlatform dispatch table behavior', () => {
     afterEach(() => {
@@ -77,5 +78,54 @@ describe('YouTubePlatform dispatch table behavior', () => {
         await flushPromises();
 
         expect(giftEvents).toHaveLength(0);
+        const debugMessages = getDebugMessages(platform.logger);
+        expect(debugMessages.some((message) => message.includes('ignored gifted membership announcement for GiftedViewer')))
+            .toBe(true);
+    });
+
+    test('uses fallback username when gift redemption recipient is missing', async () => {
+        const platform = createPlatform();
+
+        platform.handleChatMessage({
+            type: 'AddChatItemAction',
+            item: {
+                type: 'LiveChatSponsorshipsGiftRedemptionAnnouncement',
+                id: 'LCC.test-gift-redemption-002',
+                timestampUsec: '1704067201000000',
+                author: {
+                    id: 'UC_TEST_CHANNEL_000002',
+                    name: 'N/A'
+                }
+            }
+        });
+        await flushPromises();
+
+        const debugMessages = getDebugMessages(platform.logger);
+        expect(debugMessages.some((message) => message.includes('ignored gifted membership announcement for Unknown User')))
+            .toBe(true);
+    });
+
+    test('logs ignored duplicates for renderer variants without unknown-event logging', async () => {
+        const platform = createPlatform();
+        platform.logUnknownEvent = createMockFn().mockResolvedValue();
+
+        platform.handleChatMessage({
+            type: 'AddChatItemAction',
+            item: {
+                type: 'LiveChatPaidMessageRenderer',
+                id: 'LCC.test-renderer-001',
+                timestampUsec: '1704067202000000',
+                author: {
+                    id: 'UC_TEST_CHANNEL_000003',
+                    name: '@RendererUser'
+                }
+            }
+        });
+        await flushPromises();
+
+        expect(platform.logUnknownEvent).toHaveBeenCalledTimes(0);
+        const debugMessages = getDebugMessages(platform.logger);
+        expect(debugMessages.some((message) => message.includes('ignored duplicate LiveChatPaidMessageRenderer')))
+            .toBe(true);
     });
 });

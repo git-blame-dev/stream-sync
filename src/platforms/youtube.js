@@ -15,6 +15,8 @@ const { YouTubeNotificationDispatcher } = require('../utils/youtube-notification
 const { YouTubeConnectionManager } = require('../utils/youtube-connection-manager');
 const { createPlatformErrorHandler } = require('../utils/platform-error-handler');
 const { getSystemTimestampISO } = require('../utils/validation');
+const { getFallbackUsername } = require('../utils/fallback-username');
+const { normalizeYouTubeUsername } = require('../utils/youtube-username-normalizer');
 const { PlatformEvents } = require('../interfaces/PlatformEvents');
 const { YouTubeLiveStreamService } = require('../services/youtube-live-stream-service');
 const { createYouTubeEventDispatchTable } = require('./youtube/events/youtube-event-dispatch-table');
@@ -30,6 +32,27 @@ const { createYouTubeMultiStreamManager } = require('./youtube/streams/youtube-m
 
 // Timeout and limit constants
 const INNERTUBE_CREATION_TIMEOUT_MS = 3000; // 3 seconds for Innertube instance creation
+
+const IGNORED_DUPLICATE_EVENT_TYPES = new Set([
+    'LiveChatPaidMessageRenderer',
+    'LiveChatPaidStickerRenderer',
+    'LiveChatMembershipItemRenderer',
+    'LiveChatTickerPaidMessageItem',
+    'LiveChatTickerPaidMessageItemRenderer',
+    'LiveChatTickerPaidStickerItem',
+    'LiveChatTickerPaidStickerItemRenderer',
+    'LiveChatTickerSponsorItem',
+    'LiveChatTickerSponsorItemRenderer',
+    'LiveChatTickerSponsorshipsItemRenderer',
+    'LiveChatSponsorshipsGiftPurchaseAnnouncementRenderer',
+    'LiveChatSponsorshipsGiftRedemptionAnnouncement',
+    'LiveChatSponsorshipsGiftRedemptionAnnouncementRenderer'
+]);
+
+const GIFT_MEMBERSHIP_REDEMPTION_EVENT_TYPES = new Set([
+    'LiveChatSponsorshipsGiftRedemptionAnnouncement',
+    'LiveChatSponsorshipsGiftRedemptionAnnouncementRenderer'
+]);
 
 class YouTubePlatform extends EventEmitter {
     constructor(config = {}, dependencies) {
@@ -559,6 +582,11 @@ class YouTubePlatform extends EventEmitter {
             return;
         }
 
+        if (this._isIgnoredDuplicateEventType(resolvedEventType)) {
+            this.handleIgnoredDuplicateEvent(normalizedChatItem, resolvedEventType);
+            return;
+        }
+
         // Use dispatch table for event routing (unified processing)
         const handler = this.eventDispatchTable[resolvedEventType];
         if (!handler) {
@@ -650,10 +678,6 @@ class YouTubePlatform extends EventEmitter {
         });
     }
 
-    handleGiftMembershipRedemption() {
-        // Intentionally no-op to avoid double counting gift membership redemptions.
-    }
-    
     async handleViewerEngagement(chatItem) {
         if (!this.unifiedNotificationProcessor) {
             const error = new Error('UnifiedNotificationProcessor unavailable for viewer engagement');
@@ -668,27 +692,6 @@ class YouTubePlatform extends EventEmitter {
         await this.unifiedNotificationProcessor.processNotification(chatItem, 'engagement', {
             isSystemMessage: true
         });
-    }
-    
-    async handleRendererVariant(chatItem, rendererType) {
-        const author = chatItem.author?.name || chatItem.item?.author?.name || '';
-        const authorLabel = author ? ` from ${author}` : '';
-        
-        if (this.logger) {
-            this.logger.debug(
-                `[RENDERER VARIANT] Ignoring ${rendererType}${authorLabel} (duplicate format - using standard handler instead)`,
-                'youtube',
-                {
-                    rendererType,
-                    author: author || null,
-                    hasStandardHandler: true,
-                    action: 'ignored_to_prevent_double_processing'
-                }
-            );
-        }
-        
-        // Intentionally do nothing - this is a no-op to prevent unknown event logging
-        // The corresponding standard format handler will process the actual event
     }
     
     async handleLowPriorityEvent(chatItem, eventType) {
@@ -710,6 +713,47 @@ class YouTubePlatform extends EventEmitter {
         
         // Intentionally do nothing - this is a no-op to prevent unknown event logging
         // These events are not critical for core streaming functionality
+    }
+
+    handleIgnoredDuplicateEvent(chatItem, eventType) {
+        if (!this.logger) {
+            return;
+        }
+
+        if (this._isGiftMembershipRedemptionEventType(eventType)) {
+            const recipientName = this._getGiftRedemptionRecipientName(chatItem);
+            this.logger.debug(
+                `ignored gifted membership announcement for ${recipientName}`,
+                'youtube',
+                {
+                    eventType,
+                    recipient: recipientName,
+                    action: 'ignored_gifted_membership_announcement'
+                }
+            );
+            return;
+        }
+
+        const author = chatItem.author?.name || chatItem.item?.author?.name || null;
+        this.logger.debug(`ignored duplicate ${eventType}`, 'youtube', {
+            eventType,
+            author,
+            action: 'ignored_duplicate'
+        });
+    }
+
+    _getGiftRedemptionRecipientName(chatItem) {
+        const rawName = chatItem?.item?.author?.name || chatItem?.author?.name || '';
+        const normalizedName = normalizeYouTubeUsername(rawName);
+        return normalizedName || getFallbackUsername();
+    }
+
+    _isIgnoredDuplicateEventType(eventType) {
+        return IGNORED_DUPLICATE_EVENT_TYPES.has(eventType);
+    }
+
+    _isGiftMembershipRedemptionEventType(eventType) {
+        return GIFT_MEMBERSHIP_REDEMPTION_EVENT_TYPES.has(eventType);
     }
     
 
@@ -1201,19 +1245,8 @@ class YouTubePlatform extends EventEmitter {
                 return true; // Skip invalid messages
             }
 
-            // Skip renderer variants that duplicate standard events
-            const rendererVariants = [
-                'LiveChatPaidMessageRenderer',
-                'LiveChatPaidStickerRenderer', 
-                'LiveChatMembershipItemRenderer',
-                'LiveChatTickerPaidMessageItemRenderer',
-                'LiveChatTickerSponsorItemRenderer',
-                'LiveChatTickerSponsorshipsItemRenderer',
-                'LiveChatSponsorshipsGiftRedemptionAnnouncementRenderer'
-            ];
-
-            if (rendererVariants.includes(message.type)) {
-                return true; // Skip renderer variants
+            if (this._isIgnoredDuplicateEventType(message.type)) {
+                return false;
             }
 
             // Skip system messages that don't need processing
@@ -1221,7 +1254,6 @@ class YouTubePlatform extends EventEmitter {
                 'LiveChatViewerEngagementMessage',
                 'LiveChatPurchaseMessage',
                 'LiveChatPlaceholderItem',
-                'LiveChatSponsorshipsGiftRedemptionAnnouncement',
                 'UpdateLiveChatPollAction',
                 'RemoveChatItemAction',
                 'RemoveChatItemByAuthorAction',
