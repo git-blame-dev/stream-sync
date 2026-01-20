@@ -186,22 +186,8 @@ async function hydrateTwitchTokensFromStore() {
             return;
         }
 
-        if (configManager.config && configManager.config.twitch) {
-            configManager.config.twitch.accessToken = tokens.accessToken;
-            configManager.config.twitch.refreshToken = tokens.refreshToken;
-            if (Object.prototype.hasOwnProperty.call(configManager.config.twitch, 'apiKey')) {
-                configManager.config.twitch.apiKey = tokens.accessToken;
-            }
-            if (tokens.expiresAt) {
-                configManager.config.twitch.tokenExpiresAt = tokens.expiresAt;
-            }
-        }
-
         twitchConfig.accessToken = tokens.accessToken;
         twitchConfig.refreshToken = tokens.refreshToken;
-        if (Object.prototype.hasOwnProperty.call(twitchConfig, 'apiKey')) {
-            twitchConfig.apiKey = tokens.accessToken;
-        }
         if (tokens.expiresAt) {
             twitchConfig.tokenExpiresAt = tokens.expiresAt;
         }

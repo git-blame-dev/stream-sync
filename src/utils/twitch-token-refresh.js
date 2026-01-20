@@ -147,13 +147,11 @@ class TwitchTokenRefresh {
 
         const originalTokens = {
             accessToken: this.config.accessToken,
-            refreshToken: this.config.refreshToken,
-            apiKey: this.config.apiKey
+            refreshToken: this.config.refreshToken
         };
 
         try {
             this.config.accessToken = tokenData.access_token;
-            this.config.apiKey = tokenData.access_token;
             if (tokenData.refresh_token) {
                 this.config.refreshToken = tokenData.refresh_token;
             }
@@ -175,7 +173,6 @@ class TwitchTokenRefresh {
 
             this.config.accessToken = originalTokens.accessToken;
             this.config.refreshToken = originalTokens.refreshToken;
-            this.config.apiKey = originalTokens.apiKey;
 
             const configError = new ConfigError('Token configuration update failed', {
                 originalError: error,
@@ -366,7 +363,7 @@ class TwitchTokenRefresh {
         const startTime = Date.now();
         
         try {
-            const currentToken = this.config.accessToken || this.config.apiKey;
+            const currentToken = this.config.accessToken;
             const refreshNeeded = await this.needsRefresh(currentToken);
             if (!refreshNeeded) {
                 this.logger.debug('Token is still valid, no refresh needed', 'twitch', {

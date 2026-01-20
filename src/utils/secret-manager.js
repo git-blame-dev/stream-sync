@@ -211,15 +211,6 @@ const SECRET_DEFINITIONS = [
         allowConfigFallback: false
     },
     {
-        id: 'TWITCH_API_KEY',
-        envKey: 'TWITCH_API_KEY',
-        configPath: ['twitch', 'apiKey'],
-        requiredWhen: (config) => boolFromConfig(config?.twitch?.enabled),
-        promptText: 'Paste Twitch API Key (chat/EventSub token): ',
-        mask: (value) => maskValue(value, 6, 4),
-        allowConfigFallback: false
-    },
-    {
         id: 'OBS_PASSWORD',
         envKey: 'OBS_PASSWORD',
         configPath: ['obs', 'password'],

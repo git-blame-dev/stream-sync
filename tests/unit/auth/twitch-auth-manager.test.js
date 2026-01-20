@@ -183,6 +183,13 @@ describe('TwitchAuthManager', () => {
             expect(() => manager.validateConfig()).toThrow('Invalid configuration');
         });
 
+        test('requires client credentials even when tokens are present', () => {
+            const invalidConfig = { ...mockConfig, clientSecret: undefined };
+            const manager = createManager(invalidConfig);
+
+            expect(() => manager.validateConfig()).toThrow('missing fields [clientSecret]');
+        });
+
         test('should allow config updates', () => {
             const manager = createManager();
 

@@ -230,7 +230,6 @@ class TokenValidator {
                 // Update in-memory configuration with new tokens
                 if (config.twitch) {
                     config.twitch.accessToken = tokens.access_token;
-                    config.twitch.apiKey = tokens.access_token;
                     config.twitch.refreshToken = tokens.refresh_token;
                 }
 

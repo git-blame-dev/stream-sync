@@ -928,9 +928,6 @@ class TwitchAuthInitializer {
                 authService.updateAccessToken(accessToken);
             }
             authService.config.accessToken = accessToken;
-            if (Object.prototype.hasOwnProperty.call(authService.config, 'apiKey')) {
-                authService.config.apiKey = accessToken;
-            }
         }
 
         if (refreshToken) {

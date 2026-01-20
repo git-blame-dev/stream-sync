@@ -87,7 +87,6 @@ describe('Token Validator Scope Reauth', () => {
                 clientSecret: 'test-client-secret',
                 accessToken: 'test-stale-token',
                 refreshToken: 'test-stale-refresh',
-                apiKey: 'test-stale-token',
                 channel: 'test-channel'
             };
             const results = {
@@ -115,8 +114,7 @@ describe('Token Validator Scope Reauth', () => {
             expect(runOAuthFlowSpy).toHaveBeenCalled();
             expect(validateSpy).toHaveBeenCalledWith(expect.objectContaining({
                 accessToken: 'test-new-token',
-                refreshToken: 'test-new-refresh',
-                apiKey: 'test-new-token'
+                refreshToken: 'test-new-refresh'
             }));
             expect(results.platforms.twitch).toBe(revalidation);
 

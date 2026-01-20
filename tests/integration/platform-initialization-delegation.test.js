@@ -28,7 +28,9 @@ describe('Platform Initialization Delegation', () => {
             twitch: {
                 enabled: true,
                 username: 'test_channel',
-                apiKey: 'test_oauth_token'
+                channel: 'test_channel',
+                clientId: 'test-client-id',
+                clientSecret: 'test-client-secret'
             },
             youtube: { enabled: false },
             tiktok: { enabled: false },

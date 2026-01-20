@@ -29,7 +29,6 @@ describe('Twitch Viewer Count with Invalid Authentication', () => {
     mockConfig = {
       channel: 'hero_stream',
       username: 'hero_stream',
-      apiKey: 'new_key_123456789',
       accessToken: 'new_access_123456789',
     };
 
@@ -72,7 +71,7 @@ describe('Twitch Viewer Count with Invalid Authentication', () => {
       const invalidConfig = {
         channel: '',
         username: 'hero_stream',
-        apiKey: 'new_key_123456789'
+        accessToken: 'new_access_123456789'
       };
 
       viewerCountProvider = new TwitchViewerCountProvider(
@@ -163,7 +162,6 @@ describe('Twitch Viewer Count with Invalid Authentication', () => {
       const realWorldConfig = {
         channel: 'hero_stream',
         username: 'hero_stream',
-        apiKey: 'new_key_123456789',
         accessToken: 'new_access_123456789',
         refreshToken: 'new_refresh_123456789'
       };
@@ -182,8 +180,7 @@ describe('Twitch Viewer Count with Invalid Authentication', () => {
     it('should work even when EventSub fails to initialize', async () => {
       const realWorldConfig = {
         channel: 'hero_stream',
-        username: 'hero_stream',
-        apiKey: 'new_key_123456789'
+        username: 'hero_stream'
       };
       mockApiClient.getStreamInfo.mockResolvedValue({
         isLive: true,

@@ -54,8 +54,7 @@ describe('ConfigService', () => {
                 subsEnabled: true
             },
             twitch: {
-                followsEnabled: false,
-                apiKey: 'test-twitch-key'
+                followsEnabled: false
             },
             youtube: {
                 apiKey: 'test-youtube-key'

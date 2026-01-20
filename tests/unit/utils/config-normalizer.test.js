@@ -108,6 +108,27 @@ describe('Configuration Normalizer', () => {
             expect(normalized.refresh_token).toBeUndefined();
         });
 
+        test('should drop Twitch token secrets from config', () => {
+            const config = {
+                enabled: true,
+                username: 'testuser',
+                channel: 'testchannel',
+                clientId: 'test-client-id',
+                clientSecret: 'test-client-secret',
+                accessToken: 'test-access-token',
+                refreshToken: 'test-refresh-token',
+                apiKey: 'test-api-key'
+            };
+
+            const normalized = normalizeTwitchConfig(config);
+
+            expect(normalized.clientId).toBe('test-client-id');
+            expect(normalized.clientSecret).toBeUndefined();
+            expect(normalized.accessToken).toBeUndefined();
+            expect(normalized.refreshToken).toBeUndefined();
+            expect(normalized.apiKey).toBeUndefined();
+        });
+
         test('should drop unsupported Twitch keys', () => {
             const config = {
                 enabled: true,

@@ -46,7 +46,12 @@ describe('PlatformLifecycleService', () => {
 
     describe('Service Status Reporting', () => {
         it('reports ready platforms and stream statuses', async () => {
-            mockConfig.twitch = { enabled: true, apiKey: 'key' };
+            mockConfig.twitch = {
+                enabled: true,
+                channel: 'test-channel',
+                clientId: 'test-client-id',
+                clientSecret: 'test-client-secret'
+            };
 
             const mockPlatformClass = createMockFn().mockImplementation(() => ({
                 initialize: createMockFn().mockImplementation(async (handlers) => {
@@ -116,7 +121,12 @@ describe('PlatformLifecycleService', () => {
 
     describe('Platform Initialization', () => {
         it('should initialize enabled platforms', async () => {
-            mockConfig.twitch = { enabled: true, apiKey: 'test-key' };
+            mockConfig.twitch = {
+                enabled: true,
+                channel: 'test-channel',
+                clientId: 'test-client-id',
+                clientSecret: 'test-client-secret'
+            };
 
             const mockPlatformClass = createMockFn().mockImplementation(() => ({
                 initialize: createMockFn().mockResolvedValue(true),

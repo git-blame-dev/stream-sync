@@ -51,7 +51,6 @@ userAgents = test-agent-1|test-agent-2
 [twitch]
 enabled = false
 username =
-apiKey =
 cheermoteDefaultGiftCount = 1
 cheermoteGenericCheerName = Cheer
 cheermoteGenericBitsName = Bits
@@ -172,7 +171,6 @@ ${testConfigContent}
 [twitch]
 enabled = true
 username =
-apiKey = test-key
 cheermoteDefaultGiftCount = 1
 cheermoteGenericCheerName = Cheer
 cheermoteGenericBitsName = Bits
@@ -367,7 +365,6 @@ userAgents = test-agent-1|test-agent-2
 [twitch]
 enabled = false
 username =
-apiKey =
 cheermoteDefaultGiftCount = 1
 cheermoteGenericCheerName = Cheer
 cheermoteGenericBitsName = Bits
@@ -660,7 +657,6 @@ userAgents = test-agent-1|test-agent-2
 [twitch]
 enabled = true
 username = José_Streamer
-apiKey = twitch-key
 cheermoteDefaultGiftCount = 1
 cheermoteGenericCheerName = Cheer
 cheermoteGenericBitsName = Bits

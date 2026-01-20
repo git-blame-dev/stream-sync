@@ -271,7 +271,6 @@ class ReactiveTokenRefresh {
 
             // Update the config object that was passed in (for retry)
             this.config.accessToken = newTokenData.access_token;
-            this.config.apiKey = newTokenData.access_token;
             this.config.refreshToken = newTokenData.refresh_token;
 
             this.metrics.successfulRefreshes++;
