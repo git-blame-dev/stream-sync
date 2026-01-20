@@ -245,8 +245,7 @@ describe('YouTube Base Handler Class Extraction Implementation', () => {
             expect(typeof membershipHandler).toBe('function');
 
             const testEvent = {
-                item: { type: 'LiveChatPaidMessage' },
-                author: { name: 'TestUser' }
+                item: { type: 'LiveChatPaidMessage', author: { id: 'test-user-1', name: 'TestUser' } }
             };
 
             await superChatHandler(testEvent);
@@ -296,8 +295,7 @@ describe('YouTube Base Handler Class Extraction Implementation', () => {
                 expect(typeof baseHandlerMethod).toBe('function');
 
                 const testEvent = {
-                    item: { type: config.eventType },
-                    author: { name: 'TestUser' }
+                    item: { type: config.eventType, author: { id: 'test-user-2', name: 'TestUser' } }
                 };
 
                 expect(() => baseHandlerMethod(testEvent)).not.toThrow();
@@ -309,15 +307,17 @@ describe('YouTube Base Handler Class Extraction Implementation', () => {
                 {
                     handlerMethod: 'handleSuperChat',
                     event: {
-                        item: { type: 'LiveChatPaidMessage', purchase_amount: '$5.00' },
-                        author: { name: 'SuperChatUser' }
+                        item: {
+                            type: 'LiveChatPaidMessage',
+                            purchase_amount: '$5.00',
+                            author: { id: 'test-user-3', name: 'SuperChatUser' }
+                        }
                     }
                 },
                 {
                     handlerMethod: 'handleMembership',
                     event: {
-                        item: { type: 'LiveChatMembershipItem' },
-                        author: { name: 'MemberUser' }
+                        item: { type: 'LiveChatMembershipItem', author: { id: 'test-user-4', name: 'MemberUser' } }
                     }
                 }
             ];
@@ -375,8 +375,11 @@ describe('YouTube Base Handler Class Extraction Implementation', () => {
             });
 
             const testEvents = Array.from({ length: 100 }, (_, i) => ({
-                item: { type: 'LiveChatPaidMessage', purchase_amount: '$1.00' },
-                author: { name: `PerfUser${i}` }
+                item: {
+                    type: 'LiveChatPaidMessage',
+                    purchase_amount: '$1.00',
+                    author: { id: `perf-user-${i}`, name: `PerfUser${i}` }
+                }
             }));
 
             const startTime = process.hrtime.bigint();
@@ -458,8 +461,7 @@ describe('YouTube Base Handler Class Extraction Implementation', () => {
             platform.notificationDispatcher.dispatchEngagement = createMockFn();
 
             const testEvent = {
-                item: { type: 'LiveChatPoll' },
-                author: { name: 'PollUser' }
+                item: { type: 'LiveChatPoll', author: { id: 'test-user-5', name: 'PollUser' } }
             };
 
             newEventHandler(testEvent);

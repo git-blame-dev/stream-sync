@@ -13,8 +13,8 @@ describe('YouTube chat-update unified dispatch', () => {
         const mockGetLiveChat = createMockFn().mockResolvedValue({
             on: createMockFn((event, handler) => {
                 if (event === 'chat-update') {
-                    handler({ item: { type: 'LiveChatPaidMessage' }, author: { name: 'Paid' } });
-                    handler({ item: { type: 'LiveChatTextMessage', message: { text: 'hello' } }, author: { name: 'Viewer' } });
+                    handler({ item: { type: 'LiveChatPaidMessage', author: { name: 'Paid', id: 'paid-user' } } });
+                    handler({ item: { type: 'LiveChatTextMessage', author: { name: 'Viewer', id: 'viewer-user' }, message: { text: 'hello' } } });
                 }
             }),
             start: createMockFn()
@@ -45,11 +45,12 @@ describe('YouTube chat-update unified dispatch', () => {
 
         await youtubePlatform.connectToLiveChat('vid1');
 
-        expect(mockHandleChatMessage).toHaveBeenCalledWith(
-            expect.objectContaining({ item: { type: 'LiveChatPaidMessage' } })
+        const handledItems = mockHandleChatMessage.mock.calls.map(([call]) => call);
+        const hasPaidMessage = handledItems.some((call) => call.item?.type === 'LiveChatPaidMessage');
+        const hasTextMessage = handledItems.some((call) =>
+            call.item?.type === 'LiveChatTextMessage' && call.item?.message?.text === 'hello'
         );
-        expect(mockHandleChatMessage).toHaveBeenCalledWith(
-            expect.objectContaining({ item: { type: 'LiveChatTextMessage', message: { text: 'hello' } } })
-        );
+        expect(hasPaidMessage).toBe(true);
+        expect(hasTextMessage).toBe(true);
     });
 });

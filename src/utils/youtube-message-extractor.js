@@ -30,7 +30,10 @@ const YouTubeMessageExtractor = {
         if (!chatItem || typeof chatItem !== 'object') {
             return '';
         }
-        const messageField = chatItem.item?.message || chatItem.message || '';
+        if (!chatItem.item || typeof chatItem.item !== 'object') {
+            return '';
+        }
+        const messageField = chatItem.item.message || '';
         return extractMessageText(messageField);
     }
 };

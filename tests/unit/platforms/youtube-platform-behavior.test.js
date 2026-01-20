@@ -97,7 +97,10 @@ const createPlatform = (overrides = {}) => {
     return { platform, logger, streamDetectionService, timestampService };
 };
 
-const getDebugMessages = (logger) => logger.debug.mock.calls.map(([message]) => message);
+const getDebugCalls = (logger) => logger.debug.mock.calls.map(([message, _scope, metadata]) => ({
+    message,
+    metadata: metadata || null
+}));
 const createLogger = () => ({
     debug: createMockFn(),
     info: createMockFn(),
@@ -186,10 +189,13 @@ describe('YouTubePlatform modern architecture', () => {
         });
 
         const chatItem = {
-            id: 'test-msg-1',
-            videoId: 'vid-1',
-            author: { id: 'user-123', name: 'TestUser' },
-            message: { runs: [{ text: 'Hello world' }] }
+            item: {
+                id: 'test-msg-1',
+                timestampUsec: '1700000000000000',
+                author: { id: 'user-123', name: 'TestUser' },
+                message: { runs: [{ text: 'Hello world' }] }
+            },
+            videoId: 'vid-1'
         };
 
         platform._processRegularChatMessage(chatItem, 'TestUser');
@@ -252,9 +258,16 @@ describe('YouTubePlatform modern architecture', () => {
         });
 
         expect(platform.logUnknownEvent).toHaveBeenCalledTimes(0);
-        const debugMessages = getDebugMessages(logger);
-        expect(debugMessages.some((message) => message.includes('ignored gifted membership announcement for Unknown User')))
-            .toBe(true);
+        const debugCalls = getDebugCalls(logger);
+        const giftLog = debugCalls.find(({ message }) =>
+            message.includes('ignored gifted membership announcement for Unknown User')
+        );
+        expect(giftLog).toBeTruthy();
+        expect(giftLog.metadata).toMatchObject({
+            action: 'ignored_gifted_membership_announcement',
+            recipient: 'Unknown User',
+            eventType: 'LiveChatSponsorshipsGiftRedemptionAnnouncement'
+        });
     });
 
     it('logs renderer variants as ignored duplicates', async () => {
@@ -276,9 +289,47 @@ describe('YouTubePlatform modern architecture', () => {
         });
 
         expect(platform.logUnknownEvent).toHaveBeenCalledTimes(0);
-        const debugMessages = getDebugMessages(logger);
-        expect(debugMessages.some((message) => message.includes('ignored duplicate LiveChatPaidMessageRenderer')))
-            .toBe(true);
+        const debugCalls = getDebugCalls(logger);
+        const duplicateLog = debugCalls.find(({ message }) =>
+            message.includes('ignored duplicate LiveChatPaidMessageRenderer')
+        );
+        expect(duplicateLog).toBeTruthy();
+        expect(duplicateLog.metadata).toMatchObject({
+            action: 'ignored_duplicate',
+            eventType: 'LiveChatPaidMessageRenderer',
+            author: 'testRenderer'
+        });
+    });
+
+    it('emits error notification when gift purchase header author is missing', () => {
+        const notificationDispatcher = {
+            dispatchErrorNotification: createMockFn().mockResolvedValue(true)
+        };
+        const { platform } = createPlatform({ notificationDispatcher });
+        platform.baseEventHandler = { handleEvent: createMockFn() };
+
+        const chatItem = {
+            item: {
+                type: 'LiveChatSponsorshipsGiftPurchaseAnnouncement',
+                id: 'LCC.test-gift-purchase-missing-author',
+                timestampUsec: '1700000000000000',
+                giftMembershipsCount: 3,
+                header: {
+                    type: 'LiveChatSponsorshipsHeader'
+                }
+            }
+        };
+
+        platform.handleChatMessage(chatItem);
+
+        const [errorCall] = notificationDispatcher.dispatchErrorNotification.mock.calls;
+        expect(errorCall).toBeTruthy();
+        expect(errorCall[0]).toBe(chatItem);
+        expect(errorCall[1]).toBe('platform:giftpaypiggy');
+        expect(errorCall[2]).toBe(platform.handlers?.onGiftPaypiggy);
+        expect(errorCall[3]).toBe('onGiftPaypiggy');
+        expect(errorCall[4]).toMatchObject({ giftCount: 3 });
+        expect(platform.baseEventHandler.handleEvent).toHaveBeenCalledTimes(0);
     });
 
     it('emits stream-status when the first YouTube stream becomes live', async () => {
