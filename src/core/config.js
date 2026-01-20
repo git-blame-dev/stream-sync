@@ -171,8 +171,8 @@ class ConfigManager {
 
         const streamElementsEnabled = this.getBoolean('streamelements', 'enabled', false);
         if (streamElementsEnabled) {
-            const youtubeChannelId = resolveSecretValue('streamelements', 'youtubeChannelId');
-            const twitchChannelId = resolveSecretValue('streamelements', 'twitchChannelId');
+            const youtubeChannelId = resolveConfigValue('streamelements', 'youtubeChannelId');
+            const twitchChannelId = resolveConfigValue('streamelements', 'twitchChannelId');
             if (!youtubeChannelId && !twitchChannelId) {
                 const error = new Error('Missing required configuration: StreamElements channel ID (YouTube or Twitch)');
                 handleUserFacingError(error, {
@@ -193,7 +193,7 @@ class ConfigManager {
             const streamDetectionMethod = this.getString('youtube', 'streamDetectionMethod', 'youtubei').trim().toLowerCase();
             const viewerCountMethod = this.getString('youtube', 'viewerCountMethod', 'youtubei').trim().toLowerCase();
             const needsApiKey = enableAPI || streamDetectionMethod === 'api' || viewerCountMethod === 'api';
-            if (needsApiKey && !resolveSecretValue('youtube', 'apiKey')) {
+            if (needsApiKey && !resolveConfigValue('youtube', 'apiKey')) {
                 const error = new Error('Missing required configuration: YouTube API key');
                 handleUserFacingError(error, {
                     category: 'configuration',
@@ -266,7 +266,7 @@ class ConfigManager {
 // Create global configuration manager instance
 const configManager = new ConfigManager();
 
-const resolveSecretValue = (section, key) => {
+const resolveConfigValue = (section, key) => {
     const rawValue = configManager.get(section, key);
     if (rawValue === undefined || rawValue === null) {
         return undefined;
@@ -328,7 +328,7 @@ function createPlatformConfig(platformName) {
         // Unified apiKey for all platforms except Twitch (token-only auth)
         Object.defineProperty(platformConfig, 'apiKey', {
             get: function() { 
-                return resolveSecretValue(platformName, 'apiKey');
+                return resolveConfigValue(platformName, 'apiKey');
             },
             enumerable: true
         });
@@ -473,7 +473,7 @@ function getTwitchConfig() {
             get channel() { return configManager.getString('twitch', 'channel', ''); },
             get eventsub_enabled() { return configManager.getBoolean('twitch', 'eventsub_enabled', false); },
             get clientId() {
-                return resolveSecretValue('twitch', 'clientId');
+                return resolveConfigValue('twitch', 'clientId');
             },
             get tokenStorePath() {
                 const tokenStorePath = configManager.getString('twitch', 'tokenStorePath', './data/twitch-tokens.json');
@@ -562,9 +562,9 @@ const giftConfig = {
 
 const streamElementsConfig = {
     get enabled() { return configManager.getBoolean('streamelements', 'enabled', false); },
-    get youtubeChannelId() { return resolveSecretValue('streamelements', 'youtubeChannelId'); },
-    get twitchChannelId() { return resolveSecretValue('streamelements', 'twitchChannelId'); },
-    get jwtToken() { return resolveSecretValue('streamelements', 'jwtToken'); },
+    get youtubeChannelId() { return resolveConfigValue('streamelements', 'youtubeChannelId'); },
+    get twitchChannelId() { return resolveConfigValue('streamelements', 'twitchChannelId'); },
+    get jwtToken() { return resolveConfigValue('streamelements', 'jwtToken'); },
     get dataLoggingEnabled() { return configManager.getBoolean('streamelements', 'dataLoggingEnabled', false); },
     get dataLoggingPath() { return configManager.getString('streamelements', 'dataLoggingPath', './logs'); }
 };
