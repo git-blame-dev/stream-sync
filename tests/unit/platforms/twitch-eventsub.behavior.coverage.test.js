@@ -45,30 +45,31 @@ describe('TwitchEventSub behavior guardrails', () => {
 
     it('validates config fields and generates warnings for type mismatches', () => {
         eventSub = createEventSub(
-            { dataLoggingEnabled: 'not-bool' },
+            { dataLoggingEnabled: 'not-bool', broadcasterId: 'test-broadcaster-id' },
             { authManager: createAuthManager() }
         );
 
         const result = eventSub._validateConfigurationFields();
 
         expect(result.valid).toBe(true);
+        expect(result.details.broadcasterId.valid).toBe(true);
         expect(result.warnings.some((w) => w.includes('centralized auth'))).toBe(true);
     });
 
     it('throws when auth manager is missing or not ready', () => {
         expect(() => {
-            const es = createEventSub({}, { authManager: null });
+            const es = createEventSub({ broadcasterId: 'test-broadcaster-id' }, { authManager: null });
             es._validateAuthManager();
         }).toThrow('AuthManager is required');
 
         expect(() => {
-            const es = createEventSub({}, { authManager: createAuthManager({ state: 'STALE' }) });
+            const es = createEventSub({ broadcasterId: 'test-broadcaster-id' }, { authManager: createAuthManager({ state: 'STALE' }) });
             es._validateAuthManager();
         }).toThrow("AuthManager state is 'STALE'");
     });
 
     it('returns false from connection validation when session/connection is invalid', () => {
-        eventSub = createEventSub();
+        eventSub = createEventSub({ broadcasterId: 'test-broadcaster-id' });
         eventSub.sessionId = '';
         eventSub._isConnected = false;
         eventSub.ws = { readyState: 0 };
@@ -80,7 +81,7 @@ describe('TwitchEventSub behavior guardrails', () => {
     });
 
     it('categorizes subscription errors by severity and retryability', () => {
-        eventSub = createEventSub();
+        eventSub = createEventSub({ broadcasterId: 'test-broadcaster-id' });
 
         const critical = eventSub._parseSubscriptionError(
             { response: { data: { error: 'Unauthorized', message: 'bad' } } },
@@ -103,7 +104,7 @@ describe('TwitchEventSub behavior guardrails', () => {
 
     it('detects missing scopes via token validation', async () => {
         eventSub = createEventSub(
-            {},
+            { broadcasterId: 'test-broadcaster-id' },
             { authManager: createAuthManager({ scopes: ['user:read:chat'], clientId: 'test-client' }) }
         );
 
@@ -115,7 +116,7 @@ describe('TwitchEventSub behavior guardrails', () => {
 
     it('validates auth manager state is READY', () => {
         eventSub = createEventSub(
-            {},
+            { broadcasterId: 'test-broadcaster-id' },
             { authManager: createAuthManager({ state: 'READY' }) }
         );
 

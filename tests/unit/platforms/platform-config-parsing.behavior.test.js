@@ -15,7 +15,7 @@ describe('platform config parsing behavior', () => {
 
     test('TwitchEventSub parses dataLoggingEnabled string values', () => {
         const eventSub = new TwitchEventSub(
-            { dataLoggingEnabled: 'true' },
+            { dataLoggingEnabled: 'true', broadcasterId: 'test-broadcaster-id' },
             { logger: noOpLogger, WebSocketCtor: MockWebSocket }
         );
 

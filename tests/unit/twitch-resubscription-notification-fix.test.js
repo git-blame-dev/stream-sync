@@ -27,6 +27,7 @@ describe('TwitchEventSub Resubscription Notification Fix', () => {
                 accessToken: 'testToken',
                 channel: 'testStreamer',
                 username: 'testStreamer',
+                broadcasterId: 'test-broadcaster-id',
                 dataLoggingEnabled: false
             },
             {

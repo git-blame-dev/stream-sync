@@ -26,8 +26,8 @@ class TwitchEventSub extends EventEmitter {
         this.authManager = dependencies.authManager || dependencies.twitchAuth;
         this.axios = dependencies.axios || require('axios');
         this.WebSocketCtor = dependencies.WebSocketCtor || require('ws');
-        
-        
+        this.broadcasterId = this.config.broadcasterId;
+
         // WebSocket connection
         this.ws = null;
         this.sessionId = null;
@@ -36,6 +36,7 @@ class TwitchEventSub extends EventEmitter {
         // State management
         this.isInitialized = false;
         this._isConnected = false;
+        this.subscriptionsReady = false;
         this.retryAttempts = 0;
         this.reconnectTimeout = null;
         this.connectionStartTime = null;
@@ -221,12 +222,21 @@ class TwitchEventSub extends EventEmitter {
         const warnings = [];
         const details = {};
         const usesCentralAuth = this._isCentralizedAuthReady();
-        const tokenSourceAvailable = !!(this.config?.accessToken || (usesCentralAuth && typeof this.authManager?.getAccessToken === 'function'));
+        const tokenSourceAvailable = !!(this.config.accessToken || (usesCentralAuth && typeof this.authManager.getAccessToken === 'function'));
         const clientIdSource = this._getAvailableClientId();
+        this.broadcasterId = this.config.broadcasterId;
+        details.broadcasterId = { value: this.broadcasterId, required: true };
+
+        if (!this.broadcasterId) {
+            issues.push('Twitch broadcasterId is required for EventSub subscriptions');
+            details.broadcasterId.valid = false;
+        } else {
+            details.broadcasterId.valid = true;
+        }
 
         // Validate token availability when centralized auth isn't ready
         if (!tokenSourceAvailable) {
-            const accessToken = this.config?.accessToken;
+            const accessToken = this.config.accessToken;
             details.accessToken = { value: accessToken, required: !usesCentralAuth };
             if (!accessToken) {
                 issues.push('Access token is required for EventSub authentication');
@@ -236,7 +246,7 @@ class TwitchEventSub extends EventEmitter {
             }
         } else {
             details.accessToken = {
-                value: this.config?.accessToken || null,
+                value: this.config.accessToken || null,
                 required: false,
                 valid: true,
                 source: usesCentralAuth ? 'authManager' : 'config'
@@ -248,7 +258,7 @@ class TwitchEventSub extends EventEmitter {
             value: clientIdSource,
             required: !usesCentralAuth,
             valid: !!clientIdSource || usesCentralAuth,
-            source: this.config?.clientId ? 'config' : 'authManager'
+            source: this.config.clientId ? 'config' : 'authManager'
         };
 
         if (!clientIdSource && !usesCentralAuth) {
@@ -265,7 +275,7 @@ class TwitchEventSub extends EventEmitter {
         };
 
         Object.entries(optionalFields).forEach(([field, config]) => {
-            const value = this.config?.[field];
+            const value = this.config[field];
             details[field] = { value, required: false, default: config.default };
             
             if (value !== undefined && config.type && typeof value !== config.type) {
@@ -285,11 +295,11 @@ class TwitchEventSub extends EventEmitter {
     }
 
     _isCentralizedAuthReady() {
-        return !!(this.authManager && this.authManager.getState?.() === 'READY');
+        return !!(this.authManager && this.authManager.getState() === 'READY');
     }
 
     _getAvailableClientId() {
-        if (this.config?.clientId) {
+        if (this.config.clientId) {
             return this.config.clientId;
         }
         if (this.authManager?.clientId) {
@@ -374,8 +384,8 @@ class TwitchEventSub extends EventEmitter {
             hasAuthManager: !!this.authManager,
             authState: this.authManager?.getState?.(),
             hasConfig: !!this.config,
-            hasAccessToken: !!this.config?.accessToken,
-            hasClientId: !!this.config?.clientId
+            hasAccessToken: !!this.config.accessToken,
+            hasClientId: !!this.config.clientId
         });
         
         this.logger.debug('[EVENTSUB-DEBUG] Validating configuration...', 'twitch');
@@ -476,6 +486,7 @@ class TwitchEventSub extends EventEmitter {
                     type: payload.subscription.type,
                     status: payload.subscription.status
                 });
+                await this._handleSubscriptionRevocation(payload?.subscription);
                 break;
                 
             default:
@@ -484,9 +495,23 @@ class TwitchEventSub extends EventEmitter {
     }
 
     async _setupEventSubscriptions(validationAlreadyDone = false) {
+        if (!this.broadcasterId) {
+            this._logEventSubError('EventSub subscription setup requires broadcasterId in config', null, 'subscription-setup');
+            return {
+                successful: 0,
+                total: this.requiredSubscriptions.length,
+                failures: this.requiredSubscriptions.map((subscription) => ({
+                    subscription: subscription.name,
+                    error: { code: 'BROADCASTER_MISSING', message: 'Missing broadcasterId', isCritical: true, isRetryable: false }
+                })),
+                timestamp: this.subscriptionManager.getTimestamp?.() ?? Date.now()
+            };
+        }
+
         const subscriptionState = await this.subscriptionManager.setupEventSubscriptions({
             requiredSubscriptions: this.requiredSubscriptions,
             userId: this.userId,
+            broadcasterId: this.broadcasterId,
             sessionId: this.sessionId,
             subscriptionDelay: this.subscriptionDelay,
             isConnected: this._isConnected,
@@ -496,14 +521,48 @@ class TwitchEventSub extends EventEmitter {
         if (subscriptionState) {
             this.subscriptionState = subscriptionState;
         }
+
+        return subscriptionState;
     }
 
     _parseSubscriptionError(error, subscription) {
         return this.subscriptionManager.parseSubscriptionError(error, subscription);
     }
 
+    async _handleSubscriptionRevocation(subscription) {
+        if (!subscription?.type || !this.isInitialized) {
+            return;
+        }
+
+        this.subscriptionsReady = false;
+        const context = {
+            subscriptionType: subscription.type,
+            subscriptionId: subscription.id,
+            status: subscription.status,
+            sessionId: this.sessionId
+        };
+
+        this._logEventSubError('EventSub subscription revoked', null, 'subscription-revoked', context);
+
+        try {
+            const result = await this._setupEventSubscriptions(true);
+            const failures = result?.failures || [];
+            if (failures.length > 0) {
+                this._logEventSubError('EventSub resubscribe failed after revocation', null, 'subscription-resubscribe-failed', {
+                    ...context,
+                    failures
+                });
+                return;
+            }
+
+            this.subscriptionsReady = true;
+        } catch (error) {
+            this._logEventSubError('EventSub resubscribe threw after revocation', error, 'subscription-resubscribe-error', context);
+        }
+    }
+
     isActive() {
-        return !!(this.isInitialized && this._isConnected);
+        return !!(this.isInitialized && this._isConnected && this.subscriptionsReady);
     }
 
     isConnected() {
@@ -549,7 +608,7 @@ class TwitchEventSub extends EventEmitter {
         }
 
         // Validate tokens/client id availability (config or centralized auth)
-        const hasTokenProvider = !!(this.config?.accessToken || typeof this.authManager?.getAccessToken === 'function');
+        const hasTokenProvider = !!(this.config.accessToken || typeof this.authManager?.getAccessToken === 'function');
         const clientId = this._getAvailableClientId();
         if (!hasTokenProvider || !clientId) {
             this._logEventSubError('Cannot set up subscriptions: missing authentication tokens', null, 'subscription-setup', {
@@ -617,7 +676,10 @@ class TwitchEventSub extends EventEmitter {
             throw new Error('EventSub chat send requires a valid user ID');
         }
 
-        const broadcasterId = (this.config.broadcasterId || userIdRaw).toString();
+        if (!this.config.broadcasterId) {
+            throw new Error('EventSub chat send requires broadcasterId in config');
+        }
+        const broadcasterId = this.config.broadcasterId.toString();
         const senderId = userIdRaw.toString();
         const payload = {
             broadcaster_id: broadcasterId,
@@ -690,6 +752,7 @@ class TwitchEventSub extends EventEmitter {
     _handleInitializationError(error) {
         this.isInitialized = false;
         this._isConnected = false;
+        this.subscriptionsReady = false;
         
         this.retryAttempts++;
         
@@ -751,6 +814,7 @@ class TwitchEventSub extends EventEmitter {
         // Step 3: Reset internal state
         this.isInitialized = false;
         this._isConnected = false;
+        this.subscriptionsReady = false;
         this.sessionId = null;
         this.retryAttempts = 0;
         this.subscriptions.clear();
@@ -783,7 +847,7 @@ class TwitchEventSub extends EventEmitter {
     }
 
     async _cleanupAllWebSocketSubscriptions() {
-        await this.subscriptionManager.cleanupAllWebSocketSubscriptions();
+        await this.subscriptionManager.cleanupAllWebSocketSubscriptions({ sessionId: this.sessionId });
     }
 
     async _deleteAllSubscriptions() {

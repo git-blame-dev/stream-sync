@@ -11,6 +11,7 @@ const createEventSub = (configOverrides = {}, depsOverrides = {}) => {
         channel: 'teststreamer',
         username: 'teststreamer',
         dataLoggingEnabled: false,
+        broadcasterId: 'test-broadcaster-id',
         ...configOverrides
     };
     const authManager = depsOverrides.authManager || {

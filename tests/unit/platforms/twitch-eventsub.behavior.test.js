@@ -38,7 +38,7 @@ describe('TwitchEventSub behavior', () => {
 
     it('routes follow events to handlers and emits follow event', () => {
         const instance = new TwitchEventSub(
-            { channel: 'testChannel', clientId: 'testClientId', accessToken: 'testToken' },
+            { channel: 'testChannel', clientId: 'testClientId', accessToken: 'testToken', broadcasterId: 'test-broadcaster-id' },
             mockDependencies
         );
 
@@ -58,7 +58,7 @@ describe('TwitchEventSub behavior', () => {
 
     it('routes chat message events and includes timestamp context', () => {
         const instance = new TwitchEventSub(
-            { channel: 'testChannel', clientId: 'testClientId', accessToken: 'testToken' },
+            { channel: 'testChannel', clientId: 'testClientId', accessToken: 'testToken', broadcasterId: 'test-broadcaster-id' },
             mockDependencies
         );
 
@@ -79,7 +79,7 @@ describe('TwitchEventSub behavior', () => {
 
     it('ignores duplicate notification message ids', () => {
         const instance = new TwitchEventSub(
-            { channel: 'testChannel', clientId: 'testClientId', accessToken: 'testToken' },
+            { channel: 'testChannel', clientId: 'testClientId', accessToken: 'testToken', broadcasterId: 'test-broadcaster-id' },
             mockDependencies
         );
 
@@ -104,9 +104,41 @@ describe('TwitchEventSub behavior', () => {
         expect(followEvents.length).toBe(1);
     });
 
+    it('retries subscriptions when a revocation arrives', async () => {
+        const instance = new TwitchEventSub(
+            { channel: 'testChannel', clientId: 'testClientId', accessToken: 'testToken', broadcasterId: 'test-broadcaster-id' },
+            mockDependencies
+        );
+        const resubscribeCalls = [];
+        instance.subscriptionManager.setupEventSubscriptions = async (payload) => {
+            resubscribeCalls.push(payload);
+            return { failures: [] };
+        };
+        instance.requiredSubscriptions = [{ name: 'Follows', type: 'channel.follow', version: '2', getCondition: ({ broadcasterId }) => ({ broadcaster_user_id: broadcasterId }) }];
+        instance.sessionId = 'testSession123';
+        instance._isConnected = true;
+        instance.isInitialized = true;
+        instance.broadcasterId = 'testUser123';
+
+        await instance.handleWebSocketMessage({
+            metadata: { message_type: 'revocation' },
+            payload: {
+                subscription: {
+                    id: 'sub-1',
+                    status: 'authorization_revoked',
+                    type: 'channel.follow'
+                }
+            }
+        });
+
+        expect(resubscribeCalls.length).toBe(1);
+        expect(resubscribeCalls[0].sessionId).toBe('testSession123');
+        expect(resubscribeCalls[0].broadcasterId).toBe('testUser123');
+    });
+
     it('validates configuration using centralized auth fallback', () => {
         const instance = new TwitchEventSub(
-            { channel: 'testChannel' },
+            { channel: 'testChannel', broadcasterId: 'test-broadcaster-id' },
             mockDependencies
         );
 
@@ -118,7 +150,7 @@ describe('TwitchEventSub behavior', () => {
 
     it('parses subscription errors with critical flag for auth failures', () => {
         const instance = new TwitchEventSub(
-            { channel: 'testChannel', clientId: 'testClientId', accessToken: 'testToken' },
+            { channel: 'testChannel', clientId: 'testClientId', accessToken: 'testToken', broadcasterId: 'test-broadcaster-id' },
             mockDependencies
         );
 
@@ -132,7 +164,7 @@ describe('TwitchEventSub behavior', () => {
 
     it('parses subscription errors with retryable flag for rate limits', () => {
         const instance = new TwitchEventSub(
-            { channel: 'testChannel', clientId: 'testClientId', accessToken: 'testToken' },
+            { channel: 'testChannel', clientId: 'testClientId', accessToken: 'testToken', broadcasterId: 'test-broadcaster-id' },
             mockDependencies
         );
 
@@ -146,7 +178,7 @@ describe('TwitchEventSub behavior', () => {
 
     it('validates connection readiness before subscription setup', () => {
         const instance = new TwitchEventSub(
-            { channel: 'testChannel', clientId: 'testClientId', accessToken: 'testToken' },
+            { channel: 'testChannel', clientId: 'testClientId', accessToken: 'testToken', broadcasterId: 'test-broadcaster-id' },
             mockDependencies
         );
         instance.ws = { readyState: 1 };
@@ -161,7 +193,7 @@ describe('TwitchEventSub behavior', () => {
 
     it('continues reconnecting when WebSocket close throws', async () => {
         const instance = new TwitchEventSub(
-            { channel: 'testChannel', clientId: 'testClientId', accessToken: 'testToken' },
+            { channel: 'testChannel', clientId: 'testClientId', accessToken: 'testToken', broadcasterId: 'test-broadcaster-id' },
             mockDependencies
         );
         instance.isInitialized = true;
@@ -180,12 +212,13 @@ describe('TwitchEventSub behavior', () => {
     });
 
     it('continues deleting WebSocket subscriptions after a deletion error', async () => {
+        const logErrors = [];
         const mockAxios = {
             get: createMockFn().mockResolvedValue({
                 data: {
                     data: [
-                        { id: 'sub-1', type: 'channel.follow', status: 'enabled', transport: { method: 'websocket' } },
-                        { id: 'sub-2', type: 'channel.subscribe', status: 'enabled', transport: { method: 'websocket' } }
+                        { id: 'sub-1', type: 'channel.follow', status: 'enabled', transport: { method: 'websocket', session_id: 'testSession123' } },
+                        { id: 'sub-2', type: 'channel.subscribe', status: 'enabled', transport: { method: 'websocket', session_id: 'otherSession' } }
                     ]
                 }
             }),
@@ -195,22 +228,29 @@ describe('TwitchEventSub behavior', () => {
         };
 
         const instance = new TwitchEventSub(
-            { channel: 'testChannel', clientId: 'testClientId', accessToken: 'testToken' },
+            { channel: 'testChannel', clientId: 'testClientId', accessToken: 'testToken', broadcasterId: 'test-broadcaster-id' },
             { ...mockDependencies, axios: mockAxios }
         );
+        instance._logEventSubError = (message, error, eventType, payload) => {
+            logErrors.push({ message, error, eventType, payload });
+        };
+        instance.sessionId = 'testSession123';
 
         await instance._cleanupAllWebSocketSubscriptions();
 
-        expect(mockAxios.delete.mock.calls.length).toBe(2);
+        expect(mockAxios.delete.mock.calls.length).toBe(1);
+        expect(logErrors.some((entry) => entry.eventType === 'subscription-delete')).toBe(true);
     });
 
     it('continues deleting session subscriptions after a deletion error', async () => {
+        const logErrors = [];
         const mockAxios = {
             get: createMockFn().mockResolvedValue({
                 data: {
                     data: [
                         { id: 'sub-1', type: 'channel.follow', transport: { method: 'websocket', session_id: 'testSession123' } },
-                        { id: 'sub-2', type: 'channel.subscribe', transport: { method: 'websocket', session_id: 'testSession123' } }
+                        { id: 'sub-2', type: 'channel.subscribe', transport: { method: 'websocket', session_id: 'testSession123' } },
+                        { id: 'sub-3', type: 'channel.subscribe', transport: { method: 'websocket', session_id: 'otherSession' } }
                     ]
                 }
             }),
@@ -220,15 +260,22 @@ describe('TwitchEventSub behavior', () => {
         };
 
         const instance = new TwitchEventSub(
-            { channel: 'testChannel', clientId: 'testClientId', accessToken: 'testToken' },
+            { channel: 'testChannel', clientId: 'testClientId', accessToken: 'testToken', broadcasterId: 'test-broadcaster-id' },
             { ...mockDependencies, axios: mockAxios }
         );
+        instance._logEventSubError = (message, error, eventType, payload) => {
+            logErrors.push({ message, error, eventType, payload });
+        };
         instance.sessionId = 'testSession123';
         instance.subscriptions.set('sub-1', { id: 'sub-1' });
         instance.subscriptions.set('sub-2', { id: 'sub-2' });
+        instance.subscriptions.set('sub-3', { id: 'sub-3' });
 
         await instance._deleteAllSubscriptions();
 
         expect(instance.subscriptions.has('sub-2')).toBe(false);
+        expect(instance.subscriptions.has('sub-3')).toBe(true);
+        expect(logErrors.some((entry) => entry.eventType === 'subscription-delete')).toBe(true);
+        expect(logErrors.length).toBeGreaterThan(0);
     });
 });
