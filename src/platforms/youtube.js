@@ -554,7 +554,7 @@ class YouTubePlatform extends EventEmitter {
         }
     }
 
-    handleChatMessage(chatItem) {
+    async handleChatMessage(chatItem) {
         this.logger.debug('handleChatMessage() called', 'youtube');
         
         // Enhanced validation with better error handling
@@ -606,7 +606,7 @@ class YouTubePlatform extends EventEmitter {
         });
         
         try {
-            handler(normalizedChatItem);
+            await handler(normalizedChatItem);
         } catch (error) {
             this._handleProcessingError(
                 `Error handling event type ${resolvedEventType}: ${error.message}`,
