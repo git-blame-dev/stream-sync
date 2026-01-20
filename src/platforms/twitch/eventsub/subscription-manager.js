@@ -62,9 +62,69 @@ function createTwitchEventSubSubscriptionManager(options = {}) {
         };
     };
 
+     const getAuthHeaders = async () => ({
+         'Authorization': `Bearer ${await authManager.getAccessToken()}`,
+         'Client-Id': safeGetClientId(),
+         'Content-Type': 'application/json'
+     });
+
+     const getTimestamp = () => now();
+
+
+    const ensureAuthReady = async () => {
+        const clientId = safeGetClientId();
+        const accessToken = await authManager.getAccessToken?.();
+
+        if (!clientId || !accessToken) {
+            safeLogError('Missing authentication tokens for EventSub subscriptions', null, 'subscription-auth-missing', {
+                hasClientId: !!clientId,
+                hasAccessToken: !!accessToken
+            });
+            return false;
+        }
+
+        return true;
+    };
+
+    const shouldRetrySubscription = (errorDetails) => Boolean(errorDetails?.isRetryable) && !errorDetails?.isCritical;
+
+    const retrySubscription = async ({ subscription, payload, retriesRemaining }) => {
+        if (retriesRemaining <= 0) {
+            return { success: false, error: 'retry-exhausted' };
+        }
+
+        await safeDelay(
+            validateTimeout(1000 * retriesRemaining, 1000),
+            1000,
+            'twitchEventSub:subscription-retry'
+        );
+
+        const response = await authManager.authState.executeWhenReady(async () => {
+            return await axios.post('https://api.twitch.tv/helix/eventsub/subscriptions', payload, {
+                headers: await getAuthHeaders()
+            });
+        });
+
+        const subData = response.data.data[0];
+        subscriptions.set(subData.id, {
+            ...subscription,
+            id: subData.id,
+            status: subData.status
+        });
+
+        safeLogger.info(`EventSub subscription created after retry: ${subscription.name}`, 'twitch', {
+            id: subData.id,
+            type: subscription.type,
+            status: subData.status
+        });
+
+        return { success: true };
+    };
+
     const setupEventSubscriptions = async ({
         requiredSubscriptions,
         userId,
+        broadcasterId,
         sessionId,
         subscriptionDelay,
         isConnected,
@@ -72,6 +132,18 @@ function createTwitchEventSubSubscriptionManager(options = {}) {
     }) => {
         if (!validationAlreadyDone && !safeValidateConnection()) {
             return null;
+        }
+
+        if (!(await ensureAuthReady())) {
+            return {
+                successful: 0,
+                total: requiredSubscriptions.length,
+                failures: requiredSubscriptions.map((subscription) => ({
+                    subscription: subscription.name,
+                    error: { code: 'AUTH_MISSING', message: 'Missing authentication tokens', isCritical: true, isRetryable: false }
+                })),
+                timestamp: now()
+            };
         }
 
         safeLogger.info('Setting up EventSub subscriptions', 'twitch');
@@ -94,7 +166,7 @@ function createTwitchEventSubSubscriptionManager(options = {}) {
                 const subscriptionPayload = {
                     type: subscription.type,
                     version: subscription.version,
-                    condition: subscription.getCondition(userId),
+                    condition: subscription.getCondition({ userId, broadcasterId }),
                     transport: {
                         method: 'websocket',
                         session_id: sessionId
@@ -109,11 +181,7 @@ function createTwitchEventSubSubscriptionManager(options = {}) {
 
                 const response = await authManager.authState.executeWhenReady(async () => {
                     return await axios.post('https://api.twitch.tv/helix/eventsub/subscriptions', subscriptionPayload, {
-                        headers: {
-                            'Authorization': `Bearer ${await authManager.getAccessToken()}`,
-                            'Client-Id': safeGetClientId(),
-                            'Content-Type': 'application/json'
-                        }
+                        headers: await getAuthHeaders()
                     });
                 });
 
@@ -141,6 +209,33 @@ function createTwitchEventSubSubscriptionManager(options = {}) {
                 }
             } catch (error) {
                 const errorDetails = parseSubscriptionError(error, subscription);
+                let retryResult = null;
+
+                if (shouldRetrySubscription(errorDetails)) {
+                    try {
+                        retryResult = await retrySubscription({
+                            subscription,
+                            payload: {
+                                type: subscription.type,
+                                version: subscription.version,
+                                condition: subscription.getCondition({ userId, broadcasterId }),
+                                transport: {
+                                    method: 'websocket',
+                                    session_id: sessionId
+                                }
+                            },
+                            retriesRemaining: 1
+                        });
+                    } catch (retryError) {
+                        retryResult = { success: false, error: retryError.message };
+                    }
+                }
+
+                if (retryResult?.success) {
+                    successCount++;
+                    continue;
+                }
+
                 failedSubscriptions.push({
                     subscription: subscription.name,
                     error: errorDetails
@@ -178,10 +273,10 @@ function createTwitchEventSubSubscriptionManager(options = {}) {
         };
     };
 
-    const cleanupAllWebSocketSubscriptions = async () => {
+    const cleanupAllWebSocketSubscriptions = async ({ sessionId } = {}) => {
         safeLogger.info('Starting cleanup method...', 'twitch');
 
-        if (!config?.accessToken || !config?.clientId) {
+        if (!(await ensureAuthReady())) {
             safeLogger.warn('Cannot cleanup WebSocket subscriptions - missing authentication tokens', 'twitch', {
                 hasAccessToken: !!config?.accessToken,
                 hasClientId: !!config?.clientId
@@ -194,16 +289,14 @@ function createTwitchEventSubSubscriptionManager(options = {}) {
 
             const response = await authManager.authState.executeWhenReady(async () => {
                 return await axios.get('https://api.twitch.tv/helix/eventsub/subscriptions', {
-                    headers: {
-                        'Authorization': `Bearer ${await authManager.getAccessToken()}`,
-                        'Client-Id': config.clientId
-                    },
+                    headers: await getAuthHeaders(),
                     timeout: 5000
                 });
             });
 
             const allSubscriptions = response.data.data;
-            const webSocketSubscriptions = allSubscriptions.filter((sub) => sub.transport?.method === 'websocket');
+            const webSocketSubscriptions = allSubscriptions.filter((sub) => sub.transport?.method === 'websocket')
+                .filter((sub) => !sessionId || sub.transport?.session_id === sessionId);
 
             safeLogger.info(`Found ${webSocketSubscriptions.length} existing WebSocket subscriptions to clean up`, 'twitch');
 
@@ -224,10 +317,7 @@ function createTwitchEventSubSubscriptionManager(options = {}) {
                 try {
                     await authManager.authState.executeWhenReady(async () => {
                         return await axios.delete(`https://api.twitch.tv/helix/eventsub/subscriptions?id=${subscription.id}`, {
-                            headers: {
-                                'Authorization': `Bearer ${await authManager.getAccessToken()}`,
-                                'Client-Id': config.clientId
-                            }
+                            headers: await getAuthHeaders()
                         });
                     });
 
@@ -257,7 +347,7 @@ function createTwitchEventSubSubscriptionManager(options = {}) {
     };
 
     const deleteAllSubscriptions = async ({ sessionId } = {}) => {
-        if (!config?.accessToken || !config?.clientId) {
+        if (!(await ensureAuthReady())) {
             safeLogger.warn('Cannot delete subscriptions - missing authentication tokens', 'twitch');
             return;
         }
@@ -267,10 +357,7 @@ function createTwitchEventSubSubscriptionManager(options = {}) {
 
             const response = await authManager.authState.executeWhenReady(async () => {
                 return await axios.get('https://api.twitch.tv/helix/eventsub/subscriptions', {
-                    headers: {
-                        'Authorization': `Bearer ${await authManager.getAccessToken()}`,
-                        'Client-Id': config.clientId
-                    }
+                    headers: await getAuthHeaders()
                 });
             });
 
@@ -296,10 +383,7 @@ function createTwitchEventSubSubscriptionManager(options = {}) {
                 try {
                     await authManager.authState.executeWhenReady(async () => {
                         return await axios.delete(`https://api.twitch.tv/helix/eventsub/subscriptions?id=${subscription.id}`, {
-                            headers: {
-                                'Authorization': `Bearer ${await authManager.getAccessToken()}`,
-                                'Client-Id': config.clientId
-                            }
+                            headers: await getAuthHeaders()
                         });
                     });
 
@@ -333,7 +417,8 @@ function createTwitchEventSubSubscriptionManager(options = {}) {
         setupEventSubscriptions,
         parseSubscriptionError,
         cleanupAllWebSocketSubscriptions,
-        deleteAllSubscriptions
+        deleteAllSubscriptions,
+        getTimestamp
     };
 }
 

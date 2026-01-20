@@ -107,20 +107,46 @@ function createTwitchEventSubWsLifecycle(options = {}) {
                                     );
 
                                     const isConnectionValid = state._validateConnectionForSubscriptions?.();
-                                    if (isConnectionValid) {
-                                        await state._setupEventSubscriptions?.(true);
-                                    } else {
+                                    if (!isConnectionValid) {
                                         logError('Connection validation failed before subscription setup', null, 'connection-validation');
+                                        state.subscriptionsReady = false;
+                                        emit('eventSubSubscriptionFailed', {
+                                            sessionId: state.sessionId,
+                                            reason: 'connection-validation'
+                                        });
+                                        reject(new Error('EventSub subscription setup failed'));
+                                        return;
                                     }
+
+                                    const result = await state._setupEventSubscriptions?.(true);
+                                    const failures = result?.failures || [];
+                                    if (failures.length > 0) {
+                                        state.subscriptionsReady = false;
+                                        logError('Subscription setup completed with failures', null, 'subscription-setup-failed', {
+                                            failures
+                                        });
+                                        emit('eventSubSubscriptionFailed', {
+                                            sessionId: state.sessionId,
+                                            failures
+                                        });
+                                        reject(new Error('EventSub subscription setup failed'));
+                                        return;
+                                    }
+
+                                    state.subscriptionsReady = true;
+                                    emit('eventSubConnected', {
+                                        sessionId: state.sessionId
+                                    });
+                                    resolve();
                                 } catch (error) {
+                                    state.subscriptionsReady = false;
                                     logError('Error during subscription setup', error, 'subscription-setup');
+                                    emit('eventSubSubscriptionFailed', {
+                                        sessionId: state.sessionId,
+                                        error: error.message
+                                    });
+                                    reject(new Error('EventSub subscription setup failed'));
                                 }
-                            });
-
-                            resolve();
-
-                            emit('eventSubConnected', {
-                                sessionId: state.sessionId
                             });
                         }
                     } catch (error) {
@@ -180,6 +206,7 @@ function createTwitchEventSubWsLifecycle(options = {}) {
                     }
 
                     state._isConnected = false;
+                    state.subscriptionsReady = false;
                     state.sessionId = null;
 
                     const connectionDuration = state.connectionStartTime ? now() - state.connectionStartTime : 'unknown';

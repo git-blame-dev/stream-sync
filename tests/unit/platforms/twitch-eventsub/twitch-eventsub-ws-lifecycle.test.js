@@ -28,6 +28,7 @@ describe('Twitch EventSub WS lifecycle', () => {
         connectionStartTime: null,
         sessionId: null,
         _isConnected: false,
+        subscriptionsReady: false,
         subscriptions: new Map(),
         isInitialized: true,
         retryAttempts: 0,
@@ -44,17 +45,19 @@ describe('Twitch EventSub WS lifecycle', () => {
         ...overrides
     });
 
-    test('connectWebSocket resolves and emits eventSubConnected on session_welcome', async () => {
+    test('connectWebSocket resolves after subscriptions are ready and emits eventSubConnected', async () => {
         const safeSetTimeout = createMockFn(() => null);
         const lifecycle = createTwitchEventSubWsLifecycle({
             WebSocketCtor: MockWebSocket,
             safeSetTimeout,
             safeDelay: async () => {},
             validateTimeout: (value) => value,
-            setImmediateFn: () => {}
+            setImmediateFn: (fn) => fn()
         });
 
-        const state = createState();
+        const state = createState({
+            _setupEventSubscriptions: createMockFn(async () => ({ failures: [] }))
+        });
         const connectPromise = lifecycle.connectWebSocket(state);
 
         state.ws.readyState = 1;
@@ -78,6 +81,7 @@ describe('Twitch EventSub WS lifecycle', () => {
 
         expect(state.sessionId).toBe('test-session-123');
         expect(state._isConnected).toBe(true);
+        expect(state.subscriptionsReady).toBe(true);
         expect(state.emit.mock.calls.some(([event, payload]) => event === 'eventSubConnected' && payload.sessionId === 'test-session-123')).toBe(true);
     });
 
@@ -95,6 +99,43 @@ describe('Twitch EventSub WS lifecycle', () => {
 
         const state = createState();
         await expect(lifecycle.connectWebSocket(state)).rejects.toThrow('Connection timeout - no welcome message');
+    });
+
+    test('connectWebSocket emits failure event when subscription setup fails', async () => {
+        const safeSetTimeout = createMockFn(() => null);
+        const lifecycle = createTwitchEventSubWsLifecycle({
+            WebSocketCtor: MockWebSocket,
+            safeSetTimeout,
+            safeDelay: async () => {},
+            validateTimeout: (value) => value,
+            setImmediateFn: (fn) => fn()
+        });
+
+        const state = createState({
+            _setupEventSubscriptions: createMockFn(async () => ({ failures: [{ subscription: 'Follows' }] }))
+        });
+        const connectPromise = lifecycle.connectWebSocket(state);
+
+        state.ws.readyState = 1;
+        state.ws.emit('open');
+        state.ws.emit(
+            'message',
+            Buffer.from(JSON.stringify({
+                metadata: { message_type: 'session_welcome' },
+                payload: {
+                    session: {
+                        id: 'test-session-456',
+                        keepalive_timeout_seconds: 30,
+                        status: 'connected',
+                        connected_at: '2024-01-01T00:00:00Z'
+                    }
+                }
+            }))
+        );
+
+        await expect(connectPromise).rejects.toThrow('EventSub subscription setup failed');
+        expect(state.subscriptionsReady).toBe(false);
+        expect(state.emit.mock.calls.some(([event, payload]) => event === 'eventSubSubscriptionFailed' && payload.sessionId === 'test-session-456')).toBe(true);
     });
 
     test('scheduleReconnect disables initialization when max attempts exceeded', () => {

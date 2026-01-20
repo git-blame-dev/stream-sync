@@ -1,5 +1,5 @@
-function createSubscriptionCondition(userId, config) {
-    const baseCondition = { broadcaster_user_id: userId };
+function createSubscriptionCondition({ userId, broadcasterId }, config) {
+    const baseCondition = { broadcaster_user_id: broadcasterId };
 
     if (config.requiresUserScope) {
         return { ...baseCondition, user_id: userId };
@@ -8,7 +8,7 @@ function createSubscriptionCondition(userId, config) {
         return { ...baseCondition, moderator_user_id: userId };
     }
     if (config.usesToBroadcaster) {
-        return { to_broadcaster_user_id: userId };
+        return { to_broadcaster_user_id: broadcasterId };
     }
 
     return baseCondition;
@@ -47,7 +47,7 @@ function createTwitchEventSubSubscriptions() {
         name: config.name,
         type: config.type,
         version: config.version,
-        getCondition: (userId) => createSubscriptionCondition(userId, config),
+        getCondition: ({ userId, broadcasterId }) => createSubscriptionCondition({ userId, broadcasterId }, config),
         handler: getHandlerName(config.type)
     }));
 }

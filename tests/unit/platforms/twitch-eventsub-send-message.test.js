@@ -33,6 +33,7 @@ describe('TwitchEventSub chat sending', () => {
                 accessToken: 'test-access-token',
                 channel: 'teststreamer',
                 username: 'teststreamer',
+                broadcasterId: 'test-broadcaster-id',
                 dataLoggingEnabled: false
             },
             {
@@ -65,6 +66,7 @@ describe('TwitchEventSub chat sending', () => {
                 accessToken: 'test-access-token',
                 channel: 'teststreamer',
                 username: 'teststreamer',
+                broadcasterId: 'test-broadcaster-id',
                 dataLoggingEnabled: false
             },
             {
@@ -93,6 +95,7 @@ describe('TwitchEventSub chat sending', () => {
                 accessToken: 'test-access-token',
                 channel: 'teststreamer',
                 username: 'teststreamer',
+                broadcasterId: 'test-broadcaster-id',
                 dataLoggingEnabled: false
             },
             {

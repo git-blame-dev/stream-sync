@@ -42,7 +42,7 @@ describe('Twitch platform refactor behaviors', () => {
     it('accepts centralized auth for EventSub validation without raw tokens', async () => {
         const MockWebSocket = class { constructor() {} };
         const eventSub = new TwitchEventSub(
-            { enabled: true, eventsub_enabled: true },
+            { enabled: true, eventsub_enabled: true, broadcasterId: TEST_USER_ID },
             {
                 authManager: createAuthManager({ userId: TEST_USER_ID }),
                 logger: noOpLogger,
