@@ -10,9 +10,12 @@ class UnifiedNotificationProcessor {
         this.errorHandler = platform.errorHandler;
         this.textProcessing = platform.textProcessing || createTextProcessingManager({ logger: this.logger });
         this.messageExtractor = {
-            extractMessage: (chatItem) => this.textProcessing.extractMessageText(
-                chatItem?.item?.message || ''
-            )
+            extractMessage: (chatItem) => {
+                if (!chatItem || typeof chatItem !== 'object' || !chatItem.item || typeof chatItem.item !== 'object') {
+                    return '';
+                }
+                return this.textProcessing.extractMessageText(chatItem.item.message || '');
+            }
         };
         this.shouldSuppressNotification = shouldSuppressYouTubeNotification;
     }
@@ -28,7 +31,12 @@ class UnifiedNotificationProcessor {
             }
 
             const handlerName = `on${eventType.charAt(0).toUpperCase() + eventType.slice(1)}`;
-            const handler = this.platform.handlers?.[handlerName];
+            const handlers = this.platform.handlers;
+            if (!handlers || typeof handlers !== 'object') {
+                this.logger.warn(`Suppressed ${eventType} notification: handlers unavailable`, 'youtube');
+                return;
+            }
+            const handler = handlers[handlerName];
 
             if (!author) {
                 this.logger.warn(`Suppressed ${eventType} notification: missing author`, 'youtube');
@@ -40,8 +48,8 @@ class UnifiedNotificationProcessor {
 
             const extractedMessage = this.messageExtractor.extractMessage(chatItem);
 
-            const username = author?.name || null;
-            const userId = author?.id || null;
+            const username = typeof author.name === 'string' ? author.name : null;
+            const userId = typeof author.id === 'string' ? author.id : null;
             if (!userId) {
                 this.logger.warn(`Suppressed ${eventType} notification: missing userId`, 'youtube');
                 if (monetizationTypes.has(eventType) && this.notificationDispatcher) {
@@ -77,25 +85,13 @@ class UnifiedNotificationProcessor {
             this.logger.debug(`${eventType} notification processed via unified method`, 'youtube');
             return notification;
         } catch (error) {
-            if (this.errorHandler) {
-                this.errorHandler.handleEventProcessingError(
-                    error,
-                    eventType,
-                    chatItem,
-                    `Error processing ${eventType} notification: ${error.message}`,
-                    'youtube-notification-pipeline'
-                );
-            } else if (this.platform && typeof this.platform._handleProcessingError === 'function') {
-                this.platform._handleProcessingError(
-                    `Error processing ${eventType} notification: ${error.message}`,
-                    error,
-                    eventType,
-                    chatItem
-                );
-            } else {
-                const fallbackLogger = this.platform?.logger || this.logger;
-                fallbackLogger?.error?.(`Error processing ${eventType} notification: ${error.message}`, 'youtube', error);
-            }
+            this.errorHandler.handleEventProcessingError(
+                error,
+                eventType,
+                chatItem,
+                `Error processing ${eventType} notification: ${error.message}`,
+                'youtube-notification-pipeline'
+            );
         }
     }
 }

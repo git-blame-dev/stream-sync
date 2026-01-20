@@ -76,14 +76,15 @@ function hydrateGiftPurchaseAuthor(normalizedChatItem) {
         return null;
     }
 
-    const authorId = typeof item.author?.id === 'string' ? item.author.id.trim() : '';
-    const authorName = typeof item.author?.name === 'string' ? item.author.name.trim() : '';
+    const author = item.author;
+    const authorId = typeof author === 'object' && typeof author.id === 'string' ? author.id.trim() : '';
+    const authorName = typeof author === 'object' && typeof author.name === 'string' ? author.name.trim() : '';
     if (authorId && authorName) {
         return normalizedChatItem;
     }
 
     const header = item.header;
-    const headerName = typeof header?.author_name?.text === 'string'
+    const headerName = header && header.author_name && typeof header.author_name.text === 'string'
         ? header.author_name.text.trim()
         : '';
     const headerId = typeof item.author_external_channel_id === 'string'
@@ -94,8 +95,8 @@ function hydrateGiftPurchaseAuthor(normalizedChatItem) {
         return null;
     }
 
-    const headerPhoto = Array.isArray(header?.author_photo) ? header.author_photo : [];
-    const headerBadges = Array.isArray(header?.author_badges) ? header.author_badges : [];
+    const headerPhoto = header && Array.isArray(header.author_photo) ? header.author_photo : [];
+    const headerBadges = header && Array.isArray(header.author_badges) ? header.author_badges : [];
     const hydratedAuthor = {
         id: headerId,
         name: headerName,

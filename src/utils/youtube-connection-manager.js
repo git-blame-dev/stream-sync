@@ -147,7 +147,8 @@ class YouTubeConnectionManager {
         
         const connectionData = this.connections.get(videoId);
         try {
-            await this._shutdownConnection(connectionData?.connection, videoId);
+            const connection = connectionData ? connectionData.connection : null;
+            await this._shutdownConnection(connection, videoId);
         } catch (err) {
             this._handleConnectionError('Error removing connection for video ' + videoId, err, { videoId });
         } finally {
@@ -224,7 +225,8 @@ class YouTubeConnectionManager {
         }
         
         for (const [videoId, connectionData] of this.connections) {
-            this._shutdownConnection(connectionData?.connection, videoId).catch((err) => {
+            const connection = connectionData ? connectionData.connection : null;
+            this._shutdownConnection(connection, videoId).catch((err) => {
                 this._handleConnectionError('Error removing connection for video ' + videoId, err, { videoId });
             });
         }

@@ -52,7 +52,9 @@ function createYouTubeConnectionFactory(options = {}) {
                     'YouTube getLiveChat call'
                 );
             } catch (error) {
-                const errorMessage = error?.message || String(error);
+                const errorMessage = error instanceof Error && typeof error.message === 'string'
+                    ? error.message
+                    : String(error);
                 platform.logger.debug(
                     `Live chat probe failed for ${videoId}: ${errorMessage}`,
                     'youtube'
@@ -102,7 +104,9 @@ function createYouTubeConnectionFactory(options = {}) {
                 'youtube'
             );
 
-            const errorMessage = error?.message || String(error);
+            const errorMessage = error instanceof Error && typeof error.message === 'string'
+                ? error.message
+                : String(error);
             const isTemporaryError = errorMessage.includes('ECONNRESET') ||
                 errorMessage.includes('ETIMEDOUT') ||
                 errorMessage.includes('503') ||
@@ -131,11 +135,11 @@ function createYouTubeConnectionFactory(options = {}) {
             }
 
             if (chatItem.author && chatItem.text) {
-                const rawAuthorName = typeof chatItem.author?.name === 'string'
+                const rawAuthorName = typeof chatItem.author === 'object' && typeof chatItem.author.name === 'string'
                     ? chatItem.author.name
                     : (typeof chatItem.author === 'string' ? chatItem.author : '');
                 const authorName = normalizeYouTubeUsername(rawAuthorName);
-                const authorId = typeof chatItem.author?.id === 'string'
+                const authorId = typeof chatItem.author === 'object' && typeof chatItem.author.id === 'string'
                     ? chatItem.author.id.trim()
                     : '';
 
@@ -144,7 +148,7 @@ function createYouTubeConnectionFactory(options = {}) {
                         `Skipping chat-update for ${videoId}: missing author`,
                         'youtube',
                         {
-                            eventType: chatItem.type || null,
+                            eventType: typeof chatItem.type === 'string' ? chatItem.type : null,
                             author: authorName || getFallbackUsername()
                         }
                     );
@@ -207,13 +211,17 @@ function createYouTubeConnectionFactory(options = {}) {
                         `Skipping chat-update for ${videoId}: missing author`,
                         'youtube',
                         {
-                            eventType: enhancedMessage?.item?.type || enhancedMessage?.type || null,
+                            eventType: enhancedMessage && enhancedMessage.item
+                                ? enhancedMessage.item.type || null
+                                : (enhancedMessage && enhancedMessage.type ? enhancedMessage.type : null),
                             author: getFallbackUsername()
                         }
                     );
                     continue;
                 }
-                const messageText = enhancedMessage?.item?.message?.text || 'No text';
+                const messageText = enhancedMessage && enhancedMessage.item && enhancedMessage.item.message
+                    ? enhancedMessage.item.message.text || 'No text'
+                    : 'No text';
 
                 platform.logger.debug(
                     `Single chat-update event received for ${videoId}: ${authorName} - ${messageText}`,

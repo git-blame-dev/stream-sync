@@ -71,12 +71,13 @@ function createYouTubeEventFactory(options = {}) {
 
         createErrorEvent: (data = {}) => {
             const timestamp = ensureIsoTimestamp(data.timestamp, 'YouTube error event requires timestamp');
+            const error = data.error && typeof data.error === 'object' ? data.error : {};
             return {
                 type: PlatformEvents.ERROR,
                 platform: platformName,
                 error: {
-                    message: data.error?.message,
-                    name: data.error?.name
+                    message: typeof error.message === 'string' ? error.message : undefined,
+                    name: typeof error.name === 'string' ? error.name : undefined
                 },
                 context: data.context || {},
                 recoverable: data.recoverable ?? true,

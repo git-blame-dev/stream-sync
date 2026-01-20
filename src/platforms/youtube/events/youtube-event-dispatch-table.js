@@ -32,10 +32,14 @@ function createYouTubeEventDispatchTable(platform) {
 
         // Regular chat messages route through unified handler
         LiveChatTextMessage: (chatItem) => {
+            if (!chatItem || typeof chatItem !== 'object' || !chatItem.item || typeof chatItem.item !== 'object') {
+                platform.logger.warn('Skipping chat message: missing chat item payload', 'youtube');
+                return;
+            }
             const authorName = platform._resolveChatItemAuthorName(chatItem);
             if (!authorName) {
-                platform.logger?.warn?.('Skipping chat message: missing author name', 'youtube', {
-                    eventType: chatItem.item?.type || null
+                platform.logger.warn('Skipping chat message: missing author name', 'youtube', {
+                    eventType: chatItem.item.type || null
                 });
                 return;
             }
