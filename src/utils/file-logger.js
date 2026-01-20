@@ -10,8 +10,6 @@ class FileLogger {
         this.fs = deps.fs || defaultFs;
         this.config = {
             ...config,
-            maxSize: config.maxSize ?? 10 * 1024 * 1024, // 10MB
-            maxFiles: config.maxFiles ?? 5,
             logDir: config.logDir
         };
 
@@ -22,10 +20,6 @@ class FileLogger {
         const fullPath = path.join(this.config.logDir, filename);
 
         try {
-            if (this.needsRotation(fullPath)) {
-                this.rotateFile(fullPath);
-            }
-
             this.fs.appendFileSync(fullPath, content + '\n');
 
         } catch (error) {
@@ -36,45 +30,6 @@ class FileLogger {
     log(content) {
         const filename = this.config.filename || 'runtime.log';
         this.write(filename, content);
-    }
-    
-    needsRotation(filePath) {
-        try {
-            if (!this.fs.existsSync(filePath)) return false;
-
-            const stats = this.fs.statSync(filePath);
-            return stats.size >= this.config.maxSize;
-        } catch {
-            return false;
-        }
-    }
-    
-    rotateFile(filePath) {
-        try {
-            const dir = path.dirname(filePath);
-            const ext = path.extname(filePath);
-            const basename = path.basename(filePath, ext);
-
-            for (let i = this.config.maxFiles - 1; i >= 1; i--) {
-                const oldFile = path.join(dir, `${basename}.${i}${ext}`);
-                const newFile = path.join(dir, `${basename}.${i + 1}${ext}`);
-
-                if (this.fs.existsSync(oldFile)) {
-                    if (i === this.config.maxFiles - 1) {
-                        this.fs.unlinkSync(oldFile);
-                    } else {
-                        this.fs.renameSync(oldFile, newFile);
-                    }
-                }
-            }
-
-            const rotatedFile = path.join(dir, `${basename}.1${ext}`);
-            if (this.fs.existsSync(filePath)) {
-                this.fs.renameSync(filePath, rotatedFile);
-            }
-        } catch (error) {
-            process.stderr.write(`[FileLogger] Failed to rotate log file: ${error.message}\n`);
-        }
     }
     
     ensureLogDirectory() {
