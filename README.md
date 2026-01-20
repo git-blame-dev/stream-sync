@@ -17,17 +17,17 @@ StreamSync is a multi-platform live chat and event pipeline for streamers. It no
 
 ## Getting Started
 ```bash
-npm install
+bun install
 cp config.example.ini config.ini
 # edit config.ini (and .env if needed)
-npm start
+bun start
 ```
 
 ## Development Commands
 ```bash
-npm run lint
-npm test
-npm run start:debug
+bun lint
+bun test
+bun start:debug
 ```
 
 ## Configuration
@@ -38,7 +38,7 @@ npm run start:debug
 StreamSync follows a strict TDD workflow and emphasizes behavior-first tests. The suite is fixture-driven, deterministic, and avoids real network/OBS usage in CI while still covering end-to-end flows through smoke E2E tests.
 
 ## Tech Stack
-- Node.js + Bun (test runner)
+- Bun (runtime and test runner)
 - Twitch: EventSub WebSocket + Helix API
 - YouTube: youtubei.js
 - TikTok: tiktok-live-connector

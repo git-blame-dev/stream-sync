@@ -143,7 +143,7 @@ describe('Keyword Parsing Command Line Arguments', () => {
     describe('Help Documentation', () => {
         test('should include --disable-keyword-parsing in help text', () => {
             const helpText = `
-Usage: node src/main.js [options]
+Usage: bun src/main.js [options]
 
 Options:
   --debug                      Enable debug mode (detailed logging)
@@ -153,7 +153,7 @@ Options:
   --help, -h                   Show this help message
 
 Examples:
-  node src/main.js --disable-keyword-parsing --debug
+  bun src/main.js --disable-keyword-parsing --debug
 `;
 
             expect(helpText).toContain('--disable-keyword-parsing');

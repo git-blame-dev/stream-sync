@@ -53,7 +53,7 @@ for (let i = 0; i < args.length; i++) {
 if (cliArgs.help) {
     // Use process.stdout.write for help text to avoid logging system interference
     process.stdout.write(`
-Usage: node src/main.js [options]
+Usage: bun src/main.js [options]
 
 Options:
   --no-msg             Suppress console output of chat messages
@@ -63,9 +63,9 @@ Options:
   --help, -h           Show this help message
 
 Examples:
-  node src/main.js --no-msg
-  node src/main.js --log-level warn
-  node src/main.js --debug
+  bun src/main.js --no-msg
+  bun src/main.js --log-level warn
+  bun src/main.js --debug
 `);
     process.exit(0);
 }
