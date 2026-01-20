@@ -405,9 +405,7 @@ class FileOutputter {
 
         this.fileLogger = new FileLogger({
             logDir,
-            filename: this.config.filename || 'runtime.log',
-            maxSize: this.config.maxSize ?? 10 * 1024 * 1024, // 10MB
-            maxFiles: this.config.maxFiles ?? 5
+            filename: this.config.filename || 'runtime.log'
         });
     }
     

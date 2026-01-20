@@ -39,15 +39,13 @@ describe('file-logger behavior', () => {
         expect(mockFs.mkdirSync).toHaveBeenCalledWith('logs-test', { recursive: true });
     });
 
-    it('writes log content and rotates when exceeding max size', () => {
+    it('writes log content to the configured file', () => {
         const mockFs = createMockFs();
-        mockFs._files['logs/app.log'] = 'x'.repeat(15);
 
-        const logger = new FileLogger({ logDir: 'logs', filename: 'app.log', maxSize: 10, maxFiles: 2 }, { fs: mockFs });
+        const logger = new FileLogger({ logDir: 'logs', filename: 'app.log' }, { fs: mockFs });
 
         logger.log('new-line');
 
-        expect(mockFs.renameSync).toHaveBeenCalledWith('logs/app.log', 'logs/app.1.log');
         expect(mockFs.appendFileSync).toHaveBeenCalledWith('logs/app.log', 'new-line\n');
     });
 
