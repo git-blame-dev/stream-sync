@@ -187,25 +187,6 @@ class ConfigManager {
             }
         }
 
-        const youtubeEnabled = this.getBoolean('youtube', 'enabled', false);
-        if (youtubeEnabled) {
-            const enableAPI = this.getBoolean('youtube', 'enableAPI', false);
-            const streamDetectionMethod = this.getString('youtube', 'streamDetectionMethod', 'youtubei').trim().toLowerCase();
-            const viewerCountMethod = this.getString('youtube', 'viewerCountMethod', 'youtubei').trim().toLowerCase();
-            const needsApiKey = enableAPI || streamDetectionMethod === 'api' || viewerCountMethod === 'api';
-            if (needsApiKey && !resolveConfigValue('youtube', 'apiKey')) {
-                const error = new Error('Missing required configuration: YouTube API key');
-                handleUserFacingError(error, {
-                    category: 'configuration',
-                    operation: 'validation'
-                }, {
-                    showInConsole: true,
-                    includeActions: true,
-                    logTechnical: false
-                });
-                throw error;
-            }
-        }
     }
 
     get(section, key, defaultValue = undefined) {
@@ -275,6 +256,26 @@ const resolveConfigValue = (section, key) => {
     return trimmed.length > 0 ? trimmed : undefined;
 };
 
+const resolveSecretValue = (envKey) => {
+    const rawValue = process.env[envKey];
+    if (rawValue === undefined || rawValue === null) {
+        return undefined;
+    }
+    const trimmed = String(rawValue).trim();
+    return trimmed.length > 0 ? trimmed : undefined;
+};
+
+const resolvePlatformApiKey = (platformName) => {
+    switch (platformName) {
+        case 'tiktok':
+            return resolveSecretValue('TIKTOK_API_KEY');
+        case 'youtube':
+            return resolveSecretValue('YOUTUBE_API_KEY');
+        default:
+            return undefined;
+    }
+};
+
 const resolveFallbackUsername = () => {
     if (!configManager.config || !configManager.config.general) {
         return 'Unknown User';
@@ -328,7 +329,7 @@ function createPlatformConfig(platformName) {
         // Unified apiKey for all platforms except Twitch (token-only auth)
         Object.defineProperty(platformConfig, 'apiKey', {
             get: function() { 
-                return resolveConfigValue(platformName, 'apiKey');
+                return resolvePlatformApiKey(platformName);
             },
             enumerable: true
         });
@@ -472,13 +473,24 @@ function getTwitchConfig() {
         Object.assign(_twitchConfig, {
             get channel() { return configManager.getString('twitch', 'channel', ''); },
             get eventsub_enabled() { return configManager.getBoolean('twitch', 'eventsub_enabled', false); },
-            get clientId() {
-                return resolveConfigValue('twitch', 'clientId');
-            },
             get tokenStorePath() {
                 const tokenStorePath = configManager.getString('twitch', 'tokenStorePath', './data/twitch-tokens.json');
                 return tokenStorePath.trim() ? tokenStorePath : './data/twitch-tokens.json';
             }
+        });
+
+        Object.defineProperty(_twitchConfig, 'clientId', {
+            get: function() {
+                return resolveSecretValue('TWITCH_CLIENT_ID');
+            },
+            enumerable: true
+        });
+
+        Object.defineProperty(_twitchConfig, 'clientSecret', {
+            get: function() {
+                return resolveSecretValue('TWITCH_CLIENT_SECRET');
+            },
+            enumerable: true
         });
     }
     return _twitchConfig;
@@ -494,8 +506,7 @@ const obsConfig = {
     get address() { return configManager.getString('obs', 'address', 'ws://localhost:4455'); },
     // OBS WebSocket server password
     get password() {
-        const value = configManager.get('obs', 'password');
-        return value === undefined || value === null ? undefined : String(value);
+        return resolveSecretValue('OBS_PASSWORD');
     },
     // OBS integration enabled/disabled
     get enabled() { return configManager.getBoolean('obs', 'enabled', false); },
@@ -564,7 +575,7 @@ const streamElementsConfig = {
     get enabled() { return configManager.getBoolean('streamelements', 'enabled', false); },
     get youtubeChannelId() { return resolveConfigValue('streamelements', 'youtubeChannelId'); },
     get twitchChannelId() { return resolveConfigValue('streamelements', 'twitchChannelId'); },
-    get jwtToken() { return resolveConfigValue('streamelements', 'jwtToken'); },
+    get jwtToken() { return resolveSecretValue('STREAMELEMENTS_JWT_TOKEN'); },
     get dataLoggingEnabled() { return configManager.getBoolean('streamelements', 'dataLoggingEnabled', false); },
     get dataLoggingPath() { return configManager.getString('streamelements', 'dataLoggingPath', './logs'); }
 };
