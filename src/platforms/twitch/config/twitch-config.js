@@ -4,6 +4,8 @@ const dropUndefinedValues = (valueMap) => Object.fromEntries(
     Object.entries(valueMap).filter(([, value]) => value !== undefined)
 );
 
+const DEFAULT_LOG_DIRECTORY = './logs';
+
 const TWITCH_CONFIG_VALIDATION_RULES = {
     required: {
         enabled: { type: 'boolean', message: 'Platform must be enabled' },
@@ -12,8 +14,7 @@ const TWITCH_CONFIG_VALIDATION_RULES = {
     },
     optional: {
         eventsub_enabled: { type: 'boolean', default: true, message: 'EventSub configuration' },
-        dataLoggingEnabled: { type: 'boolean', default: false, message: 'Data logging configuration' },
-        dataLoggingPath: { type: 'string', default: './logs', message: 'Data logging path configuration' }
+        dataLoggingEnabled: { type: 'boolean', default: false, message: 'Data logging configuration' }
     }
 };
 
@@ -27,7 +28,7 @@ function normalizeTwitchPlatformConfig(rawConfig = {}) {
         tokenExpiresAt: rawConfig.tokenExpiresAt,
         eventsub_enabled: ConfigValidatorStatic.parseBoolean(rawConfig.eventsub_enabled, true),
         dataLoggingEnabled: ConfigValidatorStatic.parseBoolean(rawConfig.dataLoggingEnabled, false),
-        dataLoggingPath: rawConfig.dataLoggingPath || './logs',
+        dataLoggingPath: DEFAULT_LOG_DIRECTORY,
         viewerCountEnabled: ConfigValidatorStatic.parseBoolean(rawConfig.viewerCountEnabled, undefined),
         viewerCountSource: rawConfig.viewerCountSource,
         messagesEnabled: ConfigValidatorStatic.parseBoolean(rawConfig.messagesEnabled, undefined),

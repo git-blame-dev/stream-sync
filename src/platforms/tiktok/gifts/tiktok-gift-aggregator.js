@@ -3,8 +3,7 @@ const { safeObjectStringify: defaultSafeObjectStringify } = require('../../../ut
 const { resolveTikTokTimestampISO } = require('../../../utils/tiktok-timestamp');
 const {
     formatCoinAmount: defaultFormatCoinAmount,
-    extractTikTokUserData: defaultExtractTikTokUserData,
-    logTikTokGiftData: defaultLogTikTokGiftData
+    extractTikTokUserData: defaultExtractTikTokUserData
 } = require('../../../utils/tiktok-data-extraction');
 
 function createTikTokGiftAggregator(options = {}) {
@@ -13,7 +12,6 @@ function createTikTokGiftAggregator(options = {}) {
         safeSetTimeout = defaultSafeSetTimeout,
         clearTimeoutFn = clearTimeout,
         now = () => Date.now(),
-        logTikTokGiftData = defaultLogTikTokGiftData,
         extractTikTokUserData = defaultExtractTikTokUserData,
         formatCoinAmount = defaultFormatCoinAmount,
         safeObjectStringify = defaultSafeObjectStringify
@@ -84,18 +82,6 @@ function createTikTokGiftAggregator(options = {}) {
             `[TikTok Gift] Updated standard gift aggregation for ${key}: totalCount=${giftCount}, unitAmount=${unitAmount}`,
             'tiktok'
         );
-
-        const processedData = {
-            username,
-            giftType,
-            giftCount,
-            amount: Number(unitAmount) * giftCount,
-            currency: resolvedCurrency
-        };
-        await logTikTokGiftData(originalData, processedData, key, {
-            logger: platform.logger,
-            errorHandler: platform.errorHandler
-        });
 
         if (platform.giftAggregation[key].timer) {
             platform.logger.debug(`[TikTok Gift] Clearing existing timer for ${key}`, 'tiktok');

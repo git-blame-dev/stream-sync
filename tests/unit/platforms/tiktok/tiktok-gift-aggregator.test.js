@@ -30,7 +30,6 @@ describe('TikTok gift aggregator', () => {
             platform,
             safeSetTimeout,
             now,
-            logTikTokGiftData: async () => undefined,
             formatCoinAmount: () => '',
             safeObjectStringify: () => '{}'
         });

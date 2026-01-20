@@ -1,6 +1,4 @@
 
-const fs = require('fs');
-const path = require('path');
 const { createPlatformErrorHandler } = require('./platform-error-handler');
 const { resolveLogger } = require('./logger-resolver');
 
@@ -8,13 +6,7 @@ class YouTubeiCurrencyParser {
     constructor(dependencies = {}) {
         // Dependency injection for testability
         this.logger = resolveLogger(dependencies.logger, 'YouTubeiCurrencyParser');
-        this.unknownCurrencyLoggingEnabled = Boolean(dependencies.unknownCurrencyLoggingEnabled);
-        this.logsDirectory = dependencies.logsDirectory;
         this.errorHandler = createPlatformErrorHandler(this.logger, 'youtubei-currency');
-
-        if (this.unknownCurrencyLoggingEnabled && !this.logsDirectory) {
-            throw new Error('logsDirectory is required when unknown currency logging is enabled');
-        }
         
         // PERFORMANCE OPTIMIZED: Combined patterns to reduce regex attempts
         this.codeSpacePattern = /^([A-Za-z]{3})\s+([0-9,]+(?:[\.,][0-9]{1,2})?)$/;
@@ -85,9 +77,6 @@ class YouTubeiCurrencyParser {
             'LKR': '₨',  // Sri Lankan Rupee
         };
         
-        // PERFORMANCE OPTIMIZATION: Lazy load logs directory creation
-        this._logsDirectoryEnsured = false;
-        
         // PERFORMANCE OPTIMIZATION: Pre-compiled result template to avoid object creation
         this._resultTemplate = {
             amount: 0,
@@ -151,22 +140,6 @@ class YouTubeiCurrencyParser {
         // 4. Unknown format - log and return failure
         this._logUnknownCurrency(displayString);
         return this._createFailureResult(displayString, 'Unknown currency format');
-    }
-
-    _ensureLogsDirectory() {
-        if (!this.unknownCurrencyLoggingEnabled) {
-            return;
-        }
-        if (this._logsDirectoryEnsured) return;
-        
-        try {
-            if (!fs.existsSync(this.logsDirectory)) {
-                fs.mkdirSync(this.logsDirectory, { recursive: true });
-            }
-            this._logsDirectoryEnsured = true;
-        } catch (error) {
-            this._handleCurrencyParserError(`Failed to create logs directory: ${error.message}`, error, 'logs-directory');
-        }
     }
 
     _parseCodeSpaceFormat(input) {
@@ -354,32 +327,6 @@ class YouTubeiCurrencyParser {
                 { originalString, giftData }
             );
 
-            if (!this.unknownCurrencyLoggingEnabled) {
-                return;
-            }
-
-            // PERFORMANCE OPTIMIZATION: Only do expensive file operations in non-test environments
-            if (process.env.NODE_ENV === 'test') {
-                return; // Skip file logging during tests
-            }
-
-            // Lazy load logs directory only when needed
-            this._ensureLogsDirectory();
-
-            // Log to file for analysis
-            const logEntry = {
-                timestamp: new Date().toISOString(),
-                originalString: originalString,
-                giftData: giftData,
-                userAgent: process.env.USER_AGENT || 'unknown',
-                nodeVersion: process.version
-            };
-
-            const logLine = JSON.stringify(logEntry) + '\n';
-            const logPath = path.join(this.logsDirectory, 'youtube-gift-unknown-currency.txt');
-            
-            fs.appendFileSync(logPath, logLine);
-            
         } catch (error) {
             this._handleCurrencyParserError(`Failed to log unknown currency: ${error.message}`, error, 'unknown-currency');
         }

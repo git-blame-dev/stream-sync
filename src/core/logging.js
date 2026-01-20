@@ -33,7 +33,10 @@ function safeObjectStringify(obj, maxDepth = 3) {
             return '[Object: circular reference detected]';
         }
         // For any other errors, return a safe representation
-        return `[Object: ${obj.constructor?.name || 'Unknown'} - stringify failed${err && err.message ? `: ${err.message}` : ''}]`;
+        const constructorName = obj && obj.constructor && obj.constructor.name
+            ? obj.constructor.name
+            : 'Unknown';
+        return `[Object: ${constructorName} - stringify failed${err && err.message ? `: ${err.message}` : ''}]`;
     }
 }
 
@@ -43,10 +46,10 @@ let validateLoggingConfig = null;
 // Default test config - used when running in test environment without explicit initialization
 const DEFAULT_TEST_CONFIG = {
     console: { enabled: false },
-    file: { enabled: false },
+    file: { enabled: false, directory: './logs' },
     debug: { enabled: false },
     platforms: { tiktok: { enabled: true }, twitch: { enabled: true }, youtube: { enabled: true } },
-    chat: { enabled: false }
+    chat: { enabled: false, separateFiles: true, directory: './logs' }
 };
 
 function setConfigValidator(validator) {
@@ -86,10 +89,10 @@ function getLoggingConfig() {
             // Fallback to default config
             return {
                 console: { enabled: true, level: 'info' },
-                file: { enabled: true, level: 'debug' },
+                file: { enabled: true, level: 'debug', directory: './logs' },
                 debug: { enabled: false },
                 platforms: { twitch: { enabled: true }, youtube: { enabled: true }, tiktok: { enabled: true } },
-                chat: { enabled: true, separateFiles: true }
+                chat: { enabled: true, separateFiles: true, directory: './logs' }
             };
         }
         return validateFn();
@@ -115,18 +118,6 @@ const originalConsoleError = console.error;
 
 let consoleOverrideEnabled = false;
 let programLogInitialized = false;
-let missingFileLogDirectoryWarned = false;
-let missingChatLogDirectoryWarned = false;
-
-function warnMissingFileLogDirectory() {
-    if (missingFileLogDirectoryWarned) {
-        return;
-    }
-    missingFileLogDirectoryWarned = true;
-    if (process.env.NODE_ENV !== 'test') {
-        originalConsoleError('[Logging System] File logging enabled but no directory configured');
-    }
-}
 
 function ensureLogDirectory(dirPath) {
     if (!dirPath) {
@@ -160,16 +151,11 @@ function getFileLogDirectory() {
         return null;
     }
 
-    if (!config?.file?.enabled) {
+    if (!config || !config.file || !config.file.enabled) {
         return null;
     }
 
-    const logDir = config.file.directory;
-    if (!logDir) {
-        warnMissingFileLogDirectory();
-        return null;
-    }
-    return logDir;
+    return config.file.directory || null;
 }
 
 function getChatLogDirectory() {
@@ -180,21 +166,14 @@ function getChatLogDirectory() {
         return null;
     }
 
-    if (!config?.chat?.enabled || !config?.chat?.separateFiles) {
+    if (!config || !config.file || !config.file.enabled) {
+        return null;
+    }
+    if (!config.chat || !config.chat.enabled || !config.chat.separateFiles) {
         return null;
     }
 
-    const logDir = config.chat.directory;
-    if (!logDir) {
-        if (!missingChatLogDirectoryWarned) {
-            missingChatLogDirectoryWarned = true;
-            if (process.env.NODE_ENV !== 'test') {
-                originalConsoleError('[Logging System] Chat file logging enabled but no directory configured');
-            }
-        }
-        return null;
-    }
-    return logDir;
+    return config.chat.directory || null;
 }
 
 function logProgram(message) {
@@ -298,7 +277,9 @@ class UnifiedLogger {
     }
     
     ensureLogDirectory() {
-        const logPath = this.config?.file?.directory;
+        const logPath = this.config && this.config.file
+            ? this.config.file.directory
+            : null;
         if (!logPath) {
             return;
         }
@@ -340,7 +321,6 @@ class UnifiedLogger {
         const config = this.config[destination];
         if (!config || !config.enabled) return false;
         if (destination === 'file' && !config.directory) {
-            warnMissingFileLogDirectory();
             return false;
         }
         

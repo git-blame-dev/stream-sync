@@ -91,7 +91,7 @@ describe('core/logging behavior', () => {
     it('logs chat messages to sanitized platform files', () => {
         const validatedConfig = {
             console: { enabled: false, level: 'error' },
-            file: { enabled: false, level: 'error' },
+            file: { enabled: true, level: 'error' },
             debug: { enabled: false },
             platforms: {},
             chat: { enabled: true, separateFiles: true, directory: '/tmp/chat-logs' }

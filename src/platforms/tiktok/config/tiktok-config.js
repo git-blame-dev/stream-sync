@@ -1,3 +1,5 @@
+const DEFAULT_LOG_DIRECTORY = './logs';
+
 function normalizeTikTokPlatformConfig(rawConfig = {}, configValidator) {
     const safeConfig = (rawConfig && typeof rawConfig === 'object') ? rawConfig : {};
     const trimToUndefined = (value) => (typeof value === 'string' && value.trim() ? value.trim() : undefined);
@@ -17,9 +19,7 @@ function normalizeTikTokPlatformConfig(rawConfig = {}, configValidator) {
         greetingsEnabled: configValidator.parseBoolean(safeConfig.greetingsEnabled, true),
         giftAggregationEnabled: configValidator.parseBoolean(safeConfig.giftAggregationEnabled, true),
         dataLoggingEnabled: configValidator.parseBoolean(safeConfig.dataLoggingEnabled, false),
-        dataLoggingPath: configValidator.parseString(safeConfig.dataLoggingPath, './logs'),
-        giftLoggingEnabled: configValidator.parseBoolean(safeConfig.giftLoggingEnabled, false),
-        giftLoggingPath: configValidator.parseString(safeConfig.giftLoggingPath, './logs')
+        dataLoggingPath: DEFAULT_LOG_DIRECTORY
     };
 }
 
