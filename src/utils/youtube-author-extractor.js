@@ -4,7 +4,11 @@ function extractAuthor(chatItem) {
         return null;
     }
 
-    const author = chatItem.item?.author;
+    if (!chatItem.item || typeof chatItem.item !== 'object') {
+        return null;
+    }
+
+    const author = chatItem.item.author;
     if (!author || typeof author !== 'object') {
         return null;
     }

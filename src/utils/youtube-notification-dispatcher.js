@@ -24,6 +24,10 @@ class YouTubeNotificationDispatcher {
             this.logger.warn(`Cannot build ${type} notification: invalid chatItem`);
             return null;
         }
+        if (!chatItem.item || typeof chatItem.item !== 'object') {
+            this.logger.warn(`Cannot build ${type} notification: missing chat item payload`);
+            return null;
+        }
 
         const author = options.author !== undefined ? options.author : extractAuthor(chatItem);
         if (!author) {
@@ -32,7 +36,7 @@ class YouTubeNotificationDispatcher {
         }
         const messageText = options.message !== undefined
             ? options.message
-            : extractMessageText(chatItem.item?.message);
+            : extractMessageText(chatItem.item.message);
         const notificationType = options.notificationType || type;
         const timestamp = this.extractTimestamp(chatItem);
         if (!timestamp) {
@@ -60,7 +64,11 @@ class YouTubeNotificationDispatcher {
     }
 
     buildMonetizedNotification(chatItem, type, options = {}) {
-        const purchaseAmount = chatItem.item?.purchase_amount;
+        if (!chatItem || typeof chatItem !== 'object' || !chatItem.item || typeof chatItem.item !== 'object') {
+            this.logger.warn(`Missing chat item payload for ${type} notification`);
+            return null;
+        }
+        const purchaseAmount = chatItem.item.purchase_amount;
 
         if (!purchaseAmount || typeof purchaseAmount !== 'string') {
             this.logger.warn(`Missing purchase_amount in ${type} notification`);
@@ -130,6 +138,13 @@ class YouTubeNotificationDispatcher {
         return this.dispatchToHandler(errorNotification, handler, handlerName);
     }
 
+    resolveHandler(handlers, handlerName) {
+        if (!handlers || typeof handlers !== 'object') {
+            return undefined;
+        }
+        return handlers[handlerName];
+    }
+
     extractStructuredText(field) {
         if (!field) {
             return '';
@@ -164,12 +179,14 @@ class YouTubeNotificationDispatcher {
                 }
             });
             if (!notification) {
-                return await this.dispatchErrorNotification(chatItem, 'platform:gift', handlers?.onGift, 'onGift', {
+                const giftHandler = this.resolveHandler(handlers, 'onGift');
+                return await this.dispatchErrorNotification(chatItem, 'platform:gift', giftHandler, 'onGift', {
                     giftType: 'Super Chat',
                     giftCount: 1
                 });
             }
-            return await this.dispatchToHandler(notification, handlers?.onGift, 'onGift');
+            const giftHandler = this.resolveHandler(handlers, 'onGift');
+            return await this.dispatchToHandler(notification, giftHandler, 'onGift');
 
         } catch (error) {
             this.errorHandler.handleEventProcessingError(
@@ -185,9 +202,17 @@ class YouTubeNotificationDispatcher {
 
     async dispatchSuperSticker(chatItem, handlers) {
         try {
-            const stickerDescription = chatItem.item?.sticker?.name ||
-                chatItem.item?.sticker?.altText ||
-                this.extractStructuredText(chatItem.item?.sticker?.label);
+            if (!chatItem || typeof chatItem !== 'object' || !chatItem.item || typeof chatItem.item !== 'object') {
+                this.logger.warn('Missing chat item payload for supersticker notification');
+                return await this.dispatchErrorNotification(chatItem, 'platform:gift', undefined, 'onGift', {
+                    giftType: 'Super Sticker',
+                    giftCount: 1
+                });
+            }
+            const sticker = chatItem.item.sticker;
+            const stickerDescription = sticker
+                ? (sticker.name || sticker.altText || this.extractStructuredText(sticker.label))
+                : '';
 
             const notification = this.buildMonetizedNotification(chatItem, 'platform:gift', {
                 message: stickerDescription || '',
@@ -201,12 +226,14 @@ class YouTubeNotificationDispatcher {
             });
 
             if (!notification) {
-                return await this.dispatchErrorNotification(chatItem, 'platform:gift', handlers?.onGift, 'onGift', {
+                const giftHandler = this.resolveHandler(handlers, 'onGift');
+                return await this.dispatchErrorNotification(chatItem, 'platform:gift', giftHandler, 'onGift', {
                     giftType: 'Super Sticker',
                     giftCount: 1
                 });
             }
-            return await this.dispatchToHandler(notification, handlers?.onGift, 'onGift');
+            const giftHandler = this.resolveHandler(handlers, 'onGift');
+            return await this.dispatchToHandler(notification, giftHandler, 'onGift');
         } catch (error) {
             this.errorHandler.handleEventProcessingError(
                 error,
@@ -221,11 +248,15 @@ class YouTubeNotificationDispatcher {
 
     async dispatchMembership(chatItem, handlers) {
         try {
-            const membershipLevel = this.extractStructuredText(chatItem.item?.headerPrimaryText);
-            const membershipMessage = this.extractStructuredText(chatItem.item?.headerSubtext) ||
-                extractMessageText(chatItem.item?.message);
+            if (!chatItem || typeof chatItem !== 'object' || !chatItem.item || typeof chatItem.item !== 'object') {
+                this.logger.warn('Missing chat item payload for membership notification');
+                return await this.dispatchErrorNotification(chatItem, 'platform:paypiggy', undefined, 'onMembership');
+            }
+            const membershipLevel = this.extractStructuredText(chatItem.item.headerPrimaryText);
+            const membershipMessage = this.extractStructuredText(chatItem.item.headerSubtext) ||
+                extractMessageText(chatItem.item.message);
 
-            const membershipMonths = chatItem.item?.memberMilestoneDurationInMonths;
+            const membershipMonths = chatItem.item.memberMilestoneDurationInMonths;
 
             const notification = this.buildBasicNotification(chatItem, 'platform:paypiggy', {
                 message: membershipMessage,
@@ -237,11 +268,13 @@ class YouTubeNotificationDispatcher {
 
             if (!notification) {
                 const resolvedMonths = Number.isFinite(Number(membershipMonths)) ? membershipMonths : undefined;
-                return await this.dispatchErrorNotification(chatItem, 'platform:paypiggy', handlers?.onMembership, 'onMembership', {
+                const membershipHandler = this.resolveHandler(handlers, 'onMembership');
+                return await this.dispatchErrorNotification(chatItem, 'platform:paypiggy', membershipHandler, 'onMembership', {
                     months: resolvedMonths
                 });
             }
-            return await this.dispatchToHandler(notification, handlers?.onMembership, 'onMembership');
+            const membershipHandler = this.resolveHandler(handlers, 'onMembership');
+            return await this.dispatchToHandler(notification, membershipHandler, 'onMembership');
         } catch (error) {
             this.errorHandler.handleEventProcessingError(
                 error,
@@ -256,12 +289,17 @@ class YouTubeNotificationDispatcher {
 
     async dispatchGiftMembership(chatItem, handlers) {
         try {
-            const giftCount = chatItem.item?.giftMembershipsCount;
+            if (!chatItem || typeof chatItem !== 'object' || !chatItem.item || typeof chatItem.item !== 'object') {
+                this.logger.warn('Missing chat item payload for gift membership notification');
+                return await this.dispatchErrorNotification(chatItem, 'platform:giftpaypiggy', undefined, 'onGiftPaypiggy');
+            }
+            const giftCount = chatItem.item.giftMembershipsCount;
             if (typeof giftCount !== 'number' || !Number.isFinite(giftCount)) {
                 this.logger.warn('Missing giftMembershipsCount in gift membership notification');
-                return await this.dispatchErrorNotification(chatItem, 'platform:giftpaypiggy', handlers?.onGiftPaypiggy, 'onGiftPaypiggy');
+                const giftHandler = this.resolveHandler(handlers, 'onGiftPaypiggy');
+                return await this.dispatchErrorNotification(chatItem, 'platform:giftpaypiggy', giftHandler, 'onGiftPaypiggy');
             }
-            const giftMessage = extractMessageText(chatItem.item?.message);
+            const giftMessage = extractMessageText(chatItem.item.message);
 
             const notification = this.buildBasicNotification(chatItem, 'platform:giftpaypiggy', {
                 message: giftMessage,
@@ -272,11 +310,13 @@ class YouTubeNotificationDispatcher {
 
             if (!notification) {
                 const resolvedGiftCount = Number.isFinite(Number(giftCount)) ? giftCount : undefined;
-                return await this.dispatchErrorNotification(chatItem, 'platform:giftpaypiggy', handlers?.onGiftPaypiggy, 'onGiftPaypiggy', {
+                const giftHandler = this.resolveHandler(handlers, 'onGiftPaypiggy');
+                return await this.dispatchErrorNotification(chatItem, 'platform:giftpaypiggy', giftHandler, 'onGiftPaypiggy', {
                     giftCount: resolvedGiftCount
                 });
             }
-            return await this.dispatchToHandler(notification, handlers?.onGiftPaypiggy, 'onGiftPaypiggy');
+            const giftHandler = this.resolveHandler(handlers, 'onGiftPaypiggy');
+            return await this.dispatchToHandler(notification, giftHandler, 'onGiftPaypiggy');
         } catch (error) {
             this.errorHandler.handleEventProcessingError(
                 error,
