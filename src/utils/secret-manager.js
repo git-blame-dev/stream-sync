@@ -198,8 +198,7 @@ const SECRET_DEFINITIONS = [
         configPath: ['twitch', 'clientId'],
         requiredWhen: (config) => boolFromConfig(config?.twitch?.enabled),
         promptText: 'Paste Twitch Client ID: ',
-        mask: (value) => maskValue(value, 6, 4),
-        allowConfigFallback: false
+        mask: (value) => maskValue(value, 6, 4)
     },
     {
         id: 'TWITCH_CLIENT_SECRET',
@@ -207,8 +206,7 @@ const SECRET_DEFINITIONS = [
         configPath: ['twitch', 'clientSecret'],
         requiredWhen: (config) => boolFromConfig(config?.twitch?.enabled),
         promptText: 'Paste Twitch Client Secret: ',
-        mask: (value) => maskValue(value, 6, 4),
-        allowConfigFallback: false
+        mask: (value) => maskValue(value, 6, 4)
     },
     {
         id: 'OBS_PASSWORD',
@@ -230,7 +228,15 @@ const SECRET_DEFINITIONS = [
         id: 'YOUTUBE_API_KEY',
         envKey: 'YOUTUBE_API_KEY',
         configPath: ['youtube', 'apiKey'],
-        requiredWhen: (config) => boolFromConfig(config?.youtube?.enableAPI),
+        requiredWhen: (config) => {
+            if (!boolFromConfig(config?.youtube?.enabled)) {
+                return false;
+            }
+            const enableApi = boolFromConfig(config?.youtube?.enableAPI);
+            const streamDetectionMethod = String(config?.youtube?.streamDetectionMethod || '').trim().toLowerCase();
+            const viewerCountMethod = String(config?.youtube?.viewerCountMethod || '').trim().toLowerCase();
+            return enableApi || streamDetectionMethod === 'api' || viewerCountMethod === 'api';
+        },
         promptText: 'Paste YouTube Data API key (optional unless API mode enabled): ',
         mask: (value) => maskValue(value, 6, 4),
         optional: true
@@ -298,7 +304,7 @@ async function ensureSecrets(options = {}) {
     };
 
     for (const secret of SECRET_DEFINITIONS) {
-        const { id, envKey, configPath, requiredWhen, promptText, mask, optional, allowConfigFallback = true } = secret;
+        const { id, envKey, configPath, requiredWhen, promptText, mask, optional } = secret;
         const section = configPath[0];
         const key = configPath[1];
         const enabledConfig = {
@@ -311,13 +317,12 @@ async function ensureSecrets(options = {}) {
 
         const isRequired = requiredWhen ? requiredWhen(enabledConfig) : !optional;
         const existingEnv = normalize(process.env[envKey] || envFileVars[envKey]);
-        const existingConfig = allowConfigFallback ? normalize(getConfigSection(section)?.[key]) : null;
-        let value = existingEnv || existingConfig || null;
+        let value = existingEnv || null;
 
         if (value) {
             setConfigValue(config, configManager, section, key, value);
             process.env[envKey] = value;
-            applied[id] = { source: existingEnv ? 'env' : 'config' };
+            applied[id] = { source: 'env' };
             safeLogger.debug?.(`Using ${id} (${mask ? mask(value) : maskValue(value)})`, 'secret-manager');
             continue;
         }
@@ -335,7 +340,7 @@ async function ensureSecrets(options = {}) {
             }
         }
 
-        if (isRequired && !optional) {
+        if (isRequired) {
             missingRequired.push(envKey);
         }
     }

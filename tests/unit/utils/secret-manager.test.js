@@ -307,6 +307,38 @@ describe('secret-manager', () => {
         }
     });
 
+    it('requires a YouTube API key when API methods are selected', async () => {
+        const { ensureSecrets } = require('../../../src/utils/secret-manager');
+
+        process.env.TIKTOK_API_KEY = 'env_tiktok_key';
+        process.env.TWITCH_CLIENT_ID = 'env_client_id';
+        process.env.TWITCH_CLIENT_SECRET = 'env_client_secret';
+        process.env.OBS_PASSWORD = 'env_obs_password';
+        process.env.STREAMELEMENTS_JWT_TOKEN = 'env_jwt_token';
+
+        const youtubeSection = configManager.getSection('youtube');
+        youtubeSection.enabled = true;
+        youtubeSection.enableAPI = false;
+        youtubeSection.streamDetectionMethod = 'api';
+        youtubeSection.viewerCountMethod = 'youtubei';
+
+        await expect(ensureSecrets({
+            configManager,
+            config: {
+                tiktok: configManager.getSection('tiktok'),
+                twitch: configManager.getSection('twitch'),
+                obs: configManager.getSection('obs'),
+                streamelements: configManager.getSection('streamelements'),
+                youtube: youtubeSection
+            },
+            logger,
+            interactive: false,
+            envFilePath,
+            envFileReadEnabled: false,
+            envFileWriteEnabled: false
+        })).rejects.toThrow(/missing required secrets/i);
+    });
+
     it('shows colon-terminated prompts for interactive clarity', async () => {
         const { ensureSecrets } = require('../../../src/utils/secret-manager');
 

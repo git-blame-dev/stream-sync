@@ -379,7 +379,7 @@ jwtToken = se-jwt-token`
         }
     });
 
-    it('throws error when YouTube API usage is enabled without apiKey', () => {
+    it('does not throw when YouTube API usage is enabled without apiKey', () => {
         const originalStderrWrite = process.stderr.write;
         process.stderr.write = () => {};
         try {
@@ -394,7 +394,7 @@ jwtToken = se-jwt-token`
             configManager.isLoaded = false;
             configManager.configPath = testConfigPath;
 
-            expect(() => configManager.load()).toThrow(/YouTube API key/);
+            expect(() => configManager.load()).not.toThrow();
         } finally {
             process.stderr.write = originalStderrWrite;
         }

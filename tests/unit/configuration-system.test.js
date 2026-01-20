@@ -134,10 +134,9 @@ describe('Configuration System Behavior Tests', () => {
 
             expect(youtubeEnabled).toBe(true);
             expect(youtubeUsername).toBe('TestChannel');
-            expect(youtubeApiKey).toBe('test-api-key');
+            expect(youtubeApiKey).toBe(process.env.YOUTUBE_API_KEY);
 
             expectNoTechnicalArtifacts(youtubeUsername);
-            expectNoTechnicalArtifacts(youtubeApiKey);
         });
 
         it('should prevent system startup when required sections are missing', () => {
@@ -243,7 +242,7 @@ userAgents = test-agent-1|test-agent-2
 
             expect(youtubeConfig.enabled).toBe(true);
             expect(youtubeConfig.username).toBe('TestChannel');
-            expect(youtubeConfig.apiKey).toBe('test-api-key');
+            expect(youtubeConfig.apiKey).toBe(process.env.YOUTUBE_API_KEY);
 
             expect(twitchConfig.enabled).toBe(false);
             expect(tiktokConfig.enabled).toBe(false);
@@ -457,7 +456,7 @@ userAgents = test-agent-1|test-agent-2
 
             expect(config.general.debugEnabled).toBe(false);
             expect(config.youtube.username).toBe('CLIChannel');
-            expect(config.obs.password).toBe('clipass');
+            expect(config.obs.password).toBe(process.env.OBS_PASSWORD);
         });
     });
 
@@ -584,9 +583,9 @@ followsEnabled = true
             expect(youtubeConfig.messagesEnabled).toBe(true);
             expect(youtubeConfig.giftsEnabled).toBe(false);
             expect(youtubeConfig.followsEnabled).toBe(true);
+            expect(youtubeConfig.apiKey).toBe(process.env.YOUTUBE_API_KEY);
 
             expectNoTechnicalArtifacts(youtubeConfig.username);
-            expectNoTechnicalArtifacts(youtubeConfig.apiKey);
         });
 
         it('should handle TTS configuration that affects speech behavior', () => {
