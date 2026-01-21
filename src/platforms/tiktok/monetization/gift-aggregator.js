@@ -1,10 +1,6 @@
 const { safeSetTimeout: defaultSafeSetTimeout } = require('../../../utils/timeout-validator');
 const { safeObjectStringify: defaultSafeObjectStringify } = require('../../../utils/logger-utils');
-const { resolveTikTokTimestampISO } = require('../../../utils/tiktok-timestamp');
-const {
-    formatCoinAmount: defaultFormatCoinAmount,
-    extractTikTokUserData: defaultExtractTikTokUserData
-} = require('../../../utils/tiktok-data-extraction');
+const { formatCoinAmount: defaultFormatCoinAmount } = require('../../../utils/tiktok-data-extraction');
 
 function createTikTokGiftAggregator(options = {}) {
     const {
@@ -12,7 +8,6 @@ function createTikTokGiftAggregator(options = {}) {
         safeSetTimeout = defaultSafeSetTimeout,
         clearTimeoutFn = clearTimeout,
         now = () => Date.now(),
-        extractTikTokUserData = defaultExtractTikTokUserData,
         formatCoinAmount = defaultFormatCoinAmount,
         safeObjectStringify = defaultSafeObjectStringify
     } = options;
@@ -20,6 +15,24 @@ function createTikTokGiftAggregator(options = {}) {
     if (!platform) {
         throw new Error('platform is required to create TikTok gift aggregator');
     }
+
+    const normalizeRequiredString = (value, label) => {
+        const normalized = typeof value === 'string'
+            ? value.trim()
+            : (typeof value === 'number' ? String(value).trim() : '');
+        if (!normalized) {
+            throw new Error(`TikTok gift aggregation requires ${label}`);
+        }
+        return normalized;
+    };
+
+    const normalizeRequiredPositive = (value, label) => {
+        const numeric = Number(value);
+        if (!Number.isFinite(numeric) || numeric <= 0) {
+            throw new Error(`TikTok gift aggregation requires ${label}`);
+        }
+        return numeric;
+    };
 
     const cleanupGiftAggregation = () => {
         for (const key in platform.giftAggregation) {
@@ -30,19 +43,22 @@ function createTikTokGiftAggregator(options = {}) {
         platform.giftAggregation = {};
     };
 
-    const handleStandardGift = async (identityKey, username, giftType, giftCount, unitAmount, currency, originalData) => {
-        const key = `${identityKey}-${giftType}`;
-        if (typeof currency !== 'string' || !currency.trim()) {
-            throw new Error('TikTok gift aggregation requires currency');
+    const handleStandardGift = async (gift) => {
+        if (!gift || typeof gift !== 'object') {
+            throw new Error('TikTok gift aggregation requires gift payload');
         }
-        if (!Number.isFinite(Number(giftCount)) || giftCount <= 0) {
-            throw new Error('TikTok gift aggregation requires giftCount');
-        }
-        if (!Number.isFinite(Number(unitAmount))) {
-            throw new Error('TikTok gift aggregation requires unitAmount');
-        }
+
+        const userId = normalizeRequiredString(gift.userId, 'userId');
+        const username = normalizeRequiredString(gift.username, 'username');
+        const giftType = normalizeRequiredString(gift.giftType, 'giftType');
+        const giftCount = normalizeRequiredPositive(gift.giftCount, 'giftCount');
+        const unitAmount = normalizeRequiredPositive(gift.unitAmount, 'unitAmount');
+        const currency = normalizeRequiredString(gift.currency, 'currency');
+        const giftId = normalizeRequiredString(gift.id, 'msgId');
+        const timestamp = normalizeRequiredString(gift.timestamp, 'timestamp');
         const resolvedCurrency = currency.trim();
 
+        const key = `${userId}-${giftType}`;
         const existingAggregation = platform.giftAggregation[key];
         if (existingAggregation) {
             platform.logger.debug(
@@ -55,11 +71,19 @@ function createTikTokGiftAggregator(options = {}) {
 
         if (!platform.giftAggregation[key]) {
             platform.giftAggregation[key] = {
+                platform: gift.platform || 'tiktok',
+                userId,
                 username,
+                giftType,
+                currency: resolvedCurrency,
                 totalCount: 0,
                 timer: null,
                 lastProcessed: nowMs,
-                unitAmount
+                unitAmount,
+                lastGift: gift,
+                lastId: giftId,
+                lastTimestamp: timestamp,
+                sourceType: typeof gift.sourceType === 'string' ? gift.sourceType : undefined
             };
         }
 
@@ -77,6 +101,10 @@ function createTikTokGiftAggregator(options = {}) {
         platform.giftAggregation[key].totalCount = giftCount;
         platform.giftAggregation[key].lastProcessed = nowMs;
         platform.giftAggregation[key].unitAmount = unitAmount;
+        platform.giftAggregation[key].lastGift = gift;
+        platform.giftAggregation[key].lastId = giftId;
+        platform.giftAggregation[key].lastTimestamp = timestamp;
+        platform.giftAggregation[key].sourceType = typeof gift.sourceType === 'string' ? gift.sourceType : undefined;
 
         platform.logger.debug(
             `[TikTok Gift] Updated standard gift aggregation for ${key}: totalCount=${giftCount}, unitAmount=${unitAmount}`,
@@ -122,33 +150,16 @@ function createTikTokGiftAggregator(options = {}) {
 
                 platform.logger.info(`[Gift] ${giftMessage}`, 'tiktok');
 
-                const sanitizedOriginalData = originalData && typeof originalData === 'object'
-                    ? { ...originalData }
-                    : originalData;
-                if (sanitizedOriginalData && typeof sanitizedOriginalData === 'object') {
-                    delete sanitizedOriginalData.displayName;
-                    delete sanitizedOriginalData.userId;
-                    delete sanitizedOriginalData.uniqueId;
-                    delete sanitizedOriginalData.nickname;
-                }
-                const extractedIdentity = extractTikTokUserData(sanitizedOriginalData);
-                if (sanitizedOriginalData && typeof sanitizedOriginalData === 'object' && !sanitizedOriginalData.user) {
-                    sanitizedOriginalData.user = {
-                        userId: extractedIdentity.userId,
-                        uniqueId: finalUsername
-                    };
-                }
-
                 const enhancedGiftData = {
                     username: finalUsername,
-                    userId: extractedIdentity.userId,
+                    userId: aggregationData.userId,
                     giftType,
                     giftCount: aggregatedCount,
                     amount: totalAmount,
                     currency: resolvedCurrency,
                     isAggregated: true,
                     isStreakCompleted: false,
-                    originalData: sanitizedOriginalData
+                    originalData: aggregationData.lastGift?.rawData
                 };
 
                 if (!enhancedGiftData.giftType || !enhancedGiftData.giftCount || enhancedGiftData.giftCount <= 0) {
@@ -163,22 +174,25 @@ function createTikTokGiftAggregator(options = {}) {
                 }
 
                 const giftPayload = {
-                    ...(sanitizedOriginalData || {}),
-                    user: sanitizedOriginalData?.user,
-                    repeatCount: aggregatedCount,
-                    giftDetails: sanitizedOriginalData?.giftDetails || {
-                        giftName: giftType,
-                        diamondCount: Number.isFinite(Number(storedUnitAmount)) ? Number(storedUnitAmount) : 0
-                    },
-                    unitAmount: storedUnitAmount,
-                    aggregatedCount,
+                    platform: aggregationData.platform,
+                    userId: aggregationData.userId,
+                    username: finalUsername,
                     giftType,
                     giftCount: aggregatedCount,
+                    repeatCount: aggregatedCount,
+                    unitAmount: storedUnitAmount,
                     amount: totalAmount,
                     currency: resolvedCurrency,
-                    timestamp: resolveTikTokTimestampISO(sanitizedOriginalData),
+                    id: aggregationData.lastId,
+                    timestamp: aggregationData.lastTimestamp,
+                    isAggregated: true,
+                    aggregatedCount,
                     enhancedGiftData
                 };
+
+                if (aggregationData.sourceType) {
+                    giftPayload.sourceType = aggregationData.sourceType;
+                }
 
                 try {
                     await platform._handleGift(giftPayload);
@@ -200,7 +214,7 @@ function createTikTokGiftAggregator(options = {}) {
                 platform.errorHandler.handleEventProcessingError(
                     error,
                     'gift-aggregation',
-                    { key, originalData },
+                    { key, gift },
                     'Error in gift aggregation timer'
                 );
                 delete platform.giftAggregation[key];

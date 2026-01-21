@@ -1,10 +1,10 @@
 const { describe, test, expect, it, afterEach } = require('bun:test');
-const { createMockFn, restoreAllMocks } = require('../../../helpers/bun-mock-utils');
-const { unmockModule, restoreAllModuleMocks } = require('../../../helpers/bun-module-mocks');
+const { createMockFn, restoreAllMocks } = require('../../../../helpers/bun-mock-utils');
+const { unmockModule, restoreAllModuleMocks } = require('../../../../helpers/bun-module-mocks');
 
-unmockModule('../../../../src/platforms/tiktok');
-const { TikTokPlatform } = require('../../../../src/platforms/tiktok');
-const { createMockTikTokPlatformDependencies } = require('../../../helpers/mock-factories');
+unmockModule('../../../../../src/platforms/tiktok');
+const { TikTokPlatform } = require('../../../../../src/platforms/tiktok');
+const { createMockTikTokPlatformDependencies } = require('../../../../helpers/mock-factories');
 
 describe('TikTokPlatform event emissions', () => {
     afterEach(() => {

@@ -1,9 +1,9 @@
 const { describe, test, expect } = require('bun:test');
-const { createMockFn } = require('../../../helpers/bun-mock-utils');
-const { noOpLogger } = require('../../../helpers/mock-factories');
+const { createMockFn } = require('../../../../helpers/bun-mock-utils');
+const { noOpLogger } = require('../../../../helpers/mock-factories');
 const {
     createTikTokConnectionOrchestrator
-} = require('../../../../src/platforms/tiktok/connection/tiktok-connection-orchestrator');
+} = require('../../../../../src/platforms/tiktok/connections/tiktok-connection-orchestrator');
 
 describe('TikTok connection orchestrator', () => {
     test('connect is a no-op when connection prerequisites fail', async () => {
@@ -40,4 +40,3 @@ describe('TikTok connection orchestrator', () => {
         expect(platform.connectingPromise).toBeNull();
     });
 });
-

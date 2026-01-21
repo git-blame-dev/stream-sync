@@ -1,8 +1,8 @@
 const { describe, it, expect, beforeEach, afterEach } = require('bun:test');
-const { createMockFn, restoreAllMocks } = require('../../helpers/bun-mock-utils');
-const { noOpLogger } = require('../../helpers/mock-factories');
+const { createMockFn, restoreAllMocks } = require('../../../../helpers/bun-mock-utils');
+const { noOpLogger } = require('../../../../helpers/mock-factories');
 
-const { TikTokPlatform } = require('../../../src/platforms/tiktok');
+const { TikTokPlatform } = require('../../../../../src/platforms/tiktok');
 
 describe('TikTok gift processing', () => {
     let originalNodeEnv;
@@ -15,6 +15,21 @@ describe('TikTok gift processing', () => {
     afterEach(() => {
         process.env.NODE_ENV = originalNodeEnv;
         restoreAllMocks();
+    });
+
+    const buildGift = (overrides = {}) => ({
+        platform: 'tiktok',
+        userId: 'testTikTokUser1',
+        username: 'testUser1',
+        giftType: 'Rose',
+        giftCount: 2,
+        repeatCount: 2,
+        unitAmount: 1,
+        amount: 2,
+        currency: 'coins',
+        id: 'gift-msg-1',
+        timestamp: '2025-01-02T03:04:05.000Z',
+        ...overrides
     });
 
     const createPlatform = (options = {}) => {
@@ -46,17 +61,17 @@ describe('TikTok gift processing', () => {
         platform.errorHandler = errorHandler;
 
         await expect(platform.giftAggregator.handleStandardGift(
-            'testUser1',
-            'TestUser One',
-            'Rose',
-            2,
-            1,
-            'coins',
-            {
-                user: { userId: 'testTikTokUser1', uniqueId: 'testUser1' },
+            buildGift({
+                userId: 'testTikTokUser1',
+                username: 'testUser1',
+                giftType: 'Rose',
+                giftCount: 2,
                 repeatCount: 2,
-                giftDetails: { giftName: 'Rose', diamondCount: 1 }
-            }
+                unitAmount: 1,
+                amount: 2,
+                currency: 'coins',
+                id: 'gift-msg-1'
+            })
         )).resolves.toBeUndefined();
     });
 
@@ -66,17 +81,17 @@ describe('TikTok gift processing', () => {
         platform.errorHandler = errorHandler;
 
         await expect(platform.giftAggregator.handleStandardGift(
-            'testUser2',
-            'TestUser Two',
-            'Sunglasses',
-            5,
-            10,
-            'coins',
-            {
-                user: { userId: 'testTikTokUser2', uniqueId: 'testUser2' },
+            buildGift({
+                userId: 'testTikTokUser2',
+                username: 'testUser2',
+                giftType: 'Sunglasses',
+                giftCount: 5,
                 repeatCount: 5,
-                giftDetails: { giftName: 'Sunglasses', diamondCount: 10 }
-            }
+                unitAmount: 10,
+                amount: 50,
+                currency: 'coins',
+                id: 'gift-msg-2'
+            })
         )).resolves.toBeUndefined();
     });
 
@@ -85,18 +100,16 @@ describe('TikTok gift processing', () => {
         const errorHandler = { handleEventProcessingError: createMockFn() };
         platform.errorHandler = errorHandler;
 
-        await expect(platform.handleStandardGift(
-            'testUser3',
-            'TestUser Three',
-            'Diamond',
-            1,
-            100,
-            'diamonds',
-            {
-                user: { userId: 'testTikTokUser3', uniqueId: 'testUser3' },
-                repeatCount: 1,
-                giftDetails: { giftName: 'Diamond', diamondCount: 100 }
-            }
-        )).resolves.toBeUndefined();
+        await expect(platform.handleStandardGift(buildGift({
+            userId: 'testTikTokUser3',
+            username: 'testUser3',
+            giftType: 'Diamond',
+            giftCount: 1,
+            repeatCount: 1,
+            unitAmount: 100,
+            amount: 100,
+            currency: 'diamonds',
+            id: 'gift-msg-3'
+        }))).resolves.toBeUndefined();
     });
 });

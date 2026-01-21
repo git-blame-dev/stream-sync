@@ -1,9 +1,9 @@
 const { describe, it, expect, afterEach } = require('bun:test');
-const { createMockFn, restoreAllMocks } = require('../../helpers/bun-mock-utils');
-const { noOpLogger } = require('../../helpers/mock-factories');
+const { createMockFn, restoreAllMocks } = require('../../../../helpers/bun-mock-utils');
+const { noOpLogger } = require('../../../../helpers/mock-factories');
 
-const { TikTokPlatform } = require('../../../src/platforms/tiktok');
-const { PlatformEvents } = require('../../../src/interfaces/PlatformEvents');
+const { TikTokPlatform } = require('../../../../../src/platforms/tiktok');
+const { PlatformEvents } = require('../../../../../src/interfaces/PlatformEvents');
 
 const createPlatform = (configOverrides = {}, dependencyOverrides = {}) => {
     const logger = dependencyOverrides.logger || noOpLogger;
@@ -111,6 +111,34 @@ describe('TikTokPlatform behavior alignment', () => {
             expect(routedGifts[0]).not.toHaveProperty('amount');
             expect(routedGifts[0]).not.toHaveProperty('currency');
         });
+
+        it('emits a user-facing error when gift normalization fails', async () => {
+            const platform = createPlatform();
+            const routedGifts = [];
+            platform.handlers = {
+                ...platform.handlers,
+                onGift: (data) => routedGifts.push(data)
+            };
+
+            await expect(
+                platform.handleTikTokGift({
+                    repeatCount: 1,
+                    giftDetails: { giftName: 'Rose', diamondCount: 1, giftType: 0 },
+                    msgId: 'gift-missing-user',
+                    createTime: 1_700_000_000
+                })
+            ).resolves.toBeUndefined();
+
+            expect(routedGifts).toHaveLength(1);
+            expect(routedGifts[0]).toMatchObject({
+                platform: 'tiktok',
+                isError: true,
+                id: 'gift-missing-user',
+                type: 'gift',
+                eventType: 'gift'
+            });
+            expect(routedGifts[0].timestamp).toEqual(expect.any(String));
+        });
     });
 
     describe('connection lifecycle events', () => {
@@ -178,17 +206,19 @@ describe('TikTokPlatform behavior alignment', () => {
             });
 
             await platform._handleGift({
+                platform: 'tiktok',
+                userId: 'alice-id',
+                username: 'alice',
                 giftType: 'Rose',
                 giftCount: 3,
+                repeatCount: 3,
                 amount: 3,
                 currency: 'coins',
                 unitAmount: 1,
+                id: 'gift-agg-1',
                 timestamp: new Date().toISOString(),
-                msgId: 'gift-agg-1',
-                repeatCount: 3,
                 aggregatedCount: 3,
-                giftDetails: { giftName: 'Rose', diamondCount: 1, giftType: 0 },
-                user: { userId: 'alice-id', uniqueId: 'alice' },
+                isAggregated: true,
                 enhancedGiftData: {
                     giftType: 'Rose',
                     giftCount: 3,

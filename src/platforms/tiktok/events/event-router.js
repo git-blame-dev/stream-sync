@@ -1,4 +1,5 @@
-const { normalizeTikTokMessage, validateNormalizedMessage } = require('../../../utils/message-normalization');
+const { validateNormalizedMessage } = require('../../../utils/message-normalization');
+const { normalizeTikTokChatEvent } = require('./event-normalizer');
 const { PlatformEvents } = require('../../../interfaces/PlatformEvents');
 
 function cleanupTikTokEventListeners(platform) {
@@ -113,7 +114,10 @@ function setupTikTokEventListeners(platform) {
                 return;
             }
 
-            const normalizedData = normalizeTikTokMessage(data, platform.platformName, platform.timestampService);
+            const normalizedData = normalizeTikTokChatEvent(data, {
+                platformName: platform.platformName,
+                timestampService: platform.timestampService
+            });
             const validation = validateNormalizedMessage(normalizedData);
 
             if (!validation.isValid) {

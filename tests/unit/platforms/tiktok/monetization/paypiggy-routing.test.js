@@ -1,13 +1,13 @@
 const { describe, test, expect, afterEach } = require('bun:test');
-const { createMockFn, restoreAllMocks } = require('../../../helpers/bun-mock-utils');
-const { unmockModule, restoreAllModuleMocks, resetModules } = require('../../../helpers/bun-module-mocks');
+const { createMockFn, restoreAllMocks } = require('../../../../helpers/bun-mock-utils');
+const { unmockModule, restoreAllModuleMocks, resetModules } = require('../../../../helpers/bun-module-mocks');
 
-unmockModule('../../../../src/platforms/tiktok');
+unmockModule('../../../../../src/platforms/tiktok');
 
-const { PlatformEvents } = require('../../../../src/interfaces/PlatformEvents');
-const { TikTokPlatform } = require('../../../../src/platforms/tiktok');
-const { createMockTikTokPlatformDependencies } = require('../../../helpers/mock-factories');
-const testClock = require('../../../helpers/test-clock');
+const { PlatformEvents } = require('../../../../../src/interfaces/PlatformEvents');
+const { TikTokPlatform } = require('../../../../../src/platforms/tiktok');
+const { createMockTikTokPlatformDependencies } = require('../../../../helpers/mock-factories');
+const testClock = require('../../../../helpers/test-clock');
 
 describe('TikTok paypiggy routing', () => {
     afterEach(() => {
