@@ -1,9 +1,9 @@
 const { describe, test, expect } = require('bun:test');
-const { createMockFn } = require('../../../helpers/bun-mock-utils');
-const { noOpLogger } = require('../../../helpers/mock-factories');
+const { createMockFn } = require('../../../../helpers/bun-mock-utils');
+const { noOpLogger } = require('../../../../helpers/mock-factories');
 const { EventEmitter } = require('events');
 
-const { createTwitchEventSubWsLifecycle } = require('../../../../src/platforms/twitch/eventsub/ws-lifecycle');
+const { createTwitchEventSubWsLifecycle } = require('../../../../../src/platforms/twitch/connections/ws-lifecycle');
 
 class MockWebSocket extends EventEmitter {
     constructor(url) {

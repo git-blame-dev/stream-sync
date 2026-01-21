@@ -1,6 +1,6 @@
 const { describe, test, expect } = require('bun:test');
-const { createTwitchEventFactory } = require('../../../../src/platforms/twitch/events/twitch-event-factory');
-const { PlatformEvents } = require('../../../../src/interfaces/PlatformEvents');
+const { createTwitchEventFactory } = require('../../../../../src/platforms/twitch/events/event-factory');
+const { PlatformEvents } = require('../../../../../src/interfaces/PlatformEvents');
 
 describe('Twitch event factory', () => {
     const fixedNow = '2025-01-01T00:00:00.000Z';

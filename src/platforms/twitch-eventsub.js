@@ -4,10 +4,10 @@ const { EventEmitter } = require('events');
 const { createPlatformErrorHandler } = require('../utils/platform-error-handler');
 const { ConfigValidatorStatic } = require('../utils/config-validator');
 const { extractHttpErrorDetails } = require('../utils/http-error-utils');
-const { createTwitchEventSubSubscriptions } = require('./twitch/eventsub/subscriptions');
-const { createTwitchEventSubEventRouter } = require('./twitch/eventsub/event-router');
-const { createTwitchEventSubSubscriptionManager } = require('./twitch/eventsub/subscription-manager');
-const { createTwitchEventSubWsLifecycle } = require('./twitch/eventsub/ws-lifecycle');
+const { createTwitchEventSubSubscriptions } = require('./twitch/connections/eventsub-subscriptions');
+const { createTwitchEventSubEventRouter } = require('./twitch/events/event-router');
+const { createTwitchEventSubSubscriptionManager } = require('./twitch/connections/eventsub-subscription-manager');
+const { createTwitchEventSubWsLifecycle } = require('./twitch/connections/ws-lifecycle');
 const { validateLoggerInterface } = require('../utils/dependency-validator');
 
 const DEFAULT_LOG_DIRECTORY = './logs';

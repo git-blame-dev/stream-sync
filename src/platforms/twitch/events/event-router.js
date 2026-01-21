@@ -1,7 +1,11 @@
 const { extractTwitchMessageData } = require('../../../utils/message-normalization');
-const { PlatformEvents } = require('../../../interfaces/PlatformEvents');
 const { validateLoggerInterface } = require('../../../utils/dependency-validator');
 const { createPlatformErrorHandler } = require('../../../utils/platform-error-handler');
+const {
+    applyTimestampFallback,
+    normalizeMonths,
+    normalizeUserIdentity
+} = require('./event-normalizer');
 
 function createTwitchEventSubEventRouter(options = {}) {
     const {
@@ -32,10 +36,6 @@ function createTwitchEventSubEventRouter(options = {}) {
         Promise.resolve(safeLogRaw(eventType, event)).catch((err) => {
             safeLogError(`${failureMessagePrefix}: ${err.message}`, err, failureStage);
         });
-    };
-    const normalizeMonths = (value) => {
-        const numericValue = Number(value);
-        return Number.isFinite(numericValue) && numericValue > 0 ? numericValue : undefined;
     };
 
     const handleChatMessageEvent = (event) => {
@@ -93,9 +93,9 @@ function createTwitchEventSubEventRouter(options = {}) {
             return;
         }
 
+        const identity = normalizeUserIdentity(event.user_name, event.user_id);
         safeEmit('follow', {
-            username: event.user_name,
-            userId: event.user_id,
+            ...identity,
             timestamp: event.followed_at
         });
     };
@@ -121,10 +121,10 @@ function createTwitchEventSubEventRouter(options = {}) {
         }
 
         const months = normalizeMonths(event.cumulative_months);
+        const identity = normalizeUserIdentity(event.user_name, event.user_id);
         const payload = {
             type: 'paypiggy',
-            username: event.user_name,
-            userId: event.user_id,
+            ...identity,
             tier: event.tier,
             timestamp: event.timestamp
         };
@@ -147,10 +147,10 @@ function createTwitchEventSubEventRouter(options = {}) {
             return;
         }
 
+        const identity = normalizeUserIdentity(event.from_broadcaster_user_name, event.from_broadcaster_user_id);
         safeEmit('raid', {
             platform: 'twitch',
-            username: event.from_broadcaster_user_name,
-            userId: event.from_broadcaster_user_id,
+            ...identity,
             viewerCount: event.viewers,
             timestamp: event.timestamp
         });
@@ -187,10 +187,10 @@ function createTwitchEventSubEventRouter(options = {}) {
 
         const giftType = resolveBitsGiftType(messageData.cheermoteInfo);
 
+        const identity = normalizeUserIdentity(event.user_name, event.user_id);
         safeEmit('gift', {
             platform: 'twitch',
-            username: event.user_name,
-            userId: event.user_id,
+            ...identity,
             bits: event.bits,
             giftType,
             giftCount: 1,
@@ -217,9 +217,9 @@ function createTwitchEventSubEventRouter(options = {}) {
             return;
         }
 
+        const identity = normalizeUserIdentity(event.user_name, event.user_id);
         safeEmit('paypiggyGift', {
-            username: event.user_name,
-            userId: event.user_id,
+            ...identity,
             tier: event.tier,
             giftCount: event.total,
             timestamp: event.timestamp,
@@ -246,10 +246,10 @@ function createTwitchEventSubEventRouter(options = {}) {
         }
 
         const months = normalizeMonths(event.cumulative_months);
+        const identity = normalizeUserIdentity(event.user_name, event.user_id);
         const payload = {
             type: 'paypiggy',
-            username: event.user_name,
-            userId: event.user_id,
+            ...identity,
             tier: event.tier,
             message: typeof event.message?.text === 'string' ? event.message.text : undefined,
             timestamp: event.timestamp
@@ -259,30 +259,6 @@ function createTwitchEventSubEventRouter(options = {}) {
         }
 
         safeEmit('paypiggyMessage', payload);
-    };
-
-    const resolveNotificationTimestamp = (event, metadata, subscriptionType) => {
-        if (!event || typeof event !== 'object') {
-            return metadata?.message_timestamp;
-        }
-
-        if (subscriptionType === 'stream.online') {
-            return event.started_at || event.timestamp || metadata?.message_timestamp;
-        }
-
-        if (subscriptionType === 'stream.offline') {
-            return event.ended_at || event.timestamp || metadata?.message_timestamp;
-        }
-
-        return event.timestamp || metadata?.message_timestamp;
-    };
-
-    const applyTimestampFallback = (event, metadata, subscriptionType) => {
-        const resolvedTimestamp = resolveNotificationTimestamp(event, metadata, subscriptionType);
-        if (!resolvedTimestamp || (event && event.timestamp)) {
-            return event;
-        }
-        return { ...event, timestamp: resolvedTimestamp };
     };
 
     const handleStreamOnlineEvent = (event) => {

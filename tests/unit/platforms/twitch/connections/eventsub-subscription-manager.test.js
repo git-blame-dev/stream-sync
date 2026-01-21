@@ -1,7 +1,7 @@
 const { describe, test, expect } = require('bun:test');
-const { createMockFn } = require('../../../helpers/bun-mock-utils');
-const { noOpLogger } = require('../../../helpers/mock-factories');
-const { createTwitchEventSubSubscriptionManager } = require('../../../../src/platforms/twitch/eventsub/subscription-manager');
+const { createMockFn } = require('../../../../helpers/bun-mock-utils');
+const { noOpLogger } = require('../../../../helpers/mock-factories');
+const { createTwitchEventSubSubscriptionManager } = require('../../../../../src/platforms/twitch/connections/eventsub-subscription-manager');
 
 const createAuthManager = (overrides = {}) => ({
     authState: { executeWhenReady: async (fn) => fn() },

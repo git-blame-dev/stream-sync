@@ -1,5 +1,5 @@
 const { describe, test, expect } = require('bun:test');
-const { createTwitchEventSubSubscriptions } = require('../../../../src/platforms/twitch/eventsub/subscriptions');
+const { createTwitchEventSubSubscriptions } = require('../../../../../src/platforms/twitch/connections/eventsub-subscriptions');
 
 describe('Twitch EventSub subscriptions', () => {
     test('builds subscription definitions with correct conditions and handlers', () => {
