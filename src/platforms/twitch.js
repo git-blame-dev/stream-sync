@@ -14,8 +14,8 @@ const {
     normalizeTwitchPlatformConfig,
     validateTwitchPlatformConfig
 } = require('./twitch/config/twitch-config');
-const { createTwitchEventFactory } = require('./twitch/events/twitch-event-factory');
-const { createTwitchEventSubWiring } = require('./twitch/eventsub/wiring');
+const { createTwitchEventFactory } = require('./twitch/events/event-factory');
+const { createTwitchEventSubWiring } = require('./twitch/connections/wiring');
 
 class TwitchPlatform extends EventEmitter {
     constructor(config, dependencies = {}) {

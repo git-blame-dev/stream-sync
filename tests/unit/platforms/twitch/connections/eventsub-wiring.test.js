@@ -1,6 +1,6 @@
 const { describe, test, expect } = require('bun:test');
-const { noOpLogger } = require('../../../helpers/mock-factories');
-const { createTwitchEventSubWiring } = require('../../../../src/platforms/twitch/eventsub/wiring');
+const { noOpLogger } = require('../../../../helpers/mock-factories');
+const { createTwitchEventSubWiring } = require('../../../../../src/platforms/twitch/connections/wiring');
 
 describe('Twitch EventSub wiring', () => {
     const createEventSub = ({ useOff = true } = {}) => {
@@ -70,4 +70,3 @@ describe('Twitch EventSub wiring', () => {
         expect(eventSubListeners).toEqual([]);
     });
 });
-
