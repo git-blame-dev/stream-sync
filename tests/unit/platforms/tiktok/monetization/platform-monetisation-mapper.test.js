@@ -1,11 +1,12 @@
 const { describe, it, expect, beforeEach, afterEach } = require('bun:test');
-const { mockModule, restoreAllModuleMocks, resetModules } = require('../../helpers/bun-module-mocks');
-const { restoreAllMocks } = require('../../helpers/bun-mock-utils');
-const { noOpLogger } = require('../../helpers/mock-factories');
+const { mockModule, restoreAllModuleMocks, resetModules } = require('../../../../helpers/bun-module-mocks');
+const { restoreAllMocks } = require('../../../../helpers/bun-mock-utils');
+const { noOpLogger } = require('../../../../helpers/mock-factories');
 
 const EventEmitter = require('events');
-const { TikTokPlatform } = require('../../../src/platforms/tiktok');
-const { PlatformEvents } = require('../../../src/interfaces/PlatformEvents');
+const { TikTokPlatform } = require('../../../../../src/platforms/tiktok');
+const { PlatformEvents } = require('../../../../../src/interfaces/PlatformEvents');
+const { createTikTokEventFactory } = require('../../../../../src/platforms/tiktok/events/event-factory');
 
 describe('TikTokPlatform monetisation mapping', () => {
     let platform;
@@ -35,36 +36,13 @@ describe('TikTokPlatform monetisation mapping', () => {
             }
         );
 
-        if (!platform.eventFactory) {
-            platform.eventFactory = {
-                createSubscription: (data = {}) => ({
-                    platform: 'tiktok',
-                    type: PlatformEvents.PAYPIGGY,
-                    username: data.user?.uniqueId,
-                    userId: data.user?.userId,
-                    tier: data.tier,
-                    months: data.months,
-                    message: typeof data.message === 'string' ? data.message : undefined
-                }),
-                createSuperfan: (data = {}) => ({
-                    platform: 'tiktok',
-                    type: PlatformEvents.PAYPIGGY,
-                    tier: 'superfan',
-                    username: data.user?.uniqueId,
-                    userId: data.user?.userId
-                }),
-                createGift: (data = {}) => ({
-                    platform: 'tiktok',
-                    type: PlatformEvents.GIFT,
-                    giftType: data.giftType || data.giftDetails?.giftName || 'gift',
-                    giftCount: data.repeatCount,
-                    amount: (data.giftDetails?.diamondCount ?? data.coinValue ?? 0) * (data.repeatCount ?? 0),
-                    currency: 'coins',
-                    username: data.user?.uniqueId,
-                    userId: data.user?.userId
-                })
-            };
-        }
+        platform.eventFactory = createTikTokEventFactory({
+            platformName: 'tiktok',
+            getTimestamp: (data) => data.timestamp || '2024-01-01T00:00:00Z',
+            normalizeUserData: (data) => platform._normalizeUserData(data),
+            getPlatformMessageId: (data) => platform._getPlatformMessageId(data),
+            buildEventMetadata: (metadata) => platform._buildEventMetadata(metadata)
+        });
 
         platform.emit = (evt, payload) => emitted.push({ evt, payload });
     });
@@ -74,7 +52,8 @@ describe('TikTokPlatform monetisation mapping', () => {
             user: { userId: 'u1', uniqueId: 'memberuser' },
             message: 'Thanks for the support!',
             tier: 'basic',
-            months: 1
+            months: 1,
+            timestamp: '2024-01-01T00:00:00Z'
         });
 
         platform.emit('platform:event', handler);
@@ -90,7 +69,8 @@ describe('TikTokPlatform monetisation mapping', () => {
 
     it('emits superfan paypiggy with superfan tier', () => {
         const handler = platform.eventFactory.createSuperfan({
-            user: { userId: 'sf1', uniqueId: 'superfanuser' }
+            user: { userId: 'sf1', uniqueId: 'superfanuser' },
+            timestamp: '2024-01-01T00:00:00Z'
         });
 
         platform.emit('platform:event', handler);
@@ -102,7 +82,8 @@ describe('TikTokPlatform monetisation mapping', () => {
 
     it('does not default tier, months, or message when missing', () => {
         const handler = platform.eventFactory.createSubscription({
-            user: { userId: 'u2', uniqueId: 'plainmember' }
+            user: { userId: 'u2', uniqueId: 'plainmember' },
+            timestamp: '2024-01-01T00:00:00Z'
         });
 
         platform.emit('platform:event', handler);
@@ -118,8 +99,9 @@ describe('TikTokPlatform monetisation mapping', () => {
 
     it('emits gift with coin normalization', () => {
         const handler = platform.eventFactory.createGift({
-            user: { userId: 'g1', uniqueId: 'giftuser' },
-            giftDetails: { giftName: 'Rose', diamondCount: 250, giftType: 0 },
+            platform: 'tiktok',
+            userId: 'g1',
+            username: 'giftuser',
             giftType: 'Rose',
             giftCount: 2,
             amount: 500,
@@ -127,7 +109,7 @@ describe('TikTokPlatform monetisation mapping', () => {
             unitAmount: 250,
             repeatCount: 2,
             timestamp: '2024-01-01T00:00:00Z',
-            msgId: 'gift-msg-1'
+            id: 'gift-msg-1'
         });
 
         platform.emit('platform:event', handler);

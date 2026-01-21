@@ -1,11 +1,11 @@
 const { describe, it, expect, beforeEach, afterEach } = require('bun:test');
-const { createMockFn, restoreAllMocks } = require('../../helpers/bun-mock-utils');
-const { noOpLogger } = require('../../helpers/mock-factories');
+const { createMockFn, restoreAllMocks } = require('../../../../helpers/bun-mock-utils');
+const { noOpLogger } = require('../../../../helpers/mock-factories');
 
-const PlatformEventRouter = require('../../../src/services/PlatformEventRouter');
-const { PlatformEvents } = require('../../../src/interfaces/PlatformEvents');
-const { TikTokPlatform } = require('../../../src/platforms/tiktok');
-const testClock = require('../../helpers/test-clock');
+const PlatformEventRouter = require('../../../../../src/services/PlatformEventRouter');
+const { PlatformEvents } = require('../../../../../src/interfaces/PlatformEvents');
+const { TikTokPlatform } = require('../../../../../src/platforms/tiktok');
+const testClock = require('../../../../helpers/test-clock');
 
 describe('TikTokPlatform unified event contract (expected behavior)', () => {
     let platform;
@@ -121,20 +121,17 @@ describe('TikTokPlatform unified event contract (expected behavior)', () => {
     it('routes gift events through platform:event to PlatformEventRouter', async () => {
         const timestamp = new Date(testClock.now()).toISOString();
         await platform._handleGift({
-            user: {
-                userId: 'tt-gift-1',
-                uniqueId: 'gifter',
-                nickname: 'Gifter'
-            },
+            platform: 'tiktok',
+            userId: 'tt-gift-1',
+            username: 'gifter',
             giftType: 'Rose',
             giftCount: 2,
+            repeatCount: 2,
             amount: 20,
             currency: 'coins',
             unitAmount: 10,
             timestamp,
-            msgId: 'gift-msg-1',
-            repeatCount: 2,
-            giftDetails: { giftName: 'Rose', diamondCount: 10, giftType: 0 }
+            id: 'gift-msg-1'
         });
 
         expect(runtime.handleGiftNotification).toHaveBeenCalledTimes(1);

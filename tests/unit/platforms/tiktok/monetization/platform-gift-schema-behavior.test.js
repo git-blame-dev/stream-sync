@@ -1,10 +1,10 @@
 const { describe, it, expect, beforeEach, afterEach } = require('bun:test');
-const { createMockFn, restoreAllMocks } = require('../../helpers/bun-mock-utils');
-const { useFakeTimers, useRealTimers, runOnlyPendingTimers } = require('../../helpers/bun-timers');
+const { createMockFn, restoreAllMocks } = require('../../../../helpers/bun-mock-utils');
+const { useFakeTimers, useRealTimers, runOnlyPendingTimers } = require('../../../../helpers/bun-timers');
 
-const { TikTokPlatform } = require('../../../src/platforms/tiktok');
-const { createMockTikTokPlatformDependencies } = require('../../helpers/mock-factories');
-const testClock = require('../../helpers/test-clock');
+const { TikTokPlatform } = require('../../../../../src/platforms/tiktok');
+const { createMockTikTokPlatformDependencies } = require('../../../../helpers/mock-factories');
+const testClock = require('../../../../helpers/test-clock');
 
 describe('TikTokPlatform gift aggregation and schema behavior', () => {
     const baseConfig = { enabled: true, username: 'gift_tester', giftAggregationEnabled: true };

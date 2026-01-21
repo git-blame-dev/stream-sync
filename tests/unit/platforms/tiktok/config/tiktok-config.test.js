@@ -1,11 +1,11 @@
 const { describe, test, expect } = require('bun:test');
-const { noOpLogger } = require('../../../helpers/mock-factories');
-const { ConfigValidator } = require('../../../../src/utils/config-validator');
+const { noOpLogger } = require('../../../../helpers/mock-factories');
+const { ConfigValidator } = require('../../../../../src/utils/config-validator');
 
 const {
     normalizeTikTokPlatformConfig,
     validateTikTokPlatformConfig
-} = require('../../../../src/platforms/tiktok/config/tiktok-config');
+} = require('../../../../../src/platforms/tiktok/config/tiktok-config');
 
 describe('TikTok config helpers', () => {
     const logger = noOpLogger;

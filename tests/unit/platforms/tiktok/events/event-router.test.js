@@ -1,9 +1,9 @@
 const { describe, test, expect, afterEach } = require('bun:test');
-const { createMockFn, restoreAllMocks } = require('../../../helpers/bun-mock-utils');
-const { noOpLogger } = require('../../../helpers/mock-factories');
+const { createMockFn, restoreAllMocks } = require('../../../../helpers/bun-mock-utils');
+const { noOpLogger } = require('../../../../helpers/mock-factories');
 const {
     setupTikTokEventListeners
-} = require('../../../../src/platforms/tiktok/events/tiktok-event-router');
+} = require('../../../../../src/platforms/tiktok/events/event-router');
 
 describe('TikTok event router', () => {
     afterEach(() => {

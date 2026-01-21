@@ -9,19 +9,20 @@ const { ConnectionStateManager } = require('../utils/connection-state-manager');
 const { PlatformConnectionFactory } = require('../utils/platform-connection-factory');
 const { PlatformEvents } = require('../interfaces/PlatformEvents');
 const { safeSetTimeout } = require('../utils/timeout-validator');
-const { resolveTikTokTimestampMs, resolveTikTokTimestampISO } = require('../utils/tiktok-timestamp');
+const { resolveTikTokTimestampMs } = require('../utils/tiktok-timestamp');
 const { createPlatformErrorHandler } = require('../utils/platform-error-handler');
 const { createMonetizationErrorPayload } = require('../utils/monetization-error-utils');
 const { createRetrySystem } = require('../utils/retry-system');
 const TimestampExtractionService = require('../services/TimestampExtractionService');
 const { getSystemTimestampISO } = require('../utils/validation');
-const { extractTikTokUserData, extractTikTokGiftData, formatCoinAmount } = require('../utils/tiktok-data-extraction');
+const { extractTikTokUserData, formatCoinAmount } = require('../utils/tiktok-data-extraction');
 const { validateNotificationManagerInterface } = require('../utils/dependency-validator');
-const { normalizeTikTokMessage } = require('../utils/message-normalization');
+const { normalizeTikTokChatEvent, normalizeTikTokGiftEvent } = require('./tiktok/events/event-normalizer');
 const { normalizeTikTokPlatformConfig, validateTikTokPlatformConfig } = require('./tiktok/config/tiktok-config');
-const { createTikTokConnectionOrchestrator } = require('./tiktok/connection/tiktok-connection-orchestrator');
-const { cleanupTikTokEventListeners, setupTikTokEventListeners } = require('./tiktok/events/tiktok-event-router');
-const { createTikTokGiftAggregator } = require('./tiktok/gifts/tiktok-gift-aggregator');
+const { createTikTokConnectionOrchestrator } = require('./tiktok/connections/tiktok-connection-orchestrator');
+const { cleanupTikTokEventListeners, setupTikTokEventListeners } = require('./tiktok/events/event-router');
+const { createTikTokGiftAggregator } = require('./tiktok/monetization/gift-aggregator');
+const { createTikTokEventFactory } = require('./tiktok/events/event-factory');
 
 class TikTokPlatform extends EventEmitter {
     constructor(config = {}, dependencies = {}) {
@@ -59,279 +60,20 @@ class TikTokPlatform extends EventEmitter {
             || new TimestampExtractionService({ logger: this.logger });
         this._validateDependencies(dependencies, this.config);
         
-        // Initialize event factories for standardized event creation (with safe fallbacks for tests)
-        // Use simple factory that spreads params for consistent structure
-        this.eventFactory = {
-            createChatMessage: (data = {}, options = {}) => {
-                const normalized = options.normalizedData || normalizeTikTokMessage(data, this.platformName, this.timestampService);
-                const identity = this._normalizeUserData({
-                    userId: normalized?.userId,
-                    username: normalized?.username
-                });
+        this.platformName = 'tiktok';
+        this.eventFactory = createTikTokEventFactory({
+            platformName: this.platformName,
+            getTimestamp: (data) => this._getTimestamp(data),
+            normalizeUserData: (data) => this._normalizeUserData(data),
+            getPlatformMessageId: (data) => this._getPlatformMessageId(data),
+            buildEventMetadata: (metadata) => this._buildEventMetadata(metadata),
+            normalizeChatEvent: (data) => normalizeTikTokChatEvent(data, {
+                platformName: this.platformName,
+                timestampService: this.timestampService
+            }),
+            timestampService: this.timestampService
+        });
 
-                if (!normalized?.message) {
-                    throw new Error('Missing TikTok message text');
-                }
-                if (!normalized?.timestamp) {
-                    throw new Error('Missing TikTok message timestamp');
-                }
-                const messageText = normalized.message;
-                const timestamp = normalized.timestamp;
-
-                return {
-                    type: 'platform:chat-message',
-                    platform: 'tiktok',
-                    username: identity.username,
-                    userId: identity.userId,
-                    message: {
-                        text: messageText
-                    },
-                    timestamp,
-                    metadata: this._buildEventMetadata(normalized?.metadata)
-                };
-            },
-            createGift: (data = {}) => {
-                const { username, userId } = extractTikTokUserData(data);
-                const hasEnhancedGiftData = data.enhancedGiftData && typeof data.enhancedGiftData === 'object';
-
-                if (typeof data.giftType !== 'string' || !data.giftType.trim()) {
-                    throw new Error('TikTok gift requires giftType');
-                }
-                if (typeof data.giftCount !== 'number' || !Number.isFinite(data.giftCount) || data.giftCount <= 0) {
-                    throw new Error('TikTok gift requires giftCount');
-                }
-                if (typeof data.amount !== 'number' || !Number.isFinite(data.amount) || data.amount <= 0) {
-                    throw new Error('TikTok gift requires amount');
-                }
-                if (typeof data.currency !== 'string' || !data.currency.trim()) {
-                    throw new Error('TikTok gift requires currency');
-                }
-                if (data.timestamp === undefined || data.timestamp === null) {
-                    throw new Error('TikTok gift requires timestamp');
-                }
-                const giftType = data.giftType.trim();
-                const giftCount = data.giftCount;
-                const repeatCount = Number.isFinite(Number(data.repeatCount))
-                    ? Number(data.repeatCount)
-                    : undefined;
-                const unitAmountRaw = data.unitAmount;
-                if (typeof unitAmountRaw !== 'number' || !Number.isFinite(unitAmountRaw)) {
-                    throw new Error('TikTok gift requires unitAmount');
-                }
-                const resolvedAmount = data.amount;
-                const currency = data.currency.trim();
-                const identity = this._normalizeUserData({
-                    userId,
-                    username
-                });
-                const platformMessageId = this._getPlatformMessageId(data);
-                if (!platformMessageId) {
-                    throw new Error('TikTok gift requires msgId');
-                }
-                let isAggregated = false;
-                if (typeof data.isAggregated === 'boolean') {
-                    isAggregated = data.isAggregated;
-                } else if (hasEnhancedGiftData && typeof data.enhancedGiftData.isAggregated === 'boolean') {
-                    isAggregated = data.enhancedGiftData.isAggregated;
-                } else if (Number.isFinite(Number(data.aggregatedCount))) {
-                    isAggregated = Number(data.aggregatedCount) > 0;
-                }
-                const aggregatedCountValue = Number.isFinite(Number(data.aggregatedCount))
-                    ? Number(data.aggregatedCount)
-                    : (hasEnhancedGiftData && Number.isFinite(Number(data.enhancedGiftData.giftCount))
-                        ? Number(data.enhancedGiftData.giftCount)
-                        : (isAggregated ? giftCount : undefined));
-
-                const result = {
-                    type: 'platform:gift',
-                    platform: 'tiktok',
-                    username: identity.username,
-                    userId: identity.userId,
-                    giftType,
-                    giftCount,
-                    amount: resolvedAmount,
-                    currency,
-                    ...(repeatCount !== undefined ? { repeatCount } : {}),
-                    id: platformMessageId,
-                    timestamp: data.timestamp,
-                    isAggregated
-                };
-                if (isAggregated && Number.isFinite(Number(aggregatedCountValue))) {
-                    result.aggregatedCount = Number(aggregatedCountValue);
-                }
-                if (hasEnhancedGiftData) {
-                    result.enhancedGiftData = data.enhancedGiftData;
-                }
-                if (typeof data.sourceType === 'string') {
-                    result.sourceType = data.sourceType;
-                }
-                return result;
-            },
-            createFollow: (params) => {
-                const identity = this._normalizeUserData({
-                    userId: params.userId,
-                    username: params.username
-                });
-
-                return {
-                    type: 'platform:follow',
-                    platform: 'tiktok',
-                    username: identity.username,
-                    userId: identity.userId,
-                    timestamp: params.timestamp,
-                    metadata: this._buildEventMetadata(params.metadata)
-                };
-            },
-            createShare: (params = {}) => {
-                const identity = this._normalizeUserData({
-                    userId: params.userId,
-                    username: params.username
-                });
-
-                return {
-                    type: 'platform:share',
-                    platform: 'tiktok',
-                    username: identity.username,
-                    userId: identity.userId,
-                    timestamp: params.timestamp,
-                    metadata: this._buildEventMetadata({
-                        interactionType: 'share',
-                        ...(params.metadata || {})
-                    })
-                };
-            },
-            createEnvelope: (data = {}) => {
-                const { userId, username } = extractTikTokUserData(data);
-                const identity = this._normalizeUserData({ userId, username });
-                const messageId = this._getPlatformMessageId(data);
-                if (!messageId) {
-                    throw new Error('Missing TikTok envelope message id');
-                }
-
-                const amount = Number(data?.giftCoins ?? data?.amount);
-                if (!Number.isFinite(amount)) {
-                    throw new Error('Missing TikTok envelope gift amount');
-                }
-                const currency = typeof data?.currency === 'string' ? data.currency.trim() : '';
-                if (!currency) {
-                    throw new Error('TikTok envelope requires currency');
-                }
-
-                return {
-                    type: 'platform:envelope',
-                    platform: 'tiktok',
-                    username: identity.username,
-                    userId: identity.userId,
-                    giftType: 'Treasure Chest',
-                    giftCount: 1,
-                    repeatCount: 1,
-                    amount,
-                    currency,
-                    id: messageId,
-                    timestamp: this._getTimestamp(data)
-                };
-            },
-            createSubscription: (data = {}) => {
-                const { userId, username } = extractTikTokUserData(data);
-                const identity = this._normalizeUserData({ userId, username });
-                const tier = typeof data?.tier === 'string' ? data.tier.trim() : '';
-                const message = typeof data?.message === 'string' ? data.message.trim() : '';
-                const months = Number(data?.months);
-
-                const payload = {
-                    type: PlatformEvents.PAYPIGGY,
-                    platform: 'tiktok',
-                    ...identity,
-                    timestamp: this._getTimestamp(data)
-                };
-                if (tier) {
-                    payload.tier = tier;
-                }
-                if (Number.isFinite(months) && months > 0) {
-                    payload.months = months;
-                }
-                if (message) {
-                    payload.message = message;
-                }
-                return payload;
-            },
-            createSuperfan: (data = {}) => {
-                const { userId, username } = extractTikTokUserData(data);
-                const identity = this._normalizeUserData({ userId, username });
-                const tier = typeof data?.tier === 'string' ? data.tier.trim() : '';
-                const message = typeof data?.message === 'string' ? data.message.trim() : '';
-                const months = Number(data?.months);
-
-                const payload = {
-                    type: PlatformEvents.PAYPIGGY,
-                    platform: 'tiktok',
-                    ...identity,
-                    tier: 'superfan',
-                    timestamp: this._getTimestamp(data)
-                };
-                if (Number.isFinite(months) && months > 0) {
-                    payload.months = months;
-                }
-                if (message) {
-                    payload.message = message;
-                }
-                return payload;
-            },
-            createConnection: (connectionId = PlatformEvents._generateCorrelationId()) => {
-                const correlationId = PlatformEvents._generateCorrelationId();
-                const timestamp = getSystemTimestampISO();
-
-                return {
-                    type: PlatformEvents.CHAT_CONNECTED,
-                    platform: 'tiktok',
-                    connectionId,
-                    timestamp,
-                    metadata: {
-                        platform: 'tiktok',
-                        correlationId
-                    }
-                };
-            },
-            createDisconnection: (reason, willReconnect) => {
-                const correlationId = PlatformEvents._generateCorrelationId();
-                const timestamp = getSystemTimestampISO();
-
-                return {
-                    type: PlatformEvents.CHAT_DISCONNECTED,
-                    platform: 'tiktok',
-                    reason,
-                    willReconnect,
-                    timestamp,
-                    metadata: {
-                        platform: 'tiktok',
-                        correlationId
-                    }
-                };
-            },
-            createError: (error, context) => {
-                const correlationId = PlatformEvents._generateCorrelationId();
-                const timestamp = getSystemTimestampISO();
-                return {
-                    type: PlatformEvents.ERROR,
-                    platform: 'tiktok',
-                    error: {
-                        message: error.message,
-                        name: error.name
-                    },
-                    context: {
-                        ...(context || {}),
-                        correlationId
-                    },
-                    recoverable: context?.recoverable !== undefined ? context.recoverable : true,
-                    metadata: {
-                        platform: 'tiktok',
-                        correlationId,
-                        timestamp
-                    }
-                };
-            }
-        };
-        
         // Track planned vs unexpected disconnections
         this.isPlannedDisconnection = false;
         
@@ -365,7 +107,6 @@ class TikTokPlatform extends EventEmitter {
         };
 
         this.connection = null;
-        this.platformName = 'tiktok';
         this.handlers = this._createDefaultHandlers();
         this.connectionActive = false;
         this.connectionTime = 0;
@@ -900,72 +641,24 @@ class TikTokPlatform extends EventEmitter {
             return;
         }
         try {
-            // Use robust extraction utilities (from src/utils/tiktok-data-extraction.js)
-            const { userId, username } = extractTikTokUserData(data);
-            const { giftType, giftCount, amount, currency, unitAmount, comboType, repeatEnd } = extractTikTokGiftData(data);
+            const normalizedGift = normalizeTikTokGiftEvent(data, {
+                platformName: this.platformName,
+                timestampService: this.timestampService,
+                getTimestamp: (payload) => this._getTimestamp(payload),
+                getPlatformMessageId: (payload) => this._getPlatformMessageId(payload)
+            });
+            const {
+                userId,
+                username,
+                giftType,
+                giftCount,
+                amount,
+                currency,
+                unitAmount,
+                comboType,
+                repeatEnd
+            } = normalizedGift;
             const identityKey = userId;
-
-            // Validate required fields
-            if (!userId || !username || !giftType) {
-                this.logger.warn('Gift event missing required fields', 'tiktok', { data, userId, username, giftType });
-                const fieldError = new Error('TikTok gift payload missing required fields');
-                this.errorHandler.handleEventProcessingError(
-                    fieldError,
-                    'gift-missing-fields',
-                    { data, userId, username, giftType }
-                );
-                const errorPayload = this._createMonetizationErrorPayload('gift', data, {
-                    username,
-                    userId,
-                    giftType
-                });
-                if (!errorPayload) {
-                    return;
-                }
-                this._emitPlatformEvent(PlatformEvents.GIFT, errorPayload);
-                return;
-            }
-
-            // CRITICAL: Validate gift count - 0 means TikTok data is malformed
-            if (giftCount === 0) {
-                const countError = new Error('[TikTok Gift] INVALID COUNT - repeatCount missing from TikTok API');
-                const context = {
-                    userId,
-                    username,
-                    giftType,
-                    amount,
-                    currency,
-                    hasRepeatCount: 'repeatCount' in data,
-                    repeatCountValue: data.repeatCount,
-                    rawDataKeys: Object.keys(data),
-                    timestamp: getSystemTimestampISO(),
-                    reason: 'gift-count-invalid',
-                    recoverable: true
-                };
-
-                this.errorHandler.handleEventProcessingError(
-                    countError,
-                    'gift-count-invalid',
-                    context,
-                    'Invalid TikTok gift count payload'
-                );
-
-                await this._handleError(countError, context);
-
-                const errorPayload = this._createMonetizationErrorPayload('gift', data, {
-                    username,
-                    userId,
-                    giftType,
-                    giftCount,
-                    amount,
-                    currency
-                });
-                if (!errorPayload) {
-                    return;
-                }
-                this._emitPlatformEvent(PlatformEvents.GIFT, errorPayload);
-                return;
-            }
 
             this.logger.debug(`[TikTok Gift] Processing gift: ${identityKey} sent ${giftCount}x ${giftType} (${amount} ${currency}, comboType: ${comboType}, repeatEnd: ${repeatEnd})`, 'tiktok');
 
@@ -994,34 +687,22 @@ class TikTokPlatform extends EventEmitter {
             // Check if gift aggregation is disabled - if so, send immediately
             if (!this.config.giftAggregationEnabled) {
                 this.logger.debug('[TikTok Gift] Aggregation disabled, sending gift immediately', 'tiktok');
-                await this.handleOfficialGift(identityKey, username, giftType, giftCount, unitAmount, amount, currency, isStreakCompleted, data);
+                await this.handleOfficialGift(normalizedGift, { isStreakCompleted });
                 return; // Exit early, no aggregation needed
             }
 
             // Use standard aggregation for all processable gifts
-            await this.handleStandardGift(identityKey, username, giftType, giftCount, unitAmount, currency, data);
+            await this.handleStandardGift(normalizedGift);
 
         } catch (error) {
+            const errorOverrides = this._buildGiftErrorOverrides(data);
             if (error?.message && error.message.includes('repeatCount')) {
                 await this._handleError(error, {
                     reason: 'gift-count-invalid',
                     recoverable: true,
                     data
                 });
-                const fallbackGiftType = typeof data?.giftDetails?.giftName === 'string'
-                    ? data.giftDetails.giftName
-                    : undefined;
-                let fallbackIdentity = {};
-                try {
-                    fallbackIdentity = extractTikTokUserData(data);
-                } catch {
-                    fallbackIdentity = {};
-                }
-                const errorPayload = this._createMonetizationErrorPayload('gift', data, {
-                    username: fallbackIdentity.username,
-                    userId: fallbackIdentity.userId,
-                    giftType: fallbackGiftType
-                });
+                const errorPayload = this._createMonetizationErrorPayload('gift', data, errorOverrides);
                 if (!errorPayload) {
                     return;
                 }
@@ -1034,20 +715,7 @@ class TikTokPlatform extends EventEmitter {
                 data,
                 'Error processing gift'
             );
-            const fallbackGiftType = typeof data?.giftDetails?.giftName === 'string'
-                ? data.giftDetails.giftName
-                : undefined;
-            let fallbackIdentity = {};
-            try {
-                fallbackIdentity = extractTikTokUserData(data);
-            } catch {
-                fallbackIdentity = {};
-            }
-            const errorPayload = this._createMonetizationErrorPayload('gift', data, {
-                username: fallbackIdentity.username,
-                userId: fallbackIdentity.userId,
-                giftType: fallbackGiftType
-            });
+            const errorPayload = this._createMonetizationErrorPayload('gift', data, errorOverrides);
             if (!errorPayload) {
                 return;
             }
@@ -1055,51 +723,51 @@ class TikTokPlatform extends EventEmitter {
         }
     }
 
-    async handleOfficialGift(identityKey, username, giftType, giftCount, unitAmount, amount, currency, isStreakCompleted, originalData) {
-        // Create gift message with streak indication
-        let giftMessage = isStreakCompleted 
+    async handleOfficialGift(gift, options = {}) {
+        const isStreakCompleted = options.isStreakCompleted === true;
+        const username = gift.username;
+        const giftType = gift.giftType;
+        const giftCount = gift.giftCount;
+        const amount = gift.amount;
+        const currency = gift.currency;
+
+        let giftMessage = isStreakCompleted
             ? `${username} completed a streak of ${giftCount}x ${giftType}`
             : `${username} sent ${giftCount}x ${giftType}`;
         giftMessage += formatCoinAmount(amount, currency);
         this.logger.info(`[Gift] ${giftMessage}`, 'tiktok');
 
-        // Create enhanced gift data for notification
-        const extractedIdentity = extractTikTokUserData(originalData);
         const enhancedGiftData = {
             username,
-            userId: extractedIdentity.userId,
-            giftType: giftType,
-            giftCount: giftCount,
-            amount,
-            currency,
-            isAggregated: false,
-            isStreakCompleted: isStreakCompleted,
-            originalData: originalData
-        };
-
-
-        const giftPayload = {
-            ...(originalData || {}),
-            user: (originalData?.user && typeof originalData.user === 'object')
-                ? originalData.user
-                : { userId: extractedIdentity.userId, uniqueId: username },
-            repeatCount: originalData?.repeatCount ?? giftCount,
-            giftDetails: originalData?.giftDetails || {
-                giftName: giftType,
-                diamondCount: Number.isFinite(Number(unitAmount)) ? Number(unitAmount) : 0
-            },
-            aggregatedCount: giftCount,
+            userId: gift.userId,
             giftType,
             giftCount,
             amount,
             currency,
-            unitAmount,
-            timestamp: resolveTikTokTimestampISO(originalData),
+            isAggregated: false,
+            isStreakCompleted,
+            originalData: gift.rawData
+        };
+
+        const giftPayload = {
+            platform: gift.platform || 'tiktok',
+            userId: gift.userId,
+            username,
+            giftType,
+            giftCount,
+            repeatCount: Number.isFinite(Number(gift.repeatCount)) ? Number(gift.repeatCount) : giftCount,
+            amount,
+            currency,
+            unitAmount: gift.unitAmount,
+            id: gift.id,
+            timestamp: gift.timestamp,
+            isAggregated: false,
             enhancedGiftData
         };
-        delete giftPayload.userId;
-        delete giftPayload.uniqueId;
-        delete giftPayload.nickname;
+
+        if (typeof gift.sourceType === 'string') {
+            giftPayload.sourceType = gift.sourceType;
+        }
 
         try {
             await this._handleGift(giftPayload);
@@ -1113,8 +781,8 @@ class TikTokPlatform extends EventEmitter {
         }
     }
 
-    async handleStandardGift(identityKey, username, giftType, giftCount, unitAmount, currency, originalData) {
-        return this.giftAggregator.handleStandardGift(identityKey, username, giftType, giftCount, unitAmount, currency, originalData);
+    async handleStandardGift(gift) {
+        return this.giftAggregator.handleStandardGift(gift);
     }
 
 
@@ -1350,6 +1018,59 @@ class TikTokPlatform extends EventEmitter {
         return TikTokPlatform.resolveEventTimestampISO(data);
     }
 
+    _buildGiftErrorOverrides(data) {
+        if (!data || typeof data !== 'object') {
+            return {};
+        }
+
+        const normalizeString = (value) => {
+            if (typeof value === 'string') {
+                const trimmed = value.trim();
+                return trimmed ? trimmed : null;
+            }
+            if (typeof value === 'number') {
+                const normalized = String(value).trim();
+                return normalized ? normalized : null;
+            }
+            return null;
+        };
+
+        const user = (data.user && typeof data.user === 'object') ? data.user : null;
+        const userId = normalizeString(user?.userId ?? data.userId);
+        const username = normalizeString(user?.uniqueId ?? data.username);
+        const giftDetails = (data.giftDetails && typeof data.giftDetails === 'object') ? data.giftDetails : null;
+        const giftType = normalizeString(giftDetails?.giftName);
+
+        const giftCountValue = Number(data.repeatCount);
+        const giftCount = Number.isFinite(giftCountValue) && giftCountValue > 0 ? giftCountValue : null;
+
+        const amountValue = Number(data.giftCoins ?? data.amount);
+        const amount = Number.isFinite(amountValue) && amountValue > 0 ? amountValue : null;
+        const currency = normalizeString(data.currency);
+
+        const overrides = {};
+        if (userId) {
+            overrides.userId = userId;
+        }
+        if (username) {
+            overrides.username = username;
+        }
+        if (giftType) {
+            overrides.giftType = giftType;
+        }
+        if (giftCount !== null) {
+            overrides.giftCount = giftCount;
+        }
+        if (amount !== null) {
+            overrides.amount = amount;
+        }
+        if (currency) {
+            overrides.currency = currency;
+        }
+
+        return overrides;
+    }
+
     _createMonetizationErrorPayload(notificationType, data, overrides = {}) {
         const id = this._getPlatformMessageId(data);
         const timestamp = this._getTimestamp(data);
@@ -1423,14 +1144,31 @@ class TikTokPlatform extends EventEmitter {
             ]);
             if (monetizationTypes.has(emitType)) {
                 let errorOverrides = {};
-                try {
-                    const identity = extractTikTokUserData(data);
-                    errorOverrides = {
-                        username: identity.username,
-                        userId: identity.userId
-                    };
-                } catch (extractError) {
-                    errorOverrides = {};
+                const hasCanonicalIdentity = data
+                    && data.userId !== undefined
+                    && data.userId !== null
+                    && data.username !== undefined
+                    && data.username !== null;
+                if (hasCanonicalIdentity) {
+                    const normalizedUserId = String(data.userId).trim();
+                    const normalizedUsername = String(data.username).trim();
+                    if (normalizedUserId && normalizedUsername) {
+                        errorOverrides = {
+                            username: normalizedUsername,
+                            userId: normalizedUserId
+                        };
+                    }
+                }
+                if (!errorOverrides.userId) {
+                    try {
+                        const identity = extractTikTokUserData(data);
+                        errorOverrides = {
+                            username: identity.username,
+                            userId: identity.userId
+                        };
+                    } catch (extractError) {
+                        errorOverrides = {};
+                    }
                 }
                 if (emitType === PlatformEvents.GIFT) {
                     const amount = Number(data?.giftCoins ?? data?.amount);
