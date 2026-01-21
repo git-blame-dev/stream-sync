@@ -2,9 +2,8 @@ const { describe, test, afterEach, expect } = require('bun:test');
 
 const EventEmitter = require('events');
 const NotificationManager = require('../../src/notifications/NotificationManager');
-const { YouTubeNotificationDispatcher } = require('../../src/utils/youtube-notification-dispatcher');
-const { createYouTubeEventDispatchTable } = require('../../src/platforms/youtube/events/youtube-event-dispatch-table');
-const { initializeTestLogging } = require('../helpers/test-setup');
+const { YouTubePlatform } = require('../../src/platforms/youtube');
+const { initializeTestLogging, createMockConfig, createMockPlatformDependencies } = require('../helpers/test-setup');
 const { getSyntheticFixture } = require('../helpers/platform-test-data');
 const { createMockDisplayQueue, noOpLogger } = require('../helpers/mock-factories');
 const { createTextProcessingManager } = require('../../src/utils/text-processing');
@@ -26,24 +25,26 @@ const createEventBus = () => {
     };
 };
 
-const createDispatcherHarness = () => {
+const createPlatformHarness = () => {
     const logger = noOpLogger;
-    const dispatcher = new YouTubeNotificationDispatcher({ logger });
+    const config = createMockConfig('youtube', {
+        enabled: true,
+        username: 'test-channel',
+        apiKey: 'test-key'
+    });
+    const dependencies = createMockPlatformDependencies('youtube', { logger });
+    const platform = new YouTubePlatform(config, dependencies);
     let capturedPayload;
-    const handlers = {
+
+    platform.handlers = {
+        ...(platform.handlers || {}),
         onGift: (payload) => {
             capturedPayload = payload;
         }
     };
-    const platform = {
-        logger,
-        handlers,
-        handleSuperChat: (chatItem) => dispatcher.dispatchSuperChat(chatItem, handlers)
-    };
-    const dispatchTable = createYouTubeEventDispatchTable(platform);
 
     return {
-        dispatchTable,
+        platform,
         getCapturedPayload: () => capturedPayload
     };
 };
@@ -100,9 +101,9 @@ describe('YouTube data flow integrity', () => {
         restoreAllMocks();
     });
 
-    test('builds user-facing output from dispatcher payloads', async () => {
-        const { dispatchTable, getCapturedPayload } = createDispatcherHarness();
-        await dispatchTable[realSuperChat.item.type](realSuperChat);
+    test('builds user-facing output from platform event payloads', async () => {
+        const { platform, getCapturedPayload } = createPlatformHarness();
+        await platform.handleChatMessage(realSuperChat);
         const capturedPayload = getCapturedPayload();
 
         expect(capturedPayload).toBeDefined();

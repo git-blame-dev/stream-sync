@@ -1,13 +1,13 @@
 const { describe, test, expect, afterEach } = require('bun:test');
-const { createMockFn, restoreAllMocks } = require('../../../helpers/bun-mock-utils');
+const { createMockFn, restoreAllMocks } = require('../../../../helpers/bun-mock-utils');
 
-const { YouTubePlatform } = require('../../../../src/platforms/youtube');
-const { getSyntheticFixture } = require('../../../helpers/platform-test-data');
+const { YouTubePlatform } = require('../../../../../src/platforms/youtube');
+const { getSyntheticFixture } = require('../../../../helpers/platform-test-data');
 const {
     initializeTestLogging,
     createMockConfig,
     createMockPlatformDependencies
-} = require('../../../helpers/test-setup');
+} = require('../../../../helpers/test-setup');
 
 initializeTestLogging();
 
@@ -17,7 +17,7 @@ const getDebugCalls = (logger) => logger.debug.mock.calls.map(([message, _scope,
     metadata: metadata || null
 }));
 
-describe('YouTubePlatform dispatch table behavior', () => {
+describe('YouTubePlatform event routing behavior', () => {
     afterEach(() => {
         restoreAllMocks();
     });
@@ -44,7 +44,7 @@ describe('YouTubePlatform dispatch table behavior', () => {
         };
 
         const giftPurchase = getSyntheticFixture('youtube', 'gift-purchase-header');
-        platform.handleChatMessage(giftPurchase);
+        await platform.handleChatMessage(giftPurchase);
         await flushPromises();
 
         expect(giftEvents).toHaveLength(1);
@@ -66,7 +66,7 @@ describe('YouTubePlatform dispatch table behavior', () => {
             onGiftPaypiggy: (event) => giftEvents.push(event)
         };
 
-        platform.handleChatMessage({
+        await platform.handleChatMessage({
             type: 'AddChatItemAction',
             item: {
                 type: 'LiveChatSponsorshipsGiftRedemptionAnnouncement',
@@ -96,7 +96,7 @@ describe('YouTubePlatform dispatch table behavior', () => {
     test('uses fallback username when gift redemption recipient is missing', async () => {
         const platform = createPlatform();
 
-        platform.handleChatMessage({
+        await platform.handleChatMessage({
             type: 'AddChatItemAction',
             item: {
                 type: 'LiveChatSponsorshipsGiftRedemptionAnnouncement',
@@ -126,7 +126,7 @@ describe('YouTubePlatform dispatch table behavior', () => {
         const platform = createPlatform();
         platform.logRawPlatformData = createMockFn().mockResolvedValue();
 
-        platform.handleChatMessage({
+        await platform.handleChatMessage({
             type: 'AddChatItemAction',
             item: {
                 type: 'LiveChatPaidMessageRenderer',

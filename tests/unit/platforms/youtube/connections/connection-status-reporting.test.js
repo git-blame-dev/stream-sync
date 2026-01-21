@@ -1,6 +1,6 @@
 const { describe, test, expect, beforeEach } = require('bun:test');
-const { createMockFn } = require('../../helpers/bun-mock-utils');
-const { noOpLogger } = require('../../helpers/mock-factories');
+const { createMockFn } = require('../../../../helpers/bun-mock-utils');
+const { noOpLogger } = require('../../../../helpers/mock-factories');
 const { EventEmitter } = require('events');
 
 const createMockPlatform = () => {

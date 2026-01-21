@@ -10,7 +10,7 @@ class YouTubeiCurrencyParser {
         
         // PERFORMANCE OPTIMIZED: Combined patterns to reduce regex attempts
         this.codeSpacePattern = /^([A-Za-z]{3})\s+([0-9,]+(?:[\.,][0-9]{1,2})?)$/;
-        this.codeSymbolPattern = /^([A-Z]{3})\$([0-9,]+(?:\.[0-9]{1,2})?)$/;
+        this.codeSymbolPattern = /^([A-Za-z]{3})\$([0-9,]+(?:\.[0-9]{1,2})?)$/;
         
         // Precompiled symbol patterns for performance
         this.symbolMappings = [
@@ -208,7 +208,7 @@ class YouTubeiCurrencyParser {
         const match = input.match(this.codeSymbolPattern);
 
         if (match) {
-            const currency = match[1];
+            const currency = match[1].toUpperCase();
             const amountStr = match[2];
             const amount = this._parseAmount(amountStr);
 
@@ -310,7 +310,7 @@ class YouTubeiCurrencyParser {
     _createFailureResult(originalString, reason) {
         return {
             amount: 0,
-            currency: 'USD',
+            currency: '',
             symbol: '',
             success: false,
             originalString: originalString,

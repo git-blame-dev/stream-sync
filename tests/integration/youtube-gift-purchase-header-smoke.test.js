@@ -1,8 +1,9 @@
 const { describe, test, afterEach, expect } = require('bun:test');
-const { YouTubeNotificationDispatcher } = require('../../src/utils/youtube-notification-dispatcher');
+const { YouTubePlatform } = require('../../src/platforms/youtube');
 const { getSyntheticFixture } = require('../helpers/platform-test-data');
-const { createMockFn, restoreAllMocks } = require('../helpers/bun-mock-utils');
+const { restoreAllMocks } = require('../helpers/bun-mock-utils');
 const { noOpLogger } = require('../helpers/mock-factories');
+const { createMockPlatformDependencies, createMockConfig } = require('../helpers/test-setup');
 
 const giftPurchaseHeaderOnly = getSyntheticFixture('youtube', 'gift-purchase-header');
 const giftPurchaseTimestamp = new Date(
@@ -14,16 +15,24 @@ describe('YouTube Gift Purchase Smoke (Canonical Author)', () => {
         restoreAllMocks();
     });
 
-    test('routes gift purchase through dispatcher to handler', async () => {
-        const dispatcher = new YouTubeNotificationDispatcher({ logger: noOpLogger });
-        const onGiftPaypiggy = createMockFn();
+    test('routes gift purchase through event pipeline to handler', async () => {
+        const config = createMockConfig('youtube', {
+            enabled: true,
+            username: 'test-channel',
+            apiKey: 'test-key'
+        });
+        const dependencies = createMockPlatformDependencies('youtube', { logger: noOpLogger });
+        const platform = new YouTubePlatform(config, dependencies);
+        const giftEvents = [];
+        platform.handlers = {
+            ...platform.handlers,
+            onGiftPaypiggy: (event) => giftEvents.push(event)
+        };
 
-        const result = await dispatcher.dispatchGiftMembership(giftPurchaseHeaderOnly, { onGiftPaypiggy });
+        await platform.handleChatMessage(giftPurchaseHeaderOnly);
 
-        expect(result).toBe(true);
-        expect(onGiftPaypiggy).toHaveBeenCalledTimes(1);
-
-        const notification = onGiftPaypiggy.mock.calls[0][0];
+        expect(giftEvents).toHaveLength(1);
+        const notification = giftEvents[0];
         expect(notification.type).toBe('platform:giftpaypiggy');
         expect(notification.username).toBe('GiftGiver');
         expect(notification.userId).toBe(giftPurchaseHeaderOnly.item.author.id);

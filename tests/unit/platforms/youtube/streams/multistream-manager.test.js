@@ -1,8 +1,8 @@
 const { describe, test, expect } = require('bun:test');
-const { createMockFn } = require('../../helpers/bun-mock-utils');
-const { noOpLogger } = require('../../helpers/mock-factories');
+const { createMockFn } = require('../../../../helpers/bun-mock-utils');
+const { noOpLogger } = require('../../../../helpers/mock-factories');
 
-const { createYouTubeMultiStreamManager } = require('../../../src/platforms/youtube/streams/youtube-multistream-manager');
+const { createYouTubeMultiStreamManager } = require('../../../../../src/platforms/youtube/streams/youtube-multistream-manager');
 
 describe('YouTube multi-stream manager', () => {
     const buildPlatform = (overrides = {}) => {
