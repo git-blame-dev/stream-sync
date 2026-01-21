@@ -1,6 +1,6 @@
 const GIFT_PURCHASE_EVENT_TYPE = 'LiveChatSponsorshipsGiftPurchaseAnnouncement';
 
-function normalizeYouTubeChatItem(chatItem) {
+function normalizeYouTubeEvent(chatItem) {
     if (!chatItem || typeof chatItem !== 'object') {
         return {
             normalizedChatItem: null,
@@ -37,6 +37,8 @@ function normalizeYouTubeChatItem(chatItem) {
         };
     }
 
+    normalizedChatItem = hydrateWrapperFields(normalizedChatItem, chatItem);
+
     if (eventType === GIFT_PURCHASE_EVENT_TYPE) {
         const hydratedGiftPurchase = hydrateGiftPurchaseAuthor(normalizedChatItem);
         if (!hydratedGiftPurchase) {
@@ -66,6 +68,30 @@ function normalizeYouTubeChatItem(chatItem) {
         debugMetadata: {
             structure,
             eventType
+        }
+    };
+}
+
+function hydrateWrapperFields(normalizedChatItem, rawChatItem) {
+    if (!rawChatItem?.item || typeof rawChatItem.item !== 'object') {
+        return normalizedChatItem;
+    }
+
+    const wrapperId = rawChatItem.id;
+    const wrapperTimestamp = rawChatItem.timestampUsec;
+    const shouldHydrateId = wrapperId !== undefined && wrapperId !== null && !normalizedChatItem.item?.id;
+    const shouldHydrateTimestamp = wrapperTimestamp !== undefined && wrapperTimestamp !== null && !normalizedChatItem.item?.timestampUsec;
+
+    if (!shouldHydrateId && !shouldHydrateTimestamp) {
+        return normalizedChatItem;
+    }
+
+    return {
+        ...normalizedChatItem,
+        item: {
+            ...normalizedChatItem.item,
+            ...(shouldHydrateId ? { id: wrapperId } : {}),
+            ...(shouldHydrateTimestamp ? { timestampUsec: wrapperTimestamp } : {})
         }
     };
 }
@@ -114,5 +140,5 @@ function hydrateGiftPurchaseAuthor(normalizedChatItem) {
 }
 
 module.exports = {
-    normalizeYouTubeChatItem
+    normalizeYouTubeEvent
 };

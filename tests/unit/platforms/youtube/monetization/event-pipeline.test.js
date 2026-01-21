@@ -1,12 +1,12 @@
 
 const { describe, test, expect, afterEach } = require('bun:test');
-const { createMockFn, restoreAllMocks } = require('../../../helpers/bun-mock-utils');
+const { createMockFn, restoreAllMocks } = require('../../../../helpers/bun-mock-utils');
 
-const { YouTubePlatform } = require('../../../../src/platforms/youtube');
-const { createYouTubeSuperChatEvent } = require('../../../helpers/youtube-test-data');
-const { createMockPlatformDependencies, createMockConfig } = require('../../../helpers/test-setup');
+const { YouTubePlatform } = require('../../../../../src/platforms/youtube');
+const { createYouTubeSuperChatEvent } = require('../../../../helpers/youtube-test-data');
+const { createMockPlatformDependencies, createMockConfig } = require('../../../../helpers/test-setup');
 
-describe('YouTube monetized notification pipeline', () => {
+describe('YouTube monetized event pipeline', () => {
     afterEach(() => {
         restoreAllMocks();
     });
@@ -60,6 +60,45 @@ describe('YouTube monetized notification pipeline', () => {
         expect(giftEvents[0].message).toBe('Thanks for the amazing content! Keep it up!');
         expect(giftEvents[0].userId).toBeTruthy();
         expect(giftEvents[0].id).toBeTruthy();
+    });
+
+    test('emits membership events for LiveChatMembershipItem payloads', async () => {
+        const youtubePlatform = createPlatform();
+        const membershipEvents = [];
+        youtubePlatform.handlers = {
+            ...youtubePlatform.handlers,
+            onMembership: (event) => membershipEvents.push(event)
+        };
+
+        const membershipItem = {
+            item: {
+                type: 'LiveChatMembershipItem',
+                id: 'LCC.test-membership-001',
+                timestampUsec: '1704067200000000',
+                author: {
+                    id: 'UC_TEST_CHANNEL_00999',
+                    name: 'MemberUser'
+                },
+                headerPrimaryText: { text: 'Gold Member' },
+                headerSubtext: { text: 'Welcome to the membership' },
+                memberMilestoneDurationInMonths: 3
+            }
+        };
+
+        await youtubePlatform.handleChatMessage(membershipItem);
+        await new Promise((resolve) => setImmediate(resolve));
+
+        expect(membershipEvents).toHaveLength(1);
+        expect(membershipEvents[0]).toMatchObject({
+            platform: 'youtube',
+            type: 'platform:paypiggy',
+            username: 'MemberUser',
+            userId: 'UC_TEST_CHANNEL_00999',
+            membershipLevel: 'Gold Member',
+            message: 'Welcome to the membership',
+            months: 3
+        });
+        expect(membershipEvents[0].timestamp).toBe(new Date(1704067200000).toISOString());
     });
 
 });

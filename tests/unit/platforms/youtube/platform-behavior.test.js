@@ -1,11 +1,11 @@
 const { describe, it, expect, beforeEach, afterEach } = require('bun:test');
-const { createMockFn, restoreAllMocks } = require('../../helpers/bun-mock-utils');
-const { unmockModule, restoreAllModuleMocks, resetModules } = require('../../helpers/bun-module-mocks');
-const { noOpLogger } = require('../../helpers/mock-factories');
+const { createMockFn, restoreAllMocks } = require('../../../helpers/bun-mock-utils');
+const { unmockModule, restoreAllModuleMocks, resetModules } = require('../../../helpers/bun-module-mocks');
+const { noOpLogger } = require('../../../helpers/mock-factories');
 
-unmockModule('../../../src/platforms/youtube');
+unmockModule('../../../../src/platforms/youtube');
 
-const { YouTubePlatform } = require('../../../src/platforms/youtube');
+const { YouTubePlatform } = require('../../../../src/platforms/youtube');
 
 const createTimestampService = () => ({
     extractTimestamp: createMockFn().mockReturnValue('2024-01-01T00:00:00.000Z')
@@ -31,7 +31,6 @@ const createPlatform = (overrides = {}) => {
         streamDetectionService,
         timestampService,
         viewerService: overrides.viewerService || null,
-        notificationDispatcher: overrides.notificationDispatcher,
         ChatFileLoggingService: overrides.ChatFileLoggingService,
         notificationManager: overrides.notificationManager || {
             emit: createMockFn(),
@@ -245,7 +244,7 @@ describe('YouTubePlatform modern architecture', () => {
         const { platform } = createPlatform({ logger });
         platform.logRawPlatformData = createMockFn().mockResolvedValue();
 
-        platform.handleChatMessage({
+        await platform.handleChatMessage({
             type: 'AddChatItemAction',
             item: {
                 type: 'LiveChatSponsorshipsGiftRedemptionAnnouncement',
@@ -276,7 +275,7 @@ describe('YouTubePlatform modern architecture', () => {
         const { platform } = createPlatform({ logger });
         platform.logRawPlatformData = createMockFn().mockResolvedValue();
 
-        platform.handleChatMessage({
+        await platform.handleChatMessage({
             type: 'AddChatItemAction',
             item: {
                 type: 'LiveChatPaidMessageRenderer',
@@ -306,8 +305,8 @@ describe('YouTubePlatform modern architecture', () => {
         const logger = createLogger();
         const { platform } = createPlatform({ logger });
         const handlerError = new Error('dispatch failed');
-        platform._cachedEventDispatchTable = {
-            LiveChatPaidMessage: () => Promise.reject(handlerError)
+        platform.eventRouter = {
+            routeEvent: createMockFn().mockRejectedValue(handlerError)
         };
         platform._handleProcessingError = createMockFn();
 
@@ -340,12 +339,13 @@ describe('YouTubePlatform modern architecture', () => {
         expect(unhandled).toHaveLength(0);
     });
 
-    it('emits error notification when gift purchase header author is missing', () => {
-        const notificationDispatcher = {
-            dispatchErrorNotification: createMockFn().mockResolvedValue(true)
+    it('emits error notification when gift purchase header author is missing', async () => {
+        const { platform } = createPlatform();
+        const giftErrors = [];
+        platform.handlers = {
+            ...platform.handlers,
+            onGiftPaypiggy: (payload) => giftErrors.push(payload)
         };
-        const { platform } = createPlatform({ notificationDispatcher });
-        platform.baseEventHandler = { handleEvent: createMockFn() };
 
         const chatItem = {
             item: {
@@ -359,16 +359,18 @@ describe('YouTubePlatform modern architecture', () => {
             }
         };
 
-        platform.handleChatMessage(chatItem);
+        await platform.handleChatMessage(chatItem);
 
-        const [errorCall] = notificationDispatcher.dispatchErrorNotification.mock.calls;
-        expect(errorCall).toBeTruthy();
-        expect(errorCall[0]).toBe(chatItem);
-        expect(errorCall[1]).toBe('platform:giftpaypiggy');
-        expect(errorCall[2]).toBe(platform.handlers?.onGiftPaypiggy);
-        expect(errorCall[3]).toBe('onGiftPaypiggy');
-        expect(errorCall[4]).toMatchObject({ giftCount: 3 });
-        expect(platform.baseEventHandler.handleEvent).toHaveBeenCalledTimes(0);
+        expect(giftErrors).toHaveLength(1);
+        expect(giftErrors[0]).toMatchObject({
+            type: 'platform:giftpaypiggy',
+            platform: 'youtube',
+            giftCount: 3,
+            id: 'LCC.test-gift-purchase-missing-author',
+            isError: true
+        });
+        expect(giftErrors[0].timestamp).toBe(new Date(1700000000000).toISOString());
+        expect(giftErrors[0].username).toBeUndefined();
     });
 
     it('emits stream-status when the first YouTube stream becomes live', async () => {

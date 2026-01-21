@@ -11,22 +11,18 @@ const innertubeInstanceManager = require('../services/innertube-instance-manager
 const { ViewerCountProviderFactory } = require('../utils/viewer-count-providers');
 
 const { normalizeYouTubeConfig, DEFAULT_YOUTUBE_CONFIG } = require('../utils/config-normalizer');
-const { YouTubeNotificationDispatcher } = require('../utils/youtube-notification-dispatcher');
 const { YouTubeConnectionManager } = require('../utils/youtube-connection-manager');
 const { createPlatformErrorHandler } = require('../utils/platform-error-handler');
 const { getSystemTimestampISO } = require('../utils/validation');
 const { getFallbackUsername } = require('../utils/fallback-username');
 const { normalizeYouTubeUsername } = require('../utils/youtube-username-normalizer');
+const { extractAuthor } = require('../utils/youtube-author-extractor');
 const { PlatformEvents } = require('../interfaces/PlatformEvents');
 const { YouTubeLiveStreamService } = require('../services/youtube-live-stream-service');
-const { createYouTubeEventDispatchTable } = require('./youtube/events/youtube-event-dispatch-table');
-const { normalizeYouTubeChatItem } = require('./youtube/events/youtube-chat-item-normalizer');
-const { createYouTubeEventFactory } = require('./youtube/events/youtube-event-factory');
-const { YouTubeBaseEventHandler } = require('./youtube/notifications/youtube-base-event-handler');
-const {
-    shouldSuppressYouTubeNotification,
-    UnifiedNotificationProcessor
-} = require('./youtube/notifications/youtube-unified-notification-processor');
+const { createYouTubeEventRouter } = require('./youtube/events/event-router');
+const { normalizeYouTubeEvent } = require('./youtube/events/event-normalizer');
+const { createYouTubeEventFactory } = require('./youtube/events/event-factory');
+const { createYouTubeMonetizationParser } = require('./youtube/monetization/monetization-parser');
 const { createYouTubeConnectionFactory } = require('./youtube/connections/youtube-connection-factory');
 const { createYouTubeMultiStreamManager } = require('./youtube/streams/youtube-multistream-manager');
 
@@ -93,6 +89,13 @@ class YouTubePlatform extends EventEmitter {
         this.config = { ...normalizedConfig };
         this.platformName = 'youtube';
         this.eventFactory = createYouTubeEventFactory();
+        try {
+            this.eventRouter = createYouTubeEventRouter({ platform: this });
+        } catch (error) {
+            this._handleProcessingError('Failed to create event router', error, 'configuration');
+            throw error;
+        }
+        this.monetizationParser = createYouTubeMonetizationParser({ logger: this.logger });
         this._ensureDataLoggingPath();
 
         // Extract dependencies (all required, no fallbacks)
@@ -107,14 +110,8 @@ class YouTubePlatform extends EventEmitter {
             config: this.config
         });
 
-        this.notificationDispatcher = dependencies.notificationDispatcher || new YouTubeNotificationDispatcher({
-            logger: this.logger,
-            platform: this
-        });
-        
         // Logger reference for debug calls
-        
-        
+
         // Track initialization and monitoring states
         this.isInitialized = false;
         this.monitoringInterval = null;
@@ -158,53 +155,15 @@ class YouTubePlatform extends EventEmitter {
         // Initialize stream detection service from dependencies
         this.streamDetectionService = dependencies.streamDetectionService;
 
-        // Initialize extracted services
-        // Initialize base event handler for eliminating code duplication
-        try {
-            this.baseEventHandler = new YouTubeBaseEventHandler(this);
-        } catch (error) {
-            this._handleProcessingError('Failed to create baseEventHandler', error, 'configuration');
-            throw error;
-        }
-        
         // Multi-stream support - track multiple live streams and their connections
 
         this.logger.debug('Platform initialized with configuration', 'youtube', this.config);
 
-        // Dependency injection for modular utilities/services
-        // Set dependencies before creating UnifiedNotificationProcessor
-        // ALWAYS prioritize dependencies - no overrides later in the constructor
-        // Explicit check to ensure proper dependency injection for tests
-        if (dependencies.AuthorExtractor !== undefined) {
-            this.AuthorExtractor = dependencies.AuthorExtractor;
-        } else {
-            this.AuthorExtractor = require('../utils/youtube-author-extractor');
-        }
-        
-        if (dependencies.NotificationBuilder) {
-            this.NotificationBuilder = dependencies.NotificationBuilder;
-        } else {
-            this.NotificationBuilder = require('../utils/notification-builder');
-        }
-        try {
-            this.unifiedNotificationProcessor = new UnifiedNotificationProcessor(this);
-        } catch (error) {
-            this._handleProcessingError('Failed to create UnifiedNotificationProcessor', error, 'configuration');
-            throw error;
-        }
-        
         // Validate critical properties are defined
         if (!this.handleChatMessage) {
             this._handleProcessingError(
                 'handleChatMessage not defined after constructor',
                 new Error('handleChatMessage not defined after constructor'),
-                'configuration'
-            );
-        }
-        if (!this.baseEventHandler) {
-            this._handleProcessingError(
-                'baseEventHandler not defined after constructor',
-                new Error('baseEventHandler not defined after constructor'),
                 'configuration'
             );
         }
@@ -541,19 +500,6 @@ class YouTubePlatform extends EventEmitter {
         return await this._youtubeConnectionFactory.setupConnectionEventListeners(connection, videoId);
 	    }
 
-    get eventDispatchTable() {
-        if (this._cachedEventDispatchTable) {
-            return this._cachedEventDispatchTable;
-        }
-        try {
-            this._cachedEventDispatchTable = createYouTubeEventDispatchTable(this);
-            return this._cachedEventDispatchTable;
-        } catch (error) {
-            this._handleProcessingError(`Error creating event dispatch table: ${error.message}`, error, 'configuration');
-            throw error;
-        }
-    }
-
     async handleChatMessage(chatItem) {
         this.logger.debug('handleChatMessage() called', 'youtube');
         
@@ -566,7 +512,7 @@ class YouTubePlatform extends EventEmitter {
         // Rate limiting removed - unified processing eliminates spam naturally
         
         const modernEventType = chatItem.item?.type;
-        const { normalizedChatItem, eventType, debugMetadata } = normalizeYouTubeChatItem(chatItem);
+        const { normalizedChatItem, eventType, debugMetadata } = normalizeYouTubeEvent(chatItem);
         const resolvedEventType = eventType || modernEventType;
         if (!normalizedChatItem) {
             if (debugMetadata?.reason === 'missing_gift_purchase_author') {
@@ -593,20 +539,16 @@ class YouTubePlatform extends EventEmitter {
             return;
         }
 
-        // Use dispatch table for event routing (unified processing)
-        const handler = this.eventDispatchTable[resolvedEventType];
-        if (!handler) {
-            this._handleMissingChatEvent(resolvedEventType, normalizedChatItem);
-            return;
-        }
-        
         this.logger.debug('YouTube event routing', 'youtube', {
             eventType: resolvedEventType,
             author: authorForLog
         });
         
         try {
-            await handler(normalizedChatItem);
+            const routed = await this.eventRouter.routeEvent(normalizedChatItem, resolvedEventType);
+            if (!routed) {
+                this._handleMissingChatEvent(resolvedEventType, normalizedChatItem);
+            }
         } catch (error) {
             this._handleProcessingError(
                 `Error handling event type ${resolvedEventType}: ${error.message}`,
@@ -618,17 +560,86 @@ class YouTubePlatform extends EventEmitter {
     }
 
     async handleSuperChat(chatItem) {
-        await this.baseEventHandler.handleEvent(chatItem, {
-            eventType: 'superchat',
-            dispatchMethod: 'dispatchSuperChat'
-        });
+        const author = this._resolveMonetizationAuthor(chatItem);
+        try {
+            const parsed = this.monetizationParser.parseSuperChat(chatItem);
+            const payload = this.eventFactory.createGiftEvent({
+                ...parsed,
+                ...author
+            });
+            this._emitPlatformEvent(PlatformEvents.GIFT, payload);
+        } catch (error) {
+            this._handleProcessingError(`Error processing Super Chat: ${error.message}`, error, 'superchat', chatItem);
+            this._emitGiftError(chatItem, {
+                giftType: 'Super Chat',
+                giftCount: 1,
+                author
+            });
+        }
     }
 
     async handleSuperSticker(chatItem) {
-        await this.baseEventHandler.handleEvent(chatItem, {
-            eventType: 'supersticker',
-            dispatchMethod: 'dispatchSuperSticker'
-        });
+        const author = this._resolveMonetizationAuthor(chatItem);
+        try {
+            const parsed = this.monetizationParser.parseSuperSticker(chatItem);
+            const payload = this.eventFactory.createGiftEvent({
+                ...parsed,
+                ...author
+            });
+            this._emitPlatformEvent(PlatformEvents.GIFT, payload);
+        } catch (error) {
+            this._handleProcessingError(`Error processing Super Sticker: ${error.message}`, error, 'supersticker', chatItem);
+            this._emitGiftError(chatItem, {
+                giftType: 'Super Sticker',
+                giftCount: 1,
+                author
+            });
+        }
+    }
+
+    handleChatTextMessage(chatItem) {
+        if (!chatItem || typeof chatItem !== 'object' || !chatItem.item || typeof chatItem.item !== 'object') {
+            this.logger.warn('Skipping chat message: missing chat item payload', 'youtube');
+            return;
+        }
+        const authorName = this._resolveChatItemAuthorName(chatItem);
+        if (!authorName) {
+            this.logger.warn('Skipping chat message: missing author name', 'youtube', {
+                eventType: chatItem.item.type || null
+            });
+            return;
+        }
+        this._processRegularChatMessage(chatItem, authorName);
+    }
+
+    async handleMembership(chatItem) {
+        const author = this._resolveMonetizationAuthor(chatItem);
+        try {
+            const parsed = this.monetizationParser.parseMembership(chatItem);
+            const payload = this.eventFactory.createPaypiggyEvent({
+                ...parsed,
+                ...author
+            });
+            this._emitPlatformEvent(PlatformEvents.PAYPIGGY, payload);
+        } catch (error) {
+            this._handleProcessingError(`Error processing membership: ${error.message}`, error, 'membership', chatItem);
+            this._emitPaypiggyError(chatItem, { author });
+        }
+    }
+
+    async handleGiftMembershipPurchase(chatItem) {
+        const author = this._resolveMonetizationAuthor(chatItem);
+        try {
+            const parsed = this.monetizationParser.parseGiftPurchase(chatItem);
+            const payload = this.eventFactory.createGiftPaypiggyEvent({
+                ...parsed,
+                ...author
+            });
+            this._emitPlatformEvent(PlatformEvents.GIFTPAYPIGGY, payload);
+        } catch (error) {
+            this._handleProcessingError(`Error processing gift membership purchase: ${error.message}`, error, 'gift-membership', chatItem);
+            this._emitGiftPaypiggyError(chatItem, { author });
+        }
     }
 
 
@@ -670,36 +681,78 @@ class YouTubePlatform extends EventEmitter {
         }
     }
 
-    async handleMembership(chatItem) {
-        await this.baseEventHandler.handleEvent(chatItem, {
-            eventType: 'Membership',
-            dispatchMethod: 'dispatchMembership'
-        });
-    }
-    
-    async handleGiftMembershipPurchase(chatItem) {
-        await this.baseEventHandler.handleEvent(chatItem, {
-            eventType: 'GiftMembershipPurchase',
-            dispatchMethod: 'dispatchGiftMembership'
-        });
+    _resolveMonetizationAuthor(chatItem) {
+        const author = extractAuthor(chatItem);
+        if (!author) {
+            return {};
+        }
+        return {
+            username: author.name,
+            userId: author.id
+        };
     }
 
-    async handleViewerEngagement(chatItem) {
-        if (!this.unifiedNotificationProcessor) {
-            const error = new Error('UnifiedNotificationProcessor unavailable for viewer engagement');
-            this._handleProcessingError(
-                'Viewer engagement notification skipped: unified processor missing',
-                error,
-                'viewer-engagement',
-                chatItem
-            );
+    _resolveMonetizationTimestamp(chatItem, label) {
+        try {
+            return this.monetizationParser.resolveTimestamp(chatItem, label);
+        } catch (error) {
+            this._handleProcessingError(`Missing timestamp for ${label}: ${error.message}`, error, 'monetization');
+            return null;
+        }
+    }
+
+    _resolveMonetizationId(chatItem) {
+        return this.monetizationParser.resolveOptionalId(chatItem);
+    }
+
+    _emitGiftError(chatItem, options = {}) {
+        const timestamp = this._resolveMonetizationTimestamp(chatItem, options.label || 'YouTube gift');
+        if (!timestamp) {
             return;
         }
-        await this.unifiedNotificationProcessor.processNotification(chatItem, 'engagement', {
-            isSystemMessage: true
+        const id = this._resolveMonetizationId(chatItem);
+        const payload = this.eventFactory.createGiftEvent({
+            isError: true,
+            ...(options.giftType ? { giftType: options.giftType } : {}),
+            ...(options.giftCount !== undefined ? { giftCount: options.giftCount } : {}),
+            ...(id ? { id } : {}),
+            ...(options.author || {}),
+            timestamp
         });
+        this._emitPlatformEvent(PlatformEvents.GIFT, payload);
     }
-    
+
+    _emitGiftPaypiggyError(chatItem, options = {}) {
+        const timestamp = this._resolveMonetizationTimestamp(chatItem, options.label || 'YouTube gift membership');
+        if (!timestamp) {
+            return;
+        }
+        const id = this._resolveMonetizationId(chatItem);
+        const payload = this.eventFactory.createGiftPaypiggyEvent({
+            isError: true,
+            ...(options.giftCount !== undefined ? { giftCount: options.giftCount } : {}),
+            ...(id ? { id } : {}),
+            ...(options.author || {}),
+            timestamp
+        });
+        this._emitPlatformEvent(PlatformEvents.GIFTPAYPIGGY, payload);
+    }
+
+    _emitPaypiggyError(chatItem, options = {}) {
+        const timestamp = this._resolveMonetizationTimestamp(chatItem, options.label || 'YouTube membership');
+        if (!timestamp) {
+            return;
+        }
+        const id = this._resolveMonetizationId(chatItem);
+        const payload = this.eventFactory.createPaypiggyEvent({
+            isError: true,
+            ...(id ? { id } : {}),
+            ...(options.author || {}),
+            timestamp
+        });
+        this._emitPlatformEvent(PlatformEvents.PAYPIGGY, payload);
+    }
+
     async handleLowPriorityEvent(chatItem, eventType) {
         const author = this._resolveChatItemAuthorName(chatItem);
         const resolvedAuthor = author || getFallbackUsername();
@@ -757,32 +810,14 @@ class YouTubePlatform extends EventEmitter {
 
     _handleMissingGiftPurchaseAuthor(chatItem, debugMetadata) {
         const giftCount = chatItem?.item?.giftMembershipsCount;
-        const resolvedGiftCount = Number.isFinite(Number(giftCount)) ? giftCount : undefined;
+        const resolvedGiftCount = Number.isFinite(Number(giftCount)) ? Number(giftCount) : undefined;
 
         this.logger.warn('Gift membership purchase missing author data; sending error notification', 'youtube', {
             eventType: debugMetadata?.eventType || 'LiveChatSponsorshipsGiftPurchaseAnnouncement',
             giftCount: resolvedGiftCount
         });
 
-        if (!this.notificationDispatcher || typeof this.notificationDispatcher.dispatchErrorNotification !== 'function') {
-            return;
-        }
-
-        Promise.resolve(
-            this.notificationDispatcher.dispatchErrorNotification(
-                chatItem,
-                'platform:giftpaypiggy',
-                this.handlers?.onGiftPaypiggy,
-                'onGiftPaypiggy',
-                { giftCount: resolvedGiftCount }
-            )
-        ).catch((error) => {
-            this._handleProcessingError(
-                `Failed to dispatch gift purchase error notification: ${error.message}`,
-                error,
-                'gift-membership'
-            );
-        });
+        this._emitGiftPaypiggyError(chatItem, { giftCount: resolvedGiftCount });
     }
 
     _resolveChatItemAuthorName(chatItem) {

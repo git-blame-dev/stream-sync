@@ -1,10 +1,10 @@
 const { describe, test, expect, beforeEach, afterEach } = require('bun:test');
-const { createMockFn, clearAllMocks, restoreAllMocks, spyOn } = require('../../helpers/bun-mock-utils');
-const { noOpLogger } = require('../../helpers/mock-factories');
+const { createMockFn, clearAllMocks, restoreAllMocks, spyOn } = require('../../../helpers/bun-mock-utils');
+const { noOpLogger } = require('../../../helpers/mock-factories');
 
-const PlatformEvents = require('../../../src/interfaces/PlatformEvents');
+const PlatformEvents = require('../../../../src/interfaces/PlatformEvents');
 const EventEmitter = require('events');
-const testClock = require('../../helpers/test-clock');
+const testClock = require('../../../helpers/test-clock');
 
 describe('YouTube Platform Event Routing', () => {
     let youtubePlatform;

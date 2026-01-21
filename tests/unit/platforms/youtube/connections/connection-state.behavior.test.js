@@ -1,14 +1,14 @@
 const { describe, it, expect, beforeEach, afterEach } = require('bun:test');
-const { createMockFn, restoreAllMocks } = require('../../helpers/bun-mock-utils');
-const { unmockModule, restoreAllModuleMocks, resetModules } = require('../../helpers/bun-module-mocks');
+const { createMockFn, restoreAllMocks } = require('../../../../helpers/bun-mock-utils');
+const { unmockModule, restoreAllModuleMocks, resetModules } = require('../../../../helpers/bun-module-mocks');
 
-unmockModule('../../../src/platforms/youtube');
+unmockModule('../../../../../src/platforms/youtube');
 
-const { initializeTestLogging, createMockConfig, createMockPlatformDependencies } = require('../../helpers/test-setup');
+const { initializeTestLogging, createMockConfig, createMockPlatformDependencies } = require('../../../../helpers/test-setup');
 
 initializeTestLogging();
 
-const { YouTubePlatform } = require('../../../src/platforms/youtube');
+const { YouTubePlatform } = require('../../../../../src/platforms/youtube');
 
 describe('YouTubePlatform connection state reporting', () => {
     let config;

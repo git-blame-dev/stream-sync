@@ -17,29 +17,6 @@ function extractMessageText(messageObject) {
     return '';
 }
 
-function shouldSuppressYouTubeNotification(author) {
-    if (!author || typeof author !== 'object') {
-        return true;
-    }
-    const username = typeof author.name === 'string' ? author.name.trim() : '';
-    return username.length === 0;
-}
-
-const YouTubeMessageExtractor = {
-    extractMessage(chatItem) {
-        if (!chatItem || typeof chatItem !== 'object') {
-            return '';
-        }
-        if (!chatItem.item || typeof chatItem.item !== 'object') {
-            return '';
-        }
-        const messageField = chatItem.item.message || '';
-        return extractMessageText(messageField);
-    }
-};
-
 module.exports = {
-    extractMessageText,
-    YouTubeMessageExtractor,
-    shouldSuppressYouTubeNotification
+    extractMessageText
 };

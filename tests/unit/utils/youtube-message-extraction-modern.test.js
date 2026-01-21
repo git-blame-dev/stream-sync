@@ -1,6 +1,6 @@
 
-const { describe, test, expect, beforeEach, it, afterEach } = require('bun:test');
-const { resetModules, restoreAllModuleMocks } = require('../../helpers/bun-module-mocks');
+const { describe, test, expect, it, afterEach } = require('bun:test');
+const { restoreAllModuleMocks } = require('../../helpers/bun-module-mocks');
 
 const { getSyntheticFixture } = require('../../helpers/platform-test-data');
 const testClock = require('../../helpers/test-clock');
@@ -14,16 +14,11 @@ describe('YouTube Message Extraction - Modern (Production Data)', () => {
         restoreAllModuleMocks();
     });
 
-    let YouTubeMessageExtractor;
-
-    beforeEach(() => {
-        resetModules();
-        YouTubeMessageExtractor = require('../../../src/utils/youtube-message-extractor');
-    });
+    const { extractMessageText } = require('../../../src/utils/youtube-message-extractor');
 
     describe('Chat Message Text Extraction', () => {
         it('extracts plain text from chat message', () => {
-            const text = YouTubeMessageExtractor.extractMessageText(realChatMessage.item.message);
+            const text = extractMessageText(realChatMessage.item.message);
             expect(text).toBe('Test chat message');
         });
 
@@ -35,7 +30,7 @@ describe('YouTube Message Extraction - Modern (Production Data)', () => {
                 ]
             };
 
-            const text = YouTubeMessageExtractor.extractMessageText(message);
+            const text = extractMessageText(message);
             expect(text).toBe('Full message text');
         });
 
@@ -48,31 +43,31 @@ describe('YouTube Message Extraction - Modern (Production Data)', () => {
                 ]
             };
 
-            const text = YouTubeMessageExtractor.extractMessageText(message);
+            const text = extractMessageText(message);
             expect(text).toBe('Hello world!');
         });
     });
 
     describe('SuperChat Message Extraction', () => {
         it('extracts message from SuperChat', () => {
-            const text = YouTubeMessageExtractor.extractMessageText(realSuperChat.item.message);
+            const text = extractMessageText(realSuperChat.item.message);
             expect(text).toBe('Thanks for the stream!');
         });
     });
 
     describe('SuperSticker Handling', () => {
         it('returns empty string for SuperSticker (no message field)', () => {
-            const text = YouTubeMessageExtractor.extractMessageText(realSuperSticker.item.message);
+            const text = extractMessageText(realSuperSticker.item.message);
             expect(text).toBe('');
         });
 
         it('handles undefined message gracefully', () => {
-            const text = YouTubeMessageExtractor.extractMessageText(undefined);
+            const text = extractMessageText(undefined);
             expect(text).toBe('');
         });
 
         it('handles null message gracefully', () => {
-            const text = YouTubeMessageExtractor.extractMessageText(null);
+            const text = extractMessageText(null);
             expect(text).toBe('');
         });
     });
@@ -84,7 +79,7 @@ describe('YouTube Message Extraction - Modern (Production Data)', () => {
                 runs: []
             };
 
-            const text = YouTubeMessageExtractor.extractMessageText(message);
+            const text = extractMessageText(message);
             expect(text).toBe('');
         });
 
@@ -94,7 +89,7 @@ describe('YouTube Message Extraction - Modern (Production Data)', () => {
                 runs: [{ text: '   ' }]
             };
 
-            const text = YouTubeMessageExtractor.extractMessageText(message);
+            const text = extractMessageText(message);
             expect(text).toBe('   ');
         });
 
@@ -105,7 +100,7 @@ describe('YouTube Message Extraction - Modern (Production Data)', () => {
                 ]
             };
 
-            const text = YouTubeMessageExtractor.extractMessageText(message);
+            const text = extractMessageText(message);
             expect(text).toBe('');
         });
     });
@@ -115,7 +110,7 @@ describe('YouTube Message Extraction - Modern (Production Data)', () => {
             const start = testClock.now();
 
             for (let i = 0; i < 1000; i++) {
-                YouTubeMessageExtractor.extractMessageText(realChatMessage.item.message);
+                extractMessageText(realChatMessage.item.message);
             }
 
             const simulatedDurationMs = 25;

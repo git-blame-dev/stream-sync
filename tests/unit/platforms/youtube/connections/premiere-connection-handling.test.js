@@ -1,7 +1,7 @@
 const { describe, test, expect, beforeEach } = require('bun:test');
-const { createMockFn } = require('../../helpers/bun-mock-utils');
-const { noOpLogger } = require('../../helpers/mock-factories');
-const { YouTubeConnectionManager } = require('../../../src/utils/youtube-connection-manager');
+const { createMockFn } = require('../../../../helpers/bun-mock-utils');
+const { noOpLogger } = require('../../../../helpers/mock-factories');
+const { YouTubeConnectionManager } = require('../../../../../src/utils/youtube-connection-manager');
 
 const createMockConnection = (videoId, isReady = false) => ({
     videoId,

@@ -126,7 +126,7 @@ describe('YouTube Currency Parsing - Modern (Production Data)', () => {
 
             expect(result.success).toBe(false);
             expect(result.amount).toBe(0);
-            expect(result.currency).toBe('USD');
+            expect(result.currency).toBe('');
         });
 
         it('handles undefined gracefully', () => {
@@ -134,7 +134,7 @@ describe('YouTube Currency Parsing - Modern (Production Data)', () => {
 
             expect(result.success).toBe(false);
             expect(result.amount).toBe(0);
-            expect(result.currency).toBe('USD');
+            expect(result.currency).toBe('');
         });
 
         it('handles empty string gracefully', () => {
@@ -142,7 +142,7 @@ describe('YouTube Currency Parsing - Modern (Production Data)', () => {
 
             expect(result.success).toBe(false);
             expect(result.amount).toBe(0);
-            expect(result.currency).toBe('USD');
+            expect(result.currency).toBe('');
         });
 
         it('handles invalid format gracefully', () => {

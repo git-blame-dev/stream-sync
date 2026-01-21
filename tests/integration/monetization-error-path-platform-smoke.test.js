@@ -3,7 +3,6 @@ const { createMockFn, clearAllMocks, restoreAllMocks } = require('../helpers/bun
 const EventEmitter = require('events');
 const PlatformLifecycleService = require('../../src/services/PlatformLifecycleService');
 const NotificationManager = require('../../src/notifications/NotificationManager');
-const { YouTubeNotificationDispatcher } = require('../../src/utils/youtube-notification-dispatcher');
 const { createMonetizationErrorPayload } = require('../../src/utils/monetization-error-utils');
 const { createMockDisplayQueue, noOpLogger } = require('../helpers/mock-factories');
 const { createTextProcessingManager } = require('../../src/utils/text-processing');
