@@ -290,6 +290,18 @@ const resolveFallbackUsername = () => {
     return trimmed.length > 0 ? trimmed : 'Unknown User';
 };
 
+const resolveAnonymousUsername = () => {
+    if (!configManager.config || !configManager.config.general) {
+        return 'Anonymous User';
+    }
+    const rawValue = configManager.config.general.anonymousUsername;
+    if (rawValue === undefined || rawValue === null) {
+        return 'Anonymous User';
+    }
+    const trimmed = String(rawValue).trim();
+    return trimmed.length > 0 ? trimmed : 'Anonymous User';
+};
+
 const resolveHttpUserAgents = () => {
     const rawAgents = configManager.get('http', 'userAgents');
     const parsed = parseUserAgentList(rawAgents);
@@ -434,6 +446,7 @@ const generalConfig = {
     get keywordParsingEnabled() { return configManager.getBoolean('general', 'keywordParsingEnabled', true); },
     get ignoreSelfMessages() { return configManager.getBoolean('general', 'ignoreSelfMessages', false); },
     get fallbackUsername() { return resolveFallbackUsername(); },
+    get anonymousUsername() { return resolveAnonymousUsername(); },
 
     // Per-user notification suppression defaults
     get userSuppressionEnabled() { return configManager.getBoolean('general', 'userSuppressionEnabled', true); },

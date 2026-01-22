@@ -399,4 +399,23 @@ jwtToken = se-jwt-token`
             process.stderr.write = originalStderrWrite;
         }
     });
+
+    it('resolves anonymousUsername defaults and overrides', () => {
+        setupConfigMocks(buildConfig());
+        configManager.config = null;
+        configManager.isLoaded = false;
+        configManager.configPath = testConfigPath;
+        configManager.load();
+
+        expect(config.general.anonymousUsername).toBe('Anonymous User');
+
+        const overriddenConfig = buildConfig().replace('[general]\n', '[general]\nanonymousUsername = Test Anonymous\n');
+        setupConfigMocks(overriddenConfig);
+        configManager.config = null;
+        configManager.isLoaded = false;
+        configManager.configPath = testConfigPath;
+        configManager.load();
+
+        expect(config.general.anonymousUsername).toBe('Test Anonymous');
+    });
 });

@@ -283,13 +283,21 @@ class PlatformEventRouter {
         const normalizedUserId = sanitized.userId === undefined || sanitized.userId === null
             ? undefined
             : String(sanitized.userId);
+        const normalizedUsername = typeof sanitized.username === 'string' ? sanitized.username.trim() : '';
+        const isAnonymousPayload = sanitized.isAnonymous === true;
+        const allowsAnonymous = isAnonymousPayload &&
+            (originalType === PlatformEvents.GIFT || originalType === PlatformEvents.GIFTPAYPIGGY);
 
         if (!isErrorPayload) {
-            if (!sanitized.username || typeof sanitized.username !== 'string' || !sanitized.username.trim()) {
-                throw new Error('Notification payload requires username');
-            }
-            if (!normalizedUserId) {
-                throw new Error('Notification payload requires userId');
+            if (!allowsAnonymous) {
+                if (!normalizedUsername) {
+                    throw new Error('Notification payload requires username');
+                }
+                if (!normalizedUserId) {
+                    throw new Error('Notification payload requires userId');
+                }
+            } else if ((normalizedUsername && !normalizedUserId) || (!normalizedUsername && normalizedUserId)) {
+                throw new Error('Notification payload requires username and userId when identity is provided');
             }
         }
 
@@ -317,7 +325,6 @@ class PlatformEventRouter {
             sourceType: originalType,
             type: originalType
         };
-        const normalizedUsername = typeof sanitized.username === 'string' ? sanitized.username.trim() : '';
         if (normalizedUsername) {
             result.username = normalizedUsername;
         }

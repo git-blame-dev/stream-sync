@@ -1,5 +1,6 @@
 const { describe, test, expect } = require('bun:test');
 const NotificationBuilder = require('../../../src/utils/notification-builder');
+const { getAnonymousUsername } = require('../../../src/utils/fallback-username');
 
 describe('NotificationBuilder', () => {
     test('builds a basic notification object from minimal input', () => {
@@ -150,6 +151,23 @@ describe('NotificationBuilder', () => {
             expect(notification.logMessage).toMatch(/error/i);
             expect(notification.isError).toBe(true);
         });
+    });
+
+    test('uses Anonymous User when isAnonymous is true and username is missing', () => {
+        const notification = NotificationBuilder.build({
+            platform: 'twitch',
+            type: 'platform:gift',
+            giftType: 'bits',
+            giftCount: 1,
+            amount: 25,
+            currency: 'bits',
+            isAnonymous: true
+        });
+
+        const anonymousUsername = getAnonymousUsername();
+        expect(notification.displayMessage).toContain(anonymousUsername);
+        expect(notification.ttsMessage).toContain(anonymousUsername);
+        expect(notification.logMessage).toContain(anonymousUsername);
     });
 
     test('uses generic error copy when username is missing', () => {

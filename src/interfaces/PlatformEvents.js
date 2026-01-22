@@ -169,7 +169,7 @@ const EVENT_SCHEMAS = {
     },
     'platform:gift': {
         required: ['type', 'platform', 'username', 'userId', 'id', 'giftType', 'giftCount', 'amount', 'currency', 'timestamp'],
-        optional: ['repeatCount', 'message', 'cheermoteInfo', 'isError', 'isAggregated', 'aggregatedCount', 'enhancedGiftData', 'sourceType'],
+        optional: ['repeatCount', 'message', 'cheermoteInfo', 'isError', 'isAnonymous', 'isAggregated', 'aggregatedCount', 'enhancedGiftData', 'sourceType'],
         properties: {
             type: { type: 'string', enum: ['platform:gift'] },
             platform: { type: 'string', enum: VALID_PLATFORMS },
@@ -185,6 +185,7 @@ const EVENT_SCHEMAS = {
             message: { type: 'string' },
             cheermoteInfo: { type: 'object' },
             isError: { type: 'boolean' },
+            isAnonymous: { type: 'boolean' },
             isAggregated: { type: 'boolean' },
             aggregatedCount: { type: 'number' },
             enhancedGiftData: { type: 'object' },
@@ -406,7 +407,12 @@ class PlatformEventValidator {
         
         // Check required fields
         if (schema.required) {
-            for (const field of schema.required) {
+            const isAnonymousGift = (event.type === PlatformEvents.GIFT || event.type === PlatformEvents.GIFTPAYPIGGY)
+                && event.isAnonymous === true;
+            const requiredFields = isAnonymousGift
+                ? schema.required.filter((field) => field !== 'username' && field !== 'userId')
+                : schema.required;
+            for (const field of requiredFields) {
                 const fieldSchema = schema.properties?.[field];
                 const fieldTypes = fieldSchema ? (Array.isArray(fieldSchema.type) ? fieldSchema.type : [fieldSchema.type]) : [];
                 const allowsNull = fieldTypes.includes('null');
@@ -762,6 +768,7 @@ class EnhancedPlatformEvents {
     static EVENT_TYPES = PlatformEvents;
     static NOTIFICATION_TYPES = {
         GIFT: 'platform:gift',
+        GIFTPAYPIGGY: 'platform:giftpaypiggy',
         FOLLOW: 'platform:follow',
         PAYPIGGY: 'platform:paypiggy',
         RAID: 'platform:raid'
@@ -1017,11 +1024,23 @@ class EnhancedPlatformEvents {
             return false;
         }
 
-        if (typeof event.username !== 'string' || !event.username.trim()) {
-            return false;
+        const isAnonymousGift = event.data?.isAnonymous === true &&
+            (event.notificationType === PlatformEvents.GIFT || event.notificationType === PlatformEvents.GIFTPAYPIGGY);
+        const hasValidUsername = typeof event.username === 'string' && event.username.trim();
+        const hasValidUserId = typeof event.userId === 'string' && event.userId.trim();
+
+        if (!isAnonymousGift) {
+            if (!hasValidUsername) {
+                return false;
+            }
+            if (!hasValidUserId) {
+                return false;
+            }
+            return true;
         }
 
-        if (typeof event.userId !== 'string' || !event.userId.trim()) {
+        if ((event.username !== undefined && event.username !== null && !hasValidUsername) ||
+            (event.userId !== undefined && event.userId !== null && !hasValidUserId)) {
             return false;
         }
 

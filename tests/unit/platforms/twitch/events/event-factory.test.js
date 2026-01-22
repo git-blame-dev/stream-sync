@@ -103,6 +103,28 @@ describe('Twitch event factory', () => {
         expect(event.metadata).toBeUndefined();
     });
 
+    test('creates anonymous gift paypiggy event without identity', () => {
+        const factory = createFactory();
+
+        const event = factory.createGiftPaypiggyEvent({
+            giftCount: 2,
+            tier: '1000',
+            isAnonymous: true,
+            timestamp: fixedNow
+        });
+
+        expect(event).toEqual(expect.objectContaining({
+            type: PlatformEvents.GIFTPAYPIGGY,
+            platform: 'twitch',
+            giftCount: 2,
+            tier: '1000',
+            isAnonymous: true,
+            timestamp: fixedNow
+        }));
+        expect(event.username).toBeUndefined();
+        expect(event.userId).toBeUndefined();
+    });
+
     test('creates gift event and preserves cheermote info', () => {
         const factory = createFactory();
 
@@ -134,6 +156,34 @@ describe('Twitch event factory', () => {
             cheermoteInfo: { name: 'Cheer250' }
         }));
         expect(event.metadata).toBeUndefined();
+    });
+
+    test('creates anonymous gift event without identity', () => {
+        const factory = createFactory();
+
+        const event = factory.createGiftEvent({
+            giftType: 'bits',
+            giftCount: 1,
+            amount: 25,
+            currency: 'bits',
+            id: 'cheer-anon-1',
+            isAnonymous: true,
+            timestamp: fixedNow
+        });
+
+        expect(event).toEqual(expect.objectContaining({
+            type: PlatformEvents.GIFT,
+            platform: 'twitch',
+            giftType: 'bits',
+            giftCount: 1,
+            amount: 25,
+            currency: 'bits',
+            id: 'cheer-anon-1',
+            isAnonymous: true,
+            timestamp: fixedNow
+        }));
+        expect(event.username).toBeUndefined();
+        expect(event.userId).toBeUndefined();
     });
 
     test('creates stream status events with deterministic timestamps', () => {

@@ -357,13 +357,15 @@ class AppRuntime {
 
         try {
             const isError = options.isError === true;
+            const allowAnonymous = options.isAnonymous === true &&
+                (type === 'platform:gift' || type === 'platform:giftpaypiggy');
             if (!username || typeof username !== 'string' || !username.trim()) {
-                if (!isError) {
+                if (!isError && !allowAnonymous) {
                     throw new Error(`Missing username for ${type} notification`);
                 }
             }
             if (!isError) {
-                if (!options.userId) {
+                if (!options.userId && !allowAnonymous) {
                     throw new Error(`Missing userId for ${type} notification`);
                 }
                 if (!options.timestamp) {
@@ -1101,9 +1103,13 @@ class AppRuntime {
             throw new Error('handleGiftNotification requires options');
         }
         const isError = options.isError === true;
+        const allowAnonymous = options.isAnonymous === true;
         if (!isError) {
-            if (!options.userId || !options.timestamp) {
-                throw new Error('handleGiftNotification requires userId and timestamp');
+            if (!options.timestamp) {
+                throw new Error('handleGiftNotification requires timestamp');
+            }
+            if (!options.userId && !allowAnonymous) {
+                throw new Error('handleGiftNotification requires userId');
             }
         }
         if (!this.config || !this.config.general) {
@@ -1111,7 +1117,7 @@ class AppRuntime {
         }
 
         if (!username || (typeof username === 'string' && username.trim().length === 0)) {
-            if (!isError) {
+            if (!isError && !allowAnonymous) {
                 this.logger.warn('Missing username for gift notification', platform, { options });
                 return;
             }

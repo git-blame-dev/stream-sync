@@ -371,7 +371,9 @@ class TwitchPlatform extends EventEmitter {
         try {
 
             // User validation (for events that require it)
-            if (options.validateUser && !data.username) {
+            const allowAnonymous = data?.isAnonymous === true &&
+                (eventType === 'gift' || eventType === 'giftpaypiggy');
+            if (options.validateUser && !data.username && !allowAnonymous) {
                 this.logger.warn(`Incomplete ${eventType} data received`, 'twitch', data);
                 emitMonetizationError(payloadTimestamp);
                 return;

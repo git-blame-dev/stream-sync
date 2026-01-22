@@ -15,6 +15,22 @@ describe('Cheermote counting', () => {
         expect(result.primaryType).toBe('uni');
     });
 
+    it('selects primary cheermote by total bits across types', () => {
+        const fragments = [
+            { type: 'cheermote', text: 'Cheer10', cheermote: { prefix: 'Cheer', bits: 10 } },
+            { type: 'cheermote', text: 'Cheer10', cheermote: { prefix: 'Cheer', bits: 10 } },
+            { type: 'cheermote', text: 'Cheer10', cheermote: { prefix: 'Cheer', bits: 10 } },
+            { type: 'cheermote', text: 'Cheer10', cheermote: { prefix: 'Cheer', bits: 10 } },
+            { type: 'cheermote', text: 'Cheer10', cheermote: { prefix: 'Cheer', bits: 10 } },
+            { type: 'cheermote', text: 'uni100', cheermote: { prefix: 'uni', bits: 100 } }
+        ];
+
+        const result = CheermoteProcessor.processEventSubFragments(fragments);
+
+        expect(result.totalBits).toBe(150);
+        expect(result.primaryType).toBe('uni');
+    });
+
     it('returns cheermote counts in extracted message data', () => {
         const messageObj = {
             text: 'uni100 uni100',

@@ -91,7 +91,7 @@ describe('Twitch EventSub event router', () => {
         });
     });
 
-    test('does not emit bits gifts when cheermote data is missing', () => {
+    test('emits bits gifts when cheermote data is missing', () => {
         const emitted = [];
         const router = createTwitchEventSubEventRouter({
             config: { dataLoggingEnabled: false },
@@ -105,14 +105,17 @@ describe('Twitch EventSub event router', () => {
             user_name: 'Cheerer',
             user_id: '777',
             bits: 50,
-            id: 'bits-evt-missing-cheermote',
-            message: {
-                fragments: [{ type: 'text', text: 'hello' }]
-            },
+            message_id: 'bits-msg-1',
+            message: { text: 'hello' },
             timestamp: '2024-01-01T00:00:00Z'
         });
 
-        expect(emitted.find((evt) => evt.type === 'gift')).toBeUndefined();
+        const giftEvent = emitted.find((evt) => evt.type === 'gift');
+        expect(giftEvent).toBeDefined();
+        expect(giftEvent.payload.giftType).toBe('bits');
+        expect(giftEvent.payload.message).toBe('hello');
+        expect(giftEvent.payload.id).toBe('bits-msg-1');
+        expect(giftEvent.payload.cheermoteInfo).toBeNull();
     });
 
     test('does not emit stream status events without required timestamps', () => {
@@ -249,6 +252,31 @@ describe('Twitch EventSub event router', () => {
         expect(giftEvent.payload.id).toEqual(expect.any(String));
     });
 
+    test('emits anonymous bits gifts without identity fields', () => {
+        const emitted = [];
+        const router = createTwitchEventSubEventRouter({
+            config: { dataLoggingEnabled: false },
+            logger: noOpLogger,
+            emit: (type, payload) => emitted.push({ type, payload }),
+            logRawPlatformData: async () => {},
+            logError: () => {}
+        });
+
+        router.handleBitsUseEvent({
+            bits: 25,
+            id: 'bits-anon-1',
+            is_anonymous: true,
+            message: { text: 'wow' },
+            timestamp: '2024-01-02T00:00:00Z'
+        });
+
+        const giftEvent = emitted.find((evt) => evt.type === 'gift');
+        expect(giftEvent).toBeDefined();
+        expect(giftEvent.payload.isAnonymous).toBe(true);
+        expect(Object.prototype.hasOwnProperty.call(giftEvent.payload, 'username')).toBe(false);
+        expect(Object.prototype.hasOwnProperty.call(giftEvent.payload, 'userId')).toBe(false);
+    });
+
     test('emits monetization payloads with fallback timestamps when missing', () => {
         const emitted = [];
         const router = createTwitchEventSubEventRouter({
@@ -309,6 +337,30 @@ describe('Twitch EventSub event router', () => {
             isAnonymous: true,
             timestamp: '2024-01-01T00:00:00Z'
         });
+    });
+
+    test('emits anonymous paypiggyGift payloads without identity fields', () => {
+        const emitted = [];
+        const router = createTwitchEventSubEventRouter({
+            config: { dataLoggingEnabled: false },
+            logger: noOpLogger,
+            emit: (type, payload) => emitted.push({ type, payload }),
+            logRawPlatformData: async () => {},
+            logError: () => {}
+        });
+
+        router.handleNotificationEvent('channel.subscription.gift', {
+            tier: '1000',
+            total: 2,
+            is_anonymous: true,
+            timestamp: '2024-01-03T00:00:00Z'
+        });
+
+        const giftEvent = emitted.find((evt) => evt.type === 'paypiggyGift');
+        expect(giftEvent).toBeDefined();
+        expect(giftEvent.payload.isAnonymous).toBe(true);
+        expect(Object.prototype.hasOwnProperty.call(giftEvent.payload, 'username')).toBe(false);
+        expect(Object.prototype.hasOwnProperty.call(giftEvent.payload, 'userId')).toBe(false);
     });
 
     test('backfills stream timestamps from metadata or started_at', () => {
