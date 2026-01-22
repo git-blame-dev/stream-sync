@@ -33,19 +33,24 @@ class CheermoteProcessor {
     }
 
     static analyzeCheermoteTypes(cheermoteFragments) {
-        const typeCounts = {};
+        const typeStats = {};
         let totalBits = 0;
 
         // Count each type and accumulate bits
         for (const fragment of cheermoteFragments) {
             if (fragment.cheermote && fragment.cheermote.prefix) {
                 const cleanPrefix = this.extractCleanPrefix(fragment.cheermote.prefix);
-                typeCounts[cleanPrefix] = (typeCounts[cleanPrefix] || 0) + 1;
-                totalBits += fragment.cheermote.bits || 0;
+                const fragmentBits = Number(fragment.cheermote.bits) || 0;
+                if (!typeStats[cleanPrefix]) {
+                    typeStats[cleanPrefix] = { count: 0, bits: 0 };
+                }
+                typeStats[cleanPrefix].count += 1;
+                typeStats[cleanPrefix].bits += fragmentBits;
+                totalBits += fragmentBits;
             }
         }
 
-        const typeNames = Object.keys(typeCounts);
+        const typeNames = Object.keys(typeStats);
         
         if (typeNames.length === 0) {
             return {
@@ -59,7 +64,7 @@ class CheermoteProcessor {
         }
 
         // Find primary type (most common, or first if tied)
-        const primaryType = this.findPrimaryType(typeCounts);
+        const primaryType = this.findPrimaryType(typeStats);
         const mixedTypes = typeNames.length > 1;
         const otherTypesCount = Math.max(0, typeNames.length - 1);
 
@@ -72,7 +77,8 @@ class CheermoteProcessor {
             otherTypesCount,
             types: typeNames.map(type => ({
                 prefix: type,
-                count: typeCounts[type]
+                count: typeStats[type].count,
+                totalBits: typeStats[type].bits
             }))
         };
     }
@@ -86,19 +92,22 @@ class CheermoteProcessor {
         return prefix.replace(/\d+$/, '');
     }
 
-    static findPrimaryType(typeCounts) {
-        const entries = Object.entries(typeCounts);
+    static findPrimaryType(typeStats) {
+        const entries = Object.entries(typeStats);
         
         if (entries.length === 0) {
             return null;
         }
 
-        // Sort by count (descending), then alphabetically for consistency
+        // Sort by total bits (descending), then count, then alphabetically for ties
         entries.sort((a, b) => {
-            if (b[1] !== a[1]) {
-                return b[1] - a[1]; // Higher count first
+            if (b[1].bits !== a[1].bits) {
+                return b[1].bits - a[1].bits;
             }
-            return a[0].localeCompare(b[0]); // Alphabetical for ties
+            if (b[1].count !== a[1].count) {
+                return b[1].count - a[1].count;
+            }
+            return a[0].localeCompare(b[0]);
         });
 
         return entries[0][0];

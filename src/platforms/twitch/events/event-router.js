@@ -179,9 +179,16 @@ function createTwitchEventSubEventRouter(options = {}) {
     const handleBitsUseEvent = (event, rawEvent = event) => {
         logRawIfEnabled('bits_use', rawEvent, 'bits-data-log', 'Error logging raw bits use data');
 
-        if (!event?.id || !event?.user_name || !event?.user_id || typeof event?.bits !== 'number') {
+        const eventId = event?.message_id || event?.id;
+        const isAnonymous = event?.is_anonymous === true;
+        const rawUsername = typeof event?.user_name === 'string' ? event.user_name.trim() : '';
+        const rawUserId = typeof event?.user_id === 'string' ? event.user_id.trim() : '';
+        const hasIdentity = rawUsername && rawUserId;
+        const hasPartialIdentity = (rawUsername && !rawUserId) || (!rawUsername && rawUserId);
+
+        if (!eventId || typeof event?.bits !== 'number' || (!isAnonymous && !hasIdentity) || hasPartialIdentity) {
             errorHandler.handleEventProcessingError(
-                new Error('Bits use event requires id, user_name, user_id, bits, and timestamp'),
+                new Error('Bits use event requires id/message_id, bits, and identity unless anonymous'),
                 'gift',
                 event
             );
@@ -189,18 +196,11 @@ function createTwitchEventSubEventRouter(options = {}) {
         }
 
         const messageData = extractTwitchMessageData(event.message);
-        if (!messageData.cheermoteInfo) {
-            errorHandler.handleEventProcessingError(
-                new Error('Bits use event requires cheermoteInfo'),
-                'gift',
-                event
-            );
-            return;
-        }
+        const fallbackText = typeof event?.message?.text === 'string' ? event.message.text.trim() : '';
+        const messageText = messageData.textContent || fallbackText;
+        const giftType = resolveBitsGiftType(messageData.cheermoteInfo || {});
 
-        const giftType = resolveBitsGiftType(messageData.cheermoteInfo);
-
-        const identity = normalizeUserIdentity(event.user_name, event.user_id);
+        const identity = hasIdentity ? normalizeUserIdentity(event.user_name, event.user_id) : {};
         const timestamp = resolveMonetizationTimestamp(event, 'gift');
         safeEmit('gift', {
             platform: 'twitch',
@@ -210,35 +210,41 @@ function createTwitchEventSubEventRouter(options = {}) {
             giftCount: 1,
             amount: event.bits,
             currency: 'bits',
-            message: messageData.textContent,
+            message: messageText,
             cheermoteInfo: messageData.cheermoteInfo,
-            id: event.id,
+            id: eventId,
             repeatCount: 1,
             timestamp,
-            isAnonymous: event.is_anonymous
+            isAnonymous
         });
     };
 
     const handlePaypiggyGiftEvent = (event, rawEvent = event) => {
         logRawIfEnabled('subscription_gift', rawEvent, 'sub-gift-data-log', 'Error logging raw subscription gift data');
 
-        if (!event?.user_name || !event?.user_id || !event?.tier || typeof event?.total !== 'number') {
+        const isAnonymous = event?.is_anonymous === true;
+        const rawUsername = typeof event?.user_name === 'string' ? event.user_name.trim() : '';
+        const rawUserId = typeof event?.user_id === 'string' ? event.user_id.trim() : '';
+        const hasIdentity = rawUsername && rawUserId;
+        const hasPartialIdentity = (rawUsername && !rawUserId) || (!rawUsername && rawUserId);
+
+        if (!event?.tier || typeof event?.total !== 'number' || (!isAnonymous && !hasIdentity) || hasPartialIdentity) {
             errorHandler.handleEventProcessingError(
-                new Error('Subscription gift event requires user_name, user_id, tier, total, and timestamp'),
+                new Error('Subscription gift event requires tier, total, and identity unless anonymous'),
                 'giftpaypiggy',
                 event
             );
             return;
         }
 
-        const identity = normalizeUserIdentity(event.user_name, event.user_id);
+        const identity = hasIdentity ? normalizeUserIdentity(event.user_name, event.user_id) : {};
         const timestamp = resolveMonetizationTimestamp(event, 'paypiggy-gift');
         safeEmit('paypiggyGift', {
             ...identity,
             tier: event.tier,
             giftCount: event.total,
             timestamp,
-            isAnonymous: event.is_anonymous,
+            isAnonymous,
             cumulativeTotal: event.cumulative_total
         });
     };

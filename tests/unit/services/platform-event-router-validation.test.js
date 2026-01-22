@@ -119,6 +119,51 @@ describe('PlatformEventRouter validation', () => {
         expect(runtime.handleGiftNotification).toHaveBeenCalledTimes(1);
     });
 
+    it('allows anonymous gift payloads without identity fields', async () => {
+        const { router, runtime } = buildRouter();
+
+        await router.routeEvent({
+            platform: 'twitch',
+            type: 'platform:gift',
+            data: {
+                id: 'gift-anon-1',
+                giftType: 'bits',
+                giftCount: 1,
+                amount: 25,
+                currency: 'bits',
+                isAnonymous: true,
+                timestamp: new Date().toISOString()
+            }
+        });
+
+        expect(runtime.handleGiftNotification).toHaveBeenCalledTimes(1);
+        const [, , payload] = runtime.handleGiftNotification.mock.calls[0];
+        expect(payload.isAnonymous).toBe(true);
+        expect(payload.username).toBeUndefined();
+        expect(payload.userId).toBeUndefined();
+    });
+
+    it('allows anonymous giftpaypiggy payloads without identity fields', async () => {
+        const { router, runtime } = buildRouter();
+
+        await router.routeEvent({
+            platform: 'twitch',
+            type: 'platform:giftpaypiggy',
+            data: {
+                giftCount: 5,
+                tier: '1000',
+                isAnonymous: true,
+                timestamp: new Date().toISOString()
+            }
+        });
+
+        expect(runtime.handleGiftPaypiggyNotification).toHaveBeenCalledTimes(1);
+        const [, , payload] = runtime.handleGiftPaypiggyNotification.mock.calls[0];
+        expect(payload.isAnonymous).toBe(true);
+        expect(payload.username).toBeUndefined();
+        expect(payload.userId).toBeUndefined();
+    });
+
     it('routes gift notifications with canonical types', async () => {
         const { router, runtime } = buildRouter();
         const timestamp = new Date().toISOString();

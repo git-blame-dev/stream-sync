@@ -3,6 +3,7 @@ const crypto = require('crypto');
 // Import notification templates for template-based message generation
 const { NOTIFICATION_TEMPLATES, interpolateTemplate } = require('./notification-strings');
 const { normalizeCurrency } = require('./currency-utils');
+const { getAnonymousUsername } = require('./fallback-username');
 
 class NotificationBuilder {
     static build(input) {
@@ -12,14 +13,20 @@ class NotificationBuilder {
         const { platform, username, userId, message, amount, currency, vfxConfig, template } = input;
         let { type } = input;
         const isError = input.isError === true;
+        const isAnonymous = input.isAnonymous === true;
         const normalizedUsername = (typeof username === 'string') ? username.trim() : '';
-        if (!normalizedUsername && !isError) {
-            return null;
-        }
         if (typeof type !== 'string' || !type.trim()) {
+            if (!normalizedUsername && !isError) {
+                return null;
+            }
             throw new Error('Notification requires type');
         }
         type = type.trim();
+        const allowsAnonymous = isAnonymous && (type === 'platform:gift' || type === 'platform:giftpaypiggy');
+        const resolvedUsername = normalizedUsername || (allowsAnonymous ? getAnonymousUsername() : '');
+        if (!resolvedUsername && !isError) {
+            return null;
+        }
         const disallowedShortTypes = new Set(['gift', 'paypiggy', 'giftpaypiggy', 'follow', 'raid', 'share', 'envelope']);
         if (disallowedShortTypes.has(type)) {
             throw new Error(`Notification requires canonical platform type: ${type}`);
@@ -56,7 +63,7 @@ class NotificationBuilder {
         normalizedInput.platform = normalizedPlatform;
         delete normalizedInput.user;
         delete normalizedInput.displayName;
-        normalizedInput.username = normalizedUsername;
+        normalizedInput.username = resolvedUsername;
         if (normalizedUserId !== undefined) {
             normalizedInput.userId = normalizedUserId;
         }
@@ -106,8 +113,8 @@ class NotificationBuilder {
             processedAt: now,
             timestamp: new Date(now).toISOString()
         };
-        if (normalizedUsername) {
-            notification.username = normalizedUsername;
+        if (resolvedUsername) {
+            notification.username = resolvedUsername;
         }
         if (normalizedUserId !== undefined) {
             notification.userId = normalizedUserId;

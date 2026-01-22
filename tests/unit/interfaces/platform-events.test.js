@@ -100,6 +100,25 @@ describe('Platform Events Interface', () => {
             expect(PlatformEvents.validateNotificationEvent({ ...baseEvent, userId: undefined })).toBe(false);
         });
 
+        it('should validate anonymous gift notifications without identity fields', () => {
+            const giftEvent = PlatformEvents.createNotificationEvent('twitch', 'platform:gift', {
+                id: 'gift-anon-1',
+                giftType: 'bits',
+                giftCount: 1,
+                amount: 25,
+                currency: 'bits',
+                isAnonymous: true
+            });
+            const giftPaypiggyEvent = PlatformEvents.createNotificationEvent('twitch', 'platform:giftpaypiggy', {
+                giftCount: 2,
+                tier: '1000',
+                isAnonymous: true
+            });
+
+            expect(PlatformEvents.validateNotificationEvent(giftEvent)).toBe(true);
+            expect(PlatformEvents.validateNotificationEvent(giftPaypiggyEvent)).toBe(true);
+        });
+
         it('should validate connection status events', () => {
             const platforms = ['tiktok', 'twitch', 'youtube'];
             const statuses = ['connected', 'disconnected', 'reconnecting'];

@@ -14,6 +14,21 @@ function normalizeIdentity(data) {
     };
 }
 
+function normalizeOptionalIdentity(data) {
+    const hasUsername = typeof data?.username === 'string' && data.username.trim();
+    const hasUserId = typeof data?.userId === 'string' && data.userId.trim();
+    if (hasUsername && hasUserId) {
+        return {
+            userId: data.userId,
+            username: data.username
+        };
+    }
+    if (data?.isAnonymous === true && !hasUsername && !hasUserId) {
+        return null;
+    }
+    throw new Error('Twitch event payload requires userId and username');
+}
+
 function normalizePositiveInteger(value) {
     const numericValue = Number(value);
     if (!Number.isFinite(numericValue)) {
@@ -121,7 +136,7 @@ function createTwitchEventFactory(options = {}) {
         },
 
         createGiftPaypiggyEvent: (data) => {
-            const identity = normalizeIdentity(data);
+            const identity = normalizeOptionalIdentity(data);
             const giftCount = normalizePositiveInteger(data.giftCount);
             if (giftCount === undefined) {
                 throw new Error('Twitch giftpaypiggy payload requires giftCount');
@@ -131,13 +146,17 @@ function createTwitchEventFactory(options = {}) {
             const result = {
                 type: PlatformEvents.GIFTPAYPIGGY,
                 platform: platformName,
-                username: identity.username,
-                userId: identity.userId,
                 giftCount,
                 tier: data.tier,
-                isAnonymous: data.isAnonymous,
                 timestamp: getTimestamp(data)
             };
+            if (identity) {
+                result.username = identity.username;
+                result.userId = identity.userId;
+            }
+            if (data.isAnonymous === true) {
+                result.isAnonymous = true;
+            }
             if (cumulativeTotal !== undefined) {
                 result.cumulativeTotal = cumulativeTotal;
             }
@@ -161,7 +180,7 @@ function createTwitchEventFactory(options = {}) {
         },
 
         createGiftEvent: (data) => {
-            const identity = normalizeIdentity(data);
+            const identity = normalizeOptionalIdentity(data);
             const isError = data.isError === true;
             const giftType = typeof data.giftType === 'string' ? data.giftType.trim() : '';
             const giftCount = isError
@@ -190,8 +209,6 @@ function createTwitchEventFactory(options = {}) {
             const result = {
                 type: PlatformEvents.GIFT,
                 platform: platformName,
-                username: identity.username,
-                userId: identity.userId,
                 id: data.id,
                 giftType,
                 giftCount,
@@ -199,6 +216,13 @@ function createTwitchEventFactory(options = {}) {
                 currency,
                 timestamp: getTimestamp(data)
             };
+            if (identity) {
+                result.username = identity.username;
+                result.userId = identity.userId;
+            }
+            if (data.isAnonymous === true) {
+                result.isAnonymous = true;
+            }
             if (typeof data.message === 'string') {
                 result.message = data.message;
             }
