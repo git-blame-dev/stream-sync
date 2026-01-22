@@ -373,4 +373,27 @@ describe('Twitch EventSub event router', () => {
         expect(raidEvent.payload.timestamp).toBe('2024-03-01T00:00:00Z');
         expect(giftEvent.payload.timestamp).toBe('2024-03-01T00:01:00Z');
     });
+
+    test('logs raw events before timestamp fallback', () => {
+        const logged = [];
+        const router = createTwitchEventSubEventRouter({
+            config: { dataLoggingEnabled: true },
+            logger: noOpLogger,
+            emit: () => {},
+            logRawPlatformData: async (...args) => logged.push(args),
+            logError: () => {}
+        });
+
+        const rawEvent = {
+            id: 'stream-1',
+            started_at: '2024-02-01T00:00:00Z'
+        };
+
+        router.handleNotificationEvent('stream.online', rawEvent);
+
+        expect(logged).toHaveLength(1);
+        const loggedEvent = logged[0][1];
+        expect(Object.prototype.hasOwnProperty.call(loggedEvent, 'timestamp')).toBe(false);
+        expect(loggedEvent.started_at).toBe('2024-02-01T00:00:00Z');
+    });
 });

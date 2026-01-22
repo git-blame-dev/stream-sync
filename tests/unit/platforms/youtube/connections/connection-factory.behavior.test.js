@@ -85,6 +85,7 @@ describe('YouTube connection factory', () => {
         const handleChatMessage = createMockFn();
         const processRegularChatMessage = createMockFn();
         const chatUpdateHandlers = {};
+        const logRawPlatformData = createMockFn().mockResolvedValue();
 
         const { factory } = createFactory({
             validationResult: { shouldConnect: true },
@@ -93,9 +94,9 @@ describe('YouTube connection factory', () => {
                 _processRegularChatMessage: processRegularChatMessage,
                 _extractMessagesFromChatItem: createMockFn().mockReturnValue([]),
                 _shouldSkipMessage: createMockFn().mockReturnValue(false),
-                logRawPlatformData: createMockFn().mockResolvedValue(),
+                logRawPlatformData,
                 setYouTubeConnectionReady: createMockFn(),
-                config: { dataLoggingEnabled: false }
+                config: { dataLoggingEnabled: true }
             }
         });
 
@@ -109,10 +110,16 @@ describe('YouTube connection factory', () => {
 
         await factory.setupConnectionEventListeners(connection, 'video-1');
 
-        chatUpdateHandlers['chat-update']({
+        const rawChatItem = {
             author: { id: 'UC_TEST_1', name: 'TestUser' },
             text: 'hello there'
-        });
+        };
+
+        chatUpdateHandlers['chat-update'](rawChatItem);
+
+        expect(logRawPlatformData.mock.calls).toHaveLength(1);
+        expect(logRawPlatformData.mock.calls[0][0]).toBe('chat');
+        expect(logRawPlatformData.mock.calls[0][1]).toBe(rawChatItem);
 
         expect(processRegularChatMessage).toHaveBeenCalledTimes(0);
         const [handleCall] = handleChatMessage.mock.calls;
@@ -204,6 +211,7 @@ describe('YouTube connection factory', () => {
     test('skips direct chat-update payloads with missing author id', async () => {
         const handleChatMessage = createMockFn();
         const chatUpdateHandlers = {};
+        const logRawPlatformData = createMockFn().mockResolvedValue();
 
         const { factory } = createFactory({
             validationResult: { shouldConnect: true },
@@ -212,9 +220,9 @@ describe('YouTube connection factory', () => {
                 _processRegularChatMessage: createMockFn(),
                 _extractMessagesFromChatItem: createMockFn().mockReturnValue([]),
                 _shouldSkipMessage: createMockFn().mockReturnValue(false),
-                logRawPlatformData: createMockFn().mockResolvedValue(),
+                logRawPlatformData,
                 setYouTubeConnectionReady: createMockFn(),
-                config: { dataLoggingEnabled: false }
+                config: { dataLoggingEnabled: true }
             }
         });
 
@@ -228,11 +236,16 @@ describe('YouTube connection factory', () => {
 
         await factory.setupConnectionEventListeners(connection, 'video-1');
 
-        chatUpdateHandlers['chat-update']({
+        const rawChatItem = {
             author: { name: 'MissingIdUser' },
             text: 'hello there'
-        });
+        };
 
+        chatUpdateHandlers['chat-update'](rawChatItem);
+
+        expect(logRawPlatformData.mock.calls).toHaveLength(1);
+        expect(logRawPlatformData.mock.calls[0][0]).toBe('chat');
+        expect(logRawPlatformData.mock.calls[0][1]).toBe(rawChatItem);
         expect(handleChatMessage).not.toHaveBeenCalled();
     });
 
@@ -374,11 +387,14 @@ describe('YouTube connection factory', () => {
 
         await factory.setupConnectionEventListeners(connection, 'video-1');
 
-        chatUpdateHandlers['chat-update']({ type: 'AddChatItemAction' });
+        const rawChatItem = { type: 'AddChatItemAction' };
+        chatUpdateHandlers['chat-update'](rawChatItem);
 
         expect(handleChatMessage).toHaveBeenCalledTimes(1);
         expect(handleChatMessage.mock.calls[0][0].videoId).toBe('video-1');
         expect(logRawPlatformData).toHaveBeenCalledTimes(1);
+        expect(logRawPlatformData.mock.calls[0][0]).toBe('chat');
+        expect(logRawPlatformData.mock.calls[0][1]).toBe(rawChatItem);
     });
 
     test('disconnects when live chat ends', async () => {

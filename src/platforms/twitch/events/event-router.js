@@ -53,8 +53,8 @@ function createTwitchEventSubEventRouter(options = {}) {
         return fallbackTimestamp;
     };
 
-    const handleChatMessageEvent = (event) => {
-        logRawIfEnabled('chat', event, 'chat-data-log', 'Error logging raw chat data');
+    const handleChatMessageEvent = (event, rawEvent = event) => {
+        logRawIfEnabled('chat', rawEvent, 'chat-data-log', 'Error logging raw chat data');
 
         try {
             const context = {
@@ -93,8 +93,8 @@ function createTwitchEventSubEventRouter(options = {}) {
         }
     };
 
-    const handleFollowEvent = (event) => {
-        logRawIfEnabled('follow', event, 'follow-data-log', 'Error logging raw follow data');
+    const handleFollowEvent = (event, rawEvent = event) => {
+        logRawIfEnabled('follow', rawEvent, 'follow-data-log', 'Error logging raw follow data');
 
         if (!event?.user_name || !event?.user_id || !event?.followed_at) {
             errorHandler.handleEventProcessingError(
@@ -112,8 +112,8 @@ function createTwitchEventSubEventRouter(options = {}) {
         });
     };
 
-    const handlePaypiggyEvent = (event) => {
-        logRawIfEnabled('subscription', event, 'subscription-data-log', 'Error logging raw subscription data');
+    const handlePaypiggyEvent = (event, rawEvent = event) => {
+        logRawIfEnabled('subscription', rawEvent, 'subscription-data-log', 'Error logging raw subscription data');
 
         if (event.is_gift === true) {
             safeLogger.debug(
@@ -148,8 +148,8 @@ function createTwitchEventSubEventRouter(options = {}) {
         safeEmit('paypiggy', payload);
     };
 
-    const handleRaidEvent = (event) => {
-        logRawIfEnabled('raid', event, 'raid-data-log', 'Error logging raw raid data');
+    const handleRaidEvent = (event, rawEvent = event) => {
+        logRawIfEnabled('raid', rawEvent, 'raid-data-log', 'Error logging raw raid data');
 
         if (!event?.from_broadcaster_user_name || !event?.from_broadcaster_user_id || typeof event?.viewers !== 'number' || !event?.timestamp) {
             errorHandler.handleEventProcessingError(
@@ -176,8 +176,8 @@ function createTwitchEventSubEventRouter(options = {}) {
         return 'bits';
     };
 
-    const handleBitsUseEvent = (event) => {
-        logRawIfEnabled('bits_use', event, 'bits-data-log', 'Error logging raw bits use data');
+    const handleBitsUseEvent = (event, rawEvent = event) => {
+        logRawIfEnabled('bits_use', rawEvent, 'bits-data-log', 'Error logging raw bits use data');
 
         if (!event?.id || !event?.user_name || !event?.user_id || typeof event?.bits !== 'number') {
             errorHandler.handleEventProcessingError(
@@ -219,8 +219,8 @@ function createTwitchEventSubEventRouter(options = {}) {
         });
     };
 
-    const handlePaypiggyGiftEvent = (event) => {
-        logRawIfEnabled('subscription_gift', event, 'sub-gift-data-log', 'Error logging raw subscription gift data');
+    const handlePaypiggyGiftEvent = (event, rawEvent = event) => {
+        logRawIfEnabled('subscription_gift', rawEvent, 'sub-gift-data-log', 'Error logging raw subscription gift data');
 
         if (!event?.user_name || !event?.user_id || !event?.tier || typeof event?.total !== 'number') {
             errorHandler.handleEventProcessingError(
@@ -243,8 +243,8 @@ function createTwitchEventSubEventRouter(options = {}) {
         });
     };
 
-    const handlePaypiggyMessageEvent = (event) => {
-        logRawIfEnabled('subscription_message', event, 'sub-message-data-log', 'Error logging raw subscription message data');
+    const handlePaypiggyMessageEvent = (event, rawEvent = event) => {
+        logRawIfEnabled('subscription_message', rawEvent, 'sub-message-data-log', 'Error logging raw subscription message data');
 
         safeLogger.debug(
             `[Resub] ${event.user_name} resubbed on twitch (${event.cumulative_months} months, Tier: ${event.tier})`,
@@ -277,8 +277,8 @@ function createTwitchEventSubEventRouter(options = {}) {
         safeEmit('paypiggyMessage', payload);
     };
 
-    const handleStreamOnlineEvent = (event) => {
-        logRawIfEnabled('stream_online', event, 'stream-online-log', 'Error logging raw stream online data');
+    const handleStreamOnlineEvent = (event, rawEvent = event) => {
+        logRawIfEnabled('stream_online', rawEvent, 'stream-online-log', 'Error logging raw stream online data');
 
         safeLogger.info('Stream went online, starting viewer count polling', 'twitch');
         if (!event?.started_at) {
@@ -298,8 +298,8 @@ function createTwitchEventSubEventRouter(options = {}) {
         });
     };
 
-    const handleStreamOfflineEvent = (event) => {
-        logRawIfEnabled('stream_offline', event, 'stream-offline-log', 'Error logging raw stream offline data');
+    const handleStreamOfflineEvent = (event, rawEvent = event) => {
+        logRawIfEnabled('stream_offline', rawEvent, 'stream-offline-log', 'Error logging raw stream offline data');
 
         safeLogger.info('Stream went offline, stopping viewer count polling', 'twitch');
         if (!event?.timestamp) {
@@ -324,31 +324,31 @@ function createTwitchEventSubEventRouter(options = {}) {
 
         switch (subscriptionType) {
             case 'channel.chat.message':
-                handleChatMessageEvent(normalizedEvent);
+                handleChatMessageEvent(normalizedEvent, event);
                 break;
             case 'channel.follow':
-                handleFollowEvent(normalizedEvent);
+                handleFollowEvent(normalizedEvent, event);
                 break;
             case 'channel.subscribe':
-                handlePaypiggyEvent(normalizedEvent);
+                handlePaypiggyEvent(normalizedEvent, event);
                 break;
             case 'channel.raid':
-                handleRaidEvent(normalizedEvent);
+                handleRaidEvent(normalizedEvent, event);
                 break;
             case 'channel.bits.use':
-                handleBitsUseEvent(normalizedEvent);
+                handleBitsUseEvent(normalizedEvent, event);
                 break;
             case 'channel.subscription.gift':
-                handlePaypiggyGiftEvent(normalizedEvent);
+                handlePaypiggyGiftEvent(normalizedEvent, event);
                 break;
             case 'channel.subscription.message':
-                handlePaypiggyMessageEvent(normalizedEvent);
+                handlePaypiggyMessageEvent(normalizedEvent, event);
                 break;
             case 'stream.online':
-                handleStreamOnlineEvent(normalizedEvent);
+                handleStreamOnlineEvent(normalizedEvent, event);
                 break;
             case 'stream.offline':
-                handleStreamOfflineEvent(normalizedEvent);
+                handleStreamOfflineEvent(normalizedEvent, event);
                 break;
             default:
                 safeLogger.debug(`Unknown EventSub notification type: ${subscriptionType}`, 'twitch', event);

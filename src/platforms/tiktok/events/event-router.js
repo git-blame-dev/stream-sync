@@ -300,7 +300,7 @@ function setupTikTokEventListeners(platform) {
 
     platform.connection.on('rawData', async (payload) => {
         const eventType = payload?.type || 'unknown';
-        await platform._logIncomingEvent(eventType, payload?.data || payload);
+        await platform._logIncomingEvent(eventType, payload);
     });
 
     platform.listenersConfigured = true;
