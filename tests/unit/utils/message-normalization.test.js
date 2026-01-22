@@ -3,7 +3,6 @@ const { describe, test, expect, beforeEach } = require('bun:test');
 const testClock = require('../../helpers/test-clock');
 const {
     normalizeMessage,
-    normalizeTwitchMessage,
     normalizeYouTubeMessage,
     normalizeTikTokMessage,
     extractTwitchMessageData,
@@ -70,187 +69,6 @@ describe('Message Normalization', () => {
 
     beforeEach(() => {
         timestampService = buildTimestampService();
-    });
-
-    describe('when normalizing Twitch messages', () => {
-        test('normalizes TMI.js chat message correctly', () => {
-            const timestampMs = testClock.now();
-            const user = {
-                userId: '123456789',
-                username: 'testuser',
-                isMod: true,
-                isSubscriber: false,
-                isBroadcaster: false
-            };
-            const message = 'Hello world!';
-            const context = {
-                'user-id': '123456789',
-                'username': 'testuser',
-                'display-name': 'TestUser',
-                mod: true,
-                subscriber: false,
-                badges: { moderator: '1' },
-                color: '#FF0000',
-                emotes: {},
-                'room-id': '987654321',
-                timestamp: new Date(timestampMs).toISOString()
-            };
-
-            const normalized = normalizeTwitchMessage(
-                user,
-                message,
-                context,
-                'twitch',
-                timestampService
-            );
-
-            expect(normalized).toMatchObject({
-                platform: 'twitch',
-                userId: '123456789',
-                username: 'testuser',
-                message: 'Hello world!',
-                isMod: true,
-                isSubscriber: false,
-                isBroadcaster: false
-            });
-            expect(normalized.metadata).toMatchObject({
-                badges: { moderator: '1' },
-                color: '#FF0000',
-                emotes: {},
-                roomId: '987654321'
-            });
-            expect(normalized.rawData).toEqual({ user, message, context });
-        });
-
-        test('rejects non-string timestamps from the service', () => {
-            const nonStringTimestampService = {
-                extractTimestamp: () => 123456789
-            };
-            const user = { userId: '123456789', username: 'testuser' };
-            const message = 'Timestamp type check';
-            const context = { timestamp: new Date(testClock.now()).toISOString() };
-
-            expect(() => normalizeTwitchMessage(
-                user,
-                message,
-                context,
-                'twitch',
-                nonStringTimestampService
-            )).toThrow('Missing Twitch timestamp');
-        });
-
-        test('normalizes EventSub message correctly', () => {
-            const timestampMs = testClock.now();
-            const user = {
-                userId: '123456789',
-                username: 'eventsubuser'
-            };
-            const message = 'EventSub message';
-            const context = {
-                'user-id': '123456789',
-                'username': 'eventsubuser',
-                'display-name': 'EventSubUser',
-                mod: false,
-                subscriber: true,
-                timestamp: new Date(timestampMs).toISOString()
-            };
-
-            const normalized = normalizeTwitchMessage(
-                user,
-                message,
-                context,
-                'twitch-eventsub',
-                timestampService
-            );
-
-            expect(normalized).toMatchObject({
-                platform: 'twitch-eventsub',
-                userId: '123456789',
-                username: 'eventsubuser',
-                message: 'EventSub message',
-                isMod: false,
-                isSubscriber: true
-            });
-        });
-
-        test('uses user role flags when context flags are missing', () => {
-            const user = {
-                userId: 'role-1',
-                username: 'roleuser',
-                isMod: true,
-                isSubscriber: true,
-                isBroadcaster: true
-            };
-            const message = 'Role fallback message';
-            const context = {
-                timestamp: new Date(testClock.now()).toISOString(),
-                badges: { broadcaster: '1' }
-            };
-
-            const normalized = normalizeTwitchMessage(
-                user,
-                message,
-                context,
-                'twitch',
-                timestampService
-            );
-
-            expect(normalized).toMatchObject({
-                isMod: true,
-                isSubscriber: true,
-                isBroadcaster: true
-            });
-        });
-
-        test('handles non-error throws from timestamp service', () => {
-            const stringThrowingService = {
-                extractTimestamp: () => {
-                    throw 'timestamp error';
-                }
-            };
-            const user = { userId: '123456789', username: 'testuser' };
-            const message = 'Message with string error';
-            const context = { timestamp: new Date(testClock.now()).toISOString() };
-
-            let thrown;
-            try {
-                normalizeTwitchMessage(
-                    user,
-                    message,
-                    context,
-                    'twitch',
-                    stringThrowingService
-                );
-            } catch (error) {
-                thrown = error;
-            }
-
-            expect(thrown).toBe('timestamp error');
-        });
-
-        test('throws on missing user data', () => {
-            const user = {};
-            const message = 'Message with missing user data';
-            const context = { timestamp: new Date(testClock.now()).toISOString() };
-
-            expect(() => normalizeTwitchMessage(
-                user,
-                message,
-                context,
-                'twitch',
-                timestampService
-            )).toThrow('userId');
-        });
-
-        test('throws on null/undefined values', () => {
-            expect(() => normalizeTwitchMessage(
-                null,
-                null,
-                null,
-                'twitch',
-                timestampService
-            )).toThrow('user');
-        });
     });
 
     describe('when normalizing YouTube messages', () => {
@@ -773,35 +591,9 @@ describe('Message Normalization', () => {
     });
 
     describe('when using the main normalize function', () => {
-        test('routes to correct platform normalizer', () => {
-            const timestampMs = testClock.now();
-            const twitchUser = { username: 'twitchuser', userId: 'tw-1' };
-            const twitchMessage = 'Twitch message';
-            const twitchContext = { timestamp: new Date(timestampMs).toISOString() };
-
-            const normalized = normalizeMessage(
-                'twitch',
-                twitchUser,
-                twitchMessage,
-                twitchContext,
-                'twitch',
-                timestampService
-            );
-
-            expect(normalized.platform).toBe('twitch');
-            expect(normalized.username).toBe('twitchuser');
-            expect(normalized.message).toBe('Twitch message');
-        });
-
         test('throws on unknown platform', () => {
             expect(() => normalizeMessage('unknown_platform', {}, 'test message'))
                 .toThrow('Unsupported');
-        });
-
-        test('throws on normalization errors', () => {
-            const context = { timestamp: new Date(testClock.now()).toISOString() };
-            expect(() => normalizeMessage('twitch', null, 'message', context, 'twitch', timestampService))
-                .toThrow('user');
         });
 
         test('normalizes platform names in a case-insensitive way', () => {
@@ -821,137 +613,6 @@ describe('Message Normalization', () => {
             const normalized = normalizeMessage('YouTube', chatItem, 'YouTube', timestampService);
 
             expect(normalized.platform).toBe('youtube');
-        });
-    });
-
-    describe('edge cases and error handling', () => {
-        test('handles very long messages', () => {
-            const longMessage = 'A'.repeat(10000);
-            const user = { username: 'testuser', userId: 'tw-long' };
-            const context = { timestamp: new Date(testClock.now()).toISOString() };
-
-            const normalized = normalizeTwitchMessage(
-                user,
-                longMessage,
-                context,
-                'twitch',
-                timestampService
-            );
-
-            expect(normalized.message).toBe(longMessage);
-            expect(normalized.message.length).toBe(10000);
-        });
-
-        test('handles special characters in usernames', () => {
-            const user = { username: 'User@#$%^&*()', userId: 'tw-special' };
-            const message = 'Message with special username';
-            const context = { timestamp: new Date(testClock.now()).toISOString() };
-
-            const normalized = normalizeTwitchMessage(
-                user,
-                message,
-                context,
-                'twitch',
-                timestampService
-            );
-
-            expect(normalized.username).toBe('User@#$%^&*()');
-        });
-
-        test('handles unicode characters', () => {
-            const user = { username: 'ユーザー', userId: 'tw-unicode' };
-            const message = 'こんにちは世界！';
-            const context = { timestamp: new Date(testClock.now()).toISOString() };
-
-            const normalized = normalizeTwitchMessage(
-                user,
-                message,
-                context,
-                'twitch',
-                timestampService
-            );
-
-            expect(normalized.username).toBe('ユーザー');
-            expect(normalized.message).toBe('こんにちは世界！');
-        });
-
-        test('throws on empty messages', () => {
-            const user = { username: 'testuser', userId: 'tw-empty' };
-            const message = '';
-            const context = { timestamp: new Date(testClock.now()).toISOString() };
-
-            expect(() => normalizeTwitchMessage(
-                user,
-                message,
-                context,
-                'twitch',
-                timestampService
-            )).toThrow('message');
-        });
-
-        test('throws on whitespace-only messages', () => {
-            const user = { username: 'testuser', userId: 'tw-space' };
-            const message = '   \n\t   ';
-            const context = { timestamp: new Date(testClock.now()).toISOString() };
-
-            expect(() => normalizeTwitchMessage(
-                user,
-                message,
-                context,
-                'twitch',
-                timestampService
-            )).toThrow('message');
-        });
-    });
-
-    describe('performance and memory', () => {
-        test('handles high message volume efficiently', () => {
-            const startTime = testClock.now();
-            const iterations = 1000;
-
-            for (let i = 0; i < iterations; i++) {
-                const user = { username: `user${i}`, userId: `tw-${i}` };
-                const message = `Message ${i}`;
-                const context = { timestamp: new Date(testClock.now()).toISOString() };
-
-                normalizeTwitchMessage(
-                    user,
-                    message,
-                    context,
-                    'twitch',
-                    timestampService
-                );
-            }
-
-            const simulatedProcessingMs = 100;
-            testClock.advance(simulatedProcessingMs);
-            const endTime = testClock.now();
-            const duration = endTime - startTime;
-
-            expect(duration).toBeLessThan(1000);
-        });
-
-        test('does not leak memory with repeated calls', () => {
-            const initialMemory = process.memoryUsage().heapUsed;
-
-            for (let i = 0; i < 1000; i++) {
-                const user = { username: `user${i}`, userId: `tw-${i}` };
-                const message = `Message ${i}`;
-                const context = { timestamp: new Date(testClock.now()).toISOString() };
-
-                normalizeTwitchMessage(
-                    user,
-                    message,
-                    context,
-                    'twitch',
-                    timestampService
-                );
-            }
-
-            const finalMemory = process.memoryUsage().heapUsed;
-            const memoryIncrease = finalMemory - initialMemory;
-
-            expect(memoryIncrease).toBeLessThan(10 * 1024 * 1024);
         });
     });
 
@@ -1104,86 +765,8 @@ describe('Message Normalization', () => {
             });
         });
 
-        describe('Twitch Timestamp Preservation', () => {
-            test('preserves original Twitch timestamp from message data', () => {
-                const originalTime = testClock.now() - (7 * 60 * 1000);
-                const user = {
-                    userId: '123456789',
-                    username: 'testuser'
-                };
-                const message = 'Test Twitch message with timestamp';
-                const context = {
-                    timestamp: new Date(originalTime).toISOString(),
-                    'user-id': '123456789',
-                    username: 'testuser'
-                };
-
-                const normalized = normalizeTwitchMessage(
-                    user,
-                    message,
-                    context,
-                    'twitch',
-                    timestampService
-                );
-
-                const normalizedTime = new Date(normalized.timestamp).getTime();
-                expect(normalizedTime).toBe(originalTime);
-            });
-
-            test('does not replace Twitch timestamps with current time when available', () => {
-                const oldTime = testClock.now() - (15 * 60 * 1000);
-                const user = {
-                    userId: '123456789',
-                    username: 'testuser'
-                };
-                const message = 'Old cached Twitch message';
-                const context = {
-                    timestamp: new Date(oldTime).toISOString(),
-                    'user-id': '123456789',
-                    username: 'testuser'
-                };
-
-                const beforeNormalization = testClock.now();
-
-                const normalized = normalizeTwitchMessage(
-                    user,
-                    message,
-                    context,
-                    'twitch',
-                    timestampService
-                );
-
-                const afterNormalization = testClock.now();
-                const normalizedTime = new Date(normalized.timestamp).getTime();
-
-                expect(normalizedTime).toBe(oldTime);
-                expect(normalizedTime).toBeLessThan(beforeNormalization);
-                expect(normalizedTime).toBeLessThan(afterNormalization);
-            });
-
-            test('throws when Twitch timestamp is missing', () => {
-                const user = {
-                    userId: '123456789',
-                    username: 'testuser'
-                };
-                const message = 'Test Twitch message without timestamp';
-                const context = {
-                    'user-id': '123456789',
-                    username: 'testuser'
-                };
-
-                expect(() => normalizeTwitchMessage(
-                    user,
-                    message,
-                    context,
-                    'twitch',
-                    timestampService
-                )).toThrow('twitch timestamp');
-            });
-        });
-
         describe('Cross-Platform Timestamp Consistency', () => {
-            test('handles timestamp preservation consistently across all platforms', () => {
+            test('handles timestamp preservation consistently across platforms', () => {
                 const baseTime = testClock.now() - (5 * 60 * 1000);
 
                 const tikTokData = {
@@ -1206,29 +789,13 @@ describe('Message Normalization', () => {
                     }
                 };
 
-                const twitchUser = { userId: '123', username: 'testuser' };
-                const twitchMessage = 'Twitch message';
-                const twitchContext = { timestamp: new Date(baseTime).toISOString() };
-
                 const normalizedTikTok = normalizeTikTokMessage(tikTokData, 'tiktok', timestampService);
                 const normalizedYouTube = normalizeYouTubeMessage(youTubeData, 'youtube', timestampService);
-                const normalizedTwitch = normalizeTwitchMessage(
-                    twitchUser,
-                    twitchMessage,
-                    twitchContext,
-                    'twitch',
-                    timestampService
-                );
-
                 const tikTokTime = new Date(normalizedTikTok.timestamp).getTime();
                 const youTubeTime = new Date(normalizedYouTube.timestamp).getTime();
-                const twitchTime = new Date(normalizedTwitch.timestamp).getTime();
-
                 expect(tikTokTime).toBe(baseTime);
                 expect(youTubeTime).toBe(baseTime);
-                expect(twitchTime).toBe(baseTime);
-
-                [normalizedTikTok, normalizedYouTube, normalizedTwitch].forEach(normalized => {
+                [normalizedTikTok, normalizedYouTube].forEach(normalized => {
                     expect(normalized.timestamp).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/);
                 });
             });

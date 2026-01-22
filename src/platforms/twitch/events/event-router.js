@@ -57,18 +57,6 @@ function createTwitchEventSubEventRouter(options = {}) {
         logRawIfEnabled('chat', rawEvent, 'chat-data-log', 'Error logging raw chat data');
 
         try {
-            const context = {
-                'user-id': event.chatter_user_id,
-                'username': event.chatter_user_name,
-                'display-name': event.chatter_user_name,
-                'mod': event.badges?.moderator === '1',
-                'subscriber': !!event.badges?.subscriber,
-                'badges': event.badges || {},
-                'color': null,
-                'emotes': {},
-                'room-id': event.broadcaster_user_id
-            };
-
             if (!event?.timestamp) {
                 errorHandler.handleEventProcessingError(
                     new Error('Chat message requires timestamp'),
@@ -78,16 +66,7 @@ function createTwitchEventSubEventRouter(options = {}) {
                 return;
             }
 
-            context.timestamp = event.timestamp;
-
-            const messageData = {
-                channel: `#${config.channel || 'unknown'}`,
-                context: context,
-                message: event.message.text,
-                self: event.broadcaster_user_id === event.chatter_user_id
-            };
-
-            safeEmit('message', messageData);
+            safeEmit('chatMessage', event);
         } catch (error) {
             safeLogError(`Error processing EventSub chat message: ${error.message}`, error, 'eventsub-chat-message');
         }

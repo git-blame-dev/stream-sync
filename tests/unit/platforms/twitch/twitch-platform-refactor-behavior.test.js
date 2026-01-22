@@ -114,37 +114,23 @@ describe('Twitch platform refactor behaviors', () => {
         expect(received[0].timestamp).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/);
     });
 
-    it('emits chat events even when normalization validation fails', async () => {
-        const mockNormalizeTwitchMessage = createMockFn(() => ({
-            userId: 'chat-1',
-            username: 'chatter',
-            message: 'Hello world',
-            timestamp: '2024-01-01T00:00:00Z',
-            isMod: false,
-            isSubscriber: false,
-            isBroadcaster: false
-        }));
-        const mockValidateNormalizedMessage = createMockFn(() => ({
-            isValid: false,
-            issues: ['missing badge data']
-        }));
-
+    it('emits chat events from EventSub payloads', async () => {
         const platform = new TwitchPlatform(baseConfig, {
             authManager: createAuthManager({ userId: TEST_USER_ID }),
-            logger: noOpLogger,
-            normalizeTwitchMessage: mockNormalizeTwitchMessage,
-            validateNormalizedMessage: mockValidateNormalizedMessage
+            logger: noOpLogger
         });
 
         const events = [];
         platform.handlers = { onChat: (payload) => events.push(payload) };
 
-        await platform.onMessageHandler(
-            '#tester',
-            { username: 'chatter', 'display-name': 'Chatter', 'user-id': 'chat-1', mod: false, subscriber: false },
-            'Hello world',
-            false
-        );
+        await platform.onMessageHandler({
+            chatter_user_id: 'chat-1',
+            chatter_user_name: 'chatter',
+            broadcaster_user_id: 'broadcaster-1',
+            message: { text: 'Hello world' },
+            badges: { subscriber: '1' },
+            timestamp: '2024-01-01T00:00:00Z'
+        });
 
         expect(events).toHaveLength(1);
         expect(events[0].metadata.correlationId).toBeDefined();
@@ -183,12 +169,14 @@ describe('Twitch platform refactor behaviors', () => {
             onStreamStatus: createMockFn()
         };
 
-        await platform.onMessageHandler(
-            '#tester',
-            { username: 'logger', 'display-name': 'Logger', 'user-id': 'log-1', mod: false, subscriber: false },
-            'Log this',
-            false
-        );
+        await platform.onMessageHandler({
+            chatter_user_id: 'log-1',
+            chatter_user_name: 'logger',
+            broadcaster_user_id: 'broadcaster-1',
+            message: { text: 'Log this' },
+            badges: {},
+            timestamp: '2024-01-01T00:00:00Z'
+        });
 
         platform.handleStreamOfflineEvent({ timestamp: '2024-01-01T00:00:05Z' });
 

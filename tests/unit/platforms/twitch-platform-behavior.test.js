@@ -52,15 +52,14 @@ describe('TwitchPlatform behavior standards', () => {
             if (payload.type === 'platform:chat-message') emitted.push(payload.data);
         });
 
-        const context = {
-            'user-id': 'test-user-12345',
-            username: 'testviewer1',
-            'display-name': 'Test Viewer 1',
-            mod: false,
-            subscriber: true
-        };
-
-        await platform.onMessageHandler('#teststreamer', context, '  hello  ', false);
+        await platform.onMessageHandler({
+            chatter_user_id: 'test-user-12345',
+            chatter_user_name: 'testviewer1',
+            broadcaster_user_id: 'broadcaster-1',
+            message: { text: '  hello  ' },
+            badges: { subscriber: '1' },
+            timestamp: '2024-01-01T00:00:00Z'
+        });
 
         expect(emitted).toHaveLength(1);
         const payload = emitted[0];

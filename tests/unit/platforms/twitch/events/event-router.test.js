@@ -21,11 +21,11 @@ describe('Twitch EventSub event router', () => {
             timestamp: '2024-01-01T00:00:00Z'
         });
 
-        const messageEvent = emitted.find((evt) => evt.type === 'message');
+        const messageEvent = emitted.find((evt) => evt.type === 'chatMessage');
         expect(messageEvent).toBeDefined();
-        expect(messageEvent.payload.message).toBe('hi');
-        expect(messageEvent.payload.channel).toBe('#streamer');
-        expect(messageEvent.payload.context.timestamp).toBe('2024-01-01T00:00:00Z');
+        expect(messageEvent.payload.message.text).toBe('hi');
+        expect(messageEvent.payload.chatter_user_name).toBe('viewer');
+        expect(messageEvent.payload.timestamp).toBe('2024-01-01T00:00:00Z');
     });
 
     test('does not emit chat events when timestamp is missing', () => {
@@ -45,7 +45,7 @@ describe('Twitch EventSub event router', () => {
             message: { text: 'hi' }
         });
 
-        expect(emitted.find((evt) => evt.type === 'message')).toBeUndefined();
+        expect(emitted.find((evt) => evt.type === 'chatMessage')).toBeUndefined();
     });
 
     test('does not emit follow events when followed_at is missing', () => {

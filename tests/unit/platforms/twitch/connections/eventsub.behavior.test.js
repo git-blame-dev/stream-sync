@@ -56,14 +56,14 @@ describe('TwitchEventSub behavior', () => {
         expect(followEvents[0].username).toBe('testFollower');
     });
 
-    it('routes chat message events and includes timestamp context', () => {
+    it('routes chat message events and includes timestamp', () => {
         const instance = new TwitchEventSub(
             { channel: 'testChannel', clientId: 'testClientId', accessToken: 'testToken', broadcasterId: 'test-broadcaster-id' },
             mockDependencies
         );
 
         const messageEvents = [];
-        instance.on('message', (payload) => messageEvents.push(payload));
+        instance.on('chatMessage', (payload) => messageEvents.push(payload));
 
         instance.handleNotificationEvent('channel.chat.message', {
             chatter_user_id: 'chatter123',
@@ -73,8 +73,8 @@ describe('TwitchEventSub behavior', () => {
         });
 
         expect(messageEvents.length).toBe(1);
-        expect(messageEvents[0].message).toBe('Hello stream!');
-        expect(messageEvents[0].context.timestamp).toBe('2024-01-01T12:00:00Z');
+        expect(messageEvents[0].message.text).toBe('Hello stream!');
+        expect(messageEvents[0].timestamp).toBe('2024-01-01T12:00:00Z');
     });
 
     it('ignores duplicate notification message ids', () => {
