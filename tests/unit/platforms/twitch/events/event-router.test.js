@@ -3,7 +3,7 @@ const { noOpLogger } = require('../../../../helpers/mock-factories');
 const { createTwitchEventSubEventRouter } = require('../../../../../src/platforms/twitch/events/event-router');
 
 describe('Twitch EventSub event router', () => {
-    test('emits chat message payloads with preserved timestamps for old-message filtering', () => {
+    test('emits chat message payloads with preserved timestamps', () => {
         const emitted = [];
         const router = createTwitchEventSubEventRouter({
             config: { channel: 'streamer', dataLoggingEnabled: false },
@@ -17,15 +17,119 @@ describe('Twitch EventSub event router', () => {
             chatter_user_id: '1',
             chatter_user_name: 'viewer',
             broadcaster_user_id: '2',
-            message: { text: 'hi', timestamp: '2024-01-01T00:00:00Z' },
-            message_timestamp: '2024-01-01T00:00:00Z'
+            message: { text: 'hi' },
+            timestamp: '2024-01-01T00:00:00Z'
         });
 
         const messageEvent = emitted.find((evt) => evt.type === 'message');
         expect(messageEvent).toBeDefined();
         expect(messageEvent.payload.message).toBe('hi');
         expect(messageEvent.payload.channel).toBe('#streamer');
-        expect(messageEvent.payload.context['tmi-sent-ts']).toBe(String(Date.parse('2024-01-01T00:00:00Z')));
+        expect(messageEvent.payload.context.timestamp).toBe('2024-01-01T00:00:00Z');
+    });
+
+    test('does not emit chat events when timestamp is missing', () => {
+        const emitted = [];
+        const router = createTwitchEventSubEventRouter({
+            config: { channel: 'streamer', dataLoggingEnabled: false },
+            logger: noOpLogger,
+            emit: (type, payload) => emitted.push({ type, payload }),
+            logRawPlatformData: async () => {},
+            logError: () => {}
+        });
+
+        router.handleNotificationEvent('channel.chat.message', {
+            chatter_user_id: '1',
+            chatter_user_name: 'viewer',
+            broadcaster_user_id: '2',
+            message: { text: 'hi' }
+        });
+
+        expect(emitted.find((evt) => evt.type === 'message')).toBeUndefined();
+    });
+
+    test('does not emit follow events when followed_at is missing', () => {
+        const emitted = [];
+        const router = createTwitchEventSubEventRouter({
+            config: { dataLoggingEnabled: false },
+            logger: noOpLogger,
+            emit: (type, payload) => emitted.push({ type, payload }),
+            logRawPlatformData: async () => {},
+            logError: () => {}
+        });
+
+        router.handleNotificationEvent('channel.follow', {
+            user_name: 'Follower',
+            user_id: 'follower-1'
+        });
+
+        expect(emitted.find((evt) => evt.type === 'follow')).toBeUndefined();
+    });
+
+    test('emits follow events when followed_at is present', () => {
+        const emitted = [];
+        const router = createTwitchEventSubEventRouter({
+            config: { dataLoggingEnabled: false },
+            logger: noOpLogger,
+            emit: (type, payload) => emitted.push({ type, payload }),
+            logRawPlatformData: async () => {},
+            logError: () => {}
+        });
+
+        router.handleNotificationEvent('channel.follow', {
+            user_name: 'Follower',
+            user_id: 'follower-2',
+            followed_at: '2024-02-01T00:00:00Z'
+        });
+
+        const followEvent = emitted.find((evt) => evt.type === 'follow');
+        expect(followEvent).toBeDefined();
+        expect(followEvent.payload).toMatchObject({
+            username: 'Follower',
+            userId: 'follower-2',
+            timestamp: '2024-02-01T00:00:00Z'
+        });
+    });
+
+    test('does not emit bits gifts when cheermote data is missing', () => {
+        const emitted = [];
+        const router = createTwitchEventSubEventRouter({
+            config: { dataLoggingEnabled: false },
+            logger: noOpLogger,
+            emit: (type, payload) => emitted.push({ type, payload }),
+            logRawPlatformData: async () => {},
+            logError: () => {}
+        });
+
+        router.handleBitsUseEvent({
+            user_name: 'Cheerer',
+            user_id: '777',
+            bits: 50,
+            id: 'bits-evt-missing-cheermote',
+            message: {
+                fragments: [{ type: 'text', text: 'hello' }]
+            },
+            timestamp: '2024-01-01T00:00:00Z'
+        });
+
+        expect(emitted.find((evt) => evt.type === 'gift')).toBeUndefined();
+    });
+
+    test('does not emit stream status events without required timestamps', () => {
+        const emitted = [];
+        const router = createTwitchEventSubEventRouter({
+            config: { dataLoggingEnabled: false },
+            logger: noOpLogger,
+            emit: (type, payload) => emitted.push({ type, payload }),
+            logRawPlatformData: async () => {},
+            logError: () => {}
+        });
+
+        router.handleNotificationEvent('stream.online', { id: 'stream-1' });
+        router.handleNotificationEvent('stream.offline', { id: 'stream-1' });
+
+        expect(emitted.find((evt) => evt.type === 'streamOnline')).toBeUndefined();
+        expect(emitted.find((evt) => evt.type === 'streamOffline')).toBeUndefined();
     });
 
     test('suppresses gift subscription notifications for gift events', () => {
@@ -45,6 +149,67 @@ describe('Twitch EventSub event router', () => {
         });
 
         expect(emitted).toEqual([]);
+    });
+
+    test('emits subscription payloads with normalized months', () => {
+        const emitted = [];
+        const router = createTwitchEventSubEventRouter({
+            config: { dataLoggingEnabled: false },
+            logger: noOpLogger,
+            emit: (type, payload) => emitted.push({ type, payload }),
+            logRawPlatformData: async () => {},
+            logError: () => {}
+        });
+
+        router.handleNotificationEvent('channel.subscribe', {
+            user_name: 'Subscriber',
+            user_id: 'sub-1',
+            tier: '1000',
+            cumulative_months: '6',
+            is_gift: false,
+            timestamp: '2024-03-01T00:00:00Z'
+        });
+
+        const paypiggyEvent = emitted.find((evt) => evt.type === 'paypiggy');
+        expect(paypiggyEvent).toBeDefined();
+        expect(paypiggyEvent.payload).toMatchObject({
+            username: 'Subscriber',
+            userId: 'sub-1',
+            tier: '1000',
+            months: 6,
+            timestamp: '2024-03-01T00:00:00Z'
+        });
+    });
+
+    test('emits subscription message payloads with message text', () => {
+        const emitted = [];
+        const router = createTwitchEventSubEventRouter({
+            config: { dataLoggingEnabled: false },
+            logger: noOpLogger,
+            emit: (type, payload) => emitted.push({ type, payload }),
+            logRawPlatformData: async () => {},
+            logError: () => {}
+        });
+
+        router.handleNotificationEvent('channel.subscription.message', {
+            user_name: 'Resubber',
+            user_id: 'resub-1',
+            tier: '1000',
+            cumulative_months: 12,
+            message: { text: 'Still here!' },
+            timestamp: '2024-03-02T00:00:00Z'
+        });
+
+        const messageEvent = emitted.find((evt) => evt.type === 'paypiggyMessage');
+        expect(messageEvent).toBeDefined();
+        expect(messageEvent.payload).toMatchObject({
+            username: 'Resubber',
+            userId: 'resub-1',
+            tier: '1000',
+            months: 12,
+            message: 'Still here!',
+            timestamp: '2024-03-02T00:00:00Z'
+        });
     });
 
     test('extracts text content from bits.use fragments and emits a gift payload', () => {
@@ -82,6 +247,35 @@ describe('Twitch EventSub event router', () => {
         expect(giftEvent.payload.message).toBe('hello world');
         expect(giftEvent.payload.repeatCount).toBe(1);
         expect(giftEvent.payload.id).toEqual(expect.any(String));
+    });
+
+    test('emits monetization payloads with fallback timestamps when missing', () => {
+        const emitted = [];
+        const router = createTwitchEventSubEventRouter({
+            config: { dataLoggingEnabled: false },
+            logger: noOpLogger,
+            emit: (type, payload) => emitted.push({ type, payload }),
+            logRawPlatformData: async () => {},
+            logError: () => {}
+        });
+
+        router.handleBitsUseEvent({
+            user_name: 'Cheerer',
+            user_id: '777',
+            bits: 50,
+            id: 'bits-evt-missing-ts',
+            message: {
+                fragments: [
+                    { type: 'cheermote', text: 'Cheer50', cheermote: { prefix: 'Cheer', bits: 50 } },
+                    { type: 'text', text: 'hello ' },
+                    { type: 'text', text: 'world' }
+                ]
+            }
+        });
+
+        const giftEvent = emitted.find((evt) => evt.type === 'gift');
+        expect(giftEvent).toBeDefined();
+        expect(giftEvent.payload.timestamp).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/);
     });
 
     test('emits paypiggyGift payloads with gift count and cumulative total', () => {
@@ -130,14 +324,11 @@ describe('Twitch EventSub event router', () => {
         router.handleNotificationEvent('stream.online', {
             id: 'stream-1',
             started_at: '2024-02-01T00:00:00Z'
-        }, {
-            message_timestamp: '2024-02-01T00:00:30Z'
         });
 
         router.handleNotificationEvent('stream.offline', {
-            id: 'stream-1'
-        }, {
-            message_timestamp: '2024-02-01T01:00:00Z'
+            id: 'stream-1',
+            timestamp: '2024-02-01T01:00:00Z'
         });
 
         const onlineEvent = emitted.find((evt) => evt.type === 'streamOnline');
@@ -165,18 +356,16 @@ describe('Twitch EventSub event router', () => {
         router.handleNotificationEvent('channel.raid', {
             from_broadcaster_user_name: 'Raider',
             from_broadcaster_user_id: 'raid-1',
-            viewers: 8
-        }, {
-            message_timestamp: '2024-03-01T00:00:00Z'
+            viewers: 8,
+            timestamp: '2024-03-01T00:00:00Z'
         });
 
         router.handleNotificationEvent('channel.subscription.gift', {
             user_name: 'Gifter',
             user_id: 'gift-1',
             tier: '1000',
-            total: 2
-        }, {
-            message_timestamp: '2024-03-01T00:01:00Z'
+            total: 2,
+            timestamp: '2024-03-01T00:01:00Z'
         });
 
         const raidEvent = emitted.find((evt) => evt.type === 'raid');

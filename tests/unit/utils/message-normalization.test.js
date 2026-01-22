@@ -19,14 +19,22 @@ beforeEach(() => {
 const buildTimestampService = () => ({
     extractTimestamp: (platform, data) => {
         if (platform === 'twitch') {
-            const raw = data?.['tmi-sent-ts'] ?? data?.timestamp;
+            const raw = data?.timestamp;
             if (!raw) {
                 throw new Error('Missing twitch timestamp');
             }
-            return new Date(Number(raw)).toISOString();
+            const numeric = Number(raw);
+            if (Number.isFinite(numeric)) {
+                return new Date(numeric).toISOString();
+            }
+            const parsed = Date.parse(raw);
+            if (Number.isNaN(parsed)) {
+                throw new Error('Invalid twitch timestamp');
+            }
+            return new Date(parsed).toISOString();
         }
         if (platform === 'youtube') {
-            const raw = data?.timestamp;
+            const raw = data?.timestamp ?? data?.timestamp_usec;
             if (!raw) {
                 throw new Error('Missing youtube timestamp');
             }
@@ -38,11 +46,19 @@ const buildTimestampService = () => ({
             return new Date(resolved).toISOString();
         }
         if (platform === 'tiktok') {
-            const raw = data?.createTime;
+            const raw = data?.common?.clientSendTime ?? data?.common?.createTime ?? data?.timestamp;
             if (!raw) {
                 throw new Error('Missing tiktok timestamp');
             }
-            return new Date(Number(raw)).toISOString();
+            const numeric = Number(raw);
+            if (Number.isFinite(numeric)) {
+                return new Date(numeric).toISOString();
+            }
+            const parsed = Date.parse(raw);
+            if (Number.isNaN(parsed)) {
+                throw new Error('Invalid tiktok timestamp');
+            }
+            return new Date(parsed).toISOString();
         }
         throw new Error('Unsupported platform');
     }
@@ -76,7 +92,7 @@ describe('Message Normalization', () => {
                 color: '#FF0000',
                 emotes: {},
                 'room-id': '987654321',
-                'tmi-sent-ts': String(timestampMs)
+                timestamp: new Date(timestampMs).toISOString()
             };
 
             const normalized = normalizeTwitchMessage(
@@ -111,7 +127,7 @@ describe('Message Normalization', () => {
             };
             const user = { userId: '123456789', username: 'testuser' };
             const message = 'Timestamp type check';
-            const context = { 'tmi-sent-ts': String(testClock.now()) };
+            const context = { timestamp: new Date(testClock.now()).toISOString() };
 
             expect(() => normalizeTwitchMessage(
                 user,
@@ -135,7 +151,7 @@ describe('Message Normalization', () => {
                 'display-name': 'EventSubUser',
                 mod: false,
                 subscriber: true,
-                'tmi-sent-ts': String(timestampMs)
+                timestamp: new Date(timestampMs).toISOString()
             };
 
             const normalized = normalizeTwitchMessage(
@@ -159,7 +175,7 @@ describe('Message Normalization', () => {
         test('throws on missing user data', () => {
             const user = {};
             const message = 'Message with missing user data';
-            const context = { 'tmi-sent-ts': String(testClock.now()) };
+            const context = { timestamp: new Date(testClock.now()).toISOString() };
 
             expect(() => normalizeTwitchMessage(
                 user,
@@ -295,7 +311,7 @@ describe('Message Normalization', () => {
                     profilePictureUrl: 'avatar.jpg'
                 },
                 comment: 'Hello TikTok!',
-                createTime: testClock.now()
+                common: { createTime: testClock.now() }
             };
 
             const normalized = normalizeTikTokMessage(data, 'tiktok', timestampService);
@@ -325,7 +341,7 @@ describe('Message Normalization', () => {
                     nickname: 'TikTokUser'
                 },
                 comment: 'Hello TikTok!',
-                createTime: testClock.now()
+                common: { createTime: testClock.now() }
             };
 
             expect(() => normalizeTikTokMessage(data, 'tiktok', nonStringTimestampService))
@@ -333,6 +349,7 @@ describe('Message Normalization', () => {
         });
 
         test('handles TikTok gift messages', () => {
+            const giftTimestamp = new Date(testClock.now()).toISOString();
             const giftData = {
                 user: {
                     userId: 'tt-gift-1',
@@ -342,7 +359,7 @@ describe('Message Normalization', () => {
                 giftDetails: { giftName: 'Rose', diamondCount: 1 },
                 repeatCount: 5,
                 comment: 'Gift message',
-                createTime: testClock.now()
+                timestamp: giftTimestamp
             };
 
             const normalized = normalizeTikTokMessage(giftData, 'tiktok-gift', timestampService);
@@ -352,6 +369,7 @@ describe('Message Normalization', () => {
                 userId: 'tt-gift-1',
                 username: 'giftuser'
             });
+            expect(normalized.timestamp).toBe(giftTimestamp);
             expect(normalized.metadata).toMatchObject({
                 profilePicture: null,
                 followRole: null,
@@ -365,7 +383,7 @@ describe('Message Normalization', () => {
         test('throws on missing TikTok user data', () => {
             const incompleteData = {
                 comment: 'Message without user data',
-                createTime: testClock.now()
+                common: { createTime: testClock.now() }
             };
 
             expect(() => normalizeTikTokMessage(incompleteData, 'tiktok', timestampService))
@@ -529,7 +547,7 @@ describe('Message Normalization', () => {
             const timestampMs = testClock.now();
             const twitchUser = { username: 'twitchuser', userId: 'tw-1' };
             const twitchMessage = 'Twitch message';
-            const twitchContext = { 'tmi-sent-ts': String(timestampMs) };
+            const twitchContext = { timestamp: new Date(timestampMs).toISOString() };
 
             const normalized = normalizeMessage(
                 'twitch',
@@ -551,7 +569,7 @@ describe('Message Normalization', () => {
         });
 
         test('throws on normalization errors', () => {
-            const context = { 'tmi-sent-ts': String(testClock.now()) };
+            const context = { timestamp: new Date(testClock.now()).toISOString() };
             expect(() => normalizeMessage('twitch', null, 'message', context, 'twitch', timestampService))
                 .toThrow('user');
         });
@@ -561,7 +579,7 @@ describe('Message Normalization', () => {
         test('handles very long messages', () => {
             const longMessage = 'A'.repeat(10000);
             const user = { username: 'testuser', userId: 'tw-long' };
-            const context = { 'tmi-sent-ts': String(testClock.now()) };
+            const context = { timestamp: new Date(testClock.now()).toISOString() };
 
             const normalized = normalizeTwitchMessage(
                 user,
@@ -578,7 +596,7 @@ describe('Message Normalization', () => {
         test('handles special characters in usernames', () => {
             const user = { username: 'User@#$%^&*()', userId: 'tw-special' };
             const message = 'Message with special username';
-            const context = { 'tmi-sent-ts': String(testClock.now()) };
+            const context = { timestamp: new Date(testClock.now()).toISOString() };
 
             const normalized = normalizeTwitchMessage(
                 user,
@@ -594,7 +612,7 @@ describe('Message Normalization', () => {
         test('handles unicode characters', () => {
             const user = { username: 'ユーザー', userId: 'tw-unicode' };
             const message = 'こんにちは世界！';
-            const context = { 'tmi-sent-ts': String(testClock.now()) };
+            const context = { timestamp: new Date(testClock.now()).toISOString() };
 
             const normalized = normalizeTwitchMessage(
                 user,
@@ -611,7 +629,7 @@ describe('Message Normalization', () => {
         test('throws on empty messages', () => {
             const user = { username: 'testuser', userId: 'tw-empty' };
             const message = '';
-            const context = { 'tmi-sent-ts': String(testClock.now()) };
+            const context = { timestamp: new Date(testClock.now()).toISOString() };
 
             expect(() => normalizeTwitchMessage(
                 user,
@@ -625,7 +643,7 @@ describe('Message Normalization', () => {
         test('throws on whitespace-only messages', () => {
             const user = { username: 'testuser', userId: 'tw-space' };
             const message = '   \n\t   ';
-            const context = { 'tmi-sent-ts': String(testClock.now()) };
+            const context = { timestamp: new Date(testClock.now()).toISOString() };
 
             expect(() => normalizeTwitchMessage(
                 user,
@@ -645,7 +663,7 @@ describe('Message Normalization', () => {
             for (let i = 0; i < iterations; i++) {
                 const user = { username: `user${i}`, userId: `tw-${i}` };
                 const message = `Message ${i}`;
-                const context = { 'tmi-sent-ts': String(testClock.now()) };
+                const context = { timestamp: new Date(testClock.now()).toISOString() };
 
                 normalizeTwitchMessage(
                     user,
@@ -670,7 +688,7 @@ describe('Message Normalization', () => {
             for (let i = 0; i < 1000; i++) {
                 const user = { username: `user${i}`, userId: `tw-${i}` };
                 const message = `Message ${i}`;
-                const context = { 'tmi-sent-ts': String(testClock.now()) };
+                const context = { timestamp: new Date(testClock.now()).toISOString() };
 
                 normalizeTwitchMessage(
                     user,
@@ -690,7 +708,7 @@ describe('Message Normalization', () => {
 
     describe('Timestamp Preservation Behavior', () => {
         describe('TikTok Timestamp Preservation', () => {
-            test('preserves original createTime from TikTok message data', () => {
+            test('preserves common.createTime from TikTok message data', () => {
                 const originalTime = testClock.now() - (5 * 60 * 1000);
                 const tikTokData = {
                     user: {
@@ -698,7 +716,9 @@ describe('Message Normalization', () => {
                         uniqueId: 'TestUser',
                         nickname: 'Test User'
                     },
-                    createTime: originalTime,
+                    common: {
+                        createTime: originalTime
+                    },
                     comment: 'Test message with original timestamp'
                 };
 
@@ -710,11 +730,11 @@ describe('Message Normalization', () => {
                 expect(normalized.metadata.createTime).toBe(originalTime);
             });
 
-            test('throws when nested common.createTime when root field is missing', () => {
+            test('preserves common.clientSendTime when createTime is missing', () => {
                 const originalTime = testClock.now() - (4 * 60 * 1000);
                 const tikTokData = {
                     common: {
-                        createTime: String(originalTime)
+                        clientSendTime: String(originalTime)
                     },
                     user: {
                         userId: 'tt-2',
@@ -724,12 +744,14 @@ describe('Message Normalization', () => {
                     comment: 'Common timestamp test'
                 };
 
-                expect(() => normalizeTikTokMessage(tikTokData, 'tiktok', timestampService))
-                    .toThrow('tiktok timestamp');
+                const normalized = normalizeTikTokMessage(tikTokData, 'tiktok', timestampService);
+
+                const normalizedTime = new Date(normalized.timestamp).getTime();
+                expect(normalizedTime).toBe(originalTime);
             });
 
-            test('throws when using timestamp field as fallback when createTime is missing', () => {
-                const fallbackTime = testClock.now() - (3 * 60 * 1000);
+            test('accepts timestamp field when common timestamps are missing', () => {
+                const fallbackTime = new Date(testClock.now() - (3 * 60 * 1000)).toISOString();
                 const tikTokData = {
                     timestamp: fallbackTime,
                     user: {
@@ -740,8 +762,8 @@ describe('Message Normalization', () => {
                     comment: 'Test message with fallback timestamp'
                 };
 
-                expect(() => normalizeTikTokMessage(tikTokData, 'tiktok', timestampService))
-                    .toThrow('tiktok timestamp');
+                const normalized = normalizeTikTokMessage(tikTokData, 'tiktok', timestampService);
+                expect(normalized.timestamp).toBe(fallbackTime);
             });
 
             test('does not replace original timestamps with current time when available', () => {
@@ -752,7 +774,9 @@ describe('Message Normalization', () => {
                         uniqueId: 'TestUser',
                         nickname: 'Test User'
                     },
-                    createTime: oldTime,
+                    common: {
+                        createTime: oldTime
+                    },
                     comment: 'Old cached message'
                 };
 
@@ -774,7 +798,7 @@ describe('Message Normalization', () => {
                 const originalTimeMs = testClock.now() - (4 * 60 * 1000);
                 const youTubeData = {
                     item: {
-                        timestamp: (originalTimeMs * 1000).toString(),
+                        timestamp_usec: (originalTimeMs * 1000).toString(),
                         author: {
                             name: 'TestUser',
                             id: 'user123',
@@ -840,7 +864,7 @@ describe('Message Normalization', () => {
                 };
                 const message = 'Test Twitch message with timestamp';
                 const context = {
-                    'tmi-sent-ts': originalTime.toString(),
+                    timestamp: new Date(originalTime).toISOString(),
                     'user-id': '123456789',
                     username: 'testuser'
                 };
@@ -865,7 +889,7 @@ describe('Message Normalization', () => {
                 };
                 const message = 'Old cached Twitch message';
                 const context = {
-                    'tmi-sent-ts': oldTime.toString(),
+                    timestamp: new Date(oldTime).toISOString(),
                     'user-id': '123456789',
                     username: 'testuser'
                 };
@@ -914,18 +938,20 @@ describe('Message Normalization', () => {
                 const baseTime = testClock.now() - (5 * 60 * 1000);
 
                 const tikTokData = {
-                    createTime: baseTime,
                     user: {
                         userId: 'tt-5',
                         uniqueId: 'TestUser',
                         nickname: 'Test User'
+                    },
+                    common: {
+                        createTime: baseTime
                     },
                     comment: 'TikTok message'
                 };
 
                 const youTubeData = {
                     item: {
-                        timestamp: (baseTime * 1000).toString(),
+                        timestamp_usec: (baseTime * 1000).toString(),
                         author: { name: 'TestUser', id: 'user123' },
                         message: { text: 'YouTube message' }
                     }
@@ -933,7 +959,7 @@ describe('Message Normalization', () => {
 
                 const twitchUser = { userId: '123', username: 'testuser' };
                 const twitchMessage = 'Twitch message';
-                const twitchContext = { 'tmi-sent-ts': baseTime.toString() };
+                const twitchContext = { timestamp: new Date(baseTime).toISOString() };
 
                 const normalizedTikTok = normalizeTikTokMessage(tikTokData, 'tiktok', timestampService);
                 const normalizedYouTube = normalizeYouTubeMessage(youTubeData, 'youtube', timestampService);
@@ -963,26 +989,29 @@ describe('Message Normalization', () => {
             test('integrates with TimestampExtractionService when provided via dependency injection', () => {
                 const mockTimestampService = {
                     extractTimestamp: (platform, data) => {
-                        if (platform === 'tiktok' && data.createTime) {
-                            return new Date(data.createTime).toISOString();
+                        if (platform === 'tiktok' && data.common?.createTime) {
+                            return new Date(data.common.createTime).toISOString();
                         }
-                        if (platform === 'youtube' && data.timestamp) {
-                            return new Date(parseInt(data.timestamp)).toISOString();
+                        if (platform === 'youtube' && data.timestamp_usec) {
+                            return new Date(Math.floor(Number(data.timestamp_usec) / 1000)).toISOString();
                         }
-                        if (platform === 'twitch' && data.context?.['tmi-sent-ts']) {
-                            return new Date(parseInt(data.context['tmi-sent-ts'])).toISOString();
+                        if (platform === 'twitch' && data.timestamp) {
+                            const parsed = Date.parse(data.timestamp);
+                            return new Date(parsed).toISOString();
                         }
-                        return new Date(testClock.now()).toISOString();
+                        return null;
                     }
                 };
 
                 const originalTime = testClock.now() - (8 * 60 * 1000);
                 const tikTokData = {
-                    createTime: originalTime,
                     user: {
                         userId: 'tt-6',
                         uniqueId: 'TestUser',
                         nickname: 'Test User'
+                    },
+                    common: {
+                        createTime: originalTime
                     },
                     comment: 'Service integration test'
                 };

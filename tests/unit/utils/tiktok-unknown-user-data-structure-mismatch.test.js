@@ -17,10 +17,10 @@ const buildTimestampService = () => ({
     if (platform !== 'tiktok') {
       throw new Error('Unsupported platform');
     }
-    if (!data?.createTime) {
+    if (!data?.common?.createTime) {
       throw new Error('Missing tiktok timestamp');
     }
-    return new Date(Number(data.createTime)).toISOString();
+    return new Date(Number(data.common.createTime)).toISOString();
   })
 });
 
@@ -45,7 +45,7 @@ describe('TikTok Unknown User Data Structure Mismatch', () => {
             "userId": "test_user_id_nested",
             "profilePictureUrl": "https://example.invalid/avatar-nested.jpg"
           },
-          "createTime": testClock.now()
+          "common": { "createTime": testClock.now() }
         };
 
         const result = normalizeTikTokMessage(nestedTikTokData, 'tiktok', timestampService);
@@ -112,7 +112,7 @@ describe('TikTok Unknown User Data Structure Mismatch', () => {
           "nickname": "TestCrossPlatform"
         },
         "comment": "Test consistency message",
-        "createTime": testClock.now()
+        "common": { "createTime": testClock.now() }
       };
 
       const result = normalizeTikTokMessage(tikTokData, 'tiktok', timestampService);
@@ -141,7 +141,7 @@ describe('TikTok Unknown User Data Structure Mismatch', () => {
           "userId": "test_user_id_missing_username",
           "nickname": "MissingUnique"
         },
-        "createTime": testClock.now()
+        "common": { "createTime": testClock.now() }
       };
 
       const timestampService = buildTimestampService();
@@ -161,7 +161,7 @@ describe('TikTok Unknown User Data Structure Mismatch', () => {
           "userId": `test_user_id_${i}`
         },
         "comment": `Test message ${i}`,
-        "createTime": testClock.now() + i
+        "common": { "createTime": testClock.now() + i }
       }));
 
       const startTime = testClock.now();

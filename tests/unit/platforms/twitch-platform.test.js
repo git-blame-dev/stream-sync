@@ -548,7 +548,7 @@ describe('Twitch Platform', () => {
 
     describe('when handling stream status', () => {
         it('should start viewer polling on stream online and stop on offline', () => {
-            platform.handleStreamOnlineEvent({ timestamp: '2024-01-01T00:00:00Z' });
+            platform.handleStreamOnlineEvent({ started_at: '2024-01-01T00:00:00Z' });
             expect(mockViewerCountProvider.startPolling).toHaveBeenCalled();
 
             platform.handleStreamOfflineEvent({ timestamp: '2024-01-01T00:00:00Z' });

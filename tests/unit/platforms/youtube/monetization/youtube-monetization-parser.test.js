@@ -39,13 +39,13 @@ describe('YouTube monetization parser', () => {
         expect(result.giftCount).toBe(7);
     });
 
-    test('accepts timestampUsec for membership timestamps', () => {
+    test('accepts timestamp_usec for membership timestamps', () => {
         const parser = createYouTubeMonetizationParser({ logger: noOpLogger });
         const chatItem = {
             item: {
                 type: 'LiveChatMembershipItem',
                 id: 'LCC.membership-001',
-                timestampUsec: '1704067200000000',
+                timestamp_usec: '1704067200000000',
                 author: {
                     id: 'UC_TEST_CHANNEL_000010',
                     name: 'MemberUser'
@@ -58,5 +58,58 @@ describe('YouTube monetization parser', () => {
         const result = parser.parseMembership(chatItem);
 
         expect(result.timestamp).toBe(new Date(1704067200000).toISOString());
+    });
+
+    test('throws when timestamp is blank', () => {
+        const parser = createYouTubeMonetizationParser({ logger: noOpLogger });
+        const chatItem = {
+            item: {
+                type: 'LiveChatPaidMessage',
+                id: 'LCC.superchat-blank-ts',
+                timestamp: '   ',
+                purchase_amount: 5,
+                purchase_currency: 'USD',
+                author: {
+                    id: 'UC_TEST_CHANNEL_000020',
+                    name: 'BlankTsUser'
+                },
+                message: { text: 'Hello' }
+            }
+        };
+
+        expect(() => parser.parseSuperChat(chatItem)).toThrow('requires timestamp');
+    });
+
+    test('converts microsecond timestamps when provided in timestamp field', () => {
+        const parser = createYouTubeMonetizationParser({ logger: noOpLogger });
+        const chatItem = {
+            item: {
+                timestamp: '1704067200000000'
+            }
+        };
+
+        const result = parser.resolveTimestamp(chatItem, 'YouTube Super Chat');
+
+        expect(result).toBe(new Date(1704067200000).toISOString());
+    });
+
+    test('uses sticker label when name and altText are missing', () => {
+        const parser = createYouTubeMonetizationParser({ logger: noOpLogger });
+        const chatItem = {
+            item: {
+                type: 'LiveChatPaidSticker',
+                id: 'LCC.sticker-001',
+                timestamp_usec: '1704067200000000',
+                purchase_amount: 2,
+                purchase_currency: 'USD',
+                sticker: {
+                    label: { runs: [{ text: 'Nice sticker' }] }
+                }
+            }
+        };
+
+        const result = parser.parseSuperSticker(chatItem);
+
+        expect(result.message).toBe('Nice sticker');
     });
 });

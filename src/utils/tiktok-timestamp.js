@@ -53,15 +53,9 @@ function resolveTikTokTimestampMs(data) {
     }
 
     const candidates = [
-        data.createTime,
         data.common?.createTime,
         data.common?.clientSendTime,
-        data.clientSendTime,
-        data.clientTime,
-        data.timestamp,
-        data.message?.timestamp,
-        data.message?.createTime,
-        data.event?.createTime
+        data.timestamp
     ];
 
     for (const candidate of candidates) {

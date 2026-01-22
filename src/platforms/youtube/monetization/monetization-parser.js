@@ -5,7 +5,10 @@ function createYouTubeMonetizationParser(options = {}) {
     const currencyParser = new YouTubeiCurrencyParser({ logger: options.logger });
 
     const resolveTimestamp = (chatItem, label) => {
-        const rawTimestamp = chatItem?.item?.timestampUsec;
+        const rawUsec = chatItem?.item?.timestamp_usec;
+        const rawTimestamp = rawUsec !== undefined && rawUsec !== null
+            ? rawUsec
+            : chatItem?.item?.timestamp;
         if (rawTimestamp === undefined || rawTimestamp === null) {
             throw new Error(`${label} requires timestamp`);
         }
@@ -18,9 +21,11 @@ function createYouTubeMonetizationParser(options = {}) {
         if (!Number.isFinite(numericTimestamp)) {
             throw new Error(`${label} requires valid timestamp`);
         }
-        const adjustedTimestamp = numericTimestamp > 10000000000000
+        const adjustedTimestamp = rawUsec !== undefined && rawUsec !== null
             ? Math.floor(numericTimestamp / 1000)
-            : numericTimestamp;
+            : (numericTimestamp > 10000000000000
+                ? Math.floor(numericTimestamp / 1000)
+                : numericTimestamp);
         const parsed = new Date(adjustedTimestamp);
         if (Number.isNaN(parsed.getTime())) {
             throw new Error(`${label} requires valid timestamp`);

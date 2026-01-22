@@ -74,7 +74,7 @@ describe('YouTube monetized event pipeline', () => {
             item: {
                 type: 'LiveChatMembershipItem',
                 id: 'LCC.test-membership-001',
-                timestampUsec: '1704067200000000',
+                timestamp_usec: '1704067200000000',
                 author: {
                     id: 'UC_TEST_CHANNEL_00999',
                     name: 'MemberUser'

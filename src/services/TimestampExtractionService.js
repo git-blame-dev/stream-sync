@@ -90,13 +90,20 @@ class TimestampExtractionService extends ServiceInterface {
             if (!strategy) {
                 const error = new Error(`Unsupported platform: ${platform}`);
                 this._handleTimestampError(`Timestamp extraction failed for ${platform}`, error, 'unsupported-platform');
-                this._recordPerformance(startTime, false);
-                return getSystemTimestampISO();
+                this._recordPerformance(startTime, false, null, normalizedPlatform, error);
+                return null;
             }
 
             const timestamp = strategy(rawData);
             const processingTimeNs = process.hrtime.bigint() - startTime;
             const processingTimeMs = Number(processingTimeNs) / 1000000;
+
+            if (!timestamp || typeof timestamp !== 'string') {
+                const error = new Error(`Missing ${normalizedPlatform} timestamp`);
+                this._handleTimestampError(`Timestamp extraction failed for ${platform}`, error, 'missing-timestamp');
+                this._recordPerformance(startTime, false, processingTimeMs, normalizedPlatform, error);
+                return null;
+            }
 
             // Record comprehensive performance metrics
             this._recordPerformance(startTime, true, processingTimeMs, normalizedPlatform);
@@ -118,7 +125,7 @@ class TimestampExtractionService extends ServiceInterface {
         } catch (error) {
             this._recordPerformance(startTime, false, null, normalizedPlatform, error);
             this._handleTimestampError(`Timestamp extraction failed for ${platform}`, error, 'extraction');
-            return getSystemTimestampISO(); // Fallback to current time
+            return null;
         }
     }
     
@@ -181,7 +188,7 @@ class TimestampExtractionService extends ServiceInterface {
     extractTikTokTimestamp(data) {
         // Fast null check with early return
         if (!data || typeof data !== 'object') {
-            return getSystemTimestampISO();
+            return null;
         }
 
         const resolvedTimestampMs = resolveTikTokTimestampMs(data);
@@ -190,71 +197,48 @@ class TimestampExtractionService extends ServiceInterface {
             this.logger.debug && this.logger.debug(`TikTok timestamp resolved: ${timestamp}`, 'timestamp-service');
             return timestamp;
         }
-        
-        // Fallback: current time
-        const currentTime = getSystemTimestampISO();
-        this.logger.debug && this.logger.debug(`TikTok timestamp fallback to current time: ${currentTime}`, 'timestamp-service');
-        return currentTime;
+
+        return null;
     }
     
     extractYouTubeTimestamp(data) {
         // Fast null check with early return
         if (!data || typeof data !== 'object') {
-            return getSystemTimestampISO();
+            return null;
         }
-        
-        // Priority 1: timestamp field (could be microseconds or milliseconds) - optimized parsing
-        if (data.timestamp !== undefined && data.timestamp !== null) {
-            try {
-                const rawTimestamp = data.timestamp;
-                let timestampValue = this._parseTimestampInput(rawTimestamp);
-                if (timestampValue === null) {
-                    throw new Error(`Cannot parse timestamp: ${rawTimestamp}`);
-                }
-                
-                // Optimized microsecond detection - use constant for performance
-                const MICROSECOND_THRESHOLD = 10000000000000; // 10^13
-                if (timestampValue > MICROSECOND_THRESHOLD) {
-                    timestampValue = Math.floor(timestampValue / 1000); // Convert microseconds to milliseconds
-                }
-                
-                const timestamp = new Date(timestampValue).toISOString();
-                this.logger.debug && this.logger.debug(`YouTube timestamp from timestamp field: ${timestamp}`, 'timestamp-service');
-                return timestamp;
-            } catch (error) {
-                this.logger.warn(`Invalid YouTube timestamp: ${data.timestamp}`, 'timestamp-service', error);
+
+        const source = data.item && typeof data.item === 'object' ? data.item : data;
+        const rawUsec = source.timestamp_usec;
+        if (rawUsec !== undefined && rawUsec !== null) {
+            const usecValue = typeof rawUsec === 'number'
+                ? rawUsec
+                : this._fastParseInt(String(rawUsec));
+            if (usecValue === null || usecValue <= 0) {
+                return null;
             }
+            const timestamp = new Date(Math.floor(usecValue / 1000)).toISOString();
+            this.logger.debug && this.logger.debug(`YouTube timestamp from timestamp_usec: ${timestamp}`, 'timestamp-service');
+            return timestamp;
         }
-        
-        // Priority 2: timestampUsec field (microsecond format) - optimized division
-        if (data.timestampUsec !== undefined && data.timestampUsec !== null) {
-            try {
-                const rawUsec = data.timestampUsec;
-                let usecValue;
-                
-                if (typeof rawUsec === 'number') {
-                    usecValue = rawUsec;
-                } else if (typeof rawUsec === 'string') {
-                    usecValue = this._fastParseInt(rawUsec);
-                    if (usecValue === null) {
-                        throw new Error(`Cannot parse timestampUsec: ${rawUsec}`);
-                    }
-                } else {
-                    throw new Error(`Invalid timestampUsec type: ${typeof rawUsec}`);
-                }
-                
-                const timestamp = new Date(Math.floor(usecValue / 1000)).toISOString();
-                this.logger.debug && this.logger.debug(`YouTube timestamp from timestampUsec: ${timestamp}`, 'timestamp-service');
-                return timestamp;
-            } catch (error) {
-                this.logger.warn(`Invalid YouTube timestampUsec: ${data.timestampUsec}`, 'timestamp-service', error);
-            }
+
+        const rawTimestamp = source.timestamp;
+        if (rawTimestamp === undefined || rawTimestamp === null) {
+            return null;
         }
-        
-        // Fallback: current time
-        const currentTime = getSystemTimestampISO();
-        this.logger.debug && this.logger.debug(`YouTube timestamp fallback to current time: ${currentTime}`, 'timestamp-service');
-        return currentTime;
+
+        let timestampValue = this._parseTimestampInput(rawTimestamp);
+        if (timestampValue === null) {
+            return null;
+        }
+
+        const MICROSECOND_THRESHOLD = 10000000000000; // 10^13
+        if (timestampValue > MICROSECOND_THRESHOLD) {
+            timestampValue = Math.floor(timestampValue / 1000);
+        }
+
+        const timestamp = new Date(timestampValue).toISOString();
+        this.logger.debug && this.logger.debug(`YouTube timestamp from timestamp field: ${timestamp}`, 'timestamp-service');
+        return timestamp;
     }
     
     extractTwitchTimestamp(data) {
@@ -262,71 +246,26 @@ class TimestampExtractionService extends ServiceInterface {
     }
 
     _extractTwitchTimestampValue(data, options = {}) {
-        const { logFallback = true } = options;
+        const source = data && typeof data === 'object' ? data : null;
+        if (!source) {
+            return { timestamp: null, isFallback: true };
+        }
 
-        // Fast null check with early return
-        if (!data || typeof data !== 'object') {
-            const currentTime = getSystemTimestampISO();
-            if (logFallback) {
-                this.logger.debug && this.logger.debug(`Twitch timestamp fallback to current time: ${currentTime}`, 'timestamp-service');
-            }
-            return { timestamp: currentTime, isFallback: true };
+        const rawTimestamp = source.followed_at ?? source.started_at ?? source.timestamp;
+        if (rawTimestamp === undefined || rawTimestamp === null) {
+            return { timestamp: null, isFallback: true };
         }
-        
-        // Priority 1: timestamp field (direct timestamp) - optimized validation
-        if (data.timestamp !== undefined && data.timestamp !== null) {
-            try {
-                const timeValue = typeof data.timestamp === 'number' ? data.timestamp : 
-                    this._validateAndParseTimestamp(data.timestamp);
-                if (timeValue !== null) {
-                    const timestamp = new Date(timeValue).toISOString();
-                    this.logger.debug && this.logger.debug(`Twitch timestamp from timestamp field: ${timestamp}`, 'timestamp-service');
-                    return { timestamp, isFallback: false };
-                }
-            } catch (error) {
-                this.logger.warn(`Invalid Twitch timestamp: ${data.timestamp}`, 'timestamp-service', error);
-            }
+
+        const timeValue = typeof rawTimestamp === 'number'
+            ? rawTimestamp
+            : this._validateAndParseTimestamp(String(rawTimestamp));
+        if (timeValue === null || timeValue <= 0) {
+            return { timestamp: null, isFallback: true };
         }
-        
-        // Priority 2: tmi-sent-ts field (TMI.js format) - optimized parsing
-        const tmiTimestamp = data['tmi-sent-ts'];
-        if (tmiTimestamp !== undefined && tmiTimestamp !== null) {
-            try {
-                let tmiValue;
-                if (typeof tmiTimestamp === 'number') {
-                    tmiValue = tmiTimestamp;
-                } else if (typeof tmiTimestamp === 'string') {
-                    tmiValue = this._fastParseInt(tmiTimestamp);
-                    if (tmiValue === null) {
-                        throw new Error(`Cannot parse tmi-sent-ts: ${tmiTimestamp}`);
-                    }
-                } else {
-                    throw new Error(`Invalid tmi-sent-ts type: ${typeof tmiTimestamp}`);
-                }
-                
-                const timestamp = new Date(tmiValue).toISOString();
-                this.logger.debug && this.logger.debug(`Twitch timestamp from tmi-sent-ts: ${timestamp}`, 'timestamp-service');
-                return { timestamp, isFallback: false };
-            } catch (error) {
-                this.logger.warn(`Invalid Twitch tmi-sent-ts: ${tmiTimestamp}`, 'timestamp-service', error);
-            }
-        }
-        
-        // Priority 3: Check in nested context (if data is a wrapper object) - prevent infinite recursion
-        if (data.context && typeof data.context === 'object' && data.context !== data) {
-            const contextResult = this._extractTwitchTimestampValue(data.context, { logFallback: false });
-            // Only return context result if it contains an actual timestamp
-            if (!contextResult.isFallback) {
-                return contextResult;
-            }
-        }
-        
-        // Fallback: current time
-        const currentTime = getSystemTimestampISO();
-        if (logFallback) {
-            this.logger.debug && this.logger.debug(`Twitch timestamp fallback to current time: ${currentTime}`, 'timestamp-service');
-        }
-        return { timestamp: currentTime, isFallback: true };
+
+        const timestamp = new Date(timeValue).toISOString();
+        this.logger.debug && this.logger.debug(`Twitch timestamp resolved: ${timestamp}`, 'timestamp-service');
+        return { timestamp, isFallback: false };
     }
     
     _validateAndParseTimestamp(timestampStr) {
@@ -343,6 +282,12 @@ class TimestampExtractionService extends ServiceInterface {
             // Fast path for numeric strings
             const numValue = Number(timestampStr);
             if (!isNaN(numValue) && isFinite(numValue)) {
+                if (numValue <= 0) {
+                    if (this._config.enableCaching) {
+                        this._addToCache(timestampStr, null);
+                    }
+                    return null;
+                }
                 // Cache valid results if caching enabled
                 if (this._config.enableCaching) {
                     this._addToCache(timestampStr, numValue);
@@ -352,7 +297,7 @@ class TimestampExtractionService extends ServiceInterface {
             
             // Try Date parsing for ISO strings
             const dateValue = Date.parse(timestampStr);
-            if (!isNaN(dateValue)) {
+            if (!isNaN(dateValue) && dateValue > 0) {
                 if (this._config.enableCaching) {
                     this._addToCache(timestampStr, dateValue);
                 }
@@ -406,10 +351,13 @@ class TimestampExtractionService extends ServiceInterface {
         }
         const numericCandidate = Number(trimmed);
         if (!Number.isNaN(numericCandidate) && Number.isFinite(numericCandidate)) {
+            if (numericCandidate <= 0) {
+                return null;
+            }
             return numericCandidate;
         }
         const parsedDate = Date.parse(trimmed);
-        if (Number.isNaN(parsedDate)) {
+        if (Number.isNaN(parsedDate) || parsedDate <= 0) {
             return null;
         }
         return parsedDate;

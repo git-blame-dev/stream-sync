@@ -38,7 +38,7 @@ describe('TikTok social filtering', () => {
             user: { userId: 'tt-user-1', uniqueId: 'social_user' },
             displayType: 'poke',
             actionType: 'poke',
-            createTime: testClock.now()
+            common: { createTime: testClock.now() }
         });
 
         expect(interactions).toHaveLength(0);

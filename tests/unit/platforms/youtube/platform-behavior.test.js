@@ -191,7 +191,7 @@ describe('YouTubePlatform modern architecture', () => {
         const chatItem = {
             item: {
                 id: 'test-msg-1',
-                timestampUsec: '1700000000000000',
+                timestamp_usec: '1700000000000000',
                 author: { id: 'user-123', name: 'TestUser' },
                 message: { runs: [{ text: 'Hello world' }] }
             },
@@ -249,7 +249,7 @@ describe('YouTubePlatform modern architecture', () => {
             item: {
                 type: 'LiveChatSponsorshipsGiftRedemptionAnnouncement',
                 id: 'test-gift-redemption-unknown',
-                timestampUsec: '1704067203000000',
+                timestamp_usec: '1704067203000000',
                 author: {
                     id: 'UC_TEST_CHANNEL_000100',
                     name: 'N/A'
@@ -280,7 +280,7 @@ describe('YouTubePlatform modern architecture', () => {
             item: {
                 type: 'LiveChatPaidMessageRenderer',
                 id: 'test-renderer-duplicate',
-                timestampUsec: '1704067204000000',
+                timestamp_usec: '1704067204000000',
                 author: {
                     id: 'UC_TEST_CHANNEL_000200',
                     name: '@testRenderer'
@@ -319,7 +319,7 @@ describe('YouTubePlatform modern architecture', () => {
                 item: {
                     type: 'LiveChatPaidMessage',
                     id: 'LCC.test-async-error',
-                    timestampUsec: '1704067205000000',
+                    timestamp_usec: '1704067205000000',
                     author: {
                         id: 'UC_TEST_CHANNEL_000400',
                         name: 'AsyncTester'
@@ -351,7 +351,7 @@ describe('YouTubePlatform modern architecture', () => {
             item: {
                 type: 'LiveChatSponsorshipsGiftPurchaseAnnouncement',
                 id: 'LCC.test-gift-purchase-missing-author',
-                timestampUsec: '1700000000000000',
+                timestamp_usec: '1700000000000000',
                 giftMembershipsCount: 3,
                 header: {
                     type: 'LiveChatSponsorshipsHeader'
@@ -371,6 +371,42 @@ describe('YouTubePlatform modern architecture', () => {
         });
         expect(giftErrors[0].timestamp).toBe(new Date(1700000000000).toISOString());
         expect(giftErrors[0].username).toBeUndefined();
+    });
+
+    it('emits gift error payloads when monetization timestamps are missing', async () => {
+        const { platform } = createPlatform();
+        const giftErrors = [];
+        platform.handlers = {
+            ...platform.handlers,
+            onGift: (payload) => giftErrors.push(payload)
+        };
+
+        const chatItem = {
+            item: {
+                type: 'LiveChatPaidMessage',
+                id: 'LCC.test-superchat-missing-timestamp',
+                purchase_amount: 5,
+                purchase_currency: 'USD',
+                author: {
+                    id: 'yt-user-missing-ts',
+                    name: 'TestViewer'
+                },
+                message: { text: 'Super chat' }
+            }
+        };
+
+        await platform.handleChatMessage(chatItem);
+
+        expect(giftErrors).toHaveLength(1);
+        expect(giftErrors[0]).toMatchObject({
+            type: 'platform:gift',
+            platform: 'youtube',
+            giftType: 'Super Chat',
+            giftCount: 1,
+            id: 'LCC.test-superchat-missing-timestamp',
+            isError: true
+        });
+        expect(giftErrors[0].timestamp).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/);
     });
 
     it('emits stream-status when the first YouTube stream becomes live', async () => {

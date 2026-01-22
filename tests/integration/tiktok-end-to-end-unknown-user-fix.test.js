@@ -19,7 +19,7 @@ const buildTimestampService = () => ({
         if (platform !== 'tiktok') {
             throw new Error('Unsupported platform');
         }
-        const raw = data?.createTime ?? testClock.now();
+        const raw = data?.common?.createTime ?? testClock.now();
         return new Date(Number(raw)).toISOString();
     })
 });
@@ -46,7 +46,7 @@ describe('TikTok End-to-End Unknown User Fix Integration', () => {
                         "followRole": 0,
                         "userBadges": []
                     },
-                    "createTime": TEST_TIMESTAMP
+                    "common": { "createTime": TEST_TIMESTAMP }
                 };
 
                 const timestampService = buildTimestampService();
@@ -78,7 +78,7 @@ describe('TikTok End-to-End Unknown User Fix Integration', () => {
                         "profilePictureUrl": "https://example.invalid/unicode-avatar.jpg",
                         "followRole": 0
                     },
-                    "createTime": TEST_TIMESTAMP
+                    "common": { "createTime": TEST_TIMESTAMP }
                 };
 
                 const timestampService = buildTimestampService();
@@ -107,7 +107,7 @@ describe('TikTok End-to-End Unknown User Fix Integration', () => {
                     "repeatCount": 5,
                     "repeatEnd": false,
                     "groupId": "test_combo_123",
-                    "timestamp": TEST_TIMESTAMP,
+                    "timestamp": new Date(TEST_TIMESTAMP).toISOString(),
                     "giftDetails": {
                         "giftName": "TestGiftAlpha",
                         "diamondCount": 1,
@@ -198,7 +198,7 @@ describe('TikTok End-to-End Unknown User Fix Integration', () => {
                         "userId": "test_user_id_missing_username",
                         "profilePictureUrl": "https://example.invalid/avatar-missing-username.jpg"
                     },
-                    "createTime": TEST_TIMESTAMP
+                    "common": { "createTime": TEST_TIMESTAMP }
                 };
 
                 const timestampService = buildTimestampService();
@@ -221,7 +221,7 @@ describe('TikTok End-to-End Unknown User Fix Integration', () => {
                         "userId": `test_user_id_${i}`
                     },
                     "comment": `Test message ${i}`,
-                    "createTime": testClock.now() + i
+                    "common": { "createTime": testClock.now() + i }
                 }));
 
                 const startTime = testClock.now();

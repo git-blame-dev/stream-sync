@@ -13,6 +13,7 @@ describe('TikTokPlatform event emissions', () => {
     });
 
     const baseConfig = { enabled: true, username: 'event_tester' };
+    const eventTimestamp = Date.parse('2024-01-01T00:00:00Z');
 
     const createPlatformUnderTest = () => {
         const webcastEvent = {
@@ -96,7 +97,8 @@ describe('TikTokPlatform event emissions', () => {
                 displayText: {
                     displayType: 'pm_mt_guidance_share',
                     defaultPattern: '{0:user} shared the LIVE'
-                }
+                },
+                createTime: eventTimestamp
             }
         };
 
@@ -113,7 +115,8 @@ describe('TikTokPlatform event emissions', () => {
         const socialPayload = {
             user: { userId: 'follow-user-id', uniqueId: 'followUser' },
             common: {
-                displayText: { defaultPattern: '{0:user} followed the LIVE creator' }
+                displayText: { defaultPattern: '{0:user} followed the LIVE creator' },
+                createTime: eventTimestamp
             }
         };
 
@@ -133,7 +136,8 @@ describe('TikTokPlatform event emissions', () => {
                 displayText: {
                     displayType: 'pm_mt_guidance_share',
                     defaultPattern: '{0:user} shared the LIVE'
-                }
+                },
+                createTime: eventTimestamp
             }
         };
 
@@ -154,7 +158,8 @@ describe('TikTokPlatform event emissions', () => {
                 displayText: {
                     displayType: 'pm_mt_guidance_share',
                     defaultPattern: '{0:user} shared the LIVE'
-                }
+                },
+                createTime: eventTimestamp
             }
         };
         const followPayload = { ...socialPayload };
@@ -176,7 +181,8 @@ describe('TikTokPlatform event emissions', () => {
                 displayText: {
                     displayType: 'pm_mt_guidance_share',
                     defaultPattern: '{0:user} shared the LIVE'
-                }
+                },
+                createTime: eventTimestamp
             }
         };
 
@@ -224,7 +230,7 @@ describe('TikTokPlatform event emissions', () => {
 
     it('emits viewer count updates via PlatformEvents.VIEWER_COUNT', () => {
         const { eventHandlers, viewerCounts, webcastEvent } = createPlatformUnderTest();
-        const viewerPayload = { viewerCount: 777 };
+        const viewerPayload = { viewerCount: 777, common: { createTime: eventTimestamp } };
 
         eventHandlers[webcastEvent.ROOM_USER](viewerPayload);
 

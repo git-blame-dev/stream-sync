@@ -7,18 +7,22 @@ const normalizeUserIdentity = (username, userId) => ({ username, userId });
 
 const resolveNotificationTimestamp = (event, metadata, subscriptionType) => {
     if (!event || typeof event !== 'object') {
-        return metadata?.message_timestamp;
+        return null;
     }
 
     if (subscriptionType === 'stream.online') {
-        return event.started_at || event.timestamp || metadata?.message_timestamp;
+        return event.started_at;
     }
 
     if (subscriptionType === 'stream.offline') {
-        return event.ended_at || event.timestamp || metadata?.message_timestamp;
+        return event.timestamp;
     }
 
-    return event.timestamp || metadata?.message_timestamp;
+    if (subscriptionType === 'channel.follow') {
+        return event.followed_at || event.timestamp;
+    }
+
+    return event.timestamp;
 };
 
 const applyTimestampFallback = (event, metadata, subscriptionType) => {

@@ -81,7 +81,11 @@ describe('TikTokPlatform connection recovery', () => {
 
         await platform.initialize(platform.handlers);
         connection2.emit(dependencies.ControlEvent.CONNECTED);
-        connection2.emit(dependencies.WebcastEvent.ROOM_USER, { viewerCount: 99 });
+        const viewerTimestamp = Date.parse('2024-01-01T00:00:00Z');
+        connection2.emit(dependencies.WebcastEvent.ROOM_USER, {
+            viewerCount: 99,
+            common: { createTime: viewerTimestamp }
+        });
 
         expect(viewerCounts).toHaveLength(1);
         expect(viewerCounts[0]).toMatchObject({ platform: 'tiktok', count: 99 });

@@ -71,7 +71,7 @@ describe('YouTubePlatform event routing behavior', () => {
             item: {
                 type: 'LiveChatSponsorshipsGiftRedemptionAnnouncement',
                 id: 'LCC.test-gift-redemption-001',
-                timestampUsec: '1704067200000000',
+                timestamp_usec: '1704067200000000',
                 author: {
                     id: 'UC_TEST_CHANNEL_000001',
                     name: '@GiftedViewer'
@@ -101,7 +101,7 @@ describe('YouTubePlatform event routing behavior', () => {
             item: {
                 type: 'LiveChatSponsorshipsGiftRedemptionAnnouncement',
                 id: 'LCC.test-gift-redemption-002',
-                timestampUsec: '1704067201000000',
+                timestamp_usec: '1704067201000000',
                 author: {
                     id: 'UC_TEST_CHANNEL_000002',
                     name: 'N/A'
@@ -131,7 +131,7 @@ describe('YouTubePlatform event routing behavior', () => {
             item: {
                 type: 'LiveChatPaidMessageRenderer',
                 id: 'LCC.test-renderer-001',
-                timestampUsec: '1704067202000000',
+                timestamp_usec: '1704067202000000',
                 author: {
                     id: 'UC_TEST_CHANNEL_000003',
                     name: '@RendererUser'
