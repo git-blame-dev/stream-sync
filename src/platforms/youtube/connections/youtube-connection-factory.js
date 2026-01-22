@@ -129,6 +129,16 @@ function createYouTubeConnectionFactory(options = {}) {
         });
 
         connection.on('chat-update', (chatItem) => {
+            if (platform.config.dataLoggingEnabled && chatItem !== undefined) {
+                platform.logRawPlatformData('chat', chatItem).catch((logError) => {
+                    platform._handleProcessingError(
+                        `Error logging raw chat data: ${logError.message}`,
+                        logError,
+                        'data-logging'
+                    );
+                });
+            }
+
             if (!chatItem || typeof chatItem !== 'object') {
                 platform.logger.debug(`Received invalid chat-update for ${videoId}: null or non-object`, 'youtube');
                 return;
@@ -233,16 +243,6 @@ function createYouTubeConnectionFactory(options = {}) {
                     `Single chat-update event received for ${videoId}: ${authorName} - ${messageText}`,
                     'youtube'
                 );
-
-                if (platform.config.dataLoggingEnabled) {
-                    platform.logRawPlatformData('chat', { ...enhancedMessage, videoId }).catch((logError) => {
-                        platform._handleProcessingError(
-                            `Error logging raw chat data: ${logError.message}`,
-                            logError,
-                            'data-logging'
-                        );
-                    });
-                }
 
                 platform.handleChatMessage(enhancedMessage);
             }

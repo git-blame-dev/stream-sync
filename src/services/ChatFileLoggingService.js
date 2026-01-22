@@ -19,14 +19,15 @@ class ChatFileLoggingService {
         }
 
         try {
-            const timestamp = new Date().toISOString();
+            const ingestTimestamp = new Date().toISOString();
             const logEntry = {
-                timestamp,
+                ingestTimestamp,
+                platform,
                 eventType,
-                data
+                payload: data
             };
 
-            const logFileName = `${platform}-data-log.txt`;
+            const logFileName = `${platform}-data-log.ndjson`;
             const logFilePath = path.join(DEFAULT_LOG_DIRECTORY, logFileName);
 
             await this.ensureDirectoryExists(DEFAULT_LOG_DIRECTORY);
@@ -56,7 +57,7 @@ class ChatFileLoggingService {
 
     async getLogStatistics(platform, platformConfig = {}) {
         try {
-            const logFileName = `${platform}-data-log.txt`;
+            const logFileName = `${platform}-data-log.ndjson`;
             const logFilePath = path.join(DEFAULT_LOG_DIRECTORY, logFileName);
 
             const stats = await fs.stat(logFilePath);

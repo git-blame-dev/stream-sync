@@ -44,12 +44,18 @@ describe('ChatFileLoggingService - Behavior-Focused Regression Tests', () => {
             expect(appendSpy.mock.calls).toHaveLength(3);
 
             const [twitchCall, youtubeCall, tiktokCall] = appendSpy.mock.calls;
-            expect(twitchCall[0]).toBe(path.join(logDir, 'twitch-data-log.txt'));
-            expect(youtubeCall[0]).toBe(path.join(logDir, 'youtube-data-log.txt'));
-            expect(tiktokCall[0]).toBe(path.join(logDir, 'tiktok-data-log.txt'));
+            expect(twitchCall[0]).toBe(path.join(logDir, 'twitch-data-log.ndjson'));
+            expect(youtubeCall[0]).toBe(path.join(logDir, 'youtube-data-log.ndjson'));
+            expect(tiktokCall[0]).toBe(path.join(logDir, 'tiktok-data-log.ndjson'));
 
             const twitchEntry = JSON.parse(twitchCall[1]);
-            expect(twitchEntry).toMatchObject({ eventType: 'chat', data: chatData });
+            expect(twitchEntry).toMatchObject({
+                platform: 'twitch',
+                eventType: 'chat',
+                payload: chatData
+            });
+            expect(typeof twitchEntry.ingestTimestamp).toBe('string');
+            expect(twitchEntry.ingestTimestamp).toMatch(/\d{4}-\d{2}-\d{2}T/);
         });
 
         it('does not log when platform logging is disabled for user privacy', async () => {
@@ -70,7 +76,7 @@ describe('ChatFileLoggingService - Behavior-Focused Regression Tests', () => {
     });
 
     describe('Service Extraction Compatibility', () => {
-        it('maintains JSON format for consistent parsing by admins', async () => {
+        it('maintains NDJSON wrapper for raw payloads', async () => {
             const giftData = {
                 giftType: 'Rose',
                 giftCount: 1,
@@ -84,19 +90,20 @@ describe('ChatFileLoggingService - Behavior-Focused Regression Tests', () => {
             const [[, logLine]] = appendSpy.mock.calls;
             const logEntry = JSON.parse(logLine);
 
-            expect(logEntry).toHaveProperty('timestamp');
+            expect(logEntry).toHaveProperty('ingestTimestamp');
+            expect(logEntry).toHaveProperty('platform', 'tiktok');
             expect(logEntry).toHaveProperty('eventType', 'gift');
-            expect(logEntry.data).toEqual(giftData);
+            expect(logEntry.payload).toEqual(giftData);
         });
 
         it('provides statistics for monitoring system health', async () => {
             const stats = await service.getLogStatistics('youtube', { dataLoggingEnabled: true });
 
             expect(statSpy.mock.calls).toHaveLength(1);
-            expect(statSpy.mock.calls[0][0]).toBe(path.join(logDir, 'youtube-data-log.txt'));
+            expect(statSpy.mock.calls[0][0]).toBe(path.join(logDir, 'youtube-data-log.ndjson'));
             expect(stats).toMatchObject({
                 size: 123,
-                path: path.join(logDir, 'youtube-data-log.txt')
+                path: path.join(logDir, 'youtube-data-log.ndjson')
             });
         });
     });
