@@ -1,6 +1,5 @@
-const { describe, it, beforeEach, afterEach, expect } = require('bun:test');
+const { describe, it, beforeEach, expect } = require('bun:test');
 const { createMockFn, clearAllMocks } = require('../../helpers/bun-mock-utils');
-const { restoreAllModuleMocks } = require('../../helpers/bun-module-mocks');
 const { noOpLogger } = require('../../helpers/mock-factories');
 const { expectNoTechnicalArtifacts } = require('../../helpers/assertion-helpers');
 
@@ -11,10 +10,6 @@ describe('TTSService', () => {
     let ttsService;
     let mockConfigService;
     let mockEventBus;
-
-    afterEach(() => {
-        restoreAllModuleMocks();
-    });
 
     beforeEach(() => {
         clearAllMocks();

@@ -1,8 +1,9 @@
 const { describe, it, expect, beforeEach, afterEach } = require('bun:test');
 const { createMockFn, restoreAllMocks } = require('../../helpers/bun-mock-utils');
-const { resetModules, restoreAllModuleMocks } = require('../../helpers/bun-module-mocks');
 
 const fs = require('fs');
+const { configManager: globalConfigManager } = require('../../../src/core/config');
+const { ensureSecrets } = require('../../../src/utils/secret-manager');
 
 let originalReadFileSync;
 let originalWriteFileSync;
@@ -162,10 +163,8 @@ describe('secret-manager', () => {
         originalChmodSync = fs.chmodSync;
         originalStatSync = fs.statSync;
 
-        resetModules();
         setupFsMocks();
 
-        const { configManager: globalConfigManager } = require('../../../src/core/config');
         ConfigManager = globalConfigManager.constructor;
         configManager = new ConfigManager(configPath);
         configManager.load();
@@ -192,12 +191,9 @@ describe('secret-manager', () => {
         fs.chmodSync = originalChmodSync;
         fs.statSync = originalStatSync;
         restoreAllMocks();
-        restoreAllModuleMocks();
     });
 
     it('applies environment secrets without prompting and leaves existing env file untouched', async () => {
-        const { ensureSecrets } = require('../../../src/utils/secret-manager');
-
         process.env.TIKTOK_API_KEY = 'env_tiktok_key';
         process.env.TWITCH_CLIENT_ID = 'env_client_id';
         process.env.TWITCH_CLIENT_SECRET = 'env_client_secret';
@@ -308,8 +304,6 @@ describe('secret-manager', () => {
     });
 
     it('requires a YouTube API key when API methods are selected', async () => {
-        const { ensureSecrets } = require('../../../src/utils/secret-manager');
-
         process.env.TIKTOK_API_KEY = 'env_tiktok_key';
         process.env.TWITCH_CLIENT_ID = 'env_client_id';
         process.env.TWITCH_CLIENT_SECRET = 'env_client_secret';
@@ -379,8 +373,6 @@ describe('secret-manager', () => {
     });
 
     it('fails fast in non-interactive mode when required secrets are missing', async () => {
-        const { ensureSecrets } = require('../../../src/utils/secret-manager');
-
         process.env.TIKTOK_API_KEY = 'env_tiktok_key';
         process.env.OBS_PASSWORD = 'env_obs_password';
         process.env.STREAMELEMENTS_JWT_TOKEN = 'env_jwt_token';

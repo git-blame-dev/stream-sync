@@ -1,8 +1,8 @@
 
-const { describe, test, expect, beforeEach, it, afterEach } = require('bun:test');
-const { resetModules, restoreAllModuleMocks } = require('../../helpers/bun-module-mocks');
+const { describe, test, expect, it } = require('bun:test');
 
 const { getSyntheticFixture } = require('../../helpers/platform-test-data');
+const YouTubeAuthorExtractor = require('../../../src/utils/youtube-author-extractor');
 
 const realChatMessage = getSyntheticFixture('youtube', 'chat-message');
 const realChatNoAtPrefix = getSyntheticFixture('youtube', 'chat-no-at-prefix');
@@ -11,16 +11,6 @@ const realSuperChat = getSyntheticFixture('youtube', 'superchat');
 const giftPurchaseHeaderOnly = getSyntheticFixture('youtube', 'gift-purchase-header');
 
 describe('YouTube Author Extraction - Modern (Production Data)', () => {
-    afterEach(() => {
-        restoreAllModuleMocks();
-    });
-
-    let YouTubeAuthorExtractor;
-
-    beforeEach(() => {
-        resetModules();
-        YouTubeAuthorExtractor = require('../../../src/utils/youtube-author-extractor');
-    });
 
     describe('Real Chat Message Format', () => {
         it('extracts author from chat message with @ prefix in name', () => {

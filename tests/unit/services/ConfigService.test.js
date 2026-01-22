@@ -1,6 +1,5 @@
-const { describe, it, beforeEach, afterEach, expect } = require('bun:test');
+const { describe, it, beforeEach, expect } = require('bun:test');
 const { createMockFn, clearAllMocks } = require('../../helpers/bun-mock-utils');
-const { restoreAllModuleMocks } = require('../../helpers/bun-module-mocks');
 
 const { ConfigService, createConfigService } = require('../../../src/services/ConfigService');
 
@@ -64,10 +63,6 @@ describe('ConfigService', () => {
                 maxLength: 500
             }
         };
-    });
-
-    afterEach(() => {
-        restoreAllModuleMocks();
     });
 
     describe('Constructor', () => {

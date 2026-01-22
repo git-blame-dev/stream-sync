@@ -1,6 +1,5 @@
 const { describe, it, beforeEach, afterEach, expect } = require('bun:test');
 const { createMockFn, clearAllMocks, restoreAllMocks, spyOn } = require('../../helpers/bun-mock-utils');
-const { restoreAllModuleMocks } = require('../../helpers/bun-module-mocks');
 const { useFakeTimers, useRealTimers, advanceTimersByTime } = require('../../helpers/bun-timers');
 
 const { GracefulExitService } = require('../../../src/services/GracefulExitService');
@@ -27,7 +26,6 @@ describe('GracefulExitService', () => {
         }
         useRealTimers();
         restoreAllMocks();
-        restoreAllModuleMocks();
     });
 
     describe('Service Initialization', () => {

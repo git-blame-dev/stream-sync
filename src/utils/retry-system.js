@@ -1,5 +1,5 @@
 
-const { safeSetTimeout, safeDelay, validateTimeout } = require('./timeout-validator');
+const timeoutValidator = require('./timeout-validator');
 const { createPlatformErrorHandler } = require('./platform-error-handler');
 const { validateLoggerInterface } = require('./dependency-validator');
 
@@ -15,6 +15,11 @@ class RetrySystem {
         this.constants = dependencies.constants || null;
         this.errorHandler = createPlatformErrorHandler(this.logger, 'retry-system');
         this.retryTimers = {};
+
+        this.safeSetTimeout = dependencies.safeSetTimeout || timeoutValidator.safeSetTimeout;
+        this.safeDelay = dependencies.safeDelay || timeoutValidator.safeDelay;
+        this.validateTimeout = dependencies.validateTimeout || timeoutValidator.validateTimeout;
+        this.validateExponentialBackoff = dependencies.validateExponentialBackoff || timeoutValidator.validateExponentialBackoff;
         
         // Extract logger methods for convenience
         
@@ -33,11 +38,8 @@ class RetrySystem {
 
     calculateAdaptiveRetryDelay(platform) {
         const retryCount = this.platformRetryCount[platform] || 0;
-        
-        // Use centralized timeout validation for consistent behavior
-        const { validateExponentialBackoff } = require('./timeout-validator');
-        
-        const delay = validateExponentialBackoff(
+
+        const delay = this.validateExponentialBackoff(
             ADAPTIVE_RETRY_CONFIG.BASE_DELAY,
             ADAPTIVE_RETRY_CONFIG.BACKOFF_MULTIPLIER,
             retryCount,
@@ -230,8 +232,8 @@ class RetrySystem {
             }
 
             // Schedule reconnection attempt after cleanup completes
-            const validatedDelay = validateTimeout(adaptiveDelay, ADAPTIVE_RETRY_CONFIG.BASE_DELAY, 'retry delay');
-            this.retryTimers[platform] = safeSetTimeout(async () => {
+            const validatedDelay = this.validateTimeout(adaptiveDelay, ADAPTIVE_RETRY_CONFIG.BASE_DELAY, 'retry delay');
+            this.retryTimers[platform] = this.safeSetTimeout(async () => {
                 if (this.isConnected && this.isConnected(platform)) {
                     this.logger.debug(`Cancelling scheduled retry - ${platform} already connected`, 'retry-system');
                     return;
@@ -343,7 +345,7 @@ class RetrySystem {
                 
                 // Wait before retrying
                 this.logger.info(`Retrying in ${delay/1000} seconds...`, platform);
-                await safeDelay(delay, delay || 1000, 'RetrySystem http retry delay');
+                await this.safeDelay(delay, delay || 1000, 'RetrySystem http retry delay');
             }
         }
         

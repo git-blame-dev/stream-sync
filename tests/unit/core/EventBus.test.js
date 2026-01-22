@@ -1,7 +1,6 @@
 
-const { describe, test, expect, beforeEach, afterEach, afterAll } = require('bun:test');
+const { describe, test, expect, beforeEach, afterEach } = require('bun:test');
 const { createMockFn, clearAllMocks } = require('../../helpers/bun-mock-utils');
-const { restoreAllModuleMocks } = require('../../helpers/bun-module-mocks');
 const testClock = require('../../helpers/test-clock');
 const { waitForDelay } = require('../../helpers/time-utils');
 
@@ -751,7 +750,4 @@ describe('EventBus', () => {
         });
     });
 
-    afterAll(() => {
-        restoreAllModuleMocks();
-    });
 });

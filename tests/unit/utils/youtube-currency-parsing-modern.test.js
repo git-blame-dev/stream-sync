@@ -1,10 +1,9 @@
 
-const { describe, test, expect, beforeEach, it, afterEach } = require('bun:test');
-const { restoreAllMocks } = require('../../helpers/bun-mock-utils');
-const { resetModules, restoreAllModuleMocks } = require('../../helpers/bun-module-mocks');
+const { describe, test, expect, it, beforeEach } = require('bun:test');
 const { noOpLogger } = require('../../helpers/mock-factories');
 
 const { getSyntheticFixture } = require('../../helpers/platform-test-data');
+const YouTubeCurrencyParser = require('../../../src/utils/youtubei-currency-parser');
 const testClock = require('../../helpers/test-clock');
 
 const realSuperSticker = getSyntheticFixture('youtube', 'supersticker');
@@ -12,17 +11,6 @@ const realSuperChat = getSyntheticFixture('youtube', 'superchat');
 const realSuperChatINR = getSyntheticFixture('youtube', 'superchat-international');
 
 describe('YouTube Currency Parsing - Modern (Production Data)', () => {
-    afterEach(() => {
-        restoreAllMocks();
-        restoreAllModuleMocks();
-    });
-
-    let YouTubeCurrencyParser;
-
-    beforeEach(() => {
-        resetModules();
-        YouTubeCurrencyParser = require('../../../src/utils/youtubei-currency-parser');
-    });
 
     describe('Real Production Formats', () => {
         it('parses Australian dollar from SuperSticker', () => {

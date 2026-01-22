@@ -1,14 +1,33 @@
 const { describe, expect, beforeEach, it, afterEach } = require('bun:test');
-const { createMockFn, spyOn, restoreAllMocks } = require('../../helpers/bun-mock-utils');
-const { resetModules } = require('../../helpers/bun-module-mocks');
+const { createMockFn, restoreAllMocks } = require('../../helpers/bun-mock-utils');
 const { noOpLogger } = require('../../helpers/mock-factories');
 
-let safeSetTimeoutSpy;
-let safeDelaySpy;
-let validateTimeoutSpy;
-let validateExponentialBackoffSpy;
-let RetrySystem;
-let ADAPTIVE_RETRY_CONFIG;
+const { RetrySystem, ADAPTIVE_RETRY_CONFIG } = require('../../../src/utils/retry-system');
+
+let mockSafeSetTimeout;
+let mockSafeDelay;
+let mockValidateTimeout;
+let mockValidateExponentialBackoff;
+
+const createTimeoutMocks = () => {
+    mockSafeSetTimeout = createMockFn().mockImplementation((fn) => {
+        fn();
+        return 1;
+    });
+    mockSafeDelay = createMockFn().mockImplementation(() => Promise.resolve());
+    mockValidateTimeout = createMockFn().mockImplementation((delay) => delay);
+    mockValidateExponentialBackoff = createMockFn().mockImplementation((base, multiplier, retry, max) => {
+        const calculated = base * Math.pow(multiplier, retry);
+        return calculated > max ? max : calculated;
+    });
+
+    return {
+        safeSetTimeout: mockSafeSetTimeout,
+        safeDelay: mockSafeDelay,
+        validateTimeout: mockValidateTimeout,
+        validateExponentialBackoff: mockValidateExponentialBackoff
+    };
+};
 
 describe('RetrySystem', () => {
     afterEach(() => {
@@ -16,19 +35,7 @@ describe('RetrySystem', () => {
     });
 
     beforeEach(() => {
-        resetModules();
-        const timeoutValidator = require('../../../src/utils/timeout-validator');
-        safeSetTimeoutSpy = spyOn(timeoutValidator, 'safeSetTimeout').mockImplementation((fn) => {
-            fn();
-            return 1;
-        });
-        safeDelaySpy = spyOn(timeoutValidator, 'safeDelay').mockImplementation(() => Promise.resolve());
-        validateTimeoutSpy = spyOn(timeoutValidator, 'validateTimeout').mockImplementation((delay) => delay);
-        validateExponentialBackoffSpy = spyOn(timeoutValidator, 'validateExponentialBackoff').mockImplementation((base, multiplier, retry, max) => {
-            const calculated = base * Math.pow(multiplier, retry);
-            return calculated > max ? max : calculated;
-        });
-        ({ RetrySystem, ADAPTIVE_RETRY_CONFIG } = require('../../../src/utils/retry-system'));
+        createTimeoutMocks();
     });
 
     function createMockErrorHandler() {
@@ -39,7 +46,8 @@ describe('RetrySystem', () => {
     }
 
     it('stops retries on authorization errors and cleans up state', () => {
-        const retrySystem = new RetrySystem({ logger: noOpLogger });
+        const timeoutMocks = createTimeoutMocks();
+        const retrySystem = new RetrySystem({ logger: noOpLogger, ...timeoutMocks });
         retrySystem.errorHandler = createMockErrorHandler();
         const reconnect = createMockFn();
         const cleanup = createMockFn();
@@ -50,11 +58,12 @@ describe('RetrySystem', () => {
         expect(cleanup).toHaveBeenCalled();
         expect(setState).toHaveBeenCalledWith('Twitch', false, null, false);
         expect(reconnect).not.toHaveBeenCalled();
-        expect(safeSetTimeoutSpy).not.toHaveBeenCalled();
+        expect(mockSafeSetTimeout).not.toHaveBeenCalled();
     });
 
     it('continues gracefully when connection state reset throws during auth failure', () => {
-        const retrySystem = new RetrySystem({ logger: noOpLogger });
+        const timeoutMocks = createTimeoutMocks();
+        const retrySystem = new RetrySystem({ logger: noOpLogger, ...timeoutMocks });
         retrySystem.errorHandler = createMockErrorHandler();
         const reconnect = createMockFn();
         const cleanup = createMockFn();
@@ -64,24 +73,26 @@ describe('RetrySystem', () => {
             .not.toThrow();
         expect(cleanup).toHaveBeenCalled();
         expect(setState).toHaveBeenCalled();
-        expect(safeSetTimeoutSpy).not.toHaveBeenCalled();
+        expect(mockSafeSetTimeout).not.toHaveBeenCalled();
     });
 
     it('schedules reconnect with adaptive delay and executes reconnect when not connected', async () => {
-        const retrySystem = new RetrySystem({ logger: noOpLogger });
+        const timeoutMocks = createTimeoutMocks();
+        const retrySystem = new RetrySystem({ logger: noOpLogger, ...timeoutMocks });
         retrySystem.errorHandler = createMockErrorHandler();
         const reconnect = createMockFn().mockResolvedValue();
 
         retrySystem.handleConnectionError('TikTok', new Error('temporary failure'), reconnect);
         await Promise.resolve();
 
-        expect(validateTimeoutSpy).toHaveBeenCalled();
-        expect(safeSetTimeoutSpy).toHaveBeenCalled();
+        expect(mockValidateTimeout).toHaveBeenCalled();
+        expect(mockSafeSetTimeout).toHaveBeenCalled();
         expect(reconnect).toHaveBeenCalled();
     });
 
     it('continues scheduled reconnect when state reset throws inside scheduler', async () => {
-        const retrySystem = new RetrySystem({ logger: noOpLogger });
+        const timeoutMocks = createTimeoutMocks();
+        const retrySystem = new RetrySystem({ logger: noOpLogger, ...timeoutMocks });
         retrySystem.errorHandler = createMockErrorHandler();
         const reconnect = createMockFn().mockResolvedValue();
         retrySystem.isConnected = createMockFn().mockReturnValue(false);
@@ -122,7 +133,8 @@ describe('RetrySystem', () => {
     });
 
     it('does not cap retries when max attempts is set to zero', async () => {
-        const retrySystem = new RetrySystem({ logger: noOpLogger, constants: { RETRY_MAX_ATTEMPTS: 0 } });
+        const timeoutMocks = createTimeoutMocks();
+        const retrySystem = new RetrySystem({ logger: noOpLogger, constants: { RETRY_MAX_ATTEMPTS: 0 }, ...timeoutMocks });
         retrySystem.errorHandler = createMockErrorHandler();
         retrySystem.platformRetryCount.TikTok = 50;
 
@@ -185,7 +197,8 @@ describe('RetrySystem', () => {
     });
 
     it('skips scheduled reconnect when already connected', async () => {
-        const retrySystem = new RetrySystem({ logger: noOpLogger });
+        const timeoutMocks = createTimeoutMocks();
+        const retrySystem = new RetrySystem({ logger: noOpLogger, ...timeoutMocks });
         retrySystem.errorHandler = createMockErrorHandler();
         const reconnect = createMockFn();
         retrySystem.isConnected = createMockFn().mockReturnValue(true);
@@ -208,7 +221,8 @@ describe('RetrySystem', () => {
     });
 
     it('executes with retry until success then resets counts', async () => {
-        const retrySystem = new RetrySystem({ logger: noOpLogger });
+        const timeoutMocks = createTimeoutMocks();
+        const retrySystem = new RetrySystem({ logger: noOpLogger, ...timeoutMocks });
         retrySystem.errorHandler = createMockErrorHandler();
         const execute = createMockFn()
             .mockRejectedValueOnce(new Error('flaky'))
@@ -217,19 +231,20 @@ describe('RetrySystem', () => {
         const result = await retrySystem.executeWithRetry('YouTube', execute, 3);
 
         expect(result).toBe('ok');
-        expect(safeDelaySpy).toHaveBeenCalled();
+        expect(mockSafeDelay).toHaveBeenCalled();
         expect(retrySystem.getRetryCount('YouTube')).toBe(0);
     });
 
     it('stops executeWithRetry immediately on non-retryable auth errors', async () => {
-        const retrySystem = new RetrySystem({ logger: noOpLogger });
+        const timeoutMocks = createTimeoutMocks();
+        const retrySystem = new RetrySystem({ logger: noOpLogger, ...timeoutMocks });
         retrySystem.errorHandler = createMockErrorHandler();
         const unauthorizedCall = createMockFn().mockRejectedValue(new Error('401 Unauthorized'));
 
         await expect(retrySystem.executeWithRetry('Twitch', unauthorizedCall, 3)).rejects.toThrow('401');
 
         expect(unauthorizedCall).toHaveBeenCalledTimes(1);
-        expect(safeDelaySpy).not.toHaveBeenCalled();
+        expect(mockSafeDelay).not.toHaveBeenCalled();
     });
 
     it('extracts readable error messages from nested structures', () => {

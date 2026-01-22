@@ -1,6 +1,5 @@
 const { describe, test, expect, beforeEach, afterEach } = require('bun:test');
 const { createMockFn, restoreAllMocks } = require('../../helpers/bun-mock-utils');
-const { restoreAllModuleMocks } = require('../../helpers/bun-module-mocks');
 const { noOpLogger } = require('../../helpers/mock-factories');
 
 describe('Timeout NaN Warning Fix', () => {
@@ -37,7 +36,6 @@ describe('Timeout NaN Warning Fix', () => {
                 }
             });
         }
-        restoreAllModuleMocks();
     });
 
     describe('Stream Detector NaN Timeout', () => {

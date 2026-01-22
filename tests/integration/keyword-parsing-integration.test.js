@@ -1,7 +1,6 @@
 
 const { describe, test, beforeEach, afterEach, expect } = require('bun:test');
-const { createMockFn, restoreAllMocks } = require('../helpers/bun-mock-utils');
-const { restoreAllModuleMocks } = require('../helpers/bun-module-mocks');
+const { restoreAllMocks } = require('../helpers/bun-mock-utils');
 
 const { CommandParser } = require('../../src/chat/commands');
 const testClock = require('../helpers/test-clock');
@@ -29,7 +28,6 @@ describe('Keyword Parsing Integration', () => {
 
     afterEach(() => {
         restoreAllMocks();
-        restoreAllModuleMocks();
     });
 
     describe('Complete Flow - Keyword Parsing Enabled', () => {

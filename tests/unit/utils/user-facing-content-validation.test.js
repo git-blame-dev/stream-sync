@@ -1,8 +1,8 @@
-const { describe, test, expect, beforeEach, afterEach } = require('bun:test');
-const { resetModules, restoreAllModuleMocks } = require('../../helpers/bun-module-mocks');
+const { describe, test, expect } = require('bun:test');
 const { TEST_TIMEOUTS } = require('../../helpers/test-setup');
 const { setupAutomatedCleanup } = require('../../helpers/mock-lifecycle');
 const { expectNoTechnicalArtifacts } = require('../../helpers/behavior-validation');
+const { createNotificationData } = require('../../helpers/notification-test-utils');
 
 setupAutomatedCleanup({
     clearCallsBeforeEach: true,
@@ -10,18 +10,6 @@ setupAutomatedCleanup({
 });
 
 describe('User-Facing Content Validation', () => {
-    afterEach(() => {
-        restoreAllModuleMocks();
-    });
-
-    let createNotificationData;
-
-    beforeEach(() => {
-        resetModules();
-
-        const testUtils = require('../../helpers/notification-test-utils');
-        createNotificationData = testUtils.createNotificationData;
-    });
 
     describe('Template Placeholder Elimination', () => {
         const notificationTypes = ['platform:gift', 'platform:follow', 'platform:paypiggy', 'platform:raid', 'platform:envelope'];
