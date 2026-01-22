@@ -120,6 +120,7 @@ describe('Config path override', () => {
         delete process.env.CHAT_BOT_CONFIG_PATH;
         configManager.isLoaded = false;
         configManager.config = null;
+        configManager.configPath = configManager.defaultConfigPath;
     });
 
     it('loads config from CHAT_BOT_CONFIG_PATH when set', () => {

@@ -76,6 +76,13 @@ describe('Console Override Pattern', () => {
     afterEach(() => {
         restoreAllMocks();
         restoreConsole();
+        setConfigValidator(() => ({
+            console: { enabled: false },
+            file: { enabled: false, directory: './logs' },
+            debug: { enabled: false },
+            platforms: {},
+            chat: { enabled: false }
+        }));
     });
 
     describe('ensureLogDirectory', () => {
