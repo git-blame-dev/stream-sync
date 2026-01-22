@@ -436,13 +436,16 @@ class StreamElementsPlatform extends EventEmitter {
             const logsDir = this.config.dataLoggingPath;
             await fs.mkdir(logsDir, { recursive: true });
 
-            // Create log entry with timestamp and event type
-            const timestamp = new Date().toISOString();
-            const logEntry = `[${timestamp}] [${eventType.toUpperCase()}] ${JSON.stringify(data, null, 2)}\n\n`;
+            const ingestTimestamp = new Date().toISOString();
+            const logEntry = {
+                ingestTimestamp,
+                platform: 'streamelements',
+                eventType,
+                payload: data
+            };
 
-            // Append to platform-specific log file
-            const logFile = path.join(logsDir, 'streamelements-data-log.txt');
-            await fs.appendFile(logFile, logEntry);
+            const logFile = path.join(logsDir, 'streamelements-data-log.ndjson');
+            await fs.appendFile(logFile, `${JSON.stringify(logEntry)}\n`);
 
             this.logger.debug(`Raw platform data logged to ${logFile}`, 'streamelements-platform');
         } catch (error) {
