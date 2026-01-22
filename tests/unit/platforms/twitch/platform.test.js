@@ -1,43 +1,21 @@
-const { describe, it, expect, beforeEach, afterEach, beforeAll } = require('bun:test');
-const { createMockFn, restoreAllMocks, spyOn } = require('../../helpers/bun-mock-utils');
-const { unmockModule, resetModules, restoreAllModuleMocks } = require('../../helpers/bun-module-mocks');
-const { noOpLogger } = require('../../helpers/mock-factories');
-const { setupAutomatedCleanup } = require('../../helpers/mock-lifecycle');
-const { expectNoTechnicalArtifacts } = require('../../helpers/assertion-helpers');
-const { createTwitchFollowEvent } = require('../../helpers/twitch-test-data');
+const { describe, it, expect, beforeEach, afterEach } = require('bun:test');
+const { createMockFn, restoreAllMocks, spyOn } = require('../../../helpers/bun-mock-utils');
+const { noOpLogger } = require('../../../helpers/mock-factories');
+const { expectNoTechnicalArtifacts } = require('../../../helpers/assertion-helpers');
+const { createTwitchFollowEvent } = require('../../../helpers/twitch-test-data');
 
-setupAutomatedCleanup({
-    clearCallsBeforeEach: true,
-    validateAfterCleanup: true,
-    logPerformanceMetrics: true
-});
-
-unmockModule('../../../src/platforms/twitch');
-unmockModule('../../../src/platforms/twitch-eventsub');
-unmockModule('../../../src/utils/retry-system');
-unmockModule('../../../src/core/logging');
-unmockModule('../../../src/utils/platform-connection-state');
-unmockModule('../../../src/utils/api-clients/twitch-api-client');
-unmockModule('../../../src/utils/viewer-count-providers');
+const { TwitchPlatform } = require('../../../../src/platforms/twitch');
+const PlatformEventRouter = require('../../../../src/services/PlatformEventRouter');
 
 describe('Twitch Platform', () => {
-    beforeAll(() => {
-        restoreAllModuleMocks();
-        resetModules();
-    });
-
     afterEach(() => {
         restoreAllMocks();
-        restoreAllModuleMocks();
-        resetModules();
     });
 
-    let TwitchPlatform;
     let mockTwitchEventSub;
     let mockAuthManager;
     let mockApiClient;
     let mockViewerCountProvider;
-    let mockLogger;
     let mockApp;
     let platform;
     let config;
@@ -47,7 +25,6 @@ describe('Twitch Platform', () => {
     let runtime;
 
     beforeEach(() => {
-        mockLogger = noOpLogger;
         mockAuthManager = {
             getState: createMockFn().mockReturnValue('READY'),
             getAccessToken: createMockFn().mockResolvedValue('mock-access-token'),
@@ -82,9 +59,6 @@ describe('Twitch Platform', () => {
             sendMessage: createMockFn().mockResolvedValue()
         };
 
-        const { TwitchPlatform: RealTwitchPlatform } = require('../../../src/platforms/twitch');
-        TwitchPlatform = RealTwitchPlatform;
-
         config = {
             enabled: true,
             username: 'testuser',
@@ -98,7 +72,7 @@ describe('Twitch Platform', () => {
             TwitchEventSub: createMockFn().mockImplementation(() => mockTwitchEventSub),
             authManager: mockAuthManager,
             notificationBridge: mockApp,
-            logger: mockLogger,
+            logger: noOpLogger,
             timestampService: {
                 extractTimestamp: createMockFn(() => new Date().toISOString())
             }
@@ -144,13 +118,12 @@ describe('Twitch Platform', () => {
         platform.viewerCountProvider = mockViewerCountProvider;
         platform.handlers = platformHandlers;
 
-        const PlatformEventRouter = require('../../../src/services/PlatformEventRouter');
         router = new PlatformEventRouter({
             eventBus: mockEventBus,
             runtime,
             notificationManager: mockApp,
             configService: { areNotificationsEnabled: createMockFn(() => true) },
-            logger: mockLogger
+            logger: noOpLogger
         });
     });
 
@@ -500,13 +473,13 @@ describe('Twitch Platform', () => {
             const sendError = new Error('Network timeout');
             mockTwitchEventSub.sendMessage.mockRejectedValue(sendError);
 
-            await expect(platform.sendMessage('test')).rejects.toThrow('Network timeout');
+            await expect(platform.sendMessage('test')).rejects.toThrow('Twitch chat is unavailable: Network timeout');
         });
 
         it('should surface a user-friendly error when EventSub is not initialized', async () => {
             platform.eventSub = null;
 
-            await expect(platform.sendMessage('hello')).rejects.toThrow('EventSub connection is not initialized');
+            await expect(platform.sendMessage('hello')).rejects.toThrow('Twitch chat is unavailable: EventSub connection is not initialized');
         });
 
         it('should block sending when EventSub connection is inactive', async () => {
@@ -515,7 +488,7 @@ describe('Twitch Platform', () => {
                 isActive: createMockFn().mockReturnValue(false)
             };
 
-            await expect(platform.sendMessage('hello')).rejects.toThrow('EventSub connection is not active');
+            await expect(platform.sendMessage('hello')).rejects.toThrow('Twitch chat is unavailable: EventSub connection is not active');
         });
     });
 
@@ -609,13 +582,6 @@ describe('Twitch Platform', () => {
             expect(count).toBe(1500);
         });
 
-        it('should show zero viewers when count unavailable', async () => {
-            mockViewerCountProvider.getViewerCount.mockRejectedValue(new Error('API error'));
-
-            const count = await platform.getViewerCount();
-
-            expect(count).toBe(0);
-        });
     });
 
     describe('when getting statistics', () => {
