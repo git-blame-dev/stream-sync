@@ -68,13 +68,13 @@ describe('TwitchEventSub behavior', () => {
         instance.handleNotificationEvent('channel.chat.message', {
             chatter_user_id: 'chatter123',
             broadcaster_user_id: 'broadcaster456',
-            message: { text: 'Hello stream!', timestamp: '2024-01-01T12:00:00Z' },
-            message_timestamp: '2024-01-01T12:00:00Z'
+            message: { text: 'Hello stream!' },
+            timestamp: '2024-01-01T12:00:00Z'
         });
 
         expect(messageEvents.length).toBe(1);
         expect(messageEvents[0].message).toBe('Hello stream!');
-        expect(messageEvents[0].context['tmi-sent-ts']).toBe(String(Date.parse('2024-01-01T12:00:00Z')));
+        expect(messageEvents[0].context.timestamp).toBe('2024-01-01T12:00:00Z');
     });
 
     it('ignores duplicate notification message ids', () => {
@@ -89,8 +89,7 @@ describe('TwitchEventSub behavior', () => {
         const message = {
             metadata: {
                 message_id: 'dedupe-test-id',
-                message_type: 'notification',
-                message_timestamp: '2024-01-01T00:00:00Z'
+                message_type: 'notification'
             },
             payload: {
                 subscription: { type: 'channel.follow' },

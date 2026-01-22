@@ -90,6 +90,30 @@ describe('Twitch platform refactor behaviors', () => {
         expect(received[0].metadata.correlationId).toBeDefined();
     });
 
+    it('emits paypiggy error payloads when timestamps are missing', async () => {
+        const platform = new TwitchPlatform(baseConfig, {
+            authManager: createAuthManager({ userId: TEST_USER_ID }),
+            logger: noOpLogger
+        });
+
+        const received = [];
+        platform.handlers = { onPaypiggy: (payload) => received.push(payload) };
+
+        await platform.handlePaypiggyEvent({
+            username: 'Subscriber',
+            userId: 'sub-1',
+            tier: '1000',
+            is_gift: false
+        });
+
+        expect(received).toHaveLength(1);
+        expect(received[0]).toMatchObject({
+            platform: 'twitch',
+            isError: true
+        });
+        expect(received[0].timestamp).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/);
+    });
+
     it('emits chat events even when normalization validation fails', async () => {
         const mockNormalizeTwitchMessage = createMockFn(() => ({
             userId: 'chat-1',

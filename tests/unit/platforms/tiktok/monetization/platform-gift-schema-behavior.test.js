@@ -32,7 +32,7 @@ describe('TikTokPlatform gift aggregation and schema behavior', () => {
             repeatCount,
             giftType: 0,
             msgId: `gift-${timestamp}`,
-            createTime: timestamp
+            timestamp: new Date(timestamp).toISOString()
         };
     };
 
@@ -83,7 +83,7 @@ describe('TikTokPlatform gift aggregation and schema behavior', () => {
         await platform._handleChatMessage({
             user: { userId: 'tt-chatter-1', uniqueId: 'chatter', nickname: 'Chatter Box' },
             comment: 'Hello TikTok!',
-            createTime: testClock.now()
+            common: { createTime: testClock.now() }
         });
 
         expect(chatEvents).toHaveLength(1);
@@ -110,7 +110,7 @@ describe('TikTokPlatform gift aggregation and schema behavior', () => {
             repeatCount: 3,
             repeatEnd: true,
             msgId: 'gift-msg-1',
-            createTime: testClock.now()
+            timestamp: new Date(testClock.now()).toISOString()
         });
 
         expect(emittedGifts).toHaveLength(1);
@@ -140,7 +140,7 @@ describe('TikTokPlatform gift aggregation and schema behavior', () => {
             repeatCount: 2,
             repeatEnd: true,
             msgId: 'gift-msg-2',
-            createTime: testClock.now()
+            timestamp: new Date(testClock.now()).toISOString()
         });
 
         await runAllGiftTimers();

@@ -1073,10 +1073,16 @@ class TikTokPlatform extends EventEmitter {
 
     _createMonetizationErrorPayload(notificationType, data, overrides = {}) {
         const id = this._getPlatformMessageId(data);
-        const timestamp = this._getTimestamp(data);
+        let timestamp = this._getTimestamp(data);
         if (!timestamp) {
-            this.logger.warn('[TikTok Error] Missing timestamp for monetization error payload', 'tiktok', { data });
-            return null;
+            const error = new Error('Missing TikTok timestamp for monetization error payload');
+            this.errorHandler.handleEventProcessingError(
+                error,
+                'monetization-timestamp',
+                data,
+                'Missing TikTok timestamp for monetization error payload, using fallback'
+            );
+            timestamp = getSystemTimestampISO();
         }
         return createMonetizationErrorPayload({
             notificationType,

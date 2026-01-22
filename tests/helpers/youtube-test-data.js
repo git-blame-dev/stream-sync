@@ -41,7 +41,7 @@ const createYouTubeChatEvent = (messageTypeOrOverrides = 'text', overrides = {})
         item: {
             type: 'LiveChatTextMessage',
             id: nextMessageId(),
-            timestampUsec: (baseTimestamp * 1000).toString(),
+            timestamp_usec: (baseTimestamp * 1000).toString(),
             message: messageType === 'emoji' ? '🎉🔥 Great stream!' : 'Hello everyone!',
             authorDetails: {
                 channelId: baseUserId,
@@ -113,7 +113,7 @@ const createYouTubeSuperChatEvent = (amountOrOverrides = 5.00, currency = 'USD',
         item: {
             type: 'LiveChatPaidMessage',
             id: nextMessageId(),
-            timestampUsec: (baseTimestamp * 1000).toString(),
+            timestamp_usec: (baseTimestamp * 1000).toString(),
             authorDetails: {
                 channelId: baseUserId,
                 channelUrl: `https://www.youtube.example.invalid/channel/${baseUserId}`,
@@ -139,7 +139,7 @@ const createYouTubeSuperChatEvent = (amountOrOverrides = 5.00, currency = 'USD',
             },
             liveChatPaidMessageRenderer: {
                 id: nextMessageId(),
-                timestampUsec: (baseTimestamp * 1000).toString(),
+                timestamp_usec: (baseTimestamp * 1000).toString(),
                 authorName: {
                     simpleText: 'SuperChatUser'
                 },

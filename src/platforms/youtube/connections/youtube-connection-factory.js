@@ -165,12 +165,18 @@ function createYouTubeConnectionFactory(options = {}) {
                     return;
                 }
 
-                const rawTimestamp = chatItem.timestampUsec ?? chatItem.timestamp_usec ?? chatItem.timestamp;
+                const rawUsec = chatItem.timestamp_usec;
+                const rawTimestamp = rawUsec !== undefined && rawUsec !== null
+                    ? rawUsec
+                    : chatItem.timestamp;
+                const timestampField = rawUsec !== undefined && rawUsec !== null
+                    ? { timestamp_usec: rawUsec }
+                    : (rawTimestamp !== undefined && rawTimestamp !== null ? { timestamp: rawTimestamp } : {});
                 const normalizedChatItem = {
                     item: {
                         type: 'LiveChatTextMessage',
                         ...(chatItem.id ? { id: chatItem.id } : {}),
-                        ...(rawTimestamp ? { timestampUsec: rawTimestamp } : {}),
+                        ...timestampField,
                         author: {
                             id: authorId,
                             name: rawAuthorName.trim()

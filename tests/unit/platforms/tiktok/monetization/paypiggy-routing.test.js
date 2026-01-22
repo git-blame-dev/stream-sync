@@ -34,7 +34,7 @@ describe('TikTok paypiggy routing', () => {
         await platform._handleStandardEvent('paypiggy', {
             user: { userId: 'tt-sub-1', uniqueId: 'subscriber_one' },
             message: 'hello there',
-            createTime: testClock.now()
+            common: { createTime: testClock.now() }
         }, {
             factoryMethod: 'createSubscription',
             emitType: PlatformEvents.PAYPIGGY
@@ -57,7 +57,7 @@ describe('TikTok paypiggy routing', () => {
         await platform._handleStandardEvent('paypiggy', {
             user: { userId: 'tt-super-1', uniqueId: 'superfan_one' },
             message: 'superfan here',
-            createTime: testClock.now()
+            common: { createTime: testClock.now() }
         }, {
             factoryMethod: 'createSuperfan',
             emitType: PlatformEvents.PAYPIGGY

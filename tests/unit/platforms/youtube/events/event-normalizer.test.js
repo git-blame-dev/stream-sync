@@ -48,10 +48,10 @@ describe('normalizeYouTubeEvent', () => {
         });
     });
 
-    test('hydrates wrapper id and timestampUsec into chat item', () => {
+    test('hydrates wrapper id and timestamp_usec into chat item', () => {
         const chatItem = {
             id: 'LCC.wrapper-001',
-            timestampUsec: '1704067200000000',
+            timestamp_usec: '1704067200000000',
             item: {
                 type: 'LiveChatTextMessage',
                 author: {
@@ -67,6 +67,6 @@ describe('normalizeYouTubeEvent', () => {
         expect(result.eventType).toBe('LiveChatTextMessage');
         expect(result.normalizedChatItem).not.toBeNull();
         expect(result.normalizedChatItem.item.id).toBe('LCC.wrapper-001');
-        expect(result.normalizedChatItem.item.timestampUsec).toBe('1704067200000000');
+        expect(result.normalizedChatItem.item.timestamp_usec).toBe('1704067200000000');
     });
 });

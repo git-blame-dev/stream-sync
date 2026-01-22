@@ -66,7 +66,7 @@ describe('TwitchPlatform refactor behavior', () => {
             onStreamStatus: () => { throw new Error('boom'); }
         };
 
-        expect(() => platform.handleStreamOnlineEvent({ timestamp: '2024-01-01T00:00:00Z' })).not.toThrow();
+        expect(() => platform.handleStreamOnlineEvent({ started_at: '2024-01-01T00:00:00Z' })).not.toThrow();
     });
 
     it('adds correlation metadata to stream-status events', () => {
@@ -74,7 +74,7 @@ describe('TwitchPlatform refactor behavior', () => {
         let emittedPayload;
         platform.handlers = { onStreamStatus: (payload) => { emittedPayload = payload; } };
 
-        platform.handleStreamOnlineEvent({ timestamp: '2024-01-01T00:00:00Z' });
+        platform.handleStreamOnlineEvent({ started_at: '2024-01-01T00:00:00Z' });
 
         expect(emittedPayload).toBeDefined();
         expect(emittedPayload.metadata).toBeDefined();

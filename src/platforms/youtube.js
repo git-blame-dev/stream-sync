@@ -696,8 +696,8 @@ class YouTubePlatform extends EventEmitter {
         try {
             return this.monetizationParser.resolveTimestamp(chatItem, label);
         } catch (error) {
-            this._handleProcessingError(`Missing timestamp for ${label}: ${error.message}`, error, 'monetization');
-            return null;
+            this._handleProcessingError(`Missing timestamp for ${label}: ${error.message}`, error, 'monetization', chatItem);
+            return getSystemTimestampISO();
         }
     }
 

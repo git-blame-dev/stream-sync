@@ -125,7 +125,7 @@ describe('TikTokPlatform behavior alignment', () => {
                     repeatCount: 1,
                     giftDetails: { giftName: 'Rose', diamondCount: 1, giftType: 0 },
                     msgId: 'gift-missing-user',
-                    createTime: 1_700_000_000
+                    timestamp: '2024-01-01T00:00:00.000Z'
                 })
             ).resolves.toBeUndefined();
 
@@ -138,6 +138,38 @@ describe('TikTokPlatform behavior alignment', () => {
                 eventType: 'gift'
             });
             expect(routedGifts[0].timestamp).toEqual(expect.any(String));
+        });
+
+        it('emits a user-facing error when gift timestamps are missing', async () => {
+            const platform = createPlatform();
+            const routedGifts = [];
+            platform.handlers = {
+                ...platform.handlers,
+                onGift: (data) => routedGifts.push(data)
+            };
+
+            await expect(
+                platform.handleTikTokGift({
+                    repeatCount: 1,
+                    giftDetails: { giftName: 'Rose', diamondCount: 1, giftType: 0 },
+                    msgId: 'gift-missing-timestamp',
+                    user: {
+                        uniqueId: 'alice',
+                        nickname: 'Alice',
+                        userId: 'alice-id'
+                    }
+                })
+            ).resolves.toBeUndefined();
+
+            expect(routedGifts).toHaveLength(1);
+            expect(routedGifts[0]).toMatchObject({
+                platform: 'tiktok',
+                isError: true,
+                id: 'gift-missing-timestamp',
+                type: 'gift',
+                eventType: 'gift'
+            });
+            expect(routedGifts[0].timestamp).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/);
         });
     });
 
@@ -285,7 +317,11 @@ describe('TikTokPlatform behavior alignment', () => {
 
             platform.setupEventListeners();
 
-            await listeners['room_user']?.({ viewerCount: 42 });
+            const viewerTimestamp = Date.parse('2024-01-01T00:00:00Z');
+            await listeners['room_user']?.({
+                viewerCount: 42,
+                common: { createTime: viewerTimestamp }
+            });
 
             expect(platform.cachedViewerCount).toBe(42);
             const viewerEvent = events.find((evt) => evt.type === 'viewer-count');

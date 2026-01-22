@@ -3,7 +3,6 @@ const { createMockFn, clearAllMocks } = require('../../helpers/bun-mock-utils');
 const { useFakeTimers, useRealTimers, setSystemTime } = require('../../helpers/bun-timers');
 const { initializeTestLogging, TEST_TIMEOUTS } = require('../../helpers/test-setup');
 const { noOpLogger, setupAutomatedCleanup } = require('../../helpers/mock-factories');
-const { expectNoTechnicalArtifacts } = require('../../helpers/assertion-helpers');
 const testClock = require('../../helpers/test-clock');
 
 initializeTestLogging();
@@ -48,14 +47,16 @@ describe('TimestampExtractionService Behavior', () => {
     });
 
     describe('TikTok Timestamp Preservation', () => {
-        it('should preserve original createTime from TikTok messages', () => {
+        it('preserves common.createTime from TikTok messages', () => {
             if (!TimestampExtractionService) {
                 return expect(true).toBe(true);
             }
 
             const originalTime = testClock.now() - (2 * 60 * 1000);
             const tikTokData = {
-                createTime: originalTime,
+                common: {
+                    createTime: originalTime
+                },
                 userId: 'testuser-id',
                 uniqueId: 'TestUser',
                 comment: 'Test message'
@@ -70,7 +71,7 @@ describe('TimestampExtractionService Behavior', () => {
             expect(extractedTime).toBeGreaterThan(0);
         });
 
-        it('should read nested common.createTime values when root field is missing', () => {
+        it('reads common.clientSendTime when createTime is missing', () => {
             if (!TimestampExtractionService) {
                 return expect(true).toBe(true);
             }
@@ -78,7 +79,7 @@ describe('TimestampExtractionService Behavior', () => {
             const originalTime = testClock.now() - (4 * 60 * 1000);
             const tikTokData = {
                 common: {
-                    createTime: String(originalTime)
+                    clientSendTime: String(originalTime)
                 },
                 userId: 'nested-user-id',
                 uniqueId: 'NestedUser',
@@ -90,45 +91,24 @@ describe('TimestampExtractionService Behavior', () => {
             expect(extractedTime).toBe(originalTime);
         });
 
-        it('should use timestamp field as fallback when createTime is missing', () => {
+        it('uses ISO timestamp field when common timestamps are missing', () => {
             if (!TimestampExtractionService) {
                 return expect(true).toBe(true);
             }
 
-            const fallbackTime = testClock.now() - (3 * 60 * 1000);
+            const isoTimestamp = new Date(testClock.now() - (3 * 60 * 1000)).toISOString();
             const tikTokData = {
-                timestamp: fallbackTime,
+                timestamp: isoTimestamp,
                 userId: 'testuser-id',
                 uniqueId: 'TestUser',
                 comment: 'Test message'
             };
 
             const extractedTimestamp = service.extractTimestamp('tiktok', tikTokData);
-
-            const extractedTime = new Date(extractedTimestamp).getTime();
-            expect(extractedTime).toBe(fallbackTime);
+            expect(extractedTimestamp).toBe(isoTimestamp);
         });
 
-        it('should accept string timestamp values for TikTok fallback data', () => {
-            if (!TimestampExtractionService) {
-                return expect(true).toBe(true);
-            }
-
-            const fallbackTime = testClock.now() - (5 * 60 * 1000);
-            const tikTokData = {
-                timestamp: String(fallbackTime),
-                userId: 'testuser-id',
-                uniqueId: 'TestUser',
-                comment: 'String timestamp fallback'
-            };
-
-            const extractedTimestamp = service.extractTimestamp('tiktok', tikTokData);
-            const extractedTime = new Date(extractedTimestamp).getTime();
-            expect(extractedTime).toBe(fallbackTime);
-            expect(extractedTimestamp).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/);
-        });
-
-        it('should fallback to current time when no timestamp fields available', () => {
+        it('returns null when no supported timestamp fields are available', () => {
             if (!TimestampExtractionService) {
                 return expect(true).toBe(true);
             }
@@ -139,28 +119,21 @@ describe('TimestampExtractionService Behavior', () => {
                 comment: 'Test message'
             };
 
-            const beforeExtraction = testClock.now();
-
             const extractedTimestamp = service.extractTimestamp('tiktok', tikTokData);
 
-            const afterExtraction = testClock.now();
-            const extractedTime = new Date(extractedTimestamp).getTime();
-
-            expect(extractedTime).toBeGreaterThanOrEqual(beforeExtraction);
-            expect(extractedTime).toBeLessThanOrEqual(afterExtraction);
+            expect(extractedTimestamp).toBeNull();
         });
     });
 
     describe('YouTube Timestamp Preservation', () => {
-        it('should preserve original timestamp from YouTube messages in microseconds', () => {
+        it('preserves original timestamp from YouTube messages in microseconds', () => {
             if (!TimestampExtractionService) {
                 return expect(true).toBe(true);
             }
 
             const originalTimeMs = testClock.now() - (4 * 60 * 1000);
-            const originalTimeMicros = originalTimeMs * 1000;
             const youTubeData = {
-                timestamp: originalTimeMicros.toString(),
+                timestamp_usec: (originalTimeMs * 1000).toString(),
                 author: {
                     name: 'TestUser',
                     id: 'user123'
@@ -176,7 +149,7 @@ describe('TimestampExtractionService Behavior', () => {
             expect(extractedTime).toBe(originalTimeMs);
         });
 
-        it('should preserve timestamp when YouTube provides milliseconds', () => {
+        it('preserves timestamp when YouTube provides milliseconds', () => {
             if (!TimestampExtractionService) {
                 return expect(true).toBe(true);
             }
@@ -198,51 +171,7 @@ describe('TimestampExtractionService Behavior', () => {
             expect(extractedTime).toBe(originalTimeMs);
         });
 
-        it('should accept ISO string timestamps for YouTube payloads', () => {
-            if (!TimestampExtractionService) {
-                return expect(true).toBe(true);
-            }
-
-            const isoTimestamp = new Date(testClock.now() - (3 * 60 * 1000)).toISOString();
-            const youTubeData = {
-                timestamp: isoTimestamp,
-                author: {
-                    name: 'TestUser',
-                    id: 'user123'
-                },
-                message: {
-                    text: 'Test YouTube message (iso)'
-                }
-            };
-
-            const extractedTimestamp = service.extractTimestamp('youtube', youTubeData);
-            expect(extractedTimestamp).toBe(isoTimestamp);
-        });
-
-        it('should handle timestampUsec field as alternative for YouTube', () => {
-            if (!TimestampExtractionService) {
-                return expect(true).toBe(true);
-            }
-
-            const originalTimeMs = testClock.now() - (5 * 60 * 1000);
-            const youTubeData = {
-                timestampUsec: (originalTimeMs * 1000).toString(),
-                author: {
-                    name: 'TestUser',
-                    id: 'user123'
-                },
-                message: {
-                    text: 'Test YouTube message'
-                }
-            };
-
-            const extractedTimestamp = service.extractTimestamp('youtube', youTubeData);
-
-            const extractedTime = new Date(extractedTimestamp).getTime();
-            expect(extractedTime).toBe(originalTimeMs);
-        });
-
-        it('should fallback to current time when YouTube timestamps are invalid', () => {
+        it('returns null when YouTube timestamps are invalid', () => {
             if (!TimestampExtractionService) {
                 return expect(true).toBe(true);
             }
@@ -258,20 +187,14 @@ describe('TimestampExtractionService Behavior', () => {
                 }
             };
 
-            const beforeExtraction = testClock.now();
-
             const extractedTimestamp = service.extractTimestamp('youtube', youTubeData);
 
-            const afterExtraction = testClock.now();
-            const extractedTime = new Date(extractedTimestamp).getTime();
-
-            expect(extractedTime).toBeGreaterThanOrEqual(beforeExtraction);
-            expect(extractedTime).toBeLessThanOrEqual(afterExtraction);
+            expect(extractedTimestamp).toBeNull();
         });
     });
 
     describe('Twitch Timestamp Preservation', () => {
-        it('should preserve original timestamp from Twitch message context', () => {
+        it('preserves original timestamp from Twitch message context', () => {
             if (!TimestampExtractionService) {
                 return expect(true).toBe(true);
             }
@@ -290,30 +213,7 @@ describe('TimestampExtractionService Behavior', () => {
             expect(extractedTime).toBe(originalTime);
         });
 
-        it('should use tmi-sent-ts from context as fallback for Twitch', () => {
-            if (!TimestampExtractionService) {
-                return expect(true).toBe(true);
-            }
-
-            const originalTime = testClock.now() - (7 * 60 * 1000);
-            const twitchData = {
-                context: {
-                    'tmi-sent-ts': originalTime.toString(),
-                    'user-id': 'user123',
-                    'username': 'TestUser'
-                },
-                username: 'TestUser',
-                userId: 'user123',
-                message: 'Test Twitch message'
-            };
-
-            const extractedTimestamp = service.extractTimestamp('twitch', twitchData);
-
-            const extractedTime = new Date(extractedTimestamp).getTime();
-            expect(extractedTime).toBe(originalTime);
-        });
-
-        it('should accept ISO string timestamps for Twitch payloads', () => {
+        it('accepts ISO string timestamps for Twitch payloads', () => {
             if (!TimestampExtractionService) {
                 return expect(true).toBe(true);
             }
@@ -329,52 +229,7 @@ describe('TimestampExtractionService Behavior', () => {
             expect(extractedTimestamp).toBe(isoTimestamp);
         });
 
-        it('should use top-level fallback time when context has no timestamp fields', () => {
-            if (!TimestampExtractionService) {
-                return expect(true).toBe(true);
-            }
-
-            const originalDate = global.Date;
-            const isoTimes = ['2024-01-01T00:00:00.100Z', '2024-01-01T00:00:00.200Z'];
-            let callIndex = 0;
-
-            global.Date = class extends originalDate {
-                constructor(...args) {
-                    if (args.length > 0) {
-                        return new originalDate(...args);
-                    }
-                    const iso = isoTimes[Math.min(callIndex, isoTimes.length - 1)];
-                    callIndex += 1;
-                    return new originalDate(iso);
-                }
-
-                static now() {
-                    const iso = isoTimes[Math.min(callIndex, isoTimes.length - 1)];
-                    return new originalDate(iso).getTime();
-                }
-
-                static parse(dateString) {
-                    return originalDate.parse(dateString);
-                }
-
-                static UTC(...args) {
-                    return originalDate.UTC(...args);
-                }
-            };
-
-            try {
-                const twitchData = {
-                    context: { username: 'viewer' }
-                };
-
-                const extractedTimestamp = service.extractTimestamp('twitch', twitchData);
-                expect(extractedTimestamp).toBe('2024-01-01T00:00:00.200Z');
-            } finally {
-                global.Date = originalDate;
-            }
-        });
-
-        it('should fallback to current time when Twitch timestamps are missing', () => {
+        it('returns null when Twitch timestamps are missing', () => {
             if (!TimestampExtractionService) {
                 return expect(true).toBe(true);
             }
@@ -385,15 +240,9 @@ describe('TimestampExtractionService Behavior', () => {
                 message: 'Test Twitch message'
             };
 
-            const beforeExtraction = testClock.now();
-
             const extractedTimestamp = service.extractTimestamp('twitch', twitchData);
 
-            const afterExtraction = testClock.now();
-            const extractedTime = new Date(extractedTimestamp).getTime();
-
-            expect(extractedTime).toBeGreaterThanOrEqual(beforeExtraction);
-            expect(extractedTime).toBeLessThanOrEqual(afterExtraction);
+            expect(extractedTimestamp).toBeNull();
         });
     });
 
@@ -408,17 +257,9 @@ describe('TimestampExtractionService Behavior', () => {
                 message: 'Test message'
             };
 
-            const beforeExtraction = testClock.now();
-
             const extractedTimestamp = service.extractTimestamp('unsupported-platform', unknownPlatformData);
 
-            const afterExtraction = testClock.now();
-            const extractedTime = new Date(extractedTimestamp).getTime();
-
-            expect(extractedTime).toBeGreaterThanOrEqual(beforeExtraction);
-            expect(extractedTime).toBeLessThanOrEqual(afterExtraction);
-            expect(extractedTimestamp).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/);
-            expect(extractedTime).toBeGreaterThanOrEqual(beforeExtraction);
+            expect(extractedTimestamp).toBeNull();
         });
 
         it('should handle null/undefined data gracefully', () => {
@@ -429,16 +270,9 @@ describe('TimestampExtractionService Behavior', () => {
             const testCases = [null, undefined, '', 0, false];
 
             for (const testData of testCases) {
-                const beforeExtraction = testClock.now();
-
                 const extractedTimestamp = service.extractTimestamp('tiktok', testData);
 
-                const afterExtraction = testClock.now();
-                const extractedTime = new Date(extractedTimestamp).getTime();
-
-                expect(extractedTime).toBeGreaterThanOrEqual(beforeExtraction);
-                expect(extractedTime).toBeLessThanOrEqual(afterExtraction);
-                expect(extractedTimestamp).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/);
+                expect(extractedTimestamp).toBeNull();
             }
         });
 
@@ -448,10 +282,10 @@ describe('TimestampExtractionService Behavior', () => {
             }
 
             const malformedData = [
-                { platform: 'tiktok', data: { createTime: 'not-a-number' } },
+                { platform: 'tiktok', data: { common: { createTime: 'not-a-number' } } },
                 { platform: 'youtube', data: { timestamp: 'invalid' } },
-                { platform: 'twitch', data: { context: { 'tmi-sent-ts': 'bad-timestamp' } } },
-                { platform: 'tiktok', data: { createTime: -1 } },
+                { platform: 'twitch', data: { timestamp: 'bad-timestamp' } },
+                { platform: 'tiktok', data: { common: { createTime: -1 } } },
                 { platform: 'youtube', data: { timestamp: '0' } }
             ];
 
@@ -461,8 +295,7 @@ describe('TimestampExtractionService Behavior', () => {
                 expect(result).not.toThrow();
 
                 const extractedTimestamp = result();
-                expect(extractedTimestamp).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/);
-                expectNoTechnicalArtifacts(extractedTimestamp);
+                expect(extractedTimestamp).toBeNull();
             }
         });
     });
@@ -474,7 +307,7 @@ describe('TimestampExtractionService Behavior', () => {
             }
 
             const testData = {
-                createTime: testClock.now() - 60000,
+                common: { createTime: testClock.now() - 60000 },
                 userId: 'testuser-id',
                 uniqueId: 'TestUser',
                 comment: 'Performance test message'
@@ -516,12 +349,20 @@ describe('TimestampExtractionService Behavior', () => {
             const testMessages = platforms.flatMap((platform, platformIndex) =>
                 Array(messagesPerPlatform).fill().map((_, messageIndex) => {
                     const offsetMs = (platformIndex * messagesPerPlatform + messageIndex + 1) * 1000;
+                    const baseTime = testClock.now() - offsetMs;
+                    const isoTime = new Date(baseTime).toISOString();
                     return {
                         platform,
                         data: {
-                            createTime: testClock.now() - offsetMs,
-                            timestamp: testClock.now() - offsetMs,
-                            context: { 'tmi-sent-ts': (testClock.now() - offsetMs).toString() },
+                            ...(platform === 'tiktok'
+                                ? { common: { createTime: baseTime } }
+                                : {}),
+                            ...(platform === 'youtube'
+                                ? { timestamp: baseTime }
+                                : {}),
+                            ...(platform === 'twitch'
+                                ? { timestamp: isoTime }
+                                : {}),
                             userId: 'testuser-id',
                             uniqueId: 'TestUser',
                             message: 'Load test message'
@@ -564,7 +405,7 @@ describe('TimestampExtractionService Behavior', () => {
             });
 
             const testData = {
-                createTime: testClock.now() - 60000,
+                common: { createTime: testClock.now() - 60000 },
                 userId: 'testuser-id',
                 uniqueId: 'TestUser',
                 comment: 'Minimal dependencies test'

@@ -104,7 +104,7 @@ describe('TikTokPlatform unified event contract (expected behavior)', () => {
                 nickname: 'User1'
             },
             comment: 'hello world',
-            createTime: testClock.now()
+            common: { createTime: testClock.now() }
         });
 
         expect(runtime.handleChatMessage).toHaveBeenCalledTimes(1);
@@ -163,7 +163,7 @@ describe('TikTokPlatform unified event contract (expected behavior)', () => {
                 nickname: 'NoBridgeUser'
             },
             comment: 'hello from no bridge',
-            createTime: testClock.now()
+            common: { createTime: testClock.now() }
         });
 
         const chatEvent = emitted.find((entry) => entry.type === PlatformEvents.CHAT_MESSAGE);

@@ -329,7 +329,7 @@ const createMultiPlatformEventScenario = (platforms = ['youtube', 'twitch', 'tik
                     'USD',
                     {
                         item: {
-                            timestampUsec: (eventTime * 1000).toString(),
+                            timestamp_usec: (eventTime * 1000).toString(),
                             authorDetails: {
                                 displayName: Object.values(INTERNATIONAL_USERNAMES)[i % Object.values(INTERNATIONAL_USERNAMES).length]
                             }
@@ -578,7 +578,7 @@ const createInternationalUserScenario = (userCount = 10) => {
                         authorDetails: {
                             displayName: username
                         },
-                        timestampUsec: (baseTime * 1000).toString()
+                        timestamp_usec: (baseTime * 1000).toString()
                     }
                 }));
                 break;
@@ -1104,7 +1104,7 @@ const SYNTHETIC_FIXTURES = Object.freeze({
                 },
                 inline_action_buttons: [],
                 timestamp: FIXED_TIMESTAMP_MS,
-                timestampUsec: FIXED_TIMESTAMP_USEC,
+                timestamp_usec: FIXED_TIMESTAMP_USEC,
                 author: {
                     id: YOUTUBE_CHANNEL_ID_PRIMARY,
                     name: '@TestUser',
@@ -1167,7 +1167,7 @@ const SYNTHETIC_FIXTURES = Object.freeze({
                 },
                 inline_action_buttons: [],
                 timestamp: FIXED_TIMESTAMP_MS,
-                timestampUsec: FIXED_TIMESTAMP_USEC,
+                timestamp_usec: FIXED_TIMESTAMP_USEC,
                 author: {
                     id: YOUTUBE_CHANNEL_ID_SECONDARY,
                     name: 'UserWithoutAtPrefix',
@@ -1252,7 +1252,7 @@ const SYNTHETIC_FIXTURES = Object.freeze({
                 background_color: 4278239141,
                 author_name_text_color: 4294967295,
                 timestamp: FIXED_TIMESTAMP_MS,
-                timestampUsec: FIXED_TIMESTAMP_USEC,
+                timestamp_usec: FIXED_TIMESTAMP_USEC,
                 menu_endpoint: {
                     type: 'NavigationEndpoint',
                     name: 'liveChatItemContextMenuEndpoint',
@@ -1318,7 +1318,7 @@ const SYNTHETIC_FIXTURES = Object.freeze({
                 background_color: 4278239141,
                 author_name_text_color: 4294967295,
                 timestamp: FIXED_TIMESTAMP_MS,
-                timestampUsec: FIXED_TIMESTAMP_USEC,
+                timestamp_usec: FIXED_TIMESTAMP_USEC,
                 menu_endpoint: {
                     type: 'NavigationEndpoint',
                     name: 'liveChatItemContextMenuEndpoint',
@@ -1409,7 +1409,7 @@ const SYNTHETIC_FIXTURES = Object.freeze({
                 },
                 context_menu_accessibility_label: 'Chat actions',
                 timestamp: FIXED_TIMESTAMP_MS,
-                timestampUsec: FIXED_TIMESTAMP_USEC,
+                timestamp_usec: FIXED_TIMESTAMP_USEC,
                 is_v2_style: true
             },
             client_id: 'test-client-id-yt-005'
@@ -1419,7 +1419,7 @@ const SYNTHETIC_FIXTURES = Object.freeze({
             item: {
                 type: 'LiveChatSponsorshipsGiftPurchaseAnnouncement',
                 id: 'LCC.test-gift-purchase-001',
-                timestampUsec: FIXED_TIMESTAMP_USEC,
+                timestamp_usec: FIXED_TIMESTAMP_USEC,
                 author: {
                     id: YOUTUBE_CHANNEL_ID_PRIMARY,
                     name: '@GiftGiver'
@@ -1459,7 +1459,7 @@ const SYNTHETIC_FIXTURES = Object.freeze({
             item: {
                 type: 'LiveChatSponsorshipsGiftPurchaseAnnouncement',
                 id: 'LCC.test-gift-membership-001',
-                timestampUsec: FIXED_TIMESTAMP_USEC,
+                timestamp_usec: FIXED_TIMESTAMP_USEC,
                 author: {
                     id: YOUTUBE_CHANNEL_ID_PRIMARY,
                     name: '@GiftGiver'

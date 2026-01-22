@@ -291,65 +291,89 @@ class TwitchPlatform extends EventEmitter {
             return data.timestamp;
         }
 
-        return getSystemTimestampISO();
+        return null;
     }
 
     async _handleStandardEvent(eventType, data, options = {}) {
         const payloadTimestamp = this._getTimestamp(data);
+        const errorNotificationType = eventType === 'gift'
+            ? 'gift'
+            : (eventType === 'paypiggy' || eventType === 'giftpaypiggy' ? eventType : null);
+        const buildErrorOverrides = () => {
+            const baseOverrides = {
+                username: data?.username,
+                userId: data?.userId
+            };
+            if (errorNotificationType === 'gift') {
+                if (typeof data?.giftType === 'string' && data.giftType.trim()) {
+                    baseOverrides.giftType = data.giftType;
+                }
+                if (Number.isFinite(Number(data?.giftCount))) {
+                    baseOverrides.giftCount = Number(data.giftCount);
+                }
+                if (Number.isFinite(Number(data?.amount))) {
+                    baseOverrides.amount = Number(data.amount);
+                }
+                if (typeof data?.currency === 'string' && data.currency.trim()) {
+                    baseOverrides.currency = data.currency;
+                }
+            }
+            if (errorNotificationType === 'giftpaypiggy') {
+                if (Number.isFinite(Number(data?.giftCount))) {
+                    baseOverrides.giftCount = Number(data.giftCount);
+                }
+                if (typeof data?.tier === 'string' && data.tier.trim()) {
+                    baseOverrides.tier = data.tier;
+                }
+            }
+            if (errorNotificationType === 'paypiggy') {
+                if (Number.isFinite(Number(data?.months))) {
+                    baseOverrides.months = Number(data.months);
+                }
+            }
+            return baseOverrides;
+        };
+        const emitMonetizationError = (timestamp) => {
+            if (!errorNotificationType) {
+                return;
+            }
+            const errorPayload = createMonetizationErrorPayload({
+                notificationType: errorNotificationType,
+                platform: this.platformName,
+                timestamp,
+                id: data?.id,
+                ...buildErrorOverrides()
+            });
+            this._emitPlatformEvent(this._resolvePlatformEventType(eventType), errorPayload);
+        };
+
+        if (!payloadTimestamp) {
+            if (errorNotificationType) {
+                const fallbackTimestamp = getSystemTimestampISO();
+                const error = new Error(`Missing Twitch timestamp for ${eventType}`);
+                this.errorHandler.handleEventProcessingError(
+                    error,
+                    eventType,
+                    data,
+                    `Missing timestamp for ${eventType}, using fallback`
+                );
+                emitMonetizationError(fallbackTimestamp);
+            } else {
+                this.errorHandler.handleEventProcessingError(
+                    new Error(`Missing Twitch timestamp for ${eventType}`),
+                    eventType,
+                    data
+                );
+            }
+            return;
+        }
 
         try {
 
             // User validation (for events that require it)
             if (options.validateUser && !data.username) {
                 this.logger.warn(`Incomplete ${eventType} data received`, 'twitch', data);
-                const errorNotificationType = eventType === 'gift'
-                    ? 'gift'
-                    : (eventType === 'paypiggy' || eventType === 'giftpaypiggy' ? eventType : null);
-                if (errorNotificationType) {
-                    const baseOverrides = {
-                        username: data?.username,
-                        userId: data?.userId
-                    };
-                    if (errorNotificationType === 'gift') {
-                        if (typeof data?.giftType === 'string' && data.giftType.trim()) {
-                            baseOverrides.giftType = data.giftType;
-                        }
-                        if (Number.isFinite(Number(data?.giftCount))) {
-                            baseOverrides.giftCount = Number(data.giftCount);
-                        }
-                        if (Number.isFinite(Number(data?.amount))) {
-                            baseOverrides.amount = Number(data.amount);
-                        }
-                        if (typeof data?.currency === 'string' && data.currency.trim()) {
-                            baseOverrides.currency = data.currency;
-                        }
-                    }
-                    if (errorNotificationType === 'giftpaypiggy') {
-                        if (Number.isFinite(Number(data?.giftCount))) {
-                            baseOverrides.giftCount = Number(data.giftCount);
-                        }
-                        if (typeof data?.tier === 'string' && data.tier.trim()) {
-                            baseOverrides.tier = data.tier;
-                        }
-                    }
-                    if (errorNotificationType === 'paypiggy') {
-                        if (Number.isFinite(Number(data?.months))) {
-                            baseOverrides.months = Number(data.months);
-                        }
-                    }
-                    if (!payloadTimestamp) {
-                        this.logger.warn(`Skipping ${eventType} error payload: missing timestamp`, 'twitch', { data });
-                        return;
-                    }
-                    const errorPayload = createMonetizationErrorPayload({
-                        notificationType: errorNotificationType,
-                        platform: this.platformName,
-                        timestamp: payloadTimestamp,
-                        id: data?.id,
-                        ...baseOverrides
-                    });
-                    this._emitPlatformEvent(this._resolvePlatformEventType(eventType), errorPayload);
-                }
+                emitMonetizationError(payloadTimestamp);
                 return;
             }
 
@@ -367,54 +391,7 @@ class TwitchPlatform extends EventEmitter {
             this._emitPlatformEvent(emitEventType, eventData);
         } catch (error) {
             this.errorHandler.handleEventProcessingError(error, eventType, data);
-            const errorNotificationType = eventType === 'gift'
-                ? 'gift'
-                : (eventType === 'paypiggy' || eventType === 'giftpaypiggy' ? eventType : null);
-            if (errorNotificationType) {
-                const baseOverrides = {
-                    username: data?.username,
-                    userId: data?.userId
-                };
-                if (errorNotificationType === 'gift') {
-                    if (typeof data?.giftType === 'string' && data.giftType.trim()) {
-                        baseOverrides.giftType = data.giftType;
-                    }
-                    if (Number.isFinite(Number(data?.giftCount))) {
-                        baseOverrides.giftCount = Number(data.giftCount);
-                    }
-                    if (Number.isFinite(Number(data?.amount))) {
-                        baseOverrides.amount = Number(data.amount);
-                    }
-                    if (typeof data?.currency === 'string' && data.currency.trim()) {
-                        baseOverrides.currency = data.currency;
-                    }
-                }
-                if (errorNotificationType === 'giftpaypiggy') {
-                    if (Number.isFinite(Number(data?.giftCount))) {
-                        baseOverrides.giftCount = Number(data.giftCount);
-                    }
-                    if (typeof data?.tier === 'string' && data.tier.trim()) {
-                        baseOverrides.tier = data.tier;
-                    }
-                }
-                if (errorNotificationType === 'paypiggy') {
-                    if (Number.isFinite(Number(data?.months))) {
-                        baseOverrides.months = Number(data.months);
-                    }
-                }
-                if (!payloadTimestamp) {
-                    this.logger.warn(`Skipping ${eventType} error payload: missing timestamp`, 'twitch', { data });
-                    return;
-                }
-                const errorPayload = createMonetizationErrorPayload({
-                    notificationType: errorNotificationType,
-                    platform: this.platformName,
-                    timestamp: payloadTimestamp,
-                    id: data?.id,
-                    ...baseOverrides
-                });
-                this._emitPlatformEvent(this._resolvePlatformEventType(eventType), errorPayload);
-            }
+            emitMonetizationError(payloadTimestamp);
         }
     }
 
@@ -482,9 +459,18 @@ class TwitchPlatform extends EventEmitter {
 
         this._logRawEvent('stream-online', data);
 
+        if (!data?.started_at) {
+            this.errorHandler.handleEventProcessingError(
+                new Error('Stream online event requires started_at'),
+                'stream-online',
+                data
+            );
+            return;
+        }
+
         const eventData = this.eventFactory.createStreamOnlineEvent({
             ...(data || {}),
-            timestamp: this._getTimestamp(data)
+            timestamp: data.started_at
         });
         this._emitPlatformEvent(PlatformEvents.STREAM_STATUS, eventData);
 
@@ -496,9 +482,18 @@ class TwitchPlatform extends EventEmitter {
 
         this._logRawEvent('stream-offline', data);
 
+        if (!data?.timestamp) {
+            this.errorHandler.handleEventProcessingError(
+                new Error('Stream offline event requires timestamp'),
+                'stream-offline',
+                data
+            );
+            return;
+        }
+
         const eventData = this.eventFactory.createStreamOfflineEvent({
             ...(data || {}),
-            timestamp: this._getTimestamp(data)
+            timestamp: data.timestamp
         });
         this._emitPlatformEvent(PlatformEvents.STREAM_STATUS, eventData);
 

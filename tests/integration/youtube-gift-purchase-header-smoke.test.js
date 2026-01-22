@@ -7,7 +7,7 @@ const { createMockPlatformDependencies, createMockConfig } = require('../helpers
 
 const giftPurchaseHeaderOnly = getSyntheticFixture('youtube', 'gift-purchase-header');
 const giftPurchaseTimestamp = new Date(
-    Math.floor(Number(giftPurchaseHeaderOnly.item.timestampUsec) / 1000)
+    Math.floor(Number(giftPurchaseHeaderOnly.item.timestamp_usec) / 1000)
 ).toISOString();
 
 describe('YouTube Gift Purchase Smoke (Canonical Author)', () => {

@@ -78,11 +78,17 @@ function hydrateWrapperFields(normalizedChatItem, rawChatItem) {
     }
 
     const wrapperId = rawChatItem.id;
-    const wrapperTimestamp = rawChatItem.timestampUsec;
+    const wrapperTimestampUsec = rawChatItem.timestamp_usec;
+    const wrapperTimestamp = rawChatItem.timestamp;
     const shouldHydrateId = wrapperId !== undefined && wrapperId !== null && !normalizedChatItem.item?.id;
-    const shouldHydrateTimestamp = wrapperTimestamp !== undefined && wrapperTimestamp !== null && !normalizedChatItem.item?.timestampUsec;
+    const shouldHydrateTimestampUsec = wrapperTimestampUsec !== undefined && wrapperTimestampUsec !== null
+        && !normalizedChatItem.item?.timestamp_usec;
+    const shouldHydrateTimestamp = !shouldHydrateTimestampUsec
+        && wrapperTimestamp !== undefined
+        && wrapperTimestamp !== null
+        && !normalizedChatItem.item?.timestamp;
 
-    if (!shouldHydrateId && !shouldHydrateTimestamp) {
+    if (!shouldHydrateId && !shouldHydrateTimestampUsec && !shouldHydrateTimestamp) {
         return normalizedChatItem;
     }
 
@@ -91,7 +97,8 @@ function hydrateWrapperFields(normalizedChatItem, rawChatItem) {
         item: {
             ...normalizedChatItem.item,
             ...(shouldHydrateId ? { id: wrapperId } : {}),
-            ...(shouldHydrateTimestamp ? { timestampUsec: wrapperTimestamp } : {})
+            ...(shouldHydrateTimestampUsec ? { timestamp_usec: wrapperTimestampUsec } : {}),
+            ...(shouldHydrateTimestamp ? { timestamp: wrapperTimestamp } : {})
         }
     };
 }

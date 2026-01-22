@@ -52,7 +52,8 @@ describe('TwitchEventSub notification routing', () => {
                     message: { text: 'hello from chat' },
                     chatter_user_name: 'TestChatter',
                     chatter_user_id: 'chatter-123',
-                    broadcaster_user_id: 'broadcaster-456'
+                    broadcaster_user_id: 'broadcaster-456',
+                    timestamp: '2024-01-01T00:00:00Z'
                 }
             }
         };

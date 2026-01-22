@@ -126,4 +126,293 @@ describe('YouTube connection factory', () => {
             videoId: 'video-1'
         });
     });
+
+    test('normalizes direct chat-update payloads with timestamp_usec', async () => {
+        const handleChatMessage = createMockFn();
+        const chatUpdateHandlers = {};
+
+        const { factory } = createFactory({
+            validationResult: { shouldConnect: true },
+            platformOverrides: {
+                handleChatMessage,
+                _processRegularChatMessage: createMockFn(),
+                _extractMessagesFromChatItem: createMockFn().mockReturnValue([]),
+                _shouldSkipMessage: createMockFn().mockReturnValue(false),
+                logRawPlatformData: createMockFn().mockResolvedValue(),
+                setYouTubeConnectionReady: createMockFn(),
+                config: { dataLoggingEnabled: false }
+            }
+        });
+
+        const connection = {
+            on: createMockFn((event, handler) => {
+                chatUpdateHandlers[event] = handler;
+            }),
+            start: createMockFn(),
+            removeAllListeners: createMockFn()
+        };
+
+        await factory.setupConnectionEventListeners(connection, 'video-1');
+
+        chatUpdateHandlers['chat-update']({
+            author: { id: 'UC_TS_1', name: 'TimestampUser' },
+            text: 'timestamp check',
+            timestamp_usec: '1704067200000000'
+        });
+
+        const [handleCall] = handleChatMessage.mock.calls;
+        expect(handleCall[0].item.timestamp_usec).toBe('1704067200000000');
+    });
+
+    test('normalizes direct chat-update payloads with timestamp when microseconds are missing', async () => {
+        const handleChatMessage = createMockFn();
+        const chatUpdateHandlers = {};
+
+        const { factory } = createFactory({
+            validationResult: { shouldConnect: true },
+            platformOverrides: {
+                handleChatMessage,
+                _processRegularChatMessage: createMockFn(),
+                _extractMessagesFromChatItem: createMockFn().mockReturnValue([]),
+                _shouldSkipMessage: createMockFn().mockReturnValue(false),
+                logRawPlatformData: createMockFn().mockResolvedValue(),
+                setYouTubeConnectionReady: createMockFn(),
+                config: { dataLoggingEnabled: false }
+            }
+        });
+
+        const connection = {
+            on: createMockFn((event, handler) => {
+                chatUpdateHandlers[event] = handler;
+            }),
+            start: createMockFn(),
+            removeAllListeners: createMockFn()
+        };
+
+        await factory.setupConnectionEventListeners(connection, 'video-1');
+
+        chatUpdateHandlers['chat-update']({
+            author: { id: 'UC_TS_2', name: 'TimestampUser' },
+            text: 'timestamp check',
+            timestamp: 1704067200000
+        });
+
+        const [handleCall] = handleChatMessage.mock.calls;
+        expect(handleCall[0].item.timestamp).toBe(1704067200000);
+    });
+
+    test('skips direct chat-update payloads with missing author id', async () => {
+        const handleChatMessage = createMockFn();
+        const chatUpdateHandlers = {};
+
+        const { factory } = createFactory({
+            validationResult: { shouldConnect: true },
+            platformOverrides: {
+                handleChatMessage,
+                _processRegularChatMessage: createMockFn(),
+                _extractMessagesFromChatItem: createMockFn().mockReturnValue([]),
+                _shouldSkipMessage: createMockFn().mockReturnValue(false),
+                logRawPlatformData: createMockFn().mockResolvedValue(),
+                setYouTubeConnectionReady: createMockFn(),
+                config: { dataLoggingEnabled: false }
+            }
+        });
+
+        const connection = {
+            on: createMockFn((event, handler) => {
+                chatUpdateHandlers[event] = handler;
+            }),
+            start: createMockFn(),
+            removeAllListeners: createMockFn()
+        };
+
+        await factory.setupConnectionEventListeners(connection, 'video-1');
+
+        chatUpdateHandlers['chat-update']({
+            author: { name: 'MissingIdUser' },
+            text: 'hello there'
+        });
+
+        expect(handleChatMessage).not.toHaveBeenCalled();
+    });
+
+    test('marks connection ready on start events and logs initial batches', async () => {
+        const setYouTubeConnectionReady = createMockFn();
+        const startHandlers = {};
+
+        const { factory } = createFactory({
+            validationResult: { shouldConnect: true },
+            platformOverrides: {
+                setYouTubeConnectionReady,
+                handleChatMessage: createMockFn(),
+                _processRegularChatMessage: createMockFn(),
+                _extractMessagesFromChatItem: createMockFn().mockReturnValue([]),
+                _shouldSkipMessage: createMockFn().mockReturnValue(false),
+                logRawPlatformData: createMockFn().mockResolvedValue(),
+                config: { dataLoggingEnabled: false }
+            }
+        });
+
+        const connection = {
+            on: createMockFn((event, handler) => {
+                startHandlers[event] = handler;
+            }),
+            start: createMockFn(),
+            removeAllListeners: createMockFn()
+        };
+
+        await factory.setupConnectionEventListeners(connection, 'video-1');
+
+        startHandlers.start({ actions: [{ type: 'AddChatItemAction' }, { type: 'AddChatItemAction' }] });
+
+        expect(setYouTubeConnectionReady).toHaveBeenCalledTimes(1);
+        expect(setYouTubeConnectionReady.mock.calls[0][0]).toBe('video-1');
+    });
+
+    test('handles API errors from live chat with disconnect', async () => {
+        const disconnectFromYouTubeStream = createMockFn();
+        const errorHandlers = {};
+
+        const { factory } = createFactory({
+            validationResult: { shouldConnect: true },
+            platformOverrides: {
+                disconnectFromYouTubeStream,
+                _handleProcessingError: createMockFn(),
+                handleChatMessage: createMockFn(),
+                _processRegularChatMessage: createMockFn(),
+                _extractMessagesFromChatItem: createMockFn().mockReturnValue([]),
+                _shouldSkipMessage: createMockFn().mockReturnValue(false),
+                logRawPlatformData: createMockFn().mockResolvedValue(),
+                setYouTubeConnectionReady: createMockFn(),
+                config: { dataLoggingEnabled: false }
+            }
+        });
+
+        const connection = {
+            on: createMockFn((event, handler) => {
+                errorHandlers[event] = handler;
+            }),
+            start: createMockFn(),
+            removeAllListeners: createMockFn()
+        };
+
+        await factory.setupConnectionEventListeners(connection, 'video-1');
+
+        errorHandlers.error(new Error('403 forbidden'));
+
+        expect(disconnectFromYouTubeStream).toHaveBeenCalledTimes(1);
+        expect(disconnectFromYouTubeStream.mock.calls[0][0]).toBe('video-1');
+        expect(disconnectFromYouTubeStream.mock.calls[0][1]).toBe('API error: 403 forbidden');
+    });
+
+    test('does not disconnect on temporary live chat errors', async () => {
+        const disconnectFromYouTubeStream = createMockFn();
+        const errorHandlers = {};
+
+        const { factory } = createFactory({
+            validationResult: { shouldConnect: true },
+            platformOverrides: {
+                disconnectFromYouTubeStream,
+                _handleProcessingError: createMockFn(),
+                handleChatMessage: createMockFn(),
+                _processRegularChatMessage: createMockFn(),
+                _extractMessagesFromChatItem: createMockFn().mockReturnValue([]),
+                _shouldSkipMessage: createMockFn().mockReturnValue(false),
+                logRawPlatformData: createMockFn().mockResolvedValue(),
+                setYouTubeConnectionReady: createMockFn(),
+                config: { dataLoggingEnabled: false }
+            }
+        });
+
+        const connection = {
+            on: createMockFn((event, handler) => {
+                errorHandlers[event] = handler;
+            }),
+            start: createMockFn(),
+            removeAllListeners: createMockFn()
+        };
+
+        await factory.setupConnectionEventListeners(connection, 'video-1');
+
+        errorHandlers.error(new Error('503 upstream unavailable'));
+
+        expect(disconnectFromYouTubeStream).not.toHaveBeenCalled();
+    });
+
+    test('routes complex chat items through extractors and logging', async () => {
+        const handleChatMessage = createMockFn();
+        const chatUpdateHandlers = {};
+        const logRawPlatformData = createMockFn().mockResolvedValue();
+        const shouldSkipMessage = createMockFn((message) => message.item?.id === 'skip-me');
+        const resolveChatItemAuthorName = createMockFn((message) => message.item?.author?.name || 'Author');
+        const messages = [
+            { item: { id: 'skip-me', type: 'LiveChatTextMessage', message: { text: 'skip' }, author: { name: 'Skip' } } },
+            { item: { id: 'process-me', type: 'LiveChatTextMessage', message: { text: 'process' }, author: { name: 'Author' } } }
+        ];
+
+        const { factory } = createFactory({
+            validationResult: { shouldConnect: true },
+            platformOverrides: {
+                handleChatMessage,
+                _processRegularChatMessage: createMockFn(),
+                _extractMessagesFromChatItem: createMockFn().mockReturnValue(messages),
+                _shouldSkipMessage: shouldSkipMessage,
+                _resolveChatItemAuthorName: resolveChatItemAuthorName,
+                logRawPlatformData,
+                setYouTubeConnectionReady: createMockFn(),
+                config: { dataLoggingEnabled: true }
+            }
+        });
+
+        const connection = {
+            on: createMockFn((event, handler) => {
+                chatUpdateHandlers[event] = handler;
+            }),
+            start: createMockFn(),
+            removeAllListeners: createMockFn()
+        };
+
+        await factory.setupConnectionEventListeners(connection, 'video-1');
+
+        chatUpdateHandlers['chat-update']({ type: 'AddChatItemAction' });
+
+        expect(handleChatMessage).toHaveBeenCalledTimes(1);
+        expect(handleChatMessage.mock.calls[0][0].videoId).toBe('video-1');
+        expect(logRawPlatformData).toHaveBeenCalledTimes(1);
+    });
+
+    test('disconnects when live chat ends', async () => {
+        const disconnectFromYouTubeStream = createMockFn();
+        const handlers = {};
+
+        const { factory } = createFactory({
+            validationResult: { shouldConnect: true },
+            platformOverrides: {
+                disconnectFromYouTubeStream,
+                handleChatMessage: createMockFn(),
+                _processRegularChatMessage: createMockFn(),
+                _extractMessagesFromChatItem: createMockFn().mockReturnValue([]),
+                _shouldSkipMessage: createMockFn().mockReturnValue(false),
+                logRawPlatformData: createMockFn().mockResolvedValue(),
+                setYouTubeConnectionReady: createMockFn(),
+                config: { dataLoggingEnabled: false }
+            }
+        });
+
+        const connection = {
+            on: createMockFn((event, handler) => {
+                handlers[event] = handler;
+            }),
+            start: createMockFn(),
+            removeAllListeners: createMockFn()
+        };
+
+        await factory.setupConnectionEventListeners(connection, 'video-1');
+
+        handlers.end();
+
+        expect(disconnectFromYouTubeStream).toHaveBeenCalledTimes(1);
+        expect(disconnectFromYouTubeStream.mock.calls[0][0]).toBe('video-1');
+        expect(disconnectFromYouTubeStream.mock.calls[0][1]).toBe('stream ended');
+    });
 });

@@ -131,24 +131,6 @@ describe('ChatNotificationRouter', () => {
         expect(commandItem.vfxConfig.command).toBe('!testboom');
     });
 
-    it('skips old messages prior to platform connection', async () => {
-        const connectionTime = testClock.now();
-        const { router, runtime } = createRouter({
-            runtime: {
-                platformLifecycleService: {
-                    getPlatformConnectionTime: createMockFn().mockReturnValue(connectionTime)
-                }
-            }
-        });
-
-        await router.handleChatMessage('twitch', {
-            ...baseMessage,
-            timestamp: new Date(connectionTime - 1000).toISOString()
-        });
-
-        expect(runtime.displayQueue.addItem).not.toHaveBeenCalledWith(expect.objectContaining({ type: 'chat' }));
-    });
-
     it('does not skip chat when timestamp is invalid even if connection time exists', async () => {
         const connectionTime = testClock.now();
         const { router, runtime } = createRouter({

@@ -41,7 +41,7 @@ describe('TikTok eventFactory chat message behavior', () => {
                 uniqueId: 'user123',
                 nickname: 'StreamerFan'
             },
-            createTime: testClock.now()
+            common: { createTime: testClock.now() }
         };
 
         const event = platform.eventFactory.createChatMessage(rawChat);

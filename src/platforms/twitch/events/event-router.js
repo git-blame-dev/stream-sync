@@ -6,6 +6,7 @@ const {
     normalizeMonths,
     normalizeUserIdentity
 } = require('./event-normalizer');
+const { getSystemTimestampISO } = require('../../../utils/validation');
 
 function createTwitchEventSubEventRouter(options = {}) {
     const {
@@ -38,6 +39,20 @@ function createTwitchEventSubEventRouter(options = {}) {
         });
     };
 
+    const resolveMonetizationTimestamp = (event, eventType) => {
+        if (event?.timestamp) {
+            return event.timestamp;
+        }
+        const fallbackTimestamp = getSystemTimestampISO();
+        errorHandler.handleEventProcessingError(
+            new Error(`Missing ${eventType} timestamp`),
+            eventType,
+            event,
+            `Missing ${eventType} timestamp, using fallback`
+        );
+        return fallbackTimestamp;
+    };
+
     const handleChatMessageEvent = (event) => {
         logRawIfEnabled('chat', event, 'chat-data-log', 'Error logging raw chat data');
 
@@ -54,19 +69,16 @@ function createTwitchEventSubEventRouter(options = {}) {
                 'room-id': event.broadcaster_user_id
             };
 
-            const rawTimestamp = event.message_timestamp ||
-                event.sent_at ||
-                event.message?.sent_at ||
-                event.message?.timestamp ||
-                event.timestamp;
-
-            if (rawTimestamp) {
-                context.timestamp = rawTimestamp;
-                const parsedTs = Date.parse(rawTimestamp);
-                if (!Number.isNaN(parsedTs)) {
-                    context['tmi-sent-ts'] = String(parsedTs);
-                }
+            if (!event?.timestamp) {
+                errorHandler.handleEventProcessingError(
+                    new Error('Chat message requires timestamp'),
+                    'chat',
+                    event
+                );
+                return;
             }
+
+            context.timestamp = event.timestamp;
 
             const messageData = {
                 channel: `#${config.channel || 'unknown'}`,
@@ -111,7 +123,7 @@ function createTwitchEventSubEventRouter(options = {}) {
             return;
         }
 
-        if (!event?.user_name || !event?.user_id || !event?.tier || !event?.timestamp || typeof event?.is_gift !== 'boolean') {
+        if (!event?.user_name || !event?.user_id || !event?.tier || typeof event?.is_gift !== 'boolean') {
             errorHandler.handleEventProcessingError(
                 new Error('Subscription event requires user_name, user_id, tier, timestamp, and is_gift'),
                 'paypiggy',
@@ -122,11 +134,12 @@ function createTwitchEventSubEventRouter(options = {}) {
 
         const months = normalizeMonths(event.cumulative_months);
         const identity = normalizeUserIdentity(event.user_name, event.user_id);
+        const timestamp = resolveMonetizationTimestamp(event, 'paypiggy');
         const payload = {
             type: 'paypiggy',
             ...identity,
             tier: event.tier,
-            timestamp: event.timestamp
+            timestamp
         };
         if (months !== undefined) {
             payload.months = months;
@@ -166,7 +179,7 @@ function createTwitchEventSubEventRouter(options = {}) {
     const handleBitsUseEvent = (event) => {
         logRawIfEnabled('bits_use', event, 'bits-data-log', 'Error logging raw bits use data');
 
-        if (!event?.id || !event?.user_name || !event?.user_id || typeof event?.bits !== 'number' || !event?.timestamp) {
+        if (!event?.id || !event?.user_name || !event?.user_id || typeof event?.bits !== 'number') {
             errorHandler.handleEventProcessingError(
                 new Error('Bits use event requires id, user_name, user_id, bits, and timestamp'),
                 'gift',
@@ -188,6 +201,7 @@ function createTwitchEventSubEventRouter(options = {}) {
         const giftType = resolveBitsGiftType(messageData.cheermoteInfo);
 
         const identity = normalizeUserIdentity(event.user_name, event.user_id);
+        const timestamp = resolveMonetizationTimestamp(event, 'gift');
         safeEmit('gift', {
             platform: 'twitch',
             ...identity,
@@ -200,7 +214,7 @@ function createTwitchEventSubEventRouter(options = {}) {
             cheermoteInfo: messageData.cheermoteInfo,
             id: event.id,
             repeatCount: 1,
-            timestamp: event.timestamp,
+            timestamp,
             isAnonymous: event.is_anonymous
         });
     };
@@ -208,7 +222,7 @@ function createTwitchEventSubEventRouter(options = {}) {
     const handlePaypiggyGiftEvent = (event) => {
         logRawIfEnabled('subscription_gift', event, 'sub-gift-data-log', 'Error logging raw subscription gift data');
 
-        if (!event?.user_name || !event?.user_id || !event?.tier || typeof event?.total !== 'number' || !event?.timestamp) {
+        if (!event?.user_name || !event?.user_id || !event?.tier || typeof event?.total !== 'number') {
             errorHandler.handleEventProcessingError(
                 new Error('Subscription gift event requires user_name, user_id, tier, total, and timestamp'),
                 'giftpaypiggy',
@@ -218,11 +232,12 @@ function createTwitchEventSubEventRouter(options = {}) {
         }
 
         const identity = normalizeUserIdentity(event.user_name, event.user_id);
+        const timestamp = resolveMonetizationTimestamp(event, 'paypiggy-gift');
         safeEmit('paypiggyGift', {
             ...identity,
             tier: event.tier,
             giftCount: event.total,
-            timestamp: event.timestamp,
+            timestamp,
             isAnonymous: event.is_anonymous,
             cumulativeTotal: event.cumulative_total
         });
@@ -236,7 +251,7 @@ function createTwitchEventSubEventRouter(options = {}) {
             'twitch'
         );
 
-        if (!event?.user_name || !event?.user_id || !event?.tier || !event?.timestamp) {
+        if (!event?.user_name || !event?.user_id || !event?.tier) {
             errorHandler.handleEventProcessingError(
                 new Error('Subscription message event requires user_name, user_id, tier, and timestamp'),
                 'paypiggy-message',
@@ -247,12 +262,13 @@ function createTwitchEventSubEventRouter(options = {}) {
 
         const months = normalizeMonths(event.cumulative_months);
         const identity = normalizeUserIdentity(event.user_name, event.user_id);
+        const timestamp = resolveMonetizationTimestamp(event, 'paypiggy-message');
         const payload = {
             type: 'paypiggy',
             ...identity,
             tier: event.tier,
             message: typeof event.message?.text === 'string' ? event.message.text : undefined,
-            timestamp: event.timestamp
+            timestamp
         };
         if (months !== undefined) {
             payload.months = months;
@@ -265,11 +281,20 @@ function createTwitchEventSubEventRouter(options = {}) {
         logRawIfEnabled('stream_online', event, 'stream-online-log', 'Error logging raw stream online data');
 
         safeLogger.info('Stream went online, starting viewer count polling', 'twitch');
+        if (!event?.started_at) {
+            errorHandler.handleEventProcessingError(
+                new Error('Stream online event requires started_at'),
+                'stream-online',
+                event
+            );
+            return;
+        }
+
         safeEmit('streamOnline', {
             platform: 'twitch',
             streamId: event.id,
             startedAt: event.started_at,
-            timestamp: event.timestamp || event.started_at
+            timestamp: event.started_at
         });
     };
 
@@ -277,6 +302,15 @@ function createTwitchEventSubEventRouter(options = {}) {
         logRawIfEnabled('stream_offline', event, 'stream-offline-log', 'Error logging raw stream offline data');
 
         safeLogger.info('Stream went offline, stopping viewer count polling', 'twitch');
+        if (!event?.timestamp) {
+            errorHandler.handleEventProcessingError(
+                new Error('Stream offline event requires timestamp'),
+                'stream-offline',
+                event
+            );
+            return;
+        }
+
         safeEmit('streamOffline', {
             platform: 'twitch',
             streamId: event.id,
