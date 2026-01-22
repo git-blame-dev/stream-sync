@@ -1,8 +1,9 @@
 const { describe, it, expect, afterEach } = require('bun:test');
-const { createMockFn } = require('../../helpers/bun-mock-utils');
-const { noOpLogger } = require('../../helpers/mock-factories');
+const { createMockFn } = require('../../../helpers/bun-mock-utils');
+const { noOpLogger } = require('../../../helpers/mock-factories');
 
-const { TwitchPlatform } = require('../../../src/platforms/twitch');
+const { PlatformEvents } = require('../../../../src/interfaces/PlatformEvents');
+const { TwitchPlatform } = require('../../../../src/platforms/twitch');
 
 class StubChatFileLoggingService {
     constructor() {
@@ -32,7 +33,7 @@ const createPlatform = (configOverrides = {}, depsOverrides = {}) => {
     });
 };
 
-describe('TwitchPlatform refactor behavior', () => {
+describe('TwitchPlatform core behavior', () => {
     let platform;
 
     afterEach(() => {
@@ -60,6 +61,15 @@ describe('TwitchPlatform refactor behavior', () => {
         expect(validation.warnings.some((msg) => msg.toLowerCase().includes('authmanager') && msg.toLowerCase().includes('ready'))).toBe(true);
     });
 
+    it('skips EventSub initialization when auth is not ready', async () => {
+        const pendingAuth = { getState: () => 'PENDING' };
+        platform = createPlatform({}, { authManager: pendingAuth, TwitchEventSub: createMockFn() });
+
+        await platform.initializeEventSub();
+
+        expect(platform.eventSub).toBeNull();
+    });
+
     it('guards stream-status handlers so consumer errors are captured without throwing', () => {
         platform = createPlatform();
         platform.handlers = {
@@ -79,6 +89,34 @@ describe('TwitchPlatform refactor behavior', () => {
         expect(emittedPayload).toBeDefined();
         expect(emittedPayload.metadata).toBeDefined();
         expect(emittedPayload.metadata.correlationId).toEqual(expect.any(String));
+    });
+
+    it('does not emit stream status when stream online lacks started_at', () => {
+        platform = createPlatform();
+        const emitted = [];
+        platform.on('platform:event', (payload) => {
+            if (payload.type === PlatformEvents.STREAM_STATUS) {
+                emitted.push(payload.data);
+            }
+        });
+
+        platform.handleStreamOnlineEvent({});
+
+        expect(emitted).toHaveLength(0);
+    });
+
+    it('does not emit stream status when stream offline lacks timestamp', () => {
+        platform = createPlatform();
+        const emitted = [];
+        platform.on('platform:event', (payload) => {
+            if (payload.type === PlatformEvents.STREAM_STATUS) {
+                emitted.push(payload.data);
+            }
+        });
+
+        platform.handleStreamOfflineEvent({});
+
+        expect(emitted).toHaveLength(0);
     });
 
     it('logs raw platform data for non-chat events when enabled', async () => {
@@ -210,5 +248,143 @@ describe('TwitchPlatform refactor behavior', () => {
         };
 
         expect(() => platform.handleStreamOfflineEvent({ timestamp: '2024-01-01T00:00:00Z' })).not.toThrow();
+    });
+
+    it('sends messages successfully when EventSub is connected and active', async () => {
+        platform = createPlatform();
+        const mockEventSub = {
+            sendMessage: createMockFn().mockResolvedValue(),
+            isConnected: () => true,
+            isActive: () => true
+        };
+        platform.eventSub = mockEventSub;
+
+        await platform.sendMessage('test message');
+
+        expect(mockEventSub.sendMessage).toHaveBeenCalledWith('test message');
+    });
+
+    it('returns connection state with EventSub active status', () => {
+        platform = createPlatform();
+        const mockEventSub = {
+            isConnected: () => true,
+            isActive: () => true
+        };
+        platform.eventSub = mockEventSub;
+
+        const state = platform.getConnectionState();
+
+        expect(state.status).toBe('connected');
+        expect(state.eventSubActive).toBe(true);
+        expect(state.platform).toBe('twitch');
+    });
+
+    it('returns stats with EventSub connection state', () => {
+        platform = createPlatform();
+        const mockEventSub = {
+            isConnected: () => true,
+            isActive: () => true
+        };
+        platform.eventSub = mockEventSub;
+
+        const stats = platform.getStats();
+
+        expect(stats.platform).toBe('twitch');
+        expect(stats.connected).toBe(true);
+        expect(stats.eventsub).toBe(true);
+    });
+
+    it('validates configuration and returns warnings for pending auth', () => {
+        platform = createPlatform({}, { authManager: { getState: () => 'PENDING' } });
+
+        const validation = platform.validateConfig();
+
+        expect(validation.isValid).toBe(true);
+        expect(validation.warnings.length).toBeGreaterThan(0);
+    });
+
+    it('returns configured status based on validation result', () => {
+        platform = createPlatform();
+
+        const isConfigured = platform.isConfigured();
+
+        expect(isConfigured).toBe(true);
+    });
+
+    it('initializes viewer count provider when stream comes online', () => {
+        platform = createPlatform();
+        const mockProvider = {
+            startPolling: createMockFn()
+        };
+        platform.viewerCountProvider = mockProvider;
+        platform.handlers = { onStreamStatus: createMockFn() };
+
+        platform.handleStreamOnlineEvent({ started_at: '2024-01-01T00:00:00Z' });
+
+        expect(mockProvider.startPolling).toHaveBeenCalled();
+    });
+
+    it('returns zero viewer count when provider is not initialized', async () => {
+        platform = createPlatform();
+        platform.viewerCountProvider = null;
+
+        const count = await platform.getViewerCount();
+
+        expect(count).toBe(0);
+    });
+
+    it('returns zero viewer count when provider throws', async () => {
+        platform = createPlatform();
+        platform.viewerCountProvider = {
+            getViewerCount: async () => { throw new Error('API error'); }
+        };
+
+        const count = await platform.getViewerCount();
+
+        expect(count).toBe(0);
+    });
+
+    it('cleans up EventSub and resets connection state', async () => {
+        platform = createPlatform();
+        const mockEventSub = {
+            removeAllListeners: createMockFn(),
+            cleanup: createMockFn().mockResolvedValue(),
+            disconnect: createMockFn().mockResolvedValue()
+        };
+        platform.eventSub = mockEventSub;
+        platform.viewerCountProvider = { stopPolling: createMockFn() };
+
+        await platform.cleanup();
+
+        expect(mockEventSub.cleanup).toHaveBeenCalled();
+        expect(mockEventSub.disconnect).toHaveBeenCalled();
+        expect(platform.eventSub).toBeNull();
+        expect(platform.isConnected).toBe(false);
+    });
+
+    it('emits connection events on EventSub state changes', () => {
+        platform = createPlatform();
+        const emitted = [];
+        platform.on('platform:event', (payload) => {
+            if (payload.type === PlatformEvents.PLATFORM_CONNECTION) {
+                emitted.push(payload.data);
+            }
+        });
+
+        platform._handleEventSubConnectionChange(true, { reason: 'session_welcome' });
+
+        expect(emitted).toHaveLength(1);
+        expect(emitted[0].status).toBe('connected');
+        expect(platform.isConnected).toBe(true);
+    });
+
+    it('returns connection status with timestamp', async () => {
+        platform = createPlatform();
+
+        const status = await platform.getConnectionStatus();
+
+        expect(status.platform).toBe('twitch');
+        expect(status.status).toBe('disconnected');
+        expect(status.timestamp).toMatch(/^\d{4}-\d{2}-\d{2}T/);
     });
 });

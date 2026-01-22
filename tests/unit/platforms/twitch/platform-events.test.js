@@ -34,7 +34,7 @@ const baseConfig = {
     dataLoggingEnabled: false
 };
 
-describe('Twitch platform refactor behaviors', () => {
+describe('TwitchPlatform event behaviors', () => {
     afterEach(() => {
         restoreAllMocks();
     });
@@ -103,6 +103,7 @@ describe('Twitch platform refactor behaviors', () => {
             username: 'Subscriber',
             userId: 'sub-1',
             tier: '1000',
+            months: 6,
             is_gift: false
         });
 
@@ -112,6 +113,76 @@ describe('Twitch platform refactor behaviors', () => {
             isError: true
         });
         expect(received[0].timestamp).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/);
+    });
+
+    it('emits gift error payloads when usernames are missing', async () => {
+        const platform = new TwitchPlatform(baseConfig, {
+            authManager: createAuthManager({ userId: TEST_USER_ID }),
+            logger: noOpLogger
+        });
+
+        const received = [];
+        platform.handlers = { onGift: (payload) => received.push(payload) };
+
+        await platform.handleGiftEvent({
+            userId: 'test-gift-1',
+            giftType: 'subscription',
+            giftCount: 2,
+            amount: 4.99,
+            currency: 'USD',
+            timestamp: '2024-01-01T00:00:00Z'
+        });
+
+        expect(received).toHaveLength(1);
+        expect(received[0]).toMatchObject({
+            platform: 'twitch',
+            isError: true,
+            userId: 'test-gift-1'
+        });
+        expect(received[0].timestamp).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/);
+    });
+
+    it('emits giftpaypiggy error payloads when timestamps are missing', async () => {
+        const platform = new TwitchPlatform(baseConfig, {
+            authManager: createAuthManager({ userId: TEST_USER_ID }),
+            logger: noOpLogger
+        });
+
+        const received = [];
+        platform.handlers = { onGiftPaypiggy: (payload) => received.push(payload) };
+
+        await platform.handlePaypiggyGiftEvent({
+            username: 'testGifter',
+            userId: 'test-gift-2',
+            giftCount: 3,
+            tier: '2000'
+        });
+
+        expect(received).toHaveLength(1);
+        expect(received[0]).toMatchObject({
+            platform: 'twitch',
+            isError: true,
+            username: 'testGifter',
+            userId: 'test-gift-2'
+        });
+        expect(received[0].timestamp).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/);
+    });
+
+    it('skips follow event emission when timestamp is missing', async () => {
+        const platform = new TwitchPlatform(baseConfig, {
+            authManager: createAuthManager({ userId: TEST_USER_ID }),
+            logger: noOpLogger
+        });
+
+        const received = [];
+        platform.handlers = { onFollow: (payload) => received.push(payload) };
+
+        await platform.handleFollowEvent({
+            username: 'testFollower',
+            userId: 'test-follow-1'
+        });
+
+        expect(received).toHaveLength(0);
     });
 
     it('emits chat events from EventSub payloads', async () => {

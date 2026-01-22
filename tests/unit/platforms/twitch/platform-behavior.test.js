@@ -1,8 +1,8 @@
 const { describe, it, expect, afterEach } = require('bun:test');
-const { createMockFn } = require('../../helpers/bun-mock-utils');
-const { noOpLogger } = require('../../helpers/mock-factories');
+const { createMockFn } = require('../../../helpers/bun-mock-utils');
+const { noOpLogger } = require('../../../helpers/mock-factories');
 
-const { TwitchPlatform } = require('../../../src/platforms/twitch');
+const { TwitchPlatform } = require('../../../../src/platforms/twitch');
 
 const createPlatform = (configOverrides = {}, depsOverrides = {}) => {
     const config = {
@@ -134,5 +134,24 @@ describe('TwitchPlatform behavior standards', () => {
         expect(paypiggyHandler).toHaveBeenCalledTimes(1);
         const [handledPayload] = paypiggyHandler.mock.calls[0];
         expect(handledPayload).toBe(payload);
+    });
+
+    it('returns zero when viewer count provider is missing', async () => {
+        platform = createPlatform();
+
+        const count = await platform.getViewerCount();
+
+        expect(count).toBe(0);
+    });
+
+    it('returns zero when viewer count provider throws', async () => {
+        platform = createPlatform();
+        platform.viewerCountProvider = {
+            getViewerCount: async () => { throw new Error('test viewer count failure'); }
+        };
+
+        const count = await platform.getViewerCount();
+
+        expect(count).toBe(0);
     });
 });
