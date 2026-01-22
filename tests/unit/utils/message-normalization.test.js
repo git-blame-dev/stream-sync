@@ -6,6 +6,7 @@ const {
     normalizeTwitchMessage,
     normalizeYouTubeMessage,
     normalizeTikTokMessage,
+    extractTwitchMessageData,
     extractTwitchMessageText,
     extractYouTubeMessageText,
     createFallbackMessage,
@@ -170,6 +171,61 @@ describe('Message Normalization', () => {
                 isMod: false,
                 isSubscriber: true
             });
+        });
+
+        test('uses user role flags when context flags are missing', () => {
+            const user = {
+                userId: 'role-1',
+                username: 'roleuser',
+                isMod: true,
+                isSubscriber: true,
+                isBroadcaster: true
+            };
+            const message = 'Role fallback message';
+            const context = {
+                timestamp: new Date(testClock.now()).toISOString(),
+                badges: { broadcaster: '1' }
+            };
+
+            const normalized = normalizeTwitchMessage(
+                user,
+                message,
+                context,
+                'twitch',
+                timestampService
+            );
+
+            expect(normalized).toMatchObject({
+                isMod: true,
+                isSubscriber: true,
+                isBroadcaster: true
+            });
+        });
+
+        test('handles non-error throws from timestamp service', () => {
+            const stringThrowingService = {
+                extractTimestamp: () => {
+                    throw 'timestamp error';
+                }
+            };
+            const user = { userId: '123456789', username: 'testuser' };
+            const message = 'Message with string error';
+            const context = { timestamp: new Date(testClock.now()).toISOString() };
+
+            let thrown;
+            try {
+                normalizeTwitchMessage(
+                    user,
+                    message,
+                    context,
+                    'twitch',
+                    stringThrowingService
+                );
+            } catch (error) {
+                thrown = error;
+            }
+
+            expect(thrown).toBe('timestamp error');
         });
 
         test('throws on missing user data', () => {
@@ -389,6 +445,70 @@ describe('Message Normalization', () => {
             expect(() => normalizeTikTokMessage(incompleteData, 'tiktok', timestampService))
                 .toThrow('userId');
         });
+
+        test('uses fallback profilePicture data when profilePictureUrl is missing', () => {
+            const data = {
+                user: {
+                    userId: 'tt-456',
+                    uniqueId: 'tiktokuser456',
+                    nickname: ' TikTok User ',
+                    profilePicture: { url: ['avatar-fallback.jpg'] },
+                    followRole: 'follower',
+                    userBadges: ['badge-1']
+                },
+                comment: 'Hello TikTok fallback!',
+                common: { createTime: testClock.now() }
+            };
+
+            const normalized = normalizeTikTokMessage(data, 'tiktok', timestampService);
+
+            expect(normalized.metadata).toMatchObject({
+                profilePicture: 'avatar-fallback.jpg',
+                followRole: 'follower',
+                userBadges: ['badge-1'],
+                displayName: 'TikTok User'
+            });
+        });
+    });
+
+    describe('when extracting Twitch message data', () => {
+        test('extracts text and cheermote metadata from fragments', () => {
+            const messageObj = {
+                text: 'Cheer100 hello',
+                fragments: [
+                    { type: 'cheermote', text: 'Cheer100', cheermote: { prefix: 'Cheer', bits: 100 } },
+                    { type: 'text', text: ' hello' }
+                ]
+            };
+
+            const extracted = extractTwitchMessageData(messageObj);
+
+            expect(extracted.textContent).toBe('hello');
+            expect(extracted.cheermoteInfo).toMatchObject({
+                prefix: 'Cheer',
+                text: 'Cheer100',
+                totalBits: 100
+            });
+        });
+
+        test('returns empty output when fragments are missing', () => {
+            const extracted = extractTwitchMessageData({ text: 'No fragments here' });
+
+            expect(extracted.textContent).toBe('');
+            expect(extracted.cheermoteInfo).toBeNull();
+        });
+
+        test('does not build cheermote info when fragments are incomplete', () => {
+            const extracted = extractTwitchMessageData({
+                fragments: [
+                    { type: 'cheermote', text: 'Cheer50' },
+                    { type: 'text', text: ' hello' }
+                ]
+            });
+
+            expect(extracted.textContent).toBe('hello');
+            expect(extracted.cheermoteInfo).toBeNull();
+        });
     });
 
     describe('when extracting message text', () => {
@@ -414,6 +534,41 @@ describe('Message Normalization', () => {
             const messageObj = 'Hello 🌟 world! 🎉';
             const extracted = extractYouTubeMessageText(messageObj);
             expect(extracted).toBe('Hello 🌟 world! 🎉');
+        });
+
+        test('handles YouTube message arrays with emoji shortcuts', () => {
+            const messageObj = [
+                { text: 'Hello ' },
+                { emoji: { shortcuts: [':wave:'] } },
+                { emojiText: '🌟' },
+                { text: 'friend' }
+            ];
+
+            const extracted = extractYouTubeMessageText(messageObj);
+
+            expect(extracted).toBe('Hello :wave:🌟friend');
+        });
+
+        test('handles YouTube message runs with emoji shortcuts', () => {
+            const messageObj = {
+                runs: [
+                    { text: 'Welcome ' },
+                    { emoji: { shortcuts: [':sparkle:'] } },
+                    { text: 'home' }
+                ]
+            };
+
+            const extracted = extractYouTubeMessageText(messageObj);
+
+            expect(extracted).toBe('Welcome :sparkle:home');
+        });
+
+        test('handles YouTube message simpleText payloads', () => {
+            const messageObj = { simpleText: 'Simple message' };
+
+            const extracted = extractYouTubeMessageText(messageObj);
+
+            expect(extracted).toBe('Simple message');
         });
 
         test('handles null/undefined message objects', () => {
@@ -463,6 +618,34 @@ describe('Message Normalization', () => {
             expect(fallback).toBeNull();
         });
 
+        test('returns null when username is whitespace', () => {
+            const fallback = createFallbackMessage({
+                platform: 'twitch',
+                userId: 'user-3',
+                username: '   ',
+                message: 'hello',
+                timestamp: '2025-01-02T03:04:05.000Z'
+            });
+
+            expect(fallback).toBeNull();
+        });
+
+        test('trims message and coerces userId to string', () => {
+            const fallback = createFallbackMessage({
+                platform: 'twitch',
+                userId: 42,
+                username: ' testuser ',
+                message: ' hello ',
+                timestamp: '2025-01-02T03:04:05.000Z'
+            });
+
+            expect(fallback).toMatchObject({
+                userId: '42',
+                username: 'testuser',
+                message: 'hello'
+            });
+        });
+
         test('handles missing parameters in fallback', () => {
             const fallback = createFallbackMessage();
 
@@ -500,6 +683,53 @@ describe('Message Normalization', () => {
             expect(validation.isValid).toBe(false);
             expect(validation.errors).toContain('Missing required field: userId');
             expect(validation.errors).toContain('Missing required field: username');
+        });
+
+        test('returns issues when message is not an object', () => {
+            const validation = validateNormalizedMessage(null);
+
+            expect(validation.isValid).toBe(false);
+            expect(validation.issues).toContain('Message is not an object');
+        });
+
+        test('detects invalid timestamp format', () => {
+            const invalidMessage = {
+                platform: 'twitch',
+                userId: '123456789',
+                username: 'testuser',
+                message: 'Hello world!',
+                timestamp: 'not-a-date',
+                isMod: false,
+                isSubscriber: false,
+                isBroadcaster: false,
+                metadata: {},
+                rawData: {}
+            };
+
+            const validation = validateNormalizedMessage(invalidMessage);
+
+            expect(validation.isValid).toBe(false);
+            expect(validation.errors).toContain('Invalid timestamp format');
+        });
+
+        test('detects missing metadata', () => {
+            const invalidMessage = {
+                platform: 'twitch',
+                userId: '123456789',
+                username: 'testuser',
+                message: 'Hello world!',
+                timestamp: new Date(testClock.now()).toISOString(),
+                isMod: false,
+                isSubscriber: false,
+                isBroadcaster: false,
+                metadata: null,
+                rawData: {}
+            };
+
+            const validation = validateNormalizedMessage(invalidMessage);
+
+            expect(validation.isValid).toBe(false);
+            expect(validation.errors).toContain('Missing or invalid metadata field');
         });
 
         test('validates field types', () => {
@@ -572,6 +802,25 @@ describe('Message Normalization', () => {
             const context = { timestamp: new Date(testClock.now()).toISOString() };
             expect(() => normalizeMessage('twitch', null, 'message', context, 'twitch', timestampService))
                 .toThrow('user');
+        });
+
+        test('normalizes platform names in a case-insensitive way', () => {
+            const timestampMs = testClock.now();
+            const chatItem = {
+                item: {
+                    id: 'yt-case-1',
+                    timestamp: timestampMs,
+                    author: {
+                        id: 'UCabc123',
+                        name: 'CaseUser'
+                    },
+                    message: { text: 'Case check' }
+                }
+            };
+
+            const normalized = normalizeMessage('YouTube', chatItem, 'YouTube', timestampService);
+
+            expect(normalized.platform).toBe('youtube');
         });
     });
 
