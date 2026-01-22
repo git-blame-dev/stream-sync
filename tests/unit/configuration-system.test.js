@@ -1,9 +1,9 @@
 const { describe, it, expect, beforeEach, afterEach } = require('bun:test');
 const { createMockFn, restoreAllMocks } = require('../helpers/bun-mock-utils');
-const { resetModules, restoreAllModuleMocks } = require('../helpers/bun-module-mocks');
 const { expectNoTechnicalArtifacts } = require('../helpers/assertion-helpers');
 
 const fs = require('fs');
+const { config, configManager } = require('../../src/core/config');
 
 let originalReadFileSync;
 let originalExistsSync;
@@ -86,8 +86,6 @@ maxEntries = 1000
 
 describe('Configuration System Behavior Tests', () => {
     let configContent;
-    let configManager;
-    let config;
     const testConfigPath = '/test/config.ini';
 
     const setupConfigMocks = (content) => {
@@ -110,11 +108,7 @@ describe('Configuration System Behavior Tests', () => {
         originalReadFileSync = fs.readFileSync;
         originalExistsSync = fs.existsSync;
         originalWriteFileSync = fs.writeFileSync;
-        resetModules();
         setupConfigMocks(testConfigContent);
-        const configModule = require('../../src/core/config');
-        configManager = configModule.configManager;
-        config = configModule.config;
         reloadConfig();
     });
 
@@ -123,7 +117,6 @@ describe('Configuration System Behavior Tests', () => {
         fs.existsSync = originalExistsSync;
         fs.writeFileSync = originalWriteFileSync;
         restoreAllMocks();
-        restoreAllModuleMocks();
     });
 
     describe('System Startup Behavior', () => {

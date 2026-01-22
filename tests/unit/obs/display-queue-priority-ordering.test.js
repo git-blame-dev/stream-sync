@@ -1,7 +1,6 @@
 
 const { describe, test, expect, it, afterEach } = require('bun:test');
 const { createMockFn, restoreAllMocks } = require('../../helpers/bun-mock-utils');
-const { restoreAllModuleMocks } = require('../../helpers/bun-module-mocks');
 const { initializeTestLogging } = require('../../helpers/test-setup');
 
 initializeTestLogging();
@@ -12,7 +11,6 @@ const { createMockOBSManager } = require('../../helpers/mock-factories');
 describe('DisplayQueue priority ordering', () => {
     afterEach(() => {
         restoreAllMocks();
-        restoreAllModuleMocks();
     });
 
     const constants = {

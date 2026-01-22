@@ -1,11 +1,10 @@
 const { describe, test, beforeEach, afterEach, expect } = require('bun:test');
 
 const { createMockFn, restoreAllMocks } = require('../helpers/bun-mock-utils');
-const { mockModule, restoreAllModuleMocks, resetModules } = require('../helpers/bun-module-mocks');
-const { YouTubeStreamDetectionService } = require('../../src/services/youtube-stream-detection-service');
 const { createMockConfig, noOpLogger } = require('../helpers/mock-factories');
 const { expectNoTechnicalArtifacts } = require('../helpers/assertion-helpers');
 const testClock = require('../helpers/test-clock');
+const { StreamDetector } = require('../../src/utils/stream-detector');
 
 describe('YouTube YouTubei Stream Detection Integration - Regression', () => {
     let mockConfig;
@@ -14,11 +13,9 @@ describe('YouTube YouTubei Stream Detection Integration - Regression', () => {
 
     afterEach(() => {
         restoreAllMocks();
-        restoreAllModuleMocks();
     });
 
     beforeEach(() => {
-        resetModules();
         testClock.reset();
         mockConfig = createMockConfig();
         mockYouTubeService = {
@@ -29,12 +26,6 @@ describe('YouTube YouTubei Stream Detection Integration - Regression', () => {
                 averageResponseTime: 0
             })
         };
-        mockModule('youtubei.js', () => ({
-            Innertube: class MockInnertube {
-                constructor() {}
-            }
-        }));
-        const { StreamDetector } = require('../../src/utils/stream-detector');
         streamDetector = new StreamDetector({
             streamDetectionEnabled: true,
             streamRetryInterval: 15,

@@ -1,6 +1,5 @@
 const { describe, test, expect, it, afterEach } = require('bun:test');
 const { createMockFn, spyOn, restoreAllMocks } = require('../helpers/bun-mock-utils');
-const { restoreAllModuleMocks } = require('../helpers/bun-module-mocks');
 const { useFakeTimers, useRealTimers, runOnlyPendingTimers } = require('../helpers/bun-timers');
 const { noOpLogger } = require('../helpers/mock-factories');
 
@@ -9,7 +8,6 @@ const { AppRuntime } = require('../../src/main');
 describe('AppRuntime system readiness payload', () => {
     afterEach(() => {
         restoreAllMocks();
-        restoreAllModuleMocks();
         useRealTimers();
     });
 

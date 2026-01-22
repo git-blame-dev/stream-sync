@@ -1,10 +1,11 @@
 
-const { describe, test, expect, beforeEach, afterEach } = require('bun:test');
-const { resetModules, restoreAllModuleMocks } = require('../../helpers/bun-module-mocks');
+const { describe, test, expect } = require('bun:test');
 
 const { TEST_TIMEOUTS } = require('../../helpers/test-setup');
 
 const { setupAutomatedCleanup } = require('../../helpers/mock-lifecycle');
+const { interpolateTemplate } = require('../../../src/utils/notification-strings');
+const { createNotificationData } = require('../../helpers/notification-test-utils');
 
 setupAutomatedCleanup({
     clearCallsBeforeEach: true,
@@ -12,20 +13,6 @@ setupAutomatedCleanup({
 });
 
 describe('Template Interpolation Validation', () => {
-    afterEach(() => {
-        restoreAllModuleMocks();
-    });
-
-    let interpolateTemplate, createNotificationData;
-
-    beforeEach(() => {
-        resetModules();
-
-        const notificationStrings = require('../../../src/utils/notification-strings');
-        const testUtils = require('../../helpers/notification-test-utils');
-        interpolateTemplate = notificationStrings.interpolateTemplate;
-        createNotificationData = testUtils.createNotificationData;
-    });
 
 
     describe('interpolateTemplate Function', () => {

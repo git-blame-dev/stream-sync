@@ -1,22 +1,15 @@
 const { describe, test, beforeEach, afterEach, expect } = require('bun:test');
 
 const { createMockFn, restoreAllMocks } = require('../helpers/bun-mock-utils');
-const { mockModule, restoreAllModuleMocks } = require('../helpers/bun-module-mocks');
 const { noOpLogger, createMockNotificationManager, setupAutomatedCleanup } = require('../helpers/mock-factories');
 const { expectNoTechnicalArtifacts } = require('../helpers/behavior-validation');
-
-mockModule('youtubei.js', () => ({
-    Innertube: {
-        create: createMockFn()
-    }
-}));
+const { YouTubePlatform } = require('../../src/platforms/youtube');
 
 describe('YouTube Multi-Stream Viewer Count Separation', () => {
     let mockNotificationManager, cleanup;
 
     afterEach(async () => {
         restoreAllMocks();
-        restoreAllModuleMocks();
         if (cleanup && typeof cleanup === 'function') {
             await cleanup();
         }
@@ -40,8 +33,6 @@ describe('YouTube Multi-Stream Viewer Count Separation', () => {
     };
 
     const createYouTubePlatformWithMixedStates = async (scenario) => {
-        const { YouTubePlatform } = require('../../src/platforms/youtube');
-
         const mockViewerExtractionService = {
             getAggregatedViewerCount: createMockFn().mockImplementation(async (videoIds) => {
                 let totalCount = 0;

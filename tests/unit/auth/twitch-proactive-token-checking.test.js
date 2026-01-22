@@ -1,28 +1,23 @@
 
 const { describe, test, expect, beforeEach, afterEach } = require('bun:test');
-const { createMockFn, spyOn, clearAllMocks, restoreAllMocks } = require('../../helpers/bun-mock-utils');
-const { resetModules, restoreAllModuleMocks } = require('../../helpers/bun-module-mocks');
+const { createMockFn, spyOn, restoreAllMocks } = require('../../helpers/bun-mock-utils');
 const { noOpLogger } = require('../../helpers/mock-factories');
 
 const testClock = require('../../helpers/test-clock');
+const TwitchAuthInitializer = require('../../../src/auth/TwitchAuthInitializer');
+const TwitchAuthService = require('../../../src/auth/TwitchAuthService');
 
 describe('Twitch Proactive Token Checking', () => {
-    let TwitchAuthInitializer;
-    let TwitchAuthService;
     let mockAxios;
     let authInitializer;
     let authService;
 
     beforeEach(() => {
-        resetModules();
         spyOn(Date, 'now').mockImplementation(() => testClock.now());
 
         mockAxios = {
             get: createMockFn()
         };
-
-        TwitchAuthInitializer = require('../../../src/auth/TwitchAuthInitializer');
-        TwitchAuthService = require('../../../src/auth/TwitchAuthService');
 
         const config = {
             clientId: 'test-client-id',
@@ -41,8 +36,7 @@ describe('Twitch Proactive Token Checking', () => {
 
     afterEach(() => {
         restoreAllMocks();
-    
-        restoreAllModuleMocks();});
+    });
 
     describe('ensureValidToken (timestamp guard)', () => {
         test('refreshes when token is within near-expiry threshold without calling validate', async () => {

@@ -1,7 +1,6 @@
 
-const { describe, test, expect, afterAll } = require('bun:test');
+const { describe, test, expect } = require('bun:test');
 const { createMockFn } = require('../../helpers/bun-mock-utils');
-const { restoreAllModuleMocks } = require('../../helpers/bun-module-mocks');
 
 const { createTestUser, TEST_TIMEOUTS } = require('../../helpers/test-setup');
 const { setupAutomatedCleanup } = require('../../helpers/mock-lifecycle');
@@ -125,7 +124,4 @@ describe('Terminology Consistency', () => {
         }, testOptions);
     });
 
-    afterAll(() => {
-        restoreAllModuleMocks();
-    });
 });

@@ -1,11 +1,9 @@
 
 const { describe, test, expect, it, afterEach } = require('bun:test');
 const { createMockFn, restoreAllMocks } = require('../helpers/bun-mock-utils');
-const { unmockModule, requireActual, restoreAllModuleMocks } = require('../helpers/bun-module-mocks');
 const { noOpLogger, createMockNotificationManager } = require('../helpers/mock-factories');
 
-unmockModule('../../src/platforms/youtube');
-const { YouTubePlatform } = requireActual('../../src/platforms/youtube');
+const { YouTubePlatform } = require('../../src/platforms/youtube');
 
 const createPlatform = (provider = null) => {
     const notificationManager = createMockNotificationManager();
@@ -30,7 +28,6 @@ const createPlatform = (provider = null) => {
 describe('YouTubePlatform viewer count behavior', () => {
     afterEach(() => {
         restoreAllMocks();
-        restoreAllModuleMocks();
     });
 
     it('returns provider value for a specific video', async () => {

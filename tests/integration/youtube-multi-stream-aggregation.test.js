@@ -1,19 +1,12 @@
 const { describe, test, afterEach, expect } = require('bun:test');
 
 const { createMockFn, restoreAllMocks } = require('../helpers/bun-mock-utils');
-const { mockModule, restoreAllModuleMocks } = require('../helpers/bun-module-mocks');
 const { noOpLogger } = require('../helpers/mock-factories');
-
-mockModule('youtubei.js', () => ({
-    Innertube: {
-        create: createMockFn()
-    }
-}));
+const { YouTubePlatform } = require('../../src/platforms/youtube');
 
 describe('YouTube Multi-Stream Aggregation', () => {
     afterEach(() => {
         restoreAllMocks();
-        restoreAllModuleMocks();
     });
 
     const createStreamScenario = (streamData) => ({
@@ -23,8 +16,6 @@ describe('YouTube Multi-Stream Aggregation', () => {
     });
 
     const createYouTubePlatformWithStreams = async (streamConfigs, options = {}) => {
-        const { YouTubePlatform } = require('../../src/platforms/youtube');
-
         const activeVideoIds = streamConfigs.map(stream => stream.videoId);
         const failingVideoIds = options.failingVideoIds || [];
 

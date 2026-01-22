@@ -1,7 +1,6 @@
 
 const { describe, test, expect, beforeEach, afterEach } = require('bun:test');
 const { restoreAllMocks } = require('../../helpers/bun-mock-utils');
-const { restoreAllModuleMocks } = require('../../helpers/bun-module-mocks');
 
 const { CommandParser } = require('../../../src/chat/commands');
 const testClock = require('../../helpers/test-clock');
@@ -9,7 +8,6 @@ const testClock = require('../../helpers/test-clock');
 describe('CommandParser Keyword Parsing', () => {
     afterEach(() => {
         restoreAllMocks();
-        restoreAllModuleMocks();
     });
 
     let commandParser;
