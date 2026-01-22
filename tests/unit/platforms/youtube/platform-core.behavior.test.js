@@ -1,6 +1,5 @@
 const { describe, it, expect, beforeEach, afterEach } = require('bun:test');
 const { createMockFn, restoreAllMocks } = require('../../../helpers/bun-mock-utils');
-const { restoreAllModuleMocks, resetModules } = require('../../../helpers/bun-module-mocks');
 const { noOpLogger } = require('../../../helpers/mock-factories');
 const { YouTubePlatform } = require('../../../../src/platforms/youtube');
 
@@ -39,8 +38,6 @@ const createPlatform = (overrides = {}) => {
 describe('YouTubePlatform behavior', () => {
     afterEach(() => {
         restoreAllMocks();
-        restoreAllModuleMocks();
-        resetModules();
     });
 
     it('throws when dependencies argument is not an object', () => {

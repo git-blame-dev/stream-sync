@@ -1,6 +1,5 @@
 const { describe, test, expect, afterEach } = require('bun:test');
 const { createMockFn, restoreAllMocks } = require('../../../../helpers/bun-mock-utils');
-const { restoreAllModuleMocks, resetModules } = require('../../../../helpers/bun-module-mocks');
 const { initializeTestLogging } = require('../../../../helpers/test-setup');
 
 initializeTestLogging();
@@ -13,8 +12,6 @@ const testClock = require('../../../../helpers/test-clock');
 describe('TikTok social filtering', () => {
     afterEach(() => {
         restoreAllMocks();
-        restoreAllModuleMocks();
-        resetModules();
     });
 
     const baseConfig = { enabled: true, username: 'social_tester' };

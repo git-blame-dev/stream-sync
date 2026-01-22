@@ -1,14 +1,12 @@
-
 const { describe, test, expect, beforeEach, afterEach, it } = require('bun:test');
 const { createMockFn, clearAllMocks, restoreAllMocks } = require('../../helpers/bun-mock-utils');
-const { resetModules, restoreAllModuleMocks } = require('../../helpers/bun-module-mocks');
 const { useRealTimers } = require('../../helpers/bun-timers');
 
 const { createTestUser, createMockConfig } = require('../../helpers/test-setup');
 const testClock = require('../../helpers/test-clock');
+const OBSHealthChecker = require('../../../src/obs/health-checker');
 
 describe('OBSHealthChecker', () => {
-    let OBSHealthChecker;
     let mockOBSManager;
     let healthChecker;
 
@@ -18,22 +16,17 @@ describe('OBSHealthChecker', () => {
     });
 
     beforeEach(() => {
-        resetModules();
-
         mockOBSManager = {
             isConnected: createMockFn(),
             call: createMockFn()
         };
-
-        OBSHealthChecker = require('../../../src/obs/health-checker');
     });
 
     afterEach(() => {
         restoreAllMocks();
         clearAllMocks();
         useRealTimers();
-    
-        restoreAllModuleMocks();});
+    });
 
     describe('Constructor', () => {
         it('should initialize with default configuration', () => {

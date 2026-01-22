@@ -1,25 +1,22 @@
-
 const { describe, test, expect, beforeEach, it, afterEach } = require('bun:test');
 const { createMockFn, restoreAllMocks } = require('../../helpers/bun-mock-utils');
-const { resetModules, restoreAllModuleMocks } = require('../../helpers/bun-module-mocks');
 const { noOpLogger } = require('../../helpers/mock-factories');
 const { initializeTestLogging } = require('../../helpers/test-setup');
+const goals = require('../../../src/obs/goals');
+const { OBSGoalsManager, createOBSGoalsManager } = require('../../../src/obs/goals');
 
 initializeTestLogging();
 
 describe('OBSGoalsManager DI requirements', () => {
     afterEach(() => {
         restoreAllMocks();
-        restoreAllModuleMocks();
     });
 
     beforeEach(() => {
-        resetModules();
         initializeTestLogging();
     });
 
     it('exposes only DI-focused exports (no wrapper functions)', () => {
-        const goals = require('../../../src/obs/goals');
         const exportedKeys = Object.keys(goals).sort();
         expect(exportedKeys).toEqual([
             'OBSGoalsManager',
@@ -29,7 +26,6 @@ describe('OBSGoalsManager DI requirements', () => {
     });
 
     it('requires an OBS manager in the constructor', () => {
-        const { OBSGoalsManager } = require('../../../src/obs/goals');
         expect(() => new OBSGoalsManager()).toThrow(/OBSGoalsManager requires OBSConnectionManager/);
     });
 
@@ -50,7 +46,6 @@ describe('OBSGoalsManager DI requirements', () => {
             getAllGoalStates: createMockFn().mockReturnValue({})
         };
 
-        const { createOBSGoalsManager } = require('../../../src/obs/goals');
         const goalsManager = createOBSGoalsManager(mockObsManager, {
             logger: noOpLogger,
             configManager: { getBoolean: () => true, getString: () => 'goal-source', getNumber: () => 0 },

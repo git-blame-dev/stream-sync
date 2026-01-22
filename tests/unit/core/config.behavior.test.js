@@ -1,8 +1,8 @@
 const { describe, it, expect, beforeEach, afterEach } = require('bun:test');
 const { createMockFn, restoreAllMocks } = require('../../helpers/bun-mock-utils');
-const { resetModules, restoreAllModuleMocks } = require('../../helpers/bun-module-mocks');
 
 const fs = require('fs');
+const { config, configManager } = require('../../../src/core/config');
 
 let originalReadFileSync;
 let originalExistsSync;
@@ -67,15 +67,10 @@ ${streamelementsSection}
 `;
 
 describe('ConfigManager behavior', () => {
-    let configManager;
-    let config;
-    let configContent;
-
     const setupConfigMocks = (content) => {
-        configContent = content;
         fs.existsSync = createMockFn((filePath) => filePath === testConfigPath);
         fs.readFileSync = createMockFn((filePath) => {
-            if (filePath === testConfigPath) return configContent;
+            if (filePath === testConfigPath) return content;
             throw new Error(`ENOENT: no such file: ${filePath}`);
         });
     };
@@ -83,17 +78,16 @@ describe('ConfigManager behavior', () => {
     beforeEach(() => {
         originalReadFileSync = fs.readFileSync;
         originalExistsSync = fs.existsSync;
-        resetModules();
-        const configModule = require('../../../src/core/config');
-        configManager = configModule.configManager;
-        config = configModule.config;
+        configManager.config = null;
+        configManager.isLoaded = false;
     });
 
     afterEach(() => {
         fs.readFileSync = originalReadFileSync;
         fs.existsSync = originalExistsSync;
         restoreAllMocks();
-        restoreAllModuleMocks();
+        configManager.config = null;
+        configManager.isLoaded = false;
     });
 
     it('throws user-friendly error when config file is missing in non-test environment', () => {

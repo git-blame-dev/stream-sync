@@ -1,17 +1,19 @@
 const { describe, it, expect, beforeEach, afterEach } = require('bun:test');
 const { createMockFn, restoreAllMocks, spyOn } = require('../../helpers/bun-mock-utils');
-const { resetModules, unmockModule } = require('../../helpers/bun-module-mocks');
 const path = require('path');
 
-unmockModule('../../../src/core/logging');
+const logging = require('../../../src/core/logging');
 
 describe('core/logging behavior', () => {
-    let logging;
-
     beforeEach(() => {
-        resetModules();
-        unmockModule('../../../src/core/logging');
-        logging = require('../../../src/core/logging');
+        // Reset to default test validator
+        logging.setConfigValidator(() => ({
+            console: { enabled: false },
+            file: { enabled: false, directory: './logs' },
+            debug: { enabled: false },
+            platforms: { tiktok: { enabled: true }, twitch: { enabled: true }, youtube: { enabled: true } },
+            chat: { enabled: false, separateFiles: true, directory: './logs' }
+        }));
     });
 
     afterEach(() => {

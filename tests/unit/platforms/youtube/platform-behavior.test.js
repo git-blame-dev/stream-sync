@@ -1,9 +1,6 @@
 const { describe, it, expect, beforeEach, afterEach } = require('bun:test');
 const { createMockFn, restoreAllMocks } = require('../../../helpers/bun-mock-utils');
-const { unmockModule, restoreAllModuleMocks, resetModules } = require('../../../helpers/bun-module-mocks');
 const { noOpLogger } = require('../../../helpers/mock-factories');
-
-unmockModule('../../../../src/platforms/youtube');
 
 const { YouTubePlatform } = require('../../../../src/platforms/youtube');
 
@@ -111,8 +108,6 @@ const flushPromises = () => new Promise((resolve) => setImmediate(resolve));
 describe('YouTubePlatform modern architecture', () => {
     afterEach(() => {
         restoreAllMocks();
-        restoreAllModuleMocks();
-        resetModules();
     });
 
     it('emits aggregated viewer counts as platform events after stream updates', () => {

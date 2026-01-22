@@ -1,14 +1,12 @@
 const { describe, it, expect, beforeEach, afterEach } = require('bun:test');
 const { EventEmitter } = require('events');
-const { unmockModule, restoreAllModuleMocks, resetModules } = require('../../helpers/bun-module-mocks');
 const { createMockFn, restoreAllMocks, spyOn } = require('../../helpers/bun-mock-utils');
 const { noOpLogger } = require('../../helpers/mock-factories');
 const { useFakeTimers, useRealTimers, advanceTimersByTime } = require('../../helpers/bun-timers');
 const { safeSetInterval, safeSetTimeout } = require('../../../src/utils/timeout-validator');
 const fs = require('fs').promises;
 const path = require('path');
-
-unmockModule('../../../src/platforms/streamelements');
+const { StreamElementsPlatform } = require('../../../src/platforms/streamelements');
 
 class MockWebSocket extends EventEmitter {
     constructor(url) {
@@ -34,7 +32,6 @@ MockWebSocket.OPEN = 1;
 MockWebSocket.CLOSED = 3;
 
 const createPlatform = (configOverrides = {}, dependencyOverrides = {}) => {
-    const { StreamElementsPlatform } = require('../../../src/platforms/streamelements');
     const retrySystem = dependencyOverrides.retrySystem || {
         incrementRetryCount: createMockFn(() => 10),
         resetRetryCount: createMockFn(),
@@ -70,12 +67,9 @@ describe('StreamElementsPlatform behavior', () => {
     afterEach(() => {
         useRealTimers();
         restoreAllMocks();
-        restoreAllModuleMocks();
-        resetModules();
     });
 
     it('initializes disabled platform and fails prerequisites', async () => {
-        const { StreamElementsPlatform } = require('../../../src/platforms/streamelements');
         const platform = new StreamElementsPlatform({ enabled: false }, { logger: noOpLogger });
 
         const initialized = await platform.initialize({});
@@ -96,7 +90,6 @@ describe('StreamElementsPlatform behavior', () => {
     });
 
     it('returns false when prerequisites fail', async () => {
-        const { StreamElementsPlatform } = require('../../../src/platforms/streamelements');
         const platform = new StreamElementsPlatform({ enabled: true }, { logger: noOpLogger });
 
         const result = await platform.connect();
