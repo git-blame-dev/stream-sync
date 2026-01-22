@@ -88,6 +88,7 @@ describe('ConfigManager behavior', () => {
         restoreAllMocks();
         configManager.config = null;
         configManager.isLoaded = false;
+        configManager.configPath = configManager.defaultConfigPath;
     });
 
     it('throws user-friendly error when config file is missing in non-test environment', () => {

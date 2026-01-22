@@ -86,6 +86,7 @@ maxEntries = 1000
 
 describe('Configuration System Behavior Tests', () => {
     let configContent;
+    let originalDefaultConfigPath;
     const testConfigPath = '/test/config.ini';
 
     const setupConfigMocks = (content) => {
@@ -108,6 +109,7 @@ describe('Configuration System Behavior Tests', () => {
         originalReadFileSync = fs.readFileSync;
         originalExistsSync = fs.existsSync;
         originalWriteFileSync = fs.writeFileSync;
+        originalDefaultConfigPath = configManager.defaultConfigPath;
         setupConfigMocks(testConfigContent);
         reloadConfig();
     });
@@ -117,6 +119,10 @@ describe('Configuration System Behavior Tests', () => {
         fs.existsSync = originalExistsSync;
         fs.writeFileSync = originalWriteFileSync;
         restoreAllMocks();
+        configManager.isLoaded = false;
+        configManager.config = null;
+        configManager.defaultConfigPath = originalDefaultConfigPath;
+        configManager.configPath = originalDefaultConfigPath;
     });
 
     describe('System Startup Behavior', () => {

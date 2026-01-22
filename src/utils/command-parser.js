@@ -73,6 +73,11 @@ function clearExpiredGlobalCooldowns(maxAgeMs = 300000) {
     return manager.clearExpiredCooldowns(maxAgeMs);
 }
 
+function resetGlobalCooldowns() {
+    const manager = getGlobalCooldownManager();
+    manager.resetAllCooldowns();
+}
+
 module.exports = {
     updateUserCommandTimestamps,
     checkCommandCooldown,
@@ -80,5 +85,6 @@ module.exports = {
     updateGlobalCommandCooldown,
     getGlobalCooldownStats,
     getRemainingGlobalCooldown,
-    clearExpiredGlobalCooldowns
+    clearExpiredGlobalCooldowns,
+    resetGlobalCooldowns
 }; 

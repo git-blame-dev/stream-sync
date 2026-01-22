@@ -6,6 +6,8 @@ const { configManager } = require('../../../src/core/config');
 describe('Keyword Parsing Configuration', () => {
     beforeEach(() => {
         restoreAllMocks();
+        configManager.isLoaded = false;
+        configManager.config = null;
     });
 
     describe('Default Configuration', () => {
@@ -163,5 +165,7 @@ describe('Keyword Parsing Configuration', () => {
 
     afterEach(() => {
         restoreAllMocks();
+        configManager.isLoaded = false;
+        configManager.config = null;
     });
 }); 

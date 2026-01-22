@@ -491,13 +491,18 @@ async function ensureOBSConnected(maxWait = 5000) {
     return await manager.ensureConnected(maxWait);
 }
 
+function resetOBSConnectionManager() {
+    globalOBSManager = null;
+}
+
 // Export the class and factory functions
 module.exports = {
     OBSConnectionManager,
     getOBSConnectionManager,
     createOBSConnectionManager,
     initializeOBSConnection,
-    
+    resetOBSConnectionManager,
+
     // Backward compatibility exports
     obsCall,
     ensureOBSConnected

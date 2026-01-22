@@ -6,10 +6,12 @@ describe('command-parser behavior', () => {
     beforeEach(() => {
         useFakeTimers();
         setSystemTime(new Date('2024-01-01T00:00:00Z'));
+        parser.resetGlobalCooldowns();
     });
 
     afterEach(() => {
         useRealTimers();
+        parser.resetGlobalCooldowns();
     });
 
     it('applies per-user cooldowns and heavy limit escalation', () => {

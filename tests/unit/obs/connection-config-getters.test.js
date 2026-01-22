@@ -3,7 +3,7 @@ const { createMockFn, clearAllMocks, restoreAllMocks } = require('../../helpers/
 const { noOpLogger } = require('../../helpers/mock-factories');
 
 const { initializeTestLogging } = require('../../helpers/test-setup');
-const { OBSConnectionManager, initializeOBSConnection } = require('../../../src/obs/connection');
+const { OBSConnectionManager, initializeOBSConnection, resetOBSConnectionManager } = require('../../../src/obs/connection');
 
 initializeTestLogging();
 
@@ -12,6 +12,7 @@ describe('OBS Connection Configuration with Getter Properties', () => {
     let obsManager;
 
     beforeEach(() => {
+        resetOBSConnectionManager();
         mockOBSWebSocket = createMockFn().mockImplementation(() => ({
             connect: createMockFn().mockResolvedValue({
                 obsWebSocketVersion: '5.0.0',
@@ -28,6 +29,7 @@ describe('OBS Connection Configuration with Getter Properties', () => {
     afterEach(() => {
         restoreAllMocks();
         clearAllMocks();
+        resetOBSConnectionManager();
     });
 
     describe('Configuration with Getter Properties', () => {

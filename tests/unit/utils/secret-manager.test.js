@@ -165,6 +165,9 @@ describe('secret-manager', () => {
 
         setupFsMocks();
 
+        globalConfigManager.isLoaded = false;
+        globalConfigManager.config = null;
+
         ConfigManager = globalConfigManager.constructor;
         configManager = new ConfigManager(configPath);
         configManager.load();
@@ -191,6 +194,8 @@ describe('secret-manager', () => {
         fs.chmodSync = originalChmodSync;
         fs.statSync = originalStatSync;
         restoreAllMocks();
+        globalConfigManager.isLoaded = false;
+        globalConfigManager.config = null;
     });
 
     it('applies environment secrets without prompting and leaves existing env file untouched', async () => {
