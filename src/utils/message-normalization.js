@@ -19,65 +19,6 @@ function handleNormalizationError(message, error, eventType = 'normalization', e
 }
 
 
-function normalizeTwitchMessage(user, message, context, platformName = 'twitch', timestampService = null) {
-    try {
-        if (!timestampService || typeof timestampService.extractTimestamp !== 'function') {
-            throw new Error('Timestamp service is required for Twitch normalization');
-        }
-        if (!user || typeof user !== 'object') {
-            throw new Error('Missing Twitch user data');
-        }
-        const userId = typeof user.userId === 'string' ? user.userId.trim() : '';
-        const username = typeof user.username === 'string' ? user.username.trim() : '';
-        if (!userId) {
-            throw new Error('Missing Twitch userId');
-        }
-        if (!username) {
-            throw new Error('Missing Twitch username');
-        }
-        const normalizedMessage = typeof message === 'string' ? message.trim() : '';
-        if (!normalizedMessage) {
-            throw new Error('Missing Twitch message text');
-        }
-
-        const timestamp = timestampService.extractTimestamp('twitch', context);
-        if (!timestamp || typeof timestamp !== 'string') {
-            throw new Error('Missing Twitch timestamp');
-        }
-
-        const isMod = context?.mod !== undefined
-            ? context.mod === true || context.mod === '1' || context.mod === 1
-            : Boolean(user.isMod);
-        const isSubscriber = context?.subscriber !== undefined
-            ? context.subscriber === true || context.subscriber === '1' || context.subscriber === 1
-            : Boolean(user.isSubscriber);
-
-        const normalized = {
-            platform: platformName.toLowerCase(),
-            userId,
-            username,
-            message: normalizedMessage,
-            timestamp,
-            isMod,
-            isSubscriber,
-            isBroadcaster: Boolean(user.isBroadcaster),
-            metadata: {
-                badges: context?.badges,
-                color: context?.color ?? null,
-                emotes: context?.emotes,
-                roomId: context?.['room-id'] ?? null
-            },
-            rawData: { user, message, context }
-        };
-
-        logger.debug(`Normalized Twitch message from ${normalized.username}`, 'message-normalization');
-        return normalized;
-    } catch (error) {
-        handleNormalizationError(`Failed to normalize Twitch message: ${error.message}`, error, 'twitch', { username: user?.username });
-        throw error;
-    }
-}
-
 function normalizeYouTubeMessage(chatItem, platformName = 'youtube', timestampService = null) {
     try {
         if (!timestampService || typeof timestampService.extractTimestamp !== 'function') {
@@ -397,8 +338,6 @@ function normalizeMessage(platform, ...args) {
     const platformLower = platform.toLowerCase();
     
     switch (platformLower) {
-        case 'twitch':
-            return normalizeTwitchMessage(...args);
         case 'youtube':
             return normalizeYouTubeMessage(...args);
         case 'tiktok':
@@ -413,7 +352,6 @@ function normalizeMessage(platform, ...args) {
 
 module.exports = {
     normalizeMessage,
-    normalizeTwitchMessage,
     normalizeYouTubeMessage,
     normalizeTikTokMessage,
     extractTwitchMessageData,

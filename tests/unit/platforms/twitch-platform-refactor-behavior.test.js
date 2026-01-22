@@ -125,12 +125,14 @@ describe('TwitchPlatform refactor behavior', () => {
         process.on('unhandledRejection', listener);
 
         try {
-            await platform.onMessageHandler(
-                '#chan',
-                { username: 'testviewer1', 'display-name': 'TestViewer1', 'user-id': 'test-1', mod: false, subscriber: false },
-                'Hello world',
-                false
-            );
+            await platform.onMessageHandler({
+                chatter_user_id: 'test-1',
+                chatter_user_name: 'testviewer1',
+                broadcaster_user_id: 'broadcaster-1',
+                message: { text: 'Hello world' },
+                badges: {},
+                timestamp: '2024-01-01T00:00:00Z'
+            });
             await flushAsync();
         } finally {
             process.off('unhandledRejection', listener);
@@ -188,16 +190,16 @@ describe('TwitchPlatform refactor behavior', () => {
         });
 
         await platform.initialize({});
-        const listenersAfterFirstInit = eventSubStub.listeners.message?.length || 0;
+        const listenersAfterFirstInit = eventSubStub.listeners.chatMessage?.length || 0;
 
         await platform.initialize({});
-        const listenersAfterSecondInit = eventSubStub.listeners.message?.length || 0;
+        const listenersAfterSecondInit = eventSubStub.listeners.chatMessage?.length || 0;
 
         await platform.cleanup();
 
         expect(listenersAfterFirstInit).toBe(1);
         expect(listenersAfterSecondInit).toBe(1);
-        expect(eventSubStub.listeners.message || []).toHaveLength(0);
+        expect(eventSubStub.listeners.chatMessage || []).toHaveLength(0);
         expect(platform.eventSubListeners).toEqual([]);
     });
 

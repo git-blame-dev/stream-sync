@@ -39,10 +39,10 @@ describe('TwitchEventSub notification routing', () => {
         }
     });
 
-    it('routes chat notifications and emits message event', async () => {
+    it('routes chat notifications and emits chat message event', async () => {
         eventSub = createEventSub();
         const messageEvents = [];
-        eventSub.on('message', (data) => messageEvents.push(data));
+        eventSub.on('chatMessage', (data) => messageEvents.push(data));
 
         const payload = {
             metadata: { message_type: 'notification', message_id: 'test-msg-id-1' },
@@ -61,8 +61,8 @@ describe('TwitchEventSub notification routing', () => {
         await eventSub.handleWebSocketMessage(payload);
 
         expect(messageEvents).toHaveLength(1);
-        expect(messageEvents[0].context.username).toBe('TestChatter');
-        expect(messageEvents[0].message).toBe('hello from chat');
+        expect(messageEvents[0].chatter_user_name).toBe('TestChatter');
+        expect(messageEvents[0].message.text).toBe('hello from chat');
     });
 
     it('routes follow notifications and emits follow event', async () => {

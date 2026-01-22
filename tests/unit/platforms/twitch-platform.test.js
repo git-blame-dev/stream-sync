@@ -262,7 +262,14 @@ describe('Twitch Platform', () => {
             const chatMessage = 'Hello world!';
             const chatUser = 'chatuser';
 
-            await platform.onMessageHandler('#testchannel', { username: chatUser }, chatMessage, false);
+            await platform.onMessageHandler({
+                chatter_user_id: 'chat-user-1',
+                chatter_user_name: chatUser,
+                broadcaster_user_id: 'broadcaster-1',
+                message: { text: chatMessage },
+                badges: {},
+                timestamp: '2024-01-01T00:00:00Z'
+            });
 
             const messageCall = mockApp.handleChatMessage.mock.calls[0];
             if (messageCall) {
@@ -278,7 +285,14 @@ describe('Twitch Platform', () => {
         it('should prevent echo when bot sends its own messages', async () => {
             const selfMessage = 'Bot response';
 
-            await platform.onMessageHandler('#testchannel', { username: 'testuser' }, selfMessage, true);
+            await platform.onMessageHandler({
+                chatter_user_id: 'broadcaster-1',
+                chatter_user_name: 'testuser',
+                broadcaster_user_id: 'broadcaster-1',
+                message: { text: selfMessage },
+                badges: {},
+                timestamp: '2024-01-01T00:00:01Z'
+            });
 
             const messageCount = mockApp.handleChatMessage.mock.calls.length;
             expect(messageCount).toBe(0);
@@ -287,7 +301,14 @@ describe('Twitch Platform', () => {
         it('should preserve emojis and special characters for user expression', async () => {
             const messageWithEmojis = 'Hello 🌟 world! 🎉';
 
-            await platform.onMessageHandler('#testchannel', { username: 'chatuser' }, messageWithEmojis, false);
+            await platform.onMessageHandler({
+                chatter_user_id: 'chat-user-2',
+                chatter_user_name: 'chatuser',
+                broadcaster_user_id: 'broadcaster-1',
+                message: { text: messageWithEmojis },
+                badges: {},
+                timestamp: '2024-01-01T00:00:02Z'
+            });
 
             const messageCall = mockApp.handleChatMessage.mock.calls[0];
             if (messageCall) {
@@ -522,8 +543,14 @@ describe('Twitch Platform', () => {
                 onChat: (data) => mockEventBus.emit('platform:event', { platform: 'twitch', type: 'platform:chat-message', data })
             };
 
-            const context = { username: 'user1', 'display-name': 'User1', 'user-id': 'u1', mod: false, subscriber: false };
-            await platform.onMessageHandler('#chan', context, 'hello', false);
+            await platform.onMessageHandler({
+                chatter_user_id: 'u1',
+                chatter_user_name: 'user1',
+                broadcaster_user_id: 'broadcaster-1',
+                message: { text: 'hello' },
+                badges: {},
+                timestamp: '2024-01-01T00:00:03Z'
+            });
 
             expect(runtime.handleChatMessage).toHaveBeenCalledTimes(1);
             const payload = runtime.handleChatMessage.mock.calls[0][1];
@@ -686,7 +713,11 @@ describe('Twitch Platform', () => {
         it('should handle message processing errors', async () => {
             let error = null;
             try {
-                await platform.onMessageHandler('#testchannel', { username: 'test' }, 'message', false);
+                await platform.onMessageHandler({
+                    chatter_user_name: 'test',
+                    message: { text: 'message' },
+                    timestamp: '2024-01-01T00:00:04Z'
+                });
             } catch (e) {
                 error = e;
             }

@@ -6,7 +6,7 @@ const { TwitchApiClient } = require('../utils/api-clients/twitch-api-client');
 const { ViewerCountProviderFactory } = require('../utils/viewer-count-providers');
 const { PlatformEvents } = require('../interfaces/PlatformEvents');
 const { createPlatformErrorHandler } = require('../utils/platform-error-handler');
-const messageNormalization = require('../utils/message-normalization');
+const { validateNormalizedMessage } = require('../utils/message-normalization');
 const { createMonetizationErrorPayload } = require('../utils/monetization-error-utils');
 const { getSystemTimestampISO } = require('../utils/validation');
 const TimestampExtractionService = require('../services/TimestampExtractionService');
@@ -54,8 +54,7 @@ class TwitchPlatform extends EventEmitter {
         
         this.selfMessageDetectionService = dependencies.selfMessageDetectionService || null;
 
-        this.normalizeTwitchMessage = dependencies.normalizeTwitchMessage || messageNormalization.normalizeTwitchMessage;
-        this.validateNormalizedMessage = dependencies.validateNormalizedMessage || messageNormalization.validateNormalizedMessage;
+        this.validateNormalizedMessage = dependencies.validateNormalizedMessage || validateNormalizedMessage;
 
         this.platformName = 'twitch';
         this.eventSub = null;
@@ -175,7 +174,7 @@ class TwitchPlatform extends EventEmitter {
                     logger: this.logger
                 });
                 this.eventSubWiring.bindAll({
-                    message: (data) => this.onMessageHandler(data.channel, data.context, data.message, data.self),
+                    chatMessage: (data) => this.onMessageHandler(data),
                     follow: (data) => this.handleFollowEvent(data),
                     paypiggy: (data) => this.handlePaypiggyEvent(data),
                     paypiggyMessage: (data) => this.handlePaypiggyMessageEvent(data),
@@ -206,45 +205,82 @@ class TwitchPlatform extends EventEmitter {
         }
     }
 
-    async onMessageHandler(target, context, msg, self) {
+    async onMessageHandler(event) {
+        const isSelf = event?.broadcaster_user_id && event?.chatter_user_id
+            ? event.broadcaster_user_id === event.chatter_user_id
+            : false;
+
         // Check if message should be filtered using configurable service
         if (this.selfMessageDetectionService) {
-            const messageData = { self, context, username: context['username'] };
+            const messageData = {
+                self: isSelf,
+                username: event?.chatter_user_name
+            };
             if (this.selfMessageDetectionService.shouldFilterMessage('twitch', messageData, this.config)) {
                 return;
             }
         } else {
             // Fallback to original behavior if service not available
-            if (self) return;
+            if (isSelf) return;
         }
 
         // Log raw platform data if enabled
         try {
-            await this._logRawEvent('chat', { target, context, msg, self });
+            await this._logRawEvent('chat', event);
         } catch (loggingError) {
             this.errorHandler.handleDataLoggingError(loggingError, 'chat');
         }
 
         try {
-            const message = msg.trim();
-            const user = {
-                username: context['username'],
-                userId: context['user-id'],
-                isMod: context.mod,
-                isSubscriber: context.subscriber,
-                isBroadcaster: context.username === (this.config.channel ? this.config.channel.toLowerCase() : '')
+            const userId = typeof event?.chatter_user_id === 'string' ? event.chatter_user_id.trim() : '';
+            const username = typeof event?.chatter_user_name === 'string' ? event.chatter_user_name.trim() : '';
+            if (!userId) {
+                throw new Error('Missing Twitch userId');
+            }
+            if (!username) {
+                throw new Error('Missing Twitch username');
+            }
+
+            const normalizedMessage = typeof event?.message?.text === 'string' ? event.message.text.trim() : '';
+            if (!normalizedMessage) {
+                throw new Error('Missing Twitch message text');
+            }
+
+            const timestamp = event?.timestamp;
+            if (!timestamp || typeof timestamp !== 'string') {
+                throw new Error('Missing Twitch timestamp');
+            }
+
+            const badges = event?.badges && typeof event.badges === 'object' ? event.badges : {};
+            const isMod = badges?.moderator === '1' || badges?.moderator === 1 || badges?.moderator === true;
+            const isSubscriber = badges?.subscriber === '1' || badges?.subscriber === 1 || badges?.subscriber === true;
+
+            const normalizedData = {
+                platform: this.platformName,
+                userId,
+                username,
+                message: normalizedMessage,
+                timestamp,
+                isMod,
+                isSubscriber,
+                isBroadcaster: isSelf,
+                metadata: {
+                    badges,
+                    color: event?.color ?? null,
+                    emotes: (event?.message?.emotes && typeof event.message.emotes === 'object')
+                        ? event.message.emotes
+                        : {},
+                    roomId: event?.broadcaster_user_id ?? null
+                },
+                rawData: { event }
             };
 
-            // Normalize message data using standardized utility
-            const normalizedData = this.normalizeTwitchMessage(user, message, context, this.platformName, this.timestampService);
-
             const validation = this.validateNormalizedMessage(normalizedData);
-            
+
             if (!validation.isValid) {
                 this.logger.warn('Message normalization validation failed', 'twitch', {
                     issues: validation.issues,
-                    originalUser: user,
-                    originalMessage: message
+                    originalEvent: event
                 });
                 // Continue processing with potentially incomplete data
             }
