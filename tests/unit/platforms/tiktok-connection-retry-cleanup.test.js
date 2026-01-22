@@ -1,6 +1,5 @@
 const { describe, it, expect, afterEach } = require('bun:test');
 const { createMockFn, restoreAllMocks } = require('../../helpers/bun-mock-utils');
-const { restoreAllModuleMocks, resetModules } = require('../../helpers/bun-module-mocks');
 
 const { EventEmitter } = require('events');
 const { TikTokPlatform } = require('../../../src/platforms/tiktok');
@@ -11,8 +10,6 @@ describe('TikTokPlatform connection recovery', () => {
 
     afterEach(() => {
         restoreAllMocks();
-        restoreAllModuleMocks();
-        resetModules();
     });
 
     const createConnection = ({ shouldReject, id }) => {

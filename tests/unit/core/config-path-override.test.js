@@ -1,8 +1,8 @@
 const { describe, test, expect, it, beforeEach, afterEach } = require('bun:test');
 const { createMockFn, restoreAllMocks } = require('../../helpers/bun-mock-utils');
-const { resetModules, restoreAllModuleMocks } = require('../../helpers/bun-module-mocks');
 
 const fs = require('fs');
+const { config, configManager } = require('../../../src/core/config');
 
 let originalReadFileSync;
 let originalExistsSync;
@@ -109,15 +109,17 @@ describe('Config path override', () => {
     beforeEach(() => {
         originalReadFileSync = fs.readFileSync;
         originalExistsSync = fs.existsSync;
-        resetModules();
+        configManager.isLoaded = false;
+        configManager.config = null;
     });
 
     afterEach(() => {
         fs.readFileSync = originalReadFileSync;
         fs.existsSync = originalExistsSync;
         restoreAllMocks();
-        restoreAllModuleMocks();
         delete process.env.CHAT_BOT_CONFIG_PATH;
+        configManager.isLoaded = false;
+        configManager.config = null;
     });
 
     it('loads config from CHAT_BOT_CONFIG_PATH when set', () => {
@@ -134,9 +136,6 @@ describe('Config path override', () => {
         });
 
         process.env.CHAT_BOT_CONFIG_PATH = testConfigPath;
-        const { configManager } = require('../../../src/core/config');
-        configManager.isLoaded = false;
-        configManager.config = null;
         configManager.load();
 
         const raw = configManager.getRaw();
@@ -156,9 +155,6 @@ describe('Config path override', () => {
         });
 
         process.env.CHAT_BOT_CONFIG_PATH = testConfigPath;
-        const { config, configManager } = require('../../../src/core/config');
-        configManager.isLoaded = false;
-        configManager.config = null;
         configManager.load();
 
         const general = config.general;

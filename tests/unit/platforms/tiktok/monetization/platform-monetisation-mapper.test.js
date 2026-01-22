@@ -1,5 +1,4 @@
 const { describe, it, expect, beforeEach, afterEach } = require('bun:test');
-const { mockModule, restoreAllModuleMocks, resetModules } = require('../../../../helpers/bun-module-mocks');
 const { restoreAllMocks } = require('../../../../helpers/bun-mock-utils');
 const { noOpLogger } = require('../../../../helpers/mock-factories');
 
@@ -14,8 +13,6 @@ describe('TikTokPlatform monetisation mapping', () => {
 
     afterEach(() => {
         restoreAllMocks();
-        restoreAllModuleMocks();
-        resetModules();
     });
 
     beforeEach(() => {
