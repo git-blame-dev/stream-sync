@@ -1115,13 +1115,13 @@ class TikTokPlatform extends EventEmitter {
             return null;
         }
 
-        const msgId = data.msgId;
-        if (msgId === undefined || msgId === null) {
+        const msgId = data.common?.msgId;
+        if (msgId == null) {
             return null;
         }
 
         const normalized = String(msgId).trim();
-        return normalized ? normalized : null;
+        return normalized || null;
     }
 
     _shouldSkipDuplicatePlatformMessage(data, ttlMs = this.deduplicationConfig?.ttlMs ?? 2 * 60 * 1000) {

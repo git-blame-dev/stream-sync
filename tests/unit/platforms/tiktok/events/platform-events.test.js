@@ -67,7 +67,7 @@ describe('TikTokPlatform event emissions', () => {
     it('emits envelope events with the normalized payload', async () => {
         const { eventHandlers, envelopes, webcastEvent } = createPlatformUnderTest();
         const envelopePayload = {
-            msgId: 'envelope-msg-1',
+            common: { msgId: 'envelope-msg-1' },
             amount: 42,
             currency: 'coins',
             user: { userId: 'envelope-user-id', uniqueId: 'envelopeUser' }
@@ -128,8 +128,8 @@ describe('TikTokPlatform event emissions', () => {
         const { eventHandlers, shares, follows, webcastEvent } = createPlatformUnderTest();
         const followPayload = {
             user: { userId: 'share-user-id', uniqueId: 'shareUser' },
-            msgId: 'msg_share_follow_1',
             common: {
+                msgId: 'msg_share_follow_1',
                 displayText: {
                     displayType: 'pm_mt_guidance_share',
                     defaultPattern: '{0:user} shared the LIVE'
@@ -150,8 +150,8 @@ describe('TikTokPlatform event emissions', () => {
         const { eventHandlers, shares, follows, webcastEvent } = createPlatformUnderTest();
         const socialPayload = {
             user: { userId: 'share-user-id', uniqueId: 'shareUser' },
-            msgId: 'msg_share_dupe_social_first',
             common: {
+                msgId: 'msg_share_dupe_social_first',
                 displayText: {
                     displayType: 'pm_mt_guidance_share',
                     defaultPattern: '{0:user} shared the LIVE'
@@ -173,8 +173,8 @@ describe('TikTokPlatform event emissions', () => {
         const { eventHandlers, shares, follows, webcastEvent } = createPlatformUnderTest();
         const payload = {
             user: { userId: 'share-user-id', uniqueId: 'shareUser' },
-            msgId: 'msg_share_dupe_follow_first',
             common: {
+                msgId: 'msg_share_dupe_follow_first',
                 displayText: {
                     displayType: 'pm_mt_guidance_share',
                     defaultPattern: '{0:user} shared the LIVE'
