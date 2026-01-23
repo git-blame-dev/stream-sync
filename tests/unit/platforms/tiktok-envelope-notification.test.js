@@ -145,7 +145,7 @@ describe('TikTok Envelope Notification - Behavior Testing', () => {
             await handleEnvelopeNotification('tiktok', completeEnvelopeData);
 
             expect(capturedGiftCalls).toHaveLength(1);
-            expectGiftCallBehavior('tiktok', 'testUserEnvelopeComplete', {
+            expectGiftCallBehavior('tiktok', 'TestEnvelopeDisplay', {
                 giftType: 'Treasure Chest',
                 giftCount: 1,
                 amount: 500,
@@ -159,11 +159,11 @@ describe('TikTok Envelope Notification - Behavior Testing', () => {
             const result = await mockGiftHandler.mock.results[0].value;
             expectNoTechnicalArtifacts(result.displayMessage);
             expectNoTechnicalArtifacts(result.ttsMessage);
-            expect(result.displayMessage).toContain('testUserEnvelopeComplete');
+            expect(result.displayMessage).toContain('TestEnvelopeDisplay');
             expect(result.displayMessage).toContain('Treasure Chest');
         }, TEST_TIMEOUTS.UNIT);
 
-        test('should use uniqueId as username when nickname available', async () => {
+        test('should use nickname as username when available', async () => {
             const envelopeData = createEnvelopeData({
                 user: {
                     uniqueId: "testUserUnique",
@@ -175,7 +175,7 @@ describe('TikTok Envelope Notification - Behavior Testing', () => {
 
             await handleEnvelopeNotification('tiktok', envelopeData);
 
-            expectGiftCallBehavior('tiktok', 'testUserUnique', {
+            expectGiftCallBehavior('tiktok', 'TestDisplayName', {
                 giftType: 'Treasure Chest',
                 amount: 250,
                 currency: 'coins'
@@ -199,7 +199,7 @@ describe('TikTok Envelope Notification - Behavior Testing', () => {
             expect(capturedGiftCalls).toHaveLength(0);
         }, TEST_TIMEOUTS.UNIT);
 
-        test('should handle missing nickname with uniqueId fallback', async () => {
+        test('should skip when nickname is missing', async () => {
             const missingNicknameData = createEnvelopeData({
                 user: {
                     uniqueId: "testUserFallback",
@@ -210,15 +210,7 @@ describe('TikTok Envelope Notification - Behavior Testing', () => {
 
             await handleEnvelopeNotification('tiktok', missingNicknameData);
 
-            expectGiftCallBehavior('tiktok', 'testUserFallback', {
-                giftType: 'Treasure Chest',
-                amount: 750,
-                currency: 'coins'
-            });
-
-            const result = await mockGiftHandler.mock.results[0].value;
-            expectNoTechnicalArtifacts(result.displayMessage);
-            expect(result.displayMessage).toContain('testUserFallback');
+            expect(capturedGiftCalls).toHaveLength(0);
         }, TEST_TIMEOUTS.UNIT);
 
         test('should skip when uniqueId is missing', async () => {
@@ -250,7 +242,7 @@ describe('TikTok Envelope Notification - Behavior Testing', () => {
             await handleEnvelopeNotification('tiktok', nestedUserData);
 
             expect(capturedGiftCalls).toHaveLength(1);
-            expectGiftCallBehavior('tiktok', 'testUserNestedEnvelope', {
+            expectGiftCallBehavior('tiktok', 'TestNestedEnvelope', {
                 giftType: 'Treasure Chest',
                 giftCount: 1,
                 amount: 300,
@@ -277,7 +269,7 @@ describe('TikTok Envelope Notification - Behavior Testing', () => {
 
             await handleEnvelopeNotification('tiktok', amountFieldData);
 
-            expectGiftCallBehavior('tiktok', 'testUserAmount', {
+            expectGiftCallBehavior('tiktok', 'TestUserAmount', {
                 giftType: 'Treasure Chest',
                 amount: 500,
                 currency: 'coins'
@@ -297,7 +289,7 @@ describe('TikTok Envelope Notification - Behavior Testing', () => {
 
             await handleEnvelopeNotification('tiktok', stringAmountData);
 
-            expectGiftCallBehavior('tiktok', 'testUserStringAmount', {
+            expectGiftCallBehavior('tiktok', 'TestUserStringAmount', {
                 giftType: 'Treasure Chest',
                 amount: 250,
                 currency: 'coins'
@@ -399,7 +391,7 @@ describe('TikTok Envelope Notification - Behavior Testing', () => {
             expect(giftData.currency).toBe('coins');
             expect(giftData.type).toBe('platform:envelope');
 
-            expect(giftData.userId).toBe('test_user_id_envelope');
+            expect(giftData.userId).toBe('testUserEnvelope');
             expect(giftData.timestamp).toBeDefined();
             expect(giftData.originalEnvelopeData).toEqual(envelopeData);
         }, TEST_TIMEOUTS.UNIT);
@@ -441,7 +433,7 @@ describe('TikTok Envelope Notification - Behavior Testing', () => {
 
             const latestCall = getLatestGiftCall();
             const giftData = latestCall.giftData;
-            expect(giftData.userId).toBe('test_user_id_existing');
+            expect(giftData.userId).toBe('testUserWithId');
         }, TEST_TIMEOUTS.UNIT);
     });
 
@@ -508,7 +500,7 @@ describe('TikTok Envelope Notification - Behavior Testing', () => {
 
             expect(capturedGiftCalls).toHaveLength(1);
             expect(capturedGiftCalls[0].platform).toBe('tiktok');
-            expect(capturedGiftCalls[0].username).toBe('testUserDelegation');
+            expect(capturedGiftCalls[0].username).toBe('TestUserDelegation');
             expect(capturedGiftCalls[0].giftData).toMatchObject({
                 giftType: 'Treasure Chest',
                 giftCount: 1,
@@ -556,14 +548,14 @@ describe('TikTok Envelope Notification - Behavior Testing', () => {
 
             const latestCall = getLatestGiftCall();
             const giftData = latestCall.giftData;
-            expect(giftData.userId).toBe('test_user_id_rich');
+            expect(giftData.userId).toBe('testUserRich');
             expect(giftData.timestamp).toBeDefined();
             expect(giftData.originalEnvelopeData).toEqual(richEnvelopeData);
             expect(giftData.originalEnvelopeData.additionalData).toBe('test_extra_info');
 
             const result = await mockGiftHandler.mock.results[0].value;
             expectNoTechnicalArtifacts(result.displayMessage);
-            expect(result.displayMessage).toContain('testUserRich');
+            expect(result.displayMessage).toContain('TestUserRich');
         }, TEST_TIMEOUTS.UNIT);
     });
 });

@@ -70,15 +70,15 @@ describe('TikTokPlatform event emissions', () => {
             common: { msgId: 'envelope-msg-1' },
             amount: 42,
             currency: 'coins',
-            user: { userId: 'envelope-user-id', uniqueId: 'envelopeUser' }
+            user: { userId: 'envelope-user-id', uniqueId: 'envelopeUser', nickname: 'EnvelopeUser' }
         };
 
         await eventHandlers[webcastEvent.ENVELOPE](envelopePayload);
 
         expect(envelopes).toHaveLength(1);
         expect(envelopes[0].type).toBe('platform:envelope');
-        expect(envelopes[0].userId).toBe('envelope-user-id');
-        expect(envelopes[0].username).toBe('envelopeUser');
+        expect(envelopes[0].userId).toBe('envelopeUser');
+        expect(envelopes[0].username).toBe('EnvelopeUser');
         expect(envelopes[0].giftType).toBe('Treasure Chest');
         expect(envelopes[0].giftCount).toBe(1);
         expect(envelopes[0].amount).toBe(42);
@@ -89,7 +89,7 @@ describe('TikTokPlatform event emissions', () => {
     it('emits social (share) events through the share channel', async () => {
         const { eventHandlers, shares, follows, webcastEvent } = createPlatformUnderTest();
         const socialPayload = {
-            user: { userId: 'share-user-id', uniqueId: 'shareUser' },
+            user: { userId: 'share-user-id', uniqueId: 'shareUser', nickname: 'ShareUser' },
             common: {
                 displayText: {
                     displayType: 'pm_mt_guidance_share',
@@ -103,14 +103,14 @@ describe('TikTokPlatform event emissions', () => {
 
         expect(shares).toHaveLength(1);
         expect(shares[0].metadata.interactionType).toBe('share');
-        expect(shares[0].username).toBe('shareUser');
+        expect(shares[0].username).toBe('ShareUser');
         expect(follows).toHaveLength(0);
     });
 
     it('emits follow from social payloads that only include follow wording', async () => {
         const { eventHandlers, shares, follows, webcastEvent } = createPlatformUnderTest();
         const socialPayload = {
-            user: { userId: 'follow-user-id', uniqueId: 'followUser' },
+            user: { userId: 'follow-user-id', uniqueId: 'followUser', nickname: 'FollowUser' },
             common: {
                 displayText: { defaultPattern: '{0:user} followed the LIVE creator' },
                 createTime: eventTimestamp
@@ -121,13 +121,13 @@ describe('TikTokPlatform event emissions', () => {
 
         expect(follows).toHaveLength(1);
         expect(shares).toHaveLength(0);
-        expect(follows[0].username).toBe('followUser');
+        expect(follows[0].username).toBe('FollowUser');
     });
 
     it('treats share-shaped FOLLOW payloads as share events', async () => {
         const { eventHandlers, shares, follows, webcastEvent } = createPlatformUnderTest();
         const followPayload = {
-            user: { userId: 'share-user-id', uniqueId: 'shareUser' },
+            user: { userId: 'share-user-id', uniqueId: 'shareUser', nickname: 'ShareUser' },
             common: {
                 msgId: 'msg_share_follow_1',
                 displayText: {
@@ -142,14 +142,14 @@ describe('TikTokPlatform event emissions', () => {
 
         expect(shares).toHaveLength(1);
         expect(shares[0].metadata.interactionType).toBe('share');
-        expect(shares[0].username).toBe('shareUser');
+        expect(shares[0].username).toBe('ShareUser');
         expect(follows).toHaveLength(0);
     });
 
     it('dedupes share events when SOCIAL then FOLLOW carry the same msgId', async () => {
         const { eventHandlers, shares, follows, webcastEvent } = createPlatformUnderTest();
         const socialPayload = {
-            user: { userId: 'share-user-id', uniqueId: 'shareUser' },
+            user: { userId: 'share-user-id', uniqueId: 'shareUser', nickname: 'ShareUser' },
             common: {
                 msgId: 'msg_share_dupe_social_first',
                 displayText: {
@@ -165,14 +165,14 @@ describe('TikTokPlatform event emissions', () => {
         await eventHandlers[webcastEvent.FOLLOW](followPayload);
 
         expect(shares).toHaveLength(1);
-        expect(shares[0].username).toBe('shareUser');
+        expect(shares[0].username).toBe('ShareUser');
         expect(follows).toHaveLength(0);
     });
 
     it('dedupes share events when FOLLOW then SOCIAL carry the same msgId', async () => {
         const { eventHandlers, shares, follows, webcastEvent } = createPlatformUnderTest();
         const payload = {
-            user: { userId: 'share-user-id', uniqueId: 'shareUser' },
+            user: { userId: 'share-user-id', uniqueId: 'shareUser', nickname: 'ShareUser' },
             common: {
                 msgId: 'msg_share_dupe_follow_first',
                 displayText: {
@@ -187,13 +187,13 @@ describe('TikTokPlatform event emissions', () => {
         await eventHandlers[webcastEvent.SOCIAL](payload);
 
         expect(shares).toHaveLength(1);
-        expect(shares[0].username).toBe('shareUser');
+        expect(shares[0].username).toBe('ShareUser');
         expect(follows).toHaveLength(0);
     });
 
     it('emits subscribe events as paypiggy notifications', async () => {
         const { eventHandlers, paypiggies, webcastEvent } = createPlatformUnderTest();
-        const subscribePayload = { user: { userId: 'sub123', uniqueId: 'sub123', nickname: 'Subscriber' } };
+        const subscribePayload = { user: { userId: 'sub-numeric-id', uniqueId: 'sub123', nickname: 'Subscriber' } };
 
         await eventHandlers[webcastEvent.SUBSCRIBE](subscribePayload);
 
@@ -201,13 +201,14 @@ describe('TikTokPlatform event emissions', () => {
         const event = paypiggies[0];
         expect(event.type).toBe('platform:paypiggy');
         expect(event.userId).toBe('sub123');
+        expect(event.username).toBe('Subscriber');
     });
 
     it('emits superfan subscription events with SuperFan tier', async () => {
         const { eventHandlers, paypiggies, webcastEvent } = createPlatformUnderTest();
         const superfanPayload = {
             user: {
-                userId: 'sf123',
+                userId: 'sf-numeric-id',
                 uniqueId: 'sf123',
                 nickname: 'SuperFanUser'
             }
@@ -220,7 +221,7 @@ describe('TikTokPlatform event emissions', () => {
         expect(event.type).toBe('platform:paypiggy');
         expect(event.platform).toBe('tiktok');
         expect(event.userId).toBe('sf123');
-        expect(event.username).toBe('sf123');
+        expect(event.username).toBe('SuperFanUser');
         expect(event.tier).toBe('superfan');
         expect(event.metadata).toBeUndefined();
     });

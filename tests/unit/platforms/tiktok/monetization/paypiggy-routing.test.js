@@ -27,7 +27,7 @@ describe('TikTok paypiggy routing', () => {
         };
 
         await platform._handleStandardEvent('paypiggy', {
-            user: { userId: 'tt-sub-1', uniqueId: 'subscriber_one' },
+            user: { userId: 'tt-sub-1', uniqueId: 'subscriber_one', nickname: 'SubscriberOne' },
             message: 'hello there',
             common: { createTime: testClock.now() }
         }, {
@@ -36,8 +36,8 @@ describe('TikTok paypiggy routing', () => {
         });
 
         expect(paypiggyEvents).toHaveLength(1);
-        expect(paypiggyEvents[0].userId).toBe('tt-sub-1');
-        expect(paypiggyEvents[0].username).toBe('subscriber_one');
+        expect(paypiggyEvents[0].userId).toBe('subscriber_one');
+        expect(paypiggyEvents[0].username).toBe('SubscriberOne');
         expect(paypiggyEvents[0].tier).toBeUndefined();
     });
 
@@ -50,7 +50,7 @@ describe('TikTok paypiggy routing', () => {
         };
 
         await platform._handleStandardEvent('paypiggy', {
-            user: { userId: 'tt-super-1', uniqueId: 'superfan_one' },
+            user: { userId: 'tt-super-1', uniqueId: 'superfan_one', nickname: 'SuperfanOne' },
             message: 'superfan here',
             common: { createTime: testClock.now() }
         }, {
@@ -59,8 +59,8 @@ describe('TikTok paypiggy routing', () => {
         });
 
         expect(paypiggyEvents).toHaveLength(1);
-        expect(paypiggyEvents[0].userId).toBe('tt-super-1');
-        expect(paypiggyEvents[0].username).toBe('superfan_one');
+        expect(paypiggyEvents[0].userId).toBe('superfan_one');
+        expect(paypiggyEvents[0].username).toBe('SuperfanOne');
         expect(paypiggyEvents[0].tier).toBe('superfan');
     });
 });

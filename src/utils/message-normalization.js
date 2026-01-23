@@ -36,7 +36,8 @@ function normalizeYouTubeMessage(chatItem, platformName = 'youtube', timestampSe
             throw new Error('Missing YouTube author data');
         }
         const userId = typeof author.id === 'string' ? author.id.trim() : '';
-        const username = typeof author.name === 'string' ? author.name.trim() : '';
+        const rawUsername = typeof author.name === 'string' ? author.name.trim() : '';
+        const username = rawUsername.startsWith('@') ? rawUsername.slice(1) : rawUsername;
         if (!userId) {
             throw new Error('Missing YouTube userId');
         }
@@ -102,13 +103,13 @@ function normalizeTikTokMessage(data, platformName = 'tiktok', timestampService 
 
         userData = (data.user && typeof data.user === 'object') ? data.user : null;
 
-        const userId = typeof userData?.userId === 'string' ? userData.userId.trim() : '';
-        const username = typeof userData?.uniqueId === 'string' ? userData.uniqueId.trim() : '';
+        const userId = typeof userData?.uniqueId === 'string' ? userData.uniqueId.trim() : '';
+        const username = typeof userData?.nickname === 'string' ? userData.nickname.trim() : '';
         if (!userId) {
-            throw new Error('Missing TikTok userId');
+            throw new Error('Missing TikTok userId (uniqueId)');
         }
         if (!username) {
-            throw new Error('Missing TikTok username');
+            throw new Error('Missing TikTok username (nickname)');
         }
         const message = typeof data.comment === 'string' ? data.comment.trim() : '';
         if (!message) {
@@ -139,7 +140,7 @@ function normalizeTikTokMessage(data, platformName = 'tiktok', timestampService 
                 followRole: userData.followRole ?? null,
                 userBadges: Array.isArray(userData.userBadges) ? userData.userBadges : null,
                 createTime: resolvedCreateTimeMs || null,
-                displayName: typeof userData.nickname === 'string' ? userData.nickname.trim() : null
+                numericId: typeof userData.userId === 'string' ? userData.userId.trim() : null
             },
             rawData: { data }
         };

@@ -65,8 +65,8 @@ describe('TikTokPlatform gift aggregation and schema behavior', () => {
 
         expect(emittedGifts).toHaveLength(1);
         const [giftEvent] = emittedGifts;
-        expect(giftEvent.userId).toBe('tt-gifter-1');
-        expect(giftEvent.username).toBe('gifter123');
+        expect(giftEvent.userId).toBe('gifter123');
+        expect(giftEvent.username).toBe('Gifter One');
         expect(giftEvent.amount).toBe(3);
         expect(giftEvent.giftType).toBe('Rose');
         expect(giftEvent.isAggregated).toBe(true);
@@ -88,8 +88,8 @@ describe('TikTokPlatform gift aggregation and schema behavior', () => {
 
         expect(chatEvents).toHaveLength(1);
         const [chatEvent] = chatEvents;
-        expect(chatEvent.userId).toBe('tt-chatter-1');
-        expect(chatEvent.username).toBe('chatter');
+        expect(chatEvent.userId).toBe('chatter');
+        expect(chatEvent.username).toBe('Chatter Box');
         expect(chatEvent.message).toEqual({ text: 'Hello TikTok!' });
     });
 

@@ -60,8 +60,8 @@ describe('TikTok End-to-End Unknown User Fix Integration', () => {
                     timestamp: normalizedMessage.timestamp
                 };
 
-                expect(normalizedMessage.username).toBe('testUserChatOne');
-                expect(normalizedMessage.userId).toBe('test_user_id_chat_1');
+                expect(normalizedMessage.username).toBe('TestChatViewer');
+                expect(normalizedMessage.userId).toBe('testUserChatOne');
                 expect(normalizedMessage.message).toBe('Love your stream! 🎉');
 
                 expectNoTechnicalArtifacts(notificationData.username);
@@ -84,8 +84,8 @@ describe('TikTok End-to-End Unknown User Fix Integration', () => {
                 const timestampService = buildTimestampService();
                 const normalizedMessage = normalizeMessage('tiktok', unicodeTikTokMessage, 'tiktok', timestampService);
 
-                expect(normalizedMessage.username).toBe('testUser中文');
-                expect(normalizedMessage.userId).toBe('test_user_id_unicode');
+                expect(normalizedMessage.username).toBe('TestUser中文');
+                expect(normalizedMessage.userId).toBe('testUser中文');
                 expect(normalizedMessage.message).toBe('你好! Hello from China 🇨🇳');
 
                 expectNoTechnicalArtifacts(normalizedMessage.username);
@@ -130,15 +130,15 @@ describe('TikTok End-to-End Unknown User Fix Integration', () => {
                     timestamp: new Date(testClock.now()).toISOString()
                 };
 
-                expect(userData.username).toBe('testGiftUserOne');
-                expect(userData.userId).toBe('test_user_id_gift_1');
+                expect(userData.username).toBe('TestGiftSender');
+                expect(userData.userId).toBe('testGiftUserOne');
                 expect(giftData.giftType).toBe('TestGiftAlpha');
                 expect(giftData.giftCount).toBe(5);
                 expect(giftData.unitAmount).toBe(1);
                 expect(giftData.amount).toBe(5);
                 expect(giftData.currency).toBe('coins');
 
-                expect(giftNotification.displayMessage).toBe('testGiftUserOne sent 5x TestGiftAlpha');
+                expect(giftNotification.displayMessage).toBe('TestGiftSender sent 5x TestGiftAlpha');
                 expectNoTechnicalArtifacts(giftNotification.displayMessage);
                 expect(giftNotification.displayMessage).not.toContain('Unknown User');
                 expect(giftNotification.displayMessage).not.toContain('unknown');
@@ -177,12 +177,12 @@ describe('TikTok End-to-End Unknown User Fix Integration', () => {
                     displayMessage: `${userData.username} finished combo: ${giftData.giftCount}x ${giftData.giftType}`
                 };
 
-                expect(userData.username).toBe('testGiftUserCombo');
-                expect(userData.userId).toBe('test_user_id_gift_combo');
+                expect(userData.username).toBe('TestComboSender');
+                expect(userData.userId).toBe('testGiftUserCombo');
                 expect(giftData.combo).toBe(true);
                 expect(giftData.repeatEnd).toBe(true);
 
-                expect(comboNotification.displayMessage).toBe('testGiftUserCombo finished combo: 1x TestGiftCombo');
+                expect(comboNotification.displayMessage).toBe('TestComboSender finished combo: 1x TestGiftCombo');
                 expectNoTechnicalArtifacts(comboNotification.displayMessage);
                 expect(comboNotification.displayMessage).not.toContain('Unknown User');
             }, { timeout: TEST_TIMEOUTS.INTEGRATION });
@@ -203,10 +203,10 @@ describe('TikTok End-to-End Unknown User Fix Integration', () => {
 
                 const timestampService = buildTimestampService();
                 expect(() => normalizeMessage('tiktok', corruptedData, 'tiktok', timestampService))
-                    .toThrow('username');
+                    .toThrow('userId');
 
                 expect(() => extractTikTokUserData(corruptedData))
-                    .toThrow('user.userId and user.uniqueId');
+                    .toThrow('user.uniqueId and user.nickname');
             }, { timeout: TEST_TIMEOUTS.INTEGRATION });
         });
     });
@@ -240,8 +240,8 @@ describe('TikTok End-to-End Unknown User Fix Integration', () => {
                 expect(processingTime).toBeLessThan(1000);
                 expect(results).toHaveLength(100);
 
-                expect(results[0].normalized.username).toBe('testRapidUser0');
-                expect(results[99].normalized.username).toBe('testRapidUser99');
+                expect(results[0].normalized.username).toBe('TestRapidUser0');
+                expect(results[99].normalized.username).toBe('TestRapidUser99');
 
                 const unknownUserEvents = results.filter(r =>
                     r.normalized.username === 'Unknown User' ||

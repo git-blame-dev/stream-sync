@@ -46,7 +46,7 @@ describe('TikTokPlatform monetisation mapping', () => {
 
     it('emits paypiggy with normalized user and provided metadata', () => {
         const handler = platform.eventFactory.createSubscription({
-            user: { userId: 'u1', uniqueId: 'memberuser' },
+            user: { userId: 'u1', uniqueId: 'memberuser', nickname: 'MemberUser' },
             message: 'Thanks for the support!',
             tier: 'basic',
             months: 1,
@@ -57,8 +57,8 @@ describe('TikTokPlatform monetisation mapping', () => {
 
         const paypiggyEvent = emitted.find(e => e.evt === 'platform:event')?.payload;
         expect(paypiggyEvent.type).toBe(PlatformEvents.PAYPIGGY);
-        expect(paypiggyEvent.userId).toBe('u1');
-        expect(paypiggyEvent.username).toBe('memberuser');
+        expect(paypiggyEvent.userId).toBe('memberuser');
+        expect(paypiggyEvent.username).toBe('MemberUser');
         expect(paypiggyEvent.tier).toBe('basic');
         expect(paypiggyEvent.months).toBe(1);
         expect(paypiggyEvent.message).toBe('Thanks for the support!');
@@ -66,7 +66,7 @@ describe('TikTokPlatform monetisation mapping', () => {
 
     it('emits superfan paypiggy with superfan tier', () => {
         const handler = platform.eventFactory.createSuperfan({
-            user: { userId: 'sf1', uniqueId: 'superfanuser' },
+            user: { userId: 'sf1', uniqueId: 'superfanuser', nickname: 'SuperfanUser' },
             timestamp: '2024-01-01T00:00:00Z'
         });
 
@@ -79,7 +79,7 @@ describe('TikTokPlatform monetisation mapping', () => {
 
     it('does not default tier, months, or message when missing', () => {
         const handler = platform.eventFactory.createSubscription({
-            user: { userId: 'u2', uniqueId: 'plainmember' },
+            user: { userId: 'u2', uniqueId: 'plainmember', nickname: 'PlainMember' },
             timestamp: '2024-01-01T00:00:00Z'
         });
 
@@ -87,8 +87,8 @@ describe('TikTokPlatform monetisation mapping', () => {
 
         const paypiggyEvent = emitted.find(e => e.evt === 'platform:event')?.payload;
         expect(paypiggyEvent.type).toBe(PlatformEvents.PAYPIGGY);
-        expect(paypiggyEvent.userId).toBe('u2');
-        expect(paypiggyEvent.username).toBe('plainmember');
+        expect(paypiggyEvent.userId).toBe('plainmember');
+        expect(paypiggyEvent.username).toBe('PlainMember');
         expect(paypiggyEvent.tier).toBeUndefined();
         expect(paypiggyEvent.months).toBeUndefined();
         expect(paypiggyEvent.message).toBeUndefined();

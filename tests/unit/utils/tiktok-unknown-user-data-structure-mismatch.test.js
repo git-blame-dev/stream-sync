@@ -50,8 +50,8 @@ describe('TikTok Unknown User Data Structure Mismatch', () => {
 
         const result = normalizeTikTokMessage(nestedTikTokData, 'tiktok', timestampService);
 
-        expect(result.username).toBe('testUserNested');
-        expect(result.userId).toBe('test_user_id_nested');
+        expect(result.username).toBe('TestNestedUser');
+        expect(result.userId).toBe('testUserNested');
         expect(result.message).toBe('Test nested message');
         expect(result.platform).toBe('tiktok');
         expectNoTechnicalArtifacts(result.username);
@@ -87,8 +87,8 @@ describe('TikTok Unknown User Data Structure Mismatch', () => {
 
         const result = extractTikTokUserData(nestedGiftData);
 
-        expect(result.userId).toBe('test_user_id_gift_nested');
-        expect(result.username).toBe('testGiftNestedUser');
+        expect(result.userId).toBe('testGiftNestedUser');
+        expect(result.username).toBe('TestNestedGiftSender');
       }, TEST_TIMEOUTS.FAST);
     });
 
@@ -136,9 +136,9 @@ describe('TikTok Unknown User Data Structure Mismatch', () => {
   describe('Error Recovery and Data Validation', () => {
     it('should reject nested user data missing uniqueId', () => {
       const corruptedData = {
-        "comment": "Test message with missing username",
+        "comment": "Test message with missing uniqueId",
         "user": {
-          "userId": "test_user_id_missing_username",
+          "userId": "test_user_id_missing_uniqueId",
           "nickname": "MissingUnique"
         },
         "common": { "createTime": testClock.now() }
@@ -147,8 +147,8 @@ describe('TikTok Unknown User Data Structure Mismatch', () => {
       const timestampService = buildTimestampService();
 
       expect(() => normalizeTikTokMessage(corruptedData, 'tiktok', timestampService))
-        .toThrow('username');
-      expect(() => extractTikTokUserData(corruptedData)).toThrow('user.userId and user.uniqueId');
+        .toThrow('userId');
+      expect(() => extractTikTokUserData(corruptedData)).toThrow('user.uniqueId and user.nickname');
     }, TEST_TIMEOUTS.FAST);
   });
 
@@ -179,8 +179,8 @@ describe('TikTok Unknown User Data Structure Mismatch', () => {
 
       expect(processingTime).toBeLessThan(1000);
       expect(results).toHaveLength(100);
-      expect(results[0].normalized.username).toBe('testRapidUser0');
-      expect(results[99].normalized.username).toBe('testRapidUser99');
+      expect(results[0].normalized.username).toBe('TestRapidUser0');
+      expect(results[99].normalized.username).toBe('TestRapidUser99');
 
       const unknownUserEvents = results.filter(r =>
         r.normalized.username === 'Unknown User' ||

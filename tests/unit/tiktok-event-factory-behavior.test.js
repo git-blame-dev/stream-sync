@@ -48,8 +48,8 @@ describe('TikTok eventFactory chat message behavior', () => {
 
         expect(event.type).toBe('platform:chat-message');
         expect(event.platform).toBe('tiktok');
-        expect(event.userId).toBe('tt-user-1');
-        expect(event.username).toBe('user123');
+        expect(event.userId).toBe('user123');
+        expect(event.username).toBe('StreamerFan');
         expect(event.message).toEqual({ text: 'hi there' });
         expect(event.metadata.platform).toBe('tiktok');
         expect(event.metadata.correlationId).toBeDefined();
