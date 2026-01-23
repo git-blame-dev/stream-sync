@@ -49,6 +49,10 @@ class TikTokPlatform extends EventEmitter {
         this.initializationStats = dependencies.initializationStats || new InitializationStatistics('tiktok', this.logger);
         this.listenersConfigured = false;
         this.recentPlatformMessageIds = new Map();
+        this.deduplicationConfig = {
+            maxCacheSize: dependencies.deduplicationMaxCacheSize ?? 2000,
+            ttlMs: dependencies.deduplicationTtlMs ?? 2 * 60 * 1000
+        };
 
         this.config = normalizeTikTokPlatformConfig(config, this.configValidator);
 
@@ -292,26 +296,33 @@ class TikTokPlatform extends EventEmitter {
 
     _handleConnectionError(error) {
         const username = this.config.username;
-        // Safely extract error message
         const errorMessage = error?.message || error?.toString() || 'Unknown error';
         this.errorHandler.handleConnectionError(
             error,
             'connection',
             `TikTok connection error for user '${username}': ${errorMessage}`
         );
-        
-        // Check for specific error types and provide contextual guidance
+
+        let errorCategory = 'unknown';
+
         if (errorMessage.includes('fetchIsLive')) {
+            errorCategory = 'stream-status';
             this.logger.warn(`Stream status check failed for TikTok user '${username}' - may be a temporary API issue or user may not exist`, 'tiktok');
         } else if (errorMessage.includes('waitUntilLive')) {
+            errorCategory = 'stream-wait';
             this.logger.warn(`Stream wait operation failed for TikTok user '${username}' - stream may have gone offline or user may not be streaming`, 'tiktok');
-        } else if (errorMessage.includes('connect')) {
-            this.logger.warn(`Connection establishment failed for TikTok user '${username}' - may need retry or user may have ended stream`, 'tiktok');
         } else if (errorMessage.includes('TLS') || errorMessage.includes('socket disconnected')) {
+            errorCategory = 'network';
             this.logger.warn(`TLS/Network connection failed for TikTok user '${username}' - check firewall settings and network connectivity`, 'tiktok');
+        } else if (errorMessage.includes('connect')) {
+            errorCategory = 'connection-establishment';
+            this.logger.warn(`Connection establishment failed for TikTok user '${username}' - may need retry or user may have ended stream`, 'tiktok');
         } else if (errorMessage.includes('room info') || errorMessage.includes('Failed to retrieve')) {
+            errorCategory = 'room-info';
             this.logger.warn(`Room info retrieval failed for TikTok user '${username}' - verify username is correct and user exists on TikTok`, 'tiktok');
         }
+
+        return { errorCategory, username };
     }
 
     setupEventListeners() {
@@ -401,22 +412,23 @@ class TikTokPlatform extends EventEmitter {
 
     handleRetry(err) {
         const username = this.config.username;
-        
-        if (this.retrySystem) {
-            // Check if error is recoverable
-            const errorMessage = err?.message || err?.toString() || 'Unknown error';
-            const isRecoverableError = this._isRecoverableError(errorMessage);
-            
-            if (!isRecoverableError) {
-                this.logger.warn(`Non-recoverable error for TikTok user '${username}', skipping retry: ${errorMessage}`, 'tiktok');
-                return;
-            }
-            
-            this.logger.debug(`Attempting retry for TikTok user '${username}' after error: ${errorMessage}`, 'tiktok');
-            this.queueRetry(err);
-        } else {
+        const errorMessage = err?.message || err?.toString() || 'Unknown error';
+
+        if (!this.retrySystem) {
             this.logger.warn(`No retry system available for TikTok user '${username}', connection will not be retried`, 'tiktok');
+            return { action: 'skipped', reason: 'no-retry-system' };
         }
+
+        const isRecoverableError = this._isRecoverableError(errorMessage);
+
+        if (!isRecoverableError) {
+            this.logger.warn(`Non-recoverable error for TikTok user '${username}', skipping retry: ${errorMessage}`, 'tiktok');
+            return { action: 'skipped', reason: 'non-recoverable' };
+        }
+
+        this.logger.debug(`Attempting retry for TikTok user '${username}' after error: ${errorMessage}`, 'tiktok');
+        this.queueRetry(err);
+        return { action: 'retry-queued' };
     }
     
     _normalizeErrorDetails(err) {
@@ -560,21 +572,19 @@ class TikTokPlatform extends EventEmitter {
     
     queueRetry(error) {
         if (!this.retrySystem) {
-            return;
+            return { queued: false, reason: 'no-retry-system' };
         }
         if (this.retryLock) {
-            return;
+            return { queued: false, reason: 'locked' };
         }
 
         this.retryLock = true;
 
         const reconnectFn = async () => {
-            // Unlock before attempting so a subsequent failure can schedule again
             this.retryLock = false;
             try {
                 await this._connect(this.handlers);
             } catch (err) {
-                // Re-queue on failure (lock will be re-acquired)
                 this.queueRetry(err);
             }
         };
@@ -585,6 +595,8 @@ class TikTokPlatform extends EventEmitter {
             reconnectFn,
             () => this.cleanup()
         );
+
+        return { queued: true };
     }
     
     async handleConnectionIssue(issue, isError = false) {
@@ -592,33 +604,38 @@ class TikTokPlatform extends EventEmitter {
         const normalizedIssue = this._normalizeConnectionIssue(issue);
         const message = normalizedIssue.message;
         const isStreamNotLive = this._isStreamNotLive(normalizedIssue);
+
+        let issueType;
         if (isStreamNotLive) {
             this.logger.warn(this._formatStreamNotLiveMessage(username, normalizedIssue), 'tiktok');
             this._recordNotLiveWarning();
+            issueType = 'stream-not-live';
         } else if (isError) {
             this.errorHandler.handleConnectionError(issue, 'connection issue', `Connection issue: ${message}`);
+            issueType = 'error';
         } else {
             this.logger.warn(`Connection issue: ${message}`, 'tiktok');
+            issueType = 'disconnection';
         }
-        
+
         this.connectionActive = false;
         await this.cleanup();
         this.connection = null;
         this.listenersConfigured = false;
-        
-        // Emit disconnection event
+
         const disconnectionMessage = isStreamNotLive ? 'Stream is not live' : message;
         await this._handleDisconnection(disconnectionMessage);
-        
-        // Trigger reconnection attempt for both errors and disconnections
-        // Stream restarts should automatically reconnect
+
+        let retryResult = null;
         if (this.retrySystem) {
-            // Create an error object for the retry system if we have a simple disconnect reason
             const errorForRetry = isError ? issue : new Error(`TikTok disconnected: ${disconnectionMessage}`);
-            this.queueRetry(errorForRetry);
+            retryResult = this.queueRetry(errorForRetry);
         } else {
             this.logger.warn('No retry system available, connection will not be retried', 'tiktok');
+            retryResult = { queued: false, reason: 'no-retry-system' };
         }
+
+        return { issueType, retryResult };
     }
     
     getStatus() {
@@ -811,7 +828,7 @@ class TikTokPlatform extends EventEmitter {
             const inferredActionType = (data?.displayType || data?.actionType || data?.type || 'follow').toLowerCase();
             const actionType = this._inferSocialActionType(data, inferredActionType);
 
-            if (this._shouldSkipDuplicatePlatformMessage(data)) {
+            if (this._shouldSkipDuplicatePlatformMessage(data).isDuplicate) {
                 return;
             }
 
@@ -859,7 +876,7 @@ class TikTokPlatform extends EventEmitter {
                 return;
             }
 
-            if (this._shouldSkipDuplicatePlatformMessage(data)) {
+            if (this._shouldSkipDuplicatePlatformMessage(data).isDuplicate) {
                 return;
             }
 
@@ -1107,30 +1124,114 @@ class TikTokPlatform extends EventEmitter {
         return normalized ? normalized : null;
     }
 
-    _shouldSkipDuplicatePlatformMessage(data, ttlMs = 2 * 60 * 1000) {
+    _shouldSkipDuplicatePlatformMessage(data, ttlMs = this.deduplicationConfig?.ttlMs ?? 2 * 60 * 1000) {
         const messageId = this._getPlatformMessageId(data);
         if (!messageId) {
-            return false;
+            return { isDuplicate: false, cleanupPerformed: false };
         }
 
         const now = Date.now();
         const lastSeen = this.recentPlatformMessageIds.get(messageId);
         if (lastSeen && (now - lastSeen) < ttlMs) {
-            return true;
+            return { isDuplicate: true, cleanupPerformed: false };
         }
 
         this.recentPlatformMessageIds.set(messageId, now);
 
-        if (this.recentPlatformMessageIds.size > 2000) {
+        let cleanupPerformed = false;
+        const maxCacheSize = this.deduplicationConfig?.maxCacheSize ?? 2000;
+        if (this.recentPlatformMessageIds.size > maxCacheSize) {
             const cutoff = now - ttlMs;
             for (const [id, seenAt] of this.recentPlatformMessageIds.entries()) {
                 if (seenAt < cutoff) {
                     this.recentPlatformMessageIds.delete(id);
                 }
             }
+            cleanupPerformed = true;
         }
 
-        return false;
+        return { isDuplicate: false, cleanupPerformed };
+    }
+
+    _handleEventProcessingError(emitType, data, error) {
+        this.errorHandler.handleEventProcessingError(error, emitType, data);
+
+        const monetizationTypes = new Set([
+            PlatformEvents.GIFT,
+            PlatformEvents.PAYPIGGY,
+            PlatformEvents.GIFTPAYPIGGY,
+            PlatformEvents.ENVELOPE
+        ]);
+
+        if (!monetizationTypes.has(emitType)) {
+            return { payloadEmitted: false, reason: 'non-monetization' };
+        }
+
+        let errorOverrides = {};
+        const hasCanonicalIdentity = data
+            && data.userId !== undefined
+            && data.userId !== null
+            && data.username !== undefined
+            && data.username !== null;
+
+        if (hasCanonicalIdentity) {
+            const normalizedUserId = String(data.userId).trim();
+            const normalizedUsername = String(data.username).trim();
+            if (normalizedUserId && normalizedUsername) {
+                errorOverrides = {
+                    username: normalizedUsername,
+                    userId: normalizedUserId
+                };
+            }
+        }
+
+        if (!errorOverrides.userId) {
+            try {
+                const identity = extractTikTokUserData(data);
+                errorOverrides = {
+                    username: identity.username,
+                    userId: identity.userId
+                };
+            } catch (extractError) {
+                errorOverrides = {};
+            }
+        }
+
+        if (emitType === PlatformEvents.GIFT) {
+            const amount = Number(data?.giftCoins ?? data?.amount);
+            if (Number.isFinite(amount)) {
+                errorOverrides.amount = amount;
+            }
+            const repeatCount = Number(data?.giftCount ?? data?.repeatCount);
+            if (Number.isFinite(repeatCount)) {
+                errorOverrides.giftCount = repeatCount;
+            }
+            if (typeof data?.currency === 'string' && data.currency.trim()) {
+                errorOverrides.currency = data.currency.trim();
+            }
+        }
+
+        if (emitType === PlatformEvents.ENVELOPE) {
+            const amount = Number(data?.giftCoins ?? data?.amount);
+            if (Number.isFinite(amount)) {
+                errorOverrides.amount = amount;
+            }
+            if (typeof data?.currency === 'string' && data.currency.trim()) {
+                errorOverrides.currency = data.currency.trim();
+            }
+        }
+
+        const notificationType = typeof emitType === 'string' && emitType.startsWith('platform:')
+            ? emitType.replace('platform:', '')
+            : emitType;
+        const errorPayload = this._createMonetizationErrorPayload(notificationType, data, errorOverrides);
+
+        if (!errorPayload) {
+            return { payloadEmitted: false, reason: 'invalid-payload' };
+        }
+
+        this._emitPlatformEvent(emitType, errorPayload);
+        return { payloadEmitted: true };
     }
 
     async _handleStandardEvent(eventType, data, options = {}) {
@@ -1140,73 +1241,9 @@ class TikTokPlatform extends EventEmitter {
             await this._logRawEvent?.(options.logEventType || emitType, data);
             const eventData = this.eventFactory[factoryMethod](data, options);
             this._emitPlatformEvent(emitType, eventData);
+            return { success: true };
         } catch (error) {
-            this.errorHandler.handleEventProcessingError(error, emitType, data);
-            const monetizationTypes = new Set([
-                PlatformEvents.GIFT,
-                PlatformEvents.PAYPIGGY,
-                PlatformEvents.GIFTPAYPIGGY,
-                PlatformEvents.ENVELOPE
-            ]);
-            if (monetizationTypes.has(emitType)) {
-                let errorOverrides = {};
-                const hasCanonicalIdentity = data
-                    && data.userId !== undefined
-                    && data.userId !== null
-                    && data.username !== undefined
-                    && data.username !== null;
-                if (hasCanonicalIdentity) {
-                    const normalizedUserId = String(data.userId).trim();
-                    const normalizedUsername = String(data.username).trim();
-                    if (normalizedUserId && normalizedUsername) {
-                        errorOverrides = {
-                            username: normalizedUsername,
-                            userId: normalizedUserId
-                        };
-                    }
-                }
-                if (!errorOverrides.userId) {
-                    try {
-                        const identity = extractTikTokUserData(data);
-                        errorOverrides = {
-                            username: identity.username,
-                            userId: identity.userId
-                        };
-                    } catch (extractError) {
-                        errorOverrides = {};
-                    }
-                }
-                if (emitType === PlatformEvents.GIFT) {
-                    const amount = Number(data?.giftCoins ?? data?.amount);
-                    if (Number.isFinite(amount)) {
-                        errorOverrides.amount = amount;
-                    }
-                    const repeatCount = Number(data?.giftCount ?? data?.repeatCount);
-                    if (Number.isFinite(repeatCount)) {
-                        errorOverrides.giftCount = repeatCount;
-                    }
-                    if (typeof data?.currency === 'string' && data.currency.trim()) {
-                        errorOverrides.currency = data.currency.trim();
-                    }
-                }
-                if (emitType === PlatformEvents.ENVELOPE) {
-                    const amount = Number(data?.giftCoins ?? data?.amount);
-                    if (Number.isFinite(amount)) {
-                        errorOverrides.amount = amount;
-                    }
-                    if (typeof data?.currency === 'string' && data.currency.trim()) {
-                        errorOverrides.currency = data.currency.trim();
-                    }
-                }
-                const notificationType = typeof emitType === 'string' && emitType.startsWith('platform:')
-                    ? emitType.replace('platform:', '')
-                    : emitType;
-                const errorPayload = this._createMonetizationErrorPayload(notificationType, data, errorOverrides);
-                if (!errorPayload) {
-                    return;
-                }
-                this._emitPlatformEvent(emitType, errorPayload);
-            }
+            return this._handleEventProcessingError(emitType, data, error);
         }
     }
 

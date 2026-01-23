@@ -138,8 +138,16 @@ describe('TikTokPlatform connection lifecycle', () => {
         });
     });
 
-    describe('queueRetry', () => {
-        it('sets retryLock=true when called', () => {
+    describe('handleRetry', () => {
+        it('returns skipped result for non-recoverable errors', () => {
+            const platform = createPlatform();
+
+            const result = platform.handleRetry(new Error('username is required'));
+
+            expect(result).toEqual({ action: 'skipped', reason: 'non-recoverable' });
+        });
+
+        it('returns retry-queued result for recoverable errors', () => {
             const retrySystem = {
                 resetRetryCount: createMockFn(),
                 handleConnectionError: createMockFn(),
@@ -148,12 +156,29 @@ describe('TikTokPlatform connection lifecycle', () => {
             const platform = createPlatform({}, { retrySystem });
             platform.retryLock = false;
 
-            platform.queueRetry(new Error('test'));
+            const result = platform.handleRetry(new Error('connection timeout'));
 
+            expect(result).toEqual({ action: 'retry-queued' });
+        });
+    });
+
+    describe('queueRetry', () => {
+        it('returns queued=true and sets retryLock when successful', () => {
+            const retrySystem = {
+                resetRetryCount: createMockFn(),
+                handleConnectionError: createMockFn(),
+                isConnected: createMockFn()
+            };
+            const platform = createPlatform({}, { retrySystem });
+            platform.retryLock = false;
+
+            const result = platform.queueRetry(new Error('test'));
+
+            expect(result).toEqual({ queued: true });
             expect(platform.retryLock).toBe(true);
         });
 
-        it('does not change retryLock when already locked', () => {
+        it('returns queued=false with reason locked when already locked', () => {
             const retrySystem = {
                 resetRetryCount: createMockFn(),
                 handleConnectionError: createMockFn(),
@@ -162,8 +187,9 @@ describe('TikTokPlatform connection lifecycle', () => {
             const platform = createPlatform({}, { retrySystem });
             platform.retryLock = true;
 
-            platform.queueRetry(new Error('test'));
+            const result = platform.queueRetry(new Error('test'));
 
+            expect(result).toEqual({ queued: false, reason: 'locked' });
             expect(platform.retryLock).toBe(true);
         });
     });
@@ -189,6 +215,51 @@ describe('TikTokPlatform connection lifecycle', () => {
 
             const disconnectEvent = emittedEvents.find(e => e.type === PlatformEvents.CHAT_DISCONNECTED);
             expect(disconnectEvent).toBeDefined();
+        });
+
+        it('returns issueType=disconnection for regular disconnections', async () => {
+            const retrySystem = {
+                resetRetryCount: createMockFn(),
+                handleConnectionError: createMockFn(),
+                isConnected: createMockFn()
+            };
+            const platform = createPlatform({}, { retrySystem });
+            platform.retryLock = false;
+
+            const result = await platform.handleConnectionIssue('stream ended');
+
+            expect(result.issueType).toBe('disconnection');
+            expect(result.retryResult).toEqual({ queued: true });
+        });
+
+        it('returns issueType=error when isError=true', async () => {
+            const retrySystem = {
+                resetRetryCount: createMockFn(),
+                handleConnectionError: createMockFn(),
+                isConnected: createMockFn()
+            };
+            const platform = createPlatform({}, { retrySystem });
+            platform.retryLock = false;
+
+            const result = await platform.handleConnectionIssue(new Error('test error'), true);
+
+            expect(result.issueType).toBe('error');
+            expect(result.retryResult).toEqual({ queued: true });
+        });
+
+        it('returns issueType=stream-not-live for not-live messages', async () => {
+            const retrySystem = {
+                resetRetryCount: createMockFn(),
+                handleConnectionError: createMockFn(),
+                isConnected: createMockFn()
+            };
+            const platform = createPlatform({}, { retrySystem });
+            platform.retryLock = false;
+
+            const result = await platform.handleConnectionIssue({ message: 'Stream is not live', code: 4404 });
+
+            expect(result.issueType).toBe('stream-not-live');
+            expect(result.retryResult).toEqual({ queued: true });
         });
     });
 });
