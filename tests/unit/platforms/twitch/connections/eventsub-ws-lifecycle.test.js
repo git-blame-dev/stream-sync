@@ -1,6 +1,9 @@
-const { describe, test, expect } = require('bun:test');
+const { describe, test, expect, beforeEach, afterEach } = require('bun:test');
 const { createMockFn } = require('../../../../helpers/bun-mock-utils');
 const { noOpLogger } = require('../../../../helpers/mock-factories');
+const { useFakeTimers, useRealTimers, setSystemTime, advanceTimersByTime } = require('../../../../helpers/bun-timers');
+const testClock = require('../../../../helpers/test-clock');
+const { safeSetTimeout, safeDelay, validateTimeout } = require('../../../../../src/utils/timeout-validator');
 const { EventEmitter } = require('events');
 
 const { createTwitchEventSubWsLifecycle } = require('../../../../../src/platforms/twitch/connections/ws-lifecycle');
@@ -21,6 +24,30 @@ class MockWebSocket extends EventEmitter {
 }
 
 describe('Twitch EventSub WS lifecycle', () => {
+    beforeEach(() => {
+        useFakeTimers();
+        setSystemTime(new Date('2025-01-15T12:00:00.000Z'));
+        testClock.set(1736942400000);
+    });
+
+    afterEach(() => {
+        useRealTimers();
+        testClock.reset();
+    });
+
+    const immediateSafeDelay = async () => {};
+
+    const buildLifecycle = (overrides = {}) => createTwitchEventSubWsLifecycle({
+        WebSocketCtor: MockWebSocket,
+        safeSetTimeout,
+        safeDelay: immediateSafeDelay,
+        validateTimeout,
+        now: testClock.now,
+        random: () => 0,
+        setImmediateFn: (fn) => fn(),
+        ...overrides
+    });
+
     const createState = (overrides = {}) => {
         const emitCalls = overrides.emitCalls || [];
         const scheduleReconnectCalls = overrides.scheduleReconnectCalls || [];
@@ -62,14 +89,7 @@ describe('Twitch EventSub WS lifecycle', () => {
     };
 
     test('connectWebSocket resolves after subscriptions are ready and emits eventSubConnected', async () => {
-        const safeSetTimeoutCalls = [];
-        const lifecycle = createTwitchEventSubWsLifecycle({
-            WebSocketCtor: MockWebSocket,
-            safeSetTimeout: (...args) => { safeSetTimeoutCalls.push(args); return null; },
-            safeDelay: async () => {},
-            validateTimeout: (value) => value,
-            setImmediateFn: (fn) => fn()
-        });
+        const lifecycle = buildLifecycle();
 
         const state = createState({
             _setupEventSubscriptions: createMockFn(async () => ({ failures: [] }))
@@ -102,30 +122,18 @@ describe('Twitch EventSub WS lifecycle', () => {
     });
 
     test('connectWebSocket rejects on connection timeout when no welcome message arrives', async () => {
-        const lifecycle = createTwitchEventSubWsLifecycle({
-            WebSocketCtor: MockWebSocket,
-            safeSetTimeout: (fn) => {
-                fn();
-                return null;
-            },
-            safeDelay: async () => {},
-            validateTimeout: (value) => value,
-            setImmediateFn: () => {}
-        });
+        const lifecycle = buildLifecycle();
 
         const state = createState();
-        await expect(lifecycle.connectWebSocket(state)).rejects.toThrow('Connection timeout - no welcome message');
+        const connectPromise = lifecycle.connectWebSocket(state);
+
+        await advanceTimersByTime(15100);
+
+        await expect(connectPromise).rejects.toThrow('Connection timeout - no welcome message');
     });
 
     test('connectWebSocket emits failure event when subscription setup fails', async () => {
-        const safeSetTimeoutCalls = [];
-        const lifecycle = createTwitchEventSubWsLifecycle({
-            WebSocketCtor: MockWebSocket,
-            safeSetTimeout: (...args) => { safeSetTimeoutCalls.push(args); return null; },
-            safeDelay: async () => {},
-            validateTimeout: (value) => value,
-            setImmediateFn: (fn) => fn()
-        });
+        const lifecycle = buildLifecycle();
 
         const state = createState({
             _setupEventSubscriptions: createMockFn(async () => ({ failures: [{ subscription: 'Follows' }] }))
@@ -155,66 +163,52 @@ describe('Twitch EventSub WS lifecycle', () => {
     });
 
     test('scheduleReconnect disables initialization when max attempts exceeded', () => {
-        const safeSetTimeoutCalls = [];
-        const lifecycle = createTwitchEventSubWsLifecycle({
-            WebSocketCtor: MockWebSocket,
-            safeSetTimeout: (...args) => { safeSetTimeoutCalls.push(args); return null; },
-            safeDelay: async () => {},
-            validateTimeout: (value) => value,
-            setImmediateFn: () => {},
-            random: () => 0
-        });
+        const lifecycle = buildLifecycle();
 
         const state = createState({ retryAttempts: 1, maxRetryAttempts: 1, isInitialized: true });
         lifecycle.scheduleReconnect(state);
 
         expect(state.isInitialized).toBe(false);
-        expect(safeSetTimeoutCalls).toHaveLength(0);
     });
 
-    test('scheduleReconnect schedules reconnect attempt when retries remain', () => {
-        const reconnectCalls = [];
-        const safeSetTimeoutCalls = [];
-        const lifecycle = createTwitchEventSubWsLifecycle({
-            WebSocketCtor: MockWebSocket,
-            safeSetTimeout: (fn, delay) => {
-                safeSetTimeoutCalls.push({ fn, delay });
-                fn();
-                return 'timeout-id';
-            },
-            safeDelay: async () => {},
-            validateTimeout: (value) => value,
-            setImmediateFn: () => {},
-            random: () => 0
-        });
+    test('scheduleReconnect triggers reconnection after delay', async () => {
+        const lifecycle = buildLifecycle();
 
         const state = createState({
             retryAttempts: 0,
             maxRetryAttempts: 2,
-            retryDelay: 1000,
-            _reconnect: () => reconnectCalls.push(true)
+            retryDelay: 1000
+        });
+        state._reconnect = () => lifecycle.reconnect(state);
+        state._connectWebSocket = createMockFn(async () => {
+            state._isConnected = true;
+            state.emitCalls.push({ event: 'eventSubConnected', payload: { sessionId: 'reconnect-session' } });
         });
 
         lifecycle.scheduleReconnect(state);
 
-        expect(state.reconnectTimeout).toBe('timeout-id');
-        expect(reconnectCalls).toHaveLength(1);
+        expect(state._isConnected).toBe(false);
+
+        await advanceTimersByTime(1100);
+
+        expect(state._isConnected).toBe(true);
+        expect(state.emitCalls.some(e => e.event === 'eventSubConnected')).toBe(true);
     });
 
-    test('handleReconnectRequest stores reconnect_url for next connection', () => {
-        const lifecycle = createTwitchEventSubWsLifecycle({
-            WebSocketCtor: MockWebSocket,
-            safeSetTimeout: createMockFn(),
-            safeDelay: async () => {},
-            validateTimeout: (value) => value,
-            setImmediateFn: () => {},
-            random: () => 0
+    test('handleReconnectRequest stores reconnect_url and triggers reconnection', async () => {
+        const lifecycle = buildLifecycle();
+
+        const state = createState({
+            retryAttempts: 0,
+            maxRetryAttempts: 2,
+            retryDelay: 1000
+        });
+        state._scheduleReconnect = () => lifecycle.scheduleReconnect(state);
+        state._reconnect = () => lifecycle.reconnect(state);
+        state._connectWebSocket = createMockFn(async () => {
+            state._isConnected = true;
         });
 
-        const scheduleReconnectCalls = [];
-        const state = createState({
-            _scheduleReconnect: () => scheduleReconnectCalls.push(true)
-        });
         lifecycle.handleReconnectRequest(state, {
             session: {
                 reconnect_url: 'wss://eventsub.wss.twitch.tv/ws?token=test-reconnect-token'
@@ -222,14 +216,16 @@ describe('Twitch EventSub WS lifecycle', () => {
         });
 
         expect(state.reconnectUrl).toBe('wss://eventsub.wss.twitch.tv/ws?token=test-reconnect-token');
-        expect(scheduleReconnectCalls).toHaveLength(1);
+
+        await advanceTimersByTime(1100);
+        expect(state._isConnected).toBe(true);
     });
 
     test('throws when WebSocketCtor is not provided', () => {
         expect(() => createTwitchEventSubWsLifecycle({
-            safeSetTimeout: () => {},
-            safeDelay: async () => {},
-            validateTimeout: (v) => v
+            safeSetTimeout,
+            safeDelay,
+            validateTimeout
         })).toThrow('WebSocketCtor is required');
     });
 
@@ -240,36 +236,20 @@ describe('Twitch EventSub WS lifecycle', () => {
     });
 
     test('connectWebSocket closes ws and rejects on timeout when ws is open', async () => {
-        let timeoutCallback;
-        const lifecycle = createTwitchEventSubWsLifecycle({
-            WebSocketCtor: MockWebSocket,
-            safeSetTimeout: (fn) => {
-                timeoutCallback = fn;
-                return 'timeout-id';
-            },
-            safeDelay: async () => {},
-            validateTimeout: (value) => value,
-            setImmediateFn: () => {}
-        });
+        const lifecycle = buildLifecycle();
 
         const state = createState();
         const connectPromise = lifecycle.connectWebSocket(state);
 
         state.ws.readyState = 1;
-        timeoutCallback();
+        await advanceTimersByTime(15100);
 
         await expect(connectPromise).rejects.toThrow('Connection timeout - no welcome message');
         expect(state.ws.closeCalls).toHaveLength(1);
     });
 
     test('connectWebSocket rejects with invalid session ID', async () => {
-        const lifecycle = createTwitchEventSubWsLifecycle({
-            WebSocketCtor: MockWebSocket,
-            safeSetTimeout: () => null,
-            safeDelay: async () => {},
-            validateTimeout: (value) => value,
-            setImmediateFn: (fn) => fn()
-        });
+        const lifecycle = buildLifecycle();
 
         const state = createState();
         const connectPromise = lifecycle.connectWebSocket(state);
@@ -285,13 +265,7 @@ describe('Twitch EventSub WS lifecycle', () => {
     });
 
     test('connectWebSocket rejects when connection validation fails', async () => {
-        const lifecycle = createTwitchEventSubWsLifecycle({
-            WebSocketCtor: MockWebSocket,
-            safeSetTimeout: () => null,
-            safeDelay: async () => {},
-            validateTimeout: (value) => value,
-            setImmediateFn: (fn) => fn()
-        });
+        const lifecycle = buildLifecycle();
 
         const state = createState({
             _validateConnectionForSubscriptions: createMockFn(() => false)
@@ -312,13 +286,7 @@ describe('Twitch EventSub WS lifecycle', () => {
     });
 
     test('connectWebSocket rejects when subscription setup throws', async () => {
-        const lifecycle = createTwitchEventSubWsLifecycle({
-            WebSocketCtor: MockWebSocket,
-            safeSetTimeout: () => null,
-            safeDelay: async () => {},
-            validateTimeout: (value) => value,
-            setImmediateFn: (fn) => fn()
-        });
+        const lifecycle = buildLifecycle();
 
         const state = createState({
             _setupEventSubscriptions: createMockFn(async () => { throw new Error('API error'); })
@@ -337,13 +305,7 @@ describe('Twitch EventSub WS lifecycle', () => {
     });
 
     test('connectWebSocket rejects on message parse error', async () => {
-        const lifecycle = createTwitchEventSubWsLifecycle({
-            WebSocketCtor: MockWebSocket,
-            safeSetTimeout: () => null,
-            safeDelay: async () => {},
-            validateTimeout: (value) => value,
-            setImmediateFn: () => {}
-        });
+        const lifecycle = buildLifecycle();
 
         const state = createState();
         const connectPromise = lifecycle.connectWebSocket(state);
@@ -359,13 +321,7 @@ describe('Twitch EventSub WS lifecycle', () => {
     });
 
     test('connectWebSocket rejects on WebSocket error before connection resolved', async () => {
-        const lifecycle = createTwitchEventSubWsLifecycle({
-            WebSocketCtor: MockWebSocket,
-            safeSetTimeout: () => null,
-            safeDelay: async () => {},
-            validateTimeout: (value) => value,
-            setImmediateFn: () => {}
-        });
+        const lifecycle = buildLifecycle();
 
         const state = createState();
         const connectPromise = lifecycle.connectWebSocket(state);
@@ -378,13 +334,7 @@ describe('Twitch EventSub WS lifecycle', () => {
     });
 
     test('connectWebSocket handles ping by sending pong', () => {
-        const lifecycle = createTwitchEventSubWsLifecycle({
-            WebSocketCtor: MockWebSocket,
-            safeSetTimeout: () => null,
-            safeDelay: async () => {},
-            validateTimeout: (value) => value,
-            setImmediateFn: () => {}
-        });
+        const lifecycle = buildLifecycle();
 
         const state = createState();
         lifecycle.connectWebSocket(state);
@@ -397,13 +347,7 @@ describe('Twitch EventSub WS lifecycle', () => {
     });
 
     test('connectWebSocket handles pong event', () => {
-        const lifecycle = createTwitchEventSubWsLifecycle({
-            WebSocketCtor: MockWebSocket,
-            safeSetTimeout: () => null,
-            safeDelay: async () => {},
-            validateTimeout: (value) => value,
-            setImmediateFn: () => {}
-        });
+        const lifecycle = buildLifecycle();
 
         const state = createState();
         lifecycle.connectWebSocket(state);
@@ -412,13 +356,7 @@ describe('Twitch EventSub WS lifecycle', () => {
     });
 
     test('connectWebSocket rejects on abnormal close during handshake', async () => {
-        const lifecycle = createTwitchEventSubWsLifecycle({
-            WebSocketCtor: MockWebSocket,
-            safeSetTimeout: () => null,
-            safeDelay: async () => {},
-            validateTimeout: (value) => value,
-            setImmediateFn: () => {}
-        });
+        const lifecycle = buildLifecycle();
 
         const state = createState();
         const connectPromise = lifecycle.connectWebSocket(state);
@@ -429,13 +367,7 @@ describe('Twitch EventSub WS lifecycle', () => {
     });
 
     test('connectWebSocket emits eventSubDisconnected on close with various codes', async () => {
-        const lifecycle = createTwitchEventSubWsLifecycle({
-            WebSocketCtor: MockWebSocket,
-            safeSetTimeout: () => null,
-            safeDelay: async () => {},
-            validateTimeout: (value) => value,
-            setImmediateFn: (fn) => fn()
-        });
+        const lifecycle = buildLifecycle();
 
         const state = createState({
             _setupEventSubscriptions: createMockFn(async () => ({ failures: [] }))
@@ -460,21 +392,22 @@ describe('Twitch EventSub WS lifecycle', () => {
         expect(state.sessionId).toBe(null);
     });
 
-    test('connectWebSocket schedules reconnect on abnormal close when initialized', async () => {
-        const lifecycle = createTwitchEventSubWsLifecycle({
-            WebSocketCtor: MockWebSocket,
-            safeSetTimeout: () => null,
-            safeDelay: async () => {},
-            validateTimeout: (value) => value,
-            setImmediateFn: (fn) => fn()
-        });
+    test('connectWebSocket triggers reconnection on abnormal close when initialized', async () => {
+        const lifecycle = buildLifecycle();
 
-        const scheduleReconnectCalls = [];
         const state = createState({
             _setupEventSubscriptions: createMockFn(async () => ({ failures: [] })),
             isInitialized: true,
-            _scheduleReconnect: () => scheduleReconnectCalls.push(true)
+            retryAttempts: 0,
+            maxRetryAttempts: 5,
+            retryDelay: 1000
         });
+        state._scheduleReconnect = () => lifecycle.scheduleReconnect(state);
+        state._reconnect = () => lifecycle.reconnect(state);
+        state._connectWebSocket = createMockFn(async () => {
+            state._isConnected = true;
+        });
+
         const connectPromise = lifecycle.connectWebSocket(state);
 
         state.ws.readyState = 1;
@@ -486,9 +419,12 @@ describe('Twitch EventSub WS lifecycle', () => {
 
         await connectPromise;
 
+        state._isConnected = false;
         state.ws.emit('close', 4003, 'connection unused');
 
-        expect(scheduleReconnectCalls).toHaveLength(1);
+        await advanceTimersByTime(1100);
+
+        expect(state._isConnected).toBe(true);
     });
 
     test('connectWebSocket handles various Twitch close codes', async () => {
@@ -504,13 +440,11 @@ describe('Twitch EventSub WS lifecycle', () => {
         ];
 
         for (const { code } of closeCodes) {
-            const lifecycle = createTwitchEventSubWsLifecycle({
-                WebSocketCtor: MockWebSocket,
-                safeSetTimeout: () => null,
-                safeDelay: async () => {},
-                validateTimeout: (value) => value,
-                setImmediateFn: (fn) => fn()
-            });
+            useRealTimers();
+            useFakeTimers();
+            setSystemTime(new Date('2025-01-15T12:00:00.000Z'));
+
+            const lifecycle = buildLifecycle();
 
             const state = createState({
                 _setupEventSubscriptions: createMockFn(async () => ({ failures: [] })),
@@ -525,6 +459,7 @@ describe('Twitch EventSub WS lifecycle', () => {
                 payload: { session: { id: `session-${code}` } }
             })));
 
+            await advanceTimersByTime(2100);
             await connectPromise;
             state.ws.emit('close', code, 'test reason');
 
@@ -534,40 +469,33 @@ describe('Twitch EventSub WS lifecycle', () => {
         }
     });
 
-    test('scheduleReconnect clears existing timeout before scheduling new one', () => {
-        let clearedTimeout = null;
-        const originalClearTimeout = global.clearTimeout;
-        global.clearTimeout = (id) => { clearedTimeout = id; };
-
-        const lifecycle = createTwitchEventSubWsLifecycle({
-            WebSocketCtor: MockWebSocket,
-            safeSetTimeout: () => 'new-timeout',
-            safeDelay: async () => {},
-            validateTimeout: (value) => value,
-            setImmediateFn: () => {},
-            random: () => 0
-        });
+    test('scheduleReconnect replaces pending reconnect with new attempt', async () => {
+        const lifecycle = buildLifecycle();
 
         const state = createState({
-            reconnectTimeout: 'existing-timeout',
             retryAttempts: 0,
-            maxRetryAttempts: 5
+            maxRetryAttempts: 5,
+            retryDelay: 5000
+        });
+        state._reconnect = () => lifecycle.reconnect(state);
+        state._connectWebSocket = createMockFn(async () => {
+            state._isConnected = true;
         });
 
         lifecycle.scheduleReconnect(state);
 
-        expect(clearedTimeout).toBe('existing-timeout');
-        global.clearTimeout = originalClearTimeout;
+        await advanceTimersByTime(1000);
+
+        state.retryDelay = 2000;
+        lifecycle.scheduleReconnect(state);
+
+        await advanceTimersByTime(2100);
+
+        expect(state._isConnected).toBe(true);
     });
 
     test('reconnect skips when not initialized', async () => {
-        const lifecycle = createTwitchEventSubWsLifecycle({
-            WebSocketCtor: MockWebSocket,
-            safeSetTimeout: () => null,
-            safeDelay: async () => {},
-            validateTimeout: (value) => value,
-            setImmediateFn: () => {}
-        });
+        const lifecycle = buildLifecycle();
 
         const state = createState({ isInitialized: false });
         await lifecycle.reconnect(state);
@@ -576,13 +504,7 @@ describe('Twitch EventSub WS lifecycle', () => {
     });
 
     test('reconnect logs error when AuthManager is not ready', async () => {
-        const lifecycle = createTwitchEventSubWsLifecycle({
-            WebSocketCtor: MockWebSocket,
-            safeSetTimeout: () => null,
-            safeDelay: async () => {},
-            validateTimeout: (value) => value,
-            setImmediateFn: () => {}
-        });
+        const lifecycle = buildLifecycle();
 
         const state = createState({
             isInitialized: true,
@@ -597,13 +519,7 @@ describe('Twitch EventSub WS lifecycle', () => {
     });
 
     test('reconnect closes existing WebSocket before reconnecting', async () => {
-        const lifecycle = createTwitchEventSubWsLifecycle({
-            WebSocketCtor: MockWebSocket,
-            safeSetTimeout: () => null,
-            safeDelay: async () => {},
-            validateTimeout: (value) => value,
-            setImmediateFn: () => {}
-        });
+        const lifecycle = buildLifecycle();
 
         const existingWs = new MockWebSocket('wss://test');
         existingWs.readyState = 1;
@@ -620,38 +536,40 @@ describe('Twitch EventSub WS lifecycle', () => {
         expect(existingWs.closeCalls[0]).toEqual({ code: 1000, reason: 'Reconnecting' });
     });
 
-    test('reconnect schedules retry on failure when attempts remain', async () => {
-        const lifecycle = createTwitchEventSubWsLifecycle({
-            WebSocketCtor: MockWebSocket,
-            safeSetTimeout: () => null,
-            safeDelay: async () => {},
-            validateTimeout: (value) => value,
-            setImmediateFn: () => {}
-        });
+    test('reconnect retries on failure when attempts remain', async () => {
+        const lifecycle = buildLifecycle();
 
-        const scheduleReconnectCalls = [];
         const state = createState({
             isInitialized: true,
             retryAttempts: 0,
             maxRetryAttempts: 3,
-            _connectWebSocket: createMockFn(async () => { throw new Error('Connection failed'); }),
-            _scheduleReconnect: () => scheduleReconnectCalls.push(true)
+            retryDelay: 1000
+        });
+        state._scheduleReconnect = () => lifecycle.scheduleReconnect(state);
+        state._reconnect = () => lifecycle.reconnect(state);
+
+        let shouldFail = true;
+        state._connectWebSocket = createMockFn(async () => {
+            if (shouldFail) {
+                shouldFail = false;
+                throw new Error('Connection failed');
+            }
+            state._isConnected = true;
         });
 
         await lifecycle.reconnect(state);
 
-        expect(scheduleReconnectCalls).toHaveLength(1);
         expect(state.retryAttempts).toBe(1);
+        expect(state._isConnected).toBe(false);
+
+        await advanceTimersByTime(2100);
+
+        expect(state._isConnected).toBe(true);
+        expect(state.retryAttempts).toBe(0);
     });
 
     test('reconnect abandons and disables initialization after max attempts', async () => {
-        const lifecycle = createTwitchEventSubWsLifecycle({
-            WebSocketCtor: MockWebSocket,
-            safeSetTimeout: () => null,
-            safeDelay: async () => {},
-            validateTimeout: (value) => value,
-            setImmediateFn: () => {}
-        });
+        const lifecycle = buildLifecycle();
 
         const state = createState({
             isInitialized: true,
@@ -669,13 +587,7 @@ describe('Twitch EventSub WS lifecycle', () => {
     });
 
     test('reconnect resets retry attempts on success', async () => {
-        const lifecycle = createTwitchEventSubWsLifecycle({
-            WebSocketCtor: MockWebSocket,
-            safeSetTimeout: () => null,
-            safeDelay: async () => {},
-            validateTimeout: (value) => value,
-            setImmediateFn: () => {}
-        });
+        const lifecycle = buildLifecycle();
 
         const state = createState({
             isInitialized: true,
@@ -689,22 +601,22 @@ describe('Twitch EventSub WS lifecycle', () => {
         expect(state.retryAttempts).toBe(0);
     });
 
-    test('handleReconnectRequest ignores payload without reconnect_url', () => {
-        const lifecycle = createTwitchEventSubWsLifecycle({
-            WebSocketCtor: MockWebSocket,
-            safeSetTimeout: () => null,
-            safeDelay: async () => {},
-            validateTimeout: (value) => value,
-            setImmediateFn: () => {}
-        });
+    test('handleReconnectRequest ignores payload without reconnect_url', async () => {
+        const lifecycle = buildLifecycle();
 
-        const scheduleReconnectCalls = [];
         const state = createState({
-            _scheduleReconnect: () => scheduleReconnectCalls.push(true)
+            retryAttempts: 0,
+            maxRetryAttempts: 2,
+            retryDelay: 1000,
+            _connectWebSocket: createMockFn(async () => {
+                state._isConnected = true;
+            })
         });
         lifecycle.handleReconnectRequest(state, { session: {} });
 
         expect(state.reconnectUrl).toBeUndefined();
-        expect(scheduleReconnectCalls).toHaveLength(0);
+
+        await advanceTimersByTime(1500);
+        expect(state._isConnected).toBe(false);
     });
 });

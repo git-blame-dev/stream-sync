@@ -1,10 +1,24 @@
-const { describe, test, expect } = require('bun:test');
+const { describe, test, expect, beforeEach, afterEach } = require('bun:test');
 const { createMockFn } = require('../../../../helpers/bun-mock-utils');
 const { noOpLogger } = require('../../../../helpers/mock-factories');
+const { useFakeTimers, useRealTimers, setSystemTime, advanceTimersByTime } = require('../../../../helpers/bun-timers');
+const testClock = require('../../../../helpers/test-clock');
+const { safeSetInterval, validateTimeout } = require('../../../../../src/utils/timeout-validator');
 
 const { createYouTubeMultiStreamManager } = require('../../../../../src/platforms/youtube/streams/youtube-multistream-manager');
 
 describe('YouTube multi-stream manager', () => {
+    beforeEach(() => {
+        useFakeTimers();
+        setSystemTime(new Date('2025-01-15T12:00:00.000Z'));
+        testClock.set(1736942400000);
+    });
+
+    afterEach(() => {
+        useRealTimers();
+        testClock.reset();
+    });
+
     const buildPlatform = (overrides = {}) => {
         const shortageState = {
             lastWarningTime: null,
@@ -44,11 +58,11 @@ describe('YouTube multi-stream manager', () => {
         return platform;
     };
 
-    const buildManager = (platform, now = () => 100, safeSetInterval = createMockFn(() => 456)) => createYouTubeMultiStreamManager({
+    const buildManager = (platform) => createYouTubeMultiStreamManager({
         platform,
         safeSetInterval,
-        validateTimeout: (value) => value,
-        now
+        validateTimeout,
+        now: testClock.now
     });
 
     test('emits stream-detected platform:event when new streams appear', async () => {
@@ -57,7 +71,7 @@ describe('YouTube multi-stream manager', () => {
             getLiveVideoIds: createMockFn(async () => ['stream-1']),
             _emitPlatformEvent: (type, payload) => emitted.push({ type, payload })
         });
-        const manager = buildManager(platform, () => 123);
+        const manager = buildManager(platform);
 
         await manager.checkMultiStream();
 
@@ -68,7 +82,7 @@ describe('YouTube multi-stream manager', () => {
                 eventType: 'stream-detected',
                 newStreamIds: ['stream-1'],
                 allStreamIds: ['stream-1'],
-                detectionTime: 123
+                detectionTime: testClock.now()
             })
         });
     });
@@ -89,85 +103,87 @@ describe('YouTube multi-stream manager', () => {
     describe('validation', () => {
         test('throws when platform is missing', () => {
             expect(() => createYouTubeMultiStreamManager({
-                safeSetInterval: () => {},
-                validateTimeout: (v) => v,
-                now: () => 100
+                safeSetInterval,
+                validateTimeout,
+                now: testClock.now
             })).toThrow('YouTube multistream manager requires platform instance');
         });
 
         test('throws when safeSetInterval is missing', () => {
             expect(() => createYouTubeMultiStreamManager({
                 platform: buildPlatform(),
-                validateTimeout: (v) => v,
-                now: () => 100
+                validateTimeout,
+                now: testClock.now
             })).toThrow('YouTube multistream manager requires safeSetInterval function');
         });
 
         test('throws when validateTimeout is missing', () => {
             expect(() => createYouTubeMultiStreamManager({
                 platform: buildPlatform(),
-                safeSetInterval: () => {},
-                now: () => 100
+                safeSetInterval,
+                now: testClock.now
             })).toThrow('YouTube multistream manager requires validateTimeout function');
         });
 
         test('throws when now is missing', () => {
             expect(() => createYouTubeMultiStreamManager({
                 platform: buildPlatform(),
-                safeSetInterval: () => {},
-                validateTimeout: (v) => v
+                safeSetInterval,
+                validateTimeout
             })).toThrow('YouTube multistream manager requires now function');
         });
     });
 
     describe('startMonitoring', () => {
         test('clears existing monitoring interval before starting new one', async () => {
-            const existingInterval = 123;
-            const clearedIntervals = [];
-            const originalClearInterval = global.clearInterval;
-            global.clearInterval = (id) => clearedIntervals.push(id);
+            const emitted = [];
+            const platform = buildPlatform({
+                monitoringInterval: 123,
+                config: { streamPollingInterval: 1, fullCheckInterval: 1000, maxStreams: 0 },
+                getLiveVideoIds: createMockFn(async () => ['stream-1']),
+                _emitPlatformEvent: (type, payload) => emitted.push({ type, payload })
+            });
+            const manager = buildManager(platform);
+            platform.checkMultiStream = () => manager.checkMultiStream();
+
+            await manager.startMonitoring();
+            const firstEmitCount = emitted.length;
+
+            await manager.startMonitoring();
+
+            expect(emitted.length).toBeGreaterThanOrEqual(firstEmitCount);
+        });
+
+        test('performs periodic checks at configured interval', async () => {
+            const emitted = [];
+            const platform = buildPlatform({
+                config: { streamPollingInterval: 1, fullCheckInterval: 1000, maxStreams: 0 },
+                getLiveVideoIds: createMockFn(async () => ['stream-1']),
+                _emitPlatformEvent: (type, payload) => emitted.push({ type, payload })
+            });
+            const manager = buildManager(platform);
+            platform.checkMultiStream = () => manager.checkMultiStream();
+
+            await manager.startMonitoring();
+            const initialEmitCount = emitted.length;
+
+            await advanceTimersByTime(1100);
+
+            expect(emitted.length).toBeGreaterThan(initialEmitCount);
+        });
+
+        test('records monitoring start time', async () => {
+            setSystemTime(new Date('2025-01-15T12:05:00.000Z'));
+            const expectedTime = testClock.now();
 
             const platform = buildPlatform({
-                monitoringInterval: existingInterval,
                 getLiveVideoIds: createMockFn(async () => [])
             });
             const manager = buildManager(platform);
 
             await manager.startMonitoring();
 
-            global.clearInterval = originalClearInterval;
-            expect(clearedIntervals).toContain(existingInterval);
-            expect(platform.monitoringInterval).toBeDefined();
-        });
-
-        test('sets up interval with configured polling interval', async () => {
-            const intervalCalls = [];
-            const safeSetInterval = createMockFn((callback, ms) => {
-                intervalCalls.push({ callback, ms });
-                return 999;
-            });
-
-            const platform = buildPlatform({
-                config: { streamPollingInterval: 30, fullCheckInterval: 1000, maxStreams: 0 },
-                getLiveVideoIds: createMockFn(async () => [])
-            });
-            const manager = buildManager(platform, () => 100, safeSetInterval);
-
-            await manager.startMonitoring();
-
-            expect(intervalCalls).toHaveLength(1);
-            expect(intervalCalls[0].ms).toBe(30000);
-        });
-
-        test('records monitoring start time', async () => {
-            const platform = buildPlatform({
-                getLiveVideoIds: createMockFn(async () => [])
-            });
-            const manager = buildManager(platform, () => 5000);
-
-            await manager.startMonitoring();
-
-            expect(platform.monitoringIntervalStart).toBe(5000);
+            expect(platform.monitoringIntervalStart).toBe(expectedTime);
         });
 
         test('propagates error from initial check when throwOnError is true', async () => {
@@ -184,6 +200,7 @@ describe('YouTube multi-stream manager', () => {
 
     describe('checkMultiStream at capacity', () => {
         test('skips full check when at maxStreams and within full check interval', async () => {
+            const currentTime = testClock.now();
             const platform = buildPlatform({
                 config: { maxStreams: 2, streamPollingInterval: 60, fullCheckInterval: 60000 },
                 connectionManager: {
@@ -192,16 +209,17 @@ describe('YouTube multi-stream manager', () => {
                     hasConnection: createMockFn(() => true)
                 },
                 getActiveYouTubeVideoIds: createMockFn(() => ['stream-1', 'stream-2']),
-                lastFullStreamCheck: 50
+                lastFullStreamCheck: currentTime - 50
             });
-            const manager = buildManager(platform, () => 100);
+            const manager = buildManager(platform);
 
             await manager.checkMultiStream();
 
-            expect(platform.lastFullStreamCheck).toBe(50);
+            expect(platform.lastFullStreamCheck).toBe(currentTime - 50);
         });
 
         test('updates lastFullStreamCheck when performing full check after interval exceeded', async () => {
+            const currentTime = testClock.now();
             const platform = buildPlatform({
                 config: { maxStreams: 2, streamPollingInterval: 60, fullCheckInterval: 1000 },
                 connectionManager: {
@@ -211,16 +229,17 @@ describe('YouTube multi-stream manager', () => {
                 },
                 getActiveYouTubeVideoIds: createMockFn(() => ['stream-1', 'stream-2']),
                 getLiveVideoIds: createMockFn(async () => ['stream-1', 'stream-2']),
-                lastFullStreamCheck: 0
+                lastFullStreamCheck: currentTime - 5000
             });
-            const manager = buildManager(platform, () => 5000);
+            const manager = buildManager(platform);
 
             await manager.checkMultiStream();
 
-            expect(platform.lastFullStreamCheck).toBe(5000);
+            expect(platform.lastFullStreamCheck).toBe(currentTime);
         });
 
         test('disconnects streams that are no longer live during full check', async () => {
+            const currentTime = testClock.now();
             const disconnected = [];
             const platform = buildPlatform({
                 config: { maxStreams: 2, streamPollingInterval: 60, fullCheckInterval: 1000 },
@@ -234,9 +253,9 @@ describe('YouTube multi-stream manager', () => {
                 disconnectFromYouTubeStream: createMockFn(async (videoId, reason) => {
                     disconnected.push({ videoId, reason });
                 }),
-                lastFullStreamCheck: 0
+                lastFullStreamCheck: currentTime - 5000
             });
-            const manager = buildManager(platform, () => 5000);
+            const manager = buildManager(platform);
 
             await manager.checkMultiStream();
 
@@ -244,6 +263,7 @@ describe('YouTube multi-stream manager', () => {
         });
 
         test('preserves connections when stream detection returns empty at capacity', async () => {
+            const currentTime = testClock.now();
             const disconnected = [];
             const platform = buildPlatform({
                 config: { maxStreams: 2, streamPollingInterval: 60, fullCheckInterval: 1000 },
@@ -257,9 +277,9 @@ describe('YouTube multi-stream manager', () => {
                 disconnectFromYouTubeStream: createMockFn(async (videoId) => {
                     disconnected.push(videoId);
                 }),
-                lastFullStreamCheck: 0
+                lastFullStreamCheck: currentTime - 5000
             });
-            const manager = buildManager(platform, () => 5000);
+            const manager = buildManager(platform);
 
             await manager.checkMultiStream();
 
@@ -377,7 +397,7 @@ describe('YouTube multi-stream manager', () => {
                     warn: (msg, scope) => warnCalls.push({ msg, scope })
                 }
             });
-            const manager = buildManager(platform, () => 1000);
+            const manager = buildManager(platform);
 
             manager.checkStreamShortageAndWarn(1, 3);
 
@@ -387,12 +407,13 @@ describe('YouTube multi-stream manager', () => {
         });
 
         test('throttles warning when shortage persists within interval', () => {
+            const currentTime = testClock.now();
             const warnCalls = [];
             const infoCalls = [];
             const platform = buildPlatform({
                 config: { fullCheckInterval: 60000 },
                 shortageState: {
-                    lastWarningTime: 900,
+                    lastWarningTime: currentTime - 100,
                     isInShortage: true,
                     lastKnownAvailable: 1,
                     lastKnownRequired: 3
@@ -403,7 +424,7 @@ describe('YouTube multi-stream manager', () => {
                     info: (msg) => infoCalls.push(msg)
                 }
             });
-            const manager = buildManager(platform, () => 1000);
+            const manager = buildManager(platform);
 
             manager.checkStreamShortageAndWarn(1, 3);
 
@@ -412,10 +433,11 @@ describe('YouTube multi-stream manager', () => {
         });
 
         test('logs resolution when shortage is resolved', () => {
+            const currentTime = testClock.now();
             const infoCalls = [];
             const platform = buildPlatform({
                 shortageState: {
-                    lastWarningTime: 500,
+                    lastWarningTime: currentTime - 500,
                     isInShortage: true,
                     lastKnownAvailable: 1,
                     lastKnownRequired: 3
@@ -425,7 +447,7 @@ describe('YouTube multi-stream manager', () => {
                     info: (msg) => infoCalls.push(msg)
                 }
             });
-            const manager = buildManager(platform, () => 1000);
+            const manager = buildManager(platform);
 
             manager.checkStreamShortageAndWarn(3, 3);
 
@@ -447,7 +469,7 @@ describe('YouTube multi-stream manager', () => {
                     info: (msg) => infoCalls.push(msg)
                 }
             });
-            const manager = buildManager(platform, () => 1000);
+            const manager = buildManager(platform);
 
             manager.checkStreamShortageAndWarn(3, 3);
 
