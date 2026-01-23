@@ -31,7 +31,7 @@ describe('TikTokPlatform gift aggregation and schema behavior', () => {
             giftDetails: { giftName: 'Rose', diamondCount: 1, giftType: 0 },
             repeatCount,
             giftType: 0,
-            msgId: `gift-${timestamp}`,
+            common: { msgId: `gift-${timestamp}`, createTime: timestamp },
             timestamp: new Date(timestamp).toISOString()
         };
     };
@@ -109,7 +109,7 @@ describe('TikTokPlatform gift aggregation and schema behavior', () => {
             giftDetails: { giftName: 'Heart Me', diamondCount: 25, giftType: 0 },
             repeatCount: 3,
             repeatEnd: true,
-            msgId: 'gift-msg-1',
+            common: { msgId: 'gift-msg-1', createTime: testClock.now() },
             timestamp: new Date(testClock.now()).toISOString()
         });
 
@@ -139,7 +139,7 @@ describe('TikTokPlatform gift aggregation and schema behavior', () => {
             giftDetails: { giftName: 'User', diamondCount: 5, giftType: 0 },
             repeatCount: 2,
             repeatEnd: true,
-            msgId: 'gift-msg-2',
+            common: { msgId: 'gift-msg-2', createTime: testClock.now() },
             timestamp: new Date(testClock.now()).toISOString()
         });
 

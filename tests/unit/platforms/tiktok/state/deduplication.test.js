@@ -60,7 +60,7 @@ describe('TikTokPlatform _shouldSkipDuplicatePlatformMessage', () => {
         it('returns isDuplicate=false for new messages', () => {
             const platform = createPlatform();
 
-            const result = platform._shouldSkipDuplicatePlatformMessage({ msgId: 'msg-1' });
+            const result = platform._shouldSkipDuplicatePlatformMessage({ common: { msgId: 'msg-1' } });
 
             expect(result.isDuplicate).toBe(false);
         });
@@ -68,8 +68,8 @@ describe('TikTokPlatform _shouldSkipDuplicatePlatformMessage', () => {
         it('returns isDuplicate=true for duplicate messages within TTL', () => {
             const platform = createPlatform();
 
-            platform._shouldSkipDuplicatePlatformMessage({ msgId: 'msg-1' });
-            const result = platform._shouldSkipDuplicatePlatformMessage({ msgId: 'msg-1' });
+            platform._shouldSkipDuplicatePlatformMessage({ common: { msgId: 'msg-1' } });
+            const result = platform._shouldSkipDuplicatePlatformMessage({ common: { msgId: 'msg-1' } });
 
             expect(result.isDuplicate).toBe(true);
         });
@@ -87,10 +87,10 @@ describe('TikTokPlatform _shouldSkipDuplicatePlatformMessage', () => {
         it('performs cleanup when cache exceeds maxCacheSize', () => {
             const platform = createPlatform({}, { deduplicationMaxCacheSize: 3 });
 
-            platform._shouldSkipDuplicatePlatformMessage({ msgId: 'msg-1' });
-            platform._shouldSkipDuplicatePlatformMessage({ msgId: 'msg-2' });
-            platform._shouldSkipDuplicatePlatformMessage({ msgId: 'msg-3' });
-            const result = platform._shouldSkipDuplicatePlatformMessage({ msgId: 'msg-4' });
+            platform._shouldSkipDuplicatePlatformMessage({ common: { msgId: 'msg-1' } });
+            platform._shouldSkipDuplicatePlatformMessage({ common: { msgId: 'msg-2' } });
+            platform._shouldSkipDuplicatePlatformMessage({ common: { msgId: 'msg-3' } });
+            const result = platform._shouldSkipDuplicatePlatformMessage({ common: { msgId: 'msg-4' } });
 
             expect(result.cleanupPerformed).toBe(true);
         });
@@ -98,9 +98,9 @@ describe('TikTokPlatform _shouldSkipDuplicatePlatformMessage', () => {
         it('does not perform cleanup when cache is within threshold', () => {
             const platform = createPlatform({}, { deduplicationMaxCacheSize: 10 });
 
-            platform._shouldSkipDuplicatePlatformMessage({ msgId: 'msg-1' });
-            platform._shouldSkipDuplicatePlatformMessage({ msgId: 'msg-2' });
-            const result = platform._shouldSkipDuplicatePlatformMessage({ msgId: 'msg-3' });
+            platform._shouldSkipDuplicatePlatformMessage({ common: { msgId: 'msg-1' } });
+            platform._shouldSkipDuplicatePlatformMessage({ common: { msgId: 'msg-2' } });
+            const result = platform._shouldSkipDuplicatePlatformMessage({ common: { msgId: 'msg-3' } });
 
             expect(result.cleanupPerformed).toBe(false);
         });

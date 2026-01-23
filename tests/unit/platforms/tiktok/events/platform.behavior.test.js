@@ -78,7 +78,7 @@ describe('TikTokPlatform behavior alignment', () => {
                 platform.handleTikTokGift({
                     repeatCount: 0,
                     giftDetails: { giftName: 'Rose', diamondCount: 1, giftType: 0 },
-                    msgId: 'gift-zero',
+                    common: { msgId: 'gift-zero' },
                     user: {
                         uniqueId: 'alice',
                         nickname: 'Alice',
@@ -124,7 +124,7 @@ describe('TikTokPlatform behavior alignment', () => {
                 platform.handleTikTokGift({
                     repeatCount: 1,
                     giftDetails: { giftName: 'Rose', diamondCount: 1, giftType: 0 },
-                    msgId: 'gift-missing-user',
+                    common: { msgId: 'gift-missing-user' },
                     timestamp: '2024-01-01T00:00:00.000Z'
                 })
             ).resolves.toBeUndefined();
@@ -133,7 +133,6 @@ describe('TikTokPlatform behavior alignment', () => {
             expect(routedGifts[0]).toMatchObject({
                 platform: 'tiktok',
                 isError: true,
-                id: 'gift-missing-user',
                 type: 'gift',
                 eventType: 'gift'
             });
@@ -152,7 +151,7 @@ describe('TikTokPlatform behavior alignment', () => {
                 platform.handleTikTokGift({
                     repeatCount: 1,
                     giftDetails: { giftName: 'Rose', diamondCount: 1, giftType: 0 },
-                    msgId: 'gift-missing-timestamp',
+                    common: { msgId: 'gift-missing-timestamp' },
                     user: {
                         uniqueId: 'alice',
                         nickname: 'Alice',
@@ -165,7 +164,6 @@ describe('TikTokPlatform behavior alignment', () => {
             expect(routedGifts[0]).toMatchObject({
                 platform: 'tiktok',
                 isError: true,
-                id: 'gift-missing-timestamp',
                 type: 'gift',
                 eventType: 'gift'
             });
