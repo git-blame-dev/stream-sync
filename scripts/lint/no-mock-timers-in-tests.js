@@ -32,10 +32,7 @@ const IGNORE_DIRECTORIES = new Set([
 
 // Allowlist for existing files that need refactoring (technical debt)
 // New test files should use fake timers, not mock injection
-const ALLOWLIST = new Set([
-    'tests/unit/platforms/twitch/connections/eventsub-ws-lifecycle.test.js',
-    'tests/unit/platforms/youtube/streams/multistream-manager.test.js'
-]);
+const ALLOWLIST = new Set([]);
 
 const MOCK_TIMER_PATTERNS = [
     {
