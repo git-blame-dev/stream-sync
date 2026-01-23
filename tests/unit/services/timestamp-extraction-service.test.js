@@ -1,7 +1,7 @@
 const { describe, it, beforeAll, beforeEach, afterEach, expect } = require('bun:test');
 const { createMockFn, clearAllMocks } = require('../../helpers/bun-mock-utils');
 const { useFakeTimers, useRealTimers, setSystemTime } = require('../../helpers/bun-timers');
-const { initializeTestLogging, TEST_TIMEOUTS } = require('../../helpers/test-setup');
+const { initializeTestLogging } = require('../../helpers/test-setup');
 const { noOpLogger, setupAutomatedCleanup } = require('../../helpers/mock-factories');
 const testClock = require('../../helpers/test-clock');
 
@@ -319,7 +319,7 @@ describe('TimestampExtractionService Behavior', () => {
 
             for (let i = 0; i < iterations; i++) {
                 const startTime = testClock.now();
-                const result = service.extractTimestamp(platform, testData);
+                service.extractTimestamp(platform, testData);
                 const simulatedDurationMs = 0.8;
                 testClock.advance(simulatedDurationMs);
                 const endTime = testClock.now();

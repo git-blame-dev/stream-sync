@@ -15,7 +15,7 @@ setupAutomatedCleanup({
 });
 
 // Import viewer count utilities from the new modular structure
-const { ViewerCountSystem, validateViewerCount } = require('../../src/utils/viewer-count');
+const { validateViewerCount } = require('../../src/utils/viewer-count');
 
 // Create a mock viewer count system instance for testing
 const viewerCountSystem = {

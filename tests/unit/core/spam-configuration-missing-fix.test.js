@@ -1,10 +1,10 @@
 
 const { describe, expect, beforeEach, it, afterEach } = require('bun:test');
 const { createMockFn, restoreAllMocks } = require('../../helpers/bun-mock-utils');
-const { initializeTestLogging, createTestUser, TEST_TIMEOUTS } = require('../../helpers/test-setup');
-const { createMockNotificationDispatcher, noOpLogger } = require('../../helpers/mock-factories');
+const { initializeTestLogging } = require('../../helpers/test-setup');
+const { noOpLogger } = require('../../helpers/mock-factories');
 const { setupAutomatedCleanup } = require('../../helpers/mock-lifecycle');
-const { expectValidNotification, expectNoTechnicalArtifacts } = require('../../helpers/assertion-helpers');
+const { expectNoTechnicalArtifacts } = require('../../helpers/assertion-helpers');
 const { createTextProcessingManager } = require('../../../src/utils/text-processing');
 
 initializeTestLogging();

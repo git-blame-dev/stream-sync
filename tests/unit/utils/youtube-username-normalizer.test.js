@@ -4,7 +4,7 @@ const {
     normalizeYouTubeUserInfo, 
     isYouTubeUsername 
 } = require('../../../src/utils/youtube-username-normalizer');
-const { INTERNATIONAL_USERNAMES, EDGE_CASE_AMOUNTS, BOUNDARY_CONDITIONS } = require('../../helpers/platform-test-data');
+const { INTERNATIONAL_USERNAMES, BOUNDARY_CONDITIONS } = require('../../helpers/platform-test-data');
 const testClock = require('../../helpers/test-clock');
 
 describe('YouTube Username Normalization', () => {

@@ -1,10 +1,7 @@
 
 const { describe, test, expect, beforeEach, afterEach } = require('bun:test');
 
-const {
-  createTestUser,
-  TEST_TIMEOUTS
-} = require('../helpers/test-setup');
+const { TEST_TIMEOUTS } = require('../helpers/test-setup');
 
 const {
   createMockConfig

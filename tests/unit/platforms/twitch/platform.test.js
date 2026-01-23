@@ -6,6 +6,7 @@ const { createTwitchFollowEvent } = require('../../../helpers/twitch-test-data')
 
 const { TwitchPlatform } = require('../../../../src/platforms/twitch');
 const PlatformEventRouter = require('../../../../src/services/PlatformEventRouter');
+const { EventBus } = require('../../../../src/core/EventBus');
 
 describe('Twitch Platform', () => {
     afterEach(() => {
@@ -20,8 +21,7 @@ describe('Twitch Platform', () => {
     let platform;
     let config;
     let platformHandlers;
-    let mockEventBus;
-    let router;
+    let eventBus;
     let runtime;
 
     beforeEach(() => {
@@ -88,10 +88,7 @@ describe('Twitch Platform', () => {
             onStreamStatus: createMockFn()
         };
 
-        mockEventBus = {
-            emitted: [],
-            emit: createMockFn((type, payload) => mockEventBus.emitted.push({ type, payload }))
-        };
+        eventBus = new EventBus();
 
         runtime = {
             handleChatMessage: createMockFn(),
@@ -101,25 +98,12 @@ describe('Twitch Platform', () => {
             handleRaidNotification: createMockFn()
         };
 
-        mockEventBus.handlers = {};
-        mockEventBus.subscribe = (eventName, handler) => {
-            mockEventBus.handlers[eventName] = mockEventBus.handlers[eventName] || [];
-            mockEventBus.handlers[eventName].push(handler);
-            return () => {
-                mockEventBus.handlers[eventName] = mockEventBus.handlers[eventName].filter(h => h !== handler);
-            };
-        };
-        mockEventBus.emit = (eventName, payload) => {
-            (mockEventBus.handlers[eventName] || []).forEach(handler => handler(payload));
-            mockEventBus.emitted.push({ eventName, payload });
-        };
-
         platform.apiClient = mockApiClient;
         platform.viewerCountProvider = mockViewerCountProvider;
         platform.handlers = platformHandlers;
 
-        router = new PlatformEventRouter({
-            eventBus: mockEventBus,
+        new PlatformEventRouter({
+            eventBus,
             runtime,
             notificationManager: mockApp,
             configService: { areNotificationsEnabled: createMockFn(() => true) },
@@ -513,7 +497,7 @@ describe('Twitch Platform', () => {
     describe('when routing events through PlatformEventRouter', () => {
         it('should route chat events end-to-end via platform:event', async () => {
             platform.handlers = {
-                onChat: (data) => mockEventBus.emit('platform:event', { platform: 'twitch', type: 'platform:chat-message', data })
+                onChat: (data) => eventBus.emit('platform:event', { platform: 'twitch', type: 'platform:chat-message', data })
             };
 
             await platform.onMessageHandler({
@@ -528,12 +512,11 @@ describe('Twitch Platform', () => {
             expect(runtime.handleChatMessage).toHaveBeenCalledTimes(1);
             const payload = runtime.handleChatMessage.mock.calls[0][1];
             expect(payload.message).toBeDefined();
-            expect(mockEventBus.emitted.find(e => e.eventName === 'platform:event')).toBeDefined();
         });
 
         it('should route follow events end-to-end via platform:event', async () => {
             platform.handlers = {
-                onFollow: (data) => mockEventBus.emit('platform:event', { platform: 'twitch', type: 'platform:follow', data })
+                onFollow: (data) => eventBus.emit('platform:event', { platform: 'twitch', type: 'platform:follow', data })
             };
             const followEvent = { username: 'follower', userId: 'follower-id', timestamp: new Date().toISOString() };
 
@@ -542,7 +525,6 @@ describe('Twitch Platform', () => {
             expect(runtime.handleFollowNotification).toHaveBeenCalledTimes(1);
             const payload = runtime.handleFollowNotification.mock.calls[0][2];
             expect(payload.username).toBe('follower');
-            expect(mockEventBus.emitted.find(e => e.eventName === 'platform:event')).toBeDefined();
         });
     });
 

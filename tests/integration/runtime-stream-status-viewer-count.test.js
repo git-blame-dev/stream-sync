@@ -1,6 +1,6 @@
 const { describe, test, afterEach, expect } = require('bun:test');
 
-const { createMockFn, restoreAllMocks } = require('../helpers/bun-mock-utils');
+const { restoreAllMocks } = require('../helpers/bun-mock-utils');
 const { AppRuntime } = require('../../src/main');
 const { createAppRuntimeTestDependencies } = require('../helpers/runtime-test-harness');
 

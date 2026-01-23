@@ -1,23 +1,7 @@
 const { describe, expect, beforeEach, afterEach, it } = require('bun:test');
 const { createMockFn, restoreAllMocks } = require('../helpers/bun-mock-utils');
-const { ViewerCountObserver } = require('../../src/observers/viewer-count-observer');
 const { OBSViewerCountObserver } = require('../../src/observers/obs-viewer-count-observer');
-const { ViewerCountExtractionService } = require('../../src/services/viewer-count-extraction-service');
 const testClock = require('../helpers/test-clock');
-
-const VIEWER_COUNT_CONSTANTS = {
-    OBSERVER: {
-        DEFAULT_OBS_OBSERVER_ID: 'obs-observer-1'
-    },
-    LOG_CONTEXT: {
-        OBS_OBSERVER: 'OBSObserver'
-    },
-    VIEWER_COUNT_ZERO: 0,
-    PLATFORM_NAMES: ['tiktok', 'twitch', 'youtube'],
-    ERROR_MESSAGES: {
-        MISSING_OBS_CONNECTION: 'OBS not connected, skipping viewer count update'
-    }
-};
 
 describe('Viewer Count & OBS Observer Performance Tests', () => {
     let performanceMetrics;
@@ -480,7 +464,6 @@ describe('Viewer Count & OBS Observer Performance Tests', () => {
         it('should maintain stability during realistic streaming session load', async () => {
             // Given: Realistic streaming session simulation
             const sessionDuration = 5000; // 5 seconds (scaled down from 2+ hours)
-            const viewerCountSystem = createViewerCountSystem();
             const loadSimulator = createStreamingLoadSimulator();
             
             // When: Simulating streaming session load
@@ -508,7 +491,6 @@ describe('Viewer Count & OBS Observer Performance Tests', () => {
 
         it('should handle viewer count spikes without performance degradation', async () => {
             // Given: Viewer count spike scenario
-            const viewerCountSystem = createViewerCountSystem();
             const spikeSimulator = createViewerCountSpikeSimulator();
             
             // When: Simulating viewer count spikes
@@ -712,14 +694,6 @@ describe('Viewer Count & OBS Observer Performance Tests', () => {
             pendingDelayMs = 0;
             delayFlushScheduled = false;
         });
-    }
-
-    function advanceClock(delayMs) {
-        if (typeof delayMs !== 'number' || !Number.isFinite(delayMs) || delayMs <= 0) {
-            return 0;
-        }
-        testClock.advance(delayMs);
-        return delayMs;
     }
 
     function simulateDelay(delayMs) {
@@ -1014,12 +988,11 @@ describe('Viewer Count & OBS Observer Performance Tests', () => {
                 let minPerformance = 1.0;
                 let maxRecoveryTime = 0;
                 
-                for (const baseline of config.baselines) {
+                for (const _baseline of config.baselines) {
                     for (const magnitude of config.spikeMagnitudes) {
                         totalSpikes++;
-                        
+
                         // Simulate spike processing
-                        const spikeStart = testClock.now();
                         await simulateDelay(config.spikeDuration / 4); // Processing time
                         
                         // Simulate performance during spike (slightly degraded)
@@ -1108,11 +1081,9 @@ describe('Viewer Count & OBS Observer Performance Tests', () => {
 
     function createFlakyOBSManager() {
         const mockOBS = createMockOBSManager();
-        let connectionFailures = 0;
         let recoverySuccess = true;
-        
+
         mockOBS.simulateConnectionFailure = () => {
-            connectionFailures++;
             const originalIsConnected = mockOBS.isConnected;
             mockOBS.isConnected = () => false;
             

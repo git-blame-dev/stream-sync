@@ -76,12 +76,12 @@ describe('DisplayQueue notification TTS staging', () => {
     }
 
     it('emits VFX and updates TTS for gift notifications', async () => {
-        const { queue, eventBus, recordedTexts } = createQueue();
+        const { queue, eventBus } = createQueue();
         const capturedVfx = [];
 
         eventBus.on(PlatformEvents.VFX_COMMAND_RECEIVED, (payload) => capturedVfx.push(payload));
 
-        const giftPromise = queue.handleGiftEffects({
+        queue.handleGiftEffects({
             type: 'platform:gift',
             platform: 'tiktok',
             vfxConfig: {

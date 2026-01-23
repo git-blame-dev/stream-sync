@@ -481,18 +481,6 @@ describe('YouTube Resolution Performance - User Experience Validation', () => {
       // Given: Heavy international content that might impact processing
       const complexInternationalChannelId = 'UCcomplex1234567890123'; // Listed in testChannelIds array
       const complexContentOperations = 10;
-      
-      // Mock complex international content
-      const createComplexInternationalContent = () => ({
-        getLiveStreams: createMockFn().mockResolvedValue({
-          videos: [{
-            id: 'complex123',
-            title: { text: '🎮 Live Gaming Stream 实时游戏直播 ライブゲーミング 라이브 게이밍 بث مباشر للألعاب 🎮' },
-            is_live: true,
-            author: { name: 'MultiLingual Creator 多语言创作者 マルチ言語クリエイター 다국어 창작자' }
-          }]
-        })
-      });
 
       // When: User performs multiple operations with complex international content
       const complexContentResults = [];

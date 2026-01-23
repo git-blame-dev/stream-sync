@@ -2,7 +2,7 @@
 const { describe, test, expect, beforeEach, afterEach } = require('bun:test');
 const { initializeTestLogging, TEST_TIMEOUTS } = require('../../helpers/test-setup');
 const { createMockFn, clearAllMocks, restoreAllMocks } = require('../../helpers/bun-mock-utils');
-const { noOpLogger, createMockNotificationBuilder, createMockConfig } = require('../../helpers/mock-factories');
+const { noOpLogger } = require('../../helpers/mock-factories');
 const { setupAutomatedCleanup } = require('../../helpers/mock-lifecycle');
 const { expectNoTechnicalArtifacts } = require('../../helpers/assertion-helpers');
 const { extractTikTokUserData } = require('../../../src/utils/tiktok-data-extraction');
@@ -63,8 +63,6 @@ const createEnvelopeNotificationHandler = (mockLogger, mockGiftHandler) => {
 
 describe('TikTok Envelope Notification - Behavior Testing', () => {
     let mockLogger;
-    let mockNotificationBuilder;
-    let mockConfig;
     let handleEnvelopeNotification;
     let mockGiftHandler;
     let capturedGiftCalls;
@@ -73,10 +71,6 @@ describe('TikTok Envelope Notification - Behavior Testing', () => {
 
     beforeEach(() => {
         mockLogger = noOpLogger;
-        mockNotificationBuilder = createMockNotificationBuilder();
-        mockConfig = createMockConfig({
-            tiktok: { enabled: true, username: 'testUserConfig' }
-        });
 
         capturedGiftCalls = [];
 

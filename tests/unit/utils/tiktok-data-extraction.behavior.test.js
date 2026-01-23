@@ -1,4 +1,4 @@
-const { describe, expect, it, afterEach } = require('bun:test');
+const { describe, expect, it } = require('bun:test');
 const {
     extractTikTokUserData,
     extractTikTokGiftData,

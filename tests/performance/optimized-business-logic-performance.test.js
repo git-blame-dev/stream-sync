@@ -1,5 +1,4 @@
 
-const OptimizedTestFactory = require('../helpers/optimized-test-factory');
 const NotificationBuilder = require('../../src/utils/notification-builder');
 const testClock = require('../helpers/test-clock');
 

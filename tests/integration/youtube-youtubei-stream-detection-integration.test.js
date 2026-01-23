@@ -1,13 +1,12 @@
 const { describe, test, beforeEach, afterEach, expect } = require('bun:test');
 
 const { createMockFn, restoreAllMocks } = require('../helpers/bun-mock-utils');
-const { createMockConfig, noOpLogger } = require('../helpers/mock-factories');
+const { noOpLogger } = require('../helpers/mock-factories');
 const { expectNoTechnicalArtifacts } = require('../helpers/assertion-helpers');
 const testClock = require('../helpers/test-clock');
 const { StreamDetector } = require('../../src/utils/stream-detector');
 
 describe('YouTube YouTubei Stream Detection Integration - Regression', () => {
-    let mockConfig;
     let streamDetector;
     let mockYouTubeService;
 
@@ -17,7 +16,6 @@ describe('YouTube YouTubei Stream Detection Integration - Regression', () => {
 
     beforeEach(() => {
         testClock.reset();
-        mockConfig = createMockConfig();
         mockYouTubeService = {
             detectLiveStreams: createMockFn(),
             getUsageMetrics: createMockFn().mockReturnValue({
@@ -92,11 +90,6 @@ describe('YouTube YouTubei Stream Detection Integration - Regression', () => {
 
     describe('Stream Detector Routing', () => {
         test('should route to YouTubeStreamDetectionService when youtubei method configured', async () => {
-            const platformConfig = {
-                streamDetectionMethod: 'youtubei',
-                username: 'testchannel',
-                apiKey: 'test-api-key'
-            };
             mockYouTubeService.detectLiveStreams.mockResolvedValue({
                 success: true,
                 videoIds: ['test123video'],
@@ -128,11 +121,6 @@ describe('YouTube YouTubei Stream Detection Integration - Regression', () => {
         });
 
         test('should meet performance targets for youtubei stream detection', async () => {
-            const platformConfig = {
-                streamDetectionMethod: 'youtubei',
-                username: 'testchannel',
-                apiKey: 'test-api-key'
-            };
             mockYouTubeService.detectLiveStreams.mockResolvedValue({
                 success: true,
                 videoIds: ['test123video'],

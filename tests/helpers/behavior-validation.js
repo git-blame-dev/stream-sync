@@ -463,10 +463,6 @@ const expectGracefulDegradation = async (systemUnderTest, degradationExpectation
     };
     
     try {
-        // Capture initial system state
-        const initialState = degradationExpectations.getSystemState ? 
-            degradationExpectations.getSystemState() : { operational: true };
-        
         // Execute potentially failing system
         await systemUnderTest();
         

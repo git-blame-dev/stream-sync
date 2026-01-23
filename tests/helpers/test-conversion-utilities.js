@@ -1,11 +1,9 @@
 
-const { 
-    waitForEvent, 
-    waitFor, 
+const {
+    waitForEvent,
+    waitFor,
     observeUserExperience,
-    expectUserExperience,
-    expectNoTechnicalArtifacts,
-    NetworkEventSimulator 
+    expectNoTechnicalArtifacts
 } = require('./event-driven-testing');
 
 const convertDelayToEvent = async (emitter, eventName, timeoutMs = 5000) => {

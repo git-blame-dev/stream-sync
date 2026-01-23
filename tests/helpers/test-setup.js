@@ -8,7 +8,6 @@ const nextSequence = () => {
     return sequence;
 };
 const nextTimestampMs = () => BASE_TIMESTAMP_MS + (nextSequence() * 1000);
-const nextTimestampIso = () => new Date(nextTimestampMs()).toISOString();
 const nextTestId = (prefix) => `${prefix}-${nextSequence().toString(36).padStart(6, '0')}`;
 
 const createMockLoggingConfig = (platformOverrides = {}) => ({

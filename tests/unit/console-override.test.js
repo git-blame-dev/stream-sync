@@ -2,7 +2,6 @@ const { describe, test, expect, beforeEach, afterEach, beforeAll, afterAll } = r
 const { createMockFn, restoreAllMocks } = require('../helpers/bun-mock-utils');
 
 const fs = require('fs');
-const path = require('path');
 
 let initializeConsoleOverride;
 let restoreConsole;

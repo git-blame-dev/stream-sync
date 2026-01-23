@@ -19,23 +19,9 @@ setupAutomatedCleanup({
 describe('Text Processing', () => {
     let textProcessing;
     let mockLogger;
-    let mockConstants;
-    let mockConfig;
 
     beforeEach(() => {
         mockLogger = noOpLogger;
-        mockConstants = {
-            MAX_USERNAME_LENGTH: 12,
-            MAX_MESSAGE_LENGTH: 500,
-            DEFAULT_CURRENCY: 'USD'
-        };
-        mockConfig = {
-            textProcessing: {
-                maxUsernameLength: 12,
-                maxMessageLength: 500,
-                enableEmojis: true
-            }
-        };
 
         textProcessing = createTextProcessingManager({ logger: mockLogger });
     });

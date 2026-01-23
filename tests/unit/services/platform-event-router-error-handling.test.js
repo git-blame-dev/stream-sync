@@ -1,4 +1,4 @@
-const { describe, expect, it, beforeEach, afterEach } = require('bun:test');
+const { describe, expect, it, beforeEach } = require('bun:test');
 const { createMockFn } = require('../../helpers/bun-mock-utils');
 const { noOpLogger } = require('../../helpers/mock-factories');
 const PlatformEventRouter = require('../../../src/services/PlatformEventRouter');
@@ -57,7 +57,7 @@ describe('PlatformEventRouter error handling', () => {
             .mockRejectedValueOnce(new Error('first call fails'))
             .mockResolvedValueOnce();
 
-        const router = new PlatformEventRouter({
+        new PlatformEventRouter({
             eventBus: mockEventBus,
             runtime: mockRuntime,
             notificationManager: mockNotificationManager,
@@ -74,7 +74,7 @@ describe('PlatformEventRouter error handling', () => {
     it('does not crash when handler throws non-Error value', async () => {
         mockRuntime.handleChatMessage.mockRejectedValueOnce('string error');
 
-        const router = new PlatformEventRouter({
+        new PlatformEventRouter({
             eventBus: mockEventBus,
             runtime: mockRuntime,
             notificationManager: mockNotificationManager,
