@@ -1,5 +1,5 @@
 
-const { describe, test, expect, it } = require('bun:test');
+const { describe, expect, it } = require('bun:test');
 
 const { getSyntheticFixture } = require('../../helpers/platform-test-data');
 const testClock = require('../../helpers/test-clock');

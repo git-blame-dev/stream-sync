@@ -230,7 +230,7 @@ describe('YouTube YouTubei Stream Detection Integration - Regression', () => {
                 try {
                     const service = mockYouTubePlatform.getStreamDetectionService();
                     return await service.detectLiveStreams(mockYouTubePlatform.config.username);
-                } catch (error) {
+                } catch {
                     return {
                         success: false,
                         message: 'Unable to detect streams at this time',

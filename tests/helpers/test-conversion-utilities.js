@@ -249,7 +249,7 @@ const validateUserExperienceFocus = (testResult) => {
     if (testResult.displayContent) {
         try {
             expectNoTechnicalArtifacts(testResult.displayContent);
-        } catch (error) {
+        } catch {
             checks.noTechnicalArtifacts = false;
         }
     }

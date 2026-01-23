@@ -129,7 +129,7 @@ class TestLogger {
         this.hooks.beforeLog.forEach(hook => {
             try {
                 hook(level, message, meta);
-            } catch (error) {
+            } catch {
                 // Don't let hook errors break logging
             }
         });
@@ -159,7 +159,7 @@ class TestLogger {
         this.hooks.afterLog.forEach(hook => {
             try {
                 hook(entry);
-            } catch (error) {
+            } catch {
                 // Don't let hook errors break logging
             }
         });

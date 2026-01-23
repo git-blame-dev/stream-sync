@@ -1,5 +1,5 @@
 
-const { describe, test, expect, it } = require('bun:test');
+const { describe, expect, it } = require('bun:test');
 
 const { getSyntheticFixture } = require('../../helpers/platform-test-data');
 const YouTubeAuthorExtractor = require('../../../src/utils/youtube-author-extractor');

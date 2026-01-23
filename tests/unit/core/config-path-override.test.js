@@ -1,4 +1,4 @@
-const { describe, test, expect, it, beforeEach, afterEach } = require('bun:test');
+const { describe, expect, it, beforeEach, afterEach } = require('bun:test');
 const { createMockFn, restoreAllMocks } = require('../../helpers/bun-mock-utils');
 
 const fs = require('fs');
