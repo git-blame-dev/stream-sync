@@ -60,7 +60,8 @@ describe('Twitch EventSub event router', () => {
 
         router.handleNotificationEvent('channel.follow', {
             user_name: 'Follower',
-            user_id: 'follower-1'
+            user_id: 'follower-1',
+            user_login: 'follower'
         });
 
         expect(emitted.find((evt) => evt.type === 'follow')).toBeUndefined();
@@ -79,6 +80,7 @@ describe('Twitch EventSub event router', () => {
         router.handleNotificationEvent('channel.follow', {
             user_name: 'Follower',
             user_id: 'follower-2',
+            user_login: 'follower',
             followed_at: '2024-02-01T00:00:00Z'
         });
 
@@ -86,7 +88,7 @@ describe('Twitch EventSub event router', () => {
         expect(followEvent).toBeDefined();
         expect(followEvent.payload).toMatchObject({
             username: 'Follower',
-            userId: 'follower-2',
+            userId: 'follower',
             timestamp: '2024-02-01T00:00:00Z'
         });
     });
@@ -104,6 +106,7 @@ describe('Twitch EventSub event router', () => {
         router.handleBitsUseEvent({
             user_name: 'Cheerer',
             user_id: '777',
+            user_login: 'cheerer',
             bits: 50,
             message_id: 'bits-msg-1',
             message: { text: 'hello' },
@@ -148,6 +151,7 @@ describe('Twitch EventSub event router', () => {
         router.handlePaypiggyEvent({
             user_name: 'GiftedUser',
             user_id: '123',
+            user_login: 'gifteduser',
             is_gift: true
         });
 
@@ -167,6 +171,7 @@ describe('Twitch EventSub event router', () => {
         router.handleNotificationEvent('channel.subscribe', {
             user_name: 'Subscriber',
             user_id: 'sub-1',
+            user_login: 'subscriber',
             tier: '1000',
             cumulative_months: '6',
             is_gift: false,
@@ -177,7 +182,7 @@ describe('Twitch EventSub event router', () => {
         expect(paypiggyEvent).toBeDefined();
         expect(paypiggyEvent.payload).toMatchObject({
             username: 'Subscriber',
-            userId: 'sub-1',
+            userId: 'subscriber',
             tier: '1000',
             months: 6,
             timestamp: '2024-03-01T00:00:00Z'
@@ -197,6 +202,7 @@ describe('Twitch EventSub event router', () => {
         router.handleNotificationEvent('channel.subscription.message', {
             user_name: 'Resubber',
             user_id: 'resub-1',
+            user_login: 'resubber',
             tier: '1000',
             cumulative_months: 12,
             message: { text: 'Still here!' },
@@ -207,7 +213,7 @@ describe('Twitch EventSub event router', () => {
         expect(messageEvent).toBeDefined();
         expect(messageEvent.payload).toMatchObject({
             username: 'Resubber',
-            userId: 'resub-1',
+            userId: 'resubber',
             tier: '1000',
             months: 12,
             message: 'Still here!',
@@ -228,6 +234,7 @@ describe('Twitch EventSub event router', () => {
         router.handleBitsUseEvent({
             user_name: 'Cheerer',
             user_id: '777',
+            user_login: 'cheerer',
             bits: 50,
             id: 'bits-evt-1',
             message: {
@@ -290,6 +297,7 @@ describe('Twitch EventSub event router', () => {
         router.handleBitsUseEvent({
             user_name: 'Cheerer',
             user_id: '777',
+            user_login: 'cheerer',
             bits: 50,
             id: 'bits-evt-missing-ts',
             message: {
@@ -318,7 +326,7 @@ describe('Twitch EventSub event router', () => {
 
         router.handleNotificationEvent('channel.subscription.gift', {
             user_name: 'GiftPilot',
-            user_id: 'tw-gift-1',
+            user_login: 'giftpilot',
             tier: '1000',
             total: 3,
             cumulative_total: 12,
@@ -330,7 +338,7 @@ describe('Twitch EventSub event router', () => {
         expect(giftEvent).toBeDefined();
         expect(giftEvent.payload).toMatchObject({
             username: 'GiftPilot',
-            userId: 'tw-gift-1',
+            userId: 'giftpilot',
             tier: '1000',
             giftCount: 3,
             cumulativeTotal: 12,
@@ -407,14 +415,14 @@ describe('Twitch EventSub event router', () => {
 
         router.handleNotificationEvent('channel.raid', {
             from_broadcaster_user_name: 'Raider',
-            from_broadcaster_user_id: 'raid-1',
+            from_broadcaster_user_login: 'raider',
             viewers: 8,
             timestamp: '2024-03-01T00:00:00Z'
         });
 
         router.handleNotificationEvent('channel.subscription.gift', {
             user_name: 'Gifter',
-            user_id: 'gift-1',
+            user_login: 'gifter',
             tier: '1000',
             total: 2,
             timestamp: '2024-03-01T00:01:00Z'

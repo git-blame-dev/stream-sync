@@ -76,7 +76,7 @@ describe('TwitchEventSub notification routing', () => {
                 subscription: { type: 'channel.follow' },
                 event: {
                     user_name: 'NewFollower',
-                    user_id: 'follower-456',
+                    user_login: 'newfollower',
                     followed_at: '2024-01-01T00:00:00Z'
                 }
             }
@@ -95,7 +95,7 @@ describe('TwitchEventSub notification routing', () => {
 
         const subscriptionEvent = {
             user_name: 'LongTenure',
-            user_id: '123',
+            user_login: 'longtenure',
             tier: '1000',
             cumulative_months: 7,
             is_gift: false,
@@ -119,7 +119,7 @@ describe('TwitchEventSub notification routing', () => {
 
         const resubEvent = {
             user_name: 'Resubber',
-            user_id: '456',
+            user_login: 'resubber',
             tier: '1000',
             cumulative_months: 9,
             message: { text: 'Great stream!' },
@@ -148,7 +148,7 @@ describe('TwitchEventSub notification routing', () => {
                 subscription: { type: 'channel.raid' },
                 event: {
                     from_broadcaster_user_name: 'RaiderStreamer',
-                    from_broadcaster_user_id: 'raider-789',
+                    from_broadcaster_user_login: 'raiderstreamer',
                     viewers: 50,
                     timestamp: '2024-01-01T00:00:00Z'
                 }
