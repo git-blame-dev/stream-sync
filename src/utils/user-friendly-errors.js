@@ -538,7 +538,6 @@ module.exports = {
     translateError,
     formatErrorForConsole,
     formatErrorForLog,
-    showUserFriendlyError,
     handleUserFacingError,
     ERROR_MESSAGES,
     TECHNICAL_ERROR_PATTERNS
