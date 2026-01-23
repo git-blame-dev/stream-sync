@@ -6,7 +6,7 @@
   "scripts": {
     "start": "bun src/bootstrap.js",
     "start:debug": "bun src/bootstrap.js --debug",
-    "lint": "bun scripts/lint/no-raw-timeouts.js && eslint \"src/**/*.js\" \"tests/**/*.js\" && knip --config knip.json --include files,unlisted,exports",
+    "lint": "bun scripts/lint/no-raw-timeouts.js && bun scripts/lint/no-mock-timers-in-tests.js && bun scripts/lint/no-implementation-test-patterns.js && eslint \"src/**/*.js\" \"tests/**/*.js\" && knip --config knip.json --include files,unlisted,exports",
     "test": "NODE_ENV=test bun test"
   },
   "devDependencies": {
