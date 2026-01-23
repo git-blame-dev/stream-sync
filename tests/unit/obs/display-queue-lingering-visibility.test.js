@@ -1,6 +1,6 @@
 
 const { describe, expect, it, afterEach } = require('bun:test');
-const { createMockFn, restoreAllMocks } = require('../../helpers/bun-mock-utils');
+const { restoreAllMocks } = require('../../helpers/bun-mock-utils');
 
 const { DisplayQueue } = require('../../../src/obs/display-queue');
 const { createMockOBSManager } = require('../../helpers/mock-factories');

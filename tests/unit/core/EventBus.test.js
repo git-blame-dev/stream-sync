@@ -47,7 +47,7 @@ describe('EventBus', () => {
 
         test('should bind methods to preserve context', () => {
             const bus = new EventBus();
-            const { emit, subscribe, unsubscribe } = bus;
+            const { emit, subscribe } = bus;
 
             expect(() => emit('test')).not.toThrow();
             expect(() => subscribe('test', () => {})).not.toThrow();

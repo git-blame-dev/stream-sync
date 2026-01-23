@@ -1,4 +1,4 @@
-const { describe, expect, beforeEach, it, afterEach } = require('bun:test');
+const { describe, expect, beforeEach, it } = require('bun:test');
 const { createMockFn } = require('../../helpers/bun-mock-utils');
 const { noOpLogger } = require('../../helpers/mock-factories');
 const { createOBSSourcesManager } = require('../../../src/obs/sources');

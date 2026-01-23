@@ -2,7 +2,6 @@ const { describe, expect, beforeEach, afterEach, it } = require('bun:test');
 const { createMockFn, clearAllMocks, restoreAllMocks } = require('../../helpers/bun-mock-utils');
 const { useRealTimers } = require('../../helpers/bun-timers');
 
-const { createTestUser, createMockConfig } = require('../../helpers/test-setup');
 const testClock = require('../../helpers/test-clock');
 const OBSHealthChecker = require('../../../src/obs/health-checker');
 

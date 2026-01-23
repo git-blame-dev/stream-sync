@@ -1724,7 +1724,6 @@ const expectUnifiedErrorHandling = (errorResults) => {
         throw new Error('expectUnifiedErrorHandling requires at least 2 error results to compare');
     }
     
-    const firstResult = errorResults[0];
     const requiredFields = ['implementationType'];
     
     // Check that all results have required fields

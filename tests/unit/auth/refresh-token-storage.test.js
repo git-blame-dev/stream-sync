@@ -248,7 +248,6 @@ describe('Refresh Token Storage and Update Handling (Twitch Best Practices)', ()
         test('should update memory first, then file (correct order)', async () => {
             const operationOrder = [];
 
-            const originalUpdateConfig = tokenRefresh.updateConfig.bind(tokenRefresh);
             tokenRefresh.updateConfig = async function(tokenData) {
                 operationOrder.push('memory_update_start');
 

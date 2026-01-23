@@ -268,7 +268,7 @@ class TimeSimulator {
         }
 
         // Check and fire intervals
-        for (const [id, interval] of this.intervals.entries()) {
+        for (const [_id, interval] of this.intervals.entries()) {
             while (interval.nextFire <= this.currentTime) {
                 interval.callback();
                 interval.nextFire += interval.delay;

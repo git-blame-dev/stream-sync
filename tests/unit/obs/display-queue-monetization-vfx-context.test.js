@@ -68,7 +68,7 @@ describe('DisplayQueue monetization VFX context', () => {
             data: { username: 'testGiftUser', userId: 'testUserId123', displayMessage: 'sent a gift' }
         };
 
-        const giftPromise = queue.handleGiftEffects(item, []);
+        queue.handleGiftEffects(item, []);
 
         await safeDelay(2100);
 

@@ -2,10 +2,9 @@
 const { describe, expect, beforeEach, afterEach, it } = require('bun:test');
 const { spyOn, restoreAllMocks } = require('../../helpers/bun-mock-utils');
 
-const { 
+const {
   initializeTestLogging,
-  createTestUser, 
-  TEST_TIMEOUTS 
+  TEST_TIMEOUTS
 } = require('../../helpers/test-setup');
 
 const {

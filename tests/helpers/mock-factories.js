@@ -18,8 +18,6 @@ const createTimestamp = () => {
 };
 const nextPseudoRandom = () => ((nextSequence() * 9301 + 49297) % 233280) / 233280;
 const YOUTUBE_TEST_CHANNEL_ID = 'UC_TEST_CHANNEL_00000000';
-const TWITCH_TEST_USER_ID = 'test-twitch-user-id';
-const TIKTOK_TEST_USER_ID = 'test-tiktok-user-id';
 const requireNonEmptyString = (value, field) => {
     if (typeof value !== 'string' || !value.trim()) {
         throw new Error(`${field} is required`);
@@ -3351,7 +3349,7 @@ const createTikTokWebSocketMessage = (eventType, eventData = {}) => {
 };
 
 const createWebSocketMessageSimulator = (options = {}) => {
-    const { platform = 'twitch', logger = console } = options;
+    const { platform = 'twitch' } = options;
     
     return {
         generateRapidMessages: (count = 10, eventType = 'chat') => {

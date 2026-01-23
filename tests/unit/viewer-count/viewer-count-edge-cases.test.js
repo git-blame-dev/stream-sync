@@ -111,8 +111,7 @@ const createEdgeCaseObserver = (observerId = 'edge-case-observer', edgeCaseBehav
     } = edgeCaseBehavior;
     
     let updateCallCount = 0;
-    let statusCallCount = 0;
-    
+
     return {
         observerId,
         receivedUpdates: [],
@@ -139,8 +138,6 @@ const createEdgeCaseObserver = (observerId = 'edge-case-observer', edgeCaseBehav
         },
         
         async onStreamStatusChange(statusUpdate) {
-            statusCallCount++;
-            
             if (shouldThrowOnStatusChange) {
                 throw new Error('Observer status processing failed');
             }
@@ -163,19 +160,6 @@ const expectSystemStability = (system) => {
     expect(typeof system.isPolling).toBe('boolean');
     expect(typeof system.counts).toBe('object');
     expect(system.observers).toBeInstanceOf(Map);
-};
-
-const expectEdgeCaseHandling = (count, systemState) => {
-    expect(systemState).toBeDefined();
-    expect(systemState.isStable).toBe(true);
-
-    if (count === Infinity || count === -Infinity || isNaN(count)) {
-        expect(systemState.hasValidCount).toBe(false);
-    } else if (count < 0) {
-        expect(systemState.hasValidCount).toBe(false);
-    } else {
-        expect(systemState.hasValidCount).toBe(true);
-    }
 };
 
 describe('Viewer Count & OBS Observer Edge Case Tests', () => {
@@ -748,8 +732,7 @@ describe('Viewer Count & OBS Observer Edge Case Tests', () => {
             system.addObserver(observer);
             
             const futureDate = new Date(testClock.now() + 86400000);
-            const pastDate = new Date(testClock.now() - 86400000);
-            
+
             await system.notifyObservers('tiktok', 100, 50);
 
             const originalNow = global.Date.now;

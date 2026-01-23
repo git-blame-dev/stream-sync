@@ -1,6 +1,6 @@
 
 const { describe, test, expect, beforeEach, afterEach, afterAll } = require('bun:test');
-const { createMockFn, restoreAllMocks } = require('../../helpers/bun-mock-utils');
+const { restoreAllMocks } = require('../../helpers/bun-mock-utils');
 const { useFakeTimers, useRealTimers, advanceTimersByTime } = require('../../helpers/bun-timers');
 
 const { ViewerCountSystem } = require('../../../src/utils/viewer-count');
@@ -85,30 +85,6 @@ const createMockPlatformWithViewerCount = (platformName = 'tiktok', config = {})
         getCallCount() {
             return callCount;
         }
-    };
-};
-
-const createMockConfigManager = (configOverrides = {}) => {
-    const defaultConfig = {
-        viewerCountPollingInterval: 60,
-        enableViewerCount: true,
-        ...configOverrides
-    };
-
-    return {
-        getNumber: createMockFn((section, key, defaultValue) => {
-            if (section === 'general' && key === 'viewerCountPollingInterval') {
-                return defaultConfig.viewerCountPollingInterval !== undefined ? defaultConfig.viewerCountPollingInterval : defaultValue;
-            }
-            return defaultValue;
-        }),
-
-        getBoolean: createMockFn((section, key, defaultValue) => {
-            if (section === 'general' && key === 'enableViewerCount') {
-                return defaultConfig.enableViewerCount ?? defaultValue;
-            }
-            return defaultValue;
-        })
     };
 };
 
@@ -250,7 +226,7 @@ describe('ViewerCountSystem - Comprehensive Behavior Tests', () => {
         });
 
         test('should notify multiple observers of viewer count changes', async () => {
-            const { system, mockPlatforms } = createViewerCountTestEnvironment();
+            const { system } = createViewerCountTestEnvironment();
             
             const observer1 = createMockViewerCountObserver('observer-1');
             const observer2 = createMockViewerCountObserver('observer-2');
@@ -347,7 +323,7 @@ describe('ViewerCountSystem - Comprehensive Behavior Tests', () => {
         });
 
         test('should detect viewer count changes and notify observers', async () => {
-            const { system, mockPlatforms } = createViewerCountTestEnvironment({
+            const { system } = createViewerCountTestEnvironment({
                 tiktok: { viewerCountSequence: [100, 150, 200] }
             });
             const observer = createMockViewerCountObserver('count-tracker');
@@ -361,7 +337,7 @@ describe('ViewerCountSystem - Comprehensive Behavior Tests', () => {
         }, 10000);
 
         test('should handle platform API failures gracefully during polling', async () => {
-            const { system, mockPlatforms } = createViewerCountTestEnvironment({
+            const { system } = createViewerCountTestEnvironment({
                 tiktok: { failAfterCalls: 1, failureMessage: 'Network timeout' }
             });
             const observer = createMockViewerCountObserver('error-tracker');
@@ -373,7 +349,7 @@ describe('ViewerCountSystem - Comprehensive Behavior Tests', () => {
         }, 10000);
 
         test('should maintain independent polling schedules per platform', async () => {
-            const { system, mockPlatforms } = createViewerCountTestEnvironment();
+            const { system } = createViewerCountTestEnvironment();
             system.startPolling();
             system.stopPlatformPolling('tiktok');
             advanceTimersByTime(5);
@@ -473,7 +449,7 @@ describe('ViewerCountSystem - Comprehensive Behavior Tests', () => {
         });
 
         test('should track viewer count history accurately', async () => {
-            const { system, mockPlatforms } = createViewerCountTestEnvironment({
+            const { system } = createViewerCountTestEnvironment({
                 tiktok: { viewerCountSequence: [100, 120, 90, 110] }
             });
             const observer = createMockViewerCountObserver('history-tracker');

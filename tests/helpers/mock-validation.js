@@ -150,17 +150,6 @@ const validateMockContract = (mockObject, contractName) => {
         }
     });
 
-    // Validate method signatures if available
-    if (contract.methodSignatures) {
-        Object.keys(contract.methodSignatures).forEach(methodName => {
-            if (mockObject[methodName]) {
-                const signature = contract.methodSignatures[methodName];
-                // Note: Runtime signature validation is limited in JavaScript
-                // This serves as documentation and can be extended with runtime checks
-            }
-        });
-    }
-
     // Validate mock type annotation
     if (mockObject._mockType !== contractName) {
         warnings.push(`Mock type annotation mismatch. Expected: ${contractName}, Got: ${mockObject._mockType}`);

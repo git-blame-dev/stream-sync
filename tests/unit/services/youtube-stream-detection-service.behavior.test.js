@@ -5,11 +5,9 @@ const { YouTubeStreamDetectionService } = require('../../../src/services/youtube
 const testClock = require('../../helpers/test-clock');
 
 describe('YouTubeStreamDetectionService behavior', () => {
-    let dateNowSpy;
-
     beforeEach(() => {
         clearAllMocks();
-        dateNowSpy = spyOn(Date, 'now').mockImplementation(() => testClock.now());
+        spyOn(Date, 'now').mockImplementation(() => testClock.now());
     });
 
     afterEach(() => {

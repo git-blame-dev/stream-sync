@@ -13,9 +13,6 @@ const globalAuthSystem = new StreamingAuthenticationSystem({
 });
 
 beforeAll(() => {
-    // Store the original mock factory function
-    const originalCreateMockAuthenticationSystem = global.createMockAuthenticationSystem;
-    
     // Replace with real implementation
     global.createMockAuthenticationSystem = function(options = {}) {
         return {

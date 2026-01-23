@@ -1,7 +1,6 @@
 const { describe, expect, beforeEach, afterEach, it } = require('bun:test');
 const { createMockFn, clearAllMocks, restoreAllMocks } = require('../../helpers/bun-mock-utils');
-const { noOpLogger, setupAutomatedCleanup } = require('../../helpers/mock-factories');
-const { expectNoTechnicalArtifacts } = require('../../helpers/assertion-helpers');
+const { noOpLogger } = require('../../helpers/mock-factories');
 const { waitForDelay } = require('../../helpers/time-utils');
 const { YouTubeConnectionManager } = require('../../../src/utils/youtube-connection-manager');
 
@@ -307,8 +306,8 @@ describe('YouTube Connection Manager - Behavior Excellence', () => {
         });
 
         it('should handle empty video ID and invalid parameters appropriately', async () => {
-            const emptyResult = await connectionManager.connectToStream('', mockConnectionFactory);
-            const nullResult = await connectionManager.connectToStream(null, mockConnectionFactory);
+            await connectionManager.connectToStream('', mockConnectionFactory);
+            await connectionManager.connectToStream(null, mockConnectionFactory);
 
             const totalConnections = connectionManager.getAllConnections().length;
 

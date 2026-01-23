@@ -1,6 +1,5 @@
 
 const { describe, test, expect, beforeEach, afterEach } = require('bun:test');
-const { createMockFn } = require('../../helpers/bun-mock-utils');
 const { noOpLogger } = require('../../helpers/mock-factories');
 
 const TwitchAuthManager = require('../../../src/auth/TwitchAuthManager');

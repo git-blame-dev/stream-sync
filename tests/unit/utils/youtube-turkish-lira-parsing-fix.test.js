@@ -5,11 +5,7 @@ const { createMockFn, restoreAllMocks } = require('../../helpers/bun-mock-utils'
 const { YouTubeiCurrencyParser } = require('../../../src/utils/youtubei-currency-parser');
 const NotificationManager = require('../../../src/notifications/NotificationManager');
 const { createTextProcessingManager } = require('../../../src/utils/text-processing');
-const { 
-    noOpLogger,
-    createMockNotificationManager,
-    createMockPlatform
-} = require('../../helpers/mock-factories');
+const { noOpLogger } = require('../../helpers/mock-factories');
 const { 
     setupAutomatedCleanup 
 } = require('../../helpers/mock-lifecycle');

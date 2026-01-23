@@ -8,11 +8,9 @@ describe('OBS Connection Race Condition - User Experience Validation', () => {
     let mockOBS;
     let connectionManager;
     let identifiedCallback;
-    let connectionOpenedCallback;
 
     beforeEach(() => {
         identifiedCallback = null;
-        connectionOpenedCallback = null;
 
         mockOBS = {
             connect: createMockFn(),
@@ -21,15 +19,11 @@ describe('OBS Connection Race Condition - User Experience Validation', () => {
             on: createMockFn().mockImplementation((event, callback) => {
                 if (event === 'Identified') {
                     identifiedCallback = callback;
-                } else if (event === 'ConnectionOpened') {
-                    connectionOpenedCallback = callback;
                 }
             }),
             once: createMockFn().mockImplementation((event, callback) => {
                 if (event === 'Identified') {
                     identifiedCallback = callback;
-                } else if (event === 'ConnectionOpened') {
-                    connectionOpenedCallback = callback;
                 }
             }),
             off: createMockFn()

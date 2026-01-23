@@ -1,6 +1,6 @@
 const { describe, test, afterEach, expect } = require('bun:test');
 const { createMockFn, restoreAllMocks } = require('../helpers/bun-mock-utils');
-const { createMockPlatform, createMockNotificationManager, noOpLogger } = require('../helpers/mock-factories');
+const { createMockPlatform, noOpLogger } = require('../helpers/mock-factories');
 const { ViewerCountSystem } = require('../../src/utils/viewer-count');
 const { createRuntimeConstantsFixture } = require('../helpers/runtime-constants-fixture');
 

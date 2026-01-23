@@ -1,5 +1,5 @@
 
-const { createTestUser, createMockConfig } = require('../../helpers/test-setup');
+const { createTestUser } = require('../../helpers/test-setup');
 const { PlatformEvents, PlatformEventValidator } = require('../../../src/interfaces/PlatformEvents');
 const testClock = require('../../helpers/test-clock');
 

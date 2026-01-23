@@ -1,4 +1,4 @@
-const { beforeAll, beforeEach, afterEach, afterAll, expect, mock } = require('bun:test');
+const { beforeAll, beforeEach, afterEach, afterAll, expect } = require('bun:test');
 const { waitForDelay, scheduleTimeout, scheduleInterval } = require('../helpers/time-utils');
 const testClock = require('../helpers/test-clock');
 const { initializeTestLogging } = require('../helpers/test-setup');
