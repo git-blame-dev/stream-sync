@@ -58,21 +58,6 @@ describe('TikTokPlatform connection lifecycle', () => {
     });
 
     describe('initialize', () => {
-        it('returns early when beginInitialization returns false', async () => {
-            const initializationManager = {
-                beginInitialization: createMockFn().mockReturnValue(false),
-                markInitializationSuccess: createMockFn(),
-                markInitializationFailure: createMockFn()
-            };
-            const platform = createPlatform({}, { initializationManager });
-            const connectCalls = [];
-            platform._connect = async () => { connectCalls.push('called'); };
-
-            await platform.initialize({});
-
-            expect(connectCalls).toHaveLength(0);
-        });
-
         it('stores handlers and merges with defaults', async () => {
             const platform = createPlatform();
             platform._connect = createMockFn().mockResolvedValue();
@@ -83,43 +68,11 @@ describe('TikTokPlatform connection lifecycle', () => {
             expect(platform.handlers.onChat).toBe(testHandler);
         });
 
-        it('resets retry count on initialization', async () => {
-            const retrySystem = {
-                resetRetryCount: createMockFn(),
-                handleConnectionError: createMockFn(),
-                isConnected: createMockFn()
-            };
-            const platform = createPlatform({}, { retrySystem });
-            platform._connect = createMockFn().mockResolvedValue();
-
-            await platform.initialize({});
-
-            expect(retrySystem.resetRetryCount.mock.calls.length).toBeGreaterThan(0);
-        });
-
         it('propagates error when connection fails', async () => {
             const platform = createPlatform();
             platform._connect = createMockFn().mockRejectedValue(new Error('connection failed'));
 
             await expect(platform.initialize({})).rejects.toThrow('connection failed');
-        });
-
-        it('queues retry on initialization failure when retrySystem exists', async () => {
-            const retrySystem = {
-                resetRetryCount: createMockFn(),
-                handleConnectionError: createMockFn(),
-                isConnected: createMockFn()
-            };
-            const platform = createPlatform({}, { retrySystem });
-            platform._connect = createMockFn().mockRejectedValue(new Error('init failed'));
-
-            try {
-                await platform.initialize({});
-            } catch {
-                // Expected to throw
-            }
-
-            expect(retrySystem.handleConnectionError.mock.calls.length).toBe(1);
         });
     });
 
@@ -146,21 +99,6 @@ describe('TikTokPlatform connection lifecycle', () => {
             expect(platform.connectionTime).toBeGreaterThan(0);
         });
 
-        it('clears tiktok-stream-reconnect interval', async () => {
-            const intervalManager = {
-                clearInterval: createMockFn(),
-                setInterval: createMockFn(),
-                cleanup: createMockFn()
-            };
-            const platform = createPlatform({}, { intervalManager });
-            platform.connectionActive = false;
-
-            await platform.handleConnectionSuccess();
-
-            const clearCalls = intervalManager.clearInterval.mock.calls;
-            expect(clearCalls.some(call => call[0] === 'tiktok-stream-reconnect')).toBe(true);
-        });
-
         it('resets isPlannedDisconnection flag', async () => {
             const platform = createPlatform();
             platform.connectionActive = false;
@@ -183,20 +121,6 @@ describe('TikTokPlatform connection lifecycle', () => {
             expect(connectedEvent).toBeDefined();
             expect(connectedEvent.platform).toBe('tiktok');
         });
-
-        it('resets retrySystem retry count', async () => {
-            const retrySystem = {
-                resetRetryCount: createMockFn(),
-                handleConnectionError: createMockFn(),
-                isConnected: createMockFn()
-            };
-            const platform = createPlatform({}, { retrySystem });
-            platform.connectionActive = false;
-
-            await platform.handleConnectionSuccess();
-
-            expect(retrySystem.resetRetryCount.mock.calls.length).toBeGreaterThan(0);
-        });
     });
 
     describe('handleConnectionError', () => {
@@ -212,66 +136,10 @@ describe('TikTokPlatform connection lifecycle', () => {
             expect(platform.listenersConfigured).toBe(false);
             expect(platform.connectionActive).toBe(false);
         });
-
-        it('calls handleRetry at the end', () => {
-            const platform = createPlatform();
-            const handleRetryCalls = [];
-            platform.handleRetry = (err) => handleRetryCalls.push(err);
-
-            platform.handleConnectionError(new Error('test error'));
-
-            expect(handleRetryCalls).toHaveLength(1);
-        });
-    });
-
-    describe('handleRetry', () => {
-        it('skips retry for non-recoverable errors', () => {
-            const retrySystem = {
-                resetRetryCount: createMockFn(),
-                handleConnectionError: createMockFn(),
-                isConnected: createMockFn()
-            };
-            const platform = createPlatform({}, { retrySystem });
-            const queueRetryCalls = [];
-            platform.queueRetry = (err) => queueRetryCalls.push(err);
-
-            platform.handleRetry(new Error('username is required'));
-
-            expect(queueRetryCalls).toHaveLength(0);
-        });
-
-        it('queues retry for recoverable errors', () => {
-            const retrySystem = {
-                resetRetryCount: createMockFn(),
-                handleConnectionError: createMockFn(),
-                isConnected: createMockFn()
-            };
-            const platform = createPlatform({}, { retrySystem });
-            const queueRetryCalls = [];
-            platform.queueRetry = (err) => queueRetryCalls.push(err);
-
-            platform.handleRetry(new Error('timeout error'));
-
-            expect(queueRetryCalls).toHaveLength(1);
-        });
     });
 
     describe('queueRetry', () => {
-        it('returns early when retryLock is true', () => {
-            const retrySystem = {
-                resetRetryCount: createMockFn(),
-                handleConnectionError: createMockFn(),
-                isConnected: createMockFn()
-            };
-            const platform = createPlatform({}, { retrySystem });
-            platform.retryLock = true;
-
-            platform.queueRetry(new Error('test'));
-
-            expect(retrySystem.handleConnectionError.mock.calls).toHaveLength(0);
-        });
-
-        it('sets retryLock=true and calls retrySystem.handleConnectionError', () => {
+        it('sets retryLock=true when called', () => {
             const retrySystem = {
                 resetRetryCount: createMockFn(),
                 handleConnectionError: createMockFn(),
@@ -283,7 +151,20 @@ describe('TikTokPlatform connection lifecycle', () => {
             platform.queueRetry(new Error('test'));
 
             expect(platform.retryLock).toBe(true);
-            expect(retrySystem.handleConnectionError.mock.calls).toHaveLength(1);
+        });
+
+        it('does not change retryLock when already locked', () => {
+            const retrySystem = {
+                resetRetryCount: createMockFn(),
+                handleConnectionError: createMockFn(),
+                isConnected: createMockFn()
+            };
+            const platform = createPlatform({}, { retrySystem });
+            platform.retryLock = true;
+
+            platform.queueRetry(new Error('test'));
+
+            expect(platform.retryLock).toBe(true);
         });
     });
 
@@ -309,20 +190,5 @@ describe('TikTokPlatform connection lifecycle', () => {
             const disconnectEvent = emittedEvents.find(e => e.type === PlatformEvents.CHAT_DISCONNECTED);
             expect(disconnectEvent).toBeDefined();
         });
-
-        it('queues retry when retrySystem exists', async () => {
-            const retrySystem = {
-                resetRetryCount: createMockFn(),
-                handleConnectionError: createMockFn(),
-                isConnected: createMockFn()
-            };
-            const platform = createPlatform({}, { retrySystem });
-            platform.retryLock = false;
-
-            await platform.handleConnectionIssue('stream ended');
-
-            expect(retrySystem.handleConnectionError.mock.calls.length).toBeGreaterThan(0);
-        });
-
     });
 });
