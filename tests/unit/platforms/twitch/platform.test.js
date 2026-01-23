@@ -24,7 +24,13 @@ describe('Twitch Platform', () => {
     let eventBus;
     let runtime;
 
+    let viewerCountProviderCalls;
+    let eventSubCalls;
+
     beforeEach(() => {
+        viewerCountProviderCalls = { startPolling: [], stopPolling: [] };
+        eventSubCalls = { initialize: [], disconnect: [] };
+
         mockAuthManager = {
             getState: createMockFn().mockReturnValue('READY'),
             getAccessToken: createMockFn().mockResolvedValue('mock-access-token'),
@@ -39,8 +45,8 @@ describe('Twitch Platform', () => {
         };
         mockViewerCountProvider = {
             getViewerCount: createMockFn().mockResolvedValue(1500),
-            startPolling: createMockFn(),
-            stopPolling: createMockFn()
+            startPolling: () => viewerCountProviderCalls.startPolling.push(true),
+            stopPolling: () => viewerCountProviderCalls.stopPolling.push(true)
         };
         mockApp = {
             handleChatMessage: createMockFn(),
@@ -50,9 +56,9 @@ describe('Twitch Platform', () => {
         };
 
         mockTwitchEventSub = {
-            initialize: createMockFn().mockResolvedValue(),
+            initialize: createMockFn(async () => { eventSubCalls.initialize.push(true); }),
             connect: createMockFn().mockResolvedValue(),
-            disconnect: createMockFn().mockResolvedValue(),
+            disconnect: createMockFn(async () => { eventSubCalls.disconnect.push(true); }),
             on: createMockFn(),
             emit: createMockFn(),
             isConnected: createMockFn().mockReturnValue(true),
@@ -78,24 +84,39 @@ describe('Twitch Platform', () => {
             }
         });
 
+        const handlerCalls = {
+            onChat: [],
+            onFollow: [],
+            onPaypiggy: [],
+            onGift: [],
+            onGiftPaypiggy: [],
+            onRaid: [],
+            onStreamStatus: []
+        };
         platformHandlers = {
-            onChat: createMockFn(),
-            onFollow: createMockFn(),
-            onPaypiggy: createMockFn(),
-            onGift: createMockFn(),
-            onGiftPaypiggy: createMockFn(),
-            onRaid: createMockFn(),
-            onStreamStatus: createMockFn()
+            onChat: (payload) => handlerCalls.onChat.push(payload),
+            onFollow: (payload) => handlerCalls.onFollow.push(payload),
+            onPaypiggy: (payload) => handlerCalls.onPaypiggy.push(payload),
+            onGift: (payload) => handlerCalls.onGift.push(payload),
+            onGiftPaypiggy: (payload) => handlerCalls.onGiftPaypiggy.push(payload),
+            onRaid: (payload) => handlerCalls.onRaid.push(payload),
+            onStreamStatus: (payload) => handlerCalls.onStreamStatus.push(payload),
+            _calls: handlerCalls
         };
 
         eventBus = new EventBus();
 
+        const runtimeCalls = {
+            handleChatMessage: [],
+            handleFollowNotification: []
+        };
         runtime = {
-            handleChatMessage: createMockFn(),
-            handleFollowNotification: createMockFn(),
+            handleChatMessage: (...args) => runtimeCalls.handleChatMessage.push(args),
+            handleFollowNotification: (...args) => runtimeCalls.handleFollowNotification.push(args),
             handlePaypiggyNotification: createMockFn(),
             handleGiftNotification: createMockFn(),
-            handleRaidNotification: createMockFn()
+            handleRaidNotification: createMockFn(),
+            _calls: runtimeCalls
         };
 
         platform.apiClient = mockApiClient;
@@ -153,7 +174,7 @@ describe('Twitch Platform', () => {
             await platform.initializeEventSub();
 
             expect(platform.config.eventsub_enabled).toBe(true);
-            expect(mockAuthManager.getState).toHaveBeenCalled();
+            expect(mockAuthManager.getState.mock.calls.length).toBeGreaterThan(0);
         });
 
         it('should operate without real-time events when user disables EventSub', async () => {
@@ -183,7 +204,7 @@ describe('Twitch Platform', () => {
 
             await platform.initialize(handlers);
 
-            expect(mockTwitchEventSub.initialize).toHaveBeenCalled();
+            expect(eventSubCalls.initialize).toHaveLength(1);
             expect(platform.handlers).toEqual(handlers);
         });
 
@@ -289,8 +310,8 @@ describe('Twitch Platform', () => {
 
             await platform.handleFollowEvent(followEvent);
 
-            expect(platformHandlers.onFollow).toHaveBeenCalledTimes(1);
-            const payload = platformHandlers.onFollow.mock.calls[0][0];
+            expect(platformHandlers._calls.onFollow).toHaveLength(1);
+            const payload = platformHandlers._calls.onFollow[0];
             expect(payload.platform).toBe('twitch');
             expect(payload.username).toBe('newfollower');
             expectNoTechnicalArtifacts(payload.username);
@@ -318,8 +339,8 @@ describe('Twitch Platform', () => {
 
             await platform.handlePaypiggyEvent(subEvent);
 
-            expect(platformHandlers.onPaypiggy).toHaveBeenCalledTimes(1);
-            const payload = platformHandlers.onPaypiggy.mock.calls[0][0];
+            expect(platformHandlers._calls.onPaypiggy).toHaveLength(1);
+            const payload = platformHandlers._calls.onPaypiggy[0];
             expect(payload.platform).toBe('twitch');
             expect(payload.username).toBe('subscriber');
             expectNoTechnicalArtifacts(payload.username);
@@ -336,8 +357,8 @@ describe('Twitch Platform', () => {
 
             await platform.handlePaypiggyEvent(giftSubscriptionEvent);
 
-            expect(platformHandlers.onPaypiggy).toHaveBeenCalledTimes(1);
-            const payload = platformHandlers.onPaypiggy.mock.calls[0][0];
+            expect(platformHandlers._calls.onPaypiggy).toHaveLength(1);
+            const payload = platformHandlers._calls.onPaypiggy[0];
             expect(payload.username).toBe('gifter');
             expectNoTechnicalArtifacts(payload.username);
             expect(payload.tier).toBe('2000');
@@ -356,8 +377,8 @@ describe('Twitch Platform', () => {
 
             await platform.handlePaypiggyMessageEvent(resubEvent);
 
-            expect(platformHandlers.onPaypiggy).toHaveBeenCalledTimes(1);
-            const payload = platformHandlers.onPaypiggy.mock.calls[0][0];
+            expect(platformHandlers._calls.onPaypiggy).toHaveLength(1);
+            const payload = platformHandlers._calls.onPaypiggy[0];
             expect(payload.username).toBe('resubber');
             expect(payload.message).toBe('Back again!');
             expect(payload.months).toBe(10);
@@ -375,8 +396,8 @@ describe('Twitch Platform', () => {
 
             await platform.handlePaypiggyGiftEvent(giftEvent);
 
-            expect(platformHandlers.onGiftPaypiggy).toHaveBeenCalledTimes(1);
-            const payload = platformHandlers.onGiftPaypiggy.mock.calls[0][0];
+            expect(platformHandlers._calls.onGiftPaypiggy).toHaveLength(1);
+            const payload = platformHandlers._calls.onGiftPaypiggy[0];
             expect(payload.username).toBe('gifter');
             expect(payload.giftCount).toBe(3);
             expect(payload.tier).toBe('1000');
@@ -393,8 +414,8 @@ describe('Twitch Platform', () => {
 
             await platform.handlePaypiggyGiftEvent(giftEvent);
 
-            expect(platformHandlers.onGiftPaypiggy).toHaveBeenCalledTimes(1);
-            const payload = platformHandlers.onGiftPaypiggy.mock.calls[0][0];
+            expect(platformHandlers._calls.onGiftPaypiggy).toHaveLength(1);
+            const payload = platformHandlers._calls.onGiftPaypiggy[0];
             expect(payload).toMatchObject({
                 platform: 'twitch',
                 username: 'gifter',
@@ -437,7 +458,7 @@ describe('Twitch Platform', () => {
             const connectionEvent = emitSpy.mock.calls.find(call => call[0] === 'platform:event');
             expect(connectionEvent).toBeDefined();
             expect(connectionEvent[1].type).toBe('platform:connection');
-            expect(platformHandlers.onStreamStatus).not.toHaveBeenCalled();
+            expect(platformHandlers._calls.onStreamStatus).toHaveLength(0);
         });
     });
 
@@ -509,8 +530,8 @@ describe('Twitch Platform', () => {
                 timestamp: '2024-01-01T00:00:03Z'
             });
 
-            expect(runtime.handleChatMessage).toHaveBeenCalledTimes(1);
-            const payload = runtime.handleChatMessage.mock.calls[0][1];
+            expect(runtime._calls.handleChatMessage).toHaveLength(1);
+            const payload = runtime._calls.handleChatMessage[0][1];
             expect(payload.message).toBeDefined();
         });
 
@@ -522,8 +543,8 @@ describe('Twitch Platform', () => {
 
             await platform.handleFollowEvent(followEvent);
 
-            expect(runtime.handleFollowNotification).toHaveBeenCalledTimes(1);
-            const payload = runtime.handleFollowNotification.mock.calls[0][2];
+            expect(runtime._calls.handleFollowNotification).toHaveLength(1);
+            const payload = runtime._calls.handleFollowNotification[0][2];
             expect(payload.username).toBe('follower');
         });
     });
@@ -531,17 +552,17 @@ describe('Twitch Platform', () => {
     describe('when handling stream status', () => {
         it('should start viewer polling on stream online and stop on offline', () => {
             platform.handleStreamOnlineEvent({ started_at: '2024-01-01T00:00:00Z' });
-            expect(mockViewerCountProvider.startPolling).toHaveBeenCalled();
+            expect(viewerCountProviderCalls.startPolling).toHaveLength(1);
 
             platform.handleStreamOfflineEvent({ timestamp: '2024-01-01T00:00:00Z' });
-            expect(mockViewerCountProvider.stopPolling).toHaveBeenCalled();
+            expect(viewerCountProviderCalls.stopPolling).toHaveLength(1);
         });
     });
 
     describe('when handling raw EventSub messages', () => {
         it('should process follow notification and emit event', async () => {
-            const followListener = createMockFn();
-            platform.on('follow', followListener);
+            const followListenerCalls = [];
+            platform.on('follow', (event) => followListenerCalls.push(event));
 
             const followEvent = createTwitchFollowEvent({
                 username: 'notifyUser',
@@ -549,8 +570,8 @@ describe('Twitch Platform', () => {
             });
             platform.emit('follow', followEvent);
 
-            expect(followListener).toHaveBeenCalledTimes(1);
-            const followPayload = followListener.mock.calls[0][0];
+            expect(followListenerCalls).toHaveLength(1);
+            const followPayload = followListenerCalls[0];
             expect(followPayload.username).toBe('notifyUser');
         });
     });
@@ -602,7 +623,7 @@ describe('Twitch Platform', () => {
 
             await platform.cleanup();
 
-            expect(mockTwitchEventSub.disconnect).toHaveBeenCalled();
+            expect(eventSubCalls.disconnect).toHaveLength(1);
             expect(platform.eventSub).toBeNull();
             expect(platform.handlers).toEqual({});
         });
@@ -695,7 +716,7 @@ describe('Twitch Platform', () => {
             platform.config.viewerCountEnabled = true;
             platform.initializeViewerCountProvider();
 
-            expect(mockViewerCountProvider.startPolling).toHaveBeenCalled();
+            expect(viewerCountProviderCalls.startPolling.length).toBeGreaterThan(0);
         });
 
         it('should stop polling during cleanup', async () => {
@@ -703,7 +724,7 @@ describe('Twitch Platform', () => {
 
             await platform.cleanup();
 
-            expect(mockViewerCountProvider.stopPolling).toHaveBeenCalled();
+            expect(viewerCountProviderCalls.stopPolling.length).toBeGreaterThan(0);
         });
     });
 }); 

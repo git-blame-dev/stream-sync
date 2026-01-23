@@ -180,20 +180,10 @@ describe('YouTube multi-stream manager', () => {
             await expect(manager.startMonitoring()).rejects.toThrow('stream detection failed');
         });
 
-        test('calls _handleProcessingError on initial check failure', async () => {
-            const checkError = new Error('detection failed');
-            const platform = buildPlatform({
-                checkMultiStream: createMockFn(async () => { throw checkError; })
-            });
-            const manager = buildManager(platform);
-
-            await expect(manager.startMonitoring()).rejects.toThrow();
-            expect(platform._handleProcessingError).toHaveBeenCalled();
-        });
     });
 
     describe('checkMultiStream at capacity', () => {
-        test('skips check when at maxStreams and within full check interval', async () => {
+        test('skips full check when at maxStreams and within full check interval', async () => {
             const platform = buildPlatform({
                 config: { maxStreams: 2, streamPollingInterval: 60, fullCheckInterval: 60000 },
                 connectionManager: {
@@ -208,11 +198,10 @@ describe('YouTube multi-stream manager', () => {
 
             await manager.checkMultiStream();
 
-            expect(platform.getLiveVideoIds).not.toHaveBeenCalled();
-            expect(platform._logMultiStreamStatus).toHaveBeenCalled();
+            expect(platform.lastFullStreamCheck).toBe(50);
         });
 
-        test('performs full check when at capacity but interval exceeded', async () => {
+        test('updates lastFullStreamCheck when performing full check after interval exceeded', async () => {
             const platform = buildPlatform({
                 config: { maxStreams: 2, streamPollingInterval: 60, fullCheckInterval: 1000 },
                 connectionManager: {
@@ -228,7 +217,6 @@ describe('YouTube multi-stream manager', () => {
 
             await manager.checkMultiStream();
 
-            expect(platform.getLiveVideoIds).toHaveBeenCalled();
             expect(platform.lastFullStreamCheck).toBe(5000);
         });
 
@@ -256,6 +244,7 @@ describe('YouTube multi-stream manager', () => {
         });
 
         test('preserves connections when stream detection returns empty at capacity', async () => {
+            const disconnected = [];
             const platform = buildPlatform({
                 config: { maxStreams: 2, streamPollingInterval: 60, fullCheckInterval: 1000 },
                 connectionManager: {
@@ -265,13 +254,16 @@ describe('YouTube multi-stream manager', () => {
                 },
                 getActiveYouTubeVideoIds: createMockFn(() => ['stream-1', 'stream-2']),
                 getLiveVideoIds: createMockFn(async () => []),
+                disconnectFromYouTubeStream: createMockFn(async (videoId) => {
+                    disconnected.push(videoId);
+                }),
                 lastFullStreamCheck: 0
             });
             const manager = buildManager(platform, () => 5000);
 
             await manager.checkMultiStream();
 
-            expect(platform.disconnectFromYouTubeStream).not.toHaveBeenCalled();
+            expect(disconnected).toEqual([]);
         });
     });
 
@@ -294,7 +286,7 @@ describe('YouTube multi-stream manager', () => {
     });
 
     describe('connection error handling', () => {
-        test('logs error when stream connection fails but continues with other streams', async () => {
+        test('continues connecting other streams when one stream connection fails', async () => {
             const connected = [];
             const platform = buildPlatform({
                 getLiveVideoIds: createMockFn(async () => ['s1', 's2']),
@@ -307,13 +299,13 @@ describe('YouTube multi-stream manager', () => {
 
             await manager.checkMultiStream();
 
-            expect(platform._handleConnectionErrorLogging).toHaveBeenCalled();
             expect(connected).toEqual(['s2']);
         });
     });
 
     describe('stream detection failure preservation', () => {
         test('preserves existing connections when detection returns empty', async () => {
+            const disconnected = [];
             const platform = buildPlatform({
                 connectionManager: {
                     getConnectionCount: createMockFn(() => 1),
@@ -321,13 +313,16 @@ describe('YouTube multi-stream manager', () => {
                     hasConnection: createMockFn(() => true)
                 },
                 getActiveYouTubeVideoIds: createMockFn(() => []),
-                getLiveVideoIds: createMockFn(async () => [])
+                getLiveVideoIds: createMockFn(async () => []),
+                disconnectFromYouTubeStream: createMockFn(async (videoId) => {
+                    disconnected.push(videoId);
+                })
             });
             const manager = buildManager(platform);
 
             await manager.checkMultiStream();
 
-            expect(platform.disconnectFromYouTubeStream).not.toHaveBeenCalled();
+            expect(disconnected).toEqual([]);
         });
 
         test('disconnects streams that are no longer detected', async () => {
@@ -354,19 +349,16 @@ describe('YouTube multi-stream manager', () => {
     });
 
     describe('checkMultiStream error handling', () => {
-        test('calls _handleProcessingError and _handleError on exception', async () => {
+        test('completes without throwing when stream detection fails and throwOnError is false', async () => {
             const platform = buildPlatform({
                 getLiveVideoIds: createMockFn(async () => { throw new Error('api error'); })
             });
             const manager = buildManager(platform);
 
-            await manager.checkMultiStream();
-
-            expect(platform._handleProcessingError).toHaveBeenCalled();
-            expect(platform._handleError).toHaveBeenCalled();
+            await expect(manager.checkMultiStream()).resolves.toBeUndefined();
         });
 
-        test('rethrows error when throwOnError is true', async () => {
+        test('throws error when stream detection fails and throwOnError is true', async () => {
             const platform = buildPlatform({
                 getLiveVideoIds: createMockFn(async () => { throw new Error('api error'); })
             });

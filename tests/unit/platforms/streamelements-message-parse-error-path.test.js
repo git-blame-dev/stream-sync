@@ -1,5 +1,5 @@
 const { describe, it, expect, afterEach } = require('bun:test');
-const { createMockFn, restoreAllMocks } = require('../../helpers/bun-mock-utils');
+const { restoreAllMocks } = require('../../helpers/bun-mock-utils');
 const { noOpLogger } = require('../../helpers/mock-factories');
 const { StreamElementsPlatform } = require('../../../src/platforms/streamelements');
 
@@ -12,15 +12,16 @@ describe('StreamElementsPlatform message parsing', () => {
 
         const platform = new StreamElementsPlatform({ enabled: true }, { logger: noOpLogger });
 
+        const errorHandlerCalls = [];
         const errorHandler = {
-            handleEventProcessingError: createMockFn()
+            handleEventProcessingError: (...args) => errorHandlerCalls.push(args)
         };
         platform.errorHandler = errorHandler;
 
         expect(() => platform.handleMessage(Buffer.from('not-json'))).not.toThrow();
-        expect(errorHandler.handleEventProcessingError).toHaveBeenCalledTimes(1);
+        expect(errorHandlerCalls).toHaveLength(1);
 
-        const [errorArg, eventType] = errorHandler.handleEventProcessingError.mock.calls[0];
+        const [errorArg, eventType] = errorHandlerCalls[0];
         expect(errorArg).toBeInstanceOf(Error);
         expect(eventType).toBe('message');
     });

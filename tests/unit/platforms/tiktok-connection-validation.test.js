@@ -14,13 +14,14 @@ describe('TikTok connection creation', () => {
       { logger: noOpLogger, TikTokWebSocketClient }
     );
 
-    const handler = createMockFn();
-    connection.on('connected', handler);
+    const handlerCalls = [];
+    connection.on('connected', (payload) => handlerCalls.push(payload));
     connection.emit('connected', 'payload');
 
     expect(typeof connection.on).toBe('function');
     expect(typeof connection.emit).toBe('function');
     expect(typeof connection.removeAllListeners).toBe('function');
-    expect(handler).toHaveBeenCalledWith('payload');
+    expect(handlerCalls).toHaveLength(1);
+    expect(handlerCalls[0]).toBe('payload');
   });
 });

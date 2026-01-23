@@ -82,19 +82,19 @@ describe('YouTube connection factory', () => {
     });
 
     test('normalizes direct chat-update payloads before handleChatMessage', async () => {
-        const handleChatMessage = createMockFn();
-        const processRegularChatMessage = createMockFn();
+        const handleChatMessageCalls = [];
+        const processRegularChatMessageCalls = [];
         const chatUpdateHandlers = {};
-        const logRawPlatformData = createMockFn().mockResolvedValue();
+        const logRawPlatformDataCalls = [];
 
         const { factory } = createFactory({
             validationResult: { shouldConnect: true },
             platformOverrides: {
-                handleChatMessage,
-                _processRegularChatMessage: processRegularChatMessage,
+                handleChatMessage: (msg) => handleChatMessageCalls.push(msg),
+                _processRegularChatMessage: (msg) => processRegularChatMessageCalls.push(msg),
                 _extractMessagesFromChatItem: createMockFn().mockReturnValue([]),
                 _shouldSkipMessage: createMockFn().mockReturnValue(false),
-                logRawPlatformData,
+                logRawPlatformData: async (...args) => { logRawPlatformDataCalls.push(args); },
                 setYouTubeConnectionReady: createMockFn(),
                 config: { dataLoggingEnabled: true }
             }
@@ -117,14 +117,13 @@ describe('YouTube connection factory', () => {
 
         chatUpdateHandlers['chat-update'](rawChatItem);
 
-        expect(logRawPlatformData.mock.calls).toHaveLength(1);
-        expect(logRawPlatformData.mock.calls[0][0]).toBe('chat');
-        expect(logRawPlatformData.mock.calls[0][1]).toBe(rawChatItem);
+        expect(logRawPlatformDataCalls).toHaveLength(1);
+        expect(logRawPlatformDataCalls[0][0]).toBe('chat');
+        expect(logRawPlatformDataCalls[0][1]).toBe(rawChatItem);
 
-        expect(processRegularChatMessage).toHaveBeenCalledTimes(0);
-        const [handleCall] = handleChatMessage.mock.calls;
-        expect(handleCall).toBeTruthy();
-        expect(handleCall[0]).toMatchObject({
+        expect(processRegularChatMessageCalls).toHaveLength(0);
+        expect(handleChatMessageCalls).toHaveLength(1);
+        expect(handleChatMessageCalls[0]).toMatchObject({
             item: {
                 type: 'LiveChatTextMessage',
                 author: { id: 'UC_TEST_1', name: 'TestUser' },
@@ -209,18 +208,18 @@ describe('YouTube connection factory', () => {
     });
 
     test('skips direct chat-update payloads with missing author id', async () => {
-        const handleChatMessage = createMockFn();
+        const handleChatMessageCalls = [];
         const chatUpdateHandlers = {};
-        const logRawPlatformData = createMockFn().mockResolvedValue();
+        const logRawPlatformDataCalls = [];
 
         const { factory } = createFactory({
             validationResult: { shouldConnect: true },
             platformOverrides: {
-                handleChatMessage,
+                handleChatMessage: (msg) => handleChatMessageCalls.push(msg),
                 _processRegularChatMessage: createMockFn(),
                 _extractMessagesFromChatItem: createMockFn().mockReturnValue([]),
                 _shouldSkipMessage: createMockFn().mockReturnValue(false),
-                logRawPlatformData,
+                logRawPlatformData: async (...args) => { logRawPlatformDataCalls.push(args); },
                 setYouTubeConnectionReady: createMockFn(),
                 config: { dataLoggingEnabled: true }
             }
@@ -243,20 +242,20 @@ describe('YouTube connection factory', () => {
 
         chatUpdateHandlers['chat-update'](rawChatItem);
 
-        expect(logRawPlatformData.mock.calls).toHaveLength(1);
-        expect(logRawPlatformData.mock.calls[0][0]).toBe('chat');
-        expect(logRawPlatformData.mock.calls[0][1]).toBe(rawChatItem);
-        expect(handleChatMessage).not.toHaveBeenCalled();
+        expect(logRawPlatformDataCalls).toHaveLength(1);
+        expect(logRawPlatformDataCalls[0][0]).toBe('chat');
+        expect(logRawPlatformDataCalls[0][1]).toBe(rawChatItem);
+        expect(handleChatMessageCalls).toHaveLength(0);
     });
 
     test('marks connection ready on start events and logs initial batches', async () => {
-        const setYouTubeConnectionReady = createMockFn();
+        const connectionReadyCalls = [];
         const startHandlers = {};
 
         const { factory } = createFactory({
             validationResult: { shouldConnect: true },
             platformOverrides: {
-                setYouTubeConnectionReady,
+                setYouTubeConnectionReady: (videoId) => connectionReadyCalls.push(videoId),
                 handleChatMessage: createMockFn(),
                 _processRegularChatMessage: createMockFn(),
                 _extractMessagesFromChatItem: createMockFn().mockReturnValue([]),
@@ -278,18 +277,18 @@ describe('YouTube connection factory', () => {
 
         startHandlers.start({ actions: [{ type: 'AddChatItemAction' }, { type: 'AddChatItemAction' }] });
 
-        expect(setYouTubeConnectionReady).toHaveBeenCalledTimes(1);
-        expect(setYouTubeConnectionReady.mock.calls[0][0]).toBe('video-1');
+        expect(connectionReadyCalls).toHaveLength(1);
+        expect(connectionReadyCalls[0]).toBe('video-1');
     });
 
     test('handles API errors from live chat with disconnect', async () => {
-        const disconnectFromYouTubeStream = createMockFn();
+        const disconnectCalls = [];
         const errorHandlers = {};
 
         const { factory } = createFactory({
             validationResult: { shouldConnect: true },
             platformOverrides: {
-                disconnectFromYouTubeStream,
+                disconnectFromYouTubeStream: (videoId, reason) => disconnectCalls.push({ videoId, reason }),
                 _handleProcessingError: createMockFn(),
                 handleChatMessage: createMockFn(),
                 _processRegularChatMessage: createMockFn(),
@@ -313,19 +312,19 @@ describe('YouTube connection factory', () => {
 
         errorHandlers.error(new Error('403 forbidden'));
 
-        expect(disconnectFromYouTubeStream).toHaveBeenCalledTimes(1);
-        expect(disconnectFromYouTubeStream.mock.calls[0][0]).toBe('video-1');
-        expect(disconnectFromYouTubeStream.mock.calls[0][1]).toBe('API error: 403 forbidden');
+        expect(disconnectCalls).toHaveLength(1);
+        expect(disconnectCalls[0].videoId).toBe('video-1');
+        expect(disconnectCalls[0].reason).toBe('API error: 403 forbidden');
     });
 
     test('does not disconnect on temporary live chat errors', async () => {
-        const disconnectFromYouTubeStream = createMockFn();
+        const disconnectCalls = [];
         const errorHandlers = {};
 
         const { factory } = createFactory({
             validationResult: { shouldConnect: true },
             platformOverrides: {
-                disconnectFromYouTubeStream,
+                disconnectFromYouTubeStream: (videoId, reason) => disconnectCalls.push({ videoId, reason }),
                 _handleProcessingError: createMockFn(),
                 handleChatMessage: createMockFn(),
                 _processRegularChatMessage: createMockFn(),
@@ -349,13 +348,13 @@ describe('YouTube connection factory', () => {
 
         errorHandlers.error(new Error('503 upstream unavailable'));
 
-        expect(disconnectFromYouTubeStream).not.toHaveBeenCalled();
+        expect(disconnectCalls).toHaveLength(0);
     });
 
     test('routes complex chat items through extractors and logging', async () => {
-        const handleChatMessage = createMockFn();
+        const handleChatMessageCalls = [];
         const chatUpdateHandlers = {};
-        const logRawPlatformData = createMockFn().mockResolvedValue();
+        const logRawPlatformDataCalls = [];
         const shouldSkipMessage = createMockFn((message) => message.item?.id === 'skip-me');
         const resolveChatItemAuthorName = createMockFn((message) => message.item?.author?.name || 'Author');
         const messages = [
@@ -366,12 +365,12 @@ describe('YouTube connection factory', () => {
         const { factory } = createFactory({
             validationResult: { shouldConnect: true },
             platformOverrides: {
-                handleChatMessage,
+                handleChatMessage: (msg) => handleChatMessageCalls.push(msg),
                 _processRegularChatMessage: createMockFn(),
                 _extractMessagesFromChatItem: createMockFn().mockReturnValue(messages),
                 _shouldSkipMessage: shouldSkipMessage,
                 _resolveChatItemAuthorName: resolveChatItemAuthorName,
-                logRawPlatformData,
+                logRawPlatformData: async (...args) => { logRawPlatformDataCalls.push(args); },
                 setYouTubeConnectionReady: createMockFn(),
                 config: { dataLoggingEnabled: true }
             }
@@ -390,21 +389,21 @@ describe('YouTube connection factory', () => {
         const rawChatItem = { type: 'AddChatItemAction' };
         chatUpdateHandlers['chat-update'](rawChatItem);
 
-        expect(handleChatMessage).toHaveBeenCalledTimes(1);
-        expect(handleChatMessage.mock.calls[0][0].videoId).toBe('video-1');
-        expect(logRawPlatformData).toHaveBeenCalledTimes(1);
-        expect(logRawPlatformData.mock.calls[0][0]).toBe('chat');
-        expect(logRawPlatformData.mock.calls[0][1]).toBe(rawChatItem);
+        expect(handleChatMessageCalls).toHaveLength(1);
+        expect(handleChatMessageCalls[0].videoId).toBe('video-1');
+        expect(logRawPlatformDataCalls).toHaveLength(1);
+        expect(logRawPlatformDataCalls[0][0]).toBe('chat');
+        expect(logRawPlatformDataCalls[0][1]).toBe(rawChatItem);
     });
 
     test('disconnects when live chat ends', async () => {
-        const disconnectFromYouTubeStream = createMockFn();
+        const disconnectCalls = [];
         const handlers = {};
 
         const { factory } = createFactory({
             validationResult: { shouldConnect: true },
             platformOverrides: {
-                disconnectFromYouTubeStream,
+                disconnectFromYouTubeStream: (videoId, reason) => disconnectCalls.push({ videoId, reason }),
                 handleChatMessage: createMockFn(),
                 _processRegularChatMessage: createMockFn(),
                 _extractMessagesFromChatItem: createMockFn().mockReturnValue([]),
@@ -427,8 +426,8 @@ describe('YouTube connection factory', () => {
 
         handlers.end();
 
-        expect(disconnectFromYouTubeStream).toHaveBeenCalledTimes(1);
-        expect(disconnectFromYouTubeStream.mock.calls[0][0]).toBe('video-1');
-        expect(disconnectFromYouTubeStream.mock.calls[0][1]).toBe('stream ended');
+        expect(disconnectCalls).toHaveLength(1);
+        expect(disconnectCalls[0].videoId).toBe('video-1');
+        expect(disconnectCalls[0].reason).toBe('stream ended');
     });
 });

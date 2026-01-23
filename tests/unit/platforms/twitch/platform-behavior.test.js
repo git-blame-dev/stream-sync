@@ -124,16 +124,15 @@ describe('TwitchPlatform behavior standards', () => {
 
     it('routes paypiggy events through the canonical handler', () => {
         platform = createPlatform();
-        const paypiggyHandler = createMockFn();
+        const paypiggyHandlerCalls = [];
 
-        platform.handlers = { onPaypiggy: paypiggyHandler };
+        platform.handlers = { onPaypiggy: (payload) => paypiggyHandlerCalls.push(payload) };
 
         const payload = { type: 'platform:paypiggy', platform: 'twitch', username: 'testsupporter' };
         platform._emitPlatformEvent('platform:paypiggy', payload);
 
-        expect(paypiggyHandler).toHaveBeenCalledTimes(1);
-        const [handledPayload] = paypiggyHandler.mock.calls[0];
-        expect(handledPayload).toBe(payload);
+        expect(paypiggyHandlerCalls).toHaveLength(1);
+        expect(paypiggyHandlerCalls[0]).toBe(payload);
     });
 
     it('returns zero when viewer count provider is missing', async () => {

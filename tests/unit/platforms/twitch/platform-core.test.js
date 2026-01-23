@@ -7,7 +7,10 @@ const { TwitchPlatform } = require('../../../../src/platforms/twitch');
 
 class StubChatFileLoggingService {
     constructor() {
-        this.logRawPlatformData = createMockFn().mockResolvedValue();
+        this.logRawPlatformDataCalls = [];
+        this.logRawPlatformData = async (...args) => {
+            this.logRawPlatformDataCalls.push(args);
+        };
     }
 }
 
@@ -121,7 +124,6 @@ describe('TwitchPlatform core behavior', () => {
 
     it('logs raw platform data for non-chat events when enabled', async () => {
         platform = createPlatform({ dataLoggingEnabled: true });
-        const loggingSpy = platform.chatFileLoggingService.logRawPlatformData;
 
         await platform.handleFollowEvent({
             userId: 'test-123',
@@ -130,7 +132,7 @@ describe('TwitchPlatform core behavior', () => {
             timestamp: '2024-01-01T00:00:00Z'
         });
 
-        expect(loggingSpy).toHaveBeenCalledTimes(1);
+        expect(platform.chatFileLoggingService.logRawPlatformDataCalls).toHaveLength(1);
     });
 
     it('rejects sending messages when EventSub is unavailable', async () => {
@@ -141,15 +143,16 @@ describe('TwitchPlatform core behavior', () => {
 
     it('surfaces a friendly error when EventSub is disconnected before sending', async () => {
         platform = createPlatform();
+        const sendMessageCalls = [];
         const mockEventSub = {
-            sendMessage: createMockFn(),
+            sendMessage: (msg) => sendMessageCalls.push(msg),
             isConnected: () => false,
             isActive: () => false
         };
         platform.eventSub = mockEventSub;
 
         await expect(platform.sendMessage('hi')).rejects.toThrow(/unavailable/i);
-        expect(mockEventSub.sendMessage).not.toHaveBeenCalled();
+        expect(sendMessageCalls).toHaveLength(0);
     });
 
     it('keeps emitting chat events when logging fails', async () => {
@@ -252,8 +255,9 @@ describe('TwitchPlatform core behavior', () => {
 
     it('sends messages successfully when EventSub is connected and active', async () => {
         platform = createPlatform();
+        const sendMessageCalls = [];
         const mockEventSub = {
-            sendMessage: createMockFn().mockResolvedValue(),
+            sendMessage: async (msg) => { sendMessageCalls.push(msg); },
             isConnected: () => true,
             isActive: () => true
         };
@@ -261,7 +265,8 @@ describe('TwitchPlatform core behavior', () => {
 
         await platform.sendMessage('test message');
 
-        expect(mockEventSub.sendMessage).toHaveBeenCalledWith('test message');
+        expect(sendMessageCalls).toHaveLength(1);
+        expect(sendMessageCalls[0]).toBe('test message');
     });
 
     it('returns connection state with EventSub active status', () => {
@@ -313,15 +318,16 @@ describe('TwitchPlatform core behavior', () => {
 
     it('initializes viewer count provider when stream comes online', () => {
         platform = createPlatform();
+        const startPollingCalls = [];
         const mockProvider = {
-            startPolling: createMockFn()
+            startPolling: () => startPollingCalls.push(true)
         };
         platform.viewerCountProvider = mockProvider;
-        platform.handlers = { onStreamStatus: createMockFn() };
+        platform.handlers = { onStreamStatus: () => {} };
 
         platform.handleStreamOnlineEvent({ started_at: '2024-01-01T00:00:00Z' });
 
-        expect(mockProvider.startPolling).toHaveBeenCalled();
+        expect(startPollingCalls).toHaveLength(1);
     });
 
     it('returns zero viewer count when provider is not initialized', async () => {
@@ -346,18 +352,20 @@ describe('TwitchPlatform core behavior', () => {
 
     it('cleans up EventSub and resets connection state', async () => {
         platform = createPlatform();
+        const cleanupCalls = [];
+        const disconnectCalls = [];
         const mockEventSub = {
-            removeAllListeners: createMockFn(),
-            cleanup: createMockFn().mockResolvedValue(),
-            disconnect: createMockFn().mockResolvedValue()
+            removeAllListeners: () => {},
+            cleanup: async () => { cleanupCalls.push(true); },
+            disconnect: async () => { disconnectCalls.push(true); }
         };
         platform.eventSub = mockEventSub;
-        platform.viewerCountProvider = { stopPolling: createMockFn() };
+        platform.viewerCountProvider = { stopPolling: () => {} };
 
         await platform.cleanup();
 
-        expect(mockEventSub.cleanup).toHaveBeenCalled();
-        expect(mockEventSub.disconnect).toHaveBeenCalled();
+        expect(cleanupCalls).toHaveLength(1);
+        expect(disconnectCalls).toHaveLength(1);
         expect(platform.eventSub).toBeNull();
         expect(platform.isConnected).toBe(false);
     });

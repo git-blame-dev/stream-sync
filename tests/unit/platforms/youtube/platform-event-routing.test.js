@@ -1,5 +1,5 @@
 const { describe, test, expect, beforeEach, afterEach } = require('bun:test');
-const { createMockFn, clearAllMocks, restoreAllMocks, spyOn } = require('../../../helpers/bun-mock-utils');
+const { restoreAllMocks } = require('../../../helpers/bun-mock-utils');
 const { noOpLogger } = require('../../../helpers/mock-factories');
 
 const PlatformEvents = require('../../../../src/interfaces/PlatformEvents');
@@ -8,21 +8,27 @@ const testClock = require('../../../helpers/test-clock');
 
 describe('YouTube Platform Event Routing', () => {
     let youtubePlatform;
-    let mockHandlers;
+    let handlerCalls;
 
     beforeEach(() => {
-        mockHandlers = {
-            onChat: createMockFn(),
-            onGift: createMockFn(),
-            onMembership: createMockFn(),
-            onStreamStatus: createMockFn(),
-            onViewerCount: createMockFn()
+        handlerCalls = {
+            onChat: [],
+            onGift: [],
+            onMembership: [],
+            onStreamStatus: [],
+            onViewerCount: []
         };
 
         youtubePlatform = Object.create(EventEmitter.prototype);
         EventEmitter.call(youtubePlatform);
 
-        youtubePlatform.handlers = mockHandlers;
+        youtubePlatform.handlers = {
+            onChat: (payload) => handlerCalls.onChat.push(payload),
+            onGift: (payload) => handlerCalls.onGift.push(payload),
+            onMembership: (payload) => handlerCalls.onMembership.push(payload),
+            onStreamStatus: (payload) => handlerCalls.onStreamStatus.push(payload),
+            onViewerCount: (payload) => handlerCalls.onViewerCount.push(payload)
+        };
         youtubePlatform.logger = noOpLogger;
 
         youtubePlatform._emitPlatformEvent = function(type, payload) {
@@ -76,8 +82,8 @@ describe('YouTube Platform Event Routing', () => {
 
             youtubePlatform._emitPlatformEvent('chat', chatPayload);
 
-            expect(mockHandlers.onChat).toHaveBeenCalledTimes(1);
-            expect(mockHandlers.onChat).toHaveBeenCalledWith(chatPayload);
+            expect(handlerCalls.onChat).toHaveLength(1);
+            expect(handlerCalls.onChat[0]).toEqual(chatPayload);
         });
 
         test('should handle chat event with complex user data', () => {
@@ -97,7 +103,7 @@ describe('YouTube Platform Event Routing', () => {
 
             youtubePlatform._emitPlatformEvent('chat', chatPayload);
 
-            expect(mockHandlers.onChat).toHaveBeenCalledWith(chatPayload);
+            expect(handlerCalls.onChat[0]).toEqual(chatPayload);
         });
     });
 
@@ -117,8 +123,8 @@ describe('YouTube Platform Event Routing', () => {
 
             youtubePlatform._emitPlatformEvent('gift', giftPayload);
 
-            expect(mockHandlers.onGift).toHaveBeenCalledTimes(1);
-            expect(mockHandlers.onGift).toHaveBeenCalledWith(giftPayload);
+            expect(handlerCalls.onGift).toHaveLength(1);
+            expect(handlerCalls.onGift[0]).toEqual(giftPayload);
         });
 
         test('should route Super Chat events as gifts to onGift handler', () => {
@@ -135,7 +141,7 @@ describe('YouTube Platform Event Routing', () => {
 
             youtubePlatform._emitPlatformEvent('gift', superChatPayload);
 
-            expect(mockHandlers.onGift).toHaveBeenCalledWith(superChatPayload);
+            expect(handlerCalls.onGift[0]).toEqual(superChatPayload);
         });
 
         test('should route Super Sticker events as gifts to onGift handler', () => {
@@ -153,7 +159,7 @@ describe('YouTube Platform Event Routing', () => {
 
             youtubePlatform._emitPlatformEvent('gift', superStickerPayload);
 
-            expect(mockHandlers.onGift).toHaveBeenCalledWith(superStickerPayload);
+            expect(handlerCalls.onGift[0]).toEqual(superStickerPayload);
         });
     });
 
@@ -170,7 +176,7 @@ describe('YouTube Platform Event Routing', () => {
 
             youtubePlatform._emitPlatformEvent('paypiggy', membershipPayload);
 
-            expect(mockHandlers.onMembership).toHaveBeenCalledWith(membershipPayload);
+            expect(handlerCalls.onMembership[0]).toEqual(membershipPayload);
         });
 
     });
@@ -186,7 +192,7 @@ describe('YouTube Platform Event Routing', () => {
 
             youtubePlatform._emitPlatformEvent('stream-status', streamStatusPayload);
 
-            expect(mockHandlers.onStreamStatus).toHaveBeenCalledWith(streamStatusPayload);
+            expect(handlerCalls.onStreamStatus[0]).toEqual(streamStatusPayload);
         });
     });
 
@@ -201,7 +207,7 @@ describe('YouTube Platform Event Routing', () => {
 
             youtubePlatform._emitPlatformEvent('viewer-count', viewerCountPayload);
 
-            expect(mockHandlers.onViewerCount).toHaveBeenCalledWith(viewerCountPayload);
+            expect(handlerCalls.onViewerCount[0]).toEqual(viewerCountPayload);
         });
     });
 
@@ -224,8 +230,8 @@ describe('YouTube Platform Event Routing', () => {
 
                 youtubePlatform._emitPlatformEvent(eventType, testPayload);
 
-                expect(mockHandlers[handlerName]).toHaveBeenCalledWith(testPayload);
-                clearAllMocks();
+                expect(handlerCalls[handlerName].length).toBeGreaterThan(0);
+                expect(handlerCalls[handlerName][handlerCalls[handlerName].length - 1]).toEqual(testPayload);
             });
         });
     });
@@ -267,7 +273,8 @@ describe('YouTube Platform Event Routing', () => {
 
     describe('Event emitter integration', () => {
         test('should emit platform:event for local listeners', () => {
-            const emitSpy = spyOn(youtubePlatform, 'emit');
+            const emittedEvents = [];
+            youtubePlatform.on('platform:event', (event) => emittedEvents.push(event));
 
             const chatPayload = {
                 type: PlatformEvents.CHAT_MESSAGE,
@@ -280,7 +287,8 @@ describe('YouTube Platform Event Routing', () => {
 
             youtubePlatform._emitPlatformEvent('chat', chatPayload);
 
-            expect(emitSpy).toHaveBeenCalledWith('platform:event', {
+            expect(emittedEvents).toHaveLength(1);
+            expect(emittedEvents[0]).toEqual({
                 platform: 'youtube',
                 type: 'chat',
                 data: chatPayload
@@ -318,14 +326,14 @@ describe('YouTube Platform Event Routing', () => {
                 metadata: {
                     platform: 'youtube',
                     videoId: normalizedData.videoId,
-                    correlationId: expect.any(String)
+                    correlationId: 'test-correlation-id'
                 }
             };
 
             youtubePlatform._emitPlatformEvent('chat', eventData);
 
-            expect(mockHandlers.onChat).toHaveBeenCalledTimes(1);
-            expect(mockHandlers.onChat.mock.calls[0][0]).toMatchObject({
+            expect(handlerCalls.onChat).toHaveLength(1);
+            expect(handlerCalls.onChat[0]).toMatchObject({
                 type: PlatformEvents.CHAT_MESSAGE,
                 platform: 'youtube',
                 username: normalizedData.username,
@@ -341,18 +349,20 @@ describe('YouTube Platform Event Routing', () => {
         });
 
         test('should route events using same pattern as other platforms', () => {
-            const emitSpy = spyOn(youtubePlatform, 'emit');
+            const emittedEvents = [];
+            youtubePlatform.on('platform:event', (event) => emittedEvents.push(event));
             const testPayload = { type: 'test', platform: 'youtube', data: 'test' };
 
             youtubePlatform._emitPlatformEvent('chat', testPayload);
 
-            expect(emitSpy).toHaveBeenCalledWith('platform:event', {
+            expect(emittedEvents).toHaveLength(1);
+            expect(emittedEvents[0]).toEqual({
                 platform: 'youtube',
                 type: 'chat',
                 data: testPayload
             });
 
-            expect(mockHandlers.onChat).toHaveBeenCalledWith(testPayload);
+            expect(handlerCalls.onChat[0]).toEqual(testPayload);
         });
     });
 });

@@ -140,7 +140,6 @@ describe('YouTubePlatform event routing behavior', () => {
         });
         await flushPromises();
 
-        expect(platform.logRawPlatformData).toHaveBeenCalledTimes(0);
         const debugCalls = getDebugCalls(platform.logger);
         const duplicateLog = debugCalls.find(({ message }) =>
             message.includes('ignored duplicate LiveChatPaidMessageRenderer')

@@ -12,7 +12,8 @@ describe('TikTokPlatform retry deduplication', () => {
     });
 
     it('only schedules one retry when queueRetry is invoked multiple times before a reconnect starts', () => {
-        const retrySystem = { handleConnectionError: createMockFn() };
+        const retryCalls = [];
+        const retrySystem = { handleConnectionError: (...args) => retryCalls.push(args) };
         const dependencies = createMockTikTokPlatformDependencies();
         dependencies.retrySystem = retrySystem;
         dependencies.logger = noOpLogger;
@@ -25,11 +26,17 @@ describe('TikTokPlatform retry deduplication', () => {
         platform.queueRetry(new Error('first'));
         platform.queueRetry(new Error('second'));
 
-        expect(retrySystem.handleConnectionError).toHaveBeenCalledTimes(1);
+        expect(retryCalls).toHaveLength(1);
     });
 
     it('requeues a retry when the reconnect attempt fails, without double scheduling', async () => {
-        const retrySystem = { handleConnectionError: createMockFn() };
+        const retryCalls = [];
+        const retrySystem = {
+            handleConnectionError: (platformName, err, reconnectFn) => {
+                retryCalls.push({ platformName, err, reconnectFn });
+                reconnectFn();
+            }
+        };
         const dependencies = createMockTikTokPlatformDependencies();
         dependencies.retrySystem = retrySystem;
         dependencies.logger = noOpLogger;
@@ -39,17 +46,20 @@ describe('TikTokPlatform retry deduplication', () => {
 
         const platform = new TikTokPlatform(baseConfig, dependencies);
 
-        platform._connect = createMockFn()
-            .mockRejectedValueOnce(new Error('connect-failed'))
-            .mockResolvedValueOnce(true);
-
-        retrySystem.handleConnectionError.mockImplementation((platformName, err, reconnectFn) => reconnectFn());
+        const connectCalls = [];
+        platform._connect = async () => {
+            connectCalls.push(true);
+            if (connectCalls.length === 1) {
+                throw new Error('connect-failed');
+            }
+            return true;
+        };
 
         platform.queueRetry(new Error('initial'));
         await Promise.resolve();
         await Promise.resolve();
 
-        expect(retrySystem.handleConnectionError).toHaveBeenCalledTimes(2);
-        expect(platform._connect).toHaveBeenCalledTimes(2);
+        expect(retryCalls).toHaveLength(2);
+        expect(connectCalls).toHaveLength(2);
     });
 });

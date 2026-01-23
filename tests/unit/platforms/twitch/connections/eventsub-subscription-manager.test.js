@@ -1,5 +1,4 @@
 const { describe, test, expect } = require('bun:test');
-const { createMockFn } = require('../../../../helpers/bun-mock-utils');
 const { noOpLogger } = require('../../../../helpers/mock-factories');
 const { createTwitchEventSubSubscriptionManager } = require('../../../../../src/platforms/twitch/connections/eventsub-subscription-manager');
 
@@ -39,9 +38,18 @@ describe('Twitch EventSub subscription manager', () => {
     });
 
     test('retries subscription creation for retryable failures', async () => {
-        const post = createMockFn()
-            .mockRejectedValueOnce({ response: { data: { error: 'Too Many Requests', message: 'rate' }, status: 429 } })
-            .mockResolvedValueOnce({ data: { data: [{ id: 'sub-1', status: 'enabled' }] } });
+        const postCalls = [];
+        let callCount = 0;
+        const post = async (url, payload, options) => {
+            postCalls.push({ url, payload, headers: options?.headers });
+            callCount++;
+            if (callCount === 1) {
+                const error = new Error('Too Many Requests');
+                error.response = { data: { error: 'Too Many Requests', message: 'rate' }, status: 429 };
+                throw error;
+            }
+            return { data: { data: [{ id: 'sub-1', status: 'enabled' }] } };
+        };
         const manager = createManager({ axios: { post }, getClientId: () => 'testClientId' });
 
         const result = await manager.setupEventSubscriptions({
@@ -58,15 +66,23 @@ describe('Twitch EventSub subscription manager', () => {
             isConnected: true
         });
 
-        expect(post).toHaveBeenCalledTimes(2);
         expect(result.failures).toHaveLength(0);
+        expect(result.successful).toBe(1);
+        expect(postCalls.length).toBeGreaterThan(1);
+        expect(postCalls[0].url).toContain('/eventsub/subscriptions');
+        expect(postCalls[0].payload.type).toBe('channel.follow');
     });
 
     test('uses auth-provided clientId and token when config is missing', async () => {
-        const post = createMockFn().mockResolvedValue({ data: { data: [{ id: 'sub-1', status: 'enabled' }] } });
-        const getAccessToken = createMockFn(async () => 'authToken');
-        const getClientId = createMockFn(() => 'authClientId');
-        const authManager = createAuthManager({ getClientId, getAccessToken });
+        const postCalls = [];
+        const post = async (url, payload, options) => {
+            postCalls.push({ url, payload, headers: options?.headers });
+            return { data: { data: [{ id: 'sub-1', status: 'enabled' }] } };
+        };
+        const authManager = createAuthManager({
+            getClientId: () => 'authClientId',
+            getAccessToken: async () => 'authToken'
+        });
         const manager = createManager({
             authManager,
             config: {},
@@ -74,7 +90,7 @@ describe('Twitch EventSub subscription manager', () => {
             getClientId: () => authManager.getClientId()
         });
 
-        await manager.setupEventSubscriptions({
+        const result = await manager.setupEventSubscriptions({
             requiredSubscriptions: [{
                 name: 'Chat',
                 type: 'channel.chat.message',
@@ -88,21 +104,32 @@ describe('Twitch EventSub subscription manager', () => {
             isConnected: true
         });
 
-        expect(getClientId).toHaveBeenCalled();
-        expect(getAccessToken).toHaveBeenCalled();
-        expect(post).toHaveBeenCalledTimes(1);
+        expect(result.successful).toBe(1);
+        expect(postCalls).toHaveLength(1);
+        expect(postCalls[0].headers['Client-Id']).toBe('authClientId');
+        expect(postCalls[0].headers['Authorization']).toBe('Bearer authToken');
+        expect(postCalls[0].payload.type).toBe('channel.chat.message');
     });
 
     test('uses auth-provided clientId and token for cleanup when config is missing', async () => {
-        const get = createMockFn().mockResolvedValue({
-            data: {
-                data: [{ id: 'sub-1', transport: { method: 'websocket', session_id: 'session-1' } }]
-            }
+        const getCalls = [];
+        const deleteCalls = [];
+        const get = async (url, options) => {
+            getCalls.push({ url, headers: options?.headers });
+            return {
+                data: {
+                    data: [{ id: 'sub-1', transport: { method: 'websocket', session_id: 'session-1' } }]
+                }
+            };
+        };
+        const deleteCall = async (url, options) => {
+            deleteCalls.push({ url, headers: options?.headers });
+            return {};
+        };
+        const authManager = createAuthManager({
+            getClientId: () => 'authClientId',
+            getAccessToken: async () => 'authToken'
         });
-        const deleteCall = createMockFn().mockResolvedValue({});
-        const getAccessToken = createMockFn(async () => 'authToken');
-        const getClientId = createMockFn(() => 'authClientId');
-        const authManager = createAuthManager({ getClientId, getAccessToken });
         const manager = createManager({
             authManager,
             config: {},
@@ -112,9 +139,10 @@ describe('Twitch EventSub subscription manager', () => {
 
         await manager.cleanupAllWebSocketSubscriptions({ sessionId: 'session-1' });
 
-        expect(getClientId).toHaveBeenCalled();
-        expect(getAccessToken).toHaveBeenCalled();
-        expect(get).toHaveBeenCalledTimes(1);
-        expect(deleteCall).toHaveBeenCalledTimes(1);
+        expect(getCalls).toHaveLength(1);
+        expect(getCalls[0].headers['Client-Id']).toBe('authClientId');
+        expect(getCalls[0].headers['Authorization']).toBe('Bearer authToken');
+        expect(deleteCalls).toHaveLength(1);
+        expect(deleteCalls[0].url).toContain('sub-1');
     });
 });
