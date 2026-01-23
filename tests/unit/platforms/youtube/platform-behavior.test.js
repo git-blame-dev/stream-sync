@@ -468,4 +468,459 @@ describe('YouTubePlatform modern architecture', () => {
             ])
         );
     });
+
+    it('removeYouTubeConnection clears active stream in viewer service when matching', () => {
+        const { platform } = createPlatform();
+        const clearCalled = [];
+        platform.viewerService = {
+            _activeStream: { videoId: 'vid-123' },
+            clearActiveStream: () => clearCalled.push('cleared')
+        };
+        platform.connectionManager.removeConnection = createMockFn();
+
+        platform.removeYouTubeConnection('vid-123');
+
+        expect(clearCalled).toEqual(['cleared']);
+    });
+
+    it('removeYouTubeConnection does not clear viewer service when videoId does not match', () => {
+        const { platform } = createPlatform();
+        const clearCalled = [];
+        platform.viewerService = {
+            _activeStream: { videoId: 'other-vid' },
+            clearActiveStream: () => clearCalled.push('cleared')
+        };
+        platform.connectionManager.removeConnection = createMockFn();
+
+        platform.removeYouTubeConnection('vid-123');
+
+        expect(clearCalled).toEqual([]);
+    });
+
+    it('removeYouTubeConnection handles viewer service error gracefully', () => {
+        const logger = createLogger();
+        const { platform } = createPlatform({ logger });
+        platform.viewerService = {
+            _activeStream: { videoId: 'vid-123' },
+            clearActiveStream: () => { throw new Error('service error'); }
+        };
+        platform.connectionManager.removeConnection = createMockFn();
+
+        platform.removeYouTubeConnection('vid-123');
+
+        expect(logger.warn).toHaveBeenCalled();
+    });
+
+    it('disconnectFromYouTubeStream returns false when connectionManager is null', async () => {
+        const { platform } = createPlatform();
+        platform.connectionManager = null;
+
+        const result = await platform.disconnectFromYouTubeStream('vid-123');
+
+        expect(result).toBe(false);
+    });
+
+    it('getActiveYouTubeVideoIds returns empty array when connectionManager is null', () => {
+        const { platform } = createPlatform();
+        platform.connectionManager = null;
+
+        const result = platform.getActiveYouTubeVideoIds();
+
+        expect(result).toEqual([]);
+    });
+
+    it('getDetectedStreamIds returns empty array when connectionManager is null', () => {
+        const { platform } = createPlatform();
+        platform.connectionManager = null;
+
+        const result = platform.getDetectedStreamIds();
+
+        expect(result).toEqual([]);
+    });
+
+    it('getViewerCount returns 0 when provider is not available', async () => {
+        const { platform } = createPlatform();
+        platform.viewerCountProvider = null;
+
+        const count = await platform.getViewerCount();
+
+        expect(count).toBe(0);
+    });
+
+    it('getViewerCount returns 0 on provider error', async () => {
+        const { platform } = createPlatform();
+        platform.viewerCountProvider = {
+            getViewerCount: createMockFn().mockRejectedValue(new Error('provider error'))
+        };
+
+        const count = await platform.getViewerCount();
+
+        expect(count).toBe(0);
+    });
+
+    it('getViewerCountForVideo returns 0 when provider is not available', async () => {
+        const { platform } = createPlatform();
+        platform.viewerCountProvider = null;
+
+        const count = await platform.getViewerCountForVideo('vid-123');
+
+        expect(count).toBe(0);
+    });
+
+    it('getViewerCountForVideo returns 0 when provider lacks single-video method', async () => {
+        const { platform } = createPlatform();
+        platform.viewerCountProvider = {};
+
+        const count = await platform.getViewerCountForVideo('vid-123');
+
+        expect(count).toBe(0);
+    });
+
+    it('getViewerCountForVideo returns 0 on provider error', async () => {
+        const { platform } = createPlatform();
+        platform.viewerCountProvider = {
+            getViewerCountForVideo: createMockFn().mockRejectedValue(new Error('provider error'))
+        };
+
+        const count = await platform.getViewerCountForVideo('vid-123');
+
+        expect(count).toBe(0);
+    });
+
+    it('isActive returns false when isConnected throws', () => {
+        const { platform } = createPlatform();
+        platform.isConnected = () => { throw new Error('connection check failed'); };
+
+        const result = platform.isActive();
+
+        expect(result).toBe(false);
+    });
+
+    it('getHealthStatus returns degraded when no active connections and not monitoring', () => {
+        const { platform } = createPlatform();
+        platform.connectionManager.getConnectionCount = createMockFn().mockReturnValue(0);
+        platform.monitoringInterval = null;
+
+        const status = platform.getHealthStatus();
+
+        expect(status.overall).toBe('degraded');
+    });
+
+    it('getHealthStatus returns idle when no connections but monitoring active', () => {
+        const { platform } = createPlatform();
+        platform.connectionManager.getConnectionCount = createMockFn().mockReturnValue(0);
+        platform.monitoringInterval = 123;
+
+        const status = platform.getHealthStatus();
+
+        expect(status.overall).toBe('idle');
+    });
+
+    it('getHealthStatus returns healthy when connections exist', () => {
+        const { platform } = createPlatform();
+        platform.connectionManager.getConnectionCount = createMockFn().mockReturnValue(1);
+
+        const status = platform.getHealthStatus();
+
+        expect(status.overall).toBe('healthy');
+    });
+
+    it('cleanup handles viewerService cleanup error gracefully', async () => {
+        const { platform } = createPlatform();
+        platform.viewerService = {
+            cleanup: () => { throw new Error('cleanup failed'); }
+        };
+
+        await platform.cleanup();
+
+        expect(platform.isInitialized).toBe(false);
+    });
+
+    it('reconnect calls initialize with existing handlers', async () => {
+        const { platform } = createPlatform();
+        platform.handlers = { onChat: createMockFn() };
+        const initCalls = [];
+        platform.initialize = createMockFn(async (handlers) => {
+            initCalls.push(handlers);
+        });
+
+        await platform.reconnect();
+
+        expect(initCalls).toHaveLength(1);
+        expect(initCalls[0]).toEqual(platform.handlers);
+    });
+
+    it('_emitStreamStatusIfNeeded does nothing when connectionManager is null', () => {
+        const { platform } = createPlatform();
+        platform.connectionManager = null;
+        const events = [];
+        platform.on('platform:event', (e) => events.push(e));
+
+        platform._emitStreamStatusIfNeeded(0, {});
+
+        expect(events).toEqual([]);
+    });
+
+    it('_emitStreamStatusIfNeeded does nothing when count unchanged', () => {
+        const { platform } = createPlatform();
+        platform.connectionManager.getConnectionCount = createMockFn().mockReturnValue(1);
+        const events = [];
+        platform.on('platform:event', (e) => events.push(e));
+
+        platform._emitStreamStatusIfNeeded(1, {});
+
+        expect(events).toEqual([]);
+    });
+
+    it('sendMessage tries all active connections and returns true on success', async () => {
+        const { platform } = createPlatform();
+        platform.connectionManager.getAllVideoIds = createMockFn().mockReturnValue(['v1', 'v2']);
+        platform.connectionManager.getConnection = createMockFn((id) => ({
+            sendMessage: createMockFn().mockResolvedValue(id === 'v2')
+        }));
+        platform.connectionManager.getConnectionStatus = createMockFn().mockReturnValue({ ready: true });
+
+        const result = await platform.sendMessage('Hello');
+
+        expect(result).toBe(true);
+    });
+
+    it('sendMessage returns false when no connections succeed', async () => {
+        const { platform } = createPlatform();
+        platform.connectionManager.getAllVideoIds = createMockFn().mockReturnValue(['v1']);
+        platform.connectionManager.getConnection = createMockFn(() => ({
+            sendMessage: createMockFn().mockResolvedValue(false)
+        }));
+        platform.connectionManager.getConnectionStatus = createMockFn().mockReturnValue({ ready: true });
+
+        const result = await platform.sendMessage('Hello');
+
+        expect(result).toBe(false);
+    });
+
+    it('sendMessage handles connection send error gracefully', async () => {
+        const { platform } = createPlatform();
+        platform.connectionManager.getAllVideoIds = createMockFn().mockReturnValue(['v1']);
+        platform.connectionManager.getConnection = createMockFn(() => ({
+            sendMessage: createMockFn().mockRejectedValue(new Error('send failed'))
+        }));
+        platform.connectionManager.getConnectionStatus = createMockFn().mockReturnValue({ ready: true });
+
+        const result = await platform.sendMessage('Hello');
+
+        expect(result).toBe(false);
+    });
+
+    it('validateConfig returns issues when disabled', () => {
+        const { platform } = createPlatform();
+        platform.config.enabled = false;
+
+        const result = platform.validateConfig();
+
+        expect(result.isValid).toBe(false);
+        expect(result.issues).toContain('Platform is disabled');
+    });
+
+    it('validateConfig returns issues when no username', () => {
+        const { platform } = createPlatform();
+        platform.config.username = null;
+
+        const result = platform.validateConfig();
+
+        expect(result.isValid).toBe(false);
+        expect(result.issues).toContain('No username configured');
+    });
+
+    it('getNextUserAgent delegates to userAgentManager', () => {
+        const { platform } = createPlatform();
+        platform.userAgentManager = { getNextUserAgent: createMockFn().mockReturnValue('test-ua') };
+
+        const result = platform.getNextUserAgent();
+
+        expect(result).toBe('test-ua');
+    });
+
+    it('setYouTubeConnectionReady delegates to connectionManager', () => {
+        const { platform } = createPlatform();
+        platform.connectionManager.setConnectionReady = createMockFn();
+
+        platform.setYouTubeConnectionReady('vid-123');
+
+        expect(platform.connectionManager.setConnectionReady).toHaveBeenCalledWith('vid-123');
+    });
+
+    it('isAnyYouTubeStreamReady delegates to connectionManager', () => {
+        const { platform } = createPlatform();
+        platform.connectionManager.isAnyConnectionReady = createMockFn().mockReturnValue(true);
+
+        const result = platform.isAnyYouTubeStreamReady();
+
+        expect(result).toBe(true);
+    });
+
+    it('getLiveVideoIds throws when no username configured', async () => {
+        const { platform } = createPlatform();
+        platform.config.username = null;
+
+        await expect(platform.getLiveVideoIds()).rejects.toThrow('No channel username provided');
+    });
+
+    it('getLiveVideoIdsByYoutubei throws when stream detection service unavailable', async () => {
+        const { platform } = createPlatform();
+        platform.streamDetectionService = null;
+
+        await expect(platform.getLiveVideoIdsByYoutubei()).rejects.toThrow('Service unavailable');
+    });
+
+    it('getLiveVideoIdsByYoutubei returns empty array when no streams found', async () => {
+        const { platform, streamDetectionService } = createPlatform();
+        streamDetectionService.detectLiveStreams = createMockFn().mockResolvedValue({
+            success: false,
+            videoIds: [],
+            message: 'No streams'
+        });
+
+        const result = await platform.getLiveVideoIdsByYoutubei();
+
+        expect(result).toEqual([]);
+    });
+
+    it('getConnectionState returns state with connection info', () => {
+        const { platform } = createPlatform();
+        platform.connectionManager.getConnectionCount = createMockFn().mockReturnValue(1);
+        platform.connectionManager.getActiveVideoIds = createMockFn().mockReturnValue(['v1']);
+        platform.connectionManager.isConnectionReady = createMockFn().mockReturnValue(true);
+        platform.monitoringInterval = 123;
+
+        const state = platform.getConnectionState();
+
+        expect(state.isConnected).toBe(true);
+        expect(state.isMonitoring).toBe(true);
+        expect(state.totalConnections).toBe(1);
+    });
+
+    it('getStats returns platform stats', () => {
+        const { platform } = createPlatform();
+        platform.connectionManager.getConnectionCount = createMockFn().mockReturnValue(2);
+        platform.connectionManager.getActiveVideoIds = createMockFn().mockReturnValue(['v1', 'v2']);
+        platform.connectionManager.isConnectionReady = createMockFn().mockReturnValue(true);
+
+        const stats = platform.getStats();
+
+        expect(stats.platform).toBe('youtube');
+        expect(stats.totalConnections).toBe(2);
+    });
+
+    it('isConfigured returns true when enabled and username set', () => {
+        const { platform } = createPlatform();
+        platform.config.enabled = true;
+        platform.config.username = 'test-user';
+
+        expect(platform.isConfigured()).toBe(true);
+    });
+
+    it('isConfigured returns false when disabled', () => {
+        const { platform } = createPlatform();
+        platform.config.enabled = false;
+
+        expect(platform.isConfigured()).toBe(false);
+    });
+
+    it('isConnected returns true when connectionManager has connections', () => {
+        const { platform } = createPlatform();
+        platform.connectionManager.getConnectionCount = createMockFn().mockReturnValue(1);
+
+        expect(platform.isConnected()).toBe(true);
+    });
+
+    it('isConnected returns false when connectionManager has no connections', () => {
+        const { platform } = createPlatform();
+        platform.connectionManager.getConnectionCount = createMockFn().mockReturnValue(0);
+
+        expect(platform.isConnected()).toBe(false);
+    });
+
+    it('getConnectionStatus returns current status', async () => {
+        const { platform } = createPlatform();
+        platform.connectionManager.getConnectionCount = createMockFn().mockReturnValue(1);
+
+        const status = await platform.getConnectionStatus();
+
+        expect(status.platform).toBe('youtube');
+        expect(status.status).toBe('connected');
+    });
+
+    it('getTotalViewerCount sums all stream viewer counts', () => {
+        const { platform } = createPlatform();
+        platform.streamViewerCounts = new Map([['v1', 10], ['v2', 20]]);
+
+        const total = platform.getTotalViewerCount();
+
+        expect(total).toBe(30);
+    });
+
+    it('getTotalViewerCount returns 0 when no counts tracked', () => {
+        const { platform } = createPlatform();
+        platform.streamViewerCounts = null;
+
+        const total = platform.getTotalViewerCount();
+
+        expect(total).toBe(0);
+    });
+
+    it('_clearMonitoringInterval clears and nullifies interval', () => {
+        const { platform } = createPlatform();
+        platform.monitoringInterval = 123;
+        const cleared = [];
+        const originalClearInterval = global.clearInterval;
+        global.clearInterval = (id) => cleared.push(id);
+
+        platform._clearMonitoringInterval();
+
+        global.clearInterval = originalClearInterval;
+        expect(cleared).toContain(123);
+        expect(platform.monitoringInterval).toBeNull();
+    });
+
+    it('handleChatTextMessage skips when chatItem is invalid', () => {
+        const logger = createLogger();
+        const { platform } = createPlatform({ logger });
+
+        platform.handleChatTextMessage(null);
+        platform.handleChatTextMessage({ item: null });
+
+        expect(logger.warn).toHaveBeenCalled();
+    });
+
+    it('handleChatTextMessage skips when author name is missing', () => {
+        const logger = createLogger();
+        const { platform } = createPlatform({ logger });
+
+        platform.handleChatTextMessage({ item: { type: 'test' } });
+
+        expect(logger.warn).toHaveBeenCalled();
+    });
+
+    it('_handleError emits error event and calls cleanup when shouldDisconnect', async () => {
+        const { platform } = createPlatform();
+        const events = [];
+        platform.on('platform:event', (e) => events.push(e));
+        platform.cleanup = createMockFn().mockResolvedValue();
+
+        platform._handleError(new Error('fatal'), 'liveChatListener', { shouldEmit: true, shouldDisconnect: true });
+
+        await new Promise(resolve => setImmediate(resolve));
+        expect(events.some(e => e.type === 'platform:error')).toBe(true);
+        expect(platform.cleanup).toHaveBeenCalled();
+    });
+
+    it('_generateErrorMessage returns context-specific messages', () => {
+        const { platform } = createPlatform();
+
+        expect(platform._generateErrorMessage('connectToYouTubeStream', 'v1')).toContain('Failed to connect');
+        expect(platform._generateErrorMessage('liveChatListener')).toContain('live chat error');
+        expect(platform._generateErrorMessage('checkMultiStream')).toContain('multi-stream');
+        expect(platform._generateErrorMessage('getLiveVideoIds')).toContain('live video IDs');
+        expect(platform._generateErrorMessage('unknown')).toContain('unexpected error');
+    });
 });
