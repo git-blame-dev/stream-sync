@@ -96,7 +96,7 @@ function startApplication(config = 'fast', customArgs = [], options = {}) {
             scheduleTimeout(() => {
                 try {
                     child.kill('SIGKILL');
-                } catch (e) {
+                } catch {
                     // Process already terminated
                 }
             }, 2000);
@@ -175,11 +175,11 @@ function startApplication(config = 'fast', customArgs = [], options = {}) {
             scheduleTimeout(() => {
                 try {
                     child.kill('SIGKILL');
-                } catch (e) {
+                } catch {
                     // Process already terminated
                 }
             }, 2000);
-            
+
             finalize({
                 success: false,
                 error: 'Timeout',

@@ -21,7 +21,7 @@ describe('TimestampExtractionService Behavior', () => {
     beforeAll(() => {
         try {
             TimestampExtractionService = require('../../../src/services/TimestampExtractionService');
-        } catch (error) {
+        } catch {
             TimestampExtractionService = null;
         }
     });

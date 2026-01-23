@@ -6,7 +6,7 @@ const activeMocks = new Map();
 const resolveModuleId = (moduleName) => {
     try {
         return require.resolve(moduleName);
-    } catch (error) {
+    } catch {
         return moduleName;
     }
 };

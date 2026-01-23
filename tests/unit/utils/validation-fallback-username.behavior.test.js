@@ -1,4 +1,4 @@
-const { describe, test, expect, it } = require('bun:test');
+const { describe, expect, it } = require('bun:test');
 
 const {
     formatUsername12,

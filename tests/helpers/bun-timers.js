@@ -60,7 +60,7 @@ const clearTrackedTimers = () => {
         try {
             clearTimeout(timerId);
             clearInterval(timerId);
-        } catch (error) {
+        } catch {
             // Ignore already-cleared timers
         }
     });

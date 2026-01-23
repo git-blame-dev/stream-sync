@@ -380,7 +380,7 @@ describe('Viewer Count & OBS Observer Edge Case Tests', () => {
                 try {
                     const result = await mockPlatforms.tiktok.getViewerCount();
                     results.push(result);
-                } catch (error) {
+                } catch {
                     results.push('rate-limited');
                 }
             }
@@ -432,7 +432,7 @@ describe('Viewer Count & OBS Observer Edge Case Tests', () => {
                 try {
                     const result = await mockPlatforms.twitch.getViewerCount();
                     results.push(result);
-                } catch (error) {
+                } catch {
                     results.push('failed');
                 }
             }
@@ -939,7 +939,7 @@ describe('Viewer Count & OBS Observer Edge Case Tests', () => {
                 try {
                     const result = await mockPlatforms.twitch.getViewerCount();
                     results.push(result);
-                } catch (error) {
+                } catch {
                     results.push('auth-failed');
                 }
             }

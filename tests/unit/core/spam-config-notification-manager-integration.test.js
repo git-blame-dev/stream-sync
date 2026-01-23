@@ -1,5 +1,5 @@
 
-const { describe, test, expect, beforeEach, it, afterEach } = require('bun:test');
+const { describe, expect, beforeEach, it, afterEach } = require('bun:test');
 const { createMockFn, clearAllMocks, restoreAllMocks } = require('../../helpers/bun-mock-utils');
 const { noOpLogger } = require('../../helpers/mock-factories');
 

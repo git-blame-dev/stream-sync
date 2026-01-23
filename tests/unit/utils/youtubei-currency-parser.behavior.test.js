@@ -1,4 +1,4 @@
-const { describe, test, expect, it } = require('bun:test');
+const { describe, expect, it } = require('bun:test');
 
 const { YouTubeiCurrencyParser } = require('../../../src/utils/youtubei-currency-parser');
 const { noOpLogger } = require('../../helpers/mock-factories');

@@ -1,4 +1,4 @@
-const { describe, test, expect, it, afterEach } = require('bun:test');
+const { describe, expect, it, afterEach } = require('bun:test');
 const { createMockFn, restoreAllMocks } = require('../../helpers/bun-mock-utils');
 const { withTimeout, withTimeoutAll, createTimeoutWrapper, createTimeoutPromise, createTimeoutController } = require('../../../src/utils/timeout-wrapper');
 const { expectNoTechnicalArtifacts } = require('../../helpers/assertion-helpers');

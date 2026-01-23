@@ -474,7 +474,7 @@ const expectGracefulDegradation = async (systemUnderTest, degradationExpectation
         result.systemStabilityMaintained = true;
         result.errorHandledGracefully = true;
         
-    } catch (error) {
+    } catch {
         // System threw an error - validate graceful degradation
         
         // Check system remains operational
@@ -499,7 +499,7 @@ const expectGracefulDegradation = async (systemUnderTest, degradationExpectation
             try {
                 await degradationExpectations.attemptRecovery();
                 result.recoverabilityAssessed = true;
-            } catch (recoveryError) {
+            } catch {
                 result.recoverabilityAssessed = false;
             }
         }
@@ -640,7 +640,7 @@ const expectErrorRecoveryBehavior = async (operationThatMayFail, recoveryExpecta
         result.finalSystemState = recoveryExpectations.getSystemState ? 
             recoveryExpectations.getSystemState() : { status: 'operational' };
             
-    } catch (error) {
+    } catch {
         result.operationAttempted = true;
         result.errorOccurred = true;
         

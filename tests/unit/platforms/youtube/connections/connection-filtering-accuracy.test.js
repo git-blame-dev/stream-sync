@@ -1,4 +1,4 @@
-const { describe, test, expect, beforeEach, afterEach } = require('bun:test');
+const { describe, test, expect, afterEach } = require('bun:test');
 const { createMockFn } = require('../../../../helpers/bun-mock-utils');
 const { noOpLogger } = require('../../../../helpers/mock-factories');
 const { YouTubePlatform } = require('../../../../../src/platforms/youtube');
