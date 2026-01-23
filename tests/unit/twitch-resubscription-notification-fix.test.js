@@ -46,7 +46,7 @@ describe('TwitchEventSub Resubscription Notification Fix', () => {
     describe('when resubscription message received', () => {
         test('emits paypiggyMessage with months and tier', (done) => {
             const resubEvent = {
-                user_id: 'testUserId123',
+                user_login: 'testresubuser',
                 user_name: 'testResubUser',
                 tier: '1000',
                 cumulative_months: 3,
@@ -57,7 +57,7 @@ describe('TwitchEventSub Resubscription Notification Fix', () => {
             eventSub.on('paypiggyMessage', (payload) => {
                 expect(payload.type).toBe('paypiggy');
                 expect(payload.username).toBe('testResubUser');
-                expect(payload.userId).toBe('testUserId123');
+                expect(payload.userId).toBe('testresubuser');
                 expect(payload.tier).toBe('1000');
                 expect(payload.months).toBe(3);
                 expect(payload.timestamp).toBe(resubEvent.timestamp);
@@ -69,7 +69,7 @@ describe('TwitchEventSub Resubscription Notification Fix', () => {
 
         test('emits paypiggyMessage with message text and premium tier', (done) => {
             const resubEvent = {
-                user_id: 'testPremiumUser456',
+                user_login: 'testpremiumsub',
                 user_name: 'testPremiumSub',
                 tier: '2000',
                 cumulative_months: 12,
@@ -93,7 +93,7 @@ describe('TwitchEventSub Resubscription Notification Fix', () => {
     describe('when standard subscription event received', () => {
         test('emits paypiggy with normalized months', (done) => {
             const subEvent = {
-                user_id: 'testNewSub789',
+                user_login: 'testnewsubscriber',
                 user_name: 'testNewSubscriber',
                 tier: '2000',
                 cumulative_months: 6,
@@ -104,7 +104,7 @@ describe('TwitchEventSub Resubscription Notification Fix', () => {
             eventSub.on('paypiggy', (payload) => {
                 expect(payload.type).toBe('paypiggy');
                 expect(payload.username).toBe('testNewSubscriber');
-                expect(payload.userId).toBe('testNewSub789');
+                expect(payload.userId).toBe('testnewsubscriber');
                 expect(payload.tier).toBe('2000');
                 expect(payload.months).toBe(6);
                 done();
