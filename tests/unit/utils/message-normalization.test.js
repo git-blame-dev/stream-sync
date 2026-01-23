@@ -192,15 +192,16 @@ describe('Message Normalization', () => {
 
             expect(normalized).toMatchObject({
                 platform: 'tiktok',
-                userId: 'tt-123',
-                username: 'tiktokuser123',
+                userId: 'tiktokuser123',
+                username: 'TikTokUser',
                 message: 'Hello TikTok!',
                 isMod: false,
                 isSubscriber: false,
                 isBroadcaster: false
             });
             expect(normalized.metadata).toMatchObject({
-                profilePicture: 'avatar.jpg'
+                profilePicture: 'avatar.jpg',
+                numericId: 'tt-123'
             });
         });
 
@@ -240,8 +241,8 @@ describe('Message Normalization', () => {
 
             expect(normalized).toMatchObject({
                 platform: 'tiktok-gift',
-                userId: 'tt-gift-1',
-                username: 'giftuser'
+                userId: 'giftuser',
+                username: 'GiftUser'
             });
             expect(normalized.timestamp).toBe(giftTimestamp);
             expect(normalized.metadata).toMatchObject({
@@ -284,7 +285,7 @@ describe('Message Normalization', () => {
                 profilePicture: 'avatar-fallback.jpg',
                 followRole: 'follower',
                 userBadges: ['badge-1'],
-                displayName: 'TikTok User'
+                numericId: 'tt-456'
             });
         });
     });

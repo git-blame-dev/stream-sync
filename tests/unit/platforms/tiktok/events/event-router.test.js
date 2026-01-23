@@ -170,7 +170,7 @@ describe('TikTok event router', () => {
 
         await listeners[platform.WebcastEvent.CHAT]({
             comment: 'hello stream',
-            user: { userId: 'test-user-1', uniqueId: 'testuser' },
+            user: { userId: 'test-user-1', uniqueId: 'testuser', nickname: 'TestUser' },
             common: { createTime: '1700000000' },
             isModerator: false,
             isSubscriber: false,
@@ -195,7 +195,7 @@ describe('TikTok event router', () => {
 
         await listeners[platform.WebcastEvent.CHAT]({
             comment: 'late message',
-            user: { userId: 'test-user-2', uniqueId: 'testuser2' },
+            user: { userId: 'test-user-2', uniqueId: 'testuser2', nickname: 'TestUser2' },
             common: { createTime: '1700000000' },
             isModerator: false,
             isSubscriber: false,
@@ -217,7 +217,7 @@ describe('TikTok event router', () => {
 
         await listeners[platform.WebcastEvent.CHAT]({
             comment: 'self message',
-            user: { userId: 'test-user-3', uniqueId: 'selfuser' },
+            user: { userId: 'test-user-3', uniqueId: 'selfuser', nickname: 'SelfUser' },
             common: { createTime: '1700000000' },
             isModerator: false,
             isSubscriber: false,

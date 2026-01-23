@@ -9,15 +9,15 @@ function extractTikTokUserData(data) {
         throw new Error('TikTok user payload requires user object');
     }
 
-    const userId = typeof userData.userId === 'string'
-        ? userData.userId.trim()
-        : (typeof userData.userId === 'number' ? String(userData.userId) : null);
-    const username = typeof userData.uniqueId === 'string'
+    const userId = typeof userData.uniqueId === 'string'
         ? userData.uniqueId.trim()
         : (typeof userData.uniqueId === 'number' ? String(userData.uniqueId) : null);
+    const username = typeof userData.nickname === 'string'
+        ? userData.nickname.trim()
+        : (typeof userData.nickname === 'number' ? String(userData.nickname) : null);
 
     if (!userId || !username) {
-        throw new Error('TikTok user payload requires user.userId and user.uniqueId');
+        throw new Error('TikTok user payload requires user.uniqueId and user.nickname');
     }
 
     return {

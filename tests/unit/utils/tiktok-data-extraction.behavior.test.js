@@ -13,7 +13,7 @@ describe('extractTikTokUserData', () => {
 
     it('extracts canonical fields from nested user data', () => {
         const data = { user: { userId: 'test_user_id_nested', uniqueId: 'testUserNested', nickname: 'TestNestedDisplay' } };
-        expect(extractTikTokUserData(data)).toEqual({ userId: 'test_user_id_nested', username: 'testUserNested' });
+        expect(extractTikTokUserData(data)).toEqual({ userId: 'testUserNested', username: 'TestNestedDisplay' });
     });
 });
 
