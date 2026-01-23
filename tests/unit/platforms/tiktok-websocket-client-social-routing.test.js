@@ -1,32 +1,31 @@
 const { describe, it, expect } = require('bun:test');
-const { createMockFn } = require('../../helpers/bun-mock-utils');
 const { TikTokWebSocketClient } = require('../../../src/platforms/tiktok-websocket-client');
 
 describe('TikTokWebSocketClient social routing', () => {
     it('emits social without follow for share actionType', () => {
         const client = new TikTokWebSocketClient('share_tester');
-        const socialHandler = createMockFn();
-        const followHandler = createMockFn();
+        const socialCalls = [];
+        const followCalls = [];
 
-        client.on('social', socialHandler);
-        client.on('follow', followHandler);
+        client.on('social', (data) => socialCalls.push(data));
+        client.on('follow', (data) => followCalls.push(data));
 
         client.handleEvent({
             type: 'social',
             data: { actionType: 'share', displayType: 'share', user: { uniqueId: 'sharer' } }
         });
 
-        expect(socialHandler).toHaveBeenCalledTimes(1);
-        expect(followHandler).not.toHaveBeenCalled();
+        expect(socialCalls).toHaveLength(1);
+        expect(followCalls).toHaveLength(0);
     });
 
     it('emits follow for social payloads with follow wording but no actionType', () => {
         const client = new TikTokWebSocketClient('follow_tester');
-        const socialHandler = createMockFn();
-        const followHandler = createMockFn();
+        const socialCalls = [];
+        const followCalls = [];
 
-        client.on('social', socialHandler);
-        client.on('follow', followHandler);
+        client.on('social', (data) => socialCalls.push(data));
+        client.on('follow', (data) => followCalls.push(data));
 
         client.handleEvent({
             type: 'social',
@@ -36,7 +35,7 @@ describe('TikTokWebSocketClient social routing', () => {
             }
         });
 
-        expect(socialHandler).toHaveBeenCalledTimes(1);
-        expect(followHandler).toHaveBeenCalledTimes(1);
+        expect(socialCalls).toHaveLength(1);
+        expect(followCalls).toHaveLength(1);
     });
 });

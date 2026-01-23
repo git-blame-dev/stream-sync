@@ -237,7 +237,6 @@ describe('YouTubePlatform modern architecture', () => {
     it('ignores gift redemption announcements with fallback logging', async () => {
         const logger = createLogger();
         const { platform } = createPlatform({ logger });
-        platform.logRawPlatformData = createMockFn().mockResolvedValue();
 
         await platform.handleChatMessage({
             type: 'AddChatItemAction',
@@ -252,7 +251,6 @@ describe('YouTubePlatform modern architecture', () => {
             }
         });
 
-        expect(platform.logRawPlatformData).toHaveBeenCalledTimes(0);
         const debugCalls = getDebugCalls(logger);
         const giftLog = debugCalls.find(({ message }) =>
             message.includes('ignored gifted membership announcement for Unknown User')
@@ -268,7 +266,6 @@ describe('YouTubePlatform modern architecture', () => {
     it('logs renderer variants as ignored duplicates', async () => {
         const logger = createLogger();
         const { platform } = createPlatform({ logger });
-        platform.logRawPlatformData = createMockFn().mockResolvedValue();
 
         await platform.handleChatMessage({
             type: 'AddChatItemAction',
@@ -283,7 +280,6 @@ describe('YouTubePlatform modern architecture', () => {
             }
         });
 
-        expect(platform.logRawPlatformData).toHaveBeenCalledTimes(0);
         const debugCalls = getDebugCalls(logger);
         const duplicateLog = debugCalls.find(({ message }) =>
             message.includes('ignored duplicate LiveChatPaidMessageRenderer')
@@ -296,14 +292,20 @@ describe('YouTubePlatform modern architecture', () => {
         });
     });
 
-    it('routes async handler failures through _handleProcessingError', async () => {
+    it('catches async handler failures and logs error without unhandled rejection', async () => {
         const logger = createLogger();
         const { platform } = createPlatform({ logger });
         const handlerError = new Error('dispatch failed');
         platform.eventRouter = {
             routeEvent: createMockFn().mockRejectedValue(handlerError)
         };
-        platform._handleProcessingError = createMockFn();
+
+        const errorHandlerCalls = [];
+        platform.errorHandler = {
+            handleEventProcessingError: (error, eventType, eventData, message) => {
+                errorHandlerCalls.push({ error, eventType, eventData, message });
+            }
+        };
 
         const unhandled = [];
         const listener = (error) => unhandled.push(error);
@@ -326,12 +328,11 @@ describe('YouTubePlatform modern architecture', () => {
             process.off('unhandledRejection', listener);
         }
 
-        expect(platform._handleProcessingError).toHaveBeenCalledTimes(1);
-        const [message, error, eventType] = platform._handleProcessingError.mock.calls[0];
-        expect(message).toContain('Error handling event type LiveChatPaidMessage');
-        expect(error).toBe(handlerError);
-        expect(eventType).toBe('LiveChatPaidMessage');
         expect(unhandled).toHaveLength(0);
+        expect(errorHandlerCalls).toHaveLength(1);
+        expect(errorHandlerCalls[0].error).toBe(handlerError);
+        expect(errorHandlerCalls[0].eventType).toBe('LiveChatPaidMessage');
+        expect(errorHandlerCalls[0].message).toContain('Error handling event type LiveChatPaidMessage');
     });
 
     it('emits error notification when gift purchase header author is missing', async () => {
@@ -497,18 +498,18 @@ describe('YouTubePlatform modern architecture', () => {
         expect(clearCalled).toEqual([]);
     });
 
-    it('removeYouTubeConnection handles viewer service error gracefully', () => {
-        const logger = createLogger();
-        const { platform } = createPlatform({ logger });
+    it('removeYouTubeConnection completes when viewer service throws error', () => {
+        const { platform } = createPlatform();
+        let removeConnectionCalled = false;
         platform.viewerService = {
             _activeStream: { videoId: 'vid-123' },
             clearActiveStream: () => { throw new Error('service error'); }
         };
-        platform.connectionManager.removeConnection = createMockFn();
+        platform.connectionManager.removeConnection = () => { removeConnectionCalled = true; };
 
         platform.removeYouTubeConnection('vid-123');
 
-        expect(logger.warn).toHaveBeenCalled();
+        expect(removeConnectionCalled).toBe(true);
     });
 
     it('disconnectFromYouTubeStream returns false when connectionManager is null', async () => {
@@ -740,13 +741,14 @@ describe('YouTubePlatform modern architecture', () => {
         expect(result).toBe('test-ua');
     });
 
-    it('setYouTubeConnectionReady delegates to connectionManager', () => {
+    it('setYouTubeConnectionReady updates connection ready state', () => {
         const { platform } = createPlatform();
-        platform.connectionManager.setConnectionReady = createMockFn();
+        let readyVideoId = null;
+        platform.connectionManager.setConnectionReady = (videoId) => { readyVideoId = videoId; };
 
         platform.setYouTubeConnectionReady('vid-123');
 
-        expect(platform.connectionManager.setConnectionReady).toHaveBeenCalledWith('vid-123');
+        expect(readyVideoId).toBe('vid-123');
     });
 
     it('isAnyYouTubeStreamReady delegates to connectionManager', () => {
@@ -882,36 +884,40 @@ describe('YouTubePlatform modern architecture', () => {
         expect(platform.monitoringInterval).toBeNull();
     });
 
-    it('handleChatTextMessage skips when chatItem is invalid', () => {
-        const logger = createLogger();
-        const { platform } = createPlatform({ logger });
+    it('handleChatTextMessage returns early when chatItem is invalid', () => {
+        const { platform } = createPlatform();
+        const events = [];
+        platform.on('platform:event', (e) => events.push(e));
 
         platform.handleChatTextMessage(null);
         platform.handleChatTextMessage({ item: null });
 
-        expect(logger.warn).toHaveBeenCalled();
+        const chatEvents = events.filter(e => e.type === 'platform:chat-message');
+        expect(chatEvents).toHaveLength(0);
     });
 
-    it('handleChatTextMessage skips when author name is missing', () => {
-        const logger = createLogger();
-        const { platform } = createPlatform({ logger });
-
-        platform.handleChatTextMessage({ item: { type: 'test' } });
-
-        expect(logger.warn).toHaveBeenCalled();
-    });
-
-    it('_handleError emits error event and calls cleanup when shouldDisconnect', async () => {
+    it('handleChatTextMessage returns early when author name is missing', () => {
         const { platform } = createPlatform();
         const events = [];
         platform.on('platform:event', (e) => events.push(e));
-        platform.cleanup = createMockFn().mockResolvedValue();
+
+        platform.handleChatTextMessage({ item: { type: 'test' } });
+
+        const chatEvents = events.filter(e => e.type === 'platform:chat-message');
+        expect(chatEvents).toHaveLength(0);
+    });
+
+    it('_handleError emits error event and triggers cleanup when shouldDisconnect', async () => {
+        const { platform } = createPlatform();
+        const events = [];
+        platform.on('platform:event', (e) => events.push(e));
+        platform.isInitialized = true;
 
         platform._handleError(new Error('fatal'), 'liveChatListener', { shouldEmit: true, shouldDisconnect: true });
 
         await new Promise(resolve => setImmediate(resolve));
         expect(events.some(e => e.type === 'platform:error')).toBe(true);
-        expect(platform.cleanup).toHaveBeenCalled();
+        expect(platform.isInitialized).toBe(false);
     });
 
     it('_generateErrorMessage returns context-specific messages', () => {

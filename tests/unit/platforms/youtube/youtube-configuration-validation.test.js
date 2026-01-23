@@ -102,8 +102,9 @@ describe('YouTube Platform Configuration Validation', () => {
                 mockDependencies
             );
 
+            const errorHandlerCalls = [];
             const errorHandler = {
-                handleConfigurationError: createMockFn(),
+                handleConfigurationError: (...args) => errorHandlerCalls.push(args),
                 handleEventProcessingError: createMockFn(),
                 handleConnectionError: createMockFn(),
                 handleCleanupError: createMockFn()
@@ -117,7 +118,7 @@ describe('YouTube Platform Configuration Validation', () => {
 
             platform._validateAndFixConfiguration();
 
-            expect(errorHandler.handleConfigurationError).toHaveBeenCalled();
+            expect(errorHandlerCalls.length).toBeGreaterThan(0);
         });
 
         test('initializes disabled platform without errors', async () => {
@@ -181,14 +182,14 @@ describe('YouTube Platform Configuration Validation', () => {
             });
 
             const platform = new YouTubePlatform(baseConfig, dependencies);
-            const errorSpy = createMockFn();
+            const errorCalls = [];
             platform.errorHandler = {
-                handleConfigurationError: errorSpy
+                handleConfigurationError: (...args) => errorCalls.push(args)
             };
 
             platform._ensureDataLoggingPath();
 
-            expect(errorSpy).toHaveBeenCalled();
+            expect(errorCalls.length).toBeGreaterThan(0);
             mkdirMock.mockRestore();
         });
     });

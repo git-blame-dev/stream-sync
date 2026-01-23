@@ -1,5 +1,5 @@
 const { describe, test, expect, afterEach } = require('bun:test');
-const { createMockFn, restoreAllMocks } = require('../../../../helpers/bun-mock-utils');
+const { restoreAllMocks } = require('../../../../helpers/bun-mock-utils');
 const { noOpLogger } = require('../../../../helpers/mock-factories');
 const { PlatformEvents } = require('../../../../../src/interfaces/PlatformEvents');
 const { createYouTubeEventRouter } = require('../../../../../src/platforms/youtube/events/event-router');
@@ -9,30 +9,28 @@ describe('YouTube event router', () => {
         restoreAllMocks();
     });
 
-    const createPlatform = (overrides = {}) => {
+    test('routes event types to platform handlers', async () => {
+        const superChatCalls = [];
+        const superStickerCalls = [];
+        const membershipCalls = [];
+        const giftMembershipCalls = [];
+        const chatTextCalls = [];
+        const lowPriorityCalls = [];
+
         const platform = {
             logger: noOpLogger,
-            handleSuperChat: createMockFn(),
-            handleSuperSticker: createMockFn(),
-            handleMembership: createMockFn(),
-            handleGiftMembershipPurchase: createMockFn(),
-            handleChatTextMessage: createMockFn(),
-            handleLowPriorityEvent: createMockFn(),
-            _emitPlatformEvent: createMockFn(),
+            handleSuperChat: (item) => superChatCalls.push(item),
+            handleSuperSticker: (item) => superStickerCalls.push(item),
+            handleMembership: (item) => membershipCalls.push(item),
+            handleGiftMembershipPurchase: (item) => giftMembershipCalls.push(item),
+            handleChatTextMessage: (item) => chatTextCalls.push(item),
+            handleLowPriorityEvent: (item, type) => lowPriorityCalls.push({ item, type }),
+            _emitPlatformEvent: () => {},
             eventFactory: {
-                createErrorEvent: createMockFn(() => ({
-                    type: PlatformEvents.ERROR,
-                    platform: 'youtube'
-                }))
-            },
-            ...overrides
+                createErrorEvent: () => ({ type: PlatformEvents.ERROR, platform: 'youtube' })
+            }
         };
 
-        return platform;
-    };
-
-    test('routes event types to platform handlers', async () => {
-        const platform = createPlatform();
         const router = createYouTubeEventRouter({ platform });
         const chatItem = (type) => ({ item: { type } });
 
@@ -43,28 +41,34 @@ describe('YouTube event router', () => {
         await router.routeEvent(chatItem('LiveChatTextMessage'), 'LiveChatTextMessage');
         await router.routeEvent(chatItem('LiveChatViewerEngagementMessage'), 'LiveChatViewerEngagementMessage');
 
-        expect(platform.handleSuperChat).toHaveBeenCalledTimes(1);
-        expect(platform.handleSuperSticker).toHaveBeenCalledTimes(1);
-        expect(platform.handleMembership).toHaveBeenCalledTimes(1);
-        expect(platform.handleGiftMembershipPurchase).toHaveBeenCalledTimes(1);
-        expect(platform.handleChatTextMessage).toHaveBeenCalledTimes(1);
-        expect(platform.handleLowPriorityEvent).toHaveBeenCalledTimes(1);
-        expect(platform.handleLowPriorityEvent).toHaveBeenCalledWith(
-            expect.any(Object),
-            'LiveChatViewerEngagementMessage'
-        );
+        expect(superChatCalls).toHaveLength(1);
+        expect(superStickerCalls).toHaveLength(1);
+        expect(membershipCalls).toHaveLength(1);
+        expect(giftMembershipCalls).toHaveLength(1);
+        expect(chatTextCalls).toHaveLength(1);
+        expect(lowPriorityCalls).toHaveLength(1);
+        expect(lowPriorityCalls[0].type).toBe('LiveChatViewerEngagementMessage');
     });
 
     test('emits platform error when handler is missing', async () => {
-        const platform = createPlatform({ handleSuperChat: undefined });
+        const emittedEvents = [];
+
+        const platform = {
+            logger: noOpLogger,
+            handleSuperChat: undefined,
+            _emitPlatformEvent: (eventType, payload) => emittedEvents.push({ eventType, payload }),
+            eventFactory: {
+                createErrorEvent: () => ({ type: PlatformEvents.ERROR, platform: 'youtube' })
+            }
+        };
+
         const router = createYouTubeEventRouter({ platform });
 
         await router.routeEvent({ item: { type: 'LiveChatPaidMessage' } }, 'LiveChatPaidMessage');
 
-        expect(platform._emitPlatformEvent).toHaveBeenCalledTimes(1);
-        const [eventType, payload] = platform._emitPlatformEvent.mock.calls[0];
-        expect(eventType).toBe(PlatformEvents.ERROR);
-        expect(payload).toMatchObject({
+        expect(emittedEvents).toHaveLength(1);
+        expect(emittedEvents[0].eventType).toBe(PlatformEvents.ERROR);
+        expect(emittedEvents[0].payload).toMatchObject({
             type: PlatformEvents.ERROR,
             platform: 'youtube'
         });

@@ -86,10 +86,10 @@ describe('YouTubePlatform behavior', () => {
 
     it('emits platform events and invokes handler map', () => {
         const platform = createPlatform();
-        const handler = createMockFn();
-        platform.handlers.onChat = handler;
-        const eventSpy = createMockFn();
-        platform.on('platform:event', eventSpy);
+        const handlerCalls = [];
+        platform.handlers.onChat = (payload) => handlerCalls.push(payload);
+        const emittedEvents = [];
+        platform.on('platform:event', (event) => emittedEvents.push(event));
 
         platform._emitPlatformEvent('platform:chat-message', {
             platform: 'youtube',
@@ -97,13 +97,12 @@ describe('YouTubePlatform behavior', () => {
             message: { text: 'hi' }
         });
 
-        expect(handler).toHaveBeenCalled();
-        expect(eventSpy).toHaveBeenCalledWith(
-            expect.objectContaining({
-                type: 'platform:chat-message',
-                data: expect.objectContaining({ message: { text: 'hi' } })
-            })
-        );
+        expect(handlerCalls).toHaveLength(1);
+        expect(emittedEvents).toHaveLength(1);
+        expect(emittedEvents[0]).toMatchObject({
+            type: 'platform:chat-message',
+            data: expect.objectContaining({ message: { text: 'hi' } })
+        });
     });
 
     it('skips remove/delete chat actions in message filtering', () => {

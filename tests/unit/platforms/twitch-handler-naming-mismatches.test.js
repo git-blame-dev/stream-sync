@@ -1,15 +1,21 @@
 const { describe, it, expect, beforeEach } = require('bun:test');
-const { createMockFn } = require('../../helpers/bun-mock-utils');
 
 describe('Twitch Handler Integration', () => {
     let handlers;
+    let handlerCalls;
 
     beforeEach(() => {
+        handlerCalls = {
+            onFollow: [],
+            onPaypiggy: [],
+            onRaid: [],
+            onGift: []
+        };
         handlers = {
-            onFollow: createMockFn().mockResolvedValue(),
-            onPaypiggy: createMockFn().mockResolvedValue(),
-            onRaid: createMockFn().mockResolvedValue(),
-            onGift: createMockFn().mockResolvedValue()
+            onFollow: async (data) => { handlerCalls.onFollow.push(data); },
+            onPaypiggy: async (data) => { handlerCalls.onPaypiggy.push(data); },
+            onRaid: async (data) => { handlerCalls.onRaid.push(data); },
+            onGift: async (data) => { handlerCalls.onGift.push(data); }
         };
     });
 
@@ -33,8 +39,8 @@ describe('Twitch Handler Integration', () => {
 
             await handlers.onFollow(testFollowData);
 
-            expect(handlers.onFollow).toHaveBeenCalledTimes(1);
-            expect(handlers.onFollow).toHaveBeenCalledWith(testFollowData);
+            expect(handlerCalls.onFollow).toHaveLength(1);
+            expect(handlerCalls.onFollow[0]).toEqual(testFollowData);
         });
 
         it('paypiggy handler accepts subscriber data', async () => {
@@ -48,8 +54,8 @@ describe('Twitch Handler Integration', () => {
 
             await handlers.onPaypiggy(testPaypiggyData);
 
-            expect(handlers.onPaypiggy).toHaveBeenCalledTimes(1);
-            expect(handlers.onPaypiggy).toHaveBeenCalledWith(testPaypiggyData);
+            expect(handlerCalls.onPaypiggy).toHaveLength(1);
+            expect(handlerCalls.onPaypiggy[0]).toEqual(testPaypiggyData);
         });
 
         it('raid handler accepts raid data', async () => {
@@ -63,8 +69,8 @@ describe('Twitch Handler Integration', () => {
 
             await handlers.onRaid(testRaidData);
 
-            expect(handlers.onRaid).toHaveBeenCalledTimes(1);
-            expect(handlers.onRaid).toHaveBeenCalledWith(testRaidData);
+            expect(handlerCalls.onRaid).toHaveLength(1);
+            expect(handlerCalls.onRaid[0]).toEqual(testRaidData);
         });
 
         it('gift handler accepts gift data', async () => {
@@ -82,8 +88,8 @@ describe('Twitch Handler Integration', () => {
 
             await handlers.onGift(testGiftData);
 
-            expect(handlers.onGift).toHaveBeenCalledTimes(1);
-            expect(handlers.onGift).toHaveBeenCalledWith(testGiftData);
+            expect(handlerCalls.onGift).toHaveLength(1);
+            expect(handlerCalls.onGift[0]).toEqual(testGiftData);
         });
     });
 

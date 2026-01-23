@@ -33,12 +33,18 @@ describe('TikTokPlatform unified event contract (expected behavior)', () => {
             }
         };
 
+        const runtimeCalls = {
+            handleChatMessage: [],
+            handleFollowNotification: [],
+            handleGiftNotification: []
+        };
         runtime = {
-            handleChatMessage: createMockFn(),
-            handleFollowNotification: createMockFn(),
-            handleGiftNotification: createMockFn(),
+            handleChatMessage: (...args) => runtimeCalls.handleChatMessage.push(args),
+            handleFollowNotification: (...args) => runtimeCalls.handleFollowNotification.push(args),
+            handleGiftNotification: (...args) => runtimeCalls.handleGiftNotification.push(args),
             handlePaypiggyNotification: createMockFn(),
-            handleRaidNotification: createMockFn()
+            handleRaidNotification: createMockFn(),
+            _calls: runtimeCalls
         };
 
         new PlatformEventRouter({
@@ -107,14 +113,14 @@ describe('TikTokPlatform unified event contract (expected behavior)', () => {
             common: { createTime: testClock.now() }
         });
 
-        expect(runtime.handleChatMessage).toHaveBeenCalledTimes(1);
+        expect(runtime._calls.handleChatMessage).toHaveLength(1);
         expect(mockEventBus.emitted.find((e) => e.eventName === 'platform:event')).toBeDefined();
     });
 
     it('routes follow events through platform:event to PlatformEventRouter', async () => {
         await platform._handleFollow({ user: { userId: 'tt-follow-1', uniqueId: 'follower', nickname: 'Follower' } });
 
-        expect(runtime.handleFollowNotification).toHaveBeenCalledTimes(1);
+        expect(runtime._calls.handleFollowNotification).toHaveLength(1);
         expect(mockEventBus.emitted.find((e) => e.eventName === 'platform:event')).toBeDefined();
     });
 
@@ -134,7 +140,7 @@ describe('TikTokPlatform unified event contract (expected behavior)', () => {
             id: 'gift-msg-1'
         });
 
-        expect(runtime.handleGiftNotification).toHaveBeenCalledTimes(1);
+        expect(runtime._calls.handleGiftNotification).toHaveLength(1);
         expect(mockEventBus.emitted.find((e) => e.eventName === 'platform:event')).toBeDefined();
     });
 

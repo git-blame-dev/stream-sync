@@ -20,12 +20,14 @@ describe('TikTokPlatform Error Handling', () => {
             getState: createMockFn().mockReturnValue({ isConnected: false })
         };
 
+        const retrySystemCalls = { handleConnectionError: [] };
         mockRetrySystem = {
-            handleConnectionError: createMockFn(),
+            handleConnectionError: (err) => retrySystemCalls.handleConnectionError.push(err),
             handleConnectionSuccess: createMockFn(),
             resetRetryCount: createMockFn(),
             incrementRetryCount: createMockFn(),
-            executeWithRetry: createMockFn()
+            executeWithRetry: createMockFn(),
+            _calls: retrySystemCalls
         };
 
         baseConfig = {
@@ -121,7 +123,7 @@ describe('TikTokPlatform Error Handling', () => {
 
             platform.handleConnectionError(new Error('Test error'));
 
-            expect(mockRetrySystem.handleConnectionError).toHaveBeenCalled();
+            expect(mockRetrySystem._calls.handleConnectionError.length).toBeGreaterThan(0);
         });
     });
 

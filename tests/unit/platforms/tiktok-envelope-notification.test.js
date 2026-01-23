@@ -144,7 +144,7 @@ describe('TikTok Envelope Notification - Behavior Testing', () => {
 
             await handleEnvelopeNotification('tiktok', completeEnvelopeData);
 
-            expect(mockGiftHandler).toHaveBeenCalledTimes(1);
+            expect(capturedGiftCalls).toHaveLength(1);
             expectGiftCallBehavior('tiktok', 'testUserEnvelopeComplete', {
                 giftType: 'Treasure Chest',
                 giftCount: 1,
@@ -196,7 +196,7 @@ describe('TikTok Envelope Notification - Behavior Testing', () => {
 
             await handleEnvelopeNotification('tiktok', missingAmountData);
 
-            expect(mockGiftHandler).not.toHaveBeenCalled();
+            expect(capturedGiftCalls).toHaveLength(0);
         }, TEST_TIMEOUTS.UNIT);
 
         test('should handle missing nickname with uniqueId fallback', async () => {
@@ -231,7 +231,7 @@ describe('TikTok Envelope Notification - Behavior Testing', () => {
 
             await handleEnvelopeNotification('tiktok', minimalData);
 
-            expect(mockGiftHandler).not.toHaveBeenCalled();
+            expect(capturedGiftCalls).toHaveLength(0);
         }, TEST_TIMEOUTS.UNIT);
     });
 
@@ -249,7 +249,7 @@ describe('TikTok Envelope Notification - Behavior Testing', () => {
 
             await handleEnvelopeNotification('tiktok', nestedUserData);
 
-            expect(mockGiftHandler).toHaveBeenCalledTimes(1);
+            expect(capturedGiftCalls).toHaveLength(1);
             expectGiftCallBehavior('tiktok', 'testUserNestedEnvelope', {
                 giftType: 'Treasure Chest',
                 giftCount: 1,
@@ -316,7 +316,7 @@ describe('TikTok Envelope Notification - Behavior Testing', () => {
 
             await handleEnvelopeNotification('tiktok', missingCurrencyData);
 
-            expect(mockGiftHandler).not.toHaveBeenCalled();
+            expect(capturedGiftCalls).toHaveLength(0);
         }, TEST_TIMEOUTS.UNIT);
     });
 
@@ -333,7 +333,7 @@ describe('TikTok Envelope Notification - Behavior Testing', () => {
 
             await handleEnvelopeNotification('tiktok', emptyUserData);
 
-            expect(mockGiftHandler).not.toHaveBeenCalled();
+            expect(capturedGiftCalls).toHaveLength(0);
         }, TEST_TIMEOUTS.UNIT);
 
         test('should skip when identity fields are empty strings', async () => {
@@ -353,7 +353,7 @@ describe('TikTok Envelope Notification - Behavior Testing', () => {
 
             await handleEnvelopeNotification('tiktok', emptyStringUserData);
 
-            expect(mockGiftHandler).not.toHaveBeenCalled();
+            expect(capturedGiftCalls).toHaveLength(0);
         }, TEST_TIMEOUTS.UNIT);
 
         test('should skip when identity fields are null/undefined', async () => {
@@ -373,7 +373,7 @@ describe('TikTok Envelope Notification - Behavior Testing', () => {
 
             await handleEnvelopeNotification('tiktok', nullUserData);
 
-            expect(mockGiftHandler).not.toHaveBeenCalled();
+            expect(capturedGiftCalls).toHaveLength(0);
         }, TEST_TIMEOUTS.UNIT);
     });
 
@@ -456,7 +456,7 @@ describe('TikTok Envelope Notification - Behavior Testing', () => {
 
             await handleEnvelopeNotification('tiktok', errorEnvelope);
 
-            expect(mockGiftHandler).toHaveBeenCalledTimes(1);
+            expect(capturedGiftCalls).toHaveLength(1);
             const latestCall = getLatestGiftCall();
             const giftData = latestCall.giftData;
             expect(giftData.isError).toBe(true);
@@ -468,13 +468,13 @@ describe('TikTok Envelope Notification - Behavior Testing', () => {
         test('should handle null envelope data gracefully', async () => {
             await handleEnvelopeNotification('tiktok', null);
 
-            expect(mockGiftHandler).not.toHaveBeenCalled();
+            expect(capturedGiftCalls).toHaveLength(0);
         }, TEST_TIMEOUTS.UNIT);
 
         test('should handle empty envelope data object', async () => {
             await handleEnvelopeNotification('tiktok', {});
 
-            expect(mockGiftHandler).not.toHaveBeenCalled();
+            expect(capturedGiftCalls).toHaveLength(0);
         }, TEST_TIMEOUTS.UNIT);
 
         test('should reject non-numeric amounts', async () => {
@@ -489,7 +489,7 @@ describe('TikTok Envelope Notification - Behavior Testing', () => {
 
             await handleEnvelopeNotification('tiktok', invalidAmountData);
 
-            expect(mockGiftHandler).not.toHaveBeenCalled();
+            expect(capturedGiftCalls).toHaveLength(0);
         }, TEST_TIMEOUTS.UNIT);
     });
 
@@ -506,21 +506,19 @@ describe('TikTok Envelope Notification - Behavior Testing', () => {
 
             await handleEnvelopeNotification('tiktok', envelopeData);
 
-            expect(mockGiftHandler).toHaveBeenCalledTimes(1);
-            expect(mockGiftHandler).toHaveBeenCalledWith(
-                'tiktok',
-                'testUserDelegation',
-                expect.objectContaining({
-                    giftType: 'Treasure Chest',
-                    giftCount: 1,
-                    amount: 700,
-                    currency: 'coins',
-                    type: 'platform:envelope',
-                    id: envelopeData.id,
-                    timestamp: envelopeData.timestamp,
-                    originalEnvelopeData: envelopeData
-                })
-            );
+            expect(capturedGiftCalls).toHaveLength(1);
+            expect(capturedGiftCalls[0].platform).toBe('tiktok');
+            expect(capturedGiftCalls[0].username).toBe('testUserDelegation');
+            expect(capturedGiftCalls[0].giftData).toMatchObject({
+                giftType: 'Treasure Chest',
+                giftCount: 1,
+                amount: 700,
+                currency: 'coins',
+                type: 'platform:envelope',
+                id: envelopeData.id,
+                timestamp: envelopeData.timestamp,
+                originalEnvelopeData: envelopeData
+            });
         }, TEST_TIMEOUTS.UNIT);
 
         test('should maintain envelope type designation through gift processing', async () => {
