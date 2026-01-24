@@ -27,7 +27,8 @@ module.exports = [
     rules: {
       'chatbot/no-logger-error': 'error',
       'no-undef': 'error',
-      'no-console': 'error'
+      'no-console': 'error',
+      'no-unused-private-class-members': 'error'
     }
   },
   {
