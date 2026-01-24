@@ -98,10 +98,9 @@ class GoalTracker {
             const currency = this.goalState[platformKey].currency;
         
             this.logger.debug(`${platform} goal updated: ${oldCurrent} → ${newCurrent} ${currency}`, 'goal-tracker');
-        
-        // Return formatted result
+
             const formatted = this.formatGoalDisplay(platformKey);
-        const percentage = Math.round((newCurrent / target) * 100 * 10) / 10; // Round to 1 decimal
+        const percentage = target > 0 ? Math.round((newCurrent / target) * 100 * 10) / 10 : 0;
         const goalCompleted = newCurrent >= target;
         
         return {
@@ -190,12 +189,10 @@ class GoalTracker {
         return `0/0 unknown`;
     }
     
-    // Use provided values or fall back to state
-    const currentAmount = current !== undefined ? current : (state ? state.current : 0);
-    const targetAmount = target !== undefined ? target : (state ? state.target : 0);
+    const currentAmount = Number(current !== undefined ? current : (state ? state.current : 0));
+    const targetAmount = Number(target !== undefined ? target : (state ? state.target : 0));
     const currency = state ? state.currency : 'unknown';
     
-    // Helper to pad numbers with leading zeros based on target length
     const padNumber = (num, targetNum) => {
         const targetLen = String(Math.floor(targetNum)).length;
         return String(Math.floor(num)).padStart(targetLen, '0');
@@ -206,7 +203,6 @@ class GoalTracker {
             return `${padNumber(currentAmount, targetAmount)}/${targetAmount} ${currency}`;
             
         case 'youtube':
-            // Format as currency with $ symbol and 2 decimal places
             return `$${currentAmount.toFixed(2)}/$${targetAmount.toFixed(2)} USD`;
             
         case 'twitch':
