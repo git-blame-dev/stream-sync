@@ -86,10 +86,14 @@ function createYouTubeEventFactory(options = {}) {
 
         createViewerCountEvent: (data = {}) => {
             const timestamp = getTimestamp(data, 'YouTube viewer count event requires timestamp');
+            const count = Number(data.count);
+            if (!Number.isFinite(count)) {
+                throw new Error('YouTube viewer count event requires numeric count');
+            }
             return {
                 type: PlatformEvents.VIEWER_COUNT,
                 platform: platformName,
-                count: data.count,
+                count,
                 streamId: data.streamId,
                 streamViewerCount: data.streamViewerCount,
                 timestamp,
