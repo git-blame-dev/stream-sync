@@ -139,6 +139,11 @@ class NotificationManager extends EventEmitter {
     }
 
     async handleNotificationInternal(notificationType, platform, data, skipSpamDetection) {
+        if (typeof platform !== 'string') {
+            this.logger.warn(`[NotificationManager] Invalid platform type: ${typeof platform}`, 'notification-manager', { notificationType, platform });
+            return { success: false, error: 'Invalid platform type', notificationType, platform };
+        }
+
         // Check if we have configuration access through ConfigService or app
         if (!this._hasConfigAccess()) {
             this.logger.warn(`[NotificationManager] No configuration access available, cannot process notification`, platform, { notificationType, data });
@@ -220,6 +225,10 @@ class NotificationManager extends EventEmitter {
             }
         }
 
+        if (data.userId !== undefined && data.userId !== null) {
+            data.userId = String(data.userId);
+        }
+
         // Check per-user notification suppression
         if (data.userId && this.isUserSuppressed(data.userId, notificationType)) {
             if (this._isDebugEnabled()) {
@@ -274,9 +283,6 @@ class NotificationManager extends EventEmitter {
         }
         if (username) {
             data.username = username;
-        }
-        if (data.userId !== undefined && data.userId !== null) {
-            data.userId = String(data.userId);
         }
 
         // Log notifications to console when debug mode is enabled
@@ -873,11 +879,16 @@ class NotificationManager extends EventEmitter {
         try {
             this.logger.debug(`[NotificationManager] Processing ${notification.type} notification`, 'notification-manager');
 
+            if (typeof notification.platform !== 'string') {
+                throw new Error(`Invalid platform type: ${typeof notification.platform}`);
+            }
+            const platform = notification.platform.toLowerCase();
+
             const settingKey = this.NOTIFICATION_CONFIGS[notification.type]?.settingKey;
             if (!settingKey) {
                 throw new Error(`Unsupported notification type: ${notification.type}`);
             }
-            const isEnabled = this._areNotificationsEnabled(settingKey, notification.platform);
+            const isEnabled = this._areNotificationsEnabled(settingKey, platform);
             if (!isEnabled) {
                 this.logger.debug(`[NotificationManager] ${notification.type} notifications disabled`, 'notification-manager');
                 return;
@@ -888,7 +899,7 @@ class NotificationManager extends EventEmitter {
                 if (!notification.data) {
                     throw new Error('Notification processing requires notification.data');
                 }
-                await this.handleNotification(notification.type, notification.platform, notification.data);
+                await this.handleNotification(notification.type, platform, notification.data);
             } catch (handleError) {
                 this.logger.warn(`[NotificationManager] handleNotification failed: ${handleError.message} - continuing with minimal processing`);
             }
