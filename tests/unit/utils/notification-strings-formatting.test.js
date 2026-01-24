@@ -60,6 +60,14 @@ describe('notification-strings formatting functions', () => {
             expect(formatGiftCount(1, 'Rose')).toBe('1 rose');
         });
 
+        it('returns singular for numeric string "1"', () => {
+            expect(formatGiftCount('1', 'Rose')).toBe('1 rose');
+        });
+
+        it('returns plural for numeric string "5"', () => {
+            expect(formatGiftCount('5', 'Rose')).toBe('5 roses');
+        });
+
         it('returns plural for multiple', () => {
             expect(formatGiftCount(5, 'Rose')).toBe('5 roses');
         });
@@ -102,6 +110,14 @@ describe('notification-strings formatting functions', () => {
             expect(formatViewerCount(1)).toBe('1 viewer');
         });
 
+        it('returns "1 viewer" for numeric string "1"', () => {
+            expect(formatViewerCount('1')).toBe('1 viewer');
+        });
+
+        it('returns plural for numeric string "500"', () => {
+            expect(formatViewerCount('500')).toBe('500 viewers');
+        });
+
         it('returns plural for multiple', () => {
             expect(formatViewerCount(500)).toBe('500 viewers');
         });
@@ -122,6 +138,14 @@ describe('notification-strings formatting functions', () => {
 
         it('returns "1 month" for singular', () => {
             expect(formatMonths(1)).toBe('1 month');
+        });
+
+        it('returns "1 month" for numeric string "1"', () => {
+            expect(formatMonths('1')).toBe('1 month');
+        });
+
+        it('returns plural for numeric string "12"', () => {
+            expect(formatMonths('12')).toBe('12 months');
         });
 
         it('returns plural for multiple', () => {

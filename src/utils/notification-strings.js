@@ -357,10 +357,10 @@ function getCurrencyWord(currency) {
 }
 
 function formatGiftCount(count, giftType) {
-    if (!count || count === 0) return `0 ${giftType.toLowerCase()}s`;
-    
-    // Special handling for "Bits" and cheermote types -> "bit" singular conversion
-    if (count === 1) {
+    const numCount = Number(count);
+    if (!numCount || numCount === 0) return `0 ${giftType.toLowerCase()}s`;
+
+    if (numCount === 1) {
         // Handle regular "Bits" (lowercase for comparison)
         if (giftType.toLowerCase() === 'bits') {
             return '1 bit';
@@ -375,33 +375,31 @@ function formatGiftCount(count, giftType) {
         return `1 ${singularName}`;
     }
     
-    // Handle plural forms
-    // Handle regular "Bits"
     if (giftType.toLowerCase() === 'bits') {
-        return `${count} bits`;
+        return `${numCount} bits`;
     }
-    // Handle cheermote types like "ShowLove Bits" -> preserve case
     if (giftType.toLowerCase().endsWith(' bits')) {
-        const cheermoteType = giftType.replace(/ bits$/i, ''); // Preserve original case
-        return `${count} ${cheermoteType} bits`;
+        const cheermoteType = giftType.replace(/ bits$/i, '');
+        return `${numCount} ${cheermoteType} bits`;
     }
-    // Handle other gift types
     let pluralGiftType = giftType.toLowerCase();
     if (!pluralGiftType.endsWith('s')) {
         pluralGiftType += 's';
     }
-    
-    return `${count} ${pluralGiftType}`;
+
+    return `${numCount} ${pluralGiftType}`;
 }
 
 function formatViewerCount(count) {
-    if (!count || count === 0) return '0 viewers';
-    return count === 1 ? '1 viewer' : `${count} viewers`;
+    const numCount = Number(count);
+    if (!numCount || numCount === 0) return '0 viewers';
+    return numCount === 1 ? '1 viewer' : `${numCount} viewers`;
 }
 
 function formatMonths(months) {
-    if (!months || months === 0) return '0 months';
-    return months === 1 ? '1 month' : `${months} months`;
+    const numMonths = Number(months);
+    if (!numMonths || numMonths === 0) return '0 months';
+    return numMonths === 1 ? '1 month' : `${numMonths} months`;
 }
 
 // Enrich paypiggy data with platform-aware wording for template interpolation
