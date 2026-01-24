@@ -10,7 +10,7 @@ class NotificationBuilder {
         if (!input || typeof input !== 'object') {
             return null;
         }
-        const { platform, username, userId, message, amount, currency, vfxConfig, template } = input;
+        const { platform, username, userId, message, currency, vfxConfig, template } = input;
         let { type } = input;
         const isError = input.isError === true;
         const isAnonymous = input.isAnonymous === true;
@@ -33,11 +33,13 @@ class NotificationBuilder {
         }
         const normalizedUserId = (userId === null || userId === undefined) ? undefined : String(userId);
 
-        // Some notification types require a message, others don't
         const messageRequiredTypes = ['chat'];
         if (messageRequiredTypes.includes(type) && (message === undefined || message === null)) {
             throw new Error(`Notification of type "${type}" requires message content`);
         }
+        const normalizedMessage = (message !== undefined && message !== null && typeof message !== 'string')
+            ? String(message)
+            : message;
         if (typeof platform !== 'string' || !platform.trim()) {
             throw new Error('Notification requires platform');
         }
@@ -67,6 +69,9 @@ class NotificationBuilder {
         if (normalizedUserId !== undefined) {
             normalizedInput.userId = normalizedUserId;
         }
+        if (normalizedMessage !== undefined) {
+            normalizedInput.message = normalizedMessage;
+        }
         // Reject unsupported paid aliases; only canonical paypiggy should flow past this point
         const aliasPaidTypes = ['subscription', 'subscribe', 'membership', 'member', 'superfan', 'supporter', 'paid_supporter', 'resubscription'];
         if (aliasPaidTypes.includes(type)) {
@@ -75,6 +80,19 @@ class NotificationBuilder {
 
         const effectiveInput = normalizedInput;
         const finalType = effectiveInput.type;
+
+        if (effectiveInput.giftCount !== undefined && typeof effectiveInput.giftCount !== 'number') {
+            const parsed = Number(effectiveInput.giftCount);
+            if (Number.isFinite(parsed)) {
+                effectiveInput.giftCount = parsed;
+            }
+        }
+        if (effectiveInput.amount !== undefined && typeof effectiveInput.amount !== 'number') {
+            const parsed = Number(effectiveInput.amount);
+            if (Number.isFinite(parsed)) {
+                effectiveInput.amount = parsed;
+            }
+        }
 
         if (finalType === 'platform:gift' && !isError) {
             if (typeof effectiveInput.giftType !== 'string' || !effectiveInput.giftType.trim()) {
@@ -106,7 +124,7 @@ class NotificationBuilder {
             id: `${normalizedPlatform}-${finalType}-${crypto.randomUUID()}`,
             platform: normalizedPlatform,
             type: finalType,
-            message,
+            message: normalizedMessage,
             displayMessage,
             ttsMessage,
             logMessage,
@@ -119,7 +137,7 @@ class NotificationBuilder {
         if (normalizedUserId !== undefined) {
             notification.userId = normalizedUserId;
         }
-        if (amount !== undefined) notification.amount = amount;
+        if (effectiveInput.amount !== undefined) notification.amount = effectiveInput.amount;
         if (currency !== undefined) notification.currency = currency;
         if (vfxConfig !== undefined) notification.vfxConfig = vfxConfig;
         // Include any extra fields (e.g., tier, details) - optimized for performance

@@ -138,6 +138,66 @@ describe('Notification Builder Edge Cases', () => {
         });
     });
 
+    describe('Numeric String Normalization', () => {
+        test('normalizes numeric-string giftCount to number', () => {
+            const data = {
+                platform: 'tiktok',
+                type: 'platform:gift',
+                username: 'TestUser',
+                giftType: 'Rose',
+                giftCount: '5',
+                amount: 10,
+                currency: 'coins'
+            };
+
+            const notification = NotificationBuilder.build(data);
+            expect(notification).not.toBeNull();
+            expect(notification.giftCount).toBe(5);
+        });
+
+        test('normalizes numeric-string amount to number', () => {
+            const data = {
+                platform: 'tiktok',
+                type: 'platform:gift',
+                username: 'TestUser',
+                giftType: 'Rose',
+                giftCount: 1,
+                amount: '10.50',
+                currency: 'USD'
+            };
+
+            const notification = NotificationBuilder.build(data);
+            expect(notification).not.toBeNull();
+            expect(notification.amount).toBe(10.50);
+        });
+    });
+
+    describe('Message Type Coercion', () => {
+        test('coerces non-string message to string', () => {
+            const data = {
+                platform: 'youtube',
+                type: 'chat',
+                username: 'TestUser',
+                message: { text: 'Hello' }
+            };
+
+            const notification = NotificationBuilder.build(data);
+            expect(typeof notification.message).toBe('string');
+        });
+
+        test('coerces number message to string', () => {
+            const data = {
+                platform: 'youtube',
+                type: 'chat',
+                username: 'TestUser',
+                message: 12345
+            };
+
+            const notification = NotificationBuilder.build(data);
+            expect(notification.message).toBe('12345');
+        });
+    });
+
     describe('Error Notification Edge Cases', () => {
         test('allows isError notification without username', () => {
             const data = {
