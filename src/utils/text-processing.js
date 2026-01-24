@@ -111,7 +111,7 @@ class TextProcessingManager {
                     if (typeof part === 'string') {
                         return part;
                     }
-                    return part.text || part.emojiText || '';
+                    return part.text || '';
                 }).join('');
             }
             // Fallback: if not array, just return as string
@@ -143,7 +143,7 @@ class TextProcessingManager {
                     return part;
                 }
                 if (typeof part === 'object' && part !== null) {
-                    const text = part.text || part.emojiText || part.message || '';
+                    const text = part.text || part.message || '';
                     this.logger.debug(`Object part`, 'text-processing', {
                         part,
                         extractedText: text,

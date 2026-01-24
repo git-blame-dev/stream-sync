@@ -235,7 +235,6 @@ function extractYouTubeMessageText(messageObj) {
                     return part.emoji.shortcuts[0];
                 }
                 if (part.text) return part.text;
-                if (part.emojiText) return part.emojiText;
                 return '';
             })
             .join('')
