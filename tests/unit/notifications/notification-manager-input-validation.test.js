@@ -137,4 +137,32 @@ describe('NotificationManager input validation', () => {
             expect(result).not.toBeInstanceOf(Error);
         });
     });
+
+    describe('error handling - graceful degradation', () => {
+        it('returns disabled when _areNotificationsEnabled throws instead of dropping notification', async () => {
+            const deps = createDeps();
+            deps.configService.areNotificationsEnabled = createMockFn(() => {
+                throw new Error('ConfigService error');
+            });
+            const manager = new NotificationManager(deps);
+
+            const result = await manager.handleNotification('platform:follow', 'tiktok', { username: 'testUser', userId: 'user123' });
+
+            expect(result.success).toBe(false);
+            expect(result.disabled).toBe(true);
+        });
+
+        it('continues processing when _isDebugEnabled throws instead of dropping notification', async () => {
+            const deps = createDeps();
+            deps.configService.isDebugEnabled = createMockFn(() => {
+                throw new Error('ConfigService error');
+            });
+            const manager = new NotificationManager(deps);
+
+            const result = await manager.handleNotification('platform:follow', 'tiktok', { username: 'testUser', userId: 'user123' });
+
+            expect(result).toBeDefined();
+            expect(result.error === undefined || !result.error.includes('debug')).toBe(true);
+        });
+    });
 });
