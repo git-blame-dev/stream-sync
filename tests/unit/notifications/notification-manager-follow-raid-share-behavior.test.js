@@ -209,14 +209,16 @@ describe('NotificationManager follow/raid/share behavior', () => {
         }));
     });
 
-    test('throws when notification toggle check fails', async () => {
+    test('returns disabled when notification toggle check fails instead of throwing', async () => {
         configService.areNotificationsEnabled.mockImplementation(() => { throw new Error('config crash'); });
 
-        await expect(manager.handleNotification('platform:follow', 'tiktok', {
+        const result = await manager.handleNotification('platform:follow', 'tiktok', {
             username: 'ResilientUser',
             userId: 'follow-err'
-        })).rejects.toThrow('config crash');
+        });
 
+        expect(result.success).toBe(false);
+        expect(result.disabled).toBe(true);
         expect(queuedItems).toHaveLength(0);
     });
 });

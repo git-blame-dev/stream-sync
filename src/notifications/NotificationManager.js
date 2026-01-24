@@ -677,7 +677,7 @@ class NotificationManager extends EventEmitter {
                 { settingKey, platform },
                 { eventType: 'notifications-enabled' }
             );
-            throw error;
+            return false;
         }
     }
 
@@ -691,7 +691,7 @@ class NotificationManager extends EventEmitter {
                 null,
                 { eventType: 'debug-enabled' }
             );
-            throw error;
+            return false;
         }
     }
 
