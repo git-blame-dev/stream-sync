@@ -11,12 +11,15 @@ function resolveIdValue(value) {
     if (value === undefined || value === null) {
         return null;
     }
+    if (typeof value === 'object') {
+        return null;
+    }
     const trimmed = String(value).trim();
     return trimmed ? trimmed : null;
 }
 
 function resolvePositiveNumber(value) {
-    if (value === undefined || value === null) {
+    if (value === undefined || value === null || typeof value === 'boolean') {
         return null;
     }
     const num = Number(value);
@@ -56,7 +59,8 @@ function createMonetizationErrorPayload(options = {}) {
     if (!notificationType) {
         throw new Error('Monetization error payload requires notificationType');
     }
-    if (!platform) {
+    const trimmedPlatform = typeof platform === 'string' ? platform.trim() : '';
+    if (!trimmedPlatform) {
         throw new Error('Monetization error payload requires platform');
     }
 
@@ -65,18 +69,26 @@ function createMonetizationErrorPayload(options = {}) {
         throw new Error('Monetization error payload requires ISO timestamp');
     }
 
+    const normalizedType = notificationType.toLowerCase();
+    const normalizedPlatform = trimmedPlatform.toLowerCase();
+
+    const resolvedId = resolveIdValue(id);
+    const resolvedUsername = resolveNonEmptyString(username);
+    const resolvedUserId = resolveIdValue(userId);
+    const resolvedEventType = resolveNonEmptyString(eventType);
+
     const payload = {
         type: notificationType,
-        platform,
+        platform: trimmedPlatform,
         isError: true,
         timestamp: resolvedTimestamp,
-        ...(id ? { id: resolveIdValue(id) } : {}),
-        ...(username ? { username: resolveNonEmptyString(username) } : {}),
-        ...(userId ? { userId: resolveIdValue(userId) } : {}),
-        ...(eventType ? { eventType: resolveNonEmptyString(eventType) } : { eventType: notificationType })
+        ...(resolvedId ? { id: resolvedId } : {}),
+        ...(resolvedUsername ? { username: resolvedUsername } : {}),
+        ...(resolvedUserId ? { userId: resolvedUserId } : {}),
+        eventType: resolvedEventType || notificationType
     };
 
-    switch (notificationType) {
+    switch (normalizedType) {
         case 'platform:gift': {
             const resolvedGiftType = resolveNonEmptyString(giftType);
             const resolvedGiftCount = resolvePositiveNumber(giftCount);
@@ -104,7 +116,7 @@ function createMonetizationErrorPayload(options = {}) {
             if (resolvedGiftCount !== null) {
                 result.giftCount = resolvedGiftCount;
             }
-            if (platform === 'twitch' && resolvedTier) {
+            if (normalizedPlatform === 'twitch' && resolvedTier) {
                 result.tier = resolvedTier;
             }
             return result;
