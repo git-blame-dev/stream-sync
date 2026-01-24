@@ -134,9 +134,12 @@ class DisplayQueue {
         if (!item || !item.type || !item.data) {
             throw new Error('Invalid display item: missing type or data');
         }
-        
-        // Assign priority - use provided priority first, then try to map from type, default to chat priority
-        if (!item.priority) {
+
+        if (this.config.maxQueueSize && this.queue.length >= this.config.maxQueueSize) {
+            throw new Error(`Queue at capacity (${this.config.maxQueueSize})`);
+        }
+
+        if (item.priority === undefined) {
             item.priority = this.getTypePriority(item.type);
         }
 
@@ -156,7 +159,6 @@ class DisplayQueue {
             }
         }
         
-        // Insert item in correct position based on priority (higher priority = lower number)
         let insertIndex = this.queue.length;
         for (let i = 0; i < this.queue.length; i++) {
             if (this.queue[i].priority < item.priority) {
@@ -178,12 +180,10 @@ class DisplayQueue {
         if (!chatItem || chatItem.type !== 'chat') {
             throw new Error('Invalid chat item: must be type "chat"');
         }
-        
-        // Add to queue
+
         this.addItem(chatItem);
-        
-        // Process the specific chat item immediately if processing is not already running/scheduled
-        if (!this.isProcessing && !this.isRetryScheduled) {
+
+        if (!this.isProcessing && !this.isRetryScheduled && this.config.autoProcess) {
             await this.processQueue();
         }
     }
@@ -882,9 +882,12 @@ class DisplayQueue {
         logger.debug('[Display Queue] Queue cleared', 'display-queue');
     }
     
-    stop() {
+    async stop() {
         this.isProcessing = false;
-        this.isRetryScheduled = false; // Clear any pending retry when stopping
+        this.isRetryScheduled = false;
+        if (this.currentDisplay) {
+            await this.hideCurrentDisplay(this.currentDisplay);
+        }
         this.clearQueue();
         logger.info('[Display Queue] Processing stopped and queue cleared.');
     }

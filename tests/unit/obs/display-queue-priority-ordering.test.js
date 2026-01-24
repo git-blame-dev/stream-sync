@@ -83,4 +83,17 @@ describe('DisplayQueue priority ordering', () => {
             expect(processedUsers).toEqual(['Gifter1', 'Gifter2']);
         });
     });
+
+    it('retains priority 0 without overwriting with default', () => {
+        const queue = createQueue();
+
+        queue.addItem({
+            type: 'custom',
+            platform: 'twitch',
+            priority: 0,
+            data: { username: 'testUser', message: 'low priority' }
+        });
+
+        expect(queue.queue[0].priority).toBe(0);
+    });
 });
