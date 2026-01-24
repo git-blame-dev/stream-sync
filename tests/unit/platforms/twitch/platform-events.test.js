@@ -24,6 +24,10 @@ const createAuthManager = (overrides = {}) => {
     };
 };
 
+const createMockApiClient = () => ({
+    getBroadcasterId: createMockFn().mockResolvedValue('test-broadcaster-id')
+});
+
 const TEST_USER_ID = 'test-user-id';
 
 const baseConfig = {
@@ -60,6 +64,7 @@ describe('TwitchPlatform event behaviors', () => {
     it('keeps stream lifecycle transitions from crashing when polling hooks are missing', async () => {
         const platform = new TwitchPlatform(baseConfig, {
             authManager: createAuthManager({ userId: TEST_USER_ID }),
+            TwitchApiClient: createMockFn().mockImplementation(() => createMockApiClient()),
             logger: noOpLogger
         });
 

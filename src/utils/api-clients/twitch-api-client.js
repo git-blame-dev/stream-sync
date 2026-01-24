@@ -118,8 +118,12 @@ class TwitchApiClient {
         }
     }
 
-    async getUserByUsername(username) {
-        return this.getUserInfo(username);
+    async getBroadcasterId(channel) {
+        const userInfo = await this.getUserInfo(channel);
+        if (!userInfo?.id) {
+            throw new Error(`Could not resolve broadcaster ID for channel: ${channel}`);
+        }
+        return userInfo.id;
     }
 
     async getChannelInfo(channelId) {

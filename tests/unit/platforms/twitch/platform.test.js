@@ -41,7 +41,8 @@ describe('Twitch Platform', () => {
         mockApiClient = {
             getChannelInfo: createMockFn().mockResolvedValue({ id: '123456', name: 'testchannel' }),
             getViewerCount: createMockFn().mockResolvedValue(1500),
-            sendChatMessage: createMockFn().mockResolvedValue()
+            sendChatMessage: createMockFn().mockResolvedValue(),
+            getBroadcasterId: createMockFn().mockResolvedValue('123456')
         };
         mockViewerCountProvider = {
             getViewerCount: createMockFn().mockResolvedValue(1500),
@@ -76,6 +77,7 @@ describe('Twitch Platform', () => {
 
         platform = new TwitchPlatform(config, {
             TwitchEventSub: createMockFn().mockImplementation(() => mockTwitchEventSub),
+            TwitchApiClient: createMockFn().mockImplementation(() => mockApiClient),
             authManager: mockAuthManager,
             notificationBridge: mockApp,
             logger: noOpLogger,

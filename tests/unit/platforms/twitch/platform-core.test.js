@@ -16,6 +16,10 @@ class StubChatFileLoggingService {
 
 const flushAsync = () => new Promise((resolve) => setImmediate(resolve));
 
+const createMockApiClient = () => ({
+    getBroadcasterId: createMockFn().mockResolvedValue('test-broadcaster-id')
+});
+
 const createPlatform = (configOverrides = {}, depsOverrides = {}) => {
     const config = {
         enabled: true,
@@ -32,6 +36,7 @@ const createPlatform = (configOverrides = {}, depsOverrides = {}) => {
         authManager,
         timestampService: { extractTimestamp: () => new Date().toISOString() },
         ChatFileLoggingService: StubChatFileLoggingService,
+        TwitchApiClient: createMockFn().mockImplementation(() => createMockApiClient()),
         ...depsOverrides
     });
 };
