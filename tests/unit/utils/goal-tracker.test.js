@@ -236,6 +236,48 @@ describe('Goal Tracker - Core Functionality', () => {
         }, TEST_TIMEOUTS.MEDIUM);
     });
 
+    describe('Input Validation', () => {
+        beforeEach(async () => {
+            await goalTracker.initializeGoalTracker();
+        });
+
+        test('returns error for null platform', async () => {
+            const result = await goalTracker.addDonationToGoal(null, 100);
+            expect(result.success).toBe(false);
+            expect(result.error).toContain('Invalid platform');
+        }, TEST_TIMEOUTS.FAST);
+
+        test('returns error for non-string platform', async () => {
+            const result = await goalTracker.addDonationToGoal(123, 100);
+            expect(result.success).toBe(false);
+            expect(result.error).toContain('Invalid platform');
+        }, TEST_TIMEOUTS.FAST);
+
+        test('coerces numeric string amounts', async () => {
+            const result = await goalTracker.addDonationToGoal('tiktok', '50');
+            expect(result.success).toBe(true);
+            expect(result.newTotal).toBe(50);
+        }, TEST_TIMEOUTS.FAST);
+
+        test('rejects NaN amounts', async () => {
+            const result = await goalTracker.addDonationToGoal('tiktok', NaN);
+            expect(result.success).toBe(false);
+            expect(result.error).toContain('must be positive');
+        }, TEST_TIMEOUTS.FAST);
+
+        test('rejects Infinity amounts', async () => {
+            const result = await goalTracker.addDonationToGoal('tiktok', Infinity);
+            expect(result.success).toBe(false);
+            expect(result.error).toContain('must be positive');
+        }, TEST_TIMEOUTS.FAST);
+
+        test('addPaypiggyToGoal returns error for null platform', async () => {
+            const result = await goalTracker.addPaypiggyToGoal(null);
+            expect(result.success).toBe(false);
+            expect(result.error).toContain('Invalid platform');
+        }, TEST_TIMEOUTS.FAST);
+    });
+
     describe('Performance Tests', () => {
         beforeEach(async () => {
             await goalTracker.initializeGoalTracker();
