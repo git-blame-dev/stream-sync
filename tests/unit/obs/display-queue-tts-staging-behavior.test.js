@@ -205,4 +205,22 @@ describe('DisplayQueue notification TTS staging', () => {
         expect(calls[0][1]).toBe('Stage one');
         expect(calls[1][1]).toBe('Stage two');
     });
+
+    it('continues TTS when VFX config is partial and buildVfxMatch throws', async () => {
+        const { queue, recordedTexts } = createQueue();
+
+        await queue.handleSequentialEffects({
+            type: 'platform:gift',
+            platform: 'tiktok',
+            vfxConfig: { commandKey: 'gifts' },
+            data: {
+                username: 'testGifter',
+                userId: 'testGifterId',
+                displayMessage: 'sent a gift',
+                ttsMessage: 'testGifter sent a gift'
+            }
+        }, [{ type: 'primary', text: 'testGifter sent a gift', delay: 0 }]);
+
+        expect(recordedTexts).toContain('testGifter sent a gift');
+    });
 });
