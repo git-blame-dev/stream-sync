@@ -238,4 +238,80 @@ describe('YouTube event factory behavior', () => {
             timestamp: '2024-01-01T00:00:00.000Z'
         });
     });
+
+    describe('createViewerCountEvent validation', () => {
+        it('rejects non-numeric count values', () => {
+            const { createYouTubeEventFactory } = require('../../../../../src/platforms/youtube/events/event-factory');
+
+            const eventFactory = createYouTubeEventFactory({
+                generateCorrelationId: () => 'corr-ignored'
+            });
+
+            expect(() => eventFactory.createViewerCountEvent({
+                count: 'not-a-number',
+                streamId: 'stream-1',
+                timestamp: '2024-01-01T00:00:00.000Z'
+            })).toThrow('YouTube viewer count event requires numeric count');
+        });
+
+        it('rejects NaN count values', () => {
+            const { createYouTubeEventFactory } = require('../../../../../src/platforms/youtube/events/event-factory');
+
+            const eventFactory = createYouTubeEventFactory({
+                generateCorrelationId: () => 'corr-ignored'
+            });
+
+            expect(() => eventFactory.createViewerCountEvent({
+                count: NaN,
+                streamId: 'stream-1',
+                timestamp: '2024-01-01T00:00:00.000Z'
+            })).toThrow('YouTube viewer count event requires numeric count');
+        });
+
+        it('rejects Infinity count values', () => {
+            const { createYouTubeEventFactory } = require('../../../../../src/platforms/youtube/events/event-factory');
+
+            const eventFactory = createYouTubeEventFactory({
+                generateCorrelationId: () => 'corr-ignored'
+            });
+
+            expect(() => eventFactory.createViewerCountEvent({
+                count: Infinity,
+                streamId: 'stream-1',
+                timestamp: '2024-01-01T00:00:00.000Z'
+            })).toThrow('YouTube viewer count event requires numeric count');
+        });
+
+        it('accepts numeric string count values via coercion', () => {
+            const { createYouTubeEventFactory } = require('../../../../../src/platforms/youtube/events/event-factory');
+
+            const eventFactory = createYouTubeEventFactory({
+                generateCorrelationId: () => 'corr-999'
+            });
+
+            const event = eventFactory.createViewerCountEvent({
+                count: '42',
+                streamId: 'stream-1',
+                timestamp: '2024-01-01T00:00:00.000Z'
+            });
+
+            expect(event.count).toBe(42);
+        });
+
+        it('accepts zero count', () => {
+            const { createYouTubeEventFactory } = require('../../../../../src/platforms/youtube/events/event-factory');
+
+            const eventFactory = createYouTubeEventFactory({
+                generateCorrelationId: () => 'corr-999'
+            });
+
+            const event = eventFactory.createViewerCountEvent({
+                count: 0,
+                streamId: 'stream-1',
+                timestamp: '2024-01-01T00:00:00.000Z'
+            });
+
+            expect(event.count).toBe(0);
+        });
+    });
 });
