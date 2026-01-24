@@ -49,11 +49,11 @@ function handleDisplayQueueError(message, error = null, payload = null) {
 const isTestEnv = process.env.NODE_ENV === 'test';
 
 function delay(ms) {
-    // In test environment, resolve immediately to prevent test timeouts
     if (isTestEnv) {
         return Promise.resolve();
     }
-    return safeDelay(ms, typeof ms === 'number' ? ms : 5000, 'DisplayQueue delay');
+    const numMs = Number(ms);
+    return safeDelay(numMs, Number.isFinite(numMs) ? numMs : 5000, 'DisplayQueue delay');
 }
 
 class DisplayQueue {
@@ -897,34 +897,36 @@ class DisplayQueue {
             return 0;
         }
 
-        const ttsStages = MessageTTSHandler.createTTSStages(item.data) || [];
+        let ttsStages;
+        try {
+            ttsStages = MessageTTSHandler.createTTSStages(item.data) || [];
+        } catch {
+            return 0;
+        }
         if (ttsStages.length === 0) {
-            return 0; // No TTS content: clear immediately after effects
+            return 0;
         }
 
         const estimateSpeechMs = (text) => {
             if (!text || typeof text !== 'string') return 0;
             const words = text.trim().split(/\s+/).filter(Boolean).length;
-            const perWordMs = 170; // ~170ms/word average pace
-            const baseMs = 400;    // baseline for short utterances
-            return baseMs + (words * perWordMs);
+            return 400 + (words * 170);
         };
 
         let maxStageMs = 0;
         for (const stage of ttsStages) {
-            const stageDelay = stage?.delay || 0;
+            const stageDelay = Number(stage?.delay) || 0;
             const stageMs = stageDelay + estimateSpeechMs(stage?.text);
             if (stageMs > maxStageMs) {
                 maxStageMs = stageMs;
             }
         }
 
-        const tailBufferMs = 1000; // short linger after speech
-        const minWindow = 2000;    // avoid too-short flashes when TTS exists
-        const maxWindow = 20000;   // prevent runaway waits
-        const computedWindow = maxStageMs + tailBufferMs;
+        const tailBufferMs = 1000;
+        const minWindow = 2000;
+        const maxWindow = 20000;
 
-        return Math.min(maxWindow, Math.max(minWindow, computedWindow));
+        return Math.min(maxWindow, Math.max(minWindow, maxStageMs + tailBufferMs));
     }
 
 
