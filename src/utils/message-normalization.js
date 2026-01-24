@@ -62,15 +62,22 @@ function normalizeYouTubeMessage(chatItem, platformName = 'youtube', timestampSe
             throw new Error('Missing YouTube timestamp');
         }
 
+        const badges = Array.isArray(author.badges) ? author.badges : [];
+        const isBroadcaster = badges.some(badge => badge && badge.icon_type === 'OWNER');
+        const isMember = badges.some(badge =>
+            badge && typeof badge.tooltip === 'string' &&
+            badge.tooltip.toLowerCase().includes('member')
+        );
+
         const normalized = {
             platform: String(platformName || 'youtube').toLowerCase(),
             userId,
             username,
             message: normalizedMessage,
             timestamp,
-            isMod: Boolean(author.isModerator),
-            isSubscriber: Boolean(author.isMember),
-            isBroadcaster: Boolean(author.isOwner),
+            isMod: author.is_moderator === true,
+            isSubscriber: isMember,
+            isBroadcaster,
             metadata: {
                 uniqueId: messageData.id || null,
                 isSuperChat: Boolean(messageData.superchat),
