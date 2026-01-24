@@ -160,11 +160,11 @@ describe('YouTubePlatform modern architecture', () => {
                     operation: 'connectToYouTubeStream'
                 },
                 recoverable: true,
+                timestamp: expect.any(String),
                 metadata: expect.objectContaining({
                     platform: 'youtube',
                     videoId: 'video-1',
-                    correlationId: expect.any(String),
-                    timestamp: expect.any(String)
+                    correlationId: expect.any(String)
                 })
             }
         });

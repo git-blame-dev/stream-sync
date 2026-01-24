@@ -234,9 +234,9 @@ function createYouTubeEventFactory(options = {}) {
                 },
                 context: data.context || {},
                 recoverable: data.recoverable ?? true,
+                timestamp,
                 metadata: buildEventMetadata({
-                    videoId: data.videoId,
-                    timestamp
+                    videoId: data.videoId
                 })
             };
         }
