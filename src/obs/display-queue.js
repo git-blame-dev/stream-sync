@@ -134,6 +134,9 @@ class DisplayQueue {
         if (!item || !item.type || !item.data) {
             throw new Error('Invalid display item: missing type or data');
         }
+        if (!item.platform) {
+            throw new Error('Invalid display item: missing platform');
+        }
 
         if (this.config.maxQueueSize && this.queue.length >= this.config.maxQueueSize) {
             throw new Error(`Queue at capacity (${this.config.maxQueueSize})`);
