@@ -45,6 +45,13 @@ function cleanupTikTokEventListeners(platform) {
     const disconnectedEvent = platform.ControlEvent?.DISCONNECTED || 'disconnected';
     const errorEvent = platform.ControlEvent?.ERROR || 'error';
 
+    // Remove rawData listener to prevent duplicate logging on reconnect
+    try {
+        removeAllListeners.call(platform.connection, 'rawData');
+    } catch (error) {
+        platform.errorHandler?.handleCleanupError(error, 'tiktok rawData listener cleanup');
+    }
+
     [connectedEvent, disconnectedEvent, errorEvent].forEach((eventType) => {
         if (!eventType) {
             return;
@@ -285,10 +292,12 @@ function setupTikTokEventListeners(platform) {
         }
     });
 
-    platform.connection.on(platform.WebcastEvent.DISCONNECT, () => {
+    platform.connection.on(platform.WebcastEvent.DISCONNECT, async () => {
         platform._logIncomingEvent('disconnect', {});
         platform.logger.info('Disconnected from webcast', 'tiktok');
         platform.connectionActive = false;
+        platform.listenersConfigured = false;
+        await platform.handleConnectionIssue({ message: 'WebSocket disconnected' }, false);
     });
 
     if (typeof platform.WebcastEvent.STREAM_END !== 'undefined') {
