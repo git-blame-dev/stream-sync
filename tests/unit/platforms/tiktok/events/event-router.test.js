@@ -154,7 +154,8 @@ describe('TikTok event router', () => {
 
         cleanupTikTokEventListeners(platform);
 
-        expect(removeAllListeners.mock.calls.length).toBe(14);
+        // 11 WebcastEvent types + 3 ControlEvent types + 1 rawData = 15
+        expect(removeAllListeners.mock.calls.length).toBe(15);
         expect(platform.listenersConfigured).toBe(false);
     });
 
@@ -257,10 +258,11 @@ describe('TikTok event router', () => {
         listeners[platform.ControlEvent.DISCONNECTED]('bye');
         listeners[platform.ControlEvent.ERROR](new Error('control-error'));
         listeners[platform.WebcastEvent.ERROR](new Error('webcast-error'));
-        listeners[platform.WebcastEvent.DISCONNECT]();
+        await listeners[platform.WebcastEvent.DISCONNECT]();
         await listeners[platform.WebcastEvent.STREAM_END]({});
 
-        expect(platform.handleConnectionIssue.mock.calls).toHaveLength(1);
+        // handleConnectionIssue called from both DISCONNECTED and DISCONNECT handlers
+        expect(platform.handleConnectionIssue.mock.calls).toHaveLength(2);
         expect(platform.handleConnectionError.mock.calls).toHaveLength(1);
         expect(platform.handleRetry.mock.calls).toHaveLength(1);
         expect(platform.connectionActive).toBe(false);
