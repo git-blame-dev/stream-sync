@@ -109,7 +109,7 @@ class DisplayQueue {
 
     async setTTSText(text) {
         await this.sourcesManager.clearTextSource(this.config.obs.ttsTxt);
-        await safeDelay(2000);
+        await safeDelay(50);
         await this.sourcesManager.updateTextSource(this.config.obs.ttsTxt, text);
     }
 
