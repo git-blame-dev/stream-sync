@@ -27,6 +27,7 @@ describe('DisplayQueue platform notification gating', () => {
 
         const mockSourcesManager = {
             updateTextSource: createMockFn().mockResolvedValue(),
+            clearTextSource: createMockFn().mockResolvedValue(),
             updateChatMsgText: createMockFn().mockResolvedValue(),
             setSourceVisibility: createMockFn().mockResolvedValue(),
             setNotificationDisplayVisibility: createMockFn().mockResolvedValue(),

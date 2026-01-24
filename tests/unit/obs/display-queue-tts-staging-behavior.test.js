@@ -29,6 +29,7 @@ describe('DisplayQueue notification TTS staging', () => {
                 recordedTexts.push(text);
                 return Promise.resolve();
             }),
+            clearTextSource: createMockFn().mockResolvedValue(),
             setSourceVisibility: createMockFn().mockResolvedValue(),
             setNotificationDisplayVisibility: createMockFn().mockResolvedValue(),
             setChatDisplayVisibility: createMockFn().mockResolvedValue(),
