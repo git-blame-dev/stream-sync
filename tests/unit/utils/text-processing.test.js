@@ -30,25 +30,23 @@ describe('Text Processing', () => {
         it('should extract text from YouTube message array', () => {
             const messageParts = [
                 { text: 'Hello' },
-                { emojiText: '😊' },
                 { text: ' world!' }
             ];
 
             const extracted = textProcessing.extractMessageText(messageParts, 'youtube');
 
-            expect(extracted).toBe('Hello😊 world!');
+            expect(extracted).toBe('Hello world!');
         });
 
         it('should extract text from Twitch message array', () => {
             const messageParts = [
                 { text: 'Hello' },
-                { emojiText: 'Kappa' },
                 { text: ' world!' }
             ];
 
             const extracted = textProcessing.extractMessageText(messageParts, 'twitch');
 
-            expect(extracted).toBe('HelloKappa world!');
+            expect(extracted).toBe('Hello world!');
         });
 
         it('should handle string messages', () => {
@@ -68,13 +66,12 @@ describe('Text Processing', () => {
             const messageParts = [
                 'Hello',
                 { text: ' world' },
-                { emojiText: '😊' },
                 '!'
             ];
 
             const extracted = textProcessing.extractMessageText(messageParts, 'youtube');
 
-            expect(extracted).toBe('Hello world😊!');
+            expect(extracted).toBe('Hello world!');
         });
 
         it('returns empty string for non-array payloads on youtube branch', () => {

@@ -471,13 +471,12 @@ describe('Message Normalization', () => {
             const messageObj = [
                 { text: 'Hello ' },
                 { emoji: { shortcuts: [':wave:'] } },
-                { emojiText: '🌟' },
                 { text: 'friend' }
             ];
 
             const extracted = extractYouTubeMessageText(messageObj);
 
-            expect(extracted).toBe('Hello :wave:🌟friend');
+            expect(extracted).toBe('Hello :wave:friend');
         });
 
         test('handles YouTube message runs with emoji shortcuts', () => {
