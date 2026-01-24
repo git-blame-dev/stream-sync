@@ -190,4 +190,34 @@ describe('NotificationManager input validation', () => {
             await result;
         });
     });
+
+    describe('try/catch robustness', () => {
+        it('continues when VFX config throws', async () => {
+            const deps = createDeps();
+            deps.vfxCommandService.getVFXConfig = createMockFn(() => {
+                throw new Error('VFX service unavailable');
+            });
+            const manager = new NotificationManager(deps);
+
+            const result = await manager.handleNotification('platform:follow', 'tiktok', {
+                username: 'testUser',
+                userId: 'user123'
+            });
+
+            expect(result.success).toBe(true);
+        });
+
+        it('continues when generateLogMessage throws in debug mode', async () => {
+            const deps = createDeps();
+            deps.configService.isDebugEnabled = createMockFn(() => true);
+            const manager = new NotificationManager(deps);
+
+            const result = await manager.handleNotification('platform:follow', 'tiktok', {
+                username: 'testUser',
+                userId: 'user123'
+            });
+
+            expect(result.success).toBe(true);
+        });
+    });
 });

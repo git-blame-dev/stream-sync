@@ -284,19 +284,31 @@ class NotificationManager extends EventEmitter {
             data.username = username;
         }
 
-        // Log notifications to console when debug mode is enabled
         if (this._isDebugEnabled()) {
-            const logMessage = this.generateLogMessage(notificationType, data);
-            this.platformLogger.info(platform, logMessage);
+            try {
+                const logMessage = this.generateLogMessage(notificationType, data);
+                this.platformLogger.info(platform, logMessage);
+            } catch (logError) {
+                this.logger.warn(`[NotificationManager] Debug log failed: ${logError.message}`, 'notification-manager');
+            }
         }
 
-        // Track notification for suppression
         if (data.userId) {
             this.trackUserNotification(data.userId, notificationType);
         }
 
-        // Get VFX configuration and create notification data with error handling
-        const vfxConfig = await this._getVFXConfigFromService(config.commandKey, data.message ?? null);
+        let vfxConfig = null;
+        try {
+            vfxConfig = await this._getVFXConfigFromService(config.commandKey, data.message ?? null);
+        } catch (vfxError) {
+            this._handleNotificationError(
+                `[NotificationManager] VFX config failed: ${vfxError.message}`,
+                vfxError,
+                { commandKey: config.commandKey },
+                { eventType: 'vfx-config' }
+            );
+        }
+
         let notificationData;
         try {
             // Use modern NotificationBuilder for consistent notification creation
