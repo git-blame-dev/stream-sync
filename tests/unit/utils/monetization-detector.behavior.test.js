@@ -85,4 +85,16 @@ describe('monetization-detector behavior', () => {
         expect(result.details.totalValue).toBe(3);
         expect(result.details.currency).toBe('coins');
     });
+
+    test('detects tiktok gifts with numeric-string giftCount and amount', () => {
+        const result = MonetizationDetector.detectMonetization(
+            { giftType: 'rose', giftCount: '5', amount: '10', currency: 'coins' },
+            'tiktok'
+        );
+
+        expect(result.detected).toBe(true);
+        expect(result.type).toBe('tiktok_gift');
+        expect(result.details.giftCount).toBe(5);
+        expect(result.details.amount).toBe(10);
+    });
 });
