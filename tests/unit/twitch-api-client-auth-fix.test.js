@@ -82,6 +82,41 @@ describe('TwitchApiClient authentication', () => {
         });
     });
 
+    describe('getBroadcasterId', () => {
+        it('returns user ID from channel name', async () => {
+            mockHttpClient.get.mockResolvedValue({
+                status: 200,
+                data: { data: [{ id: '123456789', login: 'testchannel' }] }
+            });
+
+            const broadcasterId = await apiClient.getBroadcasterId('testchannel');
+
+            expect(broadcasterId).toBe('123456789');
+        });
+
+        it('throws when channel not found', async () => {
+            mockHttpClient.get.mockResolvedValue({
+                status: 200,
+                data: { data: [] }
+            });
+
+            await expect(apiClient.getBroadcasterId('nonexistent')).rejects.toThrow(
+                'Could not resolve broadcaster ID for channel: nonexistent'
+            );
+        });
+
+        it('throws when API returns null user', async () => {
+            mockHttpClient.get.mockResolvedValue({
+                status: 200,
+                data: { data: null }
+            });
+
+            await expect(apiClient.getBroadcasterId('badchannel')).rejects.toThrow(
+                'Could not resolve broadcaster ID for channel: badchannel'
+            );
+        });
+    });
+
     describe('401 retry with token refresh', () => {
         it('retries request after refreshing token on 401', async () => {
             mockHttpClient.get
@@ -95,7 +130,7 @@ describe('TwitchApiClient authentication', () => {
                 .mockResolvedValueOnce('expired-token')
                 .mockResolvedValueOnce('refreshed-token');
 
-            const result = await apiClient.getUserByUsername('testuser');
+            const result = await apiClient.getUserInfo('testuser');
 
             expect(result).toEqual({ id: 'test-user-id', login: 'testuser' });
         });
@@ -112,7 +147,7 @@ describe('TwitchApiClient authentication', () => {
                 .mockResolvedValueOnce('old-token')
                 .mockResolvedValueOnce('new-refreshed-token');
 
-            await apiClient.getUserByUsername('testuser');
+            await apiClient.getUserInfo('testuser');
 
             const retryRequestOptions = mockHttpClient.get.mock.calls[1][1];
             expect(retryRequestOptions.authToken).toBe('new-refreshed-token');

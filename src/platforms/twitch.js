@@ -76,13 +76,14 @@ class TwitchPlatform extends EventEmitter {
         });
     }
 
-    async initializeEventSub() {
+    async initializeEventSub(broadcasterId) {
         this.logger.debug('initializeEventSub called', 'twitch', {
             eventsub_enabled: this.config.eventsub_enabled,
             authState: this.authManager?.getState?.(),
-            hasAuthManager: !!this.authManager
+            hasAuthManager: !!this.authManager,
+            broadcasterId
         });
-        
+
         if (!this.config.eventsub_enabled) {
             this.logger.debug('EventSub is disabled in config', 'twitch');
             return;
@@ -99,7 +100,7 @@ class TwitchPlatform extends EventEmitter {
 
         try {
             this.logger.debug('Creating TwitchEventSub instance...', 'twitch');
-            this.eventSub = new this.TwitchEventSub(this.config, {
+            this.eventSub = new this.TwitchEventSub({ ...this.config, broadcasterId }, {
                 logger: this.logger,
                 authManager: this.authManager,
                 axios: this.dependencies?.axios,
@@ -143,7 +144,8 @@ class TwitchPlatform extends EventEmitter {
             });
 
             // Initialize modular components
-            this.apiClient = new TwitchApiClient(this.authManager, this.config);
+            const TwitchApiClientClass = this.dependencies.TwitchApiClient || TwitchApiClient;
+            this.apiClient = new TwitchApiClientClass(this.authManager, this.config);
             this.viewerCountProvider = ViewerCountProviderFactory.createTwitchProvider(
                 this.apiClient,
                 ConnectionStateFactory,
@@ -152,9 +154,11 @@ class TwitchPlatform extends EventEmitter {
             );
             this.logger.debug('Modular components initialized', 'twitch');
 
+            const broadcasterId = await this.apiClient.getBroadcasterId(this.config.channel);
+
             // Then initialize EventSub with ready authentication
             this.logger.debug('Initializing EventSub with centralized auth...', 'twitch');
-            await this.initializeEventSub();
+            await this.initializeEventSub(broadcasterId);
             this.logger.debug('EventSub initialization completed', 'twitch', {
                 eventSubExists: !!this.eventSub,
                 eventSubConnected: this.eventSub?.isConnected?.()

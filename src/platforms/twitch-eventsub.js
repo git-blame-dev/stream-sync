@@ -230,7 +230,7 @@ class TwitchEventSub extends EventEmitter {
         details.broadcasterId = { value: this.broadcasterId, required: true };
 
         if (!this.broadcasterId) {
-            issues.push('Twitch broadcasterId is required for EventSub subscriptions');
+            issues.push('broadcasterId must be resolved from channel before EventSub init');
             details.broadcasterId.valid = false;
         } else {
             details.broadcasterId.valid = true;
@@ -496,19 +496,6 @@ class TwitchEventSub extends EventEmitter {
     }
 
     async _setupEventSubscriptions(validationAlreadyDone = false) {
-        if (!this.broadcasterId) {
-            this._logEventSubError('EventSub subscription setup requires broadcasterId in config', null, 'subscription-setup');
-            return {
-                successful: 0,
-                total: this.requiredSubscriptions.length,
-                failures: this.requiredSubscriptions.map((subscription) => ({
-                    subscription: subscription.name,
-                    error: { code: 'BROADCASTER_MISSING', message: 'Missing broadcasterId', isCritical: true, isRetryable: false }
-                })),
-                timestamp: this.subscriptionManager.getTimestamp?.() ?? Date.now()
-            };
-        }
-
         const subscriptionState = await this.subscriptionManager.setupEventSubscriptions({
             requiredSubscriptions: this.requiredSubscriptions,
             userId: this.userId,
@@ -677,9 +664,6 @@ class TwitchEventSub extends EventEmitter {
             throw new Error('EventSub chat send requires a valid user ID');
         }
 
-        if (!this.config.broadcasterId) {
-            throw new Error('EventSub chat send requires broadcasterId in config');
-        }
         const broadcasterId = this.config.broadcasterId.toString();
         const senderId = userIdRaw.toString();
         const payload = {
