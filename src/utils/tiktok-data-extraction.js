@@ -73,7 +73,7 @@ function extractTikTokGiftData(data) {
 
         // Combo metadata fields at root level
         groupId: data.groupId,
-        repeatEnd: data.repeatEnd  // TikTok sends 0 or 1 (integer)
+        repeatEnd: data.repeatEnd === 1
     };
 }
 

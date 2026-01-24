@@ -18,7 +18,7 @@ class ConfigValidator {
     
     parseString(value, defaultValue = '') {
         if (value === undefined || value === null) return defaultValue;
-        return String(value);
+        return String(value).trim();
     }
     
     parseNumber(value, defaultValue = 0, options = {}) {
@@ -145,44 +145,6 @@ class ConfigValidator {
         return validated;
     }
     
-    validatePlatformConfig(config = {}, platformName) {
-        if (!config[platformName]) {
-            this.logger.debug(`No ${platformName} configuration found, using defaults`, platformName);
-            return { [platformName]: {} };
-        }
-        
-        const platformConfig = config[platformName];
-        
-        // Validate common platform properties
-        const validated = {
-            [platformName]: {
-                enabled: this.parseBoolean(platformConfig.enabled, false),
-                apiKey: this.parseSecret(platformConfig.apiKey),
-                ...this.validateRetryConfig(platformConfig),
-                ...this.validateIntervalConfig(platformConfig),
-                ...this.validateConnectionLimits(platformConfig)
-            }
-        };
-        
-        // Add platform-specific validations
-        if (platformName === 'youtube') {
-            validated[platformName].maxStreams = this.parseNumber(
-                platformConfig.maxStreams, 3, { min: 1, max: 10 }
-            );
-            validated[platformName].autoReconnect = this.parseBoolean(
-                platformConfig.autoReconnect, true
-            );
-        } else if (platformName === 'twitch') {
-            validated[platformName].channels = Array.isArray(platformConfig.channels) 
-                ? platformConfig.channels 
-                : [];
-        } else if (platformName === 'tiktok') {
-            validated[platformName].username = this.parseString(platformConfig.username, '');
-        }
-        
-        return validated;
-    }
-    
     validateLoggingConfig(config = {}) {
         return {
             level: this.parseString(config.level, 'info'),
@@ -210,7 +172,7 @@ class ConfigValidatorStatic {
     
     static parseString(value, defaultValue = '') {
         if (value === undefined || value === null) return defaultValue;
-        return String(value);
+        return String(value).trim();
     }
     
     static parseNumber(value, defaultValue = 0, options = {}) {

@@ -33,7 +33,7 @@ describe('TikTok Gift Count Field Normalization', () => {
 
             expect(result.giftCount).toBe(5);
             expect(result.giftType).toBe('Rose');
-            expect(result.repeatEnd).toBe(1);
+            expect(result.repeatEnd).toBe(true);
         });
 
         it('should extract intermediate count from repeatCount during active combo', () => {
@@ -48,7 +48,7 @@ describe('TikTok Gift Count Field Normalization', () => {
             const result = extractTikTokGiftData(comboIntermediateEvent);
 
             expect(result.giftCount).toBe(3);
-            expect(result.repeatEnd).toBe(0);
+            expect(result.repeatEnd).toBe(false);
         });
 
         it('should extract count from repeatCount for high-value gifts', () => {
@@ -183,13 +183,13 @@ describe('TikTok Gift Count Field Normalization', () => {
             const resultFinal = extractTikTokGiftData(comboEventFinal);
 
             expect(result1.giftCount).toBe(1);
-            expect(result1.repeatEnd).toBe(0);
+            expect(result1.repeatEnd).toBe(false);
 
             expect(result2.giftCount).toBe(2);
-            expect(result2.repeatEnd).toBe(0);
+            expect(result2.repeatEnd).toBe(false);
 
             expect(resultFinal.giftCount).toBe(5);
-            expect(resultFinal.repeatEnd).toBe(1);
+            expect(resultFinal.repeatEnd).toBe(true);
         });
     });
 

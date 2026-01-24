@@ -63,4 +63,16 @@ describe('TikTok config helpers', () => {
         expect(invalid.isValid).toBe(false);
         expect(invalid.errors).toContain('Username is required');
     });
+
+    test('rejects whitespace-only username as invalid', () => {
+        const configValidator = new ConfigValidator(logger);
+        const normalized = normalizeTikTokPlatformConfig(
+            { enabled: true, username: '   ' },
+            configValidator
+        );
+
+        const validation = validateTikTokPlatformConfig(normalized);
+        expect(validation.isValid).toBe(false);
+        expect(validation.errors).toContain('Username is required');
+    });
 });

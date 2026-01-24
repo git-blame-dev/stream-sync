@@ -27,7 +27,7 @@ describe('extractTikTokGiftData', () => {
             giftDetails: { giftName: 'TestGiftLion', diamondCount: 29, giftType: 1 },
             repeatCount: 3,
             groupId: 'test_combo_1',
-            repeatEnd: true
+            repeatEnd: 1
         });
 
         expect(result.giftType).toBe('TestGiftLion');
