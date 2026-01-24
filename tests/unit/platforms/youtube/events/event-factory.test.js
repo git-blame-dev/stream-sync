@@ -144,10 +144,10 @@ describe('YouTube event factory behavior', () => {
             },
             context: { operation: 'connect' },
             recoverable: false,
+            timestamp: '2024-01-01T00:00:00.000Z',
             metadata: {
                 platform: 'youtube',
                 videoId: 'video-1',
-                timestamp: '2024-01-01T00:00:00.000Z',
                 correlationId: 'corr-error'
             }
         });

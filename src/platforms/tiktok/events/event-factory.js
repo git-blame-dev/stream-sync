@@ -269,10 +269,10 @@ function createTikTokEventFactory(options = {}) {
                     correlationId
                 },
                 recoverable: context?.recoverable !== undefined ? context.recoverable : true,
+                timestamp,
                 metadata: {
                     platform: platformName,
-                    correlationId,
-                    timestamp
+                    correlationId
                 }
             };
         }
