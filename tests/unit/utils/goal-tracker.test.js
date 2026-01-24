@@ -276,6 +276,19 @@ describe('Goal Tracker - Core Functionality', () => {
             expect(result.success).toBe(false);
             expect(result.error).toContain('Invalid platform');
         }, TEST_TIMEOUTS.FAST);
+
+        test('formatGoalDisplay handles string targets without throwing', () => {
+            const formatted = goalTracker.formatGoalDisplay('youtube', '1.5', '10.00');
+            expect(formatted).toBe('$1.50/$10.00 USD');
+        }, TEST_TIMEOUTS.FAST);
+
+        test('percentage is 0 when target is zero', async () => {
+            goalTracker.goalState.tiktok.target = 0;
+            const result = await goalTracker.addDonationToGoal('tiktok', 100);
+            expect(result.success).toBe(true);
+            expect(Number.isFinite(result.percentage)).toBe(true);
+            expect(result.percentage).toBe(0);
+        }, TEST_TIMEOUTS.FAST);
     });
 
     describe('Performance Tests', () => {
