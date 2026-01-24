@@ -120,15 +120,14 @@ class NotificationManager extends EventEmitter {
     }
 
 
-    handleAggregatedDonation(aggregatedData) {
+    async handleAggregatedDonation(aggregatedData) {
         try {
             this.logger.info(`[Aggregated] Processing aggregated donation from ${aggregatedData.username} on ${aggregatedData.platform}: ${aggregatedData.message}`, 'notification-manager');
 
             const syntheticGiftData = createSyntheticGiftFromAggregated(aggregatedData);
 
-            // Process as a regular gift notification, but skip spam detection
-            this.handleNotificationInternal('platform:gift', aggregatedData.platform, syntheticGiftData, true);
-            
+            await this.handleNotificationInternal('platform:gift', aggregatedData.platform, syntheticGiftData, true);
+
         } catch (error) {
             this._handleNotificationError(`Error handling aggregated donation: ${error.message}`, error, { aggregatedData }, { eventType: 'aggregated-donation' });
         }

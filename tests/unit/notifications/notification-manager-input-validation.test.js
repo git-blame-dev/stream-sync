@@ -165,4 +165,29 @@ describe('NotificationManager input validation', () => {
             expect(result.error === undefined || !result.error.includes('debug')).toBe(true);
         });
     });
+
+    describe('async handling', () => {
+        it('handleAggregatedDonation is async and can be awaited', async () => {
+            const deps = createDeps();
+            deps.constants.NOTIFICATION_CONFIGS['platform:gift'] = {
+                settingKey: 'giftsEnabled',
+                commandKey: 'gifts',
+                hasSpecialProcessing: true
+            };
+            const manager = new NotificationManager(deps);
+
+            const result = manager.handleAggregatedDonation({
+                username: 'testUser',
+                platform: 'tiktok',
+                message: 'test message',
+                amount: 100,
+                currency: 'USD',
+                giftType: 'Rose',
+                giftCount: 1
+            });
+
+            expect(result).toBeInstanceOf(Promise);
+            await result;
+        });
+    });
 });
