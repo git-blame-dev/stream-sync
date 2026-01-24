@@ -118,4 +118,70 @@ describe('monetization error payload no-fallback behavior', () => {
 
         expect(payload).not.toHaveProperty('months');
     });
+
+    it('rejects object userIds instead of stringifying to [object Object]', () => {
+        const { createMonetizationErrorPayload } = require('../../../src/utils/monetization-error-utils');
+
+        const payload = createMonetizationErrorPayload({
+            notificationType: 'platform:gift',
+            platform: 'twitch',
+            timestamp: '2024-01-01T00:00:00.000Z',
+            userId: { invalid: 'object' }
+        });
+
+        expect(payload).not.toHaveProperty('userId');
+    });
+
+    it('rejects boolean values for numeric fields', () => {
+        const { createMonetizationErrorPayload } = require('../../../src/utils/monetization-error-utils');
+
+        const payload = createMonetizationErrorPayload({
+            notificationType: 'platform:gift',
+            platform: 'twitch',
+            timestamp: '2024-01-01T00:00:00.000Z',
+            giftCount: true,
+            amount: true
+        });
+
+        expect(payload).not.toHaveProperty('giftCount');
+        expect(payload).not.toHaveProperty('amount');
+    });
+
+    it('throws for whitespace-only platform', () => {
+        const { createMonetizationErrorPayload } = require('../../../src/utils/monetization-error-utils');
+
+        expect(() => createMonetizationErrorPayload({
+            notificationType: 'platform:gift',
+            platform: '   ',
+            timestamp: '2024-01-01T00:00:00.000Z'
+        })).toThrow('Monetization error payload requires platform');
+    });
+
+    it('includes tier for Twitch regardless of casing', () => {
+        const { createMonetizationErrorPayload } = require('../../../src/utils/monetization-error-utils');
+
+        const payload = createMonetizationErrorPayload({
+            notificationType: 'platform:giftpaypiggy',
+            platform: 'Twitch',
+            timestamp: '2024-01-01T00:00:00.000Z',
+            tier: '2000'
+        });
+
+        expect(payload.tier).toBe('2000');
+    });
+
+    it('handles gift fields for notification type regardless of casing', () => {
+        const { createMonetizationErrorPayload } = require('../../../src/utils/monetization-error-utils');
+
+        const payload = createMonetizationErrorPayload({
+            notificationType: 'PLATFORM:GIFT',
+            platform: 'tiktok',
+            timestamp: '2024-01-01T00:00:00.000Z',
+            giftType: 'rose',
+            giftCount: 5
+        });
+
+        expect(payload.giftType).toBe('rose');
+        expect(payload.giftCount).toBe(5);
+    });
 });
