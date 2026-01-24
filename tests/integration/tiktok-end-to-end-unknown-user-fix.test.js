@@ -105,7 +105,7 @@ describe('TikTok End-to-End Unknown User Fix Integration', () => {
                         "profilePictureUrl": "https://example.invalid/gifter-avatar.jpg"
                     },
                     "repeatCount": 5,
-                    "repeatEnd": false,
+                    "repeatEnd": 0,
                     "groupId": "test_combo_123",
                     "timestamp": new Date(TEST_TIMESTAMP).toISOString(),
                     "giftDetails": {
@@ -152,7 +152,7 @@ describe('TikTok End-to-End Unknown User Fix Integration', () => {
                         "nickname": "TestComboSender"
                     },
                     "repeatCount": 1,
-                    "repeatEnd": true,
+                    "repeatEnd": 1,
                     "groupId": "test_combo_678",
                     "giftDetails": {
                         "giftName": "TestGiftCombo",
