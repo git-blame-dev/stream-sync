@@ -724,10 +724,13 @@ class DisplayQueue {
         const vfxConfig = item.vfxConfig;
         const hasVfx = !!(this.eventBus && vfxConfig);
 
-        // Subscribe before emitting to avoid races with fast completions
         let match = null;
         if (hasVfx) {
-            match = this.buildVfxMatch(vfxConfig);
+            try {
+                match = this.buildVfxMatch(vfxConfig);
+            } catch {
+                match = null;
+            }
             if (match) {
                 const emitResult = await this.emitVfxFromConfig(item, username);
                 if (emitResult.emitted && emitResult.match?.correlationId) {
