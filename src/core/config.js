@@ -391,7 +391,7 @@ function createPlatformConfig(platformName) {
                 return ['youtubei', 'api'].includes(method) ? method : 'youtubei';
             },
             get chatMethod() { return 'scraping'; },
-            get maxStreams() { return configManager.getNumber('youtube', 'maxStreams', 0); }, // 0 = unlimited
+            get maxStreams() { return configManager.getNumber('youtube', 'maxStreams'); },
         });
     }
 
