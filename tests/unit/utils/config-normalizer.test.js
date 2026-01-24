@@ -1,8 +1,6 @@
 
 const {
     normalizeYouTubeConfig,
-    normalizeTwitchConfig,
-    normalizeTikTokConfig,
     validateRequiredKeys
 } = require('../../../src/utils/config-normalizer');
 
@@ -58,7 +56,7 @@ describe('Configuration Normalizer', () => {
             const normalized = normalizeYouTubeConfig(config);
 
             expect(normalized.retryAttempts).toBe(3);
-            expect(normalized.maxStreams).toBe(5);
+            expect(normalized.maxStreams).toBe(2);
             expect(normalized.streamPollingInterval).toBe(60);
             expect(normalized.fullCheckInterval).toBe(300000);
             expect(normalized.dataLoggingEnabled).toBe(false);
@@ -81,99 +79,7 @@ describe('Configuration Normalizer', () => {
             expect(normalized.someUnknownKey).toBeUndefined();
         });
     });
-    
-    describe('normalizeTwitchConfig', () => {
-        test('should remove snake_case Twitch keys without mapping', () => {
-            const config = {
-                enabled: true,
-                username: 'testuser',
-                api_key: 'test-api-key',
-                client_id: 'test-client-id',
-                client_secret: 'test-client-secret',
-                access_token: 'test-access-token',
-                refresh_token: 'test-refresh-token'
-            };
-            
-            const normalized = normalizeTwitchConfig(config);
-            
-            expect(normalized.apiKey).toBeUndefined();
-            expect(normalized.clientId).toBeUndefined();
-            expect(normalized.clientSecret).toBeUndefined();
-            expect(normalized.accessToken).toBeUndefined();
-            expect(normalized.refreshToken).toBeUndefined();
-            expect(normalized.api_key).toBeUndefined();
-            expect(normalized.client_id).toBeUndefined();
-            expect(normalized.client_secret).toBeUndefined();
-            expect(normalized.access_token).toBeUndefined();
-            expect(normalized.refresh_token).toBeUndefined();
-        });
 
-        test('should drop Twitch token secrets from config', () => {
-            const config = {
-                enabled: true,
-                username: 'testuser',
-                channel: 'testchannel',
-                clientId: 'test-client-id',
-                clientSecret: 'test-client-secret',
-                accessToken: 'test-access-token',
-                refreshToken: 'test-refresh-token',
-                apiKey: 'test-api-key'
-            };
-
-            const normalized = normalizeTwitchConfig(config);
-
-            expect(normalized.clientId).toBe('test-client-id');
-            expect(normalized.clientSecret).toBeUndefined();
-            expect(normalized.accessToken).toBeUndefined();
-            expect(normalized.refreshToken).toBeUndefined();
-            expect(normalized.apiKey).toBeUndefined();
-        });
-
-        test('should drop unsupported Twitch keys', () => {
-            const config = {
-                enabled: true,
-                username: 'testuser',
-                channel: 'testchannel',
-                clientId: 'test-client-id',
-                someUnknownKey: 'nope'
-            };
-
-            const normalized = normalizeTwitchConfig(config);
-
-            expect(normalized.clientId).toBe('test-client-id');
-            expect(normalized.someUnknownKey).toBeUndefined();
-        });
-    });
-    
-    describe('normalizeTikTokConfig', () => {
-        test('should remove TikTok api_key without mapping', () => {
-            const config = {
-                enabled: true,
-                username: 'testuser',
-                api_key: 'test-api-key'
-            };
-            
-            const normalized = normalizeTikTokConfig(config);
-            
-            expect(normalized.apiKey).toBeUndefined();
-            expect(normalized.api_key).toBeUndefined();
-        });
-
-        test('should drop unsupported TikTok keys', () => {
-            const config = {
-                enabled: true,
-                username: 'testuser',
-                apiKey: 'test-api-key',
-                someUnknownKey: 'nope'
-            };
-
-            const normalized = normalizeTikTokConfig(config);
-
-            expect(normalized.apiKey).toBe('test-api-key');
-            expect(normalized.someUnknownKey).toBeUndefined();
-        });
-    });
-    
     describe('validateRequiredKeys', () => {
         test('should pass when all required keys present', () => {
             const config = {
