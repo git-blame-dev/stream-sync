@@ -144,7 +144,6 @@ describe('NotificationManager Service Dependency Injection - Modernized', () => 
             });
 
             expect(typeof notificationManager.handleNotification).toBe('function');
-            expect(typeof notificationManager.handleGreeting).toBe('function');
         });
     });
 

@@ -284,35 +284,6 @@ describe('NotificationManager coverage', () => {
         });
     });
 
-    describe('handleChatMessage', () => {
-        it('does not throw when processing chat message', async () => {
-            const deps = createDeps();
-            const manager = new NotificationManager(deps);
-
-            await expect(manager.handleChatMessage({
-                platform: 'twitch',
-                userId: 'user123',
-                username: 'TestUser'
-            })).resolves.toBeUndefined();
-        });
-
-        it('handles errors gracefully', async () => {
-            const deps = createDeps({
-                userTrackingService: {
-                    isFirstMessage: createMockFn(() => Promise.reject(new Error('Service error'))),
-                    markMessageSeen: createMockFn()
-                }
-            });
-            const manager = new NotificationManager(deps);
-
-            await expect(manager.handleChatMessage({
-                platform: 'twitch',
-                userId: 'user',
-                username: 'User'
-            })).resolves.toBeUndefined();
-        });
-    });
-
     describe('processNotification', () => {
         it('does not throw when processing notification', async () => {
             const deps = createDeps();
@@ -473,28 +444,6 @@ describe('NotificationManager coverage', () => {
             });
 
             expect(speakCalls.length).toBe(1);
-        });
-    });
-
-    describe('_isGreetingEnabled', () => {
-        it('returns false when config returns false', () => {
-            const deps = createDeps();
-            deps.configService.getPlatformConfig = createMockFn(() => false);
-            const manager = new NotificationManager(deps);
-
-            const result = manager._isGreetingEnabled('twitch');
-
-            expect(result).toBe(false);
-        });
-
-        it('returns true when config returns true', () => {
-            const deps = createDeps();
-            deps.configService.getPlatformConfig = createMockFn(() => true);
-            const manager = new NotificationManager(deps);
-
-            const result = manager._isGreetingEnabled('twitch');
-
-            expect(result).toBe(true);
         });
     });
 
