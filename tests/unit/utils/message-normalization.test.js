@@ -81,9 +81,8 @@ describe('Message Normalization', () => {
                     author: {
                         id: 'UC123456789',
                         name: 'youtubeuser',
-                        isModerator: false,
-                        isMember: true,
-                        isOwner: false
+                        is_moderator: false,
+                        badges: []
                     },
                     message: { text: 'Hello YouTube!' }
                 }
@@ -97,7 +96,7 @@ describe('Message Normalization', () => {
                 username: 'youtubeuser',
                 message: 'Hello YouTube!',
                 isMod: false,
-                isSubscriber: true,
+                isSubscriber: false,
                 isBroadcaster: false
             });
             expect(normalized.metadata).toMatchObject({
@@ -117,9 +116,8 @@ describe('Message Normalization', () => {
                     author: {
                         id: 'UC123456789',
                         name: 'youtubeuser',
-                        isModerator: false,
-                        isMember: true,
-                        isOwner: false
+                        is_moderator: false,
+                        badges: []
                     },
                     message: { text: 'Hello YouTube!' }
                 }
@@ -138,9 +136,8 @@ describe('Message Normalization', () => {
                     author: {
                         id: 'UC987654321',
                         name: 'superchatter',
-                        isModerator: false,
-                        isMember: false,
-                        isOwner: false
+                        is_moderator: false,
+                        badges: []
                     },
                     superchat: {
                         amount: 5.00,
@@ -172,6 +169,121 @@ describe('Message Normalization', () => {
 
             expect(() => normalizeYouTubeMessage(incompleteChatItem, 'youtube', timestampService))
                 .toThrow('Missing YouTube chat item payload');
+        });
+
+        test('detects moderator from is_moderator field', () => {
+            const timestampMs = testClock.now();
+            const chatItem = {
+                item: {
+                    id: 'yt-mod-123',
+                    timestamp: timestampMs,
+                    author: {
+                        id: 'UCmod123',
+                        name: 'testModerator',
+                        is_moderator: true,
+                        badges: []
+                    },
+                    message: { text: 'Mod message' }
+                }
+            };
+
+            const normalized = normalizeYouTubeMessage(chatItem, 'youtube', timestampService);
+
+            expect(normalized.isMod).toBe(true);
+            expect(normalized.isBroadcaster).toBe(false);
+        });
+
+        test('detects broadcaster from OWNER badge', () => {
+            const timestampMs = testClock.now();
+            const chatItem = {
+                item: {
+                    id: 'yt-owner-123',
+                    timestamp: timestampMs,
+                    author: {
+                        id: 'UCowner123',
+                        name: 'testChannel',
+                        is_moderator: false,
+                        badges: [
+                            { type: 'LiveChatAuthorBadge', icon_type: 'OWNER', tooltip: 'Owner' }
+                        ]
+                    },
+                    message: { text: 'Owner message' }
+                }
+            };
+
+            const normalized = normalizeYouTubeMessage(chatItem, 'youtube', timestampService);
+
+            expect(normalized.isBroadcaster).toBe(true);
+            expect(normalized.isMod).toBe(false);
+        });
+
+        test('detects channel member from member badge tooltip', () => {
+            const timestampMs = testClock.now();
+            const chatItem = {
+                item: {
+                    id: 'yt-member-check',
+                    timestamp: timestampMs,
+                    author: {
+                        id: 'UCuser123',
+                        name: 'testUser',
+                        is_moderator: false,
+                        badges: [
+                            { type: 'LiveChatAuthorBadge', tooltip: 'Member (1 month)' }
+                        ]
+                    },
+                    message: { text: 'Member message' }
+                }
+            };
+
+            const normalized = normalizeYouTubeMessage(chatItem, 'youtube', timestampService);
+
+            expect(normalized.isSubscriber).toBe(true);
+        });
+
+        test('detects new member from badge tooltip', () => {
+            const timestampMs = testClock.now();
+            const chatItem = {
+                item: {
+                    id: 'yt-new-member',
+                    timestamp: timestampMs,
+                    author: {
+                        id: 'UCnew123',
+                        name: 'newMember',
+                        is_moderator: false,
+                        badges: [
+                            { type: 'LiveChatAuthorBadge', tooltip: 'New member' }
+                        ]
+                    },
+                    message: { text: 'New member message' }
+                }
+            };
+
+            const normalized = normalizeYouTubeMessage(chatItem, 'youtube', timestampService);
+
+            expect(normalized.isSubscriber).toBe(true);
+        });
+
+        test('returns false for isSubscriber when no member badge present', () => {
+            const timestampMs = testClock.now();
+            const chatItem = {
+                item: {
+                    id: 'yt-no-member',
+                    timestamp: timestampMs,
+                    author: {
+                        id: 'UCuser456',
+                        name: 'regularUser',
+                        is_moderator: false,
+                        badges: [
+                            { type: 'LiveChatAuthorBadge', icon_type: 'VERIFIED', tooltip: 'Verified' }
+                        ]
+                    },
+                    message: { text: 'Regular message' }
+                }
+            };
+
+            const normalized = normalizeYouTubeMessage(chatItem, 'youtube', timestampService);
+
+            expect(normalized.isSubscriber).toBe(false);
         });
     });
 
