@@ -107,6 +107,12 @@ class DisplayQueue {
         return parseConfigBoolean(this.config.ttsEnabled, false);
     }
 
+    async setTTSText(text) {
+        await this.sourcesManager.clearTextSource(this.config.obs.ttsTxt);
+        await safeDelay(2000);
+        await this.sourcesManager.updateTextSource(this.config.obs.ttsTxt, text);
+    }
+
     getTypePriority(type) {
         if (!this.constants || !this.constants.PRIORITY_LEVELS) {
             logger.warn('[Display Queue] PRIORITY_LEVELS not available, using default priority');
@@ -664,7 +670,7 @@ class DisplayQueue {
                     if (stage.delay > 0) {
                         await delay(stage.delay);
                     }
-                    await this.sourcesManager.updateTextSource(this.config.obs.ttsTxt, stage.text);
+                    await this.setTTSText(stage.text);
                 })();
 
                 allPromises.push(ttsPromise);
@@ -752,7 +758,7 @@ class DisplayQueue {
                     await delay(stage.delay);
                 }
 
-                await this.sourcesManager.updateTextSource(this.config.obs.ttsTxt, stage.text);
+                await this.setTTSText(stage.text);
             }
         } else {
             logger.debug(`[Sequential] TTS disabled - skipping TTS stages`, 'display-queue');

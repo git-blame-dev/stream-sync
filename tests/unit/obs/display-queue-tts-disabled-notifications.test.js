@@ -24,6 +24,7 @@ describe('DisplayQueue notification TTS disabled', () => {
                 updateCalls.push(text);
                 return Promise.resolve();
             }),
+            clearTextSource: createMockFn().mockResolvedValue(),
             setSourceVisibility: createMockFn().mockResolvedValue(),
             setPlatformLogoVisibility: createMockFn().mockResolvedValue(),
             hideAllDisplays: createMockFn().mockResolvedValue(),

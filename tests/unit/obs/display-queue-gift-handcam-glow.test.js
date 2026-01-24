@@ -38,6 +38,7 @@ describe('DisplayQueue gift effects handcam glow', () => {
 
         const mockSourcesManager = {
             updateTextSource: createMockFn().mockResolvedValue(),
+            clearTextSource: createMockFn().mockResolvedValue(),
             setSourceVisibility: createMockFn().mockResolvedValue(),
             setNotificationDisplayVisibility: createMockFn().mockResolvedValue(),
             setChatDisplayVisibility: createMockFn().mockResolvedValue(),
