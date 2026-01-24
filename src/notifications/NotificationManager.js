@@ -5,6 +5,7 @@ const {  DonationSpamDetection } = require('../utils/spam-detection');
 const { logger } = require('../core/logging');
 const { createPlatformErrorHandler } = require('../utils/platform-error-handler');
 const { PlatformEvents } = require('../interfaces/PlatformEvents');
+const { createSyntheticGiftFromAggregated } = require('./aggregated-donation-transformer');
 
 class NotificationManager extends EventEmitter {
     constructor(dependencies = {}) {
@@ -122,19 +123,9 @@ class NotificationManager extends EventEmitter {
     handleAggregatedDonation(aggregatedData) {
         try {
             this.logger.info(`[Aggregated] Processing aggregated donation from ${aggregatedData.username} on ${aggregatedData.platform}: ${aggregatedData.message}`, 'notification-manager');
-            
-            // Create a synthetic gift notification for the aggregated donation
-            const syntheticGiftData = {
-                userId: aggregatedData.userId,
-                username: aggregatedData.username,
-                giftType: `Multiple Gifts (${aggregatedData.giftTypes.join(', ')})`,
-                giftCount: aggregatedData.totalGifts,
-                amount: aggregatedData.totalCoins,
-                currency: 'coins',
-                message: aggregatedData.message,
-                isAggregated: true // Flag to identify this as an aggregated donation
-            };
-            
+
+            const syntheticGiftData = createSyntheticGiftFromAggregated(aggregatedData);
+
             // Process as a regular gift notification, but skip spam detection
             this.handleNotificationInternal('platform:gift', aggregatedData.platform, syntheticGiftData, true);
             
@@ -434,78 +425,6 @@ class NotificationManager extends EventEmitter {
         };
     }
 
-    async handleGreeting(platform, normalizedData) {
-        try {
-            // Validate normalized data structure
-            if (!normalizedData || typeof normalizedData !== 'object') {
-                this.platformLogger.warn(platform, 'Invalid normalized data provided to handleGreeting', { data: normalizedData });
-                return;
-            }
-
-        // Check if greetings are enabled using ConfigService or app config
-        const greetingsEnabled = this._areGreetingsEnabled(platform);
-        if (!greetingsEnabled) {
-            return;
-        }
-
-            // Optimize: Use standardized data fields
-            const userId = normalizedData.userId;
-            const username = normalizedData.username;
-            
-            if (!userId) {
-                this.platformLogger.warn(platform, 'No userId provided for greeting check', { data: normalizedData });
-                return;
-            }
-
-            // Check if this is a first message using UserTrackingService or app
-            const isFirstMessage = await this._isFirstMessage(userId, normalizedData);
-                
-        if (isFirstMessage) {
-                this.platformLogger.console(platform, `First message from ${username}, showing greeting.`);
-            
-                const normalizedGreetingData = { ...normalizedData };
-                delete normalizedGreetingData.displayName;
-                delete normalizedGreetingData.user;
-                const greetingData = this.NotificationBuilder.build({
-                    type: 'greeting',
-                    platform: platform,
-                    username,
-                    userId,
-                    metadata: normalizedGreetingData.metadata,
-                    // Pass any additional data that might be needed
-                    ...normalizedGreetingData
-                });
-                
-            const item = {
-                type: 'greeting',
-                data: greetingData,
-                platform: platform,
-                priority: this.PRIORITY_LEVELS.GREETING,
-            };
-
-                // Get VFX config using VFXCommandService for consistent command selection
-                const vfxConfig = await this._getVFXConfigFromService('greetings', normalizedData.message);
-                this.logger.debug('[NotificationManager] Greeting VFX config result', 'notification-manager', vfxConfig);
-                
-                if (vfxConfig) {
-                    this.logger.debug('[NotificationManager] Adding VFX config to greeting item', 'notification-manager', {
-                        filename: vfxConfig.filename,
-                        mediaSource: vfxConfig.mediaSource,
-                        vfxFilePath: vfxConfig.vfxFilePath
-                    });
-                    item.vfxConfig = vfxConfig;
-                } else {
-                    this.logger.debug('[NotificationManager] No VFX config found for greetings', 'notification-manager');
-                }
-
-                this.displayQueue.addItem(item);
-            }
-        } catch (error) {
-            this.platformLogger.error(platform, `Error handling greeting: ${error.message}`, error);
-            // Don't rethrow to prevent blocking message processing
-        }
-    }
-
     async getVFXConfig(commandKey, message) {
         if (arguments.length < 2) {
             throw new Error('getVFXConfig requires message (use null when none)');
@@ -601,25 +520,8 @@ class NotificationManager extends EventEmitter {
         };
     }
 
-    async showGreeting(platform, username, userId) {
-        if (!userId) {
-            throw new Error('showGreeting requires userId');
-        }
-        const data = {
-            username: username,
-            userId: userId
-        };
-        
-        await this.handleGreeting(platform, data);
-    }
-
     async handleGiftNotification(platform, data) {
         await this.handleNotification('platform:gift', platform, data);
-    }
-
-    async processChatMessage(platform, data) {
-        // Only handle greeting processing here, command processing is handled elsewhere
-        await this.handleGreeting(platform, data);
     }
 
     isUserSuppressed(userId, notificationType) {
@@ -773,20 +675,6 @@ class NotificationManager extends EventEmitter {
         }
     }
 
-    _areGreetingsEnabled(platform) {
-        try {
-            return this.configService.getPlatformConfig(platform, 'greetingsEnabled');
-        } catch (error) {
-            this._handleNotificationError(
-                `[NotificationManager] Error checking greetings enabled: ${error.message}`,
-                error,
-                { platform },
-                { eventType: 'greetings-enabled' }
-            );
-            throw error;
-        }
-    }
-
     _isDebugEnabled() {
         try {
             return this.configService.isDebugEnabled();
@@ -897,30 +785,6 @@ class NotificationManager extends EventEmitter {
                 error,
                 { notificationType, platform, data },
                 { eventType: 'tts-processing' }
-            );
-        }
-    }
-
-    // MODERNIZATION: Event-driven service methods
-
-    async handleChatMessage(chatMessage) {
-        try {
-            this.logger.debug(`[NotificationManager] Processing chat message from ${chatMessage.platform}:${chatMessage.username}`, 'notification-manager');
-
-            // Check if it's a first message using UserTrackingService
-            const isFirstMessage = await this._isFirstMessage(chatMessage.userId);
-
-            // Process greeting if first message and greetings enabled
-            if (isFirstMessage && this._isGreetingEnabled(chatMessage.platform)) {
-                await this._processGreetingNotification(chatMessage);
-            }
-
-        } catch (error) {
-            this._handleNotificationError(
-                `[NotificationManager] Error processing chat message: ${error.message}`,
-                error,
-                { chatMessage },
-                { eventType: 'chat-processing' }
             );
         }
     }
@@ -1036,38 +900,6 @@ class NotificationManager extends EventEmitter {
                 { notification },
                 { eventType: 'notification-processing' }
             );
-        }
-    }
-
-    // Helper methods for modernized functionality
-
-    _isGreetingEnabled(platform) {
-        try {
-            return this.configService.getPlatformConfig(platform, 'greetingsEnabled');
-        } catch (error) {
-            this._handleNotificationError(
-                `[NotificationManager] Error checking greeting settings: ${error.message}`,
-                error,
-                { platform },
-                { eventType: 'greeting-settings' }
-            );
-            return false;
-        }
-    }
-
-    async _processGreetingNotification(chatMessage) {
-        try {
-            // Process through existing greeting handler if available
-            if (typeof this.handleGreeting === 'function') {
-                await this.handleGreeting(chatMessage.platform, {
-                    username: chatMessage.username,
-                    userId: chatMessage.userId,
-                    message: chatMessage.message
-                });
-            }
-
-        } catch (error) {
-            this._handleNotificationError(`[NotificationManager] Error processing greeting: ${error.message}`, error, { chatMessage }, { eventType: 'greeting' });
         }
     }
 
