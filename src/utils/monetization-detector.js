@@ -205,44 +205,45 @@ class MonetizationDetector {
     }
 
     static detectTikTokGifts(messageData) {
-        // Fast path: Early validation
         if (!messageData || typeof messageData !== 'object') {
             return DETECTION_RESULT.NONE;
         }
-        
-        // TikTok gift events have gift-specific data
+
         const hasGiftType = messageData.giftType !== undefined && messageData.giftType !== null;
         const hasGiftCount = messageData.giftCount !== undefined && messageData.giftCount !== null;
         const hasAmount = messageData.amount !== undefined && messageData.amount !== null;
-        
-        // Must have at least gift name or count to be considered a gift
+
         if (!hasGiftType && !hasGiftCount) {
             return DETECTION_RESULT.NONE;
         }
         if (!hasGiftType || typeof messageData.giftType !== 'string' || !messageData.giftType.trim()) {
             throw new Error('TikTok gift detection requires giftType');
         }
-        if (!hasGiftCount || typeof messageData.giftCount !== 'number' || messageData.giftCount <= 0) {
+
+        const giftCount = Number(messageData.giftCount);
+        if (!hasGiftCount || !Number.isFinite(giftCount) || giftCount <= 0) {
             throw new Error('TikTok gift detection requires positive giftCount');
         }
-        if (!hasAmount || typeof messageData.amount !== 'number' || messageData.amount <= 0) {
+
+        const amount = Number(messageData.amount);
+        if (!hasAmount || !Number.isFinite(amount) || amount <= 0) {
             throw new Error('TikTok gift detection requires positive amount');
         }
         if (typeof messageData.currency !== 'string' || !messageData.currency.trim()) {
             throw new Error('TikTok gift detection requires currency');
         }
-        
+
         return {
             detected: true,
             type: MONETIZATION_TYPES.TIKTOK_GIFT,
             details: {
                 giftType: messageData.giftType,
-                giftCount: messageData.giftCount,
-                amount: messageData.amount,
+                giftCount,
+                amount,
                 currency: messageData.currency,
-                totalValue: messageData.amount,
+                totalValue: amount,
                 hasValidAmount: true,
-                originalData: { // Keep original for debugging
+                originalData: {
                     giftCount: messageData.giftCount,
                     amount: messageData.amount
                 }
