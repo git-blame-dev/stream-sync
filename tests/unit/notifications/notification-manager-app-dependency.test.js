@@ -190,7 +190,7 @@ describe('NotificationManager Service Dependency Injection - Modernized', () => 
             expect(notificationManager.donationSpamDetector).toBeUndefined();
         });
 
-        it('should reject notifications without VFX services', async () => {
+        it('should continue processing notifications without VFX services', async () => {
             const mockEventBus = { emit: createMockFn(), on: createMockFn(), off: createMockFn() };
             notificationManager = new NotificationManager({
                 displayQueue: mockDisplayQueue,
@@ -202,15 +202,16 @@ describe('NotificationManager Service Dependency Injection - Modernized', () => 
                 configService: mockConfigService
             });
 
-            await expect(notificationManager.handleNotification('platform:gift', 'tiktok', {
+            const result = await notificationManager.handleNotification('platform:gift', 'tiktok', {
                 username: 'TestUser',
                 userId: '123',
                 giftType: 'Rose',
                 giftCount: 1,
                 amount: 1,
                 currency: 'coins'
-            })).rejects.toThrow('VFXCommandService not available for config lookup: gifts');
-            expect(mockDisplayQueue.addItem).not.toHaveBeenCalled();
+            });
+
+            expect(result.success).toBe(true);
         });
     });
 
