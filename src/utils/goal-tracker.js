@@ -66,25 +66,32 @@ class GoalTracker {
 
     addDonationToGoal(platform, amount) {
     try {
+        if (!platform || typeof platform !== 'string') {
+            return {
+                success: false,
+                error: `Invalid platform: ${platform}. Supported platforms: tiktok, youtube, twitch`
+            };
+        }
+
         const platformKey = platform.toLowerCase();
-        
+
             if (!this.goalState[platformKey]) {
             return {
                 success: false,
                 error: `Invalid platform: ${platform}. Supported platforms: tiktok, youtube, twitch`
             };
         }
-        
-        if (typeof amount !== 'number' || amount <= 0) {
+
+        const numAmount = Number(amount);
+        if (!Number.isFinite(numAmount) || numAmount <= 0) {
             return {
                 success: false,
                 error: `Donation amount must be positive number, received: ${amount}`
             };
         }
         
-        // Add amount to current progress
             const oldCurrent = this.goalState[platformKey].current;
-            this.goalState[platformKey].current += amount;
+            this.goalState[platformKey].current += numAmount;
         
             const newCurrent = this.goalState[platformKey].current;
             const target = this.goalState[platformKey].target;
@@ -122,6 +129,13 @@ class GoalTracker {
 
     addPaypiggyToGoal(platform) {
     try {
+        if (!platform || typeof platform !== 'string') {
+            return {
+                success: false,
+                error: `Invalid platform: ${platform}. Supported platforms: tiktok, youtube, twitch`
+            };
+        }
+
         const platformKey = platform.toLowerCase();
         const paypiggyConfig = this.config?.goals || {};
         let paypiggyAmount = 0;
