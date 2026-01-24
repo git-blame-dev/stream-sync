@@ -34,6 +34,16 @@ describe('DisplayQueue control', () => {
         return queue;
     };
 
+    describe('platform validation', () => {
+        it('rejects items without platform', () => {
+            const queue = createQueue();
+
+            expect(() => {
+                queue.addItem({ type: 'platform:gift', data: { username: 'testUser' } });
+            }).toThrow('platform');
+        });
+    });
+
     describe('maxQueueSize enforcement', () => {
         it('rejects items when queue is at maxQueueSize capacity', () => {
             const queue = createQueue({ maxQueueSize: 2 });
