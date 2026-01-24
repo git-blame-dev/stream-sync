@@ -191,6 +191,22 @@ describe('NotificationManager input validation', () => {
         });
     });
 
+    describe('config loading safety', () => {
+        it('throws meaningful error when configService.get returns null', () => {
+            const deps = createDeps();
+            deps.configService.get = createMockFn(() => null);
+
+            expect(() => new NotificationManager(deps)).toThrow('Invalid suppression config');
+        });
+
+        it('throws meaningful error when configService.get returns undefined', () => {
+            const deps = createDeps();
+            deps.configService.get = createMockFn(() => undefined);
+
+            expect(() => new NotificationManager(deps)).toThrow('Invalid suppression config');
+        });
+    });
+
     describe('try/catch robustness', () => {
         it('continues when VFX config throws', async () => {
             const deps = createDeps();

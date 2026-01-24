@@ -653,6 +653,9 @@ class NotificationManager extends EventEmitter {
 
     _loadSuppressionConfig() {
         const generalConfig = this.configService.get('general');
+        if (!generalConfig || typeof generalConfig !== 'object') {
+            throw new Error('Invalid suppression config: general config is missing or invalid');
+        }
         const requiredKeys = [
             'userSuppressionEnabled',
             'maxNotificationsPerUser',
