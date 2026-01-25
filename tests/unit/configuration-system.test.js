@@ -551,7 +551,7 @@ enabled = notabool
             reloadConfig();
 
             expect(config.general.debugEnabled).toBe(false);
-            expect(config.general.messagesEnabled).toBe(false);
+            expect(config.general.messagesEnabled).toBe(true);
             expect(config.general.ttsEnabled).toBe(false);
             expect(config.obs.enabled).toBe(false);
             expect(config.commands.enabled).toBe(false);

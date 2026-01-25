@@ -5,6 +5,7 @@ const { handleUserFacingError } = require('../utils/user-friendly-errors');
 const { createRuntimeConstants } = require('./runtime-constants');
 const { DEFAULT_HTTP_USER_AGENTS, parseUserAgentList } = require('./http-config');
 const { DEFAULTS } = require('./config-defaults');
+const { ConfigValidator } = require('../utils/config-validator');
 
 class ConfigManager {
     constructor(defaultConfigPath = './config.ini') {
@@ -203,20 +204,18 @@ class ConfigManager {
     }
 
     getBoolean(section, key, defaultValue = false) {
-        const value = this.get(section, key, defaultValue);
-        if (typeof value === 'boolean') return value;
-        // Only "true" (case-insensitive) should return true, everything else returns false
-        return String(value).trim().toLowerCase() === 'true';
+        const value = this.get(section, key);
+        return ConfigValidator.parseBoolean(value, defaultValue);
     }
 
     getNumber(section, key, defaultValue = 0) {
-        const value = this.get(section, key, defaultValue);
-        const parsed = parseFloat(value);
-        return isNaN(parsed) ? defaultValue : parsed;
+        const value = this.get(section, key);
+        return ConfigValidator.parseNumber(value, { defaultValue });
     }
 
     getString(section, key, defaultValue = '') {
-        return String(this.get(section, key, defaultValue));
+        const value = this.get(section, key);
+        return ConfigValidator.parseString(value, defaultValue);
     }
 
     getSection(section) {
