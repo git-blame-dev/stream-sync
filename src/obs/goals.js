@@ -24,11 +24,7 @@ function buildGoalsManager(obsManager, dependencies = {}) {
     const config = dependencies.config || require('../core/config').config;
 
     const updateTextSource = dependencies.updateTextSource || (() => {
-        return require('./sources').getDefaultSourcesManager({
-            chatGroupName: config.general.chatMsgGroup,
-            notificationGroupName: config.obs.notificationMsgGroup,
-            fadeDelay: config.timing.fadeDuration
-        }).updateTextSource;
+        return require('./sources').getDefaultSourcesManager().updateTextSource;
     })();
     const { createGoalTracker } = require('../utils/goal-tracker');
     const goalTracker = dependencies.goalTracker || createGoalTracker({ logger, config });
@@ -403,11 +399,7 @@ function getDefaultGoalsManager(dependencies = {}) {
             isConnected: () => false
         };
 
-        const sourcesManager = dependencies.sourcesManager || getDefaultSourcesManager({
-            chatGroupName: config.general.chatMsgGroup,
-            notificationGroupName: config.obs.notificationMsgGroup,
-            fadeDelay: config.timing.fadeDuration
-        });
+        const sourcesManager = dependencies.sourcesManager || getDefaultSourcesManager();
 
         defaultInstance = buildGoalsManager(obsManager, {
             logger,

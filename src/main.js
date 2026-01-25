@@ -307,11 +307,7 @@ function createProductionDependencies(runtimeConstants, overrides = {}) {
     return {
         obs: {
             connectionManager: require('./obs/connection').getOBSConnectionManager({ runtimeConstants }),
-            sourcesManager: sources.getDefaultSourcesManager({
-                chatGroupName: config.general.chatMsgGroup,
-                notificationGroupName: config.obs.notificationMsgGroup,
-                fadeDelay: config.timing.fadeDuration
-            }),
+            sourcesManager: sources.getDefaultSourcesManager(),
             effectsManager: effects.getDefaultEffectsManager()
         },
         sourcesFactory: sources,
@@ -1525,11 +1521,7 @@ async function main(overrides = {}) {
         // Create OBS event-driven services
         logger.debug('Creating OBS event-driven services...', 'Main');
         const obsConnectionManager = getOBSConnectionManager({ runtimeConstants, config: config.obs });
-        const obsSources = require('./obs/sources').getDefaultSourcesManager({
-            chatGroupName: config.general.chatMsgGroup,
-            notificationGroupName: config.obs.notificationMsgGroup,
-            fadeDelay: config.timing.fadeDuration
-        });
+        const obsSources = require('./obs/sources').getDefaultSourcesManager();
 
         const obsEventService = createOBSEventService({
             eventBus,
