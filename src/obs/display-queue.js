@@ -646,7 +646,7 @@ class DisplayQueue {
         allPromises.push(this.playGiftVideoAndAudio());
 
         // Step 2: Add handcam glow if enabled
-        if (this.config.handcam?.enabled) {
+        if (this.config.handcam.enabled) {
             logger.debug('[Gift] Adding handcam glow', 'display-queue');
             allPromises.push(Promise.resolve().then(() => {
                 triggerHandcamGlow(this.obsManager, this.config.handcam, this.runtimeConstants);
@@ -765,8 +765,7 @@ class DisplayQueue {
         try {
             logger.debug('[Gift] Starting gift video and audio playback', 'display-queue');
 
-            const giftsConfig = this.config.gifts || {};
-            const { giftVideoSource, giftAudioSource } = giftsConfig;
+            const { giftVideoSource, giftAudioSource } = this.config.gifts;
             if (!giftVideoSource || !giftAudioSource) {
                 handleDisplayQueueError('[Gift] Gift media sources not configured; skipping gift media');
                 return false;

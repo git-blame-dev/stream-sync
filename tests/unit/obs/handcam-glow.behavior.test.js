@@ -31,7 +31,7 @@ describe('handcam-glow', () => {
     it('skips initialization when disabled in config', async () => {
         const obs = { call: createMockFn() };
 
-        await handcamGlow.initializeHandcamGlow(obs, { glowEnabled: false }, runtimeConstants);
+        await handcamGlow.initializeHandcamGlow(obs, { enabled: false }, runtimeConstants);
 
         expect(obs.call).not.toHaveBeenCalled();
     });
@@ -48,7 +48,7 @@ describe('handcam-glow', () => {
 
         await handcamGlow.initializeHandcamGlow(
             obs,
-            { glowEnabled: true, sourceName: 'testCam', glowFilterName: 'testGlow' },
+            { enabled: true, sourceName: 'testCam', glowFilterName: 'testGlow' },
             runtimeConstants
         );
 
@@ -64,7 +64,7 @@ describe('handcam-glow', () => {
 
         await expect(handcamGlow.initializeHandcamGlow(
             obs,
-            { glowEnabled: true, sourceName: 'testCam', glowFilterName: 'testGlow' },
+            { enabled: true, sourceName: 'testCam', glowFilterName: 'testGlow' },
             runtimeConstants
         )).resolves.toBeUndefined();
     });
@@ -84,7 +84,7 @@ describe('handcam-glow', () => {
             })
         };
 
-        handcamGlow.triggerHandcamGlow(obs, { glowEnabled: true, totalSteps: 1 }, runtimeConstants);
+        handcamGlow.triggerHandcamGlow(obs, { enabled: true, totalSteps: 1 }, runtimeConstants);
         await new Promise(resolve => setImmediate(resolve));
         await new Promise(resolve => setImmediate(resolve));
         await new Promise(resolve => setImmediate(resolve));
@@ -116,7 +116,7 @@ describe('handcam-glow', () => {
             })
         };
 
-        handcamGlow.triggerHandcamGlow(obs, { glowEnabled: true, totalSteps: 1 }, runtimeConstants);
+        handcamGlow.triggerHandcamGlow(obs, { enabled: true, totalSteps: 1 }, runtimeConstants);
         await new Promise(resolve => setImmediate(resolve));
         await new Promise(resolve => setImmediate(resolve));
         await new Promise(resolve => setImmediate(resolve));
@@ -127,13 +127,13 @@ describe('handcam-glow', () => {
 
     it('triggers fire-and-forget glow without throwing', async () => {
         const obs = { call: createMockFn() };
-        expect(() => handcamGlow.triggerHandcamGlow(obs, { glowEnabled: true }, runtimeConstants)).not.toThrow();
+        expect(() => handcamGlow.triggerHandcamGlow(obs, { enabled: true }, runtimeConstants)).not.toThrow();
         await new Promise(resolve => setImmediate(resolve));
     });
 
     it('ignores trigger when disabled', () => {
         const obs = { call: createMockFn() };
-        handcamGlow.triggerHandcamGlow(obs, { glowEnabled: false }, runtimeConstants);
+        handcamGlow.triggerHandcamGlow(obs, { enabled: false }, runtimeConstants);
         expect(obs.call).not.toHaveBeenCalled();
     });
 });
