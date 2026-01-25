@@ -1,3 +1,4 @@
+const { DEFAULTS } = require('../core/config-defaults');
 
 class ConfigValidator {
     constructor(logger) {
@@ -5,13 +6,7 @@ class ConfigValidator {
     }
 
     validateRetryConfig(config = {}, defaults = {}) {
-        const defaultRetryConfig = {
-            maxRetries: 3,
-            baseDelay: 1000,
-            maxDelay: 30000,
-            enableRetry: true,
-            ...defaults
-        };
+        const defaultRetryConfig = { ...DEFAULTS.retry, ...defaults };
 
         return {
             maxRetries: ConfigValidator.parseNumber(config.maxRetries, { defaultValue: defaultRetryConfig.maxRetries, min: 0, max: 20 }),
@@ -22,13 +17,7 @@ class ConfigValidator {
     }
 
     validateIntervalConfig(config = {}, defaults = {}) {
-        const defaultIntervalConfig = {
-            pollInterval: 5000,
-            connectionTimeout: 30000,
-            keepAliveInterval: 30000,
-            healthCheckInterval: 60000,
-            ...defaults
-        };
+        const defaultIntervalConfig = { ...DEFAULTS.intervals, ...defaults };
 
         return {
             pollInterval: ConfigValidator.parseNumber(config.pollInterval, { defaultValue: defaultIntervalConfig.pollInterval, min: 1000, max: 60000 }),
@@ -39,12 +28,7 @@ class ConfigValidator {
     }
 
     validateConnectionLimits(config = {}, defaults = {}) {
-        const defaultLimits = {
-            maxConnections: 3,
-            maxConcurrentRequests: 5,
-            maxStreamsPerConnection: 1,
-            ...defaults
-        };
+        const defaultLimits = { ...DEFAULTS.connectionLimits, ...defaults };
 
         return {
             maxConnections: ConfigValidator.parseNumber(config.maxConnections, { defaultValue: defaultLimits.maxConnections, min: 1, max: 10 }),
@@ -59,7 +43,7 @@ class ConfigValidator {
             enabled: ConfigValidator.parseBoolean(config.enabled, false),
             useAPI: ConfigValidator.parseBoolean(config.useAPI, true),
             useScraping: ConfigValidator.parseBoolean(config.useScraping, false),
-            requestTimeout: ConfigValidator.parseNumber(config.requestTimeout, { defaultValue: 5000, min: 1000, max: 30000 })
+            requestTimeout: ConfigValidator.parseNumber(config.requestTimeout, { defaultValue: DEFAULTS.api.requestTimeout, min: 1000, max: 30000 })
         };
 
         if (validated.enabled && validated.useAPI && !validated.apiKey) {
@@ -74,12 +58,12 @@ class ConfigValidator {
 
     validateLoggingConfig(config = {}) {
         return {
-            level: ConfigValidator.parseString(config.level, 'info'),
-            enableDebug: ConfigValidator.parseBoolean(config.enableDebug, false),
-            enableConsole: ConfigValidator.parseBoolean(config.enableConsole, true),
-            enableFile: ConfigValidator.parseBoolean(config.enableFile, false),
-            logPath: ConfigValidator.parseString(config.logPath, './logs'),
-            maxFileSize: ConfigValidator.parseNumber(config.maxFileSize, { defaultValue: 10485760, min: 1048576, max: 104857600 })
+            level: ConfigValidator.parseString(config.level, DEFAULTS.logging.level),
+            enableDebug: ConfigValidator.parseBoolean(config.enableDebug, DEFAULTS.logging.enableDebug),
+            enableConsole: ConfigValidator.parseBoolean(config.enableConsole, DEFAULTS.logging.enableConsole),
+            enableFile: ConfigValidator.parseBoolean(config.enableFile, DEFAULTS.logging.enableFile),
+            logPath: ConfigValidator.parseString(config.logPath, DEFAULTS.LOG_DIRECTORY),
+            maxFileSize: ConfigValidator.parseNumber(config.maxFileSize, { defaultValue: DEFAULTS.logging.maxFileSize, min: 1048576, max: 104857600 })
         };
     }
 
