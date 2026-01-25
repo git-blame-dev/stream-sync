@@ -1,24 +1,21 @@
 const { DEFAULTS } = require('../../../core/config-defaults');
+const { ConfigValidator } = require('../../../utils/config-validator');
 
-function normalizeTikTokPlatformConfig(rawConfig = {}, configValidator) {
+function normalizeTikTokPlatformConfig(rawConfig = {}) {
     const safeConfig = (rawConfig && typeof rawConfig === 'object') ? rawConfig : {};
     const trimToUndefined = (value) => (typeof value === 'string' && value.trim() ? value.trim() : undefined);
 
-    if (!configValidator) {
-        throw new Error('configValidator is required to normalize TikTok platform config');
-    }
-
-    const apiKey = trimToUndefined(configValidator.parseString(safeConfig.apiKey, undefined));
+    const apiKey = trimToUndefined(ConfigValidator.parseString(safeConfig.apiKey));
 
     return {
-        enabled: configValidator.parseBoolean(safeConfig.enabled, DEFAULTS.tiktok.enabled),
-        username: configValidator.parseString(safeConfig.username, ''),
+        enabled: ConfigValidator.parseBoolean(safeConfig.enabled, DEFAULTS.tiktok.enabled),
+        username: ConfigValidator.parseString(safeConfig.username, ''),
         apiKey,
-        viewerCountEnabled: configValidator.parseBoolean(safeConfig.viewerCountEnabled, DEFAULTS.tiktok.viewerCountEnabled),
-        viewerCountSource: configValidator.parseString(safeConfig.viewerCountSource, DEFAULTS.tiktok.viewerCountSource),
-        greetingsEnabled: configValidator.parseBoolean(safeConfig.greetingsEnabled, DEFAULTS.tiktok.greetingsEnabled),
-        giftAggregationEnabled: configValidator.parseBoolean(safeConfig.giftAggregationEnabled, DEFAULTS.tiktok.giftAggregationEnabled),
-        dataLoggingEnabled: configValidator.parseBoolean(safeConfig.dataLoggingEnabled, DEFAULTS.tiktok.dataLoggingEnabled),
+        viewerCountEnabled: ConfigValidator.parseBoolean(safeConfig.viewerCountEnabled, DEFAULTS.tiktok.viewerCountEnabled),
+        viewerCountSource: ConfigValidator.parseString(safeConfig.viewerCountSource, DEFAULTS.tiktok.viewerCountSource),
+        greetingsEnabled: ConfigValidator.parseBoolean(safeConfig.greetingsEnabled, DEFAULTS.tiktok.greetingsEnabled),
+        giftAggregationEnabled: ConfigValidator.parseBoolean(safeConfig.giftAggregationEnabled, DEFAULTS.tiktok.giftAggregationEnabled),
+        dataLoggingEnabled: ConfigValidator.parseBoolean(safeConfig.dataLoggingEnabled, DEFAULTS.tiktok.dataLoggingEnabled),
         dataLoggingPath: DEFAULTS.LOG_DIRECTORY
     };
 }

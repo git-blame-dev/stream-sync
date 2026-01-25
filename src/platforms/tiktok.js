@@ -2,7 +2,6 @@
 const { EventEmitter } = require('events');
 const { getLazyLogger, getLazyUnifiedLogger } = require('../utils/logger-utils');
 const { PlatformInitializationManager } = require('../utils/platform-initialization-manager');
-const { ConfigValidator } = require('../utils/config-validator');
 const { IntervalManager } = require('../utils/interval-manager');
 const { InitializationStatistics } = require('../utils/initialization-statistics');
 const { ConnectionStateManager } = require('../utils/connection-state-manager');
@@ -42,9 +41,7 @@ class TikTokPlatform extends EventEmitter {
         this.eventBus = dependencies.eventBus || null;
         this.notificationManager = dependencies.notificationManager;
         
-        // Initialize extracted services (conditionally for test environments)
         this.initializationManager = dependencies.initializationManager || new PlatformInitializationManager('tiktok', this.logger);
-        this.configValidator = dependencies.configValidator || new ConfigValidator(this.logger);
         this.intervalManager = dependencies.intervalManager || new IntervalManager('tiktok', this.logger);
         this.initializationStats = dependencies.initializationStats || new InitializationStatistics('tiktok', this.logger);
         this.listenersConfigured = false;
@@ -54,7 +51,7 @@ class TikTokPlatform extends EventEmitter {
             ttlMs: dependencies.deduplicationTtlMs ?? 2 * 60 * 1000
         };
 
-        this.config = normalizeTikTokPlatformConfig(config, this.configValidator);
+        this.config = normalizeTikTokPlatformConfig(config);
 
         this.TikTokWebSocketClient = dependencies.TikTokWebSocketClient;
         this.WebcastEvent = dependencies.WebcastEvent;
@@ -130,11 +127,7 @@ class TikTokPlatform extends EventEmitter {
     }
 
     _validateDependencies(dependencies = {}, config = {}) {
-        const isEnabled = this.configValidator
-            ? this.configValidator.parseBoolean(config.enabled, false)
-            : Boolean(config?.enabled);
-
-        if (!isEnabled) {
+        if (!config.enabled) {
             return;
         }
 
