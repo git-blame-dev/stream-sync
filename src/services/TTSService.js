@@ -368,18 +368,15 @@ class TTSService {
     }
 
     _getDefaultVoice() {
-        const config = this.getConfig();
-        return config.voice || 'default';
+        return this.getConfig().voice;
     }
 
     _getDefaultRate() {
-        const config = this.getConfig();
-        return config.rate || 1.0;
+        return this.getConfig().rate;
     }
 
     _getDefaultVolume() {
-        const config = this.getConfig();
-        return config.volume || 1.0;
+        return this.getConfig().volume;
     }
 
     _addToQueue(ttsRequest) {
