@@ -28,19 +28,19 @@ function normalizeTwitchPlatformConfig(rawConfig = {}) {
         eventsub_enabled: ConfigValidator.parseBoolean(rawConfig.eventsub_enabled, DEFAULTS.twitch.eventsubEnabled),
         dataLoggingEnabled: ConfigValidator.parseBoolean(rawConfig.dataLoggingEnabled, DEFAULTS.twitch.dataLoggingEnabled),
         dataLoggingPath: DEFAULTS.LOG_DIRECTORY,
-        viewerCountEnabled: ConfigValidator.parseBoolean(rawConfig.viewerCountEnabled, undefined),
+        viewerCountEnabled: ConfigValidator.parseBoolean(rawConfig.viewerCountEnabled),
         viewerCountSource: rawConfig.viewerCountSource,
-        messagesEnabled: ConfigValidator.parseBoolean(rawConfig.messagesEnabled, undefined),
-        commandsEnabled: ConfigValidator.parseBoolean(rawConfig.commandsEnabled, undefined),
-        greetingsEnabled: ConfigValidator.parseBoolean(rawConfig.greetingsEnabled, undefined),
-        farewellsEnabled: ConfigValidator.parseBoolean(rawConfig.farewellsEnabled, undefined),
-        followsEnabled: ConfigValidator.parseBoolean(rawConfig.followsEnabled, undefined),
-        giftsEnabled: ConfigValidator.parseBoolean(rawConfig.giftsEnabled, undefined),
-        raidsEnabled: ConfigValidator.parseBoolean(rawConfig.raidsEnabled, undefined),
-        paypiggiesEnabled: ConfigValidator.parseBoolean(rawConfig.paypiggiesEnabled, undefined),
-        greetNewCommentors: ConfigValidator.parseBoolean(rawConfig.greetNewCommentors, undefined),
-        ignoreSelfMessages: ConfigValidator.parseBoolean(rawConfig.ignoreSelfMessages, undefined),
-        pollInterval: ConfigValidator.parseNumber(rawConfig.pollInterval, undefined, { min: 1 })
+        messagesEnabled: ConfigValidator.parseBoolean(rawConfig.messagesEnabled),
+        commandsEnabled: ConfigValidator.parseBoolean(rawConfig.commandsEnabled),
+        greetingsEnabled: ConfigValidator.parseBoolean(rawConfig.greetingsEnabled),
+        farewellsEnabled: ConfigValidator.parseBoolean(rawConfig.farewellsEnabled),
+        followsEnabled: ConfigValidator.parseBoolean(rawConfig.followsEnabled),
+        giftsEnabled: ConfigValidator.parseBoolean(rawConfig.giftsEnabled),
+        raidsEnabled: ConfigValidator.parseBoolean(rawConfig.raidsEnabled),
+        paypiggiesEnabled: ConfigValidator.parseBoolean(rawConfig.paypiggiesEnabled),
+        greetNewCommentors: ConfigValidator.parseBoolean(rawConfig.greetNewCommentors),
+        ignoreSelfMessages: ConfigValidator.parseBoolean(rawConfig.ignoreSelfMessages),
+        pollInterval: ConfigValidator.parseNumber(rawConfig.pollInterval, { min: 1 })
     };
 
     return dropUndefinedValues(normalized);

@@ -1,23 +1,5 @@
 const { DEFAULTS } = require('../core/config-defaults');
-
-const normalizeOptionalBoolean = (value) => {
-    if (value === undefined || value === null) return undefined;
-    if (typeof value === 'boolean') return value;
-    if (typeof value === 'string') {
-        const lowerValue = value.toLowerCase();
-        if (lowerValue === 'true') return true;
-        if (lowerValue === 'false') return false;
-    }
-    return undefined;
-};
-
-const normalizeOptionalNumber = (value, { min } = {}) => {
-    if (value === undefined || value === null) return undefined;
-    const parsed = Number(value);
-    if (!Number.isFinite(parsed)) return undefined;
-    if (typeof min === 'number' && parsed < min) return undefined;
-    return parsed;
-};
+const { ConfigValidator } = require('./config-validator');
 
 const dropUndefinedValues = (valueMap) => Object.fromEntries(
     Object.entries(valueMap).filter(([, value]) => value !== undefined)
@@ -39,32 +21,33 @@ function normalizeYouTubeConfig(config) {
         });
         throw new Error(`YouTube config must use camelCase keys. Update: ${suggestions.join(', ')}`);
     }
-    
-    const dataLoggingEnabled = normalizeOptionalBoolean(config.dataLoggingEnabled);
-    const retryAttempts = normalizeOptionalNumber(config.retryAttempts, { min: 1 });
-    const streamPollingInterval = normalizeOptionalNumber(config.streamPollingInterval, { min: 1 });
-    const fullCheckInterval = normalizeOptionalNumber(config.fullCheckInterval, { min: 1 });
-    const maxStreams = normalizeOptionalNumber(config.maxStreams, { min: 0 });
+
+    const dataLoggingEnabled = ConfigValidator.parseBoolean(config.dataLoggingEnabled);
+    const retryAttempts = ConfigValidator.parseNumber(config.retryAttempts, { min: 1 });
+    const streamPollingInterval = ConfigValidator.parseNumber(config.streamPollingInterval, { min: 1 });
+    const fullCheckInterval = ConfigValidator.parseNumber(config.fullCheckInterval, { min: 1 });
+    const maxStreams = ConfigValidator.parseNumber(config.maxStreams, { min: 0 });
+
     const normalized = {
-        enabled: normalizeOptionalBoolean(config.enabled),
+        enabled: ConfigValidator.parseBoolean(config.enabled),
         username: config.username,
         apiKey: config.apiKey,
-        enableAPI: normalizeOptionalBoolean(config.enableAPI),
+        enableAPI: ConfigValidator.parseBoolean(config.enableAPI),
         streamDetectionMethod: config.streamDetectionMethod,
         viewerCountMethod: config.viewerCountMethod,
-        viewerCountEnabled: normalizeOptionalBoolean(config.viewerCountEnabled),
+        viewerCountEnabled: ConfigValidator.parseBoolean(config.viewerCountEnabled),
         viewerCountSource: config.viewerCountSource,
-        messagesEnabled: normalizeOptionalBoolean(config.messagesEnabled),
-        commandsEnabled: normalizeOptionalBoolean(config.commandsEnabled),
-        greetingsEnabled: normalizeOptionalBoolean(config.greetingsEnabled),
-        farewellsEnabled: normalizeOptionalBoolean(config.farewellsEnabled),
-        followsEnabled: normalizeOptionalBoolean(config.followsEnabled),
-        giftsEnabled: normalizeOptionalBoolean(config.giftsEnabled),
-        raidsEnabled: normalizeOptionalBoolean(config.raidsEnabled),
-        paypiggiesEnabled: normalizeOptionalBoolean(config.paypiggiesEnabled),
-        greetNewCommentors: normalizeOptionalBoolean(config.greetNewCommentors),
-        ignoreSelfMessages: normalizeOptionalBoolean(config.ignoreSelfMessages),
-        pollInterval: normalizeOptionalNumber(config.pollInterval, { min: 1 }),
+        messagesEnabled: ConfigValidator.parseBoolean(config.messagesEnabled),
+        commandsEnabled: ConfigValidator.parseBoolean(config.commandsEnabled),
+        greetingsEnabled: ConfigValidator.parseBoolean(config.greetingsEnabled),
+        farewellsEnabled: ConfigValidator.parseBoolean(config.farewellsEnabled),
+        followsEnabled: ConfigValidator.parseBoolean(config.followsEnabled),
+        giftsEnabled: ConfigValidator.parseBoolean(config.giftsEnabled),
+        raidsEnabled: ConfigValidator.parseBoolean(config.raidsEnabled),
+        paypiggiesEnabled: ConfigValidator.parseBoolean(config.paypiggiesEnabled),
+        greetNewCommentors: ConfigValidator.parseBoolean(config.greetNewCommentors),
+        ignoreSelfMessages: ConfigValidator.parseBoolean(config.ignoreSelfMessages),
+        pollInterval: ConfigValidator.parseNumber(config.pollInterval, { min: 1 }),
         dataLoggingEnabled: dataLoggingEnabled ?? DEFAULTS.youtube.dataLoggingEnabled,
         dataLoggingPath: DEFAULTS.LOG_DIRECTORY,
         retryAttempts: retryAttempts ?? DEFAULTS.youtube.retryAttempts,
@@ -78,7 +61,7 @@ function normalizeYouTubeConfig(config) {
 
 function validateRequiredKeys(config, requiredKeys, platformName = 'Platform') {
     const missing = requiredKeys.filter(key => !config[key]);
-    
+
     if (missing.length > 0) {
         throw new Error(
             `${platformName} configuration missing required keys: ${missing.join(', ')}`
@@ -96,8 +79,7 @@ function validateYouTubeConfig(config) {
     }
 
     const errors = [];
-    
-    // Validate username (channelId no longer required)
+
     if (!config.username) {
         errors.push('Channel username required');
         return {
@@ -107,10 +89,9 @@ function validateYouTubeConfig(config) {
         };
     }
 
-    // Validate streamDetectionMethod
     const validMethods = ['scraping', 'api', 'youtubei'];
     const method = config.streamDetectionMethod;
-    
+
     if (!method) {
         errors.push('Stream detection method required');
         return {
@@ -129,7 +110,6 @@ function validateYouTubeConfig(config) {
         };
     }
 
-    // Validate API key if using API methods
     if (method === 'api' && !config.apiKey) {
         errors.push('API key required for API-based detection');
         return {
@@ -139,9 +119,8 @@ function validateYouTubeConfig(config) {
         };
     }
 
-    // Normalize and return valid config
     const normalizedConfig = normalizeYouTubeConfig(config);
-    
+
     return {
         isValid: true,
         errors: [],

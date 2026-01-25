@@ -10,20 +10,17 @@ describe('config-validator (utility) behavior', () => {
     });
 
     it('parses booleans, strings, and numbers with defaults and bounds', () => {
-        expect(validator.parseBoolean('true', false)).toBe(true);
-        expect(validator.parseBoolean('invalid', true)).toBe(true);
-        expect(validator.parseString(null, 'default')).toBe('default');
-        expect(validator.parseNumber('5', 0, { min: 1, max: 10 })).toBe(5);
-        expect(validator.parseNumber('bad', 3)).toBe(3);
+        expect(ConfigValidator.parseBoolean('true', false)).toBe(true);
+        expect(ConfigValidator.parseBoolean('invalid', true)).toBe(true);
+        expect(ConfigValidator.parseString(null, 'default')).toBe('default');
+        expect(ConfigValidator.parseNumber('5', { defaultValue: 0, min: 1, max: 10 })).toBe(5);
+        expect(ConfigValidator.parseNumber('bad', { defaultValue: 3 })).toBe(3);
     });
 
-    it('rejects non-finite numeric values via instance and static methods', () => {
-        expect(validator.parseNumber(Infinity, 7)).toBe(7);
-        expect(validator.parseNumber(-Infinity, 7)).toBe(7);
-        expect(validator.parseNumber('Infinity', 7)).toBe(7);
-        expect(ConfigValidator.parseNumber(Infinity, 7)).toBe(7);
-        expect(ConfigValidator.parseNumber(-Infinity, 7)).toBe(7);
-        expect(ConfigValidator.parseNumber('Infinity', 7)).toBe(7);
+    it('rejects non-finite numeric values', () => {
+        expect(ConfigValidator.parseNumber(Infinity, { defaultValue: 7 })).toBe(7);
+        expect(ConfigValidator.parseNumber(-Infinity, { defaultValue: 7 })).toBe(7);
+        expect(ConfigValidator.parseNumber('Infinity', { defaultValue: 7 })).toBe(7);
     });
 
     it('validates retry config with bounds', () => {
