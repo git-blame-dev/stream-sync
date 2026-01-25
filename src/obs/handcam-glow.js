@@ -2,7 +2,6 @@ const { ensureOBSConnected: defaultEnsureConnected } = require('./connection');
 const { logger: defaultLogger } = require('../core/logging');
 const { safeDelay: defaultDelay } = require('../utils/timeout-validator');
 const { createPlatformErrorHandler } = require('../utils/platform-error-handler');
-const { DEFAULTS } = require('../core/config-defaults');
 
 let moduleDeps = {
     ensureConnected: defaultEnsureConnected,
@@ -51,20 +50,20 @@ function easeInCubic(t) {
     return t * t * t;
 }
 
-function createHandcamGlowConfig(handcamConfig = {}) {
+function createHandcamGlowConfig(handcamConfig) {
     return {
-        enabled: handcamConfig.enabled ?? DEFAULTS.handcam.glowEnabled,
-        maxSize: Number(handcamConfig.maxSize ?? DEFAULTS.handcam.maxSize),
-        rampUpDuration: Number(handcamConfig.rampUpDuration ?? DEFAULTS.handcam.rampUpDuration),
-        holdDuration: Number(handcamConfig.holdDuration ?? DEFAULTS.handcam.holdDuration),
-        rampDownDuration: Number(handcamConfig.rampDownDuration ?? DEFAULTS.handcam.rampDownDuration),
-        totalSteps: Number(handcamConfig.totalSteps ?? DEFAULTS.handcam.totalSteps),
-        incrementPercent: Number(handcamConfig.incrementPercent ?? DEFAULTS.handcam.incrementPercent),
-        easingEnabled: handcamConfig.easingEnabled ?? DEFAULTS.handcam.easingEnabled,
-        animationInterval: Number(handcamConfig.animationInterval ?? DEFAULTS.handcam.animationInterval),
-        sourceName: handcamConfig.sourceName ?? DEFAULTS.handcam.sourceName,
-        sceneName: handcamConfig.sceneName ?? DEFAULTS.handcam.sceneName,
-        filterName: handcamConfig.glowFilterName ?? DEFAULTS.handcam.glowFilterName,
+        enabled: handcamConfig.enabled,
+        maxSize: Number(handcamConfig.maxSize),
+        rampUpDuration: Number(handcamConfig.rampUpDuration),
+        holdDuration: Number(handcamConfig.holdDuration),
+        rampDownDuration: Number(handcamConfig.rampDownDuration),
+        totalSteps: Number(handcamConfig.totalSteps),
+        incrementPercent: Number(handcamConfig.incrementPercent),
+        easingEnabled: handcamConfig.easingEnabled,
+        animationInterval: Number(handcamConfig.animationInterval),
+        sourceName: handcamConfig.sourceName,
+        sceneName: handcamConfig.sceneName,
+        filterName: handcamConfig.glowFilterName,
 
         get totalDuration() {
             return this.rampUpDuration + this.holdDuration + this.rampDownDuration;
@@ -187,7 +186,7 @@ async function setSourceFilterEnabled(obs, sourceName, filterName, enabled) {
     }
 }
 
-async function activateHandcamGlow(obs, handcamConfig = {}) {
+async function activateHandcamGlow(obs, handcamConfig) {
     const { logger, ensureConnected } = moduleDeps;
     const config = createHandcamGlowConfig(handcamConfig);
 
@@ -237,7 +236,7 @@ async function activateHandcamGlow(obs, handcamConfig = {}) {
     }
 }
 
-async function initializeHandcamGlow(obs, handcamConfig = {}) {
+async function initializeHandcamGlow(obs, handcamConfig) {
     const { logger, ensureConnected } = moduleDeps;
     const config = createHandcamGlowConfig(handcamConfig);
 
@@ -264,7 +263,7 @@ async function initializeHandcamGlow(obs, handcamConfig = {}) {
     }
 }
 
-function triggerHandcamGlow(obs, handcamConfig = {}) {
+function triggerHandcamGlow(obs, handcamConfig) {
     const { logger } = moduleDeps;
     const config = createHandcamGlowConfig(handcamConfig);
 
