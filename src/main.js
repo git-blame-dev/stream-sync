@@ -1439,9 +1439,6 @@ async function main(overrides = {}) {
         if (!chatMsgTxt || !chatMsgScene) {
             throw new Error('Display queue requires chatMsgTxt and chatMsgScene');
         }
-        if (typeof ttsEnabled !== 'boolean') {
-            throw new Error('Display queue requires boolean ttsEnabled');
-        }
         const chatSourceName = chatMsgTxt;
         const chatSceneName = chatMsgScene;
         const chatGroupName = chatMsgGroup;
@@ -1495,9 +1492,6 @@ async function main(overrides = {}) {
         };
         
         logger.debug('Creating EventBus...', 'Main');
-        if (typeof config.general.debugEnabled !== 'boolean') {
-            throw new Error('EventBus requires boolean general.debugEnabled');
-        }
         const eventBus = createEventBus({ 
             debugEnabled: config.general.debugEnabled,
             maxListeners: 100
