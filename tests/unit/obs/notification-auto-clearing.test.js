@@ -1,10 +1,11 @@
 
 const { describe, test, expect, beforeEach, afterEach } = require('bun:test');
-const { spyOn, restoreAllMocks } = require('../../helpers/bun-mock-utils');
+const { createMockFn, spyOn, restoreAllMocks } = require('../../helpers/bun-mock-utils');
 
-const { createMockOBSManager } = require('../../helpers/mock-factories');
+const { createMockOBSManager, noOpLogger } = require('../../helpers/mock-factories');
 const { setupAutomatedCleanup } = require('../../helpers/mock-lifecycle');
-const { createRuntimeConstantsFixture } = require('../../helpers/runtime-constants-fixture');
+const { createRuntimeConstantsFixture, createSourcesConfigFixture } = require('../../helpers/runtime-constants-fixture');
+const { createOBSSourcesManager } = require('../../../src/obs/sources');
 
 setupAutomatedCleanup({
     clearCallsBeforeEach: true,
@@ -74,7 +75,24 @@ describe('Notification Auto-Clearing Behavior', () => {
             }
         };
 
-        displayQueue = new DisplayQueue(mockObsManager, mockConfig, mockConstants, null, runtimeConstants);
+        // Create REAL sourcesManager with mocked OBS (mock at external boundary only)
+        const realSourcesManager = createOBSSourcesManager(mockObsManager, {
+            ...createSourcesConfigFixture(),
+            logger: noOpLogger,
+            ensureOBSConnected: createMockFn().mockResolvedValue(),
+            obsCall: mockObsManager.call
+        });
+
+        const mockGoalsManager = {
+            processDonationGoal: createMockFn().mockResolvedValue({ success: true }),
+            processPaypiggyGoal: createMockFn().mockResolvedValue({ success: true }),
+            initializeGoalDisplay: createMockFn().mockResolvedValue()
+        };
+
+        displayQueue = new DisplayQueue(mockObsManager, mockConfig, mockConstants, null, runtimeConstants, {
+            sourcesManager: realSourcesManager,
+            goalsManager: mockGoalsManager
+        });
     });
 
     test('should hide notifications after their duration regardless of lingering chat', async () => {

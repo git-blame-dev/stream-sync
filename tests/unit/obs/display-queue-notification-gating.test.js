@@ -53,16 +53,22 @@ describe('DisplayQueue platform notification gating', () => {
             ...platformConfig
         };
 
+        const mockGoalsManager = {
+            processDonationGoal: createMockFn().mockResolvedValue({ success: true }),
+            processPaypiggyGoal: createMockFn().mockResolvedValue({ success: true }),
+            initializeGoalDisplay: createMockFn().mockResolvedValue()
+        };
+
         const queue = new DisplayQueue(
             obsManager,
             config,
             { PRIORITY_LEVELS: { CHAT: 1, FOLLOW: 2 } },
             new EventEmitter(),
-            runtimeConstants
+            runtimeConstants,
+            { sourcesManager: mockSourcesManager, goalsManager: mockGoalsManager }
         );
 
-        queue.sourcesManager = mockSourcesManager;
-        return { queue, mockSourcesManager };
+        return { queue, mockSourcesManager, mockGoalsManager };
     }
 
     it('skips notification display when platform notifications are disabled', async () => {

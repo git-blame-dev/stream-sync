@@ -38,13 +38,27 @@ describe('DisplayQueue monetization VFX context', () => {
             ttsEnabled: false
         };
 
-        const queue = new DisplayQueue(obsManager, baseConfig, constants, eventBus, runtimeConstants);
+        const mockDependencies = {
+            sourcesManager: {
+                updateTextSource: createMockFn().mockResolvedValue(),
+                clearTextSource: createMockFn().mockResolvedValue(),
+                setSourceVisibility: createMockFn().mockResolvedValue(),
+                setNotificationDisplayVisibility: createMockFn().mockResolvedValue(),
+                setChatDisplayVisibility: createMockFn().mockResolvedValue(),
+                hideAllDisplays: createMockFn().mockResolvedValue(),
+                setPlatformLogoVisibility: createMockFn().mockResolvedValue(),
+                setNotificationPlatformLogoVisibility: createMockFn().mockResolvedValue()
+            },
+            goalsManager: {
+                processDonationGoal: createMockFn().mockResolvedValue({ success: true }),
+                processPaypiggyGoal: createMockFn().mockResolvedValue({ success: true }),
+                initializeGoalDisplay: createMockFn().mockResolvedValue()
+            }
+        };
+
+        const queue = new DisplayQueue(obsManager, baseConfig, constants, eventBus, runtimeConstants, mockDependencies);
         queue.playGiftVideoAndAudio = createMockFn().mockResolvedValue();
         queue.isTTSEnabled = createMockFn().mockReturnValue(false);
-        queue.sourcesManager = {
-            updateTextSource: createMockFn().mockResolvedValue(),
-            setSourceVisibility: createMockFn().mockResolvedValue()
-        };
 
         return queue;
     }

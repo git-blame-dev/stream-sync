@@ -6,7 +6,7 @@ const { TEST_TIMEOUTS } = require('../../helpers/test-setup');
 const { noOpLogger } = require('../../helpers/mock-factories');
 const { setupAutomatedCleanup } = require('../../helpers/mock-lifecycle');
 const testClock = require('../../helpers/test-clock');
-const { createRuntimeConstantsFixture } = require('../../helpers/runtime-constants-fixture');
+const { createSourcesConfigFixture } = require('../../helpers/runtime-constants-fixture');
 const { createOBSSourcesManager } = require('../../../src/obs/sources');
 
 setupAutomatedCleanup({
@@ -38,7 +38,7 @@ describe('OBS Sources Module Characterization Tests', () => {
 
         sourcesModule = createOBSSourcesManager(mockObsManager, {
             logger: noOpLogger,
-            runtimeConstants: createRuntimeConstantsFixture(),
+            ...createSourcesConfigFixture(),
             ensureOBSConnected: mockEnsureConnected,
             obsCall: mockObsCall,
             utils: {

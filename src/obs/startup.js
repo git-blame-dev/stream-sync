@@ -2,7 +2,7 @@ const { logger: defaultLogger } = require('../core/logging');
 const { getOBSConnectionManager: defaultGetOBSConnectionManager } = require('./connection');
 const { getDefaultSourcesManager: defaultGetDefaultSourcesManager } = require('./sources');
 
-async function clearStartupDisplays(config, runtimeConstants, deps = {}) {
+async function clearStartupDisplays(config, deps = {}) {
     const {
         logger = defaultLogger,
         getOBSConnectionManager = defaultGetOBSConnectionManager,
@@ -10,17 +10,17 @@ async function clearStartupDisplays(config, runtimeConstants, deps = {}) {
     } = deps;
 
     try {
-        if (!runtimeConstants) {
-            logger.warn('clearStartupDisplays requires runtimeConstants; skipping display clearing', 'OBSStartup');
-            return;
-        }
-        if (!config || !config.general || !config.obs) {
-            logger.warn('clearStartupDisplays requires general and obs config; skipping display clearing', 'OBSStartup');
+        if (!config || !config.general || !config.obs || !config.timing) {
+            logger.warn('clearStartupDisplays requires general, obs, and timing config; skipping display clearing', 'OBSStartup');
             return;
         }
 
-        const { hideAllDisplays } = getDefaultSourcesManager({ runtimeConstants });
-        const obsManager = getOBSConnectionManager({ runtimeConstants });
+        const { hideAllDisplays } = getDefaultSourcesManager({
+            chatGroupName: config.general.chatMsgGroup,
+            notificationGroupName: config.obs.notificationMsgGroup,
+            fadeDelay: config.timing.fadeDuration
+        });
+        const obsManager = getOBSConnectionManager();
         if (!obsManager || !obsManager.isConnected()) {
             logger.debug('OBS not connected, skipping display clearing', 'OBSStartup');
             return;
@@ -28,8 +28,8 @@ async function clearStartupDisplays(config, runtimeConstants, deps = {}) {
 
         const chatSceneName = config.general.chatMsgScene;
         const notificationSceneName = config.obs.notificationScene;
-        const chatPlatformLogos = runtimeConstants.CHAT_PLATFORM_LOGOS;
-        const notificationPlatformLogos = runtimeConstants.NOTIFICATION_PLATFORM_LOGOS;
+        const chatPlatformLogos = config.obs.chatPlatformLogos;
+        const notificationPlatformLogos = config.obs.notificationPlatformLogos;
         const ttsSourceName = config.obs.ttsTxt;
         const notificationSourceName = config.obs.notificationTxt;
 

@@ -41,13 +41,24 @@ describe('DisplayQueue - Twitch Bits Goal Calculation', () => {
             }
         };
 
+        const mockSourcesManager = {
+            updateTextSource: createMockFn().mockResolvedValue(),
+            clearTextSource: createMockFn().mockResolvedValue(),
+            setSourceVisibility: createMockFn().mockResolvedValue(),
+            setNotificationDisplayVisibility: createMockFn().mockResolvedValue(),
+            setChatDisplayVisibility: createMockFn().mockResolvedValue(),
+            hideAllDisplays: createMockFn().mockResolvedValue(),
+            setPlatformLogoVisibility: createMockFn().mockResolvedValue(),
+            setNotificationPlatformLogoVisibility: createMockFn().mockResolvedValue()
+        };
+
         displayQueue = new DisplayQueue(
             mockOBSManager,
             mockConfig,
             {},
             null,
             runtimeConstants,
-            { goalsManager: mockGoalsManager }
+            { goalsManager: mockGoalsManager, sourcesManager: mockSourcesManager }
         );
     });
 
