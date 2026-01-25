@@ -15,20 +15,6 @@ const { PRIORITY_LEVELS } = require('../core/constants');
 
 let displayQueueErrorHandler = logger ? createPlatformErrorHandler(logger, 'display-queue') : null;
 
-function resolveRuntimeConstants(runtimeConstants, constants) {
-    if (runtimeConstants) {
-        return runtimeConstants;
-    }
-    if (constants && (
-        constants.CHAT_TRANSITION_DELAY !== undefined ||
-        constants.NOTIFICATION_CLEAR_DELAY !== undefined ||
-        constants.CHAT_MESSAGE_DURATION !== undefined
-    )) {
-        return constants;
-    }
-    return null;
-}
-
 function handleDisplayQueueError(message, error = null, payload = null) {
     if (!displayQueueErrorHandler && logger) {
         displayQueueErrorHandler = createPlatformErrorHandler(logger, 'display-queue');
@@ -56,7 +42,7 @@ function delay(ms) {
 }
 
 class DisplayQueue {
-    constructor(obsManager, config = {}, constants = {}, eventBus = null, runtimeConstants = null, dependencies = {}) {
+    constructor(obsManager, config = {}, constants = {}, eventBus = null, dependencies = {}) {
         if (!obsManager) {
             throw new Error('DisplayQueue requires OBSConnectionManager instance');
         }
@@ -69,10 +55,6 @@ class DisplayQueue {
         this.lastChatItem = null;
         this.obsManager = obsManager;
         this.constants = constants;
-        this.runtimeConstants = resolveRuntimeConstants(runtimeConstants, constants);
-        if (!this.runtimeConstants) {
-            throw new Error('DisplayQueue requires runtimeConstants');
-        }
         this.sourcesManager = dependencies.sourcesManager || getDefaultSourcesManager();
         this.goalsManager = dependencies.goalsManager || getDefaultGoalsManager();
         this.eventBus = eventBus;
@@ -1250,23 +1232,22 @@ class DisplayQueue {
 
 let displayQueueInstance = null;
 
-function createDisplayQueue(obsManager, config = {}, constants = {}, eventBus = null, runtimeConstants = null) {
-    return new DisplayQueue(obsManager, config, constants, eventBus, runtimeConstants);
+function createDisplayQueue(obsManager, config = {}, constants = {}, eventBus = null) {
+    return new DisplayQueue(obsManager, config, constants, eventBus);
 }
 
-function initializeDisplayQueue(obsManager, config = {}, constants = {}, eventBus = null, runtimeConstants = null) {
+function initializeDisplayQueue(obsManager, config = {}, constants = {}, eventBus = null) {
     if (!obsManager) {
         throw new Error('DisplayQueue requires OBSConnectionManager instance');
     }
 
-    // In test environment, always create a new instance to ensure test isolation
     if (process.env.NODE_ENV === 'test') {
-        displayQueueInstance = createDisplayQueue(obsManager, config, constants, eventBus, runtimeConstants);
+        displayQueueInstance = createDisplayQueue(obsManager, config, constants, eventBus);
         return displayQueueInstance;
     }
 
     if (!displayQueueInstance) {
-        displayQueueInstance = createDisplayQueue(obsManager, config, constants, eventBus, runtimeConstants);
+        displayQueueInstance = createDisplayQueue(obsManager, config, constants, eventBus);
         logger.debug('Display Queue system initialized.');
     }
     return displayQueueInstance;

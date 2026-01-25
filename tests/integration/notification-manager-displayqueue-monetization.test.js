@@ -7,7 +7,6 @@ const NotificationManager = require('../../src/notifications/NotificationManager
 const { DisplayQueue } = require('../../src/obs/display-queue');
 const constants = require('../../src/core/constants');
 const { createMockOBSConnection, noOpLogger } = require('../helpers/mock-factories');
-const { createRuntimeConstantsFixture } = require('../helpers/runtime-constants-fixture');
 const { createTextProcessingManager } = require('../../src/utils/text-processing');
 const { PlatformEvents } = require('../../src/interfaces/PlatformEvents');
 
@@ -18,7 +17,6 @@ describe('Monetisation pipeline integration', () => {
     let notificationManager;
     let router;
     let configFlags;
-    let runtimeConstants;
     const fixedTimestamp = '2025-01-01T00:00:00.000Z';
 
     const createEventBus = () => {
@@ -61,8 +59,7 @@ describe('Monetisation pipeline integration', () => {
         mockObs.isReady = createMockFn().mockResolvedValue(true);
         mockObs.call = createMockFn().mockResolvedValue({ success: true });
 
-        runtimeConstants = createRuntimeConstantsFixture();
-        displayQueue = new DisplayQueue(mockObs, config, constants, eventBus, runtimeConstants);
+        displayQueue = new DisplayQueue(mockObs, config, constants, eventBus);
         displayQueue.playGiftVideoAndAudio = createMockFn().mockResolvedValue();
         displayQueue.isTTSEnabled = createMockFn(() => false);
         displayQueue.getDuration = createMockFn(() => 0);

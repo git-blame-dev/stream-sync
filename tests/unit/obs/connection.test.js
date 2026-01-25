@@ -34,12 +34,10 @@ describe('OBS Connection Race Condition - User Experience Validation', () => {
             isTestEnvironment: true,
             testConnectionBehavior: true,
             config: {
-                address: 'ws://localhost:4455',  
+                address: 'ws://localhost:4455',
                 password: 'test123',
-                enabled: true
-            },
-            runtimeConstants: {
-                OBS_CONNECTION_TIMEOUT: 5000
+                enabled: true,
+                connectionTimeoutMs: 5000
             }
         });
     });

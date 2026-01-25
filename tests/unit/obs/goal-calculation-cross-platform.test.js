@@ -53,11 +53,6 @@ describe('Cross-Platform Goal Calculation', () => {
             NOTIFICATION_FADE_DURATION: 1000
         };
 
-        const runtimeConstants = {
-            NOTIFICATION_CLEAR_DELAY: 200,
-            NOTIFICATION_FADE_DURATION: 1000
-        };
-
         const goalTotals = {};
         const mockDependencies = {
             sourcesManager: {
@@ -79,7 +74,7 @@ describe('Cross-Platform Goal Calculation', () => {
             }
         };
 
-        displayQueue = new DisplayQueue(mockOBSManager, mockConfig, mockConstants, null, runtimeConstants, mockDependencies);
+        displayQueue = new DisplayQueue(mockOBSManager, mockConfig, mockConstants, null, mockDependencies);
         displayQueue.__goalTotals = goalTotals;
     });
     

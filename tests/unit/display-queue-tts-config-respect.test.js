@@ -1,7 +1,6 @@
 const { describe, expect, beforeEach, it, afterEach } = require('bun:test');
 const { restoreAllMocks } = require('../helpers/bun-mock-utils');
 const { DisplayQueue } = require('../../src/obs/display-queue');
-const { createRuntimeConstantsFixture } = require('../helpers/runtime-constants-fixture');
 const { createDisplayQueueDependencies } = require('../helpers/display-queue-test-factory');
 
 describe('DisplayQueue TTS Configuration Respect', () => {
@@ -11,14 +10,12 @@ describe('DisplayQueue TTS Configuration Respect', () => {
 
     let mockOBSManager;
     let displayQueue;
-    let runtimeConstants;
     let dependencies;
     const baseConstants = { PRIORITY_LEVELS: { CHAT: 1 } };
 
     beforeEach(() => {
         dependencies = createDisplayQueueDependencies();
         mockOBSManager = dependencies.mockOBS;
-        runtimeConstants = createRuntimeConstantsFixture();
     });
 
     describe('when ttsEnabled is explicitly false', () => {
@@ -37,7 +34,7 @@ describe('DisplayQueue TTS Configuration Respect', () => {
                     ttsTxt: 'tts txt'
                 }
             };
-            displayQueue = new DisplayQueue(mockOBSManager, config, baseConstants, null, runtimeConstants, {
+            displayQueue = new DisplayQueue(mockOBSManager, config, baseConstants, null, {
                 sourcesManager: dependencies.sourcesManager,
                 goalsManager: dependencies.goalsManager
             });
@@ -107,7 +104,7 @@ describe('DisplayQueue TTS Configuration Respect', () => {
                     ttsTxt: 'tts txt'
                 }
             };
-            displayQueue = new DisplayQueue(mockOBSManager, config, baseConstants, null, runtimeConstants, {
+            displayQueue = new DisplayQueue(mockOBSManager, config, baseConstants, null, {
                 sourcesManager: dependencies.sourcesManager,
                 goalsManager: dependencies.goalsManager
             });
@@ -157,7 +154,7 @@ describe('DisplayQueue TTS Configuration Respect', () => {
                     ttsTxt: 'tts txt'
                 }
             };
-            displayQueue = new DisplayQueue(mockOBSManager, config, baseConstants, null, runtimeConstants);
+            displayQueue = new DisplayQueue(mockOBSManager, config, baseConstants, null);
         });
 
         it('should return false for isTTSEnabled() when config is undefined', () => {

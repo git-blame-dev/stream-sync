@@ -306,7 +306,7 @@ function createProductionDependencies(runtimeConstants, overrides = {}) {
     
     return {
         obs: {
-            connectionManager: require('./obs/connection').getOBSConnectionManager({ runtimeConstants }),
+            connectionManager: require('./obs/connection').getOBSConnectionManager({ config: config.obs }),
             sourcesManager: sources.getDefaultSourcesManager(),
             effectsManager: effects.getDefaultEffectsManager()
         },
@@ -1390,7 +1390,7 @@ class AppRuntime {
         if (this.dependencies?.obs?.connectionManager) {
             return this.dependencies.obs.connectionManager;
         }
-        return getOBSConnectionManager({ runtimeConstants: this.runtimeConstants });
+        return getOBSConnectionManager({ config: this.config.obs });
     }
 
     _getDefaultGoalsManager() {
@@ -1498,8 +1498,8 @@ async function main(overrides = {}) {
         logger.debug('EventBus created', 'Main');
 
         logger.debug('About to initialize display queue...', 'Main');
-        const obsManager = getOBSConnectionManager({ runtimeConstants, config: config.obs });
-        const displayQueue = initializeDisplayQueue(obsManager, displayQueueConfig, displayQueueConstants, eventBus, runtimeConstants);
+        const obsManager = getOBSConnectionManager({ config: config.obs });
+        const displayQueue = initializeDisplayQueue(obsManager, displayQueueConfig, displayQueueConstants, eventBus);
         logger.debug('Display queue initialized', 'Main');
         
         logger.debug('Creating ConfigService...', 'Main');
@@ -1520,7 +1520,7 @@ async function main(overrides = {}) {
 
         // Create OBS event-driven services
         logger.debug('Creating OBS event-driven services...', 'Main');
-        const obsConnectionManager = getOBSConnectionManager({ runtimeConstants, config: config.obs });
+        const obsConnectionManager = getOBSConnectionManager({ config: config.obs });
         const obsSources = require('./obs/sources').getDefaultSourcesManager();
 
         const obsEventService = createOBSEventService({

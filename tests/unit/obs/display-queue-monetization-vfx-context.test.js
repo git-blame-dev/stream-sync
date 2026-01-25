@@ -1,6 +1,5 @@
 const { describe, expect, beforeEach, it, afterEach } = require('bun:test');
 const { createMockFn, spyOn, restoreAllMocks } = require('../../helpers/bun-mock-utils');
-const { createRuntimeConstantsFixture } = require('../../helpers/runtime-constants-fixture');
 const { safeDelay, safeSetTimeout } = require('../../../src/utils/timeout-validator');
 
 const { EventEmitter } = require('events');
@@ -22,8 +21,6 @@ describe('DisplayQueue monetization VFX context', () => {
     });
 
     function createQueue(eventBus) {
-        const runtimeConstants = createRuntimeConstantsFixture({});
-
         const obsManager = {
             isReady: createMockFn().mockResolvedValue(true),
             call: createMockFn().mockResolvedValue({ success: true }),
@@ -56,7 +53,7 @@ describe('DisplayQueue monetization VFX context', () => {
             }
         };
 
-        const queue = new DisplayQueue(obsManager, baseConfig, constants, eventBus, runtimeConstants, mockDependencies);
+        const queue = new DisplayQueue(obsManager, baseConfig, constants, eventBus, mockDependencies);
         queue.playGiftVideoAndAudio = createMockFn().mockResolvedValue();
         queue.isTTSEnabled = createMockFn().mockReturnValue(false);
 

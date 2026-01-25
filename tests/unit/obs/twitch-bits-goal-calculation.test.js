@@ -1,7 +1,6 @@
 const { describe, expect, beforeEach, afterEach, it } = require('bun:test');
 const { createMockFn } = require('../../helpers/bun-mock-utils');
 const { waitForDelay } = require('../../helpers/time-utils');
-const { createRuntimeConstantsFixture } = require('../../helpers/runtime-constants-fixture');
 const { DisplayQueue } = require('../../../src/obs/display-queue');
 const EventEmitter = require('events');
 
@@ -10,11 +9,8 @@ describe('DisplayQueue - Twitch Bits Goal Calculation', () => {
     let mockOBSManager;
     let mockConfig;
     let mockGoalsManager;
-    let runtimeConstants;
 
     beforeEach(() => {
-        runtimeConstants = createRuntimeConstantsFixture();
-
         mockOBSManager = new EventEmitter();
         mockOBSManager.call = createMockFn().mockResolvedValue({});
         mockOBSManager.isConnected = createMockFn().mockReturnValue(true);
@@ -57,7 +53,6 @@ describe('DisplayQueue - Twitch Bits Goal Calculation', () => {
             mockConfig,
             {},
             null,
-            runtimeConstants,
             { goalsManager: mockGoalsManager, sourcesManager: mockSourcesManager }
         );
     });

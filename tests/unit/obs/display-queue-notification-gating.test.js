@@ -1,6 +1,5 @@
 const { describe, expect, it, beforeEach, afterEach } = require('bun:test');
 const { createMockFn, restoreAllMocks } = require('../../helpers/bun-mock-utils');
-const { createRuntimeConstantsFixture } = require('../../helpers/runtime-constants-fixture');
 
 const { DisplayQueue } = require('../../../src/obs/display-queue');
 const { EventEmitter } = require('events');
@@ -19,12 +18,6 @@ describe('DisplayQueue platform notification gating', () => {
     });
 
     function createQueue(platformConfig = {}) {
-        const runtimeConstants = createRuntimeConstantsFixture({
-            CHAT_MESSAGE_DURATION: 4500,
-            CHAT_TRANSITION_DELAY: 200,
-            NOTIFICATION_CLEAR_DELAY: 200
-        });
-
         const mockSourcesManager = {
             updateTextSource: createMockFn().mockResolvedValue(),
             clearTextSource: createMockFn().mockResolvedValue(),
@@ -64,7 +57,6 @@ describe('DisplayQueue platform notification gating', () => {
             config,
             { PRIORITY_LEVELS: { CHAT: 1, FOLLOW: 2 } },
             new EventEmitter(),
-            runtimeConstants,
             { sourcesManager: mockSourcesManager, goalsManager: mockGoalsManager }
         );
 

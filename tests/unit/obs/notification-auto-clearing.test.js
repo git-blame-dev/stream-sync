@@ -4,7 +4,7 @@ const { createMockFn, spyOn, restoreAllMocks } = require('../../helpers/bun-mock
 
 const { createMockOBSManager, noOpLogger } = require('../../helpers/mock-factories');
 const { setupAutomatedCleanup } = require('../../helpers/mock-lifecycle');
-const { createRuntimeConstantsFixture, createSourcesConfigFixture } = require('../../helpers/runtime-constants-fixture');
+const { createSourcesConfigFixture } = require('../../helpers/runtime-constants-fixture');
 const { createOBSSourcesManager } = require('../../../src/obs/sources');
 
 setupAutomatedCleanup({
@@ -23,7 +23,6 @@ describe('Notification Auto-Clearing Behavior', () => {
     let displayQueue;
     let mockObsManager;
     let mockConstants;
-    let runtimeConstants;
 
     beforeEach(() => {
         mockObsManager = createMockOBSManager('connected');
@@ -46,7 +45,6 @@ describe('Notification Auto-Clearing Behavior', () => {
                 GIFTPAYPIGGY: 3
             }
         };
-        runtimeConstants = createRuntimeConstantsFixture(mockConstants);
 
         const mockConfig = {
             autoProcess: false,
@@ -89,7 +87,7 @@ describe('Notification Auto-Clearing Behavior', () => {
             initializeGoalDisplay: createMockFn().mockResolvedValue()
         };
 
-        displayQueue = new DisplayQueue(mockObsManager, mockConfig, mockConstants, null, runtimeConstants, {
+        displayQueue = new DisplayQueue(mockObsManager, mockConfig, mockConstants, null, {
             sourcesManager: realSourcesManager,
             goalsManager: mockGoalsManager
         });

@@ -3,7 +3,7 @@ const { describe, expect, afterEach, it } = require('bun:test');
 const { createMockFn, clearAllMocks, restoreAllMocks } = require('../../helpers/bun-mock-utils');
 
 const { setupAutomatedCleanup } = require('../../helpers/mock-lifecycle');
-const { createRuntimeConstantsFixture, createSourcesConfigFixture } = require('../../helpers/runtime-constants-fixture');
+const { createSourcesConfigFixture } = require('../../helpers/runtime-constants-fixture');
 const { noOpLogger } = require('../../helpers/mock-factories');
 const { createOBSSourcesManager } = require('../../../src/obs/sources');
 
@@ -23,7 +23,6 @@ describe('TTS Configuration Boolean Parsing', () => {
 
     describe('when ttsEnabled is configured with different values', () => {
         const createDisplayQueueWithTTS = (ttsValue) => {
-            const runtimeConstants = createRuntimeConstantsFixture();
             const baseConstants = { PRIORITY_LEVELS: { CHAT: 1 } };
             const config = {
                 ttsEnabled: ttsValue,
@@ -53,7 +52,7 @@ describe('TTS Configuration Boolean Parsing', () => {
                 initializeGoalDisplay: createMockFn().mockResolvedValue()
             };
 
-            return new DisplayQueue(mockOBS, config, baseConstants, null, runtimeConstants, {
+            return new DisplayQueue(mockOBS, config, baseConstants, null, {
                 sourcesManager: realSourcesManager,
                 goalsManager: mockGoalsManager
             });
