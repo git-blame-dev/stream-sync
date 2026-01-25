@@ -2,14 +2,14 @@ const { describe, it, beforeEach, afterEach, expect } = require('bun:test');
 const { createMockFn, clearAllMocks, restoreAllMocks, spyOn } = require('../../helpers/bun-mock-utils');
 const { noOpLogger } = require('../../helpers/mock-factories');
 const CommandCooldownService = require('../../../src/services/CommandCooldownService');
-const { createRuntimeConstantsFixture } = require('../../helpers/runtime-constants-fixture');
+const { createConfigFixture } = require('../../helpers/config-fixture');
 const testClock = require('../../helpers/test-clock');
 
 describe('CommandCooldownService', () => {
     let service;
     let mockEventBus;
     let eventSubscriptions;
-    let runtimeConstants;
+    let testConfig;
     let dateNowSpy;
 
     beforeEach(() => {
@@ -26,11 +26,11 @@ describe('CommandCooldownService', () => {
             })
         };
 
-        runtimeConstants = createRuntimeConstantsFixture();
+        testConfig = createConfigFixture();
         service = new CommandCooldownService({
             eventBus: mockEventBus,
             logger: noOpLogger,
-            runtimeConstants
+            config: testConfig
         });
     });
 
@@ -235,7 +235,7 @@ describe('CommandCooldownService', () => {
                 eventBus: mockEventBus,
                 logger: noOpLogger,
                 configService: mockConfigService,
-                runtimeConstants
+                config: testConfig
             });
 
             expect(service.getStatus().config.defaultCooldown).toBe(30000);

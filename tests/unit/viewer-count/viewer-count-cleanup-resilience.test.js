@@ -18,7 +18,7 @@ describe('ViewerCountSystem cleanup resilience', () => {
         const system = new ViewerCountSystem({
             logger: noOpLogger,
             platforms: { youtube: platform },
-            runtimeConstants: { VIEWER_COUNT_POLLING_INTERVAL_SECONDS: 15 }
+            config: { general: { viewerCountPollingIntervalMs: 15000 } }
         });
 
         system.addObserver({
@@ -35,7 +35,7 @@ describe('ViewerCountSystem cleanup resilience', () => {
         const system = new ViewerCountSystem({
             logger: noOpLogger,
             platforms: { youtube: platform },
-            runtimeConstants: { VIEWER_COUNT_POLLING_INTERVAL_SECONDS: 15 }
+            config: { general: { viewerCountPollingIntervalMs: 15000 } }
         });
 
         system.addObserver({

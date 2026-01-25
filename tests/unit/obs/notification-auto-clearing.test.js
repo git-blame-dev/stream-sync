@@ -4,7 +4,7 @@ const { createMockFn, spyOn, restoreAllMocks } = require('../../helpers/bun-mock
 
 const { createMockOBSManager, noOpLogger } = require('../../helpers/mock-factories');
 const { setupAutomatedCleanup } = require('../../helpers/mock-lifecycle');
-const { createSourcesConfigFixture } = require('../../helpers/runtime-constants-fixture');
+const { createSourcesConfigFixture } = require('../../helpers/config-fixture');
 const { createOBSSourcesManager } = require('../../../src/obs/sources');
 
 setupAutomatedCleanup({

@@ -8,13 +8,13 @@ const { createPlatformErrorHandler } = require('../utils/platform-error-handler'
 const { sanitizeForDisplay } = require('../utils/validation');
 
 class ChatNotificationRouter {
-    constructor({ runtime, logger, runtimeConstants }) {
+    constructor({ runtime, logger, config }) {
         this.runtime = runtime;
         this.logger = logger;
-        this.runtimeConstants = runtimeConstants;
-        if (!this.runtimeConstants) {
-            throw new Error('ChatNotificationRouter requires runtimeConstants');
+        if (!config) {
+            throw new Error('ChatNotificationRouter requires config');
         }
+        this.maxMessageLength = config.general.maxMessageLength;
         this.errorHandler = createPlatformErrorHandler(this.logger, 'chat-router');
     }
 
@@ -381,7 +381,7 @@ class ChatNotificationRouter {
         const safeMessage = typeof rawMessage === 'string' ? rawMessage : '';
         const withoutZeroWidth = safeMessage.replace(/[\u200B-\u200D\uFEFF]/g, ' ');
         const messageWithSpacing = withoutZeroWidth.replace(/<[^>]+>/g, ' ');
-        const sanitized = sanitizeForDisplay(messageWithSpacing, this.runtimeConstants.MAX_MESSAGE_LENGTH);
+        const sanitized = sanitizeForDisplay(messageWithSpacing, this.maxMessageLength);
 
         return {
             hasContent: sanitized.trim().length > 0,

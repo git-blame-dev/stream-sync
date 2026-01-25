@@ -18,7 +18,7 @@ describe('ViewerCountSystem observer error handling', () => {
         const system = new ViewerCountSystem({
             logger: noOpLogger,
             platforms: { youtube: platform },
-            runtimeConstants: { VIEWER_COUNT_POLLING_INTERVAL_SECONDS: 15 }
+            config: { general: { viewerCountPollingIntervalMs: 15000 } }
         });
 
         system.streamStatus.youtube = true;

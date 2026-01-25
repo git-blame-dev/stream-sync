@@ -6,7 +6,7 @@ const { TEST_TIMEOUTS } = require('../../helpers/test-setup');
 const { noOpLogger } = require('../../helpers/mock-factories');
 const { setupAutomatedCleanup } = require('../../helpers/mock-lifecycle');
 const testClock = require('../../helpers/test-clock');
-const { createSourcesConfigFixture } = require('../../helpers/runtime-constants-fixture');
+const { createSourcesConfigFixture } = require('../../helpers/config-fixture');
 const { createOBSSourcesManager } = require('../../../src/obs/sources');
 
 setupAutomatedCleanup({

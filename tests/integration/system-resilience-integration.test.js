@@ -10,13 +10,12 @@ const { OBSViewerCountObserver } = require('../../src/observers/obs-viewer-count
 const { createMockOBSManager, createMockConfig } = require('../helpers/mock-factories');
 const { expectNoTechnicalArtifacts } = require('../helpers/behavior-validation');
 const { createSilentLogger } = require('../helpers/test-logger');
-const { createRuntimeConstantsFixture } = require('../helpers/runtime-constants-fixture');
+const { createConfigFixture } = require('../helpers/config-fixture');
 
 describe('System Resilience and Error Recovery Integration', () => {
     let platforms, obsManager, viewerCountSystem;
 
     beforeEach(async () => {
-        InnertubeInstanceManager.setRuntimeConstants(createRuntimeConstantsFixture());
         platforms = {
             youtube: {
                 getViewerCount: createMockFn().mockResolvedValue(1000),
@@ -27,7 +26,7 @@ describe('System Resilience and Error Recovery Integration', () => {
         obsManager = createMockOBSManager();
         viewerCountSystem = new ViewerCountSystem({
             platforms,
-            runtimeConstants: createRuntimeConstantsFixture()
+            config: createConfigFixture()
         });
 
         const obsObserver = new OBSViewerCountObserver(obsManager, createSilentLogger());
@@ -122,9 +121,7 @@ describe('System Resilience and Error Recovery Integration', () => {
 
     describe('Configuration Error Handling', () => {
         test('should handle invalid polling configuration gracefully', async () => {
-            viewerCountSystem.runtimeConstants = createRuntimeConstantsFixture({
-                VIEWER_COUNT_POLLING_INTERVAL_SECONDS: 0
-            });
+            viewerCountSystem.pollingIntervalMs = 0;
 
             viewerCountSystem.startPolling();
 

@@ -3,31 +3,17 @@ const { validateTimeout, safeSetInterval } = require('../utils/timeout-validator
 const { logger } = require('../core/logging');
 const { createPlatformErrorHandler } = require('../utils/platform-error-handler');
 
+const INNERTUBE_INSTANCE_TTL = 300000;
+const INNERTUBE_MIN_TTL = 60000;
+
 const innertubeManagerErrorHandler = createPlatformErrorHandler(logger, 'innertube-manager');
 
-let defaultRuntimeConstants = null;
 let defaultInnertubeImporter = null;
 
-function resolveRuntimeConstants(runtimeConstants) {
-    const resolved = runtimeConstants
-        || defaultRuntimeConstants;
-    if (!resolved || !resolved.PLATFORM_TIMEOUTS) {
-        throw new Error('InnertubeInstanceManager requires runtimeConstants.PLATFORM_TIMEOUTS');
-    }
-    return resolved;
-}
-
-function resolveInstanceTimeout(explicitTimeout, runtimeConstants) {
-    const { PLATFORM_TIMEOUTS } = runtimeConstants;
-    const candidate = explicitTimeout ?? PLATFORM_TIMEOUTS.INNERTUBE_INSTANCE_TTL;
-
-    const validatedTimeout = validateTimeout(
-        candidate,
-        PLATFORM_TIMEOUTS.INNERTUBE_MIN_TTL,
-        'innertube-instance-timeout'
-    );
-
-    return Math.max(validatedTimeout, PLATFORM_TIMEOUTS.INNERTUBE_MIN_TTL);
+function resolveInstanceTimeout(explicitTimeout) {
+    const candidate = explicitTimeout ?? INNERTUBE_INSTANCE_TTL;
+    const validatedTimeout = validateTimeout(candidate, INNERTUBE_MIN_TTL, 'innertube-instance-timeout');
+    return Math.max(validatedTimeout, INNERTUBE_MIN_TTL);
 }
 
 function handleInnertubeManagerError(message, error, eventType = 'innertube') {
@@ -40,10 +26,9 @@ function handleInnertubeManagerError(message, error, eventType = 'innertube') {
 
 class InnertubeInstanceManager {
     constructor(options = {}) {
-        this.runtimeConstants = resolveRuntimeConstants(options.runtimeConstants);
-        this.activeInstances = new Map(); // key: identifier, value: instance + metadata
-        this.maxInstances = 2; // Limit concurrent instances
-        this.instanceTimeout = resolveInstanceTimeout(options.instanceTimeout, this.runtimeConstants);
+        this.activeInstances = new Map();
+        this.maxInstances = 2;
+        this.instanceTimeout = resolveInstanceTimeout(options.instanceTimeout);
         this.cleanupInterval = null;
         this.disposed = false;
         this.innertubeImporter = options.innertubeImporter
@@ -246,10 +231,6 @@ class InnertubeInstanceManager {
 let instance = null;
 
 module.exports = {
-    setRuntimeConstants(runtimeConstants) {
-        defaultRuntimeConstants = runtimeConstants;
-    },
-
     setInnertubeImporter(importer) {
         if (importer && typeof importer !== 'function') {
             throw new Error('Innertube importer must be a function');
@@ -261,11 +242,9 @@ module.exports = {
     },
 
     getInstance(options = {}) {
-        const resolvedRuntimeConstants = resolveRuntimeConstants(options.runtimeConstants);
         if (!instance) {
             instance = new InnertubeInstanceManager({
                 ...options,
-                runtimeConstants: resolvedRuntimeConstants,
                 innertubeImporter: options.innertubeImporter || defaultInnertubeImporter
             });
         }

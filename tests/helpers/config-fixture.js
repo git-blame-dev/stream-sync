@@ -62,7 +62,28 @@ function createSourcesConfigFixture(overrides = {}) {
     };
 }
 
+function createConfigFixture(overrides = {}) {
+    const { general: generalOverrides, cooldowns: cooldownsOverrides, ...restOverrides } = overrides;
+    return {
+        general: {
+            maxMessageLength: 500,
+            viewerCountPollingIntervalMs: 30000,
+            ...(generalOverrides || {})
+        },
+        cooldowns: {
+            defaultCooldownMs: 60000,
+            heavyCommandCooldownMs: 300000,
+            heavyCommandThreshold: 4,
+            heavyCommandWindowMs: 360000,
+            maxEntries: 1000,
+            ...(cooldownsOverrides || {})
+        },
+        ...restOverrides
+    };
+}
+
 module.exports = {
     createRuntimeConstantsFixture,
-    createSourcesConfigFixture
+    createSourcesConfigFixture,
+    createConfigFixture
 };

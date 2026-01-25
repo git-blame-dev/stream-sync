@@ -122,7 +122,6 @@ const { configManager, config } = configModule;
 configManager.load();
 const runtimeConstants = createRuntimeConstants(configManager.getRaw());
 const innertubeInstanceManager = require('./services/innertube-instance-manager');
-innertubeInstanceManager.setRuntimeConstants(runtimeConstants);
 
 const loggingInitWarnings = [];
 
@@ -491,11 +490,10 @@ class AppRuntime {
         this.obsEventService = this.dependencies.obsEventService;
         this.sceneManagementService = this.dependencies.sceneManagementService;
 
-        // Initialize viewer count system with injected platform provider
         this.viewerCountSystem = new ViewerCountSystem({
             platformProvider: () => this.getPlatforms(),
             logger,
-            runtimeConstants: this.runtimeConstants
+            config: this.config
         });
         this.viewerCountSystemStarted = false; // Track early initialization
         
@@ -572,7 +570,7 @@ class AppRuntime {
         this.chatNotificationRouter = new ChatNotificationRouter({
             runtime: this,
             logger,
-            runtimeConstants: this.runtimeConstants
+            config: this.config
         });
         
         // Register event handlers for event-driven architecture
@@ -1600,7 +1598,7 @@ async function main(overrides = {}) {
             eventBus,
             configService,
             logger,
-            runtimeConstants
+            config
         });
 
         const platformLifecycleService = new PlatformLifecycleService({

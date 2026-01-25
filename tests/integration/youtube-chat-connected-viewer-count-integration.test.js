@@ -3,7 +3,7 @@ const { describe, test, beforeEach, afterEach, expect } = require('bun:test');
 const { createMockFn, restoreAllMocks } = require('../helpers/bun-mock-utils');
 const wireStreamStatusHandlers = require('../../src/viewer-count/stream-status-handler');
 const { ViewerCountSystem } = require('../../src/utils/viewer-count');
-const { createRuntimeConstantsFixture } = require('../helpers/runtime-constants-fixture');
+const { createConfigFixture } = require('../helpers/config-fixture');
 
 const createEventBus = () => {
     const listeners = new Map();
@@ -46,7 +46,7 @@ describe('YouTube stream-status viewer count integration (smoke)', () => {
         eventBus = createEventBus();
         viewerCountSystem = new ViewerCountSystem({
             platformProvider: () => platforms,
-            runtimeConstants: createRuntimeConstantsFixture()
+            config: createConfigFixture()
         });
 
         await viewerCountSystem.initialize();

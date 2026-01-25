@@ -5,7 +5,7 @@ const { useFakeTimers, useRealTimers } = require('../../helpers/bun-timers');
 
 const { ViewerCountSystem } = require('../../../src/utils/viewer-count');
 const { OBSViewerCountObserver } = require('../../../src/observers/obs-viewer-count-observer');
-const { createRuntimeConstantsFixture } = require('../../helpers/runtime-constants-fixture');
+const { createConfigFixture } = require('../../helpers/config-fixture');
 
 const {
     createMockOBSManager,
@@ -96,7 +96,7 @@ const createEdgeCaseTestEnvironment = (config = {}) => {
     
     const system = new ViewerCountSystem({
         platformProvider: () => mockPlatforms,
-        runtimeConstants: createRuntimeConstantsFixture()
+        config: createConfigFixture()
     });
     
     return { system, mockPlatforms, mockConfigManager };

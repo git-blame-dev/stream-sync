@@ -36,10 +36,10 @@ class ViewerCountSystem {
         validateLoggerInterface(resolvedLogger);
         this.logger = resolvedLogger;
         this.platformProvider = this._createPlatformProvider(dependencies);
-        this.runtimeConstants = dependencies.runtimeConstants;
-        if (!this.runtimeConstants) {
-            throw new Error('ViewerCountSystem requires runtimeConstants');
+        if (!dependencies.config) {
+            throw new Error('ViewerCountSystem requires config');
         }
+        this.pollingIntervalMs = dependencies.config.general.viewerCountPollingIntervalMs;
         this.timeProvider = resolveTimeProvider(dependencies.timeProvider);
         this.isPolling = false;
         this.pollingInterval = null;
@@ -318,8 +318,8 @@ class ViewerCountSystem {
             return;
         }
 
-        const pollingIntervalSeconds = this.runtimeConstants.VIEWER_COUNT_POLLING_INTERVAL_SECONDS;
-        this.pollingInterval = pollingIntervalSeconds * VIEWER_COUNT_CONSTANTS.MS_PER_SECOND;
+        this.pollingInterval = this.pollingIntervalMs;
+        const pollingIntervalSeconds = this.pollingInterval / VIEWER_COUNT_CONSTANTS.MS_PER_SECOND;
         this.logger.debug(`Polling interval configured: ${pollingIntervalSeconds}s (${this.pollingInterval}ms)`, VIEWER_COUNT_CONSTANTS.LOG_CONTEXT.VIEWER_COUNT);
 
         if (this.pollingInterval <= 0) {

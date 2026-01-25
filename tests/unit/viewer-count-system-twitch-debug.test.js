@@ -1,19 +1,19 @@
 const { describe, test, expect, beforeEach, afterEach } = require('bun:test');
 const { createMockFn, spyOn, restoreAllMocks } = require('../helpers/bun-mock-utils');
-const { createRuntimeConstantsFixture } = require('../helpers/runtime-constants-fixture');
+const { createConfigFixture } = require('../helpers/config-fixture');
 const { noOpLogger } = require('../helpers/mock-factories');
 
 describe('Twitch Viewer Count System Debug', () => {
     let ViewerCountSystem;
     let mockTwitchPlatform;
     let mockPlatforms;
-    let runtimeConstants;
+    let testConfig;
 
     beforeEach(() => {
         ({ ViewerCountSystem } = require('../../src/utils/viewer-count'));
 
-        runtimeConstants = createRuntimeConstantsFixture({
-            VIEWER_COUNT_POLLING_INTERVAL_SECONDS: 30
+        testConfig = createConfigFixture({
+            general: { viewerCountPollingIntervalMs: 30000 }
         });
 
         mockTwitchPlatform = {
@@ -32,7 +32,7 @@ describe('Twitch Viewer Count System Debug', () => {
     });
 
     const createViewerSystem = () => {
-        return new ViewerCountSystem({ platforms: mockPlatforms, logger: noOpLogger, runtimeConstants });
+        return new ViewerCountSystem({ platforms: mockPlatforms, logger: noOpLogger, config: testConfig });
     };
 
     test('initializes with Twitch set to always live', () => {

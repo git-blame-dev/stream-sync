@@ -1,6 +1,6 @@
 const { describe, expect, it, afterEach, beforeEach } = require('bun:test');
 const { createMockFn, spyOn, restoreAllMocks } = require('../helpers/bun-mock-utils');
-const { createRuntimeConstantsFixture } = require('../helpers/runtime-constants-fixture');
+const { createRuntimeConstantsFixture } = require('../helpers/config-fixture');
 
 describe('main.js event handler wiring', () => {
     let processOnSpy;

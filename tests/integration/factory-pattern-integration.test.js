@@ -3,12 +3,10 @@ const { InnertubeFactory } = require('../../src/factories/innertube-factory');
 const InnertubeInstanceManager = require('../../src/services/innertube-instance-manager');
 const testClock = require('../helpers/test-clock');
 const { clearAllMocks, restoreAllMocks } = require('../helpers/bun-mock-utils');
-const { createRuntimeConstantsFixture } = require('../helpers/runtime-constants-fixture');
 
 describe('Factory Pattern Integration', () => {
     beforeEach(async () => {
         testClock.reset();
-        InnertubeInstanceManager.setRuntimeConstants(createRuntimeConstantsFixture());
         await InnertubeInstanceManager.cleanup();
         InnertubeInstanceManager._resetInstance();
     });

@@ -7,7 +7,7 @@ const {
     noOpLogger
 } = require('./mock-factories');
 const testClock = require('./test-clock');
-const { createRuntimeConstantsFixture } = require('./runtime-constants-fixture');
+const { createRuntimeConstantsFixture } = require('./config-fixture');
 
 const createEventBusStub = () => {
     const emitter = new EventEmitter();

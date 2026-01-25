@@ -7,7 +7,7 @@ const { createMockOBSManager } = require('../helpers/mock-factories');
 const { expectNoTechnicalArtifacts } = require('../helpers/behavior-validation');
 const { createSilentLogger } = require('../helpers/test-logger');
 const testClock = require('../helpers/test-clock');
-const { createRuntimeConstantsFixture } = require('../helpers/runtime-constants-fixture');
+const { createConfigFixture } = require('../helpers/config-fixture');
 
 const createTimeProvider = () => ({
     now: () => testClock.now(),
@@ -18,11 +18,11 @@ describe('Observer Pattern Integration', () => {
     let viewerCountSystem;
     let platforms;
     let logger;
-    let runtimeConstants;
+    let testConfig;
 
     beforeEach(async () => {
         testClock.reset();
-        runtimeConstants = createRuntimeConstantsFixture();
+        testConfig = createConfigFixture();
         logger = createSilentLogger();
         platforms = {
             youtube: {
@@ -39,7 +39,7 @@ describe('Observer Pattern Integration', () => {
             platforms,
             logger,
             timeProvider: createTimeProvider(),
-            runtimeConstants
+            config: testConfig
         });
         await viewerCountSystem.initialize();
     });

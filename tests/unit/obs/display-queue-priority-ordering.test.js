@@ -7,7 +7,7 @@ initializeTestLogging();
 
 const { DisplayQueue } = require('../../../src/obs/display-queue');
 const { createMockOBSManager, noOpLogger } = require('../../helpers/mock-factories');
-const { createSourcesConfigFixture } = require('../../helpers/runtime-constants-fixture');
+const { createSourcesConfigFixture } = require('../../helpers/config-fixture');
 const { createOBSSourcesManager } = require('../../../src/obs/sources');
 
 describe('DisplayQueue priority ordering', () => {

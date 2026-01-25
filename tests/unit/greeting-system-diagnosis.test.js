@@ -1,7 +1,7 @@
 const { describe, test, expect, afterEach } = require('bun:test');
 const { createMockFn, restoreAllMocks } = require('../helpers/bun-mock-utils');
 const { noOpLogger } = require('../helpers/mock-factories');
-const { createRuntimeConstantsFixture } = require('../helpers/runtime-constants-fixture');
+const { createConfigFixture } = require('../helpers/config-fixture');
 const ChatNotificationRouter = require('../../src/services/ChatNotificationRouter');
 
 describe('Greeting System Diagnosis', () => {
@@ -22,7 +22,7 @@ describe('Greeting System Diagnosis', () => {
         return new ChatNotificationRouter({
             runtime,
             logger,
-            runtimeConstants: createRuntimeConstantsFixture()
+            config: createConfigFixture()
         });
     };
 
