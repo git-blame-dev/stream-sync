@@ -30,21 +30,43 @@ const DEFAULTS = {
         streamMaxRetries: -1,
         continuousMonitoringInterval: 60,
         envFileReadEnabled: true,
-        envFileWriteEnabled: true
+        envFileWriteEnabled: true,
+        viewerCountScene: 'viewer-count-scene',
+        chatMsgTxt: 'chat-message-text',
+        chatMsgScene: 'chat-message-scene',
+        chatMsgGroup: 'chat-message-group',
+        fallbackUsername: 'Unknown User',
+        anonymousUsername: 'Anonymous User',
+        envFilePath: './.env',
+        maxMessageLength: 500
+    },
+
+    http: {
+        defaultTimeoutMs: 10000,
+        reachabilityTimeoutMs: 5000,
+        enhancedTimeoutMs: 3000,
+        enhancedReachabilityTimeoutMs: 3000
     },
 
     youtube: {
+        enabled: false,
+        viewerCountEnabled: true,
         retryAttempts: 3,
         maxStreams: 2,
         streamPollingInterval: 60,
         fullCheckInterval: 300000,
-        dataLoggingEnabled: false
+        dataLoggingEnabled: false,
+        enableAPI: false,
+        streamDetectionMethod: 'youtubei',
+        viewerCountMethod: 'youtubei'
     },
 
     twitch: {
         enabled: false,
+        viewerCountEnabled: true,
         eventsubEnabled: true,
-        dataLoggingEnabled: false
+        dataLoggingEnabled: false,
+        tokenStorePath: './data/twitch-tokens.json'
     },
 
     tiktok: {
@@ -101,14 +123,22 @@ const DEFAULTS = {
         enableDebug: false,
         enableConsole: true,
         enableFile: false,
-        maxFileSize: 10485760
+        maxFileSize: 10485760,
+        platformDataLoggingEnabled: false,
+        streamelementsDataLoggingEnabled: false
     },
 
     timing: {
         fadeDuration: 750,
         notificationClearDelay: 500,
         transitionDelay: 200,
-        chatMessageDuration: 4500
+        chatMessageDuration: 4500,
+        defaultNotificationDuration: 3000,
+        greetingDuration: 3000,
+        followDuration: 3000,
+        giftDuration: 3000,
+        memberDuration: 3000,
+        raidDuration: 3000
     },
 
     handcam: {
@@ -117,9 +147,9 @@ const DEFAULTS = {
         sceneName: 'handcam-scene',
         glowFilterName: 'Glow',
         maxSize: 50,
-        rampUpDuration: 500,
-        holdDuration: 6000,
-        rampDownDuration: 500,
+        rampUpDuration: 0.5,
+        holdDuration: 6.0,
+        rampDownDuration: 0.5,
         totalSteps: 30,
         incrementPercent: 3.33,
         easingEnabled: true,
@@ -135,7 +165,63 @@ const DEFAULTS = {
     },
 
     obs: {
-        connectionTimeoutMs: 10000
+        enabled: false,
+        connectionTimeoutMs: 10000,
+        address: 'ws://localhost:4455',
+        notificationTxt: 'notification-text',
+        chatMsgTxt: 'chat-message-text',
+        notificationScene: 'notification-scene',
+        notificationMsgGroup: 'notification-group',
+        ttsTxt: 'tts-text',
+        ttsScene: 'tts-scene'
+    },
+
+    goals: {
+        enabled: false,
+        goalScene: 'goals-scene',
+        tiktokGoalEnabled: true,
+        tiktokGoalTarget: 1000,
+        tiktokGoalCurrency: 'coins',
+        tiktokPaypiggyEquivalent: 50,
+        youtubeGoalEnabled: true,
+        youtubeGoalTarget: 1.00,
+        youtubeGoalCurrency: 'dollars',
+        youtubePaypiggyPrice: 4.99,
+        twitchGoalEnabled: true,
+        twitchGoalTarget: 100,
+        twitchGoalCurrency: 'bits',
+        twitchPaypiggyEquivalent: 350
+    },
+
+    gifts: {
+        giftVideoSource: 'gift-video',
+        giftAudioSource: 'gift-audio',
+        giftScene: 'gift-scene',
+        lowValueThreshold: 10,
+        spamDetectionEnabled: true,
+        spamDetectionWindow: 5,
+        maxIndividualNotifications: 2
+    },
+
+    tts: {
+        deduplicationEnabled: true,
+        debugDeduplication: false,
+        onlyForGifts: false,
+        voice: 'default',
+        rate: 1.0,
+        volume: 1.0,
+        twitchDeduplicationEnabled: true,
+        youtubeDeduplicationEnabled: true,
+        tiktokDeduplicationEnabled: true,
+        performanceWarningThreshold: 50
+    },
+
+    farewell: {
+        enabled: false
+    },
+
+    commands: {
+        enabled: false
     }
 };
 
