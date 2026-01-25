@@ -11,7 +11,6 @@ const innertubeInstanceManager = require('../services/innertube-instance-manager
 const { ViewerCountProviderFactory } = require('../utils/viewer-count-providers');
 
 const { normalizeYouTubeConfig } = require('../utils/config-normalizer');
-const { DEFAULTS } = require('../core/config-defaults');
 const { YouTubeConnectionManager } = require('../utils/youtube-connection-manager');
 const { createPlatformErrorHandler } = require('../utils/platform-error-handler');
 const { getSystemTimestampISO } = require('../utils/validation');

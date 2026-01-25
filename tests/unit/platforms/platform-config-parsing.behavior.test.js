@@ -1,5 +1,6 @@
 const { describe, test, expect } = require('bun:test');
 const { noOpLogger } = require('../../helpers/mock-factories');
+const { createStreamElementsConfigFixture } = require('../../helpers/config-fixture');
 
 const TwitchEventSub = require('../../../src/platforms/twitch-eventsub');
 const { StreamElementsPlatform } = require('../../../src/platforms/streamelements');
@@ -13,9 +14,9 @@ describe('platform config parsing behavior', () => {
         close() {}
     }
 
-    test('TwitchEventSub parses dataLoggingEnabled string values', () => {
+    test('TwitchEventSub stores normalized config values', () => {
         const eventSub = new TwitchEventSub(
-            { dataLoggingEnabled: 'true', broadcasterId: 'test-broadcaster-id' },
+            { dataLoggingEnabled: true, broadcasterId: 'test-broadcaster-id', dataLoggingPath: './logs' },
             { logger: noOpLogger, WebSocketCtor: MockWebSocket }
         );
 
@@ -29,9 +30,9 @@ describe('platform config parsing behavior', () => {
         }
     });
 
-    test('StreamElementsPlatform parses enabled and dataLoggingEnabled string values', () => {
+    test('StreamElementsPlatform stores normalized config values', () => {
         const platform = new StreamElementsPlatform(
-            { enabled: 'true', dataLoggingEnabled: 'false' },
+            createStreamElementsConfigFixture({ enabled: true, dataLoggingEnabled: false }),
             { logger: noOpLogger }
         );
 
@@ -39,21 +40,21 @@ describe('platform config parsing behavior', () => {
         expect(platform.config.dataLoggingEnabled).toBe(false);
     });
 
-    test('StreamElementsPlatform trims blank secrets and channel IDs', () => {
+    test('StreamElementsPlatform uses provided channel IDs and paths', () => {
         const platform = new StreamElementsPlatform(
-            {
+            createStreamElementsConfigFixture({
                 enabled: true,
-                jwtToken: '   ',
-                youtubeChannelId: ' ',
-                twitchChannelId: '\n',
-                dataLoggingPath: '   '
-            },
+                jwtToken: 'test-jwt-token',
+                youtubeChannelId: 'test-youtube-channel',
+                twitchChannelId: 'test-twitch-channel',
+                dataLoggingPath: './custom-logs'
+            }),
             { logger: noOpLogger }
         );
 
-        expect(platform.config.jwtToken).toBeUndefined();
-        expect(platform.config.youtubeChannelId).toBeUndefined();
-        expect(platform.config.twitchChannelId).toBeUndefined();
-        expect(platform.config.dataLoggingPath).toBe('./logs');
+        expect(platform.config.jwtToken).toBe('test-jwt-token');
+        expect(platform.config.youtubeChannelId).toBe('test-youtube-channel');
+        expect(platform.config.twitchChannelId).toBe('test-twitch-channel');
+        expect(platform.config.dataLoggingPath).toBe('./custom-logs');
     });
 });

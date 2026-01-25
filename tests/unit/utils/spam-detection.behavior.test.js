@@ -20,29 +20,17 @@ describe('SpamDetection behavior', () => {
         useRealTimers();
     });
 
-    it('gracefully allows when platform spam detection disabled', () => {
+    it('gracefully allows when spam detection disabled', () => {
         const config = createSpamDetectionConfig({
             spamDetectionEnabled: false,
-            platforms: { tiktok: { spamDetectionEnabled: false } }
+            lowValueThreshold: 10,
+            spamDetectionWindow: 5,
+            maxIndividualNotifications: 2
         });
         detection = createDonationSpamDetection(config, { logger: noOpLogger, autoCleanup: false });
 
         const result = detection.handleDonationSpam('u', 'User', 1, 'Rose', 1, 'tiktok');
         expect(result.shouldShow).toBe(true);
-    });
-
-    it('uses safe defaults for malformed config', () => {
-        const config = createSpamDetectionConfig({
-            spamDetectionEnabled: 'not-bool',
-            lowValueThreshold: 'abc',
-            spamDetectionWindow: -5,
-            maxIndividualNotifications: 'bad',
-            platforms: { tiktok: { spamDetectionEnabled: 'nope' } }
-        });
-
-        expect(config.spamDetectionEnabled).toBe(true);
-        expect(config.lowValueThreshold).toBeGreaterThan(0);
-        expect(config.getPlatformConfig('tiktok').enabled).toBe(true);
     });
 
     it('suppresses notifications after threshold and resets after window', () => {
@@ -74,34 +62,22 @@ describe('SpamDetection behavior', () => {
         expect(result.shouldShow).toBe(true);
     });
 
-    it('uses platform overrides and skips disabled platforms', () => {
+    it('allows youtube donations and suppresses tiktok after threshold', () => {
         const config = createSpamDetectionConfig({
             spamDetectionEnabled: true,
-            maxIndividualNotifications: 1,
-            platforms: { youtube: { spamDetectionEnabled: false }, tiktok: { maxIndividualNotifications: 1 } }
+            lowValueThreshold: 10,
+            spamDetectionWindow: 5,
+            maxIndividualNotifications: 1
         });
         detection = createDonationSpamDetection(config, { logger: noOpLogger, autoCleanup: false });
 
-        const ytResult = detection.handleDonationSpam('yt', 'YTUser', 1, 'Rose', 1, 'youtube');
+        const ytResult = detection.handleDonationSpam('yt', 'YTUser', 0.50, 'Super Chat', 1, 'youtube');
         const tkFirst = detection.handleDonationSpam('tk', 'TKUser', 1, 'Rose', 1, 'tiktok');
         const tkSecond = detection.handleDonationSpam('tk', 'TKUser', 1, 'Rose', 1, 'tiktok');
 
         expect(ytResult.shouldShow).toBe(true);
         expect(tkFirst.shouldShow).toBe(true);
         expect(tkSecond.shouldShow).toBe(false);
-    });
-
-    it('parses string thresholds and windows into numeric config', () => {
-        const config = createSpamDetectionConfig({
-            spamDetectionEnabled: 'true',
-            lowValueThreshold: '15',
-            spamDetectionWindow: '6',
-            maxIndividualNotifications: '3'
-        });
-
-        expect(config.lowValueThreshold).toBe(15);
-        expect(config.spamDetectionWindow).toBe(6);
-        expect(config.maxIndividualNotifications).toBe(3);
     });
 
     it('falls back to global config for unknown platform lookups', () => {

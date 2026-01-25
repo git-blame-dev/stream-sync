@@ -2,13 +2,13 @@
 const fs = require('fs').promises;
 const path = require('path');
 const { createPlatformErrorHandler } = require('../utils/platform-error-handler');
-const { DEFAULTS } = require('../core/config-defaults');
 
 class ChatFileLoggingService {
     constructor(dependencies = {}) {
         this.logger = dependencies.logger || require('../core/logging').logger;
         this.errorHandler = createPlatformErrorHandler(this.logger, 'chat-file-logging');
         this.config = dependencies.config || {};
+        this.dataLoggingPath = this.config.dataLoggingPath;
     }
 
     async logRawPlatformData(platform, eventType, data, platformConfig = {}) {
@@ -27,9 +27,9 @@ class ChatFileLoggingService {
             };
 
             const logFileName = `${platform}-data-log.ndjson`;
-            const logFilePath = path.join(DEFAULTS.LOG_DIRECTORY, logFileName);
+            const logFilePath = path.join(this.dataLoggingPath, logFileName);
 
-            await this.ensureDirectoryExists(DEFAULTS.LOG_DIRECTORY);
+            await this.ensureDirectoryExists(this.dataLoggingPath);
 
             const logLine = JSON.stringify(logEntry) + '\n';
             await fs.appendFile(logFilePath, logLine, 'utf8');
@@ -57,7 +57,7 @@ class ChatFileLoggingService {
     async getLogStatistics(platform, platformConfig = {}) {
         try {
             const logFileName = `${platform}-data-log.ndjson`;
-            const logFilePath = path.join(DEFAULTS.LOG_DIRECTORY, logFileName);
+            const logFilePath = path.join(this.dataLoggingPath, logFileName);
 
             const stats = await fs.stat(logFilePath);
             return {

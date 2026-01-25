@@ -36,35 +36,14 @@ describe('Spam Detection', () => {
             }
         };
 
-        // Create test configuration using SpamDetectionConfig class
         const configObj = {
             lowValueThreshold: 10,
             spamDetectionEnabled: true,
             spamDetectionWindow: 5,
-            maxIndividualNotifications: 2,
-            platforms: {
-                tiktok: {
-                    spamDetectionEnabled: true,
-                    lowValueThreshold: 5,
-                    spamDetectionWindow: 3,
-                    maxIndividualNotifications: 1
-                },
-                twitch: {
-                    spamDetectionEnabled: true,
-                    lowValueThreshold: 10,
-                    spamDetectionWindow: 5,
-                    maxIndividualNotifications: 2
-                },
-                youtube: {
-                    spamDetectionEnabled: false,
-                    lowValueThreshold: 1.00,
-                    spamDetectionWindow: 5,
-                    maxIndividualNotifications: 2
-                }
-            }
+            maxIndividualNotifications: 2
         };
 
-        config = new SpamDetectionConfig(configObj, { logger: mockLogger, constants: mockConstants });
+        config = new SpamDetectionConfig(configObj);
     });
 
     afterEach(() => {
@@ -72,12 +51,14 @@ describe('Spam Detection', () => {
     });
 
     describe('when initializing spam detection configuration', () => {
-        it('should create configuration with default values', () => {
-            const defaultConfig = {};
-            const spamConfig = createSpamDetectionConfig(defaultConfig, {
-                logger: mockLogger,
-                constants: mockConstants
-            });
+        it('should store normalized config values', () => {
+            const normalizedConfig = {
+                lowValueThreshold: 10,
+                spamDetectionEnabled: true,
+                spamDetectionWindow: 5,
+                maxIndividualNotifications: 2
+            };
+            const spamConfig = createSpamDetectionConfig(normalizedConfig);
 
             expect(spamConfig.lowValueThreshold).toBe(10);
             expect(spamConfig.spamDetectionEnabled).toBe(true);
@@ -92,10 +73,7 @@ describe('Spam Detection', () => {
                 spamDetectionWindow: 10,
                 maxIndividualNotifications: 5
             };
-            const spamConfig = createSpamDetectionConfig(customConfig, {
-                logger: mockLogger,
-                constants: mockConstants
-            });
+            const spamConfig = createSpamDetectionConfig(customConfig);
 
             expect(spamConfig.lowValueThreshold).toBe(20);
             expect(spamConfig.spamDetectionEnabled).toBe(false);
@@ -105,50 +83,11 @@ describe('Spam Detection', () => {
 
         it('should initialize platform-specific configurations', () => {
             expect(config.platformConfigs.tiktok.enabled).toBe(true);
-            expect(config.platformConfigs.tiktok.lowValueThreshold).toBe(5);
+            expect(config.platformConfigs.tiktok.lowValueThreshold).toBe(10);
+            expect(config.platformConfigs.twitch.enabled).toBe(true);
+            expect(config.platformConfigs.twitch.lowValueThreshold).toBe(10);
             expect(config.platformConfigs.youtube.enabled).toBe(false);
             expect(config.platformConfigs.youtube.lowValueThreshold).toBe(1.00);
-        });
-
-        it('should validate configuration values', () => {
-            const invalidConfig = {
-                lowValueThreshold: -5,
-                spamDetectionWindow: 0,
-                maxIndividualNotifications: -1
-            };
-            const spamConfig = createSpamDetectionConfig(invalidConfig, {
-                logger: mockLogger,
-                constants: mockConstants
-            });
-
-            expect(spamConfig.lowValueThreshold).toBe(10);
-            expect(spamConfig.spamDetectionWindow).toBe(5);
-            expect(spamConfig.maxIndividualNotifications).toBe(2);
-        });
-
-        it('should parse string booleans and numbers with safe fallbacks', () => {
-            const stringConfig = {
-                spamDetectionEnabled: 'false',
-                lowValueThreshold: '20',
-                spamDetectionWindow: 'not-a-number',
-                platforms: {
-                    tiktok: { spamDetectionEnabled: 'false', lowValueThreshold: '5' },
-                    youtube: { spamDetectionEnabled: 'true', lowValueThreshold: 'invalid' }
-                }
-            };
-
-            const spamConfig = createSpamDetectionConfig(stringConfig, {
-                logger: mockLogger,
-                constants: mockConstants
-            });
-
-            expect(spamConfig.spamDetectionEnabled).toBe(false);
-            expect(spamConfig.lowValueThreshold).toBe(20);
-            expect(spamConfig.spamDetectionWindow).toBe(5);
-            expect(spamConfig.platformConfigs.tiktok.enabled).toBe(false);
-            expect(spamConfig.platformConfigs.tiktok.lowValueThreshold).toBe(5);
-            expect(spamConfig.platformConfigs.youtube.enabled).toBe(true);
-            expect(spamConfig.platformConfigs.youtube.lowValueThreshold).toBe(1.00);
         });
     });
 
@@ -171,14 +110,14 @@ describe('Spam Detection', () => {
                 constants: mockConstants
             });
 
-            expect(detection.isLowValueDonation(3, 'tiktok')).toBe(true);
-            expect(detection.isLowValueDonation(7, 'tiktok')).toBe(false);
+            expect(detection.isLowValueDonation(5, 'tiktok')).toBe(true);
+            expect(detection.isLowValueDonation(15, 'tiktok')).toBe(false);
 
             expect(detection.isLowValueDonation(8, 'twitch')).toBe(true);
             expect(detection.isLowValueDonation(12, 'twitch')).toBe(false);
 
             expect(detection.isLowValueDonation(0.50, 'youtube')).toBe(false);
-            expect(detection.isLowValueDonation(1.50, 'youtube')).toBe(false);
+            expect(detection.isLowValueDonation(2.00, 'youtube')).toBe(false);
         });
 
         it('should handle unknown platforms with default threshold', () => {
@@ -227,6 +166,7 @@ describe('Spam Detection', () => {
         });
 
         it('should aggregate multiple low-value donations from same user', () => {
+            detection.handleDonationSpam('user1', 'User1', 5, 'Rose', 1, 'tiktok');
             detection.handleDonationSpam('user1', 'User1', 5, 'Rose', 1, 'tiktok');
 
             const result = detection.handleDonationSpam('user1', 'User1', 3, 'Rose', 1, 'tiktok');

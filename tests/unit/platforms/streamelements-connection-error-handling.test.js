@@ -1,6 +1,7 @@
 const { describe, it, expect, afterEach } = require('bun:test');
 const { restoreAllMocks } = require('../../helpers/bun-mock-utils');
 const { noOpLogger } = require('../../helpers/mock-factories');
+const { createStreamElementsConfigFixture } = require('../../helpers/config-fixture');
 const { StreamElementsPlatform } = require('../../../src/platforms/streamelements');
 
 afterEach(() => {
@@ -10,7 +11,7 @@ afterEach(() => {
 describe('StreamElementsPlatform connection error handling', () => {
     it('routes connection errors through error handler and retry handler', () => {
 
-        const platform = new StreamElementsPlatform({ enabled: true }, { logger: noOpLogger });
+        const platform = new StreamElementsPlatform(createStreamElementsConfigFixture({ enabled: true }), { logger: noOpLogger });
         const errorHandlerCalls = [];
         const errorHandler = { handleConnectionError: (...args) => errorHandlerCalls.push(args) };
         platform.errorHandler = errorHandler;
