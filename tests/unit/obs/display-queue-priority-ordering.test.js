@@ -6,7 +6,9 @@ const { initializeTestLogging } = require('../../helpers/test-setup');
 initializeTestLogging();
 
 const { DisplayQueue } = require('../../../src/obs/display-queue');
-const { createMockOBSManager } = require('../../helpers/mock-factories');
+const { createMockOBSManager, noOpLogger } = require('../../helpers/mock-factories');
+const { createSourcesConfigFixture } = require('../../helpers/runtime-constants-fixture');
+const { createOBSSourcesManager } = require('../../../src/obs/sources');
 
 describe('DisplayQueue priority ordering', () => {
     afterEach(() => {
@@ -31,7 +33,25 @@ describe('DisplayQueue priority ordering', () => {
     };
 
     const createQueue = () => {
-        const queue = new DisplayQueue(createMockOBSManager('connected'), config, constants, null, constants);
+        const mockOBS = createMockOBSManager('connected');
+
+        const realSourcesManager = createOBSSourcesManager(mockOBS, {
+            ...createSourcesConfigFixture(),
+            logger: noOpLogger,
+            ensureOBSConnected: createMockFn().mockResolvedValue(),
+            obsCall: mockOBS.call
+        });
+
+        const mockGoalsManager = {
+            processDonationGoal: createMockFn().mockResolvedValue({ success: true }),
+            processPaypiggyGoal: createMockFn().mockResolvedValue({ success: true }),
+            initializeGoalDisplay: createMockFn().mockResolvedValue()
+        };
+
+        const queue = new DisplayQueue(mockOBS, config, constants, null, constants, {
+            sourcesManager: realSourcesManager,
+            goalsManager: mockGoalsManager
+        });
         queue.getDuration = createMockFn().mockReturnValue(0);
         return queue;
     };

@@ -26,11 +26,15 @@ function createOBSSourcesManager(obsManager, dependencies = {}) {
         dependencies.connection?.obsCall ||
         obsManager.call?.bind(obsManager);
     const getOBSConnectionManager = dependencies.connection?.getOBSConnectionManager || (() => obsManager);
-    const runtimeConstants = dependencies.runtimeConstants;
-    if (!runtimeConstants) {
-        throw new Error('OBSSourcesManager requires runtimeConstants');
+
+    const chatGroupName = dependencies.chatGroupName;
+    const notificationGroupName = dependencies.notificationGroupName;
+    const fadeDelay = dependencies.fadeDelay;
+
+    if (!chatGroupName || !notificationGroupName || fadeDelay === undefined) {
+        throw new Error('OBSSourcesManager requires chatGroupName, notificationGroupName, and fadeDelay');
     }
-    const { STATUSBAR_GROUP_NAME, STATUSBAR_NOTIFICATION_GROUP_NAME, NOTIFICATION_CONFIG } = runtimeConstants;
+
     const utils = dependencies.utils || {};
     const delay = utils.delay || ((ms) => safeDelay(ms, ms || 500, 'OBS sources delay'));
     const sanitizeDisplayName = utils.sanitizeDisplayName || require('../utils/validation').sanitizeDisplayName;
@@ -325,12 +329,12 @@ function createOBSSourcesManager(obsManager, dependencies = {}) {
         const isVisible = platform.toLowerCase() === activePlatform.toLowerCase();
         
         try {
-            await setGroupSourceVisibility(logoSource, STATUSBAR_GROUP_NAME, isVisible);
+            await setGroupSourceVisibility(logoSource, chatGroupName, isVisible);
         } catch (error) {
             handleSourcesError(
-                `[Platform Logo] Failed to set ${platform} logo visibility in ${STATUSBAR_GROUP_NAME}: ${error.message}`,
+                `[Platform Logo] Failed to set ${platform} logo visibility in ${chatGroupName}: ${error.message}`,
                 error,
-                { platform, groupName: STATUSBAR_GROUP_NAME, context: 'OBS' }
+                { platform, groupName: chatGroupName, context: 'OBS' }
             );
         }
     }
@@ -342,12 +346,12 @@ function createOBSSourcesManager(obsManager, dependencies = {}) {
         const isVisible = platform.toLowerCase() === activePlatform.toLowerCase();
         
         try {
-            await setGroupSourceVisibility(logoSource, STATUSBAR_NOTIFICATION_GROUP_NAME, isVisible);
+            await setGroupSourceVisibility(logoSource, notificationGroupName, isVisible);
         } catch (error) {
             handleSourcesError(
-                `[Notification Logo] Failed to set ${platform} logo visibility in ${STATUSBAR_NOTIFICATION_GROUP_NAME}: ${error.message}`,
+                `[Notification Logo] Failed to set ${platform} logo visibility in ${notificationGroupName}: ${error.message}`,
                 error,
-                { platform, groupName: STATUSBAR_NOTIFICATION_GROUP_NAME, context: 'OBS' }
+                { platform, groupName: notificationGroupName, context: 'OBS' }
             );
         }
     }
@@ -361,14 +365,14 @@ function createOBSSourcesManager(obsManager, dependencies = {}) {
     
     
     for (const platform in platformLogos) {
-        await setGroupSourceVisibility(platformLogos[platform], STATUSBAR_GROUP_NAME, false);
+        await setGroupSourceVisibility(platformLogos[platform], chatGroupName, false);
     }
     }
 
     async function hideAllNotificationPlatformLogos(platformLogos) {
-        
+
         for (const platform in platformLogos) {
-            await setGroupSourceVisibility(platformLogos[platform], STATUSBAR_NOTIFICATION_GROUP_NAME, false);
+            await setGroupSourceVisibility(platformLogos[platform], notificationGroupName, false);
         }
     }
 
@@ -382,17 +386,14 @@ function createOBSSourcesManager(obsManager, dependencies = {}) {
         // Chat display visibility - reduced verbosity
         
         try {
-            if (STATUSBAR_GROUP_NAME) {
+            if (chatGroupName) {
                 if (visible) {
-                    // Show the entire statusbar group
                     logger.debug(`[Chat Display] Showing statusbar group`, 'obs-sources');
-                    await setSourceVisibility(sceneName, STATUSBAR_GROUP_NAME, true);
+                    await setSourceVisibility(sceneName, chatGroupName, true);
                 } else {
-                    // Hide the entire statusbar group 
-                    await setSourceVisibility(sceneName, STATUSBAR_GROUP_NAME, false);
-                    
-                    // Wait for the group hide transition to complete before hiding individual logos
-                    await delayFunction(NOTIFICATION_CONFIG.fadeDelay);
+                    await setSourceVisibility(sceneName, chatGroupName, false);
+
+                    await delayFunction(fadeDelay);
                     
                     // Hide all platform logos within the group for cleanup
                     await hideAllPlatformLogos(platformLogos);
@@ -415,17 +416,14 @@ function createOBSSourcesManager(obsManager, dependencies = {}) {
         // Notification display visibility - reduced verbosity
         
         try {
-            if (STATUSBAR_NOTIFICATION_GROUP_NAME) {
+            if (notificationGroupName) {
                 if (visible) {
-                    // Show the entire notification statusbar group
                     logger.debug(`[Notification Display] Showing notification statusbar group`, 'obs-sources');
-                    await setSourceVisibility(sceneName, STATUSBAR_NOTIFICATION_GROUP_NAME, true);
+                    await setSourceVisibility(sceneName, notificationGroupName, true);
                 } else {
-                    // Hide the entire notification statusbar group
-                    await setSourceVisibility(sceneName, STATUSBAR_NOTIFICATION_GROUP_NAME, false);
-                    
-                    // Wait for the group hide transition to complete before hiding individual logos
-                    await delayFunction(NOTIFICATION_CONFIG.fadeDelay);
+                    await setSourceVisibility(sceneName, notificationGroupName, false);
+
+                    await delayFunction(fadeDelay);
                     
                     // Hide all platform logos within the group for cleanup
                     await hideAllNotificationPlatformLogos(platformLogos);
@@ -608,10 +606,12 @@ function getDefaultSourcesManager(dependencies = {}) {
     if (!defaultInstance) {
         const { logger } = require('../core/logging');
         const { ensureOBSConnected, obsCall, getOBSConnectionManager } = require('./connection');
-        const { runtimeConstants } = dependencies;
-        if (!runtimeConstants) {
-            throw new Error('getDefaultSourcesManager requires runtimeConstants');
+        const { chatGroupName, notificationGroupName, fadeDelay } = dependencies;
+
+        if (!chatGroupName || !notificationGroupName || fadeDelay === undefined) {
+            throw new Error('getDefaultSourcesManager requires chatGroupName, notificationGroupName, and fadeDelay');
         }
+
         let obsManager;
         let isDegraded = false;
         try {
@@ -639,7 +639,9 @@ function getDefaultSourcesManager(dependencies = {}) {
 
         defaultInstance = createOBSSourcesManager(obsManager, {
             logger,
-            runtimeConstants,
+            chatGroupName,
+            notificationGroupName,
+            fadeDelay,
             ensureOBSConnected,
             obsCall
         });

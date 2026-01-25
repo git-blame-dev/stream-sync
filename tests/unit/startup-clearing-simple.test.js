@@ -8,7 +8,6 @@ describe('OBS Startup Display Clearing - Regression Tests', () => {
     let hideAllDisplays;
     let clearTextSource;
     let mockConfig;
-    let testRuntimeConstants;
     let deps;
 
     beforeEach(() => {
@@ -23,25 +22,27 @@ describe('OBS Startup Display Clearing - Regression Tests', () => {
         mockConfig = {
             general: {
                 chatMsgScene: 'stream pkmn switch',
-                chatMsgTxt: 'notification streamlabs'
+                chatMsgTxt: 'notification streamlabs',
+                chatMsgGroup: 'test-chat-group'
             },
             obs: {
                 notificationScene: 'stream pkmn switch',
                 notificationTxt: 'notification streamlabs',
-                ttsTxt: 'tts txt'
-            }
-        };
-
-        testRuntimeConstants = {
-            CHAT_PLATFORM_LOGOS: {
-                twitch: 'twitch-img',
-                youtube: 'youtube-img',
-                tiktok: 'tiktok-img'
+                ttsTxt: 'tts txt',
+                notificationMsgGroup: 'test-notification-group',
+                chatPlatformLogos: {
+                    twitch: 'twitch-img',
+                    youtube: 'youtube-img',
+                    tiktok: 'tiktok-img'
+                },
+                notificationPlatformLogos: {
+                    twitch: 'twitch-img',
+                    youtube: 'youtube-img',
+                    tiktok: 'tiktok-img'
+                }
             },
-            NOTIFICATION_PLATFORM_LOGOS: {
-                twitch: 'twitch-img',
-                youtube: 'youtube-img',
-                tiktok: 'tiktok-img'
+            timing: {
+                fadeDuration: 750
             }
         };
 
@@ -54,20 +55,20 @@ describe('OBS Startup Display Clearing - Regression Tests', () => {
 
     describe('Core Clearing Behavior', () => {
         it('should call hideAllDisplays with correct parameters from config', async () => {
-            await clearStartupDisplays(mockConfig, testRuntimeConstants, deps);
+            await clearStartupDisplays(mockConfig, deps);
 
             expect(hideAllDisplays).toHaveBeenCalledWith(
                 'stream pkmn switch',
                 'stream pkmn switch',
-                testRuntimeConstants.CHAT_PLATFORM_LOGOS,
-                testRuntimeConstants.NOTIFICATION_PLATFORM_LOGOS,
+                mockConfig.obs.chatPlatformLogos,
+                mockConfig.obs.notificationPlatformLogos,
                 'tts txt',
                 'notification streamlabs'
             );
         });
 
         it('should not clear text sources directly', async () => {
-            await clearStartupDisplays(mockConfig, testRuntimeConstants, deps);
+            await clearStartupDisplays(mockConfig, deps);
 
             expect(clearTextSource).not.toHaveBeenCalled();
         });
@@ -75,7 +76,7 @@ describe('OBS Startup Display Clearing - Regression Tests', () => {
         it('should skip clearing when OBS is not connected', async () => {
             mockOBSManager.isConnected = createMockFn(() => false);
 
-            await clearStartupDisplays(mockConfig, testRuntimeConstants, deps);
+            await clearStartupDisplays(mockConfig, deps);
 
             expect(hideAllDisplays).not.toHaveBeenCalled();
             expect(clearTextSource).not.toHaveBeenCalled();
@@ -87,7 +88,7 @@ describe('OBS Startup Display Clearing - Regression Tests', () => {
                 obs: {}
             };
 
-            await clearStartupDisplays(incompleteConfig, testRuntimeConstants, deps);
+            await clearStartupDisplays(incompleteConfig, deps);
 
             expect(hideAllDisplays).not.toHaveBeenCalled();
         });
@@ -97,7 +98,7 @@ describe('OBS Startup Display Clearing - Regression Tests', () => {
                 throw new Error('Source not found');
             });
 
-            await clearStartupDisplays(mockConfig, testRuntimeConstants, deps);
+            await clearStartupDisplays(mockConfig, deps);
 
             expect(hideAllDisplays).toHaveBeenCalled();
             expect(clearTextSource).not.toHaveBeenCalled();
@@ -108,16 +109,23 @@ describe('OBS Startup Display Clearing - Regression Tests', () => {
         it('should use custom source names from config', async () => {
             const customConfig = {
                 general: {
-                    chatMsgScene: 'custom chat scene'
+                    chatMsgScene: 'custom chat scene',
+                    chatMsgGroup: 'custom-chat-group'
                 },
                 obs: {
                     notificationScene: 'custom notification scene',
                     ttsTxt: 'custom tts source',
-                    notificationTxt: 'custom notification source'
+                    notificationTxt: 'custom notification source',
+                    notificationMsgGroup: 'custom-notification-group',
+                    chatPlatformLogos: { twitch: 'custom-twitch' },
+                    notificationPlatformLogos: { twitch: 'custom-twitch' }
+                },
+                timing: {
+                    fadeDuration: 500
                 }
             };
 
-            await clearStartupDisplays(customConfig, testRuntimeConstants, deps);
+            await clearStartupDisplays(customConfig, deps);
 
             expect(hideAllDisplays).toHaveBeenCalledWith(
                 'custom chat scene',
@@ -134,7 +142,7 @@ describe('OBS Startup Display Clearing - Regression Tests', () => {
         it('should not throw errors when hideAllDisplays fails', async () => {
             hideAllDisplays.mockRejectedValue(new Error('OBS connection lost'));
 
-            await expect(clearStartupDisplays(mockConfig, testRuntimeConstants, deps)).resolves.toBeUndefined();
+            await expect(clearStartupDisplays(mockConfig, deps)).resolves.toBeUndefined();
         });
 
         it('should continue when OBS manager is null', async () => {
@@ -143,7 +151,7 @@ describe('OBS Startup Display Clearing - Regression Tests', () => {
                 getOBSConnectionManager: () => null
             };
 
-            await expect(clearStartupDisplays(mockConfig, testRuntimeConstants, nullManagerDeps)).resolves.toBeUndefined();
+            await expect(clearStartupDisplays(mockConfig, nullManagerDeps)).resolves.toBeUndefined();
         });
     });
 });

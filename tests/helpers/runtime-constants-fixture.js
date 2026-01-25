@@ -53,6 +53,16 @@ function createRuntimeConstantsFixture(overrides = {}) {
     };
 }
 
+function createSourcesConfigFixture(overrides = {}) {
+    return {
+        chatGroupName: 'statusbar chat grp',
+        notificationGroupName: 'statusbar notification grp',
+        fadeDelay: 750,
+        ...overrides
+    };
+}
+
 module.exports = {
-    createRuntimeConstantsFixture
+    createRuntimeConstantsFixture,
+    createSourcesConfigFixture
 };

@@ -22,16 +22,14 @@ function buildGoalsManager(obsManager, dependencies = {}) {
     const { logger } = dependencies.logger ? { logger: dependencies.logger } : require('../core/logging');
     const configManager = dependencies.configManager || require('../core/config').configManager;
     const config = dependencies.config || require('../core/config').config;
-    const runtimeConstants = dependencies.runtimeConstants;
+
     const updateTextSource = dependencies.updateTextSource || (() => {
-        if (!runtimeConstants) {
-            throw new Error('OBSGoalsManager requires runtimeConstants when updateTextSource is not provided');
-        }
-        return require('./sources').getDefaultSourcesManager({ runtimeConstants }).updateTextSource;
+        return require('./sources').getDefaultSourcesManager({
+            chatGroupName: config.general.chatMsgGroup,
+            notificationGroupName: config.obs.notificationMsgGroup,
+            fadeDelay: config.timing.fadeDuration
+        }).updateTextSource;
     })();
-    if (!runtimeConstants) {
-        throw new Error('OBSGoalsManager requires runtimeConstants');
-    }
     const { createGoalTracker } = require('../utils/goal-tracker');
     const goalTracker = dependencies.goalTracker || createGoalTracker({ logger, config });
     const initializeGoalTracker = goalTracker.initializeGoalTracker.bind(goalTracker);
@@ -400,24 +398,23 @@ function getDefaultGoalsManager(dependencies = {}) {
         const { configManager, config } = require('../core/config');
         const { getDefaultSourcesManager } = require('./sources');
         const { createGoalTracker } = require('../utils/goal-tracker');
-        const { runtimeConstants } = dependencies;
-        if (!runtimeConstants) {
-            throw new Error('getDefaultGoalsManager requires runtimeConstants');
-        }
 
-        const obsManager = dependencies.obsManager || getOBSConnectionManager({ runtimeConstants }) || {
+        const obsManager = dependencies.obsManager || getOBSConnectionManager() || {
             isConnected: () => false
         };
 
-        const sourcesManager = dependencies.sourcesManager || getDefaultSourcesManager({ runtimeConstants });
+        const sourcesManager = dependencies.sourcesManager || getDefaultSourcesManager({
+            chatGroupName: config.general.chatMsgGroup,
+            notificationGroupName: config.obs.notificationMsgGroup,
+            fadeDelay: config.timing.fadeDuration
+        });
 
         defaultInstance = buildGoalsManager(obsManager, {
             logger,
             config,
             configManager,
             updateTextSource: sourcesManager.updateTextSource,
-            goalTracker: createGoalTracker({ logger, config }),
-            runtimeConstants
+            goalTracker: createGoalTracker({ logger, config })
         });
     }
     return defaultInstance;

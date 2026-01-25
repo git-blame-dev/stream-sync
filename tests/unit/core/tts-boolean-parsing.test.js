@@ -3,7 +3,9 @@ const { describe, expect, afterEach, it } = require('bun:test');
 const { createMockFn, clearAllMocks, restoreAllMocks } = require('../../helpers/bun-mock-utils');
 
 const { setupAutomatedCleanup } = require('../../helpers/mock-lifecycle');
-const { createRuntimeConstantsFixture } = require('../../helpers/runtime-constants-fixture');
+const { createRuntimeConstantsFixture, createSourcesConfigFixture } = require('../../helpers/runtime-constants-fixture');
+const { noOpLogger } = require('../../helpers/mock-factories');
+const { createOBSSourcesManager } = require('../../../src/obs/sources');
 
 setupAutomatedCleanup({
     clearCallsBeforeEach: true,
@@ -18,7 +20,7 @@ describe('TTS Configuration Boolean Parsing', () => {
         restoreAllMocks();
         clearAllMocks();
     });
-    
+
     describe('when ttsEnabled is configured with different values', () => {
         const createDisplayQueueWithTTS = (ttsValue) => {
             const runtimeConstants = createRuntimeConstantsFixture();
@@ -31,13 +33,30 @@ describe('TTS Configuration Boolean Parsing', () => {
                 chat: {},
                 notification: {}
             };
-            
+
             const mockOBS = {
                 isConnected: () => true,
+                call: createMockFn().mockResolvedValue({}),
                 updateTextSource: createMockFn().mockResolvedValue(true)
             };
-            
-            return new DisplayQueue(mockOBS, config, baseConstants, null, runtimeConstants);
+
+            const realSourcesManager = createOBSSourcesManager(mockOBS, {
+                ...createSourcesConfigFixture(),
+                logger: noOpLogger,
+                ensureOBSConnected: createMockFn().mockResolvedValue(),
+                obsCall: mockOBS.call
+            });
+
+            const mockGoalsManager = {
+                processDonationGoal: createMockFn().mockResolvedValue({ success: true }),
+                processPaypiggyGoal: createMockFn().mockResolvedValue({ success: true }),
+                initializeGoalDisplay: createMockFn().mockResolvedValue()
+            };
+
+            return new DisplayQueue(mockOBS, config, baseConstants, null, runtimeConstants, {
+                sourcesManager: realSourcesManager,
+                goalsManager: mockGoalsManager
+            });
         };
         
         describe('when ttsEnabled is string "false"', () => {

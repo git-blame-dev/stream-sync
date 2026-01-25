@@ -5,14 +5,14 @@ const { createOBSSourcesManager } = require('../../../src/obs/sources');
 
 describe('obs/sources behavior', () => {
     let mockLogger;
-    let runtimeConstants;
+    let sourcesConfig;
 
     beforeEach(() => {
         mockLogger = noOpLogger;
-        runtimeConstants = {
-            STATUSBAR_GROUP_NAME: 'TestStatusGroup',
-            STATUSBAR_NOTIFICATION_GROUP_NAME: 'TestNotifyGroup',
-            NOTIFICATION_CONFIG: { fadeDelay: 10 }
+        sourcesConfig = {
+            chatGroupName: 'TestStatusGroup',
+            notificationGroupName: 'TestNotifyGroup',
+            fadeDelay: 10
         };
     });
 
@@ -23,7 +23,7 @@ describe('obs/sources behavior', () => {
             isReady: createMockFn().mockResolvedValue(true)
         };
 
-        const sources = createOBSSourcesManager(obsManager, { logger: mockLogger, runtimeConstants });
+        const sources = createOBSSourcesManager(obsManager, { logger: mockLogger, ...sourcesConfig });
 
         await sources.updateTextSource('TestChatText', 'Hello 🌟');
 
@@ -40,7 +40,7 @@ describe('obs/sources behavior', () => {
 
         const sources = createOBSSourcesManager(
             { isReady: createMockFn().mockResolvedValue(true) },
-            { logger: mockLogger, runtimeConstants, ensureOBSConnected: createMockFn(), obsCall }
+            { logger: mockLogger, ...sourcesConfig, ensureOBSConnected: createMockFn(), obsCall }
         );
 
         const firstLookup = await sources.getGroupSceneItemId('TestLogo', 'TestLogos');
@@ -54,7 +54,7 @@ describe('obs/sources behavior', () => {
         const obsCall = createMockFn().mockResolvedValue({ sceneItems: [] });
         const sources = createOBSSourcesManager(
             { isReady: createMockFn().mockResolvedValue(true) },
-            { logger: mockLogger, runtimeConstants, ensureOBSConnected: createMockFn(), obsCall }
+            { logger: mockLogger, ...sourcesConfig, ensureOBSConnected: createMockFn(), obsCall }
         );
 
         await expect(sources.getGroupSceneItemId('TestMissing', 'TestGroup')).rejects.toThrow(/TestMissing/);

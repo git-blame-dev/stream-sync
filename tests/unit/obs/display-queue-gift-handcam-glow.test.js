@@ -54,6 +54,12 @@ describe('DisplayQueue gift effects handcam glow', () => {
             isConnected: () => true
         };
 
+        const mockGoalsManager = {
+            processDonationGoal: createMockFn().mockResolvedValue({ success: true }),
+            processPaypiggyGoal: createMockFn().mockResolvedValue({ success: true }),
+            initializeGoalDisplay: createMockFn().mockResolvedValue()
+        };
+
         const queue = new DisplayQueue(
             obsManager,
             {
@@ -65,11 +71,11 @@ describe('DisplayQueue gift effects handcam glow', () => {
             },
             { PRIORITY_LEVELS: { CHAT: 1, GIFT: 5 } },
             new EventEmitter(),
-            runtimeConstants
+            runtimeConstants,
+            { sourcesManager: mockSourcesManager, goalsManager: mockGoalsManager }
         );
 
-        queue.sourcesManager = mockSourcesManager;
-        return { queue, mockSourcesManager, obsManager };
+        return { queue, mockSourcesManager, mockGoalsManager, obsManager };
     }
 
     it('processes gift notification effects without errors when handcam enabled', async () => {

@@ -1,7 +1,8 @@
 const { describe, expect, beforeEach, it, afterEach } = require('bun:test');
-const { createMockFn, restoreAllMocks } = require('../helpers/bun-mock-utils');
+const { restoreAllMocks } = require('../helpers/bun-mock-utils');
 const { DisplayQueue } = require('../../src/obs/display-queue');
 const { createRuntimeConstantsFixture } = require('../helpers/runtime-constants-fixture');
+const { createDisplayQueueDependencies } = require('../helpers/display-queue-test-factory');
 
 describe('DisplayQueue TTS Configuration Respect', () => {
     afterEach(() => {
@@ -11,13 +12,12 @@ describe('DisplayQueue TTS Configuration Respect', () => {
     let mockOBSManager;
     let displayQueue;
     let runtimeConstants;
+    let dependencies;
     const baseConstants = { PRIORITY_LEVELS: { CHAT: 1 } };
 
     beforeEach(() => {
-        mockOBSManager = {
-            isReady: createMockFn().mockResolvedValue(true),
-            call: createMockFn().mockResolvedValue({ inputSettings: {} })
-        };
+        dependencies = createDisplayQueueDependencies();
+        mockOBSManager = dependencies.mockOBS;
         runtimeConstants = createRuntimeConstantsFixture();
     });
 
@@ -37,7 +37,10 @@ describe('DisplayQueue TTS Configuration Respect', () => {
                     ttsTxt: 'tts txt'
                 }
             };
-            displayQueue = new DisplayQueue(mockOBSManager, config, baseConstants, null, runtimeConstants);
+            displayQueue = new DisplayQueue(mockOBSManager, config, baseConstants, null, runtimeConstants, {
+                sourcesManager: dependencies.sourcesManager,
+                goalsManager: dependencies.goalsManager
+            });
         });
 
         it('should return false for isTTSEnabled()', () => {
@@ -104,7 +107,10 @@ describe('DisplayQueue TTS Configuration Respect', () => {
                     ttsTxt: 'tts txt'
                 }
             };
-            displayQueue = new DisplayQueue(mockOBSManager, config, baseConstants, null, runtimeConstants);
+            displayQueue = new DisplayQueue(mockOBSManager, config, baseConstants, null, runtimeConstants, {
+                sourcesManager: dependencies.sourcesManager,
+                goalsManager: dependencies.goalsManager
+            });
         });
 
         it('should return true for isTTSEnabled()', () => {

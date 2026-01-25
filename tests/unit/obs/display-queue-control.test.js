@@ -27,9 +27,27 @@ describe('DisplayQueue control', () => {
         ...overrides
     });
 
+    const createMockDependencies = () => ({
+        sourcesManager: {
+            updateTextSource: createMockFn().mockResolvedValue(),
+            clearTextSource: createMockFn().mockResolvedValue(),
+            setSourceVisibility: createMockFn().mockResolvedValue(),
+            setNotificationDisplayVisibility: createMockFn().mockResolvedValue(),
+            setChatDisplayVisibility: createMockFn().mockResolvedValue(),
+            hideAllDisplays: createMockFn().mockResolvedValue(),
+            setPlatformLogoVisibility: createMockFn().mockResolvedValue(),
+            setNotificationPlatformLogoVisibility: createMockFn().mockResolvedValue()
+        },
+        goalsManager: {
+            processDonationGoal: createMockFn().mockResolvedValue({ success: true }),
+            processPaypiggyGoal: createMockFn().mockResolvedValue({ success: true }),
+            initializeGoalDisplay: createMockFn().mockResolvedValue()
+        }
+    });
+
     const createQueue = (configOverrides = {}) => {
         const config = createConfig(configOverrides);
-        const queue = new DisplayQueue(createMockOBSManager('connected'), config, constants, null, constants);
+        const queue = new DisplayQueue(createMockOBSManager('connected'), config, constants, null, constants, createMockDependencies());
         queue.getDuration = createMockFn().mockReturnValue(0);
         return queue;
     };

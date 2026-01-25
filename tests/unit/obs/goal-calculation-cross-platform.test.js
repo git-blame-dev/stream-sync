@@ -58,13 +58,28 @@ describe('Cross-Platform Goal Calculation', () => {
             NOTIFICATION_FADE_DURATION: 1000
         };
 
-        displayQueue = new DisplayQueue(mockOBSManager, mockConfig, mockConstants, null, runtimeConstants);
         const goalTotals = {};
-        displayQueue.goalsManager = {
-            processDonationGoal: createMockFn(async (platform, amount) => {
-                goalTotals[platform] = (goalTotals[platform] || 0) + amount;
-            })
+        const mockDependencies = {
+            sourcesManager: {
+                updateTextSource: createMockFn().mockResolvedValue(),
+                clearTextSource: createMockFn().mockResolvedValue(),
+                setSourceVisibility: createMockFn().mockResolvedValue(),
+                setNotificationDisplayVisibility: createMockFn().mockResolvedValue(),
+                setChatDisplayVisibility: createMockFn().mockResolvedValue(),
+                hideAllDisplays: createMockFn().mockResolvedValue(),
+                setPlatformLogoVisibility: createMockFn().mockResolvedValue(),
+                setNotificationPlatformLogoVisibility: createMockFn().mockResolvedValue()
+            },
+            goalsManager: {
+                processDonationGoal: createMockFn(async (platform, amount) => {
+                    goalTotals[platform] = (goalTotals[platform] || 0) + amount;
+                }),
+                processPaypiggyGoal: createMockFn().mockResolvedValue({ success: true }),
+                initializeGoalDisplay: createMockFn().mockResolvedValue()
+            }
         };
+
+        displayQueue = new DisplayQueue(mockOBSManager, mockConfig, mockConstants, null, runtimeConstants, mockDependencies);
         displayQueue.__goalTotals = goalTotals;
     });
     

@@ -52,6 +52,12 @@ describe('DisplayQueue notification TTS staging', () => {
             return () => eventBus.off(event, handler);
         };
 
+        const mockGoalsManager = {
+            processDonationGoal: createMockFn().mockResolvedValue({ success: true }),
+            processPaypiggyGoal: createMockFn().mockResolvedValue({ success: true }),
+            initializeGoalDisplay: createMockFn().mockResolvedValue()
+        };
+
         const queue = new DisplayQueue(
             obsManager,
             {
@@ -67,10 +73,10 @@ describe('DisplayQueue notification TTS staging', () => {
                 CHAT_TRANSITION_DELAY: 200
             },
             eventBus,
-            runtimeConstants
+            runtimeConstants,
+            { sourcesManager: mockSourcesManager, goalsManager: mockGoalsManager }
         );
 
-        queue.sourcesManager = mockSourcesManager;
         queue.playGiftVideoAndAudio = createMockFn().mockResolvedValue();
 
         return { queue, eventBus, mockSourcesManager, recordedTexts };

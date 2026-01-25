@@ -307,7 +307,11 @@ function createProductionDependencies(runtimeConstants, overrides = {}) {
     return {
         obs: {
             connectionManager: require('./obs/connection').getOBSConnectionManager({ runtimeConstants }),
-            sourcesManager: sources.getDefaultSourcesManager({ runtimeConstants }),
+            sourcesManager: sources.getDefaultSourcesManager({
+                chatGroupName: config.general.chatMsgGroup,
+                notificationGroupName: config.obs.notificationMsgGroup,
+                fadeDelay: config.timing.fadeDuration
+            }),
             effectsManager: effects.getDefaultEffectsManager()
         },
         sourcesFactory: sources,
@@ -947,9 +951,8 @@ class AppRuntime {
         try {
             // Clear previous displays on startup (similar to viewer count initialization)
             logger.info('Clearing previous displays...', 'AppRuntime');
-            // Clear OBS startup displays
             const { clearStartupDisplays } = require('./obs/startup');
-            await clearStartupDisplays(this.config, this.runtimeConstants);
+            await clearStartupDisplays(this.config);
             logger.info('Displays cleared', 'AppRuntime');
             
             logger.info('Initializing goal display...', 'AppRuntime');
@@ -1522,7 +1525,11 @@ async function main(overrides = {}) {
         // Create OBS event-driven services
         logger.debug('Creating OBS event-driven services...', 'Main');
         const obsConnectionManager = getOBSConnectionManager({ runtimeConstants, config: config.obs });
-        const obsSources = require('./obs/sources').getDefaultSourcesManager({ runtimeConstants });
+        const obsSources = require('./obs/sources').getDefaultSourcesManager({
+            chatGroupName: config.general.chatMsgGroup,
+            notificationGroupName: config.obs.notificationMsgGroup,
+            fadeDelay: config.timing.fadeDuration
+        });
 
         const obsEventService = createOBSEventService({
             eventBus,
