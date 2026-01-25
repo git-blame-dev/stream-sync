@@ -60,7 +60,7 @@ function resolveHandcamDefaults(runtimeConstants) {
 function createHandcamGlowConfig(handcamConfig = {}, runtimeConstants) {
     const defaults = resolveHandcamDefaults(runtimeConstants);
     return {
-        enabled: handcamConfig.glowEnabled ?? defaults.ENABLED,
+        enabled: handcamConfig.enabled ?? defaults.ENABLED,
         maxSize: Number(handcamConfig.maxSize ?? defaults.DEFAULT_MAX_SIZE),
         rampUpDuration: Number(handcamConfig.rampUpDuration ?? defaults.DEFAULT_RAMP_UP_DURATION),
         holdDuration: Number(handcamConfig.holdDuration ?? defaults.DEFAULT_HOLD_DURATION),

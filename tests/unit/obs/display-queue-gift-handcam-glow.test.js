@@ -61,7 +61,7 @@ describe('DisplayQueue gift effects handcam glow', () => {
                 chat: {},
                 notification: {},
                 obs: { ttsTxt: 'testTtsTxt' },
-                handcam: { enabled: handcamEnabled, glowEnabled: handcamEnabled }
+                handcam: { enabled: handcamEnabled }
             },
             { PRIORITY_LEVELS: { CHAT: 1, GIFT: 5 } },
             new EventEmitter(),

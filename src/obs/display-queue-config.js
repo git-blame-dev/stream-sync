@@ -1,12 +1,33 @@
 const { ConfigValidator } = require('../utils/config-validator');
 const { DEFAULTS } = require('../core/config-defaults');
 
+function normalizeHandcamConfig(input = {}) {
+    return {
+        enabled: ConfigValidator.parseBoolean(input.enabled, DEFAULTS.handcam.glowEnabled),
+        sourceName: ConfigValidator.parseString(input.sourceName, DEFAULTS.handcam.sourceName),
+        sceneName: ConfigValidator.parseString(input.sceneName, DEFAULTS.handcam.sceneName),
+        glowFilterName: ConfigValidator.parseString(input.glowFilterName, DEFAULTS.handcam.glowFilterName),
+        maxSize: ConfigValidator.parseNumber(input.maxSize, { defaultValue: DEFAULTS.handcam.maxSize, min: 0 }),
+        rampUpDuration: ConfigValidator.parseNumber(input.rampUpDuration, { defaultValue: DEFAULTS.handcam.rampUpDuration, min: 0 }),
+        holdDuration: ConfigValidator.parseNumber(input.holdDuration, { defaultValue: DEFAULTS.handcam.holdDuration, min: 0 }),
+        rampDownDuration: ConfigValidator.parseNumber(input.rampDownDuration, { defaultValue: DEFAULTS.handcam.rampDownDuration, min: 0 }),
+        totalSteps: ConfigValidator.parseNumber(input.totalSteps, { defaultValue: DEFAULTS.handcam.totalSteps, min: 1 }),
+        incrementPercent: ConfigValidator.parseNumber(input.incrementPercent, { defaultValue: DEFAULTS.handcam.incrementPercent, min: 0 }),
+        easingEnabled: ConfigValidator.parseBoolean(input.easingEnabled, DEFAULTS.handcam.easingEnabled),
+        animationInterval: ConfigValidator.parseNumber(input.animationInterval, { defaultValue: DEFAULTS.handcam.animationInterval, min: 1 })
+    };
+}
+
+function normalizeGiftsConfig(input = {}) {
+    return {
+        giftVideoSource: ConfigValidator.parseString(input.giftVideoSource, DEFAULTS.gifts.giftVideoSource),
+        giftAudioSource: ConfigValidator.parseString(input.giftAudioSource, DEFAULTS.gifts.giftAudioSource),
+        scene: ConfigValidator.parseString(input.scene, DEFAULTS.gifts.giftScene)
+    };
+}
+
 function normalizeDisplayQueueConfig(input = {}) {
-    const giftsConfig = input.gifts || {};
-    const obsConfig = input.obs || {};
-    const maxQueueSize = Number.isFinite(Number(input.maxQueueSize)) && Number(input.maxQueueSize) > 0
-        ? Number(input.maxQueueSize)
-        : DEFAULTS.displayQueue.maxQueueSize;
+    const maxQueueSize = ConfigValidator.parseNumber(input.maxQueueSize, { defaultValue: DEFAULTS.displayQueue.maxQueueSize, min: 1 });
 
     return {
         autoProcess: ConfigValidator.parseBoolean(input.autoProcess, DEFAULTS.displayQueue.autoProcess),
@@ -15,11 +36,11 @@ function normalizeDisplayQueueConfig(input = {}) {
         ttsEnabled: ConfigValidator.parseBoolean(input.ttsEnabled, false),
         chat: input.chat || {},
         notification: input.notification || {},
-        obs: obsConfig,
+        obs: input.obs || {},
         tts: input.tts || {},
         vfx: input.vfx || {},
-        gifts: giftsConfig,
-        handcam: input.handcam || {},
+        gifts: normalizeGiftsConfig(input.gifts),
+        handcam: normalizeHandcamConfig(input.handcam),
         youtube: input.youtube || {},
         twitch: input.twitch || {},
         tiktok: input.tiktok || {}
