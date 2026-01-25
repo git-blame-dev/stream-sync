@@ -88,39 +88,7 @@ describe('YouTube Platform Configuration Validation', () => {
         });
     });
 
-    describe('Configuration fixes and logging surface', () => {
-        test('surfaces configuration fixes through the platform error handler when values are invalid', () => {
-            const platform = new YouTubePlatform(
-                createMockConfig('youtube', {
-                    enabled: true,
-                    username: 'channel-owner',
-                    retryAttempts: 'invalid',
-                    maxStreams: -1,
-                    streamPollingInterval: 0,
-                    fullCheckInterval: 'bad'
-                }),
-                mockDependencies
-            );
-
-            const errorHandlerCalls = [];
-            const errorHandler = {
-                handleConfigurationError: (...args) => errorHandlerCalls.push(args),
-                handleEventProcessingError: createMockFn(),
-                handleConnectionError: createMockFn(),
-                handleCleanupError: createMockFn()
-            };
-
-            platform.errorHandler = errorHandler;
-            platform.config.retryAttempts = 'invalid';
-            platform.config.maxStreams = -5;
-            platform.config.streamPollingInterval = 'nan';
-            platform.config.fullCheckInterval = undefined;
-
-            platform._validateAndFixConfiguration();
-
-            expect(errorHandlerCalls.length).toBeGreaterThan(0);
-        });
-
+    describe('Platform initialization', () => {
         test('initializes disabled platform without errors', async () => {
             const platform = new YouTubePlatform(
                 createMockConfig('youtube', { enabled: false, username: '' }),

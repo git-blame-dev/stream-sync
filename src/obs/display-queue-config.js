@@ -12,7 +12,7 @@ function normalizeDisplayQueueConfig(input = {}) {
         autoProcess: ConfigValidator.parseBoolean(input.autoProcess, DEFAULTS.displayQueue.autoProcess),
         maxQueueSize,
         chatOptimization: ConfigValidator.parseBoolean(input.chatOptimization, DEFAULTS.displayQueue.chatOptimization),
-        ttsEnabled: input.ttsEnabled,
+        ttsEnabled: ConfigValidator.parseBoolean(input.ttsEnabled, false),
         chat: input.chat || {},
         notification: input.notification || {},
         obs: obsConfig,

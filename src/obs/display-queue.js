@@ -1,7 +1,6 @@
 
 const crypto = require('crypto');
 const { logger } = require('../core/logging');
-const { ConfigValidator } = require('../utils/config-validator');
 const { normalizeDisplayQueueConfig } = require('./display-queue-config');
 const { validateDisplayConfig } = require('../utils/configuration-validator');
 const { getDefaultSourcesManager } = require('./sources');
@@ -101,10 +100,7 @@ class DisplayQueue {
     }
     
     isTTSEnabled() {
-        // Check global TTS enabled setting - respect the actual config value
-        // Use proper boolean parser to handle string values from INI
-        // Default to false for safety (when ttsEnabled is undefined)
-        return ConfigValidator.parseBoolean(this.config.ttsEnabled, false);
+        return this.config.ttsEnabled === true;
     }
 
     async setTTSText(text) {
@@ -300,10 +296,9 @@ class DisplayQueue {
             throw new Error(`DisplayQueue requires configured platform for chat: ${platform || 'unknown'}`);
         }
 
-        // Check if messages are enabled for the given platform
-        if (!ConfigValidator.parseBoolean(this.config[platform].messagesEnabled, true)) {
+        if (this.config[platform].messagesEnabled === false) {
             logger.debug(`[Display Queue] Chat for platform '${platform}' is disabled. Skipping message from '${username}'.`, 'display-queue');
-            return; // Skip displaying the chat message
+            return;
         }
 
         // Check if OBS is ready before attempting operations
@@ -386,10 +381,9 @@ class DisplayQueue {
             throw new Error(`DisplayQueue requires configured platform for notification: ${platform || 'unknown'}`);
         }
 
-        // Check if notifications are enabled for the given platform
-        if (!ConfigValidator.parseBoolean(this.config[platform].notificationsEnabled, true)) {
+        if (this.config[platform].notificationsEnabled === false) {
             logger.debug(`[Display Queue] Notifications for platform '${platform}' is disabled. Skipping notification for '${username}'.`, 'display-queue');
-            return; // Skip displaying the notification
+            return;
         }
 
         // Check if OBS is ready before attempting operations
