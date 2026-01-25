@@ -412,7 +412,8 @@ const generalConfig = {
     get streamDetectionEnabled() { return configManager.getBoolean('general', 'streamDetectionEnabled', DEFAULTS.general.streamDetectionEnabled); },
     get streamRetryInterval() { return configManager.getNumber('general', 'streamRetryInterval', DEFAULTS.general.streamRetryInterval); },
     get streamMaxRetries() { return configManager.getNumber('general', 'streamMaxRetries', DEFAULTS.general.streamMaxRetries); },
-    get continuousMonitoringInterval() { return configManager.getNumber('general', 'continuousMonitoringInterval', DEFAULTS.general.continuousMonitoringInterval); }
+    get continuousMonitoringInterval() { return configManager.getNumber('general', 'continuousMonitoringInterval', DEFAULTS.general.continuousMonitoringInterval); },
+    get maxMessageLength() { return configManager.getNumber('general', 'maxMessageLength', DEFAULTS.general.maxMessageLength); }
 };
 
 // Lazy initialization for platform configs to avoid circular dependency
@@ -472,12 +473,27 @@ const obsConfig = {
         return resolveSecretValue('OBS_PASSWORD');
     },
     get enabled() { return configManager.getBoolean('obs', 'enabled', DEFAULTS.obs.enabled); },
+    get connectionTimeoutMs() { return configManager.getNumber('obs', 'connectionTimeoutMs', DEFAULTS.obs.connectionTimeoutMs); },
     get notificationTxt() { return configManager.getString('obs', 'notificationTxt', DEFAULTS.obs.notificationTxt); },
     get chatMsgTxt() { return configManager.getString('obs', 'chatMsgTxt', DEFAULTS.obs.chatMsgTxt); },
     get notificationScene() { return configManager.getString('obs', 'notificationScene', DEFAULTS.obs.notificationScene); },
     get notificationMsgGroup() { return configManager.getString('obs', 'notificationMsgGroup', DEFAULTS.obs.notificationMsgGroup); },
     get ttsTxt() { return configManager.getString('obs', 'ttsTxt', DEFAULTS.obs.ttsTxt); },
-    get ttsScene() { return configManager.getString('obs', 'ttsScene', DEFAULTS.obs.ttsScene); }
+    get ttsScene() { return configManager.getString('obs', 'ttsScene', DEFAULTS.obs.ttsScene); },
+    get chatPlatformLogos() {
+        return {
+            twitch: ConfigValidator.requireString(configManager.get('obs', 'chatPlatformLogoTwitch'), 'obs.chatPlatformLogoTwitch'),
+            youtube: ConfigValidator.requireString(configManager.get('obs', 'chatPlatformLogoYouTube'), 'obs.chatPlatformLogoYouTube'),
+            tiktok: ConfigValidator.requireString(configManager.get('obs', 'chatPlatformLogoTikTok'), 'obs.chatPlatformLogoTikTok')
+        };
+    },
+    get notificationPlatformLogos() {
+        return {
+            twitch: ConfigValidator.requireString(configManager.get('obs', 'notificationPlatformLogoTwitch'), 'obs.notificationPlatformLogoTwitch'),
+            youtube: ConfigValidator.requireString(configManager.get('obs', 'notificationPlatformLogoYouTube'), 'obs.notificationPlatformLogoYouTube'),
+            tiktok: ConfigValidator.requireString(configManager.get('obs', 'notificationPlatformLogoTikTok'), 'obs.notificationPlatformLogoTikTok')
+        };
+    }
 };
 
 const handcamConfig = {
@@ -572,6 +588,17 @@ const ttsConfig = {
     get performanceWarningThreshold() { return configManager.getNumber('tts', 'performanceWarningThreshold', DEFAULTS.tts.performanceWarningThreshold); }
 };
 
+const cooldownsConfig = {
+    get defaultCooldown() { return configManager.getNumber('cooldowns', 'defaultCooldown', DEFAULTS.cooldowns.defaultCooldown); },
+    get defaultCooldownMs() { return this.defaultCooldown * 1000; },
+    get heavyCommandCooldown() { return configManager.getNumber('cooldowns', 'heavyCommandCooldown', DEFAULTS.cooldowns.heavyCommandCooldown); },
+    get heavyCommandCooldownMs() { return this.heavyCommandCooldown * 1000; },
+    get heavyCommandThreshold() { return configManager.getNumber('cooldowns', 'heavyCommandThreshold', DEFAULTS.cooldowns.heavyCommandThreshold); },
+    get heavyCommandWindow() { return configManager.getNumber('cooldowns', 'heavyCommandWindow', DEFAULTS.cooldowns.heavyCommandWindow); },
+    get heavyCommandWindowMs() { return this.heavyCommandWindow * 1000; },
+    get maxEntries() { return configManager.getNumber('cooldowns', 'maxEntries', DEFAULTS.cooldowns.maxEntries); }
+};
+
 
 // Consolidated config object with lazy initialization
 const config = {
@@ -587,7 +614,7 @@ const config = {
     get gifts() { return giftConfig; },
     get spam() { return spamConfig; },
     get timing() { return timingConfig; },
-    get cooldowns() { return configManager.getSection('cooldowns'); },
+    get cooldowns() { return cooldownsConfig; },
     get tts() { return ttsConfig; },
     get follows() { return { command: configManager.getString('follows', 'command', '') }; },
     get raids() { return { command: configManager.getString('raids', 'command', '') }; },
