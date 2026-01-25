@@ -93,38 +93,12 @@ class StreamDetector {
             throw new Error('StreamDetector requires a config object');
         }
 
-        const streamDetectionEnabled = this._requireBooleanConfig(config.streamDetectionEnabled, 'streamDetectionEnabled');
-        const streamRetryInterval = this._requirePositiveNumberConfig(config.streamRetryInterval, 'streamRetryInterval');
-        const streamMaxRetries = this._requireStreamMaxRetries(config.streamMaxRetries);
-        const continuousMonitoringInterval = this._requirePositiveNumberConfig(config.continuousMonitoringInterval, 'continuousMonitoringInterval');
-
         return {
-            streamDetectionEnabled,
-            streamRetryInterval: streamRetryInterval * 1000,
-            streamMaxRetries,
-            continuousMonitoringInterval: continuousMonitoringInterval * 1000
+            streamDetectionEnabled: config.streamDetectionEnabled,
+            streamRetryInterval: config.streamRetryInterval * 1000,
+            streamMaxRetries: config.streamMaxRetries,
+            continuousMonitoringInterval: config.continuousMonitoringInterval * 1000
         };
-    }
-
-    _requireBooleanConfig(value, fieldName) {
-        if (typeof value !== 'boolean') {
-            throw new Error(`StreamDetector requires ${fieldName} to be a boolean`);
-        }
-        return value;
-    }
-
-    _requirePositiveNumberConfig(value, fieldName) {
-        if (typeof value !== 'number' || !Number.isFinite(value) || value <= 0) {
-            throw new Error(`StreamDetector requires ${fieldName} to be a positive number`);
-        }
-        return value;
-    }
-
-    _requireStreamMaxRetries(value) {
-        if (typeof value !== 'number' || !Number.isFinite(value) || (value !== -1 && value < 0)) {
-            throw new Error('StreamDetector requires streamMaxRetries to be -1 or a non-negative number');
-        }
-        return value;
     }
 
     _calculateSafeRetryDelay(attemptNumber) {

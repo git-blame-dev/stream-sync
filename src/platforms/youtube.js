@@ -124,7 +124,6 @@ class YouTubePlatform extends EventEmitter {
             lastKnownAvailable: 0,
             lastKnownRequired: 0
         };
-        this._validateAndFixConfiguration();
 
         // Initialize user agent manager
         const { YouTubeUserAgentManager } = require('../utils/youtube-user-agent-manager');
@@ -265,56 +264,7 @@ class YouTubePlatform extends EventEmitter {
         return this.connectionManager.getActiveVideoIds();
     }
 
-    _validateAndFixConfiguration() {
-        const fixes = [];
-        const invalidValues = [];
-
-        const applyNumericFix = (key, minValue, defaultValue) => {
-            const value = this.config[key];
-            const isNumber = typeof value === 'number' && !Number.isNaN(value);
-            const isValid = isNumber && value >= minValue;
-
-            if (isValid) {
-                return;
-            }
-
-            invalidValues.push(`${key}=${value}`);
-            this.config[key] = defaultValue;
-            fixes.push(key);
-
-            this.logger?.warn?.(
-                `Invalid ${key} configuration (${value}), defaulting to ${defaultValue}`,
-                'youtube'
-            );
-        };
-        
-        applyNumericFix('retryAttempts', 1, DEFAULTS.youtube.retryAttempts);
-        applyNumericFix('streamPollingInterval', 1, DEFAULTS.youtube.streamPollingInterval);
-        applyNumericFix('maxStreams', 0, DEFAULTS.youtube.maxStreams);
-        applyNumericFix('fullCheckInterval', 1, DEFAULTS.youtube.fullCheckInterval);
-        
-        if (fixes.length > 0 && this.logger && this.logger.info) {
-            this.logger.info(
-                `Applied configuration fixes: ${fixes.join(', ')}`,
-                'youtube'
-            );
-        }
-
-        if (invalidValues.length > 0) {
-            const details = invalidValues.join(', ');
-            const configError = new Error(`YouTube configuration adjusted for: ${details}`);
-            this.errorHandler?.handleConfigurationError?.(configError, 'youtube:config');
-        }
-    }
-
     async initialize(handlers = {}, forceReconnect = false) {
-
-        // Validate configuration at initialization time (for test-created instances)
-        if (!this.configurationValidated) {
-            this._validateAndFixConfiguration();
-            this.configurationValidated = true;
-        }
-
         // SMART GUARD: Allow reconnection when new streams are detected
         // Only skip reinitialization if BOTH conditions are true:
         // 1. Already initialized (isInitialized = true)

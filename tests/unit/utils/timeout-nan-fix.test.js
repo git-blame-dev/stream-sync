@@ -38,47 +38,6 @@ describe('Timeout NaN Warning Fix', () => {
         }
     });
 
-    describe('Stream Detector NaN Timeout', () => {
-        test('should reject undefined streamRetryInterval configuration', () => {
-            const { StreamDetector } = require('../../../src/utils/stream-detector');
-            
-            const invalidConfig = {
-                streamDetectionEnabled: true,
-                streamRetryInterval: undefined,
-                streamMaxRetries: -1,
-                continuousMonitoringInterval: 60
-            };
-
-            expect(() => new StreamDetector(invalidConfig)).toThrow('streamRetryInterval');
-        });
-
-        test('should reject null streamRetryInterval configuration', () => {
-            const { StreamDetector } = require('../../../src/utils/stream-detector');
-            
-            const invalidConfig = {
-                streamDetectionEnabled: true,
-                streamRetryInterval: null,
-                streamMaxRetries: -1,
-                continuousMonitoringInterval: 60
-            };
-
-            expect(() => new StreamDetector(invalidConfig)).toThrow('streamRetryInterval');
-        });
-
-        test('should reject string streamRetryInterval configuration', () => {
-            const { StreamDetector } = require('../../../src/utils/stream-detector');
-            
-            const invalidConfig = {
-                streamDetectionEnabled: true,
-                streamRetryInterval: 'invalid',
-                streamMaxRetries: -1,
-                continuousMonitoringInterval: 60
-            };
-
-            expect(() => new StreamDetector(invalidConfig)).toThrow('streamRetryInterval');
-        });
-    });
-
     describe('Retry System NaN Timeout', () => {
         test('should handle invalid BACKOFF_MULTIPLIER resulting in NaN', () => {
             const { RetrySystem, ADAPTIVE_RETRY_CONFIG } = require('../../../src/utils/retry-system');
