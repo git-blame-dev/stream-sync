@@ -1,27 +1,26 @@
 
 const { safeSetTimeout, safeSetInterval } = require('./timeout-validator');
 const { createPlatformErrorHandler } = require('./platform-error-handler');
+const { ConfigValidator } = require('./config-validator');
+const { DEFAULTS } = require('../core/config-defaults');
 
 class SpamDetectionConfig {
     constructor(config = {}, dependencies = {}) {
-        // Use global logger directly
         const { logger } = require('../core/logging');
         this.logger = logger;
-        
-        // Platform-specific spam detection configuration
-        this.lowValueThreshold = this.validateNumber(config.lowValueThreshold, 10, 'lowValueThreshold');
-        this.spamDetectionEnabled = this.validateBoolean(config.spamDetectionEnabled, true, 'spamDetectionEnabled');
-        this.spamDetectionWindow = this.validateNumber(config.spamDetectionWindow, 5, 'spamDetectionWindow');
-        this.maxIndividualNotifications = this.validateNumber(config.maxIndividualNotifications, 2, 'maxIndividualNotifications');
-        
-        // Platform-specific configuration
+
+        this.lowValueThreshold = ConfigValidator.parseNumber(config.lowValueThreshold, { defaultValue: DEFAULTS.gifts.lowValueThreshold, min: 0, allowZero: false });
+        this.spamDetectionEnabled = ConfigValidator.parseBoolean(config.spamDetectionEnabled, DEFAULTS.gifts.spamDetectionEnabled);
+        this.spamDetectionWindow = ConfigValidator.parseNumber(config.spamDetectionWindow, { defaultValue: DEFAULTS.gifts.spamDetectionWindow, min: 0, allowZero: false });
+        this.maxIndividualNotifications = ConfigValidator.parseNumber(config.maxIndividualNotifications, { defaultValue: DEFAULTS.gifts.maxIndividualNotifications, min: 0, allowZero: false });
+
         this.platformConfigs = this.initializePlatformConfigs(config.platforms || {});
-        
+
         this.logConfiguration();
     }
 
     initializePlatformConfigs(platformConfigs) {
-        // Use global settings as defaults for all platforms
+        const { tiktok = {}, twitch = {}, youtube = {} } = platformConfigs;
         const globalDefaults = {
             enabled: this.spamDetectionEnabled,
             lowValueThreshold: this.lowValueThreshold,
@@ -31,64 +30,24 @@ class SpamDetectionConfig {
 
         return {
             tiktok: {
-                enabled: this.validateBoolean(platformConfigs.tiktok?.spamDetectionEnabled, globalDefaults.enabled, 'tiktok.spamDetectionEnabled'),
-                lowValueThreshold: this.validateNumber(platformConfigs.tiktok?.lowValueThreshold, globalDefaults.lowValueThreshold, 'tiktok.lowValueThreshold'),
-                spamDetectionWindow: this.validateNumber(platformConfigs.tiktok?.spamDetectionWindow, globalDefaults.spamDetectionWindow, 'tiktok.spamDetectionWindow'),
-                maxIndividualNotifications: this.validateNumber(platformConfigs.tiktok?.maxIndividualNotifications, globalDefaults.maxIndividualNotifications, 'tiktok.maxIndividualNotifications')
+                enabled: ConfigValidator.parseBoolean(tiktok.spamDetectionEnabled, globalDefaults.enabled),
+                lowValueThreshold: ConfigValidator.parseNumber(tiktok.lowValueThreshold, { defaultValue: globalDefaults.lowValueThreshold, min: 0, allowZero: false }),
+                spamDetectionWindow: ConfigValidator.parseNumber(tiktok.spamDetectionWindow, { defaultValue: globalDefaults.spamDetectionWindow, min: 0, allowZero: false }),
+                maxIndividualNotifications: ConfigValidator.parseNumber(tiktok.maxIndividualNotifications, { defaultValue: globalDefaults.maxIndividualNotifications, min: 0, allowZero: false })
             },
             twitch: {
-                enabled: this.validateBoolean(platformConfigs.twitch?.spamDetectionEnabled, globalDefaults.enabled, 'twitch.spamDetectionEnabled'),
-                lowValueThreshold: this.validateNumber(platformConfigs.twitch?.lowValueThreshold, globalDefaults.lowValueThreshold, 'twitch.lowValueThreshold'),
-                spamDetectionWindow: this.validateNumber(platformConfigs.twitch?.spamDetectionWindow, globalDefaults.spamDetectionWindow, 'twitch.spamDetectionWindow'),
-                maxIndividualNotifications: this.validateNumber(platformConfigs.twitch?.maxIndividualNotifications, globalDefaults.maxIndividualNotifications, 'twitch.maxIndividualNotifications')
+                enabled: ConfigValidator.parseBoolean(twitch.spamDetectionEnabled, globalDefaults.enabled),
+                lowValueThreshold: ConfigValidator.parseNumber(twitch.lowValueThreshold, { defaultValue: globalDefaults.lowValueThreshold, min: 0, allowZero: false }),
+                spamDetectionWindow: ConfigValidator.parseNumber(twitch.spamDetectionWindow, { defaultValue: globalDefaults.spamDetectionWindow, min: 0, allowZero: false }),
+                maxIndividualNotifications: ConfigValidator.parseNumber(twitch.maxIndividualNotifications, { defaultValue: globalDefaults.maxIndividualNotifications, min: 0, allowZero: false })
             },
             youtube: {
-                enabled: this.validateBoolean(platformConfigs.youtube?.spamDetectionEnabled, false, 'youtube.spamDetectionEnabled'), // YouTube disabled by default
-                lowValueThreshold: this.validateNumber(platformConfigs.youtube?.lowValueThreshold, 1.00, 'youtube.lowValueThreshold'), // YouTube uses USD
-                spamDetectionWindow: this.validateNumber(platformConfigs.youtube?.spamDetectionWindow, globalDefaults.spamDetectionWindow, 'youtube.spamDetectionWindow'),
-                maxIndividualNotifications: this.validateNumber(platformConfigs.youtube?.maxIndividualNotifications, globalDefaults.maxIndividualNotifications, 'youtube.maxIndividualNotifications')
+                enabled: ConfigValidator.parseBoolean(youtube.spamDetectionEnabled, false),
+                lowValueThreshold: ConfigValidator.parseNumber(youtube.lowValueThreshold, { defaultValue: 1.00, min: 0, allowZero: false }),
+                spamDetectionWindow: ConfigValidator.parseNumber(youtube.spamDetectionWindow, { defaultValue: globalDefaults.spamDetectionWindow, min: 0, allowZero: false }),
+                maxIndividualNotifications: ConfigValidator.parseNumber(youtube.maxIndividualNotifications, { defaultValue: globalDefaults.maxIndividualNotifications, min: 0, allowZero: false })
             }
         };
-    }
-
-    validateNumber(value, defaultValue, fieldName) {
-        // If value doesn't exist in config, use default
-        if (value === undefined || value === null) {
-            return defaultValue;
-        }
-
-        // Convert string numbers to actual numbers
-        const numValue = typeof value === 'string' ? parseFloat(value) : value;
-
-        if (typeof numValue !== 'number' || isNaN(numValue) || numValue <= 0) {
-            this.logger.debug(`${fieldName}: invalid value ${value}, using default ${defaultValue}`, 'spam-detection');
-            return defaultValue;
-        }
-
-        return numValue;
-    }
-
-    validateBoolean(value, defaultValue, fieldName) {
-        // If value doesn't exist in config, use default
-        if (value === undefined || value === null) {
-            return defaultValue;
-        }
-
-        // Convert string booleans to actual booleans
-        if (typeof value === 'string') {
-            const lowerValue = value.toLowerCase();
-            if (lowerValue === 'true') return true;
-            if (lowerValue === 'false') return false;
-            this.logger.debug(`${fieldName}: invalid string value ${value}, using default ${defaultValue}`, 'spam-detection');
-            return defaultValue;
-        }
-
-        if (typeof value !== 'boolean') {
-            this.logger.debug(`${fieldName}: invalid value ${value}, using default ${defaultValue}`, 'spam-detection');
-            return defaultValue;
-        }
-
-        return value;
     }
 
     getPlatformConfig(platform) {
