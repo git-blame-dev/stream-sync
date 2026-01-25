@@ -53,11 +53,11 @@ describe('Keyword Parsing Configuration', () => {
             expect(keywordParsingEnabled).toBe(true);
         });
 
-        test('should default to true for invalid boolean values', () => {
+        test('should return default for invalid boolean values', () => {
             spyOn(configManager, 'get').mockReturnValue('invalid');
 
             const keywordParsingEnabled = configManager.getBoolean('general', 'keywordParsingEnabled', true);
-            expect(keywordParsingEnabled).toBe(false);
+            expect(keywordParsingEnabled).toBe(true);
         });
     });
 
