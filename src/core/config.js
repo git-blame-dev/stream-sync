@@ -4,8 +4,7 @@ const ini = require('ini');
 const { handleUserFacingError } = require('../utils/user-friendly-errors');
 const { createRuntimeConstants } = require('./runtime-constants');
 const { DEFAULT_HTTP_USER_AGENTS, parseUserAgentList } = require('./http-config');
-
-const DEFAULT_LOG_DIRECTORY = './logs';
+const { DEFAULTS } = require('./config-defaults');
 
 class ConfigManager {
     constructor(defaultConfigPath = './config.ini') {
@@ -337,7 +336,7 @@ function createPlatformConfig(platformName) {
             return generalConfig.viewerCountPollingIntervalMs;
         },
         get dataLoggingEnabled() { return configManager.getBoolean('logging', 'platformDataLoggingEnabled', false); },
-        get dataLoggingPath() { return DEFAULT_LOG_DIRECTORY; }
+        get dataLoggingPath() { return DEFAULTS.LOG_DIRECTORY; }
     };
 
     if (platformName !== 'twitch') {
@@ -401,68 +400,45 @@ function createPlatformConfig(platformName) {
 // --- Main Configuration Objects ---
 
 const generalConfig = {
-    // Cooldown for commands in milliseconds
-    get cmdCooldownMs() { return (configManager.getNumber('general', 'cmdCoolDown', 60)) * 1000; },
-    
-    // Global per-command cooldown in milliseconds (prevents any user from using same command too frequently)
-    get globalCmdCooldownMs() { return (parseInt(configManager.get('general', 'globalCmdCoolDown'), 10) || 60) * 1000; },
-
-    // Interval for polling viewer counts in milliseconds
-    get viewerCountPollingIntervalMs() { return (configManager.getNumber('general', 'viewerCountPollingInterval', 60)) * 1000; },
-
-    // OBS scene name for viewer counts
+    get cmdCooldownMs() { return configManager.getNumber('general', 'cmdCoolDown', DEFAULTS.general.cmdCoolDown) * 1000; },
+    get globalCmdCooldownMs() { return configManager.getNumber('general', 'globalCmdCoolDown', DEFAULTS.general.globalCmdCoolDown) * 1000; },
+    get viewerCountPollingIntervalMs() { return configManager.getNumber('general', 'viewerCountPollingInterval', DEFAULTS.general.viewerCountPollingInterval) * 1000; },
     get viewerCountScene() { return configManager.get('general', 'viewerCountScene', 'viewer-count-scene'); },
-
-    // Chat message text source name
     get chatMsgTxt() { return configManager.get('general', 'chatMsgTxt', 'chat-message-text'); },
-
-    // Chat message scene name
     get chatMsgScene() { return configManager.get('general', 'chatMsgScene', 'chat-message-scene'); },
-
-    // Chat message group name (disabled - using direct source access)
     get chatMsgGroup() { return configManager.get('general', 'chatMsgGroup', 'chat-message-group'); },
-
-    // Enable/disable debug logging
-    get debugEnabled() { return configManager.getBoolean('general', 'debugEnabled', false); },
+    get debugEnabled() { return configManager.getBoolean('general', 'debugEnabled', DEFAULTS.general.debugEnabled); },
     get envFilePath() {
         const envFilePath = configManager.getString('general', 'envFilePath', './.env');
         return envFilePath && envFilePath.trim() ? envFilePath : './.env';
     },
-    get envFileReadEnabled() { return configManager.getBoolean('general', 'envFileReadEnabled', true); },
-    get envFileWriteEnabled() { return configManager.getBoolean('general', 'envFileWriteEnabled', true); },
-
-    // Global notification settings
-    get messagesEnabled() { return configManager.getBoolean('general', 'messagesEnabled', true); },
-    get commandsEnabled() { return configManager.getBoolean('general', 'commandsEnabled', true); },
-    get greetingsEnabled() { return configManager.getBoolean('general', 'greetingsEnabled', true); },
-    get farewellsEnabled() { return configManager.getBoolean('general', 'farewellsEnabled', true); },
-    get followsEnabled() { return configManager.getBoolean('general', 'followsEnabled', true); },
-    get giftsEnabled() { return configManager.getBoolean('general', 'giftsEnabled', true); },
-    get raidsEnabled() { return configManager.getBoolean('general', 'raidsEnabled', true); },
-    get paypiggiesEnabled() { return configManager.getBoolean('general', 'paypiggiesEnabled', true); },
-    get greetNewCommentors() { return configManager.getBoolean('general', 'greetNewCommentors', false); },
-    get filterOldMessages() { return configManager.getBoolean('general', 'filterOldMessages', true); },
-    get logChatMessages() { return configManager.getBoolean('general', 'logChatMessages', false); },
-    get keywordParsingEnabled() { return configManager.getBoolean('general', 'keywordParsingEnabled', true); },
-    get ignoreSelfMessages() { return configManager.getBoolean('general', 'ignoreSelfMessages', false); },
+    get envFileReadEnabled() { return configManager.getBoolean('general', 'envFileReadEnabled', DEFAULTS.general.envFileReadEnabled); },
+    get envFileWriteEnabled() { return configManager.getBoolean('general', 'envFileWriteEnabled', DEFAULTS.general.envFileWriteEnabled); },
+    get messagesEnabled() { return configManager.getBoolean('general', 'messagesEnabled', DEFAULTS.general.messagesEnabled); },
+    get commandsEnabled() { return configManager.getBoolean('general', 'commandsEnabled', DEFAULTS.general.commandsEnabled); },
+    get greetingsEnabled() { return configManager.getBoolean('general', 'greetingsEnabled', DEFAULTS.general.greetingsEnabled); },
+    get farewellsEnabled() { return configManager.getBoolean('general', 'farewellsEnabled', DEFAULTS.general.farewellsEnabled); },
+    get followsEnabled() { return configManager.getBoolean('general', 'followsEnabled', DEFAULTS.general.followsEnabled); },
+    get giftsEnabled() { return configManager.getBoolean('general', 'giftsEnabled', DEFAULTS.general.giftsEnabled); },
+    get raidsEnabled() { return configManager.getBoolean('general', 'raidsEnabled', DEFAULTS.general.raidsEnabled); },
+    get paypiggiesEnabled() { return configManager.getBoolean('general', 'paypiggiesEnabled', DEFAULTS.general.paypiggiesEnabled); },
+    get greetNewCommentors() { return configManager.getBoolean('general', 'greetNewCommentors', DEFAULTS.general.greetNewCommentors); },
+    get filterOldMessages() { return configManager.getBoolean('general', 'filterOldMessages', DEFAULTS.general.filterOldMessages); },
+    get logChatMessages() { return configManager.getBoolean('general', 'logChatMessages', DEFAULTS.general.logChatMessages); },
+    get keywordParsingEnabled() { return configManager.getBoolean('general', 'keywordParsingEnabled', DEFAULTS.general.keywordParsingEnabled); },
+    get ignoreSelfMessages() { return configManager.getBoolean('general', 'ignoreSelfMessages', DEFAULTS.general.ignoreSelfMessages); },
     get fallbackUsername() { return resolveFallbackUsername(); },
     get anonymousUsername() { return resolveAnonymousUsername(); },
-
-    // Per-user notification suppression defaults
-    get userSuppressionEnabled() { return configManager.getBoolean('general', 'userSuppressionEnabled', true); },
-    get maxNotificationsPerUser() { return configManager.getNumber('general', 'maxNotificationsPerUser', 5); },
-    get suppressionWindowMs() { return configManager.getNumber('general', 'suppressionWindowMs', 60000); },
-    get suppressionDurationMs() { return configManager.getNumber('general', 'suppressionDurationMs', 300000); },
-    get suppressionCleanupIntervalMs() { return configManager.getNumber('general', 'suppressionCleanupIntervalMs', 300000); },
-    
-    // TTS (Text-To-Speech) functionality
-    get ttsEnabled() { return configManager.getBoolean('general', 'ttsEnabled', false); },
-
-    // Stream detection (cross-platform defaults)
-    get streamDetectionEnabled() { return configManager.getBoolean('general', 'streamDetectionEnabled', true); },
-    get streamRetryInterval() { return configManager.getNumber('general', 'streamRetryInterval', 15); },
-    get streamMaxRetries() { return configManager.getNumber('general', 'streamMaxRetries', -1); },
-    get continuousMonitoringInterval() { return configManager.getNumber('general', 'continuousMonitoringInterval', 60); }
+    get userSuppressionEnabled() { return configManager.getBoolean('general', 'userSuppressionEnabled', DEFAULTS.general.userSuppressionEnabled); },
+    get maxNotificationsPerUser() { return configManager.getNumber('general', 'maxNotificationsPerUser', DEFAULTS.general.maxNotificationsPerUser); },
+    get suppressionWindowMs() { return configManager.getNumber('general', 'suppressionWindow', DEFAULTS.general.suppressionWindow) * 1000; },
+    get suppressionDurationMs() { return configManager.getNumber('general', 'suppressionDuration', DEFAULTS.general.suppressionDuration) * 1000; },
+    get suppressionCleanupIntervalMs() { return configManager.getNumber('general', 'suppressionCleanupInterval', DEFAULTS.general.suppressionCleanupInterval) * 1000; },
+    get ttsEnabled() { return configManager.getBoolean('general', 'ttsEnabled', DEFAULTS.general.ttsEnabled); },
+    get streamDetectionEnabled() { return configManager.getBoolean('general', 'streamDetectionEnabled', DEFAULTS.general.streamDetectionEnabled); },
+    get streamRetryInterval() { return configManager.getNumber('general', 'streamRetryInterval', DEFAULTS.general.streamRetryInterval); },
+    get streamMaxRetries() { return configManager.getNumber('general', 'streamMaxRetries', DEFAULTS.general.streamMaxRetries); },
+    get continuousMonitoringInterval() { return configManager.getNumber('general', 'continuousMonitoringInterval', DEFAULTS.general.continuousMonitoringInterval); }
 };
 
 // Lazy initialization for platform configs to avoid circular dependency
@@ -593,7 +569,7 @@ const streamElementsConfig = {
     get twitchChannelId() { return resolveConfigValue('streamelements', 'twitchChannelId'); },
     get jwtToken() { return resolveSecretValue('STREAMELEMENTS_JWT_TOKEN'); },
     get dataLoggingEnabled() { return configManager.getBoolean('logging', 'streamelementsDataLoggingEnabled', false); },
-    get dataLoggingPath() { return DEFAULT_LOG_DIRECTORY; }
+    get dataLoggingPath() { return DEFAULTS.LOG_DIRECTORY; }
 };
 
 // Timing configuration
@@ -751,14 +727,14 @@ function validateNewFeaturesConfig(config) {
 
 const DEFAULT_LOGGING_CONFIG = {
     console: { enabled: true, level: 'console' }, // Only user-facing messages (chat, notifications, errors)
-    file: { enabled: true, level: 'debug', directory: DEFAULT_LOG_DIRECTORY },
+    file: { enabled: true, level: 'debug', directory: DEFAULTS.LOG_DIRECTORY },
     debug: { enabled: false },
     platforms: {
         twitch: { enabled: true, fileLogging: true },
         youtube: { enabled: true, fileLogging: true },
         tiktok: { enabled: true, fileLogging: true }
     },
-    chat: { enabled: true, separateFiles: true, directory: DEFAULT_LOG_DIRECTORY }
+    chat: { enabled: true, separateFiles: true, directory: DEFAULTS.LOG_DIRECTORY }
 };
 
 function validateLoggingConfig(userConfig = {}) {
@@ -812,10 +788,10 @@ function validateLoggingConfig(userConfig = {}) {
         }
     }
 
-    config.file.directory = DEFAULT_LOG_DIRECTORY;
+    config.file.directory = DEFAULTS.LOG_DIRECTORY;
     config.chat.enabled = config.file.enabled;
     config.chat.separateFiles = true;
-    config.chat.directory = DEFAULT_LOG_DIRECTORY;
+    config.chat.directory = DEFAULTS.LOG_DIRECTORY;
     
     return config;
 }

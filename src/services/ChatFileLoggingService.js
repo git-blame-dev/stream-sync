@@ -2,8 +2,7 @@
 const fs = require('fs').promises;
 const path = require('path');
 const { createPlatformErrorHandler } = require('../utils/platform-error-handler');
-
-const DEFAULT_LOG_DIRECTORY = './logs';
+const { DEFAULTS } = require('../core/config-defaults');
 
 class ChatFileLoggingService {
     constructor(dependencies = {}) {
@@ -28,9 +27,9 @@ class ChatFileLoggingService {
             };
 
             const logFileName = `${platform}-data-log.ndjson`;
-            const logFilePath = path.join(DEFAULT_LOG_DIRECTORY, logFileName);
+            const logFilePath = path.join(DEFAULTS.LOG_DIRECTORY, logFileName);
 
-            await this.ensureDirectoryExists(DEFAULT_LOG_DIRECTORY);
+            await this.ensureDirectoryExists(DEFAULTS.LOG_DIRECTORY);
 
             const logLine = JSON.stringify(logEntry) + '\n';
             await fs.appendFile(logFilePath, logLine, 'utf8');
@@ -58,7 +57,7 @@ class ChatFileLoggingService {
     async getLogStatistics(platform, platformConfig = {}) {
         try {
             const logFileName = `${platform}-data-log.ndjson`;
-            const logFilePath = path.join(DEFAULT_LOG_DIRECTORY, logFileName);
+            const logFilePath = path.join(DEFAULTS.LOG_DIRECTORY, logFileName);
 
             const stats = await fs.stat(logFilePath);
             return {

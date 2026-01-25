@@ -1,7 +1,7 @@
 
 const crypto = require('crypto');
 const { logger } = require('../core/logging');
-const { parseConfigBoolean } = require('../utils/config-boolean-parser');
+const { ConfigValidator } = require('../utils/config-validator');
 const { normalizeDisplayQueueConfig } = require('./display-queue-config');
 const { validateDisplayConfig } = require('../utils/configuration-validator');
 const { getDefaultSourcesManager } = require('./sources');
@@ -104,7 +104,7 @@ class DisplayQueue {
         // Check global TTS enabled setting - respect the actual config value
         // Use proper boolean parser to handle string values from INI
         // Default to false for safety (when ttsEnabled is undefined)
-        return parseConfigBoolean(this.config.ttsEnabled, false);
+        return ConfigValidator.parseBoolean(this.config.ttsEnabled, false);
     }
 
     async setTTSText(text) {
@@ -301,7 +301,7 @@ class DisplayQueue {
         }
 
         // Check if messages are enabled for the given platform
-        if (!parseConfigBoolean(this.config[platform].messagesEnabled, true)) {
+        if (!ConfigValidator.parseBoolean(this.config[platform].messagesEnabled, true)) {
             logger.debug(`[Display Queue] Chat for platform '${platform}' is disabled. Skipping message from '${username}'.`, 'display-queue');
             return; // Skip displaying the chat message
         }
@@ -387,7 +387,7 @@ class DisplayQueue {
         }
 
         // Check if notifications are enabled for the given platform
-        if (!parseConfigBoolean(this.config[platform].notificationsEnabled, true)) {
+        if (!ConfigValidator.parseBoolean(this.config[platform].notificationsEnabled, true)) {
             logger.debug(`[Display Queue] Notifications for platform '${platform}' is disabled. Skipping notification for '${username}'.`, 'display-queue');
             return; // Skip displaying the notification
         }

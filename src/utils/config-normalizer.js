@@ -1,3 +1,4 @@
+const { DEFAULTS } = require('../core/config-defaults');
 
 const normalizeOptionalBoolean = (value) => {
     if (value === undefined || value === null) return undefined;
@@ -21,17 +22,6 @@ const normalizeOptionalNumber = (value, { min } = {}) => {
 const dropUndefinedValues = (valueMap) => Object.fromEntries(
     Object.entries(valueMap).filter(([, value]) => value !== undefined)
 );
-
-const DEFAULT_LOG_DIRECTORY = './logs';
-
-const DEFAULT_YOUTUBE_CONFIG = {
-    retryAttempts: 3,
-    maxStreams: 2,
-    streamPollingInterval: 60,
-    fullCheckInterval: 300000,
-    dataLoggingEnabled: false,
-    dataLoggingPath: DEFAULT_LOG_DIRECTORY
-};
 
 function normalizeYouTubeConfig(config) {
     if (!config) return config;
@@ -75,12 +65,12 @@ function normalizeYouTubeConfig(config) {
         greetNewCommentors: normalizeOptionalBoolean(config.greetNewCommentors),
         ignoreSelfMessages: normalizeOptionalBoolean(config.ignoreSelfMessages),
         pollInterval: normalizeOptionalNumber(config.pollInterval, { min: 1 }),
-        dataLoggingEnabled: dataLoggingEnabled ?? DEFAULT_YOUTUBE_CONFIG.dataLoggingEnabled,
-        dataLoggingPath: DEFAULT_LOG_DIRECTORY,
-        retryAttempts: retryAttempts ?? DEFAULT_YOUTUBE_CONFIG.retryAttempts,
-        streamPollingInterval: streamPollingInterval ?? DEFAULT_YOUTUBE_CONFIG.streamPollingInterval,
-        fullCheckInterval: fullCheckInterval ?? DEFAULT_YOUTUBE_CONFIG.fullCheckInterval,
-        maxStreams: maxStreams ?? DEFAULT_YOUTUBE_CONFIG.maxStreams
+        dataLoggingEnabled: dataLoggingEnabled ?? DEFAULTS.youtube.dataLoggingEnabled,
+        dataLoggingPath: DEFAULTS.LOG_DIRECTORY,
+        retryAttempts: retryAttempts ?? DEFAULTS.youtube.retryAttempts,
+        streamPollingInterval: streamPollingInterval ?? DEFAULTS.youtube.streamPollingInterval,
+        fullCheckInterval: fullCheckInterval ?? DEFAULTS.youtube.fullCheckInterval,
+        maxStreams: maxStreams ?? DEFAULTS.youtube.maxStreams
     };
 
     return dropUndefinedValues(normalized);
@@ -164,6 +154,5 @@ function validateYouTubeConfig(config) {
 module.exports = {
     normalizeYouTubeConfig,
     validateRequiredKeys,
-    validateYouTubeConfig,
-    DEFAULT_YOUTUBE_CONFIG
+    validateYouTubeConfig
 };

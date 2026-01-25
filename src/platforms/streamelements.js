@@ -2,11 +2,10 @@
 const { EventEmitter } = require('events');
 const { safeSetTimeout, safeSetInterval } = require('../utils/timeout-validator');
 const { createPlatformErrorHandler } = require('../utils/platform-error-handler');
-const { ConfigValidatorStatic } = require('../utils/config-validator');
+const { ConfigValidator } = require('../utils/config-validator');
 const { createRetrySystem } = require('../utils/retry-system');
 const { STREAMELEMENTS } = require('../core/endpoints');
-
-const DEFAULT_LOG_DIRECTORY = './logs';
+const { DEFAULTS } = require('../core/config-defaults');
 
 
 class StreamElementsPlatform extends EventEmitter {
@@ -32,12 +31,12 @@ class StreamElementsPlatform extends EventEmitter {
         const trimToUndefined = (value) => (typeof value === 'string' && value.trim() ? value.trim() : undefined);
 
         this.config = {
-            enabled: ConfigValidatorStatic.parseBoolean(config.enabled, false),
+            enabled: ConfigValidator.parseBoolean(config.enabled, DEFAULTS.streamelements.enabled),
             youtubeChannelId: trimToUndefined(config.youtubeChannelId),
             twitchChannelId: trimToUndefined(config.twitchChannelId),
             jwtToken: trimToUndefined(config.jwtToken),
-            dataLoggingEnabled: ConfigValidatorStatic.parseBoolean(config.dataLoggingEnabled, false),
-            dataLoggingPath: DEFAULT_LOG_DIRECTORY
+            dataLoggingEnabled: ConfigValidator.parseBoolean(config.dataLoggingEnabled, DEFAULTS.streamelements.dataLoggingEnabled),
+            dataLoggingPath: DEFAULTS.LOG_DIRECTORY
         };
         
         this.connection = null;

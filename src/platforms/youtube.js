@@ -10,7 +10,8 @@ const { withTimeout } = require('../utils/timeout-wrapper');
 const innertubeInstanceManager = require('../services/innertube-instance-manager');
 const { ViewerCountProviderFactory } = require('../utils/viewer-count-providers');
 
-const { normalizeYouTubeConfig, DEFAULT_YOUTUBE_CONFIG } = require('../utils/config-normalizer');
+const { normalizeYouTubeConfig } = require('../utils/config-normalizer');
+const { DEFAULTS } = require('../core/config-defaults');
 const { YouTubeConnectionManager } = require('../utils/youtube-connection-manager');
 const { createPlatformErrorHandler } = require('../utils/platform-error-handler');
 const { getSystemTimestampISO } = require('../utils/validation');
@@ -287,10 +288,10 @@ class YouTubePlatform extends EventEmitter {
             );
         };
         
-        applyNumericFix('retryAttempts', 1, DEFAULT_YOUTUBE_CONFIG.retryAttempts);
-        applyNumericFix('streamPollingInterval', 1, DEFAULT_YOUTUBE_CONFIG.streamPollingInterval);
-        applyNumericFix('maxStreams', 0, DEFAULT_YOUTUBE_CONFIG.maxStreams);
-        applyNumericFix('fullCheckInterval', 1, DEFAULT_YOUTUBE_CONFIG.fullCheckInterval);
+        applyNumericFix('retryAttempts', 1, DEFAULTS.youtube.retryAttempts);
+        applyNumericFix('streamPollingInterval', 1, DEFAULTS.youtube.streamPollingInterval);
+        applyNumericFix('maxStreams', 0, DEFAULTS.youtube.maxStreams);
+        applyNumericFix('fullCheckInterval', 1, DEFAULTS.youtube.fullCheckInterval);
         
         if (fixes.length > 0 && this.logger && this.logger.info) {
             this.logger.info(

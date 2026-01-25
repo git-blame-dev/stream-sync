@@ -1,18 +1,17 @@
-const { parseConfigBooleanDefaultTrue } = require('../utils/config-boolean-parser');
-
-const DEFAULT_MAX_QUEUE_SIZE = 100;
+const { ConfigValidator } = require('../utils/config-validator');
+const { DEFAULTS } = require('../core/config-defaults');
 
 function normalizeDisplayQueueConfig(input = {}) {
     const giftsConfig = input.gifts || {};
     const obsConfig = input.obs || {};
     const maxQueueSize = Number.isFinite(Number(input.maxQueueSize)) && Number(input.maxQueueSize) > 0
         ? Number(input.maxQueueSize)
-        : DEFAULT_MAX_QUEUE_SIZE;
+        : DEFAULTS.displayQueue.maxQueueSize;
 
     return {
-        autoProcess: parseConfigBooleanDefaultTrue(input.autoProcess),
+        autoProcess: ConfigValidator.parseBoolean(input.autoProcess, DEFAULTS.displayQueue.autoProcess),
         maxQueueSize,
-        chatOptimization: parseConfigBooleanDefaultTrue(input.chatOptimization),
+        chatOptimization: ConfigValidator.parseBoolean(input.chatOptimization, DEFAULTS.displayQueue.chatOptimization),
         ttsEnabled: input.ttsEnabled,
         chat: input.chat || {},
         notification: input.notification || {},
