@@ -276,30 +276,6 @@ const resolvePlatformApiKey = (platformName) => {
     }
 };
 
-const resolveFallbackUsername = () => {
-    if (!configManager.config || !configManager.config.general) {
-        return 'Unknown User';
-    }
-    const rawValue = configManager.config.general.fallbackUsername;
-    if (rawValue === undefined || rawValue === null) {
-        return 'Unknown User';
-    }
-    const trimmed = String(rawValue).trim();
-    return trimmed.length > 0 ? trimmed : 'Unknown User';
-};
-
-const resolveAnonymousUsername = () => {
-    if (!configManager.config || !configManager.config.general) {
-        return 'Anonymous User';
-    }
-    const rawValue = configManager.config.general.anonymousUsername;
-    if (rawValue === undefined || rawValue === null) {
-        return 'Anonymous User';
-    }
-    const trimmed = String(rawValue).trim();
-    return trimmed.length > 0 ? trimmed : 'Anonymous User';
-};
-
 const resolveHttpUserAgents = () => {
     const rawAgents = configManager.get('http', 'userAgents');
     const parsed = parseUserAgentList(rawAgents);
@@ -308,10 +284,10 @@ const resolveHttpUserAgents = () => {
 
 const httpConfig = {
     get userAgents() { return resolveHttpUserAgents(); },
-    get defaultTimeoutMs() { return configManager.getNumber('http', 'defaultTimeoutMs', 10000); },
-    get reachabilityTimeoutMs() { return configManager.getNumber('http', 'reachabilityTimeoutMs', 5000); },
-    get enhancedTimeoutMs() { return configManager.getNumber('http', 'enhancedTimeoutMs', 3000); },
-    get enhancedReachabilityTimeoutMs() { return configManager.getNumber('http', 'enhancedReachabilityTimeoutMs', 3000); }
+    get defaultTimeoutMs() { return configManager.getNumber('http', 'defaultTimeoutMs', DEFAULTS.http.defaultTimeoutMs); },
+    get reachabilityTimeoutMs() { return configManager.getNumber('http', 'reachabilityTimeoutMs', DEFAULTS.http.reachabilityTimeoutMs); },
+    get enhancedTimeoutMs() { return configManager.getNumber('http', 'enhancedTimeoutMs', DEFAULTS.http.enhancedTimeoutMs); },
+    get enhancedReachabilityTimeoutMs() { return configManager.getNumber('http', 'enhancedReachabilityTimeoutMs', DEFAULTS.http.enhancedReachabilityTimeoutMs); }
 };
 
 // Helper function to create platform-specific config objects with fallback logic
@@ -334,7 +310,7 @@ function createPlatformConfig(platformName) {
             }
             return generalConfig.viewerCountPollingIntervalMs;
         },
-        get dataLoggingEnabled() { return configManager.getBoolean('logging', 'platformDataLoggingEnabled', false); },
+        get dataLoggingEnabled() { return configManager.getBoolean('logging', 'platformDataLoggingEnabled', DEFAULTS.logging.platformDataLoggingEnabled); },
         get dataLoggingPath() { return DEFAULTS.LOG_DIRECTORY; }
     };
 
@@ -374,22 +350,21 @@ function createPlatformConfig(platformName) {
         });
     });
 
-    // YouTube specific granular settings
     if (platformName === 'youtube') {
         Object.assign(platformConfig, {
             get enableAPI() {
-                return configManager.getBoolean('youtube', 'enableAPI', false);
+                return configManager.getBoolean('youtube', 'enableAPI', DEFAULTS.youtube.enableAPI);
             },
             get streamDetectionMethod() {
-                const method = configManager.getString('youtube', 'streamDetectionMethod', 'youtubei').toLowerCase();
-                return ['youtubei', 'api'].includes(method) ? method : 'youtubei';
+                const method = configManager.getString('youtube', 'streamDetectionMethod', DEFAULTS.youtube.streamDetectionMethod).toLowerCase();
+                return ['youtubei', 'api'].includes(method) ? method : DEFAULTS.youtube.streamDetectionMethod;
             },
             get viewerCountMethod() {
-                const method = configManager.getString('youtube', 'viewerCountMethod', 'youtubei').toLowerCase();
-                return ['youtubei', 'api'].includes(method) ? method : 'youtubei';
+                const method = configManager.getString('youtube', 'viewerCountMethod', DEFAULTS.youtube.viewerCountMethod).toLowerCase();
+                return ['youtubei', 'api'].includes(method) ? method : DEFAULTS.youtube.viewerCountMethod;
             },
             get chatMethod() { return 'scraping'; },
-            get maxStreams() { return configManager.getNumber('youtube', 'maxStreams'); },
+            get maxStreams() { return configManager.getNumber('youtube', 'maxStreams', DEFAULTS.youtube.maxStreams); },
         });
     }
 
@@ -402,14 +377,14 @@ const generalConfig = {
     get cmdCooldownMs() { return configManager.getNumber('general', 'cmdCoolDown', DEFAULTS.general.cmdCoolDown) * 1000; },
     get globalCmdCooldownMs() { return configManager.getNumber('general', 'globalCmdCoolDown', DEFAULTS.general.globalCmdCoolDown) * 1000; },
     get viewerCountPollingIntervalMs() { return configManager.getNumber('general', 'viewerCountPollingInterval', DEFAULTS.general.viewerCountPollingInterval) * 1000; },
-    get viewerCountScene() { return configManager.get('general', 'viewerCountScene', 'viewer-count-scene'); },
-    get chatMsgTxt() { return configManager.get('general', 'chatMsgTxt', 'chat-message-text'); },
-    get chatMsgScene() { return configManager.get('general', 'chatMsgScene', 'chat-message-scene'); },
-    get chatMsgGroup() { return configManager.get('general', 'chatMsgGroup', 'chat-message-group'); },
+    get viewerCountScene() { return configManager.get('general', 'viewerCountScene', DEFAULTS.general.viewerCountScene); },
+    get chatMsgTxt() { return configManager.get('general', 'chatMsgTxt', DEFAULTS.general.chatMsgTxt); },
+    get chatMsgScene() { return configManager.get('general', 'chatMsgScene', DEFAULTS.general.chatMsgScene); },
+    get chatMsgGroup() { return configManager.get('general', 'chatMsgGroup', DEFAULTS.general.chatMsgGroup); },
     get debugEnabled() { return configManager.getBoolean('general', 'debugEnabled', DEFAULTS.general.debugEnabled); },
     get envFilePath() {
-        const envFilePath = configManager.getString('general', 'envFilePath', './.env');
-        return envFilePath && envFilePath.trim() ? envFilePath : './.env';
+        const envFilePath = configManager.getString('general', 'envFilePath', DEFAULTS.general.envFilePath);
+        return envFilePath && envFilePath.trim() ? envFilePath : DEFAULTS.general.envFilePath;
     },
     get envFileReadEnabled() { return configManager.getBoolean('general', 'envFileReadEnabled', DEFAULTS.general.envFileReadEnabled); },
     get envFileWriteEnabled() { return configManager.getBoolean('general', 'envFileWriteEnabled', DEFAULTS.general.envFileWriteEnabled); },
@@ -426,8 +401,8 @@ const generalConfig = {
     get logChatMessages() { return configManager.getBoolean('general', 'logChatMessages', DEFAULTS.general.logChatMessages); },
     get keywordParsingEnabled() { return configManager.getBoolean('general', 'keywordParsingEnabled', DEFAULTS.general.keywordParsingEnabled); },
     get ignoreSelfMessages() { return configManager.getBoolean('general', 'ignoreSelfMessages', DEFAULTS.general.ignoreSelfMessages); },
-    get fallbackUsername() { return resolveFallbackUsername(); },
-    get anonymousUsername() { return resolveAnonymousUsername(); },
+    get fallbackUsername() { return configManager.getString('general', 'fallbackUsername', DEFAULTS.general.fallbackUsername); },
+    get anonymousUsername() { return configManager.getString('general', 'anonymousUsername', DEFAULTS.general.anonymousUsername); },
     get userSuppressionEnabled() { return configManager.getBoolean('general', 'userSuppressionEnabled', DEFAULTS.general.userSuppressionEnabled); },
     get maxNotificationsPerUser() { return configManager.getNumber('general', 'maxNotificationsPerUser', DEFAULTS.general.maxNotificationsPerUser); },
     get suppressionWindowMs() { return configManager.getNumber('general', 'suppressionWindow', DEFAULTS.general.suppressionWindow) * 1000; },
@@ -460,13 +435,12 @@ function getTwitchConfig() {
         const rawSection = configManager.getSection('twitch') || {};
         _twitchConfig = Object.assign({}, rawSection, createPlatformConfig('twitch'));
         
-        // Add Twitch-specific properties as getters (these will override raw fields if present)
         Object.assign(_twitchConfig, {
             get channel() { return configManager.getString('twitch', 'channel', ''); },
-            get eventsub_enabled() { return configManager.getBoolean('twitch', 'eventsub_enabled', false); },
+            get eventsub_enabled() { return configManager.getBoolean('twitch', 'eventsub_enabled', DEFAULTS.twitch.eventsubEnabled); },
             get tokenStorePath() {
-                const tokenStorePath = configManager.getString('twitch', 'tokenStorePath', './data/twitch-tokens.json');
-                return tokenStorePath.trim() ? tokenStorePath : './data/twitch-tokens.json';
+                const tokenStorePath = configManager.getString('twitch', 'tokenStorePath', DEFAULTS.twitch.tokenStorePath);
+                return tokenStorePath.trim() ? tokenStorePath : DEFAULTS.twitch.tokenStorePath;
             }
         });
 
@@ -493,58 +467,52 @@ function getYoutubeConfig() {
 }
 
 const obsConfig = {
-    // OBS WebSocket server address
-    get address() { return configManager.getString('obs', 'address', 'ws://localhost:4455'); },
-    // OBS WebSocket server password
+    get address() { return configManager.getString('obs', 'address', DEFAULTS.obs.address); },
     get password() {
         return resolveSecretValue('OBS_PASSWORD');
     },
-    // OBS integration enabled/disabled
-    get enabled() { return configManager.getBoolean('obs', 'enabled', false); },
-    // Text source name for notifications
-    get notificationTxt() { return configManager.getString('obs', 'notificationTxt', 'notification-text'); },
-    // Text source name for chat messages
-    get chatMsgTxt() { return configManager.getString('obs', 'chatMsgTxt', 'chat-message-text'); },
-    // Scene name for notifications
-    get notificationScene() { return configManager.getString('obs', 'notificationScene', 'notification-scene'); },
-    get notificationMsgGroup() { return configManager.getString('obs', 'notificationMsgGroup', 'notification-group'); },
-    get ttsTxt() { return configManager.getString('obs', 'ttsTxt', 'tts-text'); },
-    get ttsScene() { return configManager.getString('obs', 'ttsScene', 'tts-scene'); }
+    get enabled() { return configManager.getBoolean('obs', 'enabled', DEFAULTS.obs.enabled); },
+    get notificationTxt() { return configManager.getString('obs', 'notificationTxt', DEFAULTS.obs.notificationTxt); },
+    get chatMsgTxt() { return configManager.getString('obs', 'chatMsgTxt', DEFAULTS.obs.chatMsgTxt); },
+    get notificationScene() { return configManager.getString('obs', 'notificationScene', DEFAULTS.obs.notificationScene); },
+    get notificationMsgGroup() { return configManager.getString('obs', 'notificationMsgGroup', DEFAULTS.obs.notificationMsgGroup); },
+    get ttsTxt() { return configManager.getString('obs', 'ttsTxt', DEFAULTS.obs.ttsTxt); },
+    get ttsScene() { return configManager.getString('obs', 'ttsScene', DEFAULTS.obs.ttsScene); }
 };
 
 const handcamConfig = {
-    get enabled() { return configManager.getBoolean('handcam', 'glowEnabled', false); },
-    get sourceName() { return configManager.getString('handcam', 'sourceName', 'handcam-source'); },
-    get sceneName() { return configManager.getString('handcam', 'sceneName', 'handcam-scene'); },
-    get glowFilterName() { return configManager.getString('handcam', 'glowFilterName', 'Glow'); },
-    get maxSize() { return configManager.getNumber('handcam', 'maxSize', 50); },
-    get rampUpDuration() { return configManager.getNumber('handcam', 'rampUpDuration', 0.5); },
-    get holdDuration() { return configManager.getNumber('handcam', 'holdDuration', 6.0); },
-    get rampDownDuration() { return configManager.getNumber('handcam', 'rampDownDuration', 0.5); },
-    get totalSteps() { return configManager.getNumber('handcam', 'totalSteps', 30); },
-    get incrementPercent() { return configManager.getNumber('handcam', 'incrementPercent', 3.33); },
-    get easingEnabled() { return configManager.getBoolean('handcam', 'easingEnabled', true); },
-    get animationInterval() { return configManager.getNumber('handcam', 'animationInterval', 16); }
+    get enabled() { return configManager.getBoolean('handcam', 'glowEnabled', DEFAULTS.handcam.glowEnabled); },
+    get sourceName() { return configManager.getString('handcam', 'sourceName', DEFAULTS.handcam.sourceName); },
+    get sceneName() { return configManager.getString('handcam', 'sceneName', DEFAULTS.handcam.sceneName); },
+    get glowFilterName() { return configManager.getString('handcam', 'glowFilterName', DEFAULTS.handcam.glowFilterName); },
+    get maxSize() { return configManager.getNumber('handcam', 'maxSize', DEFAULTS.handcam.maxSize); },
+    get rampUpDuration() { return configManager.getNumber('handcam', 'rampUpDuration', DEFAULTS.handcam.rampUpDuration); },
+    get holdDuration() { return configManager.getNumber('handcam', 'holdDuration', DEFAULTS.handcam.holdDuration); },
+    get rampDownDuration() { return configManager.getNumber('handcam', 'rampDownDuration', DEFAULTS.handcam.rampDownDuration); },
+    get totalSteps() { return configManager.getNumber('handcam', 'totalSteps', DEFAULTS.handcam.totalSteps); },
+    get incrementPercent() { return configManager.getNumber('handcam', 'incrementPercent', DEFAULTS.handcam.incrementPercent); },
+    get easingEnabled() { return configManager.getBoolean('handcam', 'easingEnabled', DEFAULTS.handcam.easingEnabled); },
+    get animationInterval() { return configManager.getNumber('handcam', 'animationInterval', DEFAULTS.handcam.animationInterval); }
 };
 
 const goalsConfig = {
-    get enabled() { return configManager.getBoolean('goals', 'enabled', false); },
-    get goalScene() { return configManager.getString('goals', 'goalScene', 'goals-scene'); },
-    get tiktokGoalEnabled() { return configManager.getBoolean('goals', 'tiktokGoalEnabled', true); },
+    get enabled() { return configManager.getBoolean('goals', 'enabled', DEFAULTS.goals.enabled); },
+    get goalScene() { return configManager.getString('goals', 'goalScene', DEFAULTS.goals.goalScene); },
+    get tiktokGoalEnabled() { return configManager.getBoolean('goals', 'tiktokGoalEnabled', DEFAULTS.goals.tiktokGoalEnabled); },
     get tiktokGoalSource() { return configManager.getString('goals', 'tiktokGoalSource'); },
-    get tiktokGoalTarget() { return configManager.getNumber('goals', 'tiktokGoalTarget', 1000); },
-    get tiktokGoalCurrency() { return configManager.getString('goals', 'tiktokGoalCurrency', 'coins'); },
-    get tiktokPaypiggyEquivalent() { return configManager.getNumber('goals', 'tiktokPaypiggyEquivalent', 50); },
-    get youtubeGoalEnabled() { return configManager.getBoolean('goals', 'youtubeGoalEnabled', true); },
+    get tiktokGoalTarget() { return configManager.getNumber('goals', 'tiktokGoalTarget', DEFAULTS.goals.tiktokGoalTarget); },
+    get tiktokGoalCurrency() { return configManager.getString('goals', 'tiktokGoalCurrency', DEFAULTS.goals.tiktokGoalCurrency); },
+    get tiktokPaypiggyEquivalent() { return configManager.getNumber('goals', 'tiktokPaypiggyEquivalent', DEFAULTS.goals.tiktokPaypiggyEquivalent); },
+    get youtubeGoalEnabled() { return configManager.getBoolean('goals', 'youtubeGoalEnabled', DEFAULTS.goals.youtubeGoalEnabled); },
     get youtubeGoalSource() { return configManager.getString('goals', 'youtubeGoalSource'); },
-    get youtubeGoalTarget() { return configManager.getNumber('goals', 'youtubeGoalTarget', 1.00); },
-    get youtubeGoalCurrency() { return configManager.getString('goals', 'youtubeGoalCurrency', 'dollars'); },
-    get youtubePaypiggyPrice() { return configManager.getNumber('goals', 'youtubePaypiggyPrice', 4.99); },
-    get twitchGoalEnabled() { return configManager.getBoolean('goals', 'twitchGoalEnabled', true); },
+    get youtubeGoalTarget() { return configManager.getNumber('goals', 'youtubeGoalTarget', DEFAULTS.goals.youtubeGoalTarget); },
+    get youtubeGoalCurrency() { return configManager.getString('goals', 'youtubeGoalCurrency', DEFAULTS.goals.youtubeGoalCurrency); },
+    get youtubePaypiggyPrice() { return configManager.getNumber('goals', 'youtubePaypiggyPrice', DEFAULTS.goals.youtubePaypiggyPrice); },
+    get twitchGoalEnabled() { return configManager.getBoolean('goals', 'twitchGoalEnabled', DEFAULTS.goals.twitchGoalEnabled); },
     get twitchGoalSource() { return configManager.getString('goals', 'twitchGoalSource'); },
-    get twitchGoalTarget() { return configManager.getNumber('goals', 'twitchGoalTarget', 100); },
-    get twitchGoalCurrency() { return configManager.getString('goals', 'twitchGoalCurrency', 'bits'); },
-    get twitchPaypiggyEquivalent() { return configManager.getNumber('goals', 'twitchPaypiggyEquivalent', 350); }
+    get twitchGoalTarget() { return configManager.getNumber('goals', 'twitchGoalTarget', DEFAULTS.goals.twitchGoalTarget); },
+    get twitchGoalCurrency() { return configManager.getString('goals', 'twitchGoalCurrency', DEFAULTS.goals.twitchGoalCurrency); },
+    get twitchPaypiggyEquivalent() { return configManager.getNumber('goals', 'twitchPaypiggyEquivalent', DEFAULTS.goals.twitchPaypiggyEquivalent); }
 };
 
 const vfxConfig = {
@@ -553,67 +521,55 @@ const vfxConfig = {
 
 const giftConfig = {
     get command() { return configManager.getString('gifts', 'command', ''); },
-    get giftVideoSource() { return configManager.getString('gifts', 'giftVideoSource', 'gift-video'); },
-    get giftAudioSource() { return configManager.getString('gifts', 'giftAudioSource', 'gift-audio'); },
-    get scene() { return configManager.getString('gifts', 'giftScene', 'gift-scene'); },
-    get lowValueThreshold() { return configManager.getNumber('gifts', 'lowValueThreshold', 10); },
-    get spamDetectionEnabled() { return configManager.getBoolean('gifts', 'spamDetectionEnabled', true); },
-    get spamDetectionWindow() { return configManager.getNumber('gifts', 'spamDetectionWindow', 5); },
-    get maxIndividualNotifications() { return configManager.getNumber('gifts', 'maxIndividualNotifications', 2); }
+    get giftVideoSource() { return configManager.getString('gifts', 'giftVideoSource', DEFAULTS.gifts.giftVideoSource); },
+    get giftAudioSource() { return configManager.getString('gifts', 'giftAudioSource', DEFAULTS.gifts.giftAudioSource); },
+    get scene() { return configManager.getString('gifts', 'giftScene', DEFAULTS.gifts.giftScene); },
+    get lowValueThreshold() { return configManager.getNumber('gifts', 'lowValueThreshold', DEFAULTS.gifts.lowValueThreshold); },
+    get spamDetectionEnabled() { return configManager.getBoolean('gifts', 'spamDetectionEnabled', DEFAULTS.gifts.spamDetectionEnabled); },
+    get spamDetectionWindow() { return configManager.getNumber('gifts', 'spamDetectionWindow', DEFAULTS.gifts.spamDetectionWindow); },
+    get maxIndividualNotifications() { return configManager.getNumber('gifts', 'maxIndividualNotifications', DEFAULTS.gifts.maxIndividualNotifications); }
 };
 
 const streamElementsConfig = {
-    get enabled() { return configManager.getBoolean('streamelements', 'enabled', false); },
+    get enabled() { return configManager.getBoolean('streamelements', 'enabled', DEFAULTS.streamelements.enabled); },
     get youtubeChannelId() { return resolveConfigValue('streamelements', 'youtubeChannelId'); },
     get twitchChannelId() { return resolveConfigValue('streamelements', 'twitchChannelId'); },
     get jwtToken() { return resolveSecretValue('STREAMELEMENTS_JWT_TOKEN'); },
-    get dataLoggingEnabled() { return configManager.getBoolean('logging', 'streamelementsDataLoggingEnabled', false); },
+    get dataLoggingEnabled() { return configManager.getBoolean('logging', 'streamelementsDataLoggingEnabled', DEFAULTS.logging.streamelementsDataLoggingEnabled); },
     get dataLoggingPath() { return DEFAULTS.LOG_DIRECTORY; }
 };
 
-// Timing configuration
 const timingConfig = {
-    get chatMessageDuration() { return configManager.getNumber('timing', 'chatMessageDuration', 4500); },
-    get defaultNotificationDuration() { return configManager.getNumber('timing', 'defaultNotificationDuration', 3000); },
-    get greetingDuration() { return configManager.getNumber('timing', 'greetingDuration', 3000); },
-    get followDuration() { return configManager.getNumber('timing', 'followDuration', 3000); },
-    get giftDuration() { return configManager.getNumber('timing', 'giftDuration', 3000); },
-    get memberDuration() { return configManager.getNumber('timing', 'memberDuration', 3000); },
-    get raidDuration() { return configManager.getNumber('timing', 'raidDuration', 3000); },
-    get fadeDuration() { return configManager.getNumber('timing', 'fadeDuration', 750); },
-    get transitionDelay() { return configManager.getNumber('timing', 'transitionDelay', 200); },
-    get notificationClearDelay() { return configManager.getNumber('timing', 'notificationClearDelay', 500); }
+    get chatMessageDuration() { return configManager.getNumber('timing', 'chatMessageDuration', DEFAULTS.timing.chatMessageDuration); },
+    get defaultNotificationDuration() { return configManager.getNumber('timing', 'defaultNotificationDuration', DEFAULTS.timing.defaultNotificationDuration); },
+    get greetingDuration() { return configManager.getNumber('timing', 'greetingDuration', DEFAULTS.timing.greetingDuration); },
+    get followDuration() { return configManager.getNumber('timing', 'followDuration', DEFAULTS.timing.followDuration); },
+    get giftDuration() { return configManager.getNumber('timing', 'giftDuration', DEFAULTS.timing.giftDuration); },
+    get memberDuration() { return configManager.getNumber('timing', 'memberDuration', DEFAULTS.timing.memberDuration); },
+    get raidDuration() { return configManager.getNumber('timing', 'raidDuration', DEFAULTS.timing.raidDuration); },
+    get fadeDuration() { return configManager.getNumber('timing', 'fadeDuration', DEFAULTS.timing.fadeDuration); },
+    get transitionDelay() { return configManager.getNumber('timing', 'transitionDelay', DEFAULTS.timing.transitionDelay); },
+    get notificationClearDelay() { return configManager.getNumber('timing', 'notificationClearDelay', DEFAULTS.timing.notificationClearDelay); }
 };
 
-// Unified spam detection configuration that maps to existing gift settings
 const spamConfig = {
-    get lowValueThreshold() { return configManager.getNumber('gifts', 'lowValueThreshold', 10); },
-    get spamDetectionEnabled() { return configManager.getBoolean('gifts', 'spamDetectionEnabled', true); },
-    get spamDetectionWindow() { return configManager.getNumber('gifts', 'spamDetectionWindow', 5); },
-    get maxIndividualNotifications() { return configManager.getNumber('gifts', 'maxIndividualNotifications', 2); }
+    get lowValueThreshold() { return configManager.getNumber('gifts', 'lowValueThreshold', DEFAULTS.gifts.lowValueThreshold); },
+    get spamDetectionEnabled() { return configManager.getBoolean('gifts', 'spamDetectionEnabled', DEFAULTS.gifts.spamDetectionEnabled); },
+    get spamDetectionWindow() { return configManager.getNumber('gifts', 'spamDetectionWindow', DEFAULTS.gifts.spamDetectionWindow); },
+    get maxIndividualNotifications() { return configManager.getNumber('gifts', 'maxIndividualNotifications', DEFAULTS.gifts.maxIndividualNotifications); }
 };
 
-// TTS (Text-to-Speech) deduplication and behavior configuration
 const ttsConfig = {
-    // Global deduplication setting - prevents duplicate TTS for monetization events
-    get deduplicationEnabled() { return configManager.getBoolean('tts', 'deduplicationEnabled', true); },
-    
-    // Debug logging for TTS deduplication decisions
-    get debugDeduplication() { return configManager.getBoolean('tts', 'debugDeduplication', false); },
-
-    // Optional TTS routing settings
-    get onlyForGifts() { return configManager.getBoolean('tts', 'onlyForGifts', false); },
-    get voice() { return configManager.getString('tts', 'voice', 'default'); },
-    get rate() { return configManager.getNumber('tts', 'rate', 1.0); },
-    get volume() { return configManager.getNumber('tts', 'volume', 1.0); },
-    
-    // Platform-specific deduplication controls
-    get twitchDeduplicationEnabled() { return configManager.getBoolean('tts', 'twitchDeduplicationEnabled', true); },
-    get youtubeDeduplicationEnabled() { return configManager.getBoolean('tts', 'youtubeDeduplicationEnabled', true); },
-    get tiktokDeduplicationEnabled() { return configManager.getBoolean('tts', 'tiktokDeduplicationEnabled', true); },
-    
-    // Performance monitoring
-    get performanceWarningThreshold() { return configManager.getNumber('tts', 'performanceWarningThreshold', 50); }
+    get deduplicationEnabled() { return configManager.getBoolean('tts', 'deduplicationEnabled', DEFAULTS.tts.deduplicationEnabled); },
+    get debugDeduplication() { return configManager.getBoolean('tts', 'debugDeduplication', DEFAULTS.tts.debugDeduplication); },
+    get onlyForGifts() { return configManager.getBoolean('tts', 'onlyForGifts', DEFAULTS.tts.onlyForGifts); },
+    get voice() { return configManager.getString('tts', 'voice', DEFAULTS.tts.voice); },
+    get rate() { return configManager.getNumber('tts', 'rate', DEFAULTS.tts.rate); },
+    get volume() { return configManager.getNumber('tts', 'volume', DEFAULTS.tts.volume); },
+    get twitchDeduplicationEnabled() { return configManager.getBoolean('tts', 'twitchDeduplicationEnabled', DEFAULTS.tts.twitchDeduplicationEnabled); },
+    get youtubeDeduplicationEnabled() { return configManager.getBoolean('tts', 'youtubeDeduplicationEnabled', DEFAULTS.tts.youtubeDeduplicationEnabled); },
+    get tiktokDeduplicationEnabled() { return configManager.getBoolean('tts', 'tiktokDeduplicationEnabled', DEFAULTS.tts.tiktokDeduplicationEnabled); },
+    get performanceWarningThreshold() { return configManager.getNumber('tts', 'performanceWarningThreshold', DEFAULTS.tts.performanceWarningThreshold); }
 };
 
 
@@ -637,18 +593,18 @@ const config = {
     get raids() { return { command: configManager.getString('raids', 'command', '') }; },
     get paypiggies() { return { command: configManager.getString('paypiggies', 'command', '') }; },
     get greetings() { return { command: configManager.getString('greetings', 'command', '') }; },
-    get farewell() { 
-        return { 
-            enabled: configManager.getBoolean('farewell', 'enabled', false),
-            command: configManager.getString('farewell', 'command', '') 
-        }; 
+    get farewell() {
+        return {
+            enabled: configManager.getBoolean('farewell', 'enabled', DEFAULTS.farewell.enabled),
+            command: configManager.getString('farewell', 'command', '')
+        };
     },
     get streamelements() { return streamElementsConfig; },
-    get commands() { 
+    get commands() {
         const commandsSection = configManager.getSection('commands');
         return {
             ...commandsSection,
-            get enabled() { return configManager.getBoolean('commands', 'enabled', false); }
+            get enabled() { return configManager.getBoolean('commands', 'enabled', DEFAULTS.commands.enabled); }
         };
     },
     get raw() { return configManager.getRaw(); }
