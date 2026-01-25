@@ -3,7 +3,7 @@ const { createMockFn, restoreAllMocks } = require('../helpers/bun-mock-utils');
 const { noOpLogger } = require('../helpers/mock-factories');
 const { AppRuntime } = require('../../src/main');
 const PlatformLifecycleService = require('../../src/services/PlatformLifecycleService');
-const { createConfigFixture, createRuntimeConstantsFixture } = require('../helpers/config-fixture');
+const { createConfigFixture } = require('../helpers/config-fixture');
 
 describe('Platform Initialization Delegation', () => {
     let runtime;
@@ -51,7 +51,6 @@ describe('Platform Initialization Delegation', () => {
             eventBus: { subscribe: createMockFn(), emit: createMockFn(), unsubscribe: createMockFn() },
             configService: { get: createMockFn().mockReturnValue(mockConfig.general) },
             config: createConfigFixture(),
-            runtimeConstants: createRuntimeConstantsFixture(),
             vfxCommandService: { executeCommandForKey: createMockFn().mockResolvedValue({ success: true }) },
             ttsService: { speak: createMockFn().mockResolvedValue({ success: true }) },
             userTrackingService: { isFirstMessage: createMockFn().mockResolvedValue(false) },

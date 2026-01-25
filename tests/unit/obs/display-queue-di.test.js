@@ -1,6 +1,5 @@
 const { describe, expect, beforeEach, it, afterEach } = require('bun:test');
 const { restoreAllMocks } = require('../../helpers/bun-mock-utils');
-const { createRuntimeConstantsFixture } = require('../../helpers/config-fixture');
 const { createMockOBSManager } = require('../../helpers/mock-factories');
 const { initializeTestLogging } = require('../../helpers/test-setup');
 const { DisplayQueue, initializeDisplayQueue } = require('../../../src/obs/display-queue');
@@ -17,7 +16,7 @@ describe('DisplayQueue DI requirements', () => {
     });
 
     it('requires an OBS manager in the constructor', () => {
-        expect(() => new DisplayQueue(null, {}, {}, null, createRuntimeConstantsFixture())).toThrow(/OBSConnectionManager/);
+        expect(() => new DisplayQueue(null, {}, {}, null, {})).toThrow(/OBSConnectionManager/);
     });
 
     it('accepts items when initialized with injected obsManager', () => {
@@ -30,7 +29,7 @@ describe('DisplayQueue DI requirements', () => {
         }, {
             PRIORITY_LEVELS: { CHAT: 1 },
             CHAT_MESSAGE_DURATION: 4500
-        }, null, createRuntimeConstantsFixture());
+        }, null, {});
 
         expect(() => queue.addItem({
             type: 'chat',

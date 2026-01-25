@@ -1,7 +1,5 @@
 const { describe, expect, afterEach, it, beforeEach } = require('bun:test');
 const { restoreAllMocks } = require('../../helpers/bun-mock-utils');
-const { createRuntimeConstantsFixture } = require('../../helpers/config-fixture');
-
 const { DisplayQueue } = require('../../../src/obs/display-queue');
 const { EventEmitter } = require('events');
 
@@ -19,12 +17,6 @@ describe('DisplayQueue TTS-driven durations', () => {
     });
 
     function createQueue() {
-        const runtimeConstants = createRuntimeConstantsFixture({
-            CHAT_MESSAGE_DURATION: 4500,
-            CHAT_TRANSITION_DELAY: 0,
-            NOTIFICATION_CLEAR_DELAY: 0
-        });
-
         return new DisplayQueue(
             {},
             { ttsEnabled: true },
@@ -34,7 +26,7 @@ describe('DisplayQueue TTS-driven durations', () => {
                 PRIORITY_LEVELS: { CHAT: 1 }
             },
             new EventEmitter(),
-            runtimeConstants
+            {}
         );
     }
 

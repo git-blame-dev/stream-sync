@@ -320,10 +320,7 @@ describe('OBS Connection Configuration with Getter Properties', () => {
                 const obsManager = new OBSConnectionManager({
                     config: dynamicConfig,
                     OBSWebSocket: mockOBSWebSocket,
-                    isTestEnvironment: true,
-                    runtimeConstants: {
-                        OBS_CONNECTION_TIMEOUT: 50
-                    }
+                    isTestEnvironment: true
                 });
 
                 expect(obsManager.config.address).toBe('ws://computed-server:4455');
@@ -371,10 +368,7 @@ describe('OBS Connection Configuration with Getter Properties', () => {
                     config: configWithError,
                     OBSWebSocket: mockOBSWebSocket,
                     logger: noOpLogger,
-                    isTestEnvironment: false,
-                    runtimeConstants: {
-                        OBS_CONNECTION_TIMEOUT: 50
-                    }
+                    isTestEnvironment: false
                 });
             }).toThrow('Config not loaded');
         });
