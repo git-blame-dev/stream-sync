@@ -17,7 +17,7 @@ describe('OBSConnectionManager behavior', () => {
     });
 
     const createDeps = (overrides = {}) => ({
-        config: { address: 'ws://localhost:4455', password: 'testPass', enabled: true },
+        config: { address: 'ws://localhost:4455', password: 'testPass', enabled: true, connectionTimeoutMs: 50 },
         mockOBS: {
             connect: createMockFn().mockResolvedValue({ obsWebSocketVersion: '5', negotiatedRpcVersion: 1 }),
             disconnect: createMockFn().mockResolvedValue(),
@@ -27,11 +27,7 @@ describe('OBSConnectionManager behavior', () => {
             once: createMockFn()
         },
         constants: {
-            OBS_CONNECTION_TIMEOUT: 50,
             ERROR_MESSAGES: { OBS_CONNECTION_TIMEOUT: 'Timed out' }
-        },
-        runtimeConstants: {
-            OBS_CONNECTION_TIMEOUT: 50
         },
         isTestEnvironment: true,
         ...overrides

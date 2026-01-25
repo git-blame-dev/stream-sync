@@ -11,17 +11,9 @@ class OBSConnectionManager {
         this.logger = logger;
         this.log = logger;
         this.constants = dependencies.constants || { ERROR_MESSAGES: DEFAULT_ERROR_MESSAGES };
-        this.runtimeConstants = dependencies.runtimeConstants;
-        if (!this.runtimeConstants) {
-            throw new Error('OBSConnectionManager requires runtimeConstants');
-        }
         this.OBSWebSocket = dependencies.OBSWebSocket || require('obs-websocket-js').default;
-        
-        const { 
-            OBS_CONNECTION_TIMEOUT, 
-        } = this.runtimeConstants;
+
         const { ERROR_MESSAGES } = this.constants;
-        this.OBS_CONNECTION_TIMEOUT = OBS_CONNECTION_TIMEOUT;
         this.ERROR_MESSAGES = ERROR_MESSAGES;
 
         // Test environment detection
@@ -32,13 +24,13 @@ class OBSConnectionManager {
         // Test connection behavior flag - allows testing actual connection logic with mocks
         this.testConnectionBehavior = dependencies.testConnectionBehavior || false;
 
-        // Extract properties explicitly to handle getter-based configs
         const incomingConfig = dependencies.config || {};
         this.config = {
             address: incomingConfig.address,
             password: incomingConfig.password,
             enabled: incomingConfig.enabled
         };
+        this.OBS_CONNECTION_TIMEOUT = incomingConfig.connectionTimeoutMs;
         
         // Initialize OBS WebSocket instance
         if (this.isTestEnvironment) {

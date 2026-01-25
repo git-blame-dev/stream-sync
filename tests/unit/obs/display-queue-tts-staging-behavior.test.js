@@ -1,6 +1,5 @@
 const { describe, expect, it, beforeEach, afterEach } = require('bun:test');
 const { createMockFn, restoreAllMocks } = require('../../helpers/bun-mock-utils');
-const { createRuntimeConstantsFixture } = require('../../helpers/runtime-constants-fixture');
 const { safeDelay, safeSetTimeout } = require('../../../src/utils/timeout-validator');
 const { PlatformEvents } = require('../../../src/interfaces/PlatformEvents');
 
@@ -21,7 +20,6 @@ describe('DisplayQueue notification TTS staging', () => {
     });
 
     function createQueue() {
-        const runtimeConstants = createRuntimeConstantsFixture({});
         const recordedTexts = [];
 
         const mockSourcesManager = {
@@ -73,7 +71,6 @@ describe('DisplayQueue notification TTS staging', () => {
                 CHAT_TRANSITION_DELAY: 200
             },
             eventBus,
-            runtimeConstants,
             { sourcesManager: mockSourcesManager, goalsManager: mockGoalsManager }
         );
 
