@@ -1,4 +1,3 @@
-// Test harness for building integration dependency bundles.
 const EventEmitter = require('events');
 const { createMockFn } = require('./bun-mock-utils');
 const {
@@ -7,7 +6,6 @@ const {
     noOpLogger
 } = require('./mock-factories');
 const testClock = require('./test-clock');
-const { createRuntimeConstantsFixture } = require('./config-fixture');
 
 const createEventBusStub = () => {
     const emitter = new EventEmitter();
@@ -188,7 +186,6 @@ function createAppRuntimeTestDependencies(options = {}) {
         })
     };
 
-    const runtimeConstants = options.runtimeConstants || createRuntimeConstantsFixture();
     const dependencies = {
         logging: logger,
         logger,
@@ -196,7 +193,6 @@ function createAppRuntimeTestDependencies(options = {}) {
         notificationManager,
         eventBus,
         configService,
-        runtimeConstants,
         ttsService,
         vfxCommandService,
         userTrackingService,

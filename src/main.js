@@ -113,14 +113,12 @@ const { InnertubeFactory } = require('./factories/innertube-factory');
 // --- STEP 2: CORE SYSTEM IMPORTS ---
 // Now that logging is initialized, we can safely import other modules
 const { config: configModule, logging } = require('./core');
-const { createRuntimeConstants } = require('./core/runtime-constants');
 const wireStreamStatusHandlers = require('./viewer-count/stream-status-handler');
 const { configManager, config } = configModule;
 
 // --- STEP 3: CONFIGURATION LOADING ---
 // Load config once and only once
 configManager.load();
-const runtimeConstants = createRuntimeConstants(configManager.getRaw());
 const innertubeInstanceManager = require('./services/innertube-instance-manager');
 
 const loggingInitWarnings = [];
@@ -284,14 +282,12 @@ if (cliArgs.logLevel) {
 
 let app; // Declare app instance at the module level
 
-function createProductionDependencies(runtimeConstants, overrides = {}) {
-    // FAIL-FAST: Validate core dependencies before creating production dependencies
+function createProductionDependencies(overrides = {}) {
     const { validateLoggerInterface } = require('./utils/dependency-validator');
     const { DependencyFactory } = require('./utils/dependency-factory');
     const effects = require('./obs/effects');
     const sources = require('./obs/sources');
-    
-    // Validate the main logger is properly initialized
+
     validateLoggerInterface(logger);
 
     const resolvedOverrides = overrides || {};
@@ -316,10 +312,9 @@ function createProductionDependencies(runtimeConstants, overrides = {}) {
         platforms: require('./platforms'),
         displayQueue: null, // Will be set by main function
         notificationManager: null, // Will be set by main function
-        timestampService: timestampService, // Add timestamp service for platform dependency injection
+        timestampService: timestampService,
         dependencyFactory: resolvedOverrides.dependencyFactory || new DependencyFactory(),
         lazyInnertube: InnertubeFactory.createLazyReference(),
-        runtimeConstants,
         axios: resolvedOverrides.axios,
         WebSocketCtor: resolvedOverrides.WebSocketCtor,
         tiktokConnector: resolvedOverrides.tiktokConnector,
@@ -417,8 +412,7 @@ class AppRuntime {
             streamDetectionService: this.youtubeDetectionService,
             youtubeDetectionService: this.youtubeDetectionService,
             Innertube: this.lazyInnertube,
-            USER_AGENTS: this.runtimeConstants.USER_AGENTS,
-            runtimeConstants: this.runtimeConstants
+            USER_AGENTS: this.config.http.userAgents
         };
     }
 
@@ -463,12 +457,7 @@ class AppRuntime {
         logger.debug('[AppRuntime] Constructor starting...', 'system');
         this.config = config;
         this.dependencies = dependencies;
-        this.runtimeConstants = this.dependencies.runtimeConstants;
-        if (!this.runtimeConstants) {
-            throw new Error('AppRuntime requires runtimeConstants');
-        }
-        
-        // Store auth manager for platform dependency injection
+
         this.authManager = this.dependencies.authManager;
         
         // Initialize logging using unified logger
@@ -922,8 +911,7 @@ class AppRuntime {
             try {
                 await initializeOBSConnection(this.config.obs, {
                     handcam: this.config.handcam,
-                    obsEventService: this.obsEventService,
-                    runtimeConstants: this.runtimeConstants
+                    obsEventService: this.obsEventService
                 });
                 logger.info('OBS connection initialized', 'AppRuntime');
             } catch (obsError) {
@@ -1395,7 +1383,7 @@ class AppRuntime {
         if (this.dependencies?.obs?.goalsManager) {
             return this.dependencies.obs.goalsManager;
         }
-        return getDefaultGoalsManager({ runtimeConstants: this.runtimeConstants });
+        return getDefaultGoalsManager();
     }
 }
 
@@ -1439,8 +1427,8 @@ async function main(overrides = {}) {
         const chatSourceName = chatMsgTxt;
         const chatSceneName = chatMsgScene;
         const chatGroupName = chatMsgGroup;
-        const chatLogos = runtimeConstants.CHAT_PLATFORM_LOGOS;
-        const notificationLogos = runtimeConstants.NOTIFICATION_PLATFORM_LOGOS;
+        const chatLogos = config.obs.chatPlatformLogos;
+        const notificationLogos = config.obs.notificationPlatformLogos;
         const { notificationMsgGroup, notificationTxt, notificationScene } = config.obs;
         if (!notificationTxt || !notificationScene) {
             throw new Error('Display queue requires notificationTxt and notificationScene');
@@ -1474,9 +1462,9 @@ async function main(overrides = {}) {
         // Debug: Log the display queue configuration 
         logger.debug(`[Display Queue Config] Notification: ${displayQueueConfig.notification.sourceName}, Chat: ${displayQueueConfig.chat.sourceName}`, 'Main');
         
-        const chatTransitionDelay = runtimeConstants.CHAT_TRANSITION_DELAY;
-        const notificationClearDelay = runtimeConstants.NOTIFICATION_CLEAR_DELAY;
-        const chatMessageDuration = runtimeConstants.CHAT_MESSAGE_DURATION;
+        const chatTransitionDelay = config.timing.transitionDelay;
+        const notificationClearDelay = config.timing.notificationClearDelay;
+        const chatMessageDuration = config.timing.chatMessageDuration;
         const notificationConfigs = NOTIFICATION_CONFIGS;
         const priorityLevels = PRIORITY_LEVELS;
         
@@ -1536,7 +1524,7 @@ async function main(overrides = {}) {
         });
         logger.debug('SceneManagementService created', 'Main');
 
-        const obsGoals = getDefaultGoalsManager({ runtimeConstants });
+        const obsGoals = getDefaultGoalsManager();
 
         // After displayQueue and services are created, create NotificationManager
         logger.debug('About to create notification manager...', 'Main');
@@ -1564,7 +1552,7 @@ async function main(overrides = {}) {
             logger.info('Authentication validation successful', 'Main');
         }
         
-        const dependencies = createProductionDependencies(runtimeConstants, overrides);
+        const dependencies = createProductionDependencies(overrides);
         dependencies.displayQueue = displayQueue;
         dependencies.notificationManager = notificationManager;
         dependencies.authFactory = authResult.authFactory;
@@ -1585,8 +1573,7 @@ async function main(overrides = {}) {
             timestampService: dependencies.timestampService,
             authManager: authResult.authManager,
             authFactory: authResult.authFactory,
-            runtimeConstants,
-            USER_AGENTS: runtimeConstants.USER_AGENTS,
+            USER_AGENTS: config.http.userAgents,
             config: configManager,
             Innertube: dependencies.lazyInnertube,
             axios: dependencies.axios,

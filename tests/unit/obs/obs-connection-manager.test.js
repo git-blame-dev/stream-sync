@@ -23,10 +23,8 @@ describe('OBSConnectionManager', () => {
             config: overrides.config || {
                 address: 'ws://localhost:4455',
                 password: 'testPassword',
-                enabled: true
-            },
-            runtimeConstants: {
-                OBS_CONNECTION_TIMEOUT: 50
+                enabled: true,
+                connectionTimeoutMs: 50
             },
             isTestEnvironment: overrides.isTestEnvironment ?? true,
             testConnectionBehavior: overrides.testConnectionBehavior ?? true

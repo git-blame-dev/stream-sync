@@ -1,6 +1,5 @@
 const { describe, expect, it, afterEach, beforeEach } = require('bun:test');
 const { createMockFn, spyOn, restoreAllMocks } = require('../helpers/bun-mock-utils');
-const { createRuntimeConstantsFixture } = require('../helpers/config-fixture');
 
 describe('main.js event handler wiring', () => {
     let processOnSpy;
@@ -36,7 +35,6 @@ describe('main.js event handler wiring', () => {
         commandCooldownService: overrides.commandCooldownService || { updateCooldown: createMockFn() },
         platformLifecycleService: overrides.platformLifecycleService || { getAllPlatforms: createMockFn(() => ({})) },
         dependencyFactory: overrides.dependencyFactory || { createYoutubeDependencies: createMockFn(() => ({})) },
-        runtimeConstants: overrides.runtimeConstants || createRuntimeConstantsFixture(),
         authManager: overrides.authManager || {},
         obsEventService: overrides.obsEventService || {},
         sceneManagementService: overrides.sceneManagementService || {}

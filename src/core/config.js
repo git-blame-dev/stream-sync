@@ -2,7 +2,6 @@
 const fs = require('fs');
 const ini = require('ini');
 const { handleUserFacingError } = require('../utils/user-friendly-errors');
-const { createRuntimeConstants } = require('./runtime-constants');
 const { DEFAULT_HTTP_USER_AGENTS, parseUserAgentList } = require('./http-config');
 const { DEFAULTS } = require('./config-defaults');
 const { ConfigValidator } = require('../utils/config-validator');
@@ -139,8 +138,6 @@ class ConfigManager {
         if (missingSections.length > 0) {
             throw new Error(`Missing required configuration sections: ${missingSections.join(', ')}`);
         }
-
-        createRuntimeConstants(this.config);
 
         // Validate platform sections have usernames if enabled
         const platforms = ['youtube', 'tiktok', 'twitch'];
