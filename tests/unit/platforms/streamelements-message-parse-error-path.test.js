@@ -1,6 +1,7 @@
 const { describe, it, expect, afterEach } = require('bun:test');
 const { restoreAllMocks } = require('../../helpers/bun-mock-utils');
 const { noOpLogger } = require('../../helpers/mock-factories');
+const { createStreamElementsConfigFixture } = require('../../helpers/config-fixture');
 const { StreamElementsPlatform } = require('../../../src/platforms/streamelements');
 
 afterEach(() => {
@@ -10,7 +11,7 @@ afterEach(() => {
 describe('StreamElementsPlatform message parsing', () => {
     it('routes invalid JSON messages through the error handler without throwing', () => {
 
-        const platform = new StreamElementsPlatform({ enabled: true }, { logger: noOpLogger });
+        const platform = new StreamElementsPlatform(createStreamElementsConfigFixture({ enabled: true }), { logger: noOpLogger });
 
         const errorHandlerCalls = [];
         const errorHandler = {

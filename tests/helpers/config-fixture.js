@@ -9,6 +9,15 @@ function createSourcesConfigFixture(overrides = {}) {
     };
 }
 
+function createStreamElementsConfigFixture(overrides = {}) {
+    return {
+        enabled: false,
+        dataLoggingEnabled: false,
+        dataLoggingPath: './logs',
+        ...overrides
+    };
+}
+
 function createHandcamConfigFixture(overrides = {}) {
     return {
         enabled: false,
@@ -49,6 +58,7 @@ function createConfigFixture(overrides = {}) {
 
 module.exports = {
     createSourcesConfigFixture,
+    createStreamElementsConfigFixture,
     createHandcamConfigFixture,
     createConfigFixture
 };

@@ -2,6 +2,7 @@ const { describe, it, expect, beforeEach, afterEach } = require('bun:test');
 const { EventEmitter } = require('events');
 const { createMockFn, restoreAllMocks, spyOn } = require('../../helpers/bun-mock-utils');
 const { noOpLogger } = require('../../helpers/mock-factories');
+const { createStreamElementsConfigFixture } = require('../../helpers/config-fixture');
 const { useFakeTimers, useRealTimers, advanceTimersByTime } = require('../../helpers/bun-timers');
 const { safeSetInterval, safeSetTimeout } = require('../../../src/utils/timeout-validator');
 const fs = require('fs').promises;
@@ -40,14 +41,14 @@ const createPlatform = (configOverrides = {}, dependencyOverrides = {}) => {
     };
 
     const platform = new StreamElementsPlatform(
-        {
+        createStreamElementsConfigFixture({
             enabled: true,
             jwtToken: 'test-jwt-token',
             youtubeChannelId: 'test-youtube-channel',
             twitchChannelId: 'test-twitch-channel',
             dataLoggingEnabled: true,
             ...configOverrides
-        },
+        }),
         {
             logger: noOpLogger,
             WebSocketCtor: MockWebSocket,
@@ -70,7 +71,10 @@ describe('StreamElementsPlatform behavior', () => {
     });
 
     it('initializes disabled platform and fails prerequisites', async () => {
-        const platform = new StreamElementsPlatform({ enabled: false }, { logger: noOpLogger });
+        const platform = new StreamElementsPlatform(
+            createStreamElementsConfigFixture(),
+            { logger: noOpLogger }
+        );
 
         const initialized = await platform.initialize({});
 
@@ -90,7 +94,10 @@ describe('StreamElementsPlatform behavior', () => {
     });
 
     it('returns false when prerequisites fail', async () => {
-        const platform = new StreamElementsPlatform({ enabled: true }, { logger: noOpLogger });
+        const platform = new StreamElementsPlatform(
+            createStreamElementsConfigFixture({ enabled: true }),
+            { logger: noOpLogger }
+        );
 
         const result = await platform.connect();
 

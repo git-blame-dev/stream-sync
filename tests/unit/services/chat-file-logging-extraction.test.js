@@ -24,7 +24,7 @@ describe('ChatFileLoggingService - Behavior-Focused Regression Tests', () => {
 
         service = new ChatFileLoggingService({
             logger: noOpLogger,
-            config: { dataLoggingEnabled: true }
+            config: { dataLoggingEnabled: true, dataLoggingPath: logDir }
         });
     });
 
