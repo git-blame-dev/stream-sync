@@ -2,6 +2,7 @@ const { ensureOBSConnected: defaultEnsureConnected } = require('./connection');
 const { logger: defaultLogger } = require('../core/logging');
 const { safeDelay: defaultDelay } = require('../utils/timeout-validator');
 const { createPlatformErrorHandler } = require('../utils/platform-error-handler');
+const { DEFAULTS } = require('../core/config-defaults');
 
 let moduleDeps = {
     ensureConnected: defaultEnsureConnected,
@@ -50,30 +51,21 @@ function easeInCubic(t) {
     return t * t * t;
 }
 
-function resolveHandcamDefaults(runtimeConstants) {
-    if (!runtimeConstants || !runtimeConstants.HANDCAM_GLOW_CONFIG) {
-        throw new Error('handcam-glow requires runtimeConstants.HANDCAM_GLOW_CONFIG');
-    }
-    return runtimeConstants.HANDCAM_GLOW_CONFIG;
-}
-
-function createHandcamGlowConfig(handcamConfig = {}, runtimeConstants) {
-    const defaults = resolveHandcamDefaults(runtimeConstants);
+function createHandcamGlowConfig(handcamConfig = {}) {
     return {
-        enabled: handcamConfig.enabled ?? defaults.ENABLED,
-        maxSize: Number(handcamConfig.maxSize ?? defaults.DEFAULT_MAX_SIZE),
-        rampUpDuration: Number(handcamConfig.rampUpDuration ?? defaults.DEFAULT_RAMP_UP_DURATION),
-        holdDuration: Number(handcamConfig.holdDuration ?? defaults.DEFAULT_HOLD_DURATION),
-        rampDownDuration: Number(handcamConfig.rampDownDuration ?? defaults.DEFAULT_RAMP_DOWN_DURATION),
-        totalSteps: Number(handcamConfig.totalSteps ?? defaults.DEFAULT_TOTAL_STEPS),
-        incrementPercent: Number(handcamConfig.incrementPercent ?? defaults.DEFAULT_INCREMENT_PERCENT),
-        easingEnabled: handcamConfig.easingEnabled ?? defaults.DEFAULT_EASING_ENABLED,
-        animationInterval: Number(handcamConfig.animationInterval ?? defaults.DEFAULT_ANIMATION_INTERVAL),
-        sourceName: handcamConfig.sourceName ?? defaults.SOURCE_NAME,
-        sceneName: handcamConfig.sceneName ?? defaults.SCENE_NAME,
-        filterName: handcamConfig.glowFilterName ?? defaults.FILTER_NAME,
-        
-        // Calculated properties
+        enabled: handcamConfig.enabled ?? DEFAULTS.handcam.glowEnabled,
+        maxSize: Number(handcamConfig.maxSize ?? DEFAULTS.handcam.maxSize),
+        rampUpDuration: Number(handcamConfig.rampUpDuration ?? DEFAULTS.handcam.rampUpDuration),
+        holdDuration: Number(handcamConfig.holdDuration ?? DEFAULTS.handcam.holdDuration),
+        rampDownDuration: Number(handcamConfig.rampDownDuration ?? DEFAULTS.handcam.rampDownDuration),
+        totalSteps: Number(handcamConfig.totalSteps ?? DEFAULTS.handcam.totalSteps),
+        incrementPercent: Number(handcamConfig.incrementPercent ?? DEFAULTS.handcam.incrementPercent),
+        easingEnabled: handcamConfig.easingEnabled ?? DEFAULTS.handcam.easingEnabled,
+        animationInterval: Number(handcamConfig.animationInterval ?? DEFAULTS.handcam.animationInterval),
+        sourceName: handcamConfig.sourceName ?? DEFAULTS.handcam.sourceName,
+        sceneName: handcamConfig.sceneName ?? DEFAULTS.handcam.sceneName,
+        filterName: handcamConfig.glowFilterName ?? DEFAULTS.handcam.glowFilterName,
+
         get totalDuration() {
             return this.rampUpDuration + this.holdDuration + this.rampDownDuration;
         },
@@ -195,9 +187,9 @@ async function setSourceFilterEnabled(obs, sourceName, filterName, enabled) {
     }
 }
 
-async function activateHandcamGlow(obs, handcamConfig = {}, runtimeConstants) {
+async function activateHandcamGlow(obs, handcamConfig = {}) {
     const { logger, ensureConnected } = moduleDeps;
-    const config = createHandcamGlowConfig(handcamConfig, runtimeConstants);
+    const config = createHandcamGlowConfig(handcamConfig);
 
     if (!config.enabled) {
         logger.debug('[Handcam] Glow filter disabled in config', 'handcam-glow');
@@ -245,9 +237,9 @@ async function activateHandcamGlow(obs, handcamConfig = {}, runtimeConstants) {
     }
 }
 
-async function initializeHandcamGlow(obs, handcamConfig = {}, runtimeConstants) {
+async function initializeHandcamGlow(obs, handcamConfig = {}) {
     const { logger, ensureConnected } = moduleDeps;
-    const config = createHandcamGlowConfig(handcamConfig, runtimeConstants);
+    const config = createHandcamGlowConfig(handcamConfig);
 
     if (!config.enabled) {
         logger.debug('[Handcam] Glow initialization skipped - disabled in config', 'handcam-glow');
@@ -272,9 +264,9 @@ async function initializeHandcamGlow(obs, handcamConfig = {}, runtimeConstants) 
     }
 }
 
-function triggerHandcamGlow(obs, handcamConfig = {}, runtimeConstants) {
+function triggerHandcamGlow(obs, handcamConfig = {}) {
     const { logger } = moduleDeps;
-    const config = createHandcamGlowConfig(handcamConfig, runtimeConstants);
+    const config = createHandcamGlowConfig(handcamConfig);
 
     if (!config.enabled) {
         logger.debug('[Handcam] Glow trigger ignored - disabled in config', 'handcam-glow');
@@ -283,7 +275,7 @@ function triggerHandcamGlow(obs, handcamConfig = {}, runtimeConstants) {
 
     logger.debug('[Handcam] Triggering glow animation (fire-and-forget)', 'handcam-glow');
 
-    activateHandcamGlow(obs, handcamConfig, runtimeConstants).catch(error => {
+    activateHandcamGlow(obs, handcamConfig).catch(error => {
         logger.debug('[Handcam] Fire-and-forget glow animation error', 'handcam-glow', error.message);
     });
 }

@@ -26,6 +26,14 @@ function normalizeGiftsConfig(input = {}) {
     };
 }
 
+function normalizeTimingConfig(input = {}) {
+    return {
+        transitionDelay: ConfigValidator.parseNumber(input.transitionDelay, { defaultValue: DEFAULTS.timing.transitionDelay, min: 0 }),
+        notificationClearDelay: ConfigValidator.parseNumber(input.notificationClearDelay, { defaultValue: DEFAULTS.timing.notificationClearDelay, min: 0 }),
+        chatMessageDuration: ConfigValidator.parseNumber(input.chatMessageDuration, { defaultValue: DEFAULTS.timing.chatMessageDuration, min: 0 })
+    };
+}
+
 function normalizeDisplayQueueConfig(input = {}) {
     const maxQueueSize = ConfigValidator.parseNumber(input.maxQueueSize, { defaultValue: DEFAULTS.displayQueue.maxQueueSize, min: 1 });
 
@@ -41,6 +49,7 @@ function normalizeDisplayQueueConfig(input = {}) {
         vfx: input.vfx || {},
         gifts: normalizeGiftsConfig(input.gifts),
         handcam: normalizeHandcamConfig(input.handcam),
+        timing: normalizeTimingConfig(input.timing),
         youtube: input.youtube || {},
         twitch: input.twitch || {},
         tiktok: input.tiktok || {}
