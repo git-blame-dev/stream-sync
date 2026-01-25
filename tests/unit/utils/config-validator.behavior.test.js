@@ -1,6 +1,6 @@
 const { describe, expect, beforeEach, it } = require('bun:test');
 const { noOpLogger } = require('../../helpers/mock-factories');
-const { ConfigValidator, ConfigValidatorStatic } = require('../../../src/utils/config-validator');
+const { ConfigValidator } = require('../../../src/utils/config-validator');
 
 describe('config-validator (utility) behavior', () => {
     let validator;
@@ -17,13 +17,13 @@ describe('config-validator (utility) behavior', () => {
         expect(validator.parseNumber('bad', 3)).toBe(3);
     });
 
-    it('rejects non-finite numeric values', () => {
+    it('rejects non-finite numeric values via instance and static methods', () => {
         expect(validator.parseNumber(Infinity, 7)).toBe(7);
         expect(validator.parseNumber(-Infinity, 7)).toBe(7);
         expect(validator.parseNumber('Infinity', 7)).toBe(7);
-        expect(ConfigValidatorStatic.parseNumber(Infinity, 7)).toBe(7);
-        expect(ConfigValidatorStatic.parseNumber(-Infinity, 7)).toBe(7);
-        expect(ConfigValidatorStatic.parseNumber('Infinity', 7)).toBe(7);
+        expect(ConfigValidator.parseNumber(Infinity, 7)).toBe(7);
+        expect(ConfigValidator.parseNumber(-Infinity, 7)).toBe(7);
+        expect(ConfigValidator.parseNumber('Infinity', 7)).toBe(7);
     });
 
     it('validates retry config with bounds', () => {

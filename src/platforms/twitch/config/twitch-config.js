@@ -1,10 +1,9 @@
-const { ConfigValidatorStatic } = require('../../../utils/config-validator');
+const { ConfigValidator } = require('../../../utils/config-validator');
+const { DEFAULTS } = require('../../../core/config-defaults');
 
 const dropUndefinedValues = (valueMap) => Object.fromEntries(
     Object.entries(valueMap).filter(([, value]) => value !== undefined)
 );
-
-const DEFAULT_LOG_DIRECTORY = './logs';
 
 const TWITCH_CONFIG_VALIDATION_RULES = {
     required: {
@@ -20,28 +19,28 @@ const TWITCH_CONFIG_VALIDATION_RULES = {
 
 function normalizeTwitchPlatformConfig(rawConfig = {}) {
     const normalized = {
-        enabled: ConfigValidatorStatic.parseBoolean(rawConfig.enabled, false),
+        enabled: ConfigValidator.parseBoolean(rawConfig.enabled, DEFAULTS.twitch.enabled),
         username: rawConfig.username,
         channel: rawConfig.channel,
         clientId: rawConfig.clientId,
         tokenStorePath: rawConfig.tokenStorePath,
         tokenExpiresAt: rawConfig.tokenExpiresAt,
-        eventsub_enabled: ConfigValidatorStatic.parseBoolean(rawConfig.eventsub_enabled, true),
-        dataLoggingEnabled: ConfigValidatorStatic.parseBoolean(rawConfig.dataLoggingEnabled, false),
-        dataLoggingPath: DEFAULT_LOG_DIRECTORY,
-        viewerCountEnabled: ConfigValidatorStatic.parseBoolean(rawConfig.viewerCountEnabled, undefined),
+        eventsub_enabled: ConfigValidator.parseBoolean(rawConfig.eventsub_enabled, DEFAULTS.twitch.eventsubEnabled),
+        dataLoggingEnabled: ConfigValidator.parseBoolean(rawConfig.dataLoggingEnabled, DEFAULTS.twitch.dataLoggingEnabled),
+        dataLoggingPath: DEFAULTS.LOG_DIRECTORY,
+        viewerCountEnabled: ConfigValidator.parseBoolean(rawConfig.viewerCountEnabled, undefined),
         viewerCountSource: rawConfig.viewerCountSource,
-        messagesEnabled: ConfigValidatorStatic.parseBoolean(rawConfig.messagesEnabled, undefined),
-        commandsEnabled: ConfigValidatorStatic.parseBoolean(rawConfig.commandsEnabled, undefined),
-        greetingsEnabled: ConfigValidatorStatic.parseBoolean(rawConfig.greetingsEnabled, undefined),
-        farewellsEnabled: ConfigValidatorStatic.parseBoolean(rawConfig.farewellsEnabled, undefined),
-        followsEnabled: ConfigValidatorStatic.parseBoolean(rawConfig.followsEnabled, undefined),
-        giftsEnabled: ConfigValidatorStatic.parseBoolean(rawConfig.giftsEnabled, undefined),
-        raidsEnabled: ConfigValidatorStatic.parseBoolean(rawConfig.raidsEnabled, undefined),
-        paypiggiesEnabled: ConfigValidatorStatic.parseBoolean(rawConfig.paypiggiesEnabled, undefined),
-        greetNewCommentors: ConfigValidatorStatic.parseBoolean(rawConfig.greetNewCommentors, undefined),
-        ignoreSelfMessages: ConfigValidatorStatic.parseBoolean(rawConfig.ignoreSelfMessages, undefined),
-        pollInterval: ConfigValidatorStatic.parseNumber(rawConfig.pollInterval, undefined, { min: 1 })
+        messagesEnabled: ConfigValidator.parseBoolean(rawConfig.messagesEnabled, undefined),
+        commandsEnabled: ConfigValidator.parseBoolean(rawConfig.commandsEnabled, undefined),
+        greetingsEnabled: ConfigValidator.parseBoolean(rawConfig.greetingsEnabled, undefined),
+        farewellsEnabled: ConfigValidator.parseBoolean(rawConfig.farewellsEnabled, undefined),
+        followsEnabled: ConfigValidator.parseBoolean(rawConfig.followsEnabled, undefined),
+        giftsEnabled: ConfigValidator.parseBoolean(rawConfig.giftsEnabled, undefined),
+        raidsEnabled: ConfigValidator.parseBoolean(rawConfig.raidsEnabled, undefined),
+        paypiggiesEnabled: ConfigValidator.parseBoolean(rawConfig.paypiggiesEnabled, undefined),
+        greetNewCommentors: ConfigValidator.parseBoolean(rawConfig.greetNewCommentors, undefined),
+        ignoreSelfMessages: ConfigValidator.parseBoolean(rawConfig.ignoreSelfMessages, undefined),
+        pollInterval: ConfigValidator.parseNumber(rawConfig.pollInterval, undefined, { min: 1 })
     };
 
     return dropUndefinedValues(normalized);

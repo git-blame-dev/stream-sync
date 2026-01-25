@@ -152,12 +152,10 @@ class ConfigValidator {
             enableConsole: this.parseBoolean(config.enableConsole, true),
             enableFile: this.parseBoolean(config.enableFile, false),
             logPath: this.parseString(config.logPath, './logs'),
-            maxFileSize: this.parseNumber(config.maxFileSize, 10485760, { min: 1048576, max: 104857600 }) // 1MB - 100MB
+            maxFileSize: this.parseNumber(config.maxFileSize, 10485760, { min: 1048576, max: 104857600 })
         };
     }
-}
 
-class ConfigValidatorStatic {
     static parseBoolean(value, defaultValue = false) {
         if (value === undefined || value === null) return defaultValue;
         if (typeof value === 'boolean') return value;
@@ -169,29 +167,24 @@ class ConfigValidatorStatic {
         }
         return defaultValue;
     }
-    
+
     static parseString(value, defaultValue = '') {
         if (value === undefined || value === null) return defaultValue;
         return String(value).trim();
     }
-    
+
     static parseNumber(value, defaultValue = 0, options = {}) {
         const { min, max, allowZero = true } = options;
-        
         if (value === undefined || value === null) return defaultValue;
-        
         const parsed = Number(value);
         if (!Number.isFinite(parsed)) return defaultValue;
-        
         if (!allowZero && parsed === 0) return defaultValue;
         if (typeof min === 'number' && parsed < min) return defaultValue;
         if (typeof max === 'number' && parsed > max) return defaultValue;
-        
         return parsed;
     }
 }
 
 module.exports = {
-    ConfigValidator,
-    ConfigValidatorStatic
+    ConfigValidator
 };
