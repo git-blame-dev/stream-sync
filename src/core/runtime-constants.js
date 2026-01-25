@@ -2,6 +2,7 @@
 
 const { DEFAULT_HTTP_USER_AGENTS, parseUserAgentList } = require('./http-config');
 const { ConfigValidator } = require('../utils/config-validator');
+const { DEFAULTS } = require('./config-defaults');
 
 const DEFAULT_INNERTUBE_INSTANCE_TTL = 300000;
 const DEFAULT_INNERTUBE_MIN_TTL = 60000;
@@ -11,6 +12,10 @@ function requireSection(config, sectionName) {
         throw new Error(`Missing required configuration section: ${sectionName}`);
     }
     return config[sectionName];
+}
+
+function getSection(config, sectionName) {
+    return (config && config[sectionName]) || {};
 }
 
 function buildPlatformLogoMap(obsConfig, configPathPrefix) {
@@ -25,19 +30,18 @@ function createRuntimeConstants(rawConfig) {
     const config = rawConfig || {};
     const generalConfig = requireSection(config, 'general');
     const obsConfig = requireSection(config, 'obs');
-    const timingConfig = requireSection(config, 'timing');
+    const timingConfig = getSection(config, 'timing');
     requireSection(config, 'youtube');
-    const handcamConfig = requireSection(config, 'handcam');
-    const cooldownConfig = requireSection(config, 'cooldowns');
+    const handcamConfig = getSection(config, 'handcam');
+    const cooldownConfig = getSection(config, 'cooldowns');
     requireSection(config, 'twitch');
 
     const chatPlatformLogos = buildPlatformLogoMap(obsConfig, 'chatPlatformLogo');
     const notificationPlatformLogos = buildPlatformLogoMap(obsConfig, 'notificationPlatformLogo');
 
-    const viewerCountPollingIntervalSeconds = ConfigValidator.requireNumber(
+    const viewerCountPollingIntervalSeconds = ConfigValidator.parseNumber(
         generalConfig.viewerCountPollingInterval,
-        'general.viewerCountPollingInterval',
-        { min: 0 }
+        { defaultValue: DEFAULTS.general.viewerCountPollingInterval, min: 0 }
     );
     const httpConfig = config.http || {};
     const configuredUserAgents = parseUserAgentList(httpConfig.userAgents);
@@ -48,43 +52,43 @@ function createRuntimeConstants(rawConfig) {
     return {
         CHAT_PLATFORM_LOGOS: chatPlatformLogos,
         NOTIFICATION_PLATFORM_LOGOS: notificationPlatformLogos,
-        STATUSBAR_GROUP_NAME: ConfigValidator.requireString(generalConfig.chatMsgGroup, 'general.chatMsgGroup', { allowEmpty: true }),
+        STATUSBAR_GROUP_NAME: ConfigValidator.parseString(generalConfig.chatMsgGroup, ''),
         STATUSBAR_NOTIFICATION_GROUP_NAME: ConfigValidator.requireString(obsConfig.notificationMsgGroup, 'obs.notificationMsgGroup'),
         NOTIFICATION_CONFIG: {
-            fadeDelay: ConfigValidator.requireNumber(timingConfig.fadeDuration, 'timing.fadeDuration', { min: 0 })
+            fadeDelay: ConfigValidator.parseNumber(timingConfig.fadeDuration, { defaultValue: DEFAULTS.timing.fadeDuration, min: 0 })
         },
-        NOTIFICATION_CLEAR_DELAY: ConfigValidator.requireNumber(timingConfig.notificationClearDelay, 'timing.notificationClearDelay', { min: 0 }),
-        CHAT_TRANSITION_DELAY: ConfigValidator.requireNumber(timingConfig.transitionDelay, 'timing.transitionDelay', { min: 0 }),
-        CHAT_MESSAGE_DURATION: ConfigValidator.requireNumber(timingConfig.chatMessageDuration, 'timing.chatMessageDuration', { min: 0 }),
-        OBS_CONNECTION_TIMEOUT: ConfigValidator.requireNumber(obsConfig.connectionTimeoutMs, 'obs.connectionTimeoutMs', { min: 1 }),
+        NOTIFICATION_CLEAR_DELAY: ConfigValidator.parseNumber(timingConfig.notificationClearDelay, { defaultValue: DEFAULTS.timing.notificationClearDelay, min: 0 }),
+        CHAT_TRANSITION_DELAY: ConfigValidator.parseNumber(timingConfig.transitionDelay, { defaultValue: DEFAULTS.timing.transitionDelay, min: 0 }),
+        CHAT_MESSAGE_DURATION: ConfigValidator.parseNumber(timingConfig.chatMessageDuration, { defaultValue: DEFAULTS.timing.chatMessageDuration, min: 0 }),
+        OBS_CONNECTION_TIMEOUT: ConfigValidator.parseNumber(obsConfig.connectionTimeoutMs, { defaultValue: DEFAULTS.obs.connectionTimeoutMs, min: 1 }),
         PLATFORM_TIMEOUTS: {
             INNERTUBE_INSTANCE_TTL: DEFAULT_INNERTUBE_INSTANCE_TTL,
             INNERTUBE_MIN_TTL: DEFAULT_INNERTUBE_MIN_TTL
         },
         VIEWER_COUNT_POLLING_INTERVAL_SECONDS: viewerCountPollingIntervalSeconds,
         HANDCAM_GLOW_CONFIG: {
-            ENABLED: ConfigValidator.requireBoolean(handcamConfig.glowEnabled, 'handcam.glowEnabled'),
-            SOURCE_NAME: ConfigValidator.requireString(handcamConfig.sourceName, 'handcam.sourceName'),
-            SCENE_NAME: ConfigValidator.requireString(handcamConfig.sceneName, 'handcam.sceneName'),
-            FILTER_NAME: ConfigValidator.requireString(handcamConfig.glowFilterName, 'handcam.glowFilterName'),
-            DEFAULT_MAX_SIZE: ConfigValidator.requireNumber(handcamConfig.maxSize, 'handcam.maxSize', { min: 1 }),
-            DEFAULT_RAMP_UP_DURATION: ConfigValidator.requireNumber(handcamConfig.rampUpDuration, 'handcam.rampUpDuration', { min: 0 }),
-            DEFAULT_HOLD_DURATION: ConfigValidator.requireNumber(handcamConfig.holdDuration, 'handcam.holdDuration', { min: 0 }),
-            DEFAULT_RAMP_DOWN_DURATION: ConfigValidator.requireNumber(handcamConfig.rampDownDuration, 'handcam.rampDownDuration', { min: 0 }),
-            DEFAULT_TOTAL_STEPS: ConfigValidator.requireNumber(handcamConfig.totalSteps, 'handcam.totalSteps', { min: 1, integer: true }),
-            DEFAULT_INCREMENT_PERCENT: ConfigValidator.requireNumber(handcamConfig.incrementPercent, 'handcam.incrementPercent', { min: 0 }),
-            DEFAULT_EASING_ENABLED: ConfigValidator.requireBoolean(handcamConfig.easingEnabled, 'handcam.easingEnabled'),
-            DEFAULT_ANIMATION_INTERVAL: ConfigValidator.requireNumber(handcamConfig.animationInterval, 'handcam.animationInterval', { min: 1 })
+            ENABLED: ConfigValidator.parseBoolean(handcamConfig.glowEnabled, DEFAULTS.handcam.glowEnabled),
+            SOURCE_NAME: ConfigValidator.parseString(handcamConfig.sourceName, DEFAULTS.handcam.sourceName),
+            SCENE_NAME: ConfigValidator.parseString(handcamConfig.sceneName, DEFAULTS.handcam.sceneName),
+            FILTER_NAME: ConfigValidator.parseString(handcamConfig.glowFilterName, DEFAULTS.handcam.glowFilterName),
+            DEFAULT_MAX_SIZE: ConfigValidator.parseNumber(handcamConfig.maxSize, { defaultValue: DEFAULTS.handcam.maxSize, min: 1 }),
+            DEFAULT_RAMP_UP_DURATION: ConfigValidator.parseNumber(handcamConfig.rampUpDuration, { defaultValue: DEFAULTS.handcam.rampUpDuration, min: 0 }),
+            DEFAULT_HOLD_DURATION: ConfigValidator.parseNumber(handcamConfig.holdDuration, { defaultValue: DEFAULTS.handcam.holdDuration, min: 0 }),
+            DEFAULT_RAMP_DOWN_DURATION: ConfigValidator.parseNumber(handcamConfig.rampDownDuration, { defaultValue: DEFAULTS.handcam.rampDownDuration, min: 0 }),
+            DEFAULT_TOTAL_STEPS: ConfigValidator.parseNumber(handcamConfig.totalSteps, { defaultValue: DEFAULTS.handcam.totalSteps, min: 1, integer: true }),
+            DEFAULT_INCREMENT_PERCENT: ConfigValidator.parseNumber(handcamConfig.incrementPercent, { defaultValue: DEFAULTS.handcam.incrementPercent, min: 0 }),
+            DEFAULT_EASING_ENABLED: ConfigValidator.parseBoolean(handcamConfig.easingEnabled, DEFAULTS.handcam.easingEnabled),
+            DEFAULT_ANIMATION_INTERVAL: ConfigValidator.parseNumber(handcamConfig.animationInterval, { defaultValue: DEFAULTS.handcam.animationInterval, min: 1 })
         },
         COOLDOWN_CONFIG: {
-            DEFAULT_COOLDOWN: ConfigValidator.requireNumber(cooldownConfig.defaultCooldown, 'cooldowns.defaultCooldown', { min: 1 }) * 1000,
-            HEAVY_COMMAND_COOLDOWN: ConfigValidator.requireNumber(cooldownConfig.heavyCommandCooldown, 'cooldowns.heavyCommandCooldown', { min: 1 }) * 1000,
-            HEAVY_COMMAND_THRESHOLD: ConfigValidator.requireNumber(cooldownConfig.heavyCommandThreshold, 'cooldowns.heavyCommandThreshold', { min: 1, integer: true }),
-            HEAVY_COMMAND_WINDOW: ConfigValidator.requireNumber(cooldownConfig.heavyCommandWindow, 'cooldowns.heavyCommandWindow', { min: 1 }) * 1000,
-            MAX_COOLDOWN_ENTRIES: ConfigValidator.requireNumber(cooldownConfig.maxEntries, 'cooldowns.maxEntries', { min: 1, integer: true })
+            DEFAULT_COOLDOWN: ConfigValidator.parseNumber(cooldownConfig.defaultCooldown, { defaultValue: DEFAULTS.cooldowns.defaultCooldown, min: 1 }) * 1000,
+            HEAVY_COMMAND_COOLDOWN: ConfigValidator.parseNumber(cooldownConfig.heavyCommandCooldown, { defaultValue: DEFAULTS.cooldowns.heavyCommandCooldown, min: 1 }) * 1000,
+            HEAVY_COMMAND_THRESHOLD: ConfigValidator.parseNumber(cooldownConfig.heavyCommandThreshold, { defaultValue: DEFAULTS.cooldowns.heavyCommandThreshold, min: 1, integer: true }),
+            HEAVY_COMMAND_WINDOW: ConfigValidator.parseNumber(cooldownConfig.heavyCommandWindow, { defaultValue: DEFAULTS.cooldowns.heavyCommandWindow, min: 1 }) * 1000,
+            MAX_COOLDOWN_ENTRIES: ConfigValidator.parseNumber(cooldownConfig.maxEntries, { defaultValue: DEFAULTS.cooldowns.maxEntries, min: 1, integer: true })
         },
         USER_AGENTS: resolvedUserAgents,
-        MAX_MESSAGE_LENGTH: ConfigValidator.requireNumber(generalConfig.maxMessageLength, 'general.maxMessageLength', { min: 1, integer: true })
+        MAX_MESSAGE_LENGTH: ConfigValidator.parseNumber(generalConfig.maxMessageLength, { defaultValue: 500, min: 1, integer: true })
     };
 }
 

@@ -102,6 +102,40 @@ const DEFAULTS = {
         enableConsole: true,
         enableFile: false,
         maxFileSize: 10485760
+    },
+
+    timing: {
+        fadeDuration: 750,
+        notificationClearDelay: 500,
+        transitionDelay: 200,
+        chatMessageDuration: 4500
+    },
+
+    handcam: {
+        glowEnabled: false,
+        sourceName: 'handcam-source',
+        sceneName: 'handcam-scene',
+        glowFilterName: 'Glow',
+        maxSize: 50,
+        rampUpDuration: 500,
+        holdDuration: 6000,
+        rampDownDuration: 500,
+        totalSteps: 30,
+        incrementPercent: 3.33,
+        easingEnabled: true,
+        animationInterval: 16
+    },
+
+    cooldowns: {
+        defaultCooldown: 5,
+        heavyCommandCooldown: 30,
+        heavyCommandThreshold: 3,
+        heavyCommandWindow: 60,
+        maxEntries: 1000
+    },
+
+    obs: {
+        connectionTimeoutMs: 10000
     }
 };
 
