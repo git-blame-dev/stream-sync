@@ -602,15 +602,15 @@ class OBSSourcesManager {
 
 let defaultInstance = null;
 
-function getDefaultSourcesManager(dependencies = {}) {
+function getDefaultSourcesManager() {
     if (!defaultInstance) {
         const { logger } = require('../core/logging');
+        const { config } = require('../core/config');
         const { ensureOBSConnected, obsCall, getOBSConnectionManager } = require('./connection');
-        const { chatGroupName, notificationGroupName, fadeDelay } = dependencies;
 
-        if (!chatGroupName || !notificationGroupName || fadeDelay === undefined) {
-            throw new Error('getDefaultSourcesManager requires chatGroupName, notificationGroupName, and fadeDelay');
-        }
+        const chatGroupName = config.general.chatMsgGroup;
+        const notificationGroupName = config.obs.notificationMsgGroup;
+        const fadeDelay = config.timing.fadeDuration;
 
         let obsManager;
         let isDegraded = false;

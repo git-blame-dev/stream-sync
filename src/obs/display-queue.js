@@ -1,7 +1,6 @@
 
 const crypto = require('crypto');
 const { logger } = require('../core/logging');
-const { config } = require('../core/config');
 const { normalizeDisplayQueueConfig } = require('./display-queue-config');
 const { validateDisplayConfig } = require('../utils/configuration-validator');
 const { getDefaultSourcesManager } = require('./sources');
@@ -74,16 +73,8 @@ class DisplayQueue {
         if (!this.runtimeConstants) {
             throw new Error('DisplayQueue requires runtimeConstants');
         }
-        this.sourcesManager = dependencies.sourcesManager || getDefaultSourcesManager({
-            chatGroupName: config.general.chatMsgGroup,
-            notificationGroupName: config.obs.notificationMsgGroup,
-            fadeDelay: config.timing.fadeDuration
-        });
-        this.goalsManager = dependencies.goalsManager || getDefaultGoalsManager({
-            runtimeConstants: this.runtimeConstants,
-            obsManager: this.obsManager,
-            sourcesManager: this.sourcesManager
-        });
+        this.sourcesManager = dependencies.sourcesManager || getDefaultSourcesManager();
+        this.goalsManager = dependencies.goalsManager || getDefaultGoalsManager();
         this.eventBus = eventBus;
 
         this.config = normalizeDisplayQueueConfig(config);

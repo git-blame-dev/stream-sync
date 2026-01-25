@@ -15,11 +15,7 @@ async function clearStartupDisplays(config, deps = {}) {
             return;
         }
 
-        const { hideAllDisplays } = getDefaultSourcesManager({
-            chatGroupName: config.general.chatMsgGroup,
-            notificationGroupName: config.obs.notificationMsgGroup,
-            fadeDelay: config.timing.fadeDuration
-        });
+        const { hideAllDisplays } = getDefaultSourcesManager();
         const obsManager = getOBSConnectionManager();
         if (!obsManager || !obsManager.isConnected()) {
             logger.debug('OBS not connected, skipping display clearing', 'OBSStartup');
