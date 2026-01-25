@@ -458,7 +458,7 @@ async function initializeOBSConnection(config = {}, dependencies = {}) {
             if (handcamConfig?.enabled) {
                 try {
                     const { initializeHandcamGlow } = require('./handcam-glow');
-                    await initializeHandcamGlow(manager.obs, handcamConfig, dependencies.runtimeConstants);
+                    await initializeHandcamGlow(manager.obs, handcamConfig);
                     logger.debug('[OBS] Handcam glow initialized to 0 (startup reset)', 'OBS');
                 } catch (glowError) {
                     const glowErrorMessage = glowError?.message || String(glowError);

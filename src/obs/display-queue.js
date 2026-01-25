@@ -247,7 +247,7 @@ class DisplayQueue {
                     }
                     
                     // 4. Add a small delay for a smooth transition before the next item
-                    await delay(this.runtimeConstants.CHAT_TRANSITION_DELAY);
+                    await delay(this.config.timing.transitionDelay);
 
                 } catch (err) {
                     handleDisplayQueueError(`[Display Queue] Error processing ${item.type}`, err, { itemType: item.type });
@@ -319,7 +319,7 @@ class DisplayQueue {
 
         // 2. Hide the current chat display to create a fade-out effect
         await this.hideCurrentDisplay({ type: 'chat' });
-        await delay(this.runtimeConstants.CHAT_TRANSITION_DELAY); // Wait for the fade-out
+        await delay(this.config.timing.transitionDelay);
 
         // 3. Update the content while it's hidden
         try {
@@ -444,7 +444,7 @@ class DisplayQueue {
 
         // 1. Hide chat display (including any lingering chat)
         await this.sourcesManager.setChatDisplayVisibility(false, this.config.chat.sceneName, this.config.chat.platformLogos);
-        await delay(this.runtimeConstants.NOTIFICATION_CLEAR_DELAY); // Default fade delay
+        await delay(this.config.timing.notificationClearDelay);
 
         // 2. Update notification text
         try {
@@ -649,7 +649,7 @@ class DisplayQueue {
         if (this.config.handcam.enabled) {
             logger.debug('[Gift] Adding handcam glow', 'display-queue');
             allPromises.push(Promise.resolve().then(() => {
-                triggerHandcamGlow(this.obsManager, this.config.handcam, this.runtimeConstants);
+                triggerHandcamGlow(this.obsManager, this.config.handcam);
             }).catch(err => {
                 handleDisplayQueueError('[Gift] Error activating handcam glow', err);
             }));
