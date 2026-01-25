@@ -1,7 +1,7 @@
 const { describe, test, expect, beforeEach, afterEach } = require('bun:test');
 const { createMockFn, restoreAllMocks } = require('../../helpers/bun-mock-utils');
 const { noOpLogger } = require('../../helpers/mock-factories');
-const { createRuntimeConstantsFixture } = require('../../helpers/runtime-constants-fixture');
+const { createConfigFixture } = require('../../helpers/config-fixture');
 
 describe('ViewerCountSystem stream status observer notifications', () => {
     let ViewerCountSystem;
@@ -18,7 +18,7 @@ describe('ViewerCountSystem stream status observer notifications', () => {
         return new ViewerCountSystem({
             platforms: { youtube: {} },
             logger: noOpLogger,
-            runtimeConstants: createRuntimeConstantsFixture()
+            config: createConfigFixture()
         });
     }
 

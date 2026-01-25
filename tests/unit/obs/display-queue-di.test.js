@@ -1,6 +1,6 @@
 const { describe, expect, beforeEach, it, afterEach } = require('bun:test');
 const { restoreAllMocks } = require('../../helpers/bun-mock-utils');
-const { createRuntimeConstantsFixture } = require('../../helpers/runtime-constants-fixture');
+const { createRuntimeConstantsFixture } = require('../../helpers/config-fixture');
 const { createMockOBSManager } = require('../../helpers/mock-factories');
 const { initializeTestLogging } = require('../../helpers/test-setup');
 const { DisplayQueue, initializeDisplayQueue } = require('../../../src/obs/display-queue');

@@ -1,16 +1,16 @@
 const { describe, it, beforeEach, expect } = require('bun:test');
 const { createMockFn } = require('../../helpers/bun-mock-utils');
 const { noOpLogger } = require('../../helpers/mock-factories');
-const { createRuntimeConstantsFixture } = require('../../helpers/runtime-constants-fixture');
+const { createConfigFixture } = require('../../helpers/config-fixture');
 const ChatNotificationRouter = require('../../../src/services/ChatNotificationRouter');
 
 describe('ChatNotificationRouter lingering/priority/TTS', () => {
     let mockLogger;
-    let runtimeConstants;
+    let testConfig;
 
     beforeEach(() => {
         mockLogger = noOpLogger;
-        runtimeConstants = createRuntimeConstantsFixture();
+        testConfig = createConfigFixture();
     });
 
     const baseMessage = {
@@ -21,7 +21,7 @@ describe('ChatNotificationRouter lingering/priority/TTS', () => {
         timestamp: new Date().toISOString()
     };
 
-    const createRouter = (overrides = {}) => {
+    const createRouter = ({ runtime: runtimeOverrides, config = testConfig } = {}) => {
         const baseRuntime = {
             config: {
                 general: { greetingsEnabled: true, messagesEnabled: true },
@@ -49,12 +49,12 @@ describe('ChatNotificationRouter lingering/priority/TTS', () => {
             isFirstMessage: createMockFn().mockReturnValue(false)
         };
 
-        const runtime = { ...baseRuntime, ...overrides.runtime };
+        const runtime = { ...baseRuntime, ...runtimeOverrides };
 
         const router = new ChatNotificationRouter({
             runtime,
             logger: mockLogger,
-            runtimeConstants: overrides.runtimeConstants || runtimeConstants
+            config
         });
 
         return { router, runtime };

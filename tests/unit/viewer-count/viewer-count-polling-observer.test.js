@@ -1,7 +1,7 @@
 const { describe, expect, afterEach, it } = require('bun:test');
 const { createMockFn, restoreAllMocks } = require('../../helpers/bun-mock-utils');
 const { noOpLogger } = require('../../helpers/mock-factories');
-const { createRuntimeConstantsFixture } = require('../../helpers/runtime-constants-fixture');
+const { createConfigFixture } = require('../../helpers/config-fixture');
 
 describe('ViewerCountSystem polling observer notifications', () => {
     const originalEnv = process.env.NODE_ENV;
@@ -24,7 +24,7 @@ describe('ViewerCountSystem polling observer notifications', () => {
         const system = new ViewerCountSystem({
             platforms: { youtube: platform },
             logger: noOpLogger,
-            runtimeConstants: createRuntimeConstantsFixture()
+            config: createConfigFixture()
         });
 
         system.streamStatus.youtube = true;
@@ -89,7 +89,7 @@ describe('ViewerCountSystem polling observer notifications', () => {
         const system = new ViewerCountSystem({
             platforms: { twitch: { notAGetter: true } },
             logger: noOpLogger,
-            runtimeConstants: createRuntimeConstantsFixture()
+            config: createConfigFixture()
         });
         system.streamStatus.twitch = true;
 
@@ -105,7 +105,7 @@ describe('ViewerCountSystem polling observer notifications', () => {
         const system = new ViewerCountSystem({
             platforms: { youtube: platform },
             logger: noOpLogger,
-            runtimeConstants: createRuntimeConstantsFixture()
+            config: createConfigFixture()
         });
         system.streamStatus.youtube = true;
 
@@ -121,7 +121,7 @@ describe('ViewerCountSystem polling observer notifications', () => {
         const system = new ViewerCountSystem({
             platforms: { youtube: platform },
             logger: noOpLogger,
-            runtimeConstants: createRuntimeConstantsFixture()
+            config: createConfigFixture()
         });
         system.streamStatus.youtube = true;
 

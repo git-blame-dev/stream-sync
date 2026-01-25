@@ -1,7 +1,7 @@
 const { describe, test, expect, beforeEach, afterEach } = require('bun:test');
 const { createMockFn, restoreAllMocks } = require('../../helpers/bun-mock-utils');
 const { noOpLogger } = require('../../helpers/mock-factories');
-const { createRuntimeConstantsFixture } = require('../../helpers/runtime-constants-fixture');
+const { createConfigFixture } = require('../../helpers/config-fixture');
 
 describe('ViewerCountSystem polling resilience', () => {
     let ViewerCountSystem;
@@ -22,7 +22,7 @@ describe('ViewerCountSystem polling resilience', () => {
         const system = new ViewerCountSystem({
             platforms: { twitch: platform },
             logger: noOpLogger,
-            runtimeConstants: createRuntimeConstantsFixture()
+            config: createConfigFixture()
         });
 
         system.streamStatus.twitch = streamLive;

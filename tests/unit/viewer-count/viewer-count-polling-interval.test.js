@@ -1,7 +1,7 @@
 const { describe, test, expect, beforeEach, afterEach } = require('bun:test');
 const { restoreAllMocks } = require('../../helpers/bun-mock-utils');
 const { noOpLogger } = require('../../helpers/mock-factories');
-const { createRuntimeConstantsFixture } = require('../../helpers/runtime-constants-fixture');
+const { createConfigFixture } = require('../../helpers/config-fixture');
 
 describe('ViewerCountSystem polling interval validation', () => {
     let ViewerCountSystem;
@@ -15,14 +15,14 @@ describe('ViewerCountSystem polling interval validation', () => {
     });
 
     test('does not start polling when interval is zero or negative', () => {
-        const runtimeConstants = createRuntimeConstantsFixture({
-            VIEWER_COUNT_POLLING_INTERVAL_SECONDS: -5
+        const config = createConfigFixture({
+            general: { viewerCountPollingIntervalMs: -5000 }
         });
 
         const system = new ViewerCountSystem({
             platforms: { twitch: {}, youtube: {} },
             logger: noOpLogger,
-            runtimeConstants
+            config
         });
 
         system.startPolling();

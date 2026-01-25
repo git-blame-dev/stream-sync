@@ -1,10 +1,8 @@
 const { describe, it, beforeEach, afterAll, expect } = require('bun:test');
 const { createMockFn, clearAllMocks } = require('../../helpers/bun-mock-utils');
-const { createRuntimeConstantsFixture } = require('../../helpers/runtime-constants-fixture');
 const ManagerModule = require('../../../src/services/innertube-instance-manager');
 
 describe('InnertubeInstanceManager behavior', () => {
-    let runtimeConstants;
     let InnertubeInstanceManager;
 
     const resetManager = async () => {
@@ -14,8 +12,6 @@ describe('InnertubeInstanceManager behavior', () => {
 
     beforeEach(async () => {
         clearAllMocks();
-        runtimeConstants = createRuntimeConstantsFixture();
-        ManagerModule.setRuntimeConstants(runtimeConstants);
         await resetManager();
         InnertubeInstanceManager = ManagerModule.getInstance().constructor;
     });
@@ -81,5 +77,15 @@ describe('InnertubeInstanceManager behavior', () => {
 
         expect(manager.disposed).toBe(true);
         expect(manager.getStats().activeInstances).toBe(0);
+    });
+
+    it('rejects non-function importer in setInnertubeImporter', () => {
+        expect(() => ManagerModule.setInnertubeImporter('not-a-function')).toThrow('Innertube importer must be a function');
+    });
+
+    it('accepts valid function in setInnertubeImporter', () => {
+        const customImporter = () => Promise.resolve({ Innertube: {} });
+        expect(() => ManagerModule.setInnertubeImporter(customImporter)).not.toThrow();
+        ManagerModule.setInnertubeImporter(null);
     });
 });

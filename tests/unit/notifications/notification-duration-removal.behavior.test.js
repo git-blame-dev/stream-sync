@@ -1,7 +1,7 @@
 const { describe, expect, beforeEach, it, afterEach } = require('bun:test');
 const { createMockFn, restoreAllMocks } = require('../../helpers/bun-mock-utils');
 const { noOpLogger } = require('../../helpers/mock-factories');
-const { createRuntimeConstantsFixture } = require('../../helpers/runtime-constants-fixture');
+const { createConfigFixture } = require('../../helpers/config-fixture');
 
 const EventEmitter = require('events');
 const NotificationManager = require('../../../src/notifications/NotificationManager');
@@ -91,7 +91,7 @@ describe('Display items avoid hardcoded durations', () => {
             router = new ChatNotificationRouter({
                 runtime,
                 logger: noOpLogger,
-                runtimeConstants: createRuntimeConstantsFixture()
+                config: createConfigFixture()
             });
         });
 

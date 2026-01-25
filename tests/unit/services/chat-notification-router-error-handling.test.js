@@ -1,17 +1,17 @@
 const { describe, it, beforeEach, expect } = require('bun:test');
 const { createMockFn } = require('../../helpers/bun-mock-utils');
 const { noOpLogger } = require('../../helpers/mock-factories');
-const { createRuntimeConstantsFixture } = require('../../helpers/runtime-constants-fixture');
+const { createConfigFixture } = require('../../helpers/config-fixture');
 const ChatNotificationRouter = require('../../../src/services/ChatNotificationRouter');
 
 describe('ChatNotificationRouter error handling', () => {
     let mockLogger;
-    let runtimeConstants;
+    let testConfig;
     let baseMessage;
 
     beforeEach(() => {
         mockLogger = noOpLogger;
-        runtimeConstants = createRuntimeConstantsFixture();
+        testConfig = createConfigFixture();
 
         baseMessage = {
             message: 'Test message',
@@ -57,7 +57,7 @@ describe('ChatNotificationRouter error handling', () => {
         const router = new ChatNotificationRouter({
             runtime,
             logger: mockLogger,
-            runtimeConstants
+            config: testConfig
         });
 
         await expect(router.handleChatMessage('twitch', baseMessage)).resolves.toBeUndefined();
@@ -71,7 +71,7 @@ describe('ChatNotificationRouter error handling', () => {
         const router = new ChatNotificationRouter({
             runtime,
             logger: mockLogger,
-            runtimeConstants
+            config: testConfig
         });
 
         await expect(router.handleChatMessage('twitch', baseMessage)).resolves.toBeUndefined();

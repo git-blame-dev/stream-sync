@@ -4,27 +4,27 @@ const { ViewerCountSystem } = require('../../src/utils/viewer-count');
 const { OBSViewerCountObserver } = require('../../src/observers/obs-viewer-count-observer');
 const { createOBSConnectionManager } = require('../../src/obs/connection');
 const { noOpLogger } = require('../helpers/mock-factories');
-const { createRuntimeConstantsFixture } = require('../helpers/runtime-constants-fixture');
+const { createConfigFixture } = require('../helpers/config-fixture');
 
 describe('OBS Connection Lifecycle Integration', () => {
     let viewerCountSystem, obsManager, obsObserver;
     let mockPlatforms;
     let mockOBSWebSocket;
-    let runtimeConstants;
+    let testConfig;
 
     beforeEach(async () => {
-        runtimeConstants = createRuntimeConstantsFixture();
+        testConfig = createConfigFixture();
         mockOBSWebSocket = createMockOBSWebSocket();
 
         obsManager = createOBSConnectionManager({
             mockOBS: mockOBSWebSocket,
             isTestEnvironment: true,
             testConnectionBehavior: true,
-            runtimeConstants,
             config: {
                 address: 'ws://localhost:4455',
                 password: 'testPassword123',
-                enabled: true
+                enabled: true,
+                connectionTimeoutMs: testConfig.obs?.connectionTimeoutMs || 10000
             }
         });
 
@@ -34,7 +34,7 @@ describe('OBS Connection Lifecycle Integration', () => {
             tiktok: createStreamingPlatformMock('tiktok', 800)
         };
 
-        viewerCountSystem = new ViewerCountSystem({ platforms: mockPlatforms, runtimeConstants });
+        viewerCountSystem = new ViewerCountSystem({ platforms: mockPlatforms, config: testConfig });
         obsObserver = new OBSViewerCountObserver(obsManager, noOpLogger);
 
         await viewerCountSystem.initialize();

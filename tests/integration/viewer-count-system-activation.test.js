@@ -14,7 +14,7 @@ const { setupAutomatedCleanup } = require('../helpers/mock-lifecycle');
 const { createAppRuntimeTestDependencies } = require('../helpers/runtime-test-harness');
 const testClock = require('../helpers/test-clock');
 const { safeDelay } = require('../../src/utils/timeout-validator');
-const { createRuntimeConstantsFixture } = require('../helpers/runtime-constants-fixture');
+const { createConfigFixture } = require('../helpers/config-fixture');
 
 const createMockPlatformLifecycleService = () => ({
     platforms: {},
@@ -55,7 +55,7 @@ describe('ViewerCount System Activation Integration', () => {
     let mockPlatformLifecycleService;
     let mockGoalsManager;
     let buildAppRuntimeDependencies;
-    let runtimeConstants;
+    let testConfig;
 
     const registerMockPlatforms = () => {
         const platforms = {
@@ -109,7 +109,7 @@ describe('ViewerCount System Activation Integration', () => {
         mockOBSManager.isConnected.mockReturnValue(true);
 
         mockGoalsManager = createMockGoalsManager();
-        runtimeConstants = createRuntimeConstantsFixture();
+        testConfig = createConfigFixture();
 
         mockYouTubePlatform = createMockYouTubePlatform();
         mockYouTubePlatform.getViewerCount = createMockFn().mockResolvedValue(150);
@@ -131,7 +131,7 @@ describe('ViewerCount System Activation Integration', () => {
                 configSnapshot: mockConfig,
                 displayQueue: mockDisplayQueue,
                 logger,
-                runtimeConstants,
+                config: testConfig,
                 overrides: {
                     obs: {
                         connectionManager: mockOBSManager,
@@ -155,7 +155,7 @@ describe('ViewerCount System Activation Integration', () => {
             app.viewerCountSystem = new ViewerCountSystem({
                 platformProvider: () => app.getPlatforms(),
                 logger: noOpLogger,
-                runtimeConstants
+                config: testConfig
             });
 
             app.viewerCountSystem.updateStreamStatus('youtube', true);
@@ -179,7 +179,7 @@ describe('ViewerCount System Activation Integration', () => {
             app.viewerCountSystem = new ViewerCountSystem({
                 platformProvider: () => app.getPlatforms(),
                 logger: noOpLogger,
-                runtimeConstants
+                config: testConfig
             });
 
             app.viewerCountSystem.updateStreamStatus('youtube', true);
@@ -207,7 +207,7 @@ describe('ViewerCount System Activation Integration', () => {
             app.viewerCountSystem = new ViewerCountSystem({
                 platformProvider: () => app.getPlatforms(),
                 logger: noOpLogger,
-                runtimeConstants
+                config: testConfig
             });
 
             app.viewerCountSystem.updateStreamStatus('youtube', true);
@@ -237,7 +237,7 @@ describe('ViewerCount System Activation Integration', () => {
             app.viewerCountSystem = new ViewerCountSystem({
                 platformProvider: () => app.getPlatforms(),
                 logger: noOpLogger,
-                runtimeConstants
+                config: testConfig
             });
 
             app.initializePlatforms = createMockFn().mockResolvedValue();
@@ -262,7 +262,7 @@ describe('ViewerCount System Activation Integration', () => {
             app.viewerCountSystem = new ViewerCountSystem({
                 platformProvider: () => app.getPlatforms(),
                 logger: noOpLogger,
-                runtimeConstants
+                config: testConfig
             });
 
             app.viewerCountSystem.updateStreamStatus('youtube', false);
@@ -287,7 +287,7 @@ describe('ViewerCount System Activation Integration', () => {
             app.viewerCountSystem = new ViewerCountSystem({
                 platformProvider: () => app.getPlatforms(),
                 logger: noOpLogger,
-                runtimeConstants
+                config: testConfig
             });
 
             app.viewerCountSystem.updateStreamStatus('youtube', true);

@@ -2,7 +2,7 @@ const { describe, test, expect, beforeEach, afterEach } = require('bun:test');
 const { createMockFn, restoreAllMocks } = require('../helpers/bun-mock-utils');
 const { createTestUser, initializeTestLogging } = require('../helpers/test-setup');
 const { noOpLogger } = require('../helpers/mock-factories');
-const { createRuntimeConstantsFixture } = require('../helpers/runtime-constants-fixture');
+const { createConfigFixture } = require('../helpers/config-fixture');
 const testClock = require('../helpers/test-clock');
 
 initializeTestLogging();
@@ -35,7 +35,7 @@ describe('Old Message Filter', () => {
         const router = new ChatNotificationRouter({
             runtime,
             logger: noOpLogger,
-            runtimeConstants: createRuntimeConstantsFixture()
+            config: createConfigFixture()
         });
 
         router.enqueueChatMessage = createMockFn();

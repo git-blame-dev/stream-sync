@@ -10,10 +10,10 @@ class CommandCooldownService {
         this.eventBus = options.eventBus || null;
         this.configService = options.configService || null;
         this.logger = options.logger || logger;
-        this.runtimeConstants = options.runtimeConstants;
-        if (!this.runtimeConstants) {
-            throw new Error('CommandCooldownService requires runtimeConstants');
+        if (!options.config) {
+            throw new Error('CommandCooldownService requires config');
         }
+        this.cooldownsConfig = options.config.cooldowns;
         this.configSubscriptions = [];
         this.lastConfigRefresh = null;
 
@@ -265,11 +265,11 @@ class CommandCooldownService {
 
     loadCooldownConfig(overrides = null) {
         const defaults = {
-            defaultCooldown: this.runtimeConstants.COOLDOWN_CONFIG.DEFAULT_COOLDOWN,
-            heavyCommandCooldown: this.runtimeConstants.COOLDOWN_CONFIG.HEAVY_COMMAND_COOLDOWN,
-            heavyCommandThreshold: this.runtimeConstants.COOLDOWN_CONFIG.HEAVY_COMMAND_THRESHOLD,
-            heavyCommandWindow: this.runtimeConstants.COOLDOWN_CONFIG.HEAVY_COMMAND_WINDOW,
-            maxEntries: this.runtimeConstants.COOLDOWN_CONFIG.MAX_COOLDOWN_ENTRIES
+            defaultCooldown: this.cooldownsConfig.defaultCooldownMs,
+            heavyCommandCooldown: this.cooldownsConfig.heavyCommandCooldownMs,
+            heavyCommandThreshold: this.cooldownsConfig.heavyCommandThreshold,
+            heavyCommandWindow: this.cooldownsConfig.heavyCommandWindowMs,
+            maxEntries: this.cooldownsConfig.maxEntries
         };
 
         const source = overrides || this.getCooldownOverridesFromConfig();

@@ -1,6 +1,6 @@
 const { describe, test, expect, beforeEach, afterEach } = require('bun:test');
 const { createMockFn, restoreAllMocks } = require('../helpers/bun-mock-utils');
-const { createRuntimeConstantsFixture } = require('../helpers/runtime-constants-fixture');
+const { createConfigFixture } = require('../helpers/config-fixture');
 const { noOpLogger } = require('../helpers/mock-factories');
 
 describe('Viewer Count Polling System Fix', () => {
@@ -10,13 +10,13 @@ describe('Viewer Count Polling System Fix', () => {
     let mockTwitchPlatform;
     let mockTiktokPlatform;
     let platforms;
-    let runtimeConstants;
+    let testConfig;
 
     beforeEach(async () => {
         ({ ViewerCountSystem } = require('../../src/utils/viewer-count'));
 
-        runtimeConstants = createRuntimeConstantsFixture({
-            VIEWER_COUNT_POLLING_INTERVAL_SECONDS: 60
+        testConfig = createConfigFixture({
+            general: { viewerCountPollingIntervalMs: 60 }
         });
 
         mockYoutubePlatform = {
@@ -40,7 +40,7 @@ describe('Viewer Count Polling System Fix', () => {
         viewerCountSystem = new ViewerCountSystem({
             platformProvider: () => platforms,
             logger: noOpLogger,
-            runtimeConstants
+            config: testConfig
         });
 
         const mockObserver = {

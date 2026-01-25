@@ -1,6 +1,6 @@
 const { createMockFn } = require('./bun-mock-utils');
 const { noOpLogger } = require('./mock-factories');
-const { createSourcesConfigFixture } = require('./runtime-constants-fixture');
+const { createSourcesConfigFixture } = require('./config-fixture');
 const { createOBSSourcesManager } = require('../../src/obs/sources');
 const { createGoalTracker } = require('../../src/utils/goal-tracker');
 

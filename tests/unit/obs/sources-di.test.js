@@ -1,7 +1,7 @@
 
 const { describe, expect, it, afterEach } = require('bun:test');
 const { createMockFn, restoreAllMocks } = require('../../helpers/bun-mock-utils');
-const { createSourcesConfigFixture } = require('../../helpers/runtime-constants-fixture');
+const { createSourcesConfigFixture } = require('../../helpers/config-fixture');
 const { noOpLogger } = require('../../helpers/mock-factories');
 const { OBSSourcesManager, createOBSSourcesManager } = require('../../../src/obs/sources');
 

@@ -3,7 +3,7 @@ const { describe, expect, afterEach, it } = require('bun:test');
 const { createMockFn, clearAllMocks, restoreAllMocks } = require('../../helpers/bun-mock-utils');
 
 const { setupAutomatedCleanup } = require('../../helpers/mock-lifecycle');
-const { createSourcesConfigFixture } = require('../../helpers/runtime-constants-fixture');
+const { createSourcesConfigFixture } = require('../../helpers/config-fixture');
 const { noOpLogger } = require('../../helpers/mock-factories');
 const { createOBSSourcesManager } = require('../../../src/obs/sources');
 

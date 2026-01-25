@@ -5,7 +5,7 @@ const { useFakeTimers, useRealTimers, advanceTimersByTime } = require('../../hel
 
 const { ViewerCountSystem } = require('../../../src/utils/viewer-count');
 const { setupAutomatedCleanup } = require('../../helpers/mock-factories');
-const { createRuntimeConstantsFixture } = require('../../helpers/runtime-constants-fixture');
+const { createConfigFixture } = require('../../helpers/config-fixture');
 const testClock = require('../../helpers/test-clock');
 
 const createMockViewerCountObserver = (observerId = 'testObserver', behaviorOverrides = {}) => {
@@ -88,26 +88,26 @@ const createMockPlatformWithViewerCount = (platformName = 'tiktok', config = {})
     };
 };
 
-const buildRuntimeConstants = (pollingIntervalSeconds = 60) => createRuntimeConstantsFixture({
-    VIEWER_COUNT_POLLING_INTERVAL_SECONDS: pollingIntervalSeconds
+const buildConfig = (pollingIntervalMs = 60000) => createConfigFixture({
+    general: { viewerCountPollingIntervalMs: pollingIntervalMs }
 });
 
-const createViewerCountTestEnvironment = (config = {}) => {
+const createViewerCountTestEnvironment = (envConfig = {}) => {
     const {
-        pollingInterval = 1, // Use 1ms for fast testing
+        pollingInterval = 1,
         platforms = ['tiktok', 'twitch', 'youtube'],
         initialStreamStatus = { tiktok: true, twitch: true, youtube: false }
-    } = config;
-    
+    } = envConfig;
+
     const mockPlatforms = {};
     platforms.forEach(platformName => {
-        mockPlatforms[platformName] = createMockPlatformWithViewerCount(platformName, config[platformName] || {});
+        mockPlatforms[platformName] = createMockPlatformWithViewerCount(platformName, envConfig[platformName] || {});
     });
-    
-    const runtimeConstants = buildRuntimeConstants(pollingInterval);
+
+    const config = buildConfig(pollingInterval);
     const system = new ViewerCountSystem({
         platforms: mockPlatforms,
-        runtimeConstants
+        config
     });
 
     Object.entries(initialStreamStatus).forEach(([platform, isLive]) => {
@@ -188,19 +188,19 @@ describe('ViewerCountSystem - Comprehensive Behavior Tests', () => {
         });
 
         test('should respect configured polling intervals from config', () => {
-            const system = new ViewerCountSystem({ platforms: {}, runtimeConstants: buildRuntimeConstants(60) });
+            const system = new ViewerCountSystem({ platforms: {}, config: buildConfig(60000) });
             system.startPolling();
             expect(system.pollingInterval).toBe(60000);
             expect(system.isPolling).toBe(true);
         });
 
         test('should handle missing configuration gracefully with defaults', () => {
-            const system = new ViewerCountSystem({ platforms: {}, runtimeConstants: buildRuntimeConstants(60) });
+            const system = new ViewerCountSystem({ platforms: {}, config: buildConfig(60000) });
             expect(() => system.startPolling()).not.toThrow();
         });
 
         test('should validate polling interval boundaries and disable for invalid values', () => {
-            const system = new ViewerCountSystem({ platforms: {}, runtimeConstants: buildRuntimeConstants(60) });
+            const system = new ViewerCountSystem({ platforms: {}, config: buildConfig(60000) });
             system.pollingInterval = 0;
             expect(system.pollingInterval).toBe(0);
             const isValidInterval = system.pollingInterval > 0;
@@ -208,7 +208,7 @@ describe('ViewerCountSystem - Comprehensive Behavior Tests', () => {
         });
 
         test('should handle negative polling intervals by disabling polling', () => {
-            const system = new ViewerCountSystem({ platforms: {}, runtimeConstants: buildRuntimeConstants(60) });
+            const system = new ViewerCountSystem({ platforms: {}, config: buildConfig(60000) });
             system.pollingInterval = -10000;
             expect(system.pollingInterval).toBe(-10000);
             const isValidInterval = system.pollingInterval > 0;
@@ -634,7 +634,7 @@ describe('ViewerCountSystem - Comprehensive Behavior Tests', () => {
 
     describe('Configuration Changes & Runtime Adaptation', () => {
         test('should adapt to polling interval changes at runtime', () => {
-            const system = new ViewerCountSystem({ platforms: {}, runtimeConstants: buildRuntimeConstants(60) });
+            const system = new ViewerCountSystem({ platforms: {}, config: buildConfig(60000) });
             system.startPolling();
             expect(system.pollingInterval).toBe(60000);
             system.stopPolling();
@@ -653,7 +653,7 @@ describe('ViewerCountSystem - Comprehensive Behavior Tests', () => {
         });
 
         test('should validate configuration changes before applying', () => {
-            const system = new ViewerCountSystem({ platforms: {}, runtimeConstants: buildRuntimeConstants(60) });
+            const system = new ViewerCountSystem({ platforms: {}, config: buildConfig(60000) });
             expect(() => system.startPolling()).not.toThrow();
             expect(system.isPolling).toBe(true);
         });
@@ -759,7 +759,7 @@ describe('ViewerCountSystem - Comprehensive Behavior Tests', () => {
         });
 
         test('should handle empty platform registry properly', () => {
-            const system = new ViewerCountSystem({ platforms: {}, runtimeConstants: buildRuntimeConstants(60) });
+            const system = new ViewerCountSystem({ platforms: {}, config: buildConfig(60000) });
             expect(() => system.startPolling()).not.toThrow();
         });
 

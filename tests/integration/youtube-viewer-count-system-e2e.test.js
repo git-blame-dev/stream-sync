@@ -9,7 +9,7 @@ const { OBSViewerCountObserver } = require('../../src/observers/obs-viewer-count
 const { createMockOBSManager } = require('../helpers/mock-factories');
 const { expectNoTechnicalArtifacts } = require('../helpers/behavior-validation');
 const { createSilentLogger } = require('../helpers/test-logger');
-const { createRuntimeConstantsFixture } = require('../helpers/runtime-constants-fixture');
+const { createConfigFixture } = require('../helpers/config-fixture');
 const testClock = require('../helpers/test-clock');
 
 describe('YouTube Viewer Count System - End-to-End Integration', () => {
@@ -21,12 +21,12 @@ describe('YouTube Viewer Count System - End-to-End Integration', () => {
         }
     });
 
-    let platforms, obsManager, viewerCountSystem, logger, runtimeConstants;
+    let platforms, obsManager, viewerCountSystem, logger, testConfig;
 
     beforeEach(async () => {
         testClock.reset();
         logger = createSilentLogger();
-        runtimeConstants = createRuntimeConstantsFixture();
+        testConfig = createConfigFixture();
         platforms = {
             youtube: {
                 getViewerCount: createMockFn().mockResolvedValue(1234),
@@ -41,7 +41,7 @@ describe('YouTube Viewer Count System - End-to-End Integration', () => {
         viewerCountSystem = new ViewerCountSystem({
             platformProvider: () => platforms,
             logger,
-            runtimeConstants,
+            config: testConfig,
             timeProvider
         });
         const obsObserver = new OBSViewerCountObserver(obsManager, logger);
@@ -231,9 +231,7 @@ describe('YouTube Viewer Count System - End-to-End Integration', () => {
 
     describe('Configuration Integration', () => {
         test('should respect polling interval configuration', async () => {
-            viewerCountSystem.runtimeConstants = createRuntimeConstantsFixture({
-                VIEWER_COUNT_POLLING_INTERVAL_SECONDS: 2
-            });
+            viewerCountSystem.pollingIntervalMs = 2000;
 
             viewerCountSystem.startPolling();
 
@@ -242,9 +240,7 @@ describe('YouTube Viewer Count System - End-to-End Integration', () => {
         });
 
         test('should handle disabled viewer count polling', async () => {
-            viewerCountSystem.runtimeConstants = createRuntimeConstantsFixture({
-                VIEWER_COUNT_POLLING_INTERVAL_SECONDS: 0
-            });
+            viewerCountSystem.pollingIntervalMs = 0;
 
             viewerCountSystem.startPolling();
 
