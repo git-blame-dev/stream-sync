@@ -70,6 +70,38 @@ const DEFAULTS = {
         autoProcess: true,
         chatOptimization: true,
         maxQueueSize: 100
+    },
+
+    retry: {
+        maxRetries: 3,
+        baseDelay: 1000,
+        maxDelay: 30000,
+        enableRetry: true
+    },
+
+    intervals: {
+        pollInterval: 5000,
+        connectionTimeout: 30000,
+        keepAliveInterval: 30000,
+        healthCheckInterval: 60000
+    },
+
+    connectionLimits: {
+        maxConnections: 3,
+        maxConcurrentRequests: 5,
+        maxStreamsPerConnection: 1
+    },
+
+    api: {
+        requestTimeout: 5000
+    },
+
+    logging: {
+        level: 'info',
+        enableDebug: false,
+        enableConsole: true,
+        enableFile: false,
+        maxFileSize: 10485760
     }
 };
 
