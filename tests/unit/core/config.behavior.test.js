@@ -350,9 +350,9 @@ enabled = true
         configManager.load();
 
         expect(config.cooldowns).toBeDefined();
-        expect(config.cooldowns.defaultCooldown).toBe('60');
-        expect(config.cooldowns.heavyCommandCooldown).toBe('300');
-        expect(config.cooldowns.maxEntries).toBe('1000');
+        expect(config.cooldowns.defaultCooldown).toBe(60);
+        expect(config.cooldowns.heavyCommandCooldown).toBe(300);
+        expect(config.cooldowns.maxEntries).toBe(1000);
     });
 
     it('throws error when StreamElements enabled without channel IDs', () => {
