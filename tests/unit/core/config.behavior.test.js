@@ -144,7 +144,6 @@ chatPlatformLogoTikTok = tiktok-img
 notificationPlatformLogoTwitch = twitch-img
 notificationPlatformLogoYouTube = youtube-img
 notificationPlatformLogoTikTok = tiktok-img
-notificationMsgGroup = statusbar notification grp
 
 [timing]
 fadeDuration = 750
@@ -193,7 +192,7 @@ enabled = true
             configManager.isLoaded = false;
             configManager.configPath = testConfigPath;
 
-            expect(() => configManager.load()).toThrow(/obs.connectionTimeoutMs/);
+            expect(() => configManager.load()).toThrow(/obs.notificationMsgGroup/);
         } finally {
             process.stderr.write = originalStderrWrite;
         }
