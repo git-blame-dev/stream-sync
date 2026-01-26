@@ -13,6 +13,7 @@ const DEFAULTS = {
         followsEnabled: true,
         giftsEnabled: true,
         raidsEnabled: true,
+        sharesEnabled: true,
         paypiggiesEnabled: true,
         greetNewCommentors: false,
         filterOldMessages: true,

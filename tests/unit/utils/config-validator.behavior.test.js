@@ -109,6 +109,16 @@ describe('ConfigValidator._normalizeGeneralSection()', () => {
         expect(result.chatMsgTxt).toBe('test-source');
         expect(result.fallbackUsername).toBe('TestUser');
     });
+
+    it('normalizes sharesEnabled flag', () => {
+        const rawEnabled = { sharesEnabled: 'true' };
+        const rawDisabled = { sharesEnabled: 'false' };
+        const rawDefault = {};
+
+        expect(ConfigValidator._normalizeGeneralSection(rawEnabled).sharesEnabled).toBe(true);
+        expect(ConfigValidator._normalizeGeneralSection(rawDisabled).sharesEnabled).toBe(false);
+        expect(ConfigValidator._normalizeGeneralSection(rawDefault).sharesEnabled).toBe(true);
+    });
 });
 
 describe('ConfigValidator._normalizeHttpSection()', () => {
@@ -350,9 +360,46 @@ describe('ConfigValidator simple command sections', () => {
         expect(result.command).toBe('bye-cmd');
     });
 
-    it('normalizes commands section', () => {
+    it('normalizes commands section enabled flag', () => {
         const result = ConfigValidator._normalizeCommandsSection({ enabled: 'true' });
         expect(result.enabled).toBe(true);
+    });
+
+    it('normalizes commands section preserves command definitions', () => {
+        const raw = {
+            enabled: 'true',
+            'test-single': '!testsingle, vfx bottom green',
+            'test-multi': '!testalpha|!testbravo, vfx center green, alpha|bravo'
+        };
+        const result = ConfigValidator._normalizeCommandsSection(raw);
+
+        expect(result.enabled).toBe(true);
+        expect(result['test-single']).toBe('!testsingle, vfx bottom green');
+        expect(result['test-multi']).toBe('!testalpha|!testbravo, vfx center green, alpha|bravo');
+    });
+
+    it('normalizes commands section ignores non-string values except enabled', () => {
+        const raw = {
+            enabled: 'false',
+            'valid-command': '!cmd, vfx top',
+            'invalid-number': 123,
+            'invalid-object': { foo: 'bar' },
+            'invalid-null': null
+        };
+        const result = ConfigValidator._normalizeCommandsSection(raw);
+
+        expect(result.enabled).toBe(false);
+        expect(result['valid-command']).toBe('!cmd, vfx top');
+        expect(result['invalid-number']).toBeUndefined();
+        expect(result['invalid-object']).toBeUndefined();
+        expect(result['invalid-null']).toBeUndefined();
+    });
+
+    it('normalizes commands section with empty input returns only enabled', () => {
+        const result = ConfigValidator._normalizeCommandsSection({});
+
+        expect(result.enabled).toBe(false);
+        expect(Object.keys(result)).toEqual(['enabled']);
     });
 });
 
