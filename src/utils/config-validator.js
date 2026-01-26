@@ -189,6 +189,7 @@ class ConfigValidator {
             followsEnabled: ConfigValidator.parseBoolean(raw.followsEnabled, DEFAULTS.general.followsEnabled),
             giftsEnabled: ConfigValidator.parseBoolean(raw.giftsEnabled, DEFAULTS.general.giftsEnabled),
             raidsEnabled: ConfigValidator.parseBoolean(raw.raidsEnabled, DEFAULTS.general.raidsEnabled),
+            sharesEnabled: ConfigValidator.parseBoolean(raw.sharesEnabled, DEFAULTS.general.sharesEnabled),
             paypiggiesEnabled: ConfigValidator.parseBoolean(raw.paypiggiesEnabled, DEFAULTS.general.paypiggiesEnabled),
             greetNewCommentors: ConfigValidator.parseBoolean(raw.greetNewCommentors, DEFAULTS.general.greetNewCommentors),
             filterOldMessages: ConfigValidator.parseBoolean(raw.filterOldMessages, DEFAULTS.general.filterOldMessages),
@@ -486,9 +487,18 @@ class ConfigValidator {
     }
 
     static _normalizeCommandsSection(raw) {
-        return {
+        const normalized = {
             enabled: ConfigValidator.parseBoolean(raw.enabled, DEFAULTS.commands.enabled)
         };
+
+        for (const [key, value] of Object.entries(raw)) {
+            if (key === 'enabled') continue;
+            if (typeof value === 'string') {
+                normalized[key] = value;
+            }
+        }
+
+        return normalized;
     }
 
     static _normalizeVfxSection(raw) {

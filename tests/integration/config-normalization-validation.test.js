@@ -279,4 +279,44 @@ describe('ConfigValidator normalize + validate integration', () => {
         expect(typeof normalized.timing.fadeDuration).toBe('number');
         expect(typeof normalized.cooldowns.defaultCooldown).toBe('number');
     });
+
+    it('commands section preserves user-defined command definitions through normalization', () => {
+        const rawConfig = {
+            general: {},
+            obs: {},
+            commands: {
+                enabled: 'true',
+                'test-single': '!testsingle, vfx bottom green',
+                'test-multi': '!testalpha|!testbravo, vfx top, alpha|bravo',
+                'test-keywords': '!testcmd|!testalt, vfx center green, keyword1|keyword2|keyword3'
+            }
+        };
+
+        const normalized = ConfigValidator.normalize(rawConfig);
+
+        expect(normalized.commands.enabled).toBe(true);
+        expect(normalized.commands['test-single']).toBe('!testsingle, vfx bottom green');
+        expect(normalized.commands['test-multi']).toBe('!testalpha|!testbravo, vfx top, alpha|bravo');
+        expect(normalized.commands['test-keywords']).toBe('!testcmd|!testalt, vfx center green, keyword1|keyword2|keyword3');
+        expect(Object.keys(normalized.commands).length).toBe(4);
+    });
+
+    it('sharesEnabled is preserved through normalization with correct default', () => {
+        const rawConfigExplicit = {
+            general: { sharesEnabled: 'true' },
+            obs: {},
+            commands: {}
+        };
+        const rawConfigDefault = {
+            general: {},
+            obs: {},
+            commands: {}
+        };
+
+        const normalizedExplicit = ConfigValidator.normalize(rawConfigExplicit);
+        const normalizedDefault = ConfigValidator.normalize(rawConfigDefault);
+
+        expect(normalizedExplicit.general.sharesEnabled).toBe(true);
+        expect(normalizedDefault.general.sharesEnabled).toBe(true);
+    });
 });
