@@ -35,12 +35,43 @@ class ConfigLoader {
             }
 
             const configContent = fs.readFileSync(this.configPath, 'utf-8');
-            this.config = ini.parse(configContent);
+            const rawConfig = ini.parse(configContent);
+            
+            const requiredSections = ['general', 'obs', 'commands'];
+            const missingSections = requiredSections.filter(section => !rawConfig[section]);
+            if (missingSections.length > 0) {
+                throw new Error(`Missing required configuration sections: ${missingSections.join(', ')}`);
+            }
+            
+            const normalized = ConfigValidator.normalize(rawConfig);
+            const validation = ConfigValidator.validate(normalized);
+            
+            if (!validation.isValid) {
+                const error = new Error(`Configuration validation failed: ${validation.errors.join(', ')}`);
+                handleUserFacingError(error, {
+                    category: 'configuration',
+                    operation: 'validation'
+                }, {
+                    showInConsole: true,
+                    includeActions: true,
+                    logTechnical: false
+                });
+                throw error;
+            }
+            
+            if (validation.warnings.length > 0 && process.env.NODE_ENV !== 'test') {
+                validation.warnings.forEach(warning => {
+                    process.stdout.write(`[WARN] [Config] ${warning}\n`);
+                });
+            }
+            
+            Object.freeze(normalized);
+            
+            this.config = normalized;
             this.isLoaded = true;
-            this.validate();
 
             if (process.env.NODE_ENV !== 'test') {
-                const debugEnabled = this.getBoolean('general', 'debugEnabled', false);
+                const debugEnabled = normalized.general.debugEnabled;
                 if (debugEnabled) {
                     process.stdout.write(`[INFO] [Config] Successfully loaded configuration from ${this.configPath}\n`);
                 }
@@ -56,7 +87,7 @@ class ConfigLoader {
                     includeActions: true,
                     logTechnical: false
                 });
-            } else {
+            } else if (!error.message.includes('Configuration validation failed')) {
                 handleUserFacingError(error, {
                     category: 'configuration',
                     operation: 'loading'
@@ -71,19 +102,19 @@ class ConfigLoader {
     }
 
     _getTestDefaultConfig() {
-        return {
+        return ConfigValidator.normalize({
             general: {
-                debugEnabled: false,
-                cmdCoolDown: 60,
-                globalCmdCoolDown: 60,
-                viewerCountPollingInterval: 60,
+                debugEnabled: 'false',
+                cmdCoolDown: '60',
+                globalCmdCoolDown: '60',
+                viewerCountPollingInterval: '60',
                 chatMsgGroup: 'test-chat-grp',
-                maxMessageLength: 500
+                maxMessageLength: '500'
             },
             obs: {
-                enabled: false,
+                enabled: 'false',
                 address: 'ws://localhost:4455',
-                connectionTimeoutMs: 5000,
+                connectionTimeoutMs: '5000',
                 notificationMsgGroup: 'test-notification-grp',
                 chatPlatformLogoTwitch: 'test-twitch-img',
                 chatPlatformLogoYouTube: 'test-youtube-img',
@@ -93,99 +124,38 @@ class ConfigLoader {
                 notificationPlatformLogoTikTok: 'test-tiktok-img'
             },
             timing: {
-                fadeDuration: 750,
-                transitionDelay: 200,
-                chatMessageDuration: 4000,
-                notificationClearDelay: 500
+                fadeDuration: '750',
+                transitionDelay: '200',
+                chatMessageDuration: '4000',
+                notificationClearDelay: '500'
             },
             handcam: {
-                glowEnabled: false,
+                glowEnabled: 'false',
                 sourceName: 'test-handcam',
                 sceneName: 'test-handcam-scene',
                 glowFilterName: 'Glow',
-                maxSize: 50,
-                rampUpDuration: 0.5,
-                holdDuration: 8.0,
-                rampDownDuration: 0.5,
-                totalSteps: 30,
-                incrementPercent: 3.33,
-                easingEnabled: true,
-                animationInterval: 16
+                maxSize: '50',
+                rampUpDuration: '0.5',
+                holdDuration: '8.0',
+                rampDownDuration: '0.5',
+                totalSteps: '30',
+                incrementPercent: '3.33',
+                easingEnabled: 'true',
+                animationInterval: '16'
             },
             cooldowns: {
-                defaultCooldown: 60,
-                heavyCommandCooldown: 300,
-                heavyCommandThreshold: 4,
-                heavyCommandWindow: 360,
-                maxEntries: 1000
+                defaultCooldown: '60',
+                heavyCommandCooldown: '300',
+                heavyCommandThreshold: '4',
+                heavyCommandWindow: '360',
+                maxEntries: '1000'
             },
-            commands: { enabled: false },
-            tiktok: { enabled: false },
-            twitch: { enabled: false },
-            youtube: { enabled: false },
+            commands: { enabled: 'false' },
+            tiktok: { enabled: 'false' },
+            twitch: { enabled: 'false' },
+            youtube: { enabled: 'false' },
             http: {}
-        };
-    }
-
-    validate() {
-        if (!this.config) {
-            throw new Error('Configuration not loaded');
-        }
-
-        const requiredSections = ['general', 'obs', 'commands'];
-        const missingSections = requiredSections.filter(section => !this.config[section]);
-        
-        if (missingSections.length > 0) {
-            throw new Error(`Missing required configuration sections: ${missingSections.join(', ')}`);
-        }
-
-        // Validate platform sections have usernames if enabled
-        const platforms = ['youtube', 'tiktok', 'twitch'];
-        const platformDisplayNames = {
-            youtube: 'YouTube',
-            tiktok: 'TikTok',
-            twitch: 'Twitch'
-        };
-        platforms.forEach(platform => {
-            const platformConfig = this.config[platform];
-            if (!platformConfig || !this.getBoolean(platform, 'enabled', false)) {
-                return;
-            }
-
-            const username = this.getString(platform, 'username', '').trim();
-            if (!username) {
-                const displayName = platformDisplayNames[platform] || platform;
-                const error = new Error(`Missing required configuration: ${displayName} username`);
-                handleUserFacingError(error, {
-                    category: 'configuration',
-                    operation: 'validation'
-                }, {
-                    showInConsole: true,
-                    includeActions: true,
-                    logTechnical: false
-                });
-                throw error;
-            }
         });
-
-        const streamElementsEnabled = this.getBoolean('streamelements', 'enabled', false);
-        if (streamElementsEnabled) {
-            const youtubeChannelId = resolveConfigValue('streamelements', 'youtubeChannelId');
-            const twitchChannelId = resolveConfigValue('streamelements', 'twitchChannelId');
-            if (!youtubeChannelId && !twitchChannelId) {
-                const error = new Error('Missing required configuration: StreamElements channel ID (YouTube or Twitch)');
-                handleUserFacingError(error, {
-                    category: 'configuration',
-                    operation: 'validation'
-                }, {
-                    showInConsole: true,
-                    includeActions: true,
-                    logTechnical: false
-                });
-                throw error;
-            }
-        }
-
     }
 
     get(section, key, defaultValue = undefined) {
@@ -617,76 +587,6 @@ const config = {
     get raw() { return configManager.getRaw(); }
 };
 
-function validateNewFeaturesConfig(config) {
-    const validation = {
-        isValid: true,
-        errors: [],
-        warnings: []
-    };
-
-
-    // Validate cooldown configuration
-    if (config.cooldowns) {
-        const cooldown = config.cooldowns;
-        
-        if (cooldown.defaultCooldown && (cooldown.defaultCooldown < 10 || cooldown.defaultCooldown > 3600)) {
-            validation.warnings.push('cooldowns.defaultCooldown should be between 10 and 3600 seconds');
-        }
-        
-        if (cooldown.heavyCommandCooldown && (cooldown.heavyCommandCooldown < 60 || cooldown.heavyCommandCooldown > 3600)) {
-            validation.warnings.push('cooldowns.heavyCommandCooldown should be between 60 and 3600 seconds');
-        }
-        
-        if (cooldown.heavyCommandThreshold && (cooldown.heavyCommandThreshold < 2 || cooldown.heavyCommandThreshold > 20)) {
-            validation.warnings.push('cooldowns.heavyCommandThreshold should be between 2 and 20');
-        }
-    }
-
-    // Validate handcam glow configuration
-    if (config.handcam) {
-        const handcam = config.handcam;
-        
-        if (handcam.maxSize && (handcam.maxSize < 1 || handcam.maxSize > 100)) {
-            validation.warnings.push('handcam.maxSize should be between 1 and 100');
-        }
-        
-        if (handcam.rampUpDuration && (handcam.rampUpDuration < 0.1 || handcam.rampUpDuration > 10.0)) {
-            validation.warnings.push('handcam.rampUpDuration should be between 0.1 and 10.0 seconds');
-        }
-        
-        if (handcam.holdDuration && (handcam.holdDuration < 0.1 || handcam.holdDuration > 10.0)) {
-            validation.warnings.push('handcam.holdDuration should be between 0.1 and 10.0 seconds');
-        }
-        
-        if (handcam.rampDownDuration && (handcam.rampDownDuration < 0.1 || handcam.rampDownDuration > 10.0)) {
-            validation.warnings.push('handcam.rampDownDuration should be between 0.1 and 10.0 seconds');
-        }
-    }
-
-    // Validate retry configuration
-    if (config.retry) {
-        const retry = config.retry;
-        
-        if (retry.baseDelay && (retry.baseDelay < 1000 || retry.baseDelay > 30000)) {
-            validation.warnings.push('retry.baseDelay should be between 1000 and 30000 milliseconds');
-        }
-        
-        if (retry.maxDelay && (retry.maxDelay < 5000 || retry.maxDelay > 120000)) {
-            validation.warnings.push('retry.maxDelay should be between 5000 and 120000 milliseconds');
-        }
-        
-        if (retry.backoffMultiplier && (retry.backoffMultiplier < 1.1 || retry.backoffMultiplier > 3.0)) {
-            validation.warnings.push('retry.backoffMultiplier should be between 1.1 and 3.0');
-        }
-        
-        if (retry.maxAttempts && (retry.maxAttempts < 1 || retry.maxAttempts > 50)) {
-            validation.warnings.push('retry.maxAttempts should be between 1 and 50');
-        }
-    }
-
-    return validation;
-}
-
 const DEFAULT_LOGGING_CONFIG = {
     console: { enabled: true, level: 'console' }, // Only user-facing messages (chat, notifications, errors)
     file: { enabled: true, level: 'debug', directory: DEFAULTS.LOG_DIRECTORY },
@@ -761,7 +661,6 @@ function validateLoggingConfig(userConfig = {}) {
 module.exports = {
     config,
     configManager,
-    validateNewFeaturesConfig,
     validateLoggingConfig,
     DEFAULT_LOGGING_CONFIG,
     // Export getter functions for direct access if needed
