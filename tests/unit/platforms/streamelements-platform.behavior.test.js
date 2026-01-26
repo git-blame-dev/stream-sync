@@ -72,7 +72,7 @@ describe('StreamElementsPlatform behavior', () => {
 
     it('initializes disabled platform and fails prerequisites', async () => {
         const platform = new StreamElementsPlatform(
-            createStreamElementsConfigFixture(),
+            createStreamElementsConfigFixture({ enabled: false }),
             { logger: noOpLogger }
         );
 
