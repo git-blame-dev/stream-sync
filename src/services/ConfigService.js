@@ -40,9 +40,9 @@ class ConfigService {
                 return this._getByPath(section);
             }
 
-            // Handle ConfigManager style: get('general', 'debugEnabled', false)
+            // Handle ConfigLoader style: get('general', 'debugEnabled', false)
             if (key !== null) {
-                return this._getConfigManagerStyle(section, key);
+                return this._getConfigLoaderStyle(section, key);
             }
 
             // Handle section access: get('general')
@@ -65,12 +65,12 @@ class ConfigService {
             // Try platform-specific first
             let platformSpecific;
             
-            // Handle both ConfigManager style and direct property access
+            // Handle both ConfigLoader style and direct property access
             if (typeof this.config?.get === 'function') {
                 platformSpecific = this.config.get(platform, key);
             }
             
-            // If ConfigManager didn't return a value, try direct property access
+            // If ConfigLoader didn't return a value, try direct property access
             if (platformSpecific === undefined && this.config?.[platform]) {
                 platformSpecific = this.config[platform][key];
             }
@@ -91,13 +91,13 @@ class ConfigService {
         try {
             this._assertConfigAvailable('notifications');
 
-            // Handle both ConfigManager style and direct property access
+            // Handle both ConfigLoader style and direct property access
             let platformEnabled, generalEnabled;
             
             if (platform) {
                 // Check platform-specific setting first
                 if (typeof this.config?.get === 'function') {
-                    // ConfigManager style
+                    // ConfigLoader style
                     platformEnabled = this.config.get(platform, notificationType);
                     generalEnabled = this.config.get('notifications', notificationType);
                 } else {
@@ -193,7 +193,7 @@ class ConfigService {
 
             const useSectionCommand = SECTION_COMMAND_KEYS.has(commandKey);
 
-            // Handle both ConfigManager style and direct property access
+            // Handle both ConfigLoader style and direct property access
             if (typeof this.config?.get === 'function') {
                 if (useSectionCommand) {
                     const sectionCommand = this.config.get(commandKey, 'command');
@@ -229,14 +229,14 @@ class ConfigService {
         try {
             this._assertConfigAvailable('debug');
 
-            // Handle both ConfigManager style and direct property access
+            // Handle both ConfigLoader style and direct property access
             let debugEnabled;
             
             if (typeof this.config?.get === 'function') {
                 debugEnabled = this.config.get('general', 'debugEnabled');
             }
             
-            // If ConfigManager didn't return a value, try direct property access
+            // If ConfigLoader didn't return a value, try direct property access
             if (debugEnabled === undefined && this.config?.general) {
                 debugEnabled = this.config.general.debugEnabled;
             }
@@ -265,7 +265,7 @@ class ConfigService {
                 return false;
             }
 
-            // Handle ConfigManager style setting
+            // Handle ConfigLoader style setting
             if (typeof this.config.set === 'function') {
                 this.config.set(section, key, value);
             } else {
@@ -318,7 +318,7 @@ class ConfigService {
         try {
             return {
                 hasConfig: !!this.config,
-                configType: typeof this.config?.get === 'function' ? 'ConfigManager' : 'Object',
+                configType: typeof this.config?.get === 'function' ? 'ConfigLoader' : 'Object',
                 sections: this.config ? Object.keys(this.config) : [],
                 hasEventBus: !!this.eventBus,
                 cacheSize: this.cache.size
@@ -354,10 +354,10 @@ class ConfigService {
         return current;
     }
 
-    _getConfigManagerStyle(section, key) {
-        this._assertConfigAvailable('get-config-manager-style');
+    _getConfigLoaderStyle(section, key) {
+        this._assertConfigAvailable('get-config-loader-style');
 
-        // Try ConfigManager style first
+        // Try ConfigLoader style first
         if (typeof this.config.get === 'function') {
             const value = this.config.get(section, key);
             if (value === undefined) {

@@ -6,7 +6,7 @@ const { DEFAULT_HTTP_USER_AGENTS, parseUserAgentList } = require('./http-config'
 const { DEFAULTS } = require('./config-defaults');
 const { ConfigValidator } = require('../utils/config-validator');
 
-class ConfigManager {
+class ConfigLoader {
     constructor(defaultConfigPath = './config.ini') {
         this.defaultConfigPath = defaultConfigPath;
         this.configPath = defaultConfigPath;
@@ -241,8 +241,8 @@ class ConfigManager {
     }
 }
 
-// Create global configuration manager instance
-const configManager = new ConfigManager();
+// Create global configuration loader instance
+const configManager = new ConfigLoader();
 
 const resolveConfigValue = (section, key) => {
     const rawValue = configManager.get(section, key);

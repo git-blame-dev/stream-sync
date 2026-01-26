@@ -117,7 +117,7 @@ const createCapturingLogger = () => {
 describe('secret-manager', () => {
     let configManager;
     let logger;
-    let ConfigManager;
+    let ConfigLoader;
     const originalEnv = {};
     const configPath = '/test/config.ini';
     const envFilePath = '/test/.env';
@@ -168,8 +168,8 @@ describe('secret-manager', () => {
         globalConfigManager.isLoaded = false;
         globalConfigManager.config = null;
 
-        ConfigManager = globalConfigManager.constructor;
-        configManager = new ConfigManager(configPath);
+        ConfigLoader = globalConfigManager.constructor;
+        configManager = new ConfigLoader(configPath);
         configManager.load();
         logger = createCapturingLogger();
 
