@@ -529,6 +529,121 @@ class ConfigValidator {
             command: ConfigValidator.parseString(raw.command, '')
         };
     }
+
+    static validate(config) {
+        const errors = [];
+        const warnings = [];
+
+        ConfigValidator._validateRequiredSections(config, errors);
+        ConfigValidator._validatePlatformUsernames(config, errors);
+        ConfigValidator._validateStreamElements(config, errors);
+        ConfigValidator._validateCooldownRanges(config, warnings);
+        ConfigValidator._validateHandcamRanges(config, warnings);
+        ConfigValidator._validateRetryRanges(config, warnings);
+
+        return {
+            isValid: errors.length === 0,
+            errors,
+            warnings
+        };
+    }
+
+    static _validateRequiredSections(config, errors) {
+        const requiredSections = ['general', 'obs', 'commands'];
+        requiredSections.forEach(section => {
+            if (!config[section] || typeof config[section] !== 'object') {
+                errors.push(`Missing required configuration section: ${section}`);
+            }
+        });
+    }
+
+    static _validatePlatformUsernames(config, errors) {
+        const platforms = ['youtube', 'tiktok', 'twitch'];
+        const platformDisplayNames = {
+            youtube: 'YouTube',
+            tiktok: 'TikTok',
+            twitch: 'Twitch'
+        };
+
+        platforms.forEach(platform => {
+            const platformConfig = config[platform];
+            if (platformConfig && platformConfig.enabled && !platformConfig.username) {
+                const displayName = platformDisplayNames[platform];
+                errors.push(`Missing required configuration: ${displayName} username`);
+            }
+        });
+    }
+
+    static _validateStreamElements(config, errors) {
+        if (config.streamelements && config.streamelements.enabled) {
+            const hasYoutubeChannel = config.streamelements.youtubeChannelId && 
+                config.streamelements.youtubeChannelId.trim().length > 0;
+            const hasTwitchChannel = config.streamelements.twitchChannelId && 
+                config.streamelements.twitchChannelId.trim().length > 0;
+
+            if (!hasYoutubeChannel && !hasTwitchChannel) {
+                errors.push('Missing required configuration: StreamElements channel ID (YouTube or Twitch)');
+            }
+        }
+    }
+
+    static _validateCooldownRanges(config, warnings) {
+        if (!config.cooldowns) return;
+
+        const cooldown = config.cooldowns;
+
+        if (cooldown.defaultCooldown < 10 || cooldown.defaultCooldown > 3600) {
+            warnings.push('cooldowns.defaultCooldown should be between 10 and 3600 seconds');
+        }
+
+        if (cooldown.heavyCommandCooldown < 60 || cooldown.heavyCommandCooldown > 3600) {
+            warnings.push('cooldowns.heavyCommandCooldown should be between 60 and 3600 seconds');
+        }
+
+        if (cooldown.heavyCommandThreshold < 2 || cooldown.heavyCommandThreshold > 20) {
+            warnings.push('cooldowns.heavyCommandThreshold should be between 2 and 20');
+        }
+    }
+
+    static _validateHandcamRanges(config, warnings) {
+        if (!config.handcam) return;
+
+        const handcam = config.handcam;
+
+        if (handcam.maxSize < 1 || handcam.maxSize > 100) {
+            warnings.push('handcam.maxSize should be between 1 and 100');
+        }
+
+        if (handcam.rampUpDuration < 0.1 || handcam.rampUpDuration > 10.0) {
+            warnings.push('handcam.rampUpDuration should be between 0.1 and 10.0 seconds');
+        }
+
+        if (handcam.holdDuration < 0.1 || handcam.holdDuration > 10.0) {
+            warnings.push('handcam.holdDuration should be between 0.1 and 10.0 seconds');
+        }
+
+        if (handcam.rampDownDuration < 0.1 || handcam.rampDownDuration > 10.0) {
+            warnings.push('handcam.rampDownDuration should be between 0.1 and 10.0 seconds');
+        }
+    }
+
+    static _validateRetryRanges(config, warnings) {
+        if (!config.retry) return;
+
+        const retry = config.retry;
+
+        if (retry.baseDelay < 100 || retry.baseDelay > 30000) {
+            warnings.push('retry.baseDelay should be between 100 and 30000 milliseconds');
+        }
+
+        if (retry.maxDelay < 1000 || retry.maxDelay > 300000) {
+            warnings.push('retry.maxDelay should be between 1000 and 300000 milliseconds');
+        }
+
+        if (retry.maxRetries < 0 || retry.maxRetries > 20) {
+            warnings.push('retry.maxRetries should be between 0 and 20');
+        }
+    }
 }
 
 module.exports = {
