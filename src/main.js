@@ -307,20 +307,20 @@ function createProductionDependencies(overrides = {}) {
         },
         sourcesFactory: sources,
         effectsFactory: effects,
-        logging: logger, // Use the properly initialized logger
-        logger: logger, // Also provide as 'logger' for platform compatibility
+        logging: logger,
+        logger: logger,
         platforms: require('./platforms'),
-        displayQueue: null, // Will be set by main function
-        notificationManager: null, // Will be set by main function
+        displayQueue: null,
+        notificationManager: null,
         timestampService: timestampService,
         dependencyFactory: resolvedOverrides.dependencyFactory || new DependencyFactory(),
+        configManager: configManager,
         lazyInnertube: InnertubeFactory.createLazyReference(),
         axios: resolvedOverrides.axios,
         WebSocketCtor: resolvedOverrides.WebSocketCtor,
         tiktokConnector: resolvedOverrides.tiktokConnector,
         innertubeImporter: resolvedOverrides.innertubeImporter,
 
-        // Event-driven architecture services (will be created in main function)
         eventBus: null,
         configService: null,
         ttsService: null,
@@ -431,7 +431,8 @@ class AppRuntime {
             const LazyInnertube = this.lazyInnertube;
             const dependencies = dependencyFactory.createYoutubeDependencies(youtubeConfig, {
                 Innertube: LazyInnertube,
-                logger: this.logger
+                logger: this.logger,
+                config: this.configManager
             });
 
             if (!dependencies || !dependencies.streamDetectionService) {
@@ -459,6 +460,7 @@ class AppRuntime {
         this.dependencies = dependencies;
 
         this.authManager = this.dependencies.authManager;
+        this.configManager = this.dependencies.configManager;
         
         // Initialize logging using unified logger
         this.logger = this.dependencies.logging;
@@ -502,14 +504,12 @@ class AppRuntime {
             streamMaxRetries,
             continuousMonitoringInterval
         }, {
-            youtubeDetectionService
+            youtubeDetectionService,
+            configManager: this.configManager
         });
 
-        // --- GRACEFUL EXIT: Message Counter System ---
-        // Note: Now handled by GracefulExitService (initialized in start() method)
-        this.gracefulExitTargetCount = cliArgs.chat; // Store for service initialization
+        this.gracefulExitTargetCount = cliArgs.chat;
         
-        // Initialize command parser with CLI arguments
         logger.debug('Initializing command parser...', 'AppRuntime');
         const commandParserConfig = {
             ...config,

@@ -3,17 +3,13 @@ const { PlatformConnectionFactory } = require('./platform-connection-factory');
 
 class DependencyFactory {
     constructor() {
-        // Initialize with dependency validation utilities
         this.interfaceValidators = this._createInterfaceValidators();
     }
 
     createYoutubeDependencies(config, options = {}) {
-        // Validate inputs
         this._validateConfiguration(config, 'YouTube');
         this._validateOptions(options);
 
-        // Validate YouTube-specific configuration
-        // API key is only required when using API methods (not for youtubei)
         const needsApiKey = config.enableAPI || 
                            config.streamDetectionMethod === 'api' || 
                            config.viewerCountMethod === 'api';
@@ -35,25 +31,24 @@ class DependencyFactory {
             const injectedStreamDetectionService = normalizedOptions.streamDetectionService || null;
             delete normalizedOptions.streamDetectionService;
 
-            // Create standardized logger (or use provided one)
             const logger = normalizedOptions.logger || this.createValidatedLogger('youtube');
 
-            // Create core services for modular architecture
             const innertubeFactory = this._createInnertubeFactory();
             const innertubeService = this._createInnertubeService(innertubeFactory, logger, normalizedOptions);
             const viewerExtractionService = this._createViewerExtractionService(innertubeService, logger, normalizedOptions);
             
-            // Create extracted services for clean architecture
             const ChatFileLoggingService = normalizedOptions.ChatFileLoggingService || require('../services/ChatFileLoggingService');
             const SelfMessageDetectionService = require('../services/SelfMessageDetectionService');
             
-            // Create self-message detection service with configuration
-            const selfMessageDetectionService = new SelfMessageDetectionService(normalizedOptions.config || require('../core/config').configManager);
+            if (!normalizedOptions.config) {
+                throw new Error('createYoutubeDependencies requires config (configManager) in options');
+            }
+            
+            const selfMessageDetectionService = new SelfMessageDetectionService(normalizedOptions.config);
 
             const streamDetectionService = injectedStreamDetectionService ||
                 this._createYouTubeStreamDetectionService(normalizedConfig, logger, normalizedOptions);
             
-            // Create YouTube-specific dependencies
             const dependencies = {
                 logger,
                 apiClient: this._createYouTubeApiClient(normalizedConfig, logger),
@@ -114,8 +109,12 @@ class DependencyFactory {
             const ChatFileLoggingService = options.ChatFileLoggingService || require('../services/ChatFileLoggingService');
             const SelfMessageDetectionService = require('../services/SelfMessageDetectionService');
             
+            if (!options.config) {
+                throw new Error('createTikTokDependencies requires config (configManager) in options');
+            }
+            
             // Create self-message detection service with configuration
-            const selfMessageDetectionService = new SelfMessageDetectionService(options.config || require('../core/config').configManager);
+            const selfMessageDetectionService = new SelfMessageDetectionService(options.config);
 
             // Create TikTok-specific dependencies
             const dependencies = {
@@ -187,8 +186,12 @@ class DependencyFactory {
             const ChatFileLoggingService = options.ChatFileLoggingService || require('../services/ChatFileLoggingService');
             const SelfMessageDetectionService = require('../services/SelfMessageDetectionService');
             
+            if (!options.config) {
+                throw new Error('createTwitchDependencies requires config (configManager) in options');
+            }
+            
             // Create self-message detection service with configuration
-            const selfMessageDetectionService = new SelfMessageDetectionService(options.config || require('../core/config').configManager);
+            const selfMessageDetectionService = new SelfMessageDetectionService(options.config);
             
             // Create Twitch-specific dependencies
             const dependencies = {

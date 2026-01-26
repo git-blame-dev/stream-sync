@@ -49,6 +49,7 @@ describe('OBSGoalsManager DI requirements', () => {
         const goalsManager = createOBSGoalsManager(mockObsManager, {
             logger: noOpLogger,
             configManager: { getBoolean: () => true, getString: () => 'goal-source', getNumber: () => 0 },
+            config: { goals: { enabled: true } },
             updateTextSource: createMockFn(),
             goalTracker: mockGoalTracker
         });
