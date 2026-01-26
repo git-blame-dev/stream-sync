@@ -19,14 +19,12 @@ class SelfMessageDetectionService {
                 return false;
             }
 
-            // Check for platform-specific override first
-            const platformSpecific = this.config.get?.(platform, 'ignoreSelfMessages', null);
-            if (platformSpecific !== null) {
-                return this.config.getBoolean?.(platform, 'ignoreSelfMessages', false);
+            const platformConfig = this.config[platform];
+            if (platformConfig && platformConfig.ignoreSelfMessages !== undefined) {
+                return Boolean(platformConfig.ignoreSelfMessages);
             }
 
-            // Fall back to global setting (now uses standard override pattern in config.js)
-            return this.config.getBoolean?.('general', 'ignoreSelfMessages', false);
+            return Boolean(this.config.general?.ignoreSelfMessages);
         } catch (error) {
             this.logger.warn(`Error checking filtering config for ${platform}: ${error.message}`, 'self-filter');
             // Safe default: don't filter self messages (for testing)
@@ -148,17 +146,16 @@ class SelfMessageDetectionService {
                 return result;
             }
 
-            // Check if general section has ignoreSelfMessages setting
-            const generalConfig = this.config.getSection?.('general') || {};
-            if (!generalConfig.hasOwnProperty('ignoreSelfMessages')) {
+            const generalConfig = this.config.general || {};
+            if (!Object.prototype.hasOwnProperty.call(generalConfig, 'ignoreSelfMessages')) {
                 result.warnings.push('No ignoreSelfMessages setting found in [general] section');
             }
 
-            // Validate platform-specific overrides format
             const platforms = ['twitch', 'youtube', 'tiktok'];
             platforms.forEach(platform => {
-                const platformOverride = this.config.get?.(platform, 'ignoreSelfMessages', null);
-                if (platformOverride !== null && typeof platformOverride !== 'boolean' && 
+                const platformConfig = this.config[platform];
+                const platformOverride = platformConfig?.ignoreSelfMessages;
+                if (platformOverride !== undefined && typeof platformOverride !== 'boolean' && 
                     !['true', 'false'].includes(String(platformOverride).toLowerCase())) {
                     result.warnings.push(
                         `Platform override ${platform}.ignoreSelfMessages should be a boolean value`
