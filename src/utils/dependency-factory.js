@@ -41,7 +41,7 @@ class DependencyFactory {
             const SelfMessageDetectionService = require('../services/SelfMessageDetectionService');
             
             if (!normalizedOptions.config) {
-                throw new Error('createYoutubeDependencies requires config (configManager) in options');
+                throw new Error('createYoutubeDependencies requires config object in options');
             }
             
             const selfMessageDetectionService = new SelfMessageDetectionService(normalizedOptions.config);
@@ -110,7 +110,7 @@ class DependencyFactory {
             const SelfMessageDetectionService = require('../services/SelfMessageDetectionService');
             
             if (!options.config) {
-                throw new Error('createTikTokDependencies requires config (configManager) in options');
+                throw new Error('createTikTokDependencies requires config object in options');
             }
             
             // Create self-message detection service with configuration
@@ -187,7 +187,7 @@ class DependencyFactory {
             const SelfMessageDetectionService = require('../services/SelfMessageDetectionService');
             
             if (!options.config) {
-                throw new Error('createTwitchDependencies requires config (configManager) in options');
+                throw new Error('createTwitchDependencies requires config object in options');
             }
             
             // Create self-message detection service with configuration

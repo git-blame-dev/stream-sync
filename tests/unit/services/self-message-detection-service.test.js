@@ -1,54 +1,21 @@
 const { describe, it, expect } = require('bun:test');
 const SelfMessageDetectionService = require('../../../src/services/SelfMessageDetectionService');
 
-const createConfigStub = ({ general = {}, platforms = {} } = {}) => {
-    const getSectionData = (section) => {
-        if (section === 'general') {
-            return general;
-        }
-        return platforms[section] || {};
-    };
-
-    const get = (section, key, fallback) => {
-        const data = getSectionData(section);
-        if (!Object.prototype.hasOwnProperty.call(data, key)) {
-            return fallback;
-        }
-        return data[key];
-    };
-
-    const getBoolean = (section, key, fallback) => {
-        const value = get(section, key, fallback);
-        if (value === true || value === false) {
-            return value;
-        }
-        if (typeof value === 'string') {
-            const normalized = value.toLowerCase();
-            if (normalized === 'true') {
-                return true;
-            }
-            if (normalized === 'false') {
-                return false;
-            }
-        }
-        return fallback;
-    };
-
+const createPlainConfig = ({ general = {}, twitch, youtube, tiktok } = {}) => {
     return {
-        get,
-        getBoolean,
-        getSection: (section) => getSectionData(section)
+        general,
+        twitch,
+        youtube,
+        tiktok
     };
 };
 
 describe('SelfMessageDetectionService', () => {
     describe('isFilteringEnabled', () => {
         it('uses platform override when provided', () => {
-            const config = createConfigStub({
+            const config = createPlainConfig({
                 general: { ignoreSelfMessages: false },
-                platforms: {
-                    twitch: { ignoreSelfMessages: true }
-                }
+                twitch: { ignoreSelfMessages: true }
             });
             const service = new SelfMessageDetectionService(config);
 
@@ -57,29 +24,25 @@ describe('SelfMessageDetectionService', () => {
         });
 
         it('falls back to general setting when no override exists', () => {
-            const config = createConfigStub({
+            const config = createPlainConfig({
                 general: { ignoreSelfMessages: true },
-                platforms: {
-                    tiktok: {}
-                }
+                tiktok: {}
             });
             const service = new SelfMessageDetectionService(config);
 
             expect(service.isFilteringEnabled('tiktok')).toBe(true);
         });
 
-        it('returns false when config is missing or throws', () => {
+        it('returns false when config is missing or has error', () => {
             const service = new SelfMessageDetectionService(null);
             expect(service.isFilteringEnabled('twitch')).toBe(false);
 
-            const throwingConfig = {
-                get: () => {
-                    throw new Error('boom');
-                },
-                getBoolean: () => {
+            // Config that causes an error during property access
+            const throwingConfig = new Proxy({}, {
+                get() {
                     throw new Error('boom');
                 }
-            };
+            });
             const serviceWithThrow = new SelfMessageDetectionService(throwingConfig);
             expect(serviceWithThrow.isFilteringEnabled('youtube')).toBe(false);
         });
@@ -87,7 +50,7 @@ describe('SelfMessageDetectionService', () => {
 
     describe('isSelfMessage', () => {
         it('detects Twitch self messages by explicit flag or username match', () => {
-            const service = new SelfMessageDetectionService(createConfigStub());
+            const service = new SelfMessageDetectionService(createPlainConfig());
             const platformConfig = { username: 'Streamer' };
 
             expect(service.isSelfMessage('twitch', { self: true }, platformConfig)).toBe(true);
@@ -97,7 +60,7 @@ describe('SelfMessageDetectionService', () => {
         });
 
         it('detects YouTube self messages via broadcaster indicators', () => {
-            const service = new SelfMessageDetectionService(createConfigStub());
+            const service = new SelfMessageDetectionService(createPlainConfig());
             const platformConfig = { username: 'ChannelOwner' };
 
             expect(service.isSelfMessage('youtube', { username: 'channelowner' }, platformConfig)).toBe(true);
@@ -108,7 +71,7 @@ describe('SelfMessageDetectionService', () => {
         });
 
         it('detects TikTok self messages via username or userId match', () => {
-            const service = new SelfMessageDetectionService(createConfigStub());
+            const service = new SelfMessageDetectionService(createPlainConfig());
             const platformConfig = { username: 'Creator', userId: 'tt-streamer-1' };
 
             expect(service.isSelfMessage('tiktok', { username: 'creator' }, platformConfig)).toBe(true);
@@ -119,7 +82,7 @@ describe('SelfMessageDetectionService', () => {
 
     describe('shouldFilterMessage', () => {
         it('returns false when filtering disabled even if self message', () => {
-            const config = createConfigStub({
+            const config = createPlainConfig({
                 general: { ignoreSelfMessages: false }
             });
             const service = new SelfMessageDetectionService(config);
@@ -128,7 +91,7 @@ describe('SelfMessageDetectionService', () => {
         });
 
         it('filters self messages when enabled', () => {
-            const config = createConfigStub({
+            const config = createPlainConfig({
                 general: { ignoreSelfMessages: true }
             });
             const service = new SelfMessageDetectionService(config);
@@ -139,11 +102,9 @@ describe('SelfMessageDetectionService', () => {
 
     describe('validateConfiguration', () => {
         it('warns when general setting is missing or invalid overrides are used', () => {
-            const config = createConfigStub({
+            const config = createPlainConfig({
                 general: {},
-                platforms: {
-                    twitch: { ignoreSelfMessages: 'maybe' }
-                }
+                twitch: { ignoreSelfMessages: 'maybe' }
             });
             const service = new SelfMessageDetectionService(config);
             const result = service.validateConfiguration();

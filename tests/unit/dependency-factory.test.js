@@ -12,15 +12,16 @@ describe('DependencyFactory', () => {
 
     let factory;
     let mockConfig;
-    let mockConfigManager;
+    let mockPlainConfig;
 
     beforeEach(() => {
         factory = new DependencyFactory();
 
-        mockConfigManager = {
-            getBoolean: createMockFn().mockReturnValue(false),
-            getString: createMockFn().mockReturnValue(''),
-            getNumber: createMockFn().mockReturnValue(0)
+        mockPlainConfig = {
+            general: { ignoreSelfMessages: false },
+            twitch: { ignoreSelfMessages: false },
+            youtube: { ignoreSelfMessages: false },
+            tiktok: { ignoreSelfMessages: false }
         };
 
         mockConfig = {
@@ -49,7 +50,7 @@ describe('DependencyFactory', () => {
             const options = {
                 notificationManager: { emit: createMockFn() },
                 streamDetectionService: { isLive: createMockFn() },
-                config: mockConfigManager
+                config: mockPlainConfig
             };
 
             const result = factory.createYoutubeDependencies(mockConfig.youtube, options);
@@ -69,19 +70,19 @@ describe('DependencyFactory', () => {
         it('should require config in options', () => {
             expect(() => {
                 factory.createYoutubeDependencies(mockConfig.youtube, {});
-            }).toThrow('createYoutubeDependencies requires config (configManager) in options');
+            }).toThrow('createYoutubeDependencies requires config object in options');
         });
 
         it('should validate YouTube configuration before creating dependencies', () => {
             const invalidConfig = { enabled: true };
 
             expect(() => {
-                factory.createYoutubeDependencies(invalidConfig, { config: mockConfigManager });
+                factory.createYoutubeDependencies(invalidConfig, { config: mockPlainConfig });
             }).toThrow('YouTube username is required');
         });
 
         it('should create YouTube dependencies with proper validation', () => {
-            const result = factory.createYoutubeDependencies(mockConfig.youtube, { config: mockConfigManager });
+            const result = factory.createYoutubeDependencies(mockConfig.youtube, { config: mockPlainConfig });
 
             expect(result.logger).toBeDefined();
             expect(result.apiClient).toBeDefined();
@@ -93,7 +94,7 @@ describe('DependencyFactory', () => {
                 notificationManager: { emit: createMockFn() },
                 retryAttempts: 5,
                 timeout: 30000,
-                config: mockConfigManager
+                config: mockPlainConfig
             };
 
             const result = factory.createYoutubeDependencies(mockConfig.youtube, customOptions);
@@ -110,7 +111,7 @@ describe('DependencyFactory', () => {
             };
 
             expect(() => {
-                factory.createYoutubeDependencies(youtubeiConfig, { config: mockConfigManager });
+                factory.createYoutubeDependencies(youtubeiConfig, { config: mockPlainConfig });
             }).toThrow(/Innertube dependency required/i);
         });
 
@@ -119,7 +120,7 @@ describe('DependencyFactory', () => {
 
             const result = factory.createYoutubeDependencies(mockConfig.youtube, {
                 streamDetectionService: injectedService,
-                config: mockConfigManager
+                config: mockPlainConfig
             });
 
             expect(result.streamDetectionService).toBe(injectedService);
@@ -137,7 +138,7 @@ describe('DependencyFactory', () => {
                     on: createMockFn(),
                     removeAllListeners: createMockFn()
                 })),
-                config: mockConfigManager
+                config: mockPlainConfig
             };
 
             const result = factory.createTiktokDependencies(mockConfig.tiktok, options);
@@ -158,19 +159,19 @@ describe('DependencyFactory', () => {
         it('should require config in options', () => {
             expect(() => {
                 factory.createTiktokDependencies(mockConfig.tiktok, {});
-            }).toThrow('createTikTokDependencies requires config (configManager) in options');
+            }).toThrow('createTikTokDependencies requires config object in options');
         });
 
         it('should validate TikTok configuration before creating dependencies', () => {
             const invalidConfig = { enabled: true };
 
             expect(() => {
-                factory.createTiktokDependencies(invalidConfig, { config: mockConfigManager });
+                factory.createTiktokDependencies(invalidConfig, { config: mockPlainConfig });
             }).toThrow('TikTok username is required');
         });
 
         it('should create TikTok dependencies with proper validation', () => {
-            const result = factory.createTiktokDependencies(mockConfig.tiktok, { config: mockConfigManager });
+            const result = factory.createTiktokDependencies(mockConfig.tiktok, { config: mockPlainConfig });
 
             expect(result.logger).toBeDefined();
             expect(result.connectionFactory).toBeDefined();
@@ -187,7 +188,7 @@ describe('DependencyFactory', () => {
                     on: createMockFn(),
                     removeAllListeners: createMockFn()
                 })),
-                config: mockConfigManager
+                config: mockPlainConfig
             };
 
             const result = factory.createTiktokDependencies(mockConfig.tiktok, options);
@@ -203,7 +204,7 @@ describe('DependencyFactory', () => {
                 removeAllListeners: createMockFn()
             }));
 
-            const result = factory.createTiktokDependencies(mockConfig.tiktok, { TikTokWebSocketClient, config: mockConfigManager });
+            const result = factory.createTiktokDependencies(mockConfig.tiktok, { TikTokWebSocketClient, config: mockPlainConfig });
 
             expect(typeof result.TikTokWebSocketClient).toBe('function');
             const manualConnection = new result.TikTokWebSocketClient(mockConfig.tiktok.username, {});
@@ -224,7 +225,7 @@ describe('DependencyFactory', () => {
             const options = {
                 notificationManager: { emit: createMockFn() },
                 tmiClient: { connect: createMockFn() },
-                config: mockConfigManager
+                config: mockPlainConfig
             };
 
             const result = factory.createTwitchDependencies(mockConfig.twitch, options);
@@ -244,19 +245,19 @@ describe('DependencyFactory', () => {
         it('should require config in options', () => {
             expect(() => {
                 factory.createTwitchDependencies(mockConfig.twitch, {});
-            }).toThrow('createTwitchDependencies requires config (configManager) in options');
+            }).toThrow('createTwitchDependencies requires config object in options');
         });
 
         it('should validate Twitch configuration before creating dependencies', () => {
             const invalidConfig = { enabled: true };
 
             expect(() => {
-                factory.createTwitchDependencies(invalidConfig, { config: mockConfigManager });
+                factory.createTwitchDependencies(invalidConfig, { config: mockPlainConfig });
             }).toThrow('Twitch channel is required');
         });
 
         it('should create Twitch dependencies with proper validation', () => {
-            const result = factory.createTwitchDependencies(mockConfig.twitch, { config: mockConfigManager });
+            const result = factory.createTwitchDependencies(mockConfig.twitch, { config: mockPlainConfig });
 
             expect(result.logger).toBeDefined();
             expect(result.authManager).toBeDefined();
@@ -268,7 +269,7 @@ describe('DependencyFactory', () => {
             delete configWithoutChannel.channel;
 
             expect(() => {
-                factory.createTwitchDependencies(configWithoutChannel, { config: mockConfigManager });
+                factory.createTwitchDependencies(configWithoutChannel, { config: mockPlainConfig });
             }).toThrow('Twitch channel is required');
         });
 
@@ -279,7 +280,7 @@ describe('DependencyFactory', () => {
             const result = factory.createTwitchDependencies(mockConfig.twitch, {
                 authManager: injectedAuthManager,
                 authFactory: injectedAuthFactory,
-                config: mockConfigManager
+                config: mockPlainConfig
             });
 
             expect(result.authManager).toBe(injectedAuthManager);
@@ -294,7 +295,7 @@ describe('DependencyFactory', () => {
 
             const result = factory.createTwitchDependencies(mockConfig.twitch, {
                 authFactory: providedFactory,
-                config: mockConfigManager
+                config: mockPlainConfig
             });
 
             expect(result.authManager).toBe(builtAuthManager);
@@ -302,7 +303,7 @@ describe('DependencyFactory', () => {
         });
 
         it('should create Twitch auth resources when none are provided', () => {
-            const result = factory.createTwitchDependencies(mockConfig.twitch, { config: mockConfigManager });
+            const result = factory.createTwitchDependencies(mockConfig.twitch, { config: mockPlainConfig });
 
             expect(result.authManager).toBeDefined();
             expect(typeof result.authManager.initialize).toBe('function');
@@ -409,9 +410,9 @@ describe('DependencyFactory', () => {
 
     describe('Integration Tests', () => {
         it('should create all platform dependencies with consistent interfaces', () => {
-            const youtubeDeps = factory.createYoutubeDependencies(mockConfig.youtube, { config: mockConfigManager });
-            const tiktokDeps = factory.createTiktokDependencies(mockConfig.tiktok, { config: mockConfigManager });
-            const twitchDeps = factory.createTwitchDependencies(mockConfig.twitch, { config: mockConfigManager });
+            const youtubeDeps = factory.createYoutubeDependencies(mockConfig.youtube, { config: mockPlainConfig });
+            const tiktokDeps = factory.createTiktokDependencies(mockConfig.tiktok, { config: mockPlainConfig });
+            const twitchDeps = factory.createTwitchDependencies(mockConfig.twitch, { config: mockPlainConfig });
 
             expect(typeof youtubeDeps.logger.debug).toBe('function');
             expect(typeof tiktokDeps.logger.debug).toBe('function');
@@ -428,22 +429,22 @@ describe('DependencyFactory', () => {
             const invalidConfig = {};
 
             expect(() => {
-                factory.createYoutubeDependencies(invalidConfig, { config: mockConfigManager });
+                factory.createYoutubeDependencies(invalidConfig, { config: mockPlainConfig });
             }).toThrow();
 
             expect(() => {
-                factory.createTiktokDependencies(invalidConfig, { config: mockConfigManager });
+                factory.createTiktokDependencies(invalidConfig, { config: mockPlainConfig });
             }).toThrow();
 
             expect(() => {
-                factory.createTwitchDependencies(invalidConfig, { config: mockConfigManager });
+                factory.createTwitchDependencies(invalidConfig, { config: mockPlainConfig });
             }).toThrow();
         });
 
         it('should maintain backward compatibility with existing platform creation', () => {
-            const youtubeDeps = factory.createYoutubeDependencies(mockConfig.youtube, { config: mockConfigManager });
-            const tiktokDeps = factory.createTiktokDependencies(mockConfig.tiktok, { config: mockConfigManager });
-            const twitchDeps = factory.createTwitchDependencies(mockConfig.twitch, { config: mockConfigManager });
+            const youtubeDeps = factory.createYoutubeDependencies(mockConfig.youtube, { config: mockPlainConfig });
+            const tiktokDeps = factory.createTiktokDependencies(mockConfig.tiktok, { config: mockPlainConfig });
+            const twitchDeps = factory.createTwitchDependencies(mockConfig.twitch, { config: mockPlainConfig });
 
             expect(youtubeDeps).toHaveProperty('logger');
             expect(tiktokDeps).toHaveProperty('logger');
@@ -458,15 +459,15 @@ describe('DependencyFactory', () => {
     describe('Error Handling', () => {
         it('should provide clear error messages for missing configuration', () => {
             expect(() => {
-                factory.createYoutubeDependencies(null, { config: mockConfigManager });
+                factory.createYoutubeDependencies(null, { config: mockPlainConfig });
             }).toThrow('Configuration is required');
 
             expect(() => {
-                factory.createTiktokDependencies(undefined, { config: mockConfigManager });
+                factory.createTiktokDependencies(undefined, { config: mockPlainConfig });
             }).toThrow('Configuration is required');
 
             expect(() => {
-                factory.createTwitchDependencies({}, { config: mockConfigManager });
+                factory.createTwitchDependencies({}, { config: mockPlainConfig });
             }).toThrow('Twitch channel is required');
         });
 
@@ -484,13 +485,13 @@ describe('DependencyFactory', () => {
             const invalidConfig = { enabled: true };
 
             try {
-                factory.createYoutubeDependencies(invalidConfig, { config: mockConfigManager });
+                factory.createYoutubeDependencies(invalidConfig, { config: mockPlainConfig });
             } catch (error) {
                 expect(error.message).toContain('YouTube username is required');
             }
 
             try {
-                factory.createTiktokDependencies(invalidConfig, { config: mockConfigManager });
+                factory.createTiktokDependencies(invalidConfig, { config: mockPlainConfig });
             } catch (error) {
                 expect(error.message).toContain('TikTok username is required');
             }
@@ -507,7 +508,7 @@ describe('DependencyFactory', () => {
 
             configs.forEach(config => {
                 expect(() => {
-                    factory.createYoutubeDependencies(config, { config: mockConfigManager });
+                    factory.createYoutubeDependencies(config, { config: mockPlainConfig });
                 }).toThrow();
             });
         });
@@ -521,7 +522,7 @@ describe('DependencyFactory', () => {
 
             configs.forEach(config => {
                 expect(() => {
-                    factory.createTiktokDependencies(config, { config: mockConfigManager });
+                    factory.createTiktokDependencies(config, { config: mockPlainConfig });
                 }).toThrow();
             });
         });
@@ -536,7 +537,7 @@ describe('DependencyFactory', () => {
 
             configs.forEach(config => {
                 expect(() => {
-                    factory.createTwitchDependencies(config, { config: mockConfigManager });
+                    factory.createTwitchDependencies(config, { config: mockPlainConfig });
                 }).toThrow();
             });
         });

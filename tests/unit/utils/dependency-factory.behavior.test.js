@@ -1,18 +1,19 @@
 const { describe, expect, beforeEach, it, afterEach } = require('bun:test');
-const { restoreAllMocks, createMockFn } = require('../../helpers/bun-mock-utils');
+const { restoreAllMocks } = require('../../helpers/bun-mock-utils');
 const { noOpLogger } = require('../../helpers/mock-factories');
 const { DependencyFactory } = require('../../../src/utils/dependency-factory');
 
 describe('DependencyFactory behavior', () => {
     let factory;
-    let mockConfigManager;
+    let mockPlainConfig;
 
     beforeEach(() => {
         factory = new DependencyFactory();
-        mockConfigManager = {
-            getBoolean: createMockFn().mockReturnValue(false),
-            getString: createMockFn().mockReturnValue(''),
-            getNumber: createMockFn().mockReturnValue(0)
+        mockPlainConfig = {
+            general: { ignoreSelfMessages: false },
+            twitch: { ignoreSelfMessages: false },
+            youtube: { ignoreSelfMessages: false },
+            tiktok: { ignoreSelfMessages: false }
         };
     });
 
@@ -25,7 +26,7 @@ describe('DependencyFactory behavior', () => {
             expect(() => factory.createYoutubeDependencies({
                 enableAPI: true,
                 username: 'channel'
-            }, { logger: noOpLogger, config: mockConfigManager })).toThrow(/YouTube API key is required/);
+            }, { logger: noOpLogger, config: mockPlainConfig })).toThrow(/YouTube API key is required/);
         });
 
         it('creates dependencies object with expected structure when config is valid', () => {
@@ -33,7 +34,7 @@ describe('DependencyFactory behavior', () => {
                 enableAPI: false,
                 username: 'channel',
                 apiKey: 'testKey'
-            }, { logger: noOpLogger, config: mockConfigManager });
+            }, { logger: noOpLogger, config: mockPlainConfig });
 
             expect(deps).toHaveProperty('apiClient');
             expect(deps).toHaveProperty('connectionManager');
@@ -43,19 +44,19 @@ describe('DependencyFactory behavior', () => {
 
     describe('TikTok dependency validation', () => {
         it('requires TikTok username', () => {
-            expect(() => factory.createTiktokDependencies({}, { logger: noOpLogger, config: mockConfigManager }))
+            expect(() => factory.createTiktokDependencies({}, { logger: noOpLogger, config: mockPlainConfig }))
                 .toThrow(/TikTok username is required/);
         });
     });
 
     describe('Twitch dependency validation', () => {
         it('requires Twitch channel', () => {
-            expect(() => factory.createTwitchDependencies({}, { logger: noOpLogger, config: mockConfigManager }))
+            expect(() => factory.createTwitchDependencies({}, { logger: noOpLogger, config: mockPlainConfig }))
                 .toThrow(/Twitch channel is required/);
         });
 
         it('requires Twitch client credentials for auth manager', () => {
-            expect(() => factory.createTwitchDependencies({ channel: 'me' }, { logger: noOpLogger, config: mockConfigManager }))
+            expect(() => factory.createTwitchDependencies({ channel: 'me' }, { logger: noOpLogger, config: mockPlainConfig }))
                 .toThrow(/missing fields \[clientId, clientSecret\]/);
         });
     });
