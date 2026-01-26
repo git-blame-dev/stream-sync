@@ -21,7 +21,6 @@ describe('OBS Goals Module Characterization Tests', () => {
 
     let goalsModule;
     let mockObsManager;
-    let mockConfigManager;
     let mockConfig;
     let mockSourcesManager;
     let mockGoalTracker;
@@ -41,29 +40,11 @@ describe('OBS Goals Module Characterization Tests', () => {
                 twitchGoalEnabled: true,
                 tiktokGoalTarget: 1000,
                 youtubeGoalTarget: 100,
-                twitchGoalTarget: 500
+                twitchGoalTarget: 500,
+                tiktokGoalSource: 'tiktok goal txt',
+                youtubeGoalSource: 'youtube goal txt',
+                twitchGoalSource: 'twitch goal txt'
             }
-        };
-
-        mockConfigManager = {
-            getBoolean: createMockFn().mockImplementation((section, key, defaultValue) => {
-                const responses = {
-                    'goals.enabled': true,
-                    'goals.tiktokGoalEnabled': true,
-                    'goals.youtubeGoalEnabled': true,
-                    'goals.twitchGoalEnabled': true
-                };
-                return responses[`${section}.${key}`] !== undefined ? responses[`${section}.${key}`] : defaultValue;
-            }),
-            getString: createMockFn().mockImplementation((section, key, defaultValue) => {
-                const responses = {
-                    'goals.tiktokGoalSource': 'tiktok goal txt',
-                    'goals.youtubeGoalSource': 'youtube goal txt',
-                    'goals.twitchGoalSource': 'twitch goal txt'
-                };
-                return responses[`${section}.${key}`] !== undefined ? responses[`${section}.${key}`] : defaultValue;
-            }),
-            getNumber: createMockFn()
         };
 
         mockGoalTracker = {
@@ -98,7 +79,6 @@ describe('OBS Goals Module Characterization Tests', () => {
 
         goalsModule = createOBSGoalsManager(mockObsManager, {
             logger: noOpLogger,
-            configManager: mockConfigManager,
             config: mockConfig,
             updateTextSource: mockSourcesManager.updateTextSource,
             goalTracker: mockGoalTracker
@@ -133,12 +113,14 @@ describe('OBS Goals Module Characterization Tests', () => {
         test('initializeGoalDisplay should return early when goals disabled', async () => {
             const { updateTextSource } = mockSourcesManager;
 
-            mockConfigManager.getBoolean.mockImplementation((section, key, defaultValue) => {
-                if (section === 'goals' && key === 'enabled') return false;
-                return defaultValue;
+            const disabledGoalsModule = createOBSGoalsManager(mockObsManager, {
+                logger: noOpLogger,
+                config: { goals: { enabled: false } },
+                updateTextSource: mockSourcesManager.updateTextSource,
+                goalTracker: mockGoalTracker
             });
 
-            await goalsModule.initializeGoalDisplay();
+            await disabledGoalsModule.initializeGoalDisplay();
 
             expect(mockGoalTracker.initializeGoalTracker).not.toHaveBeenCalled();
             expect(updateTextSource).not.toHaveBeenCalled();
@@ -196,12 +178,20 @@ describe('OBS Goals Module Characterization Tests', () => {
         test('updateGoalDisplay should handle disabled platform gracefully', async () => {
             const { updateTextSource } = mockSourcesManager;
 
-            mockConfigManager.getBoolean.mockImplementation((section, key, defaultValue) => {
-                if (section === 'goals' && key === 'youtubeGoalEnabled') return false;
-                return defaultValue;
+            const youtubeDisabledModule = createOBSGoalsManager(mockObsManager, {
+                logger: noOpLogger,
+                config: {
+                    goals: {
+                        enabled: true,
+                        youtubeGoalEnabled: false,
+                        youtubeGoalSource: 'youtube goal txt'
+                    }
+                },
+                updateTextSource: mockSourcesManager.updateTextSource,
+                goalTracker: mockGoalTracker
             });
 
-            await goalsModule.updateGoalDisplay('youtube');
+            await youtubeDisabledModule.updateGoalDisplay('youtube');
 
             expect(updateTextSource).not.toHaveBeenCalled();
         }, TEST_TIMEOUTS.FAST);
@@ -260,6 +250,76 @@ describe('OBS Goals Module Characterization Tests', () => {
             expect(result.success).toBe(false);
             expect(result.error).toContain('Donation processing failed');
         }, TEST_TIMEOUTS.FAST);
+
+        test('processDonationGoal should reject invalid platform', async () => {
+            const result = await goalsModule.processDonationGoal(null, 100);
+            expect(result.success).toBe(false);
+            expect(result.error).toContain('Invalid platform');
+        }, TEST_TIMEOUTS.FAST);
+
+        test('processDonationGoal should return error when goals disabled', async () => {
+            const disabledModule = createOBSGoalsManager(mockObsManager, {
+                logger: noOpLogger,
+                config: { goals: { enabled: false } },
+                updateTextSource: mockSourcesManager.updateTextSource,
+                goalTracker: mockGoalTracker
+            });
+
+            const result = await disabledModule.processDonationGoal('tiktok', 100);
+            expect(result.success).toBe(false);
+            expect(result.error).toContain('disabled');
+        }, TEST_TIMEOUTS.FAST);
+
+        test('processDonationGoal should return error when platform goal disabled', async () => {
+            const tiktokDisabledModule = createOBSGoalsManager(mockObsManager, {
+                logger: noOpLogger,
+                config: {
+                    goals: {
+                        enabled: true,
+                        tiktokGoalEnabled: false,
+                        tiktokGoalSource: 'tiktok goal txt'
+                    }
+                },
+                updateTextSource: mockSourcesManager.updateTextSource,
+                goalTracker: mockGoalTracker
+            });
+
+            const result = await tiktokDisabledModule.processDonationGoal('tiktok', 100);
+            expect(result.success).toBe(false);
+            expect(result.error).toContain('disabled');
+        }, TEST_TIMEOUTS.FAST);
+
+        test('processPaypiggyGoal should return error when goals disabled', async () => {
+            const disabledModule = createOBSGoalsManager(mockObsManager, {
+                logger: noOpLogger,
+                config: { goals: { enabled: false } },
+                updateTextSource: mockSourcesManager.updateTextSource,
+                goalTracker: mockGoalTracker
+            });
+
+            const result = await disabledModule.processPaypiggyGoal('tiktok');
+            expect(result.success).toBe(false);
+            expect(result.error).toContain('disabled');
+        }, TEST_TIMEOUTS.FAST);
+
+        test('processPaypiggyGoal should return error when platform goal disabled', async () => {
+            const tiktokDisabledModule = createOBSGoalsManager(mockObsManager, {
+                logger: noOpLogger,
+                config: {
+                    goals: {
+                        enabled: true,
+                        tiktokGoalEnabled: false,
+                        tiktokGoalSource: 'tiktok goal txt'
+                    }
+                },
+                updateTextSource: mockSourcesManager.updateTextSource,
+                goalTracker: mockGoalTracker
+            });
+
+            const result = await tiktokDisabledModule.processPaypiggyGoal('tiktok');
+            expect(result.success).toBe(false);
+            expect(result.error).toContain('disabled');
+        }, TEST_TIMEOUTS.FAST);
     });
 
     describe('Status Queries', () => {
@@ -291,12 +351,24 @@ describe('OBS Goals Module Characterization Tests', () => {
         test('should respect platform enable/disable flags', async () => {
             const { updateTextSource } = mockSourcesManager;
 
-            mockConfigManager.getBoolean.mockImplementation((section, key, defaultValue) => {
-                if (section === 'goals' && key === 'youtubeGoalEnabled') return false;
-                return defaultValue;
+            const youtubeDisabledModule = createOBSGoalsManager(mockObsManager, {
+                logger: noOpLogger,
+                config: {
+                    goals: {
+                        enabled: true,
+                        tiktokGoalEnabled: true,
+                        youtubeGoalEnabled: false,
+                        twitchGoalEnabled: true,
+                        tiktokGoalSource: 'tiktok goal txt',
+                        youtubeGoalSource: 'youtube goal txt',
+                        twitchGoalSource: 'twitch goal txt'
+                    }
+                },
+                updateTextSource: mockSourcesManager.updateTextSource,
+                goalTracker: mockGoalTracker
             });
 
-            await goalsModule.updateAllGoalDisplays();
+            await youtubeDisabledModule.updateAllGoalDisplays();
 
             expect(updateTextSource).toHaveBeenCalledWith('tiktok goal txt', '500/1000 coins');
             expect(updateTextSource).toHaveBeenCalledWith('twitch goal txt', '050/100 bits');
@@ -306,12 +378,19 @@ describe('OBS Goals Module Characterization Tests', () => {
         test('should handle missing source configurations gracefully', async () => {
             const { updateTextSource } = mockSourcesManager;
 
-            mockConfigManager.getString.mockImplementation((section, key, defaultValue) => {
-                if (section === 'goals' && key === 'tiktokGoalSource') return undefined;
-                return defaultValue;
+            const missingSourceModule = createOBSGoalsManager(mockObsManager, {
+                logger: noOpLogger,
+                config: {
+                    goals: {
+                        enabled: true,
+                        tiktokGoalEnabled: true
+                    }
+                },
+                updateTextSource: mockSourcesManager.updateTextSource,
+                goalTracker: mockGoalTracker
             });
 
-            await goalsModule.updateGoalDisplay('tiktok');
+            await missingSourceModule.updateGoalDisplay('tiktok');
 
             expect(updateTextSource).not.toHaveBeenCalled();
         }, TEST_TIMEOUTS.FAST);
