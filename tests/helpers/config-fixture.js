@@ -2,8 +2,8 @@
 
 function createSourcesConfigFixture(overrides = {}) {
     return {
-        chatGroupName: 'statusbar chat grp',
-        notificationGroupName: 'statusbar notification grp',
+        chatGroupName: 'test-chat-group',
+        notificationGroupName: 'test-notification-group',
         fadeDelay: 750,
         ...overrides
     };
@@ -11,7 +11,7 @@ function createSourcesConfigFixture(overrides = {}) {
 
 function createStreamElementsConfigFixture(overrides = {}) {
     return {
-        enabled: false,
+        enabled: true,
         dataLoggingEnabled: false,
         dataLoggingPath: './logs',
         ...overrides
@@ -20,10 +20,10 @@ function createStreamElementsConfigFixture(overrides = {}) {
 
 function createHandcamConfigFixture(overrides = {}) {
     return {
-        enabled: false,
+        enabled: true,
         sourceName: 'test-handcam-source',
         sceneName: 'test-handcam-scene',
-        glowFilterName: 'Glow',
+        glowFilterName: 'test-glow-filter',
         maxSize: 50,
         rampUpDuration: 0.5,
         holdDuration: 6.0,
