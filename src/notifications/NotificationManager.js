@@ -1,7 +1,6 @@
 
 const EventEmitter = require('events');
 const { safeSetInterval } = require('../utils/timeout-validator');
-const {  DonationSpamDetection } = require('../utils/spam-detection');
 const { logger } = require('../core/logging');
 const { createPlatformErrorHandler } = require('../utils/platform-error-handler');
 const { PlatformEvents } = require('../interfaces/PlatformEvents');
@@ -22,12 +21,8 @@ class NotificationManager extends EventEmitter {
         if (!dependencies.constants) {
             throw new Error('NotificationManager requires constants dependency');
         }
-        if (!dependencies.textProcessing) {
-            throw new Error('NotificationManager requires textProcessing dependency');
-        }
 
         this.constants = dependencies.constants;
-        this.textProcessing = dependencies.textProcessing;
         const goalsDependency = dependencies.obsGoals;
         if (goalsDependency && typeof goalsDependency.processDonationGoal === 'function') {
             this.obsGoals = goalsDependency;
@@ -345,13 +340,6 @@ class NotificationManager extends EventEmitter {
             // Enforce canonical notification type
             notificationData.type = canonicalType;
             
-            // Ensure required fields exist
-            if (data.username) {
-                const { formatUsername12 } = require('../utils/validation');
-                formatUsername12(data.username, false);
-                formatUsername12(data.username, true);
-            }
-
             // Add sourceType metadata for non-monetization notifications only
             if (resolvedSourceType !== undefined) {
                 if (isMonetizationType) {
