@@ -11,7 +11,7 @@ afterEach(() => {
 describe('StreamElementsPlatform message parsing', () => {
     it('routes invalid JSON messages through the error handler without throwing', () => {
 
-        const platform = new StreamElementsPlatform(createStreamElementsConfigFixture({ enabled: true }), { logger: noOpLogger });
+        const platform = new StreamElementsPlatform(createStreamElementsConfigFixture(), { logger: noOpLogger });
 
         const errorHandlerCalls = [];
         const errorHandler = {

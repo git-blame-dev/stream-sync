@@ -95,7 +95,7 @@ describe('StreamElementsPlatform behavior', () => {
 
     it('returns false when prerequisites fail', async () => {
         const platform = new StreamElementsPlatform(
-            createStreamElementsConfigFixture({ enabled: true }),
+            createStreamElementsConfigFixture(),
             { logger: noOpLogger }
         );
 
