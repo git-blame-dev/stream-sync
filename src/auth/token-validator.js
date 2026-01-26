@@ -227,14 +227,14 @@ class TokenValidator {
                     return false;
                 }
 
-                // Update in-memory configuration with new tokens
-                if (config.twitch) {
-                    config.twitch.accessToken = tokens.access_token;
-                    config.twitch.refreshToken = tokens.refresh_token;
-                }
+                const updatedTwitchConfig = {
+                    ...(config.twitch || {}),
+                    accessToken: tokens.access_token,
+                    refreshToken: tokens.refresh_token
+                };
 
                 // Re-validate with the new credentials
-                const revalidation = await this.validateTwitchTokens(config.twitch || {});
+                const revalidation = await this.validateTwitchTokens(updatedTwitchConfig);
                 results.platforms.twitch = revalidation;
                 results.isValid = revalidation.isValid;
 

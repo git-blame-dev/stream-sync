@@ -169,10 +169,10 @@ function logMainError(message, error, payload, options) {
     handler.logOperationalError(message, logContext, payload);
 }
 
-async function hydrateTwitchTokensFromStore() {
+async function loadTwitchTokensFromStore() {
     const twitchConfig = config.twitch;
     if (!twitchConfig || !twitchConfig.enabled) {
-        return;
+        return null;
     }
 
     const tokenStorePath = twitchConfig.tokenStorePath;
@@ -180,14 +180,14 @@ async function hydrateTwitchTokensFromStore() {
     try {
         const tokens = await loadTokens({ tokenStorePath, logger });
         if (!tokens) {
-            return;
+            return null;
         }
 
-        twitchConfig.accessToken = tokens.accessToken;
-        twitchConfig.refreshToken = tokens.refreshToken;
-        if (tokens.expiresAt) {
-            twitchConfig.tokenExpiresAt = tokens.expiresAt;
-        }
+        return {
+            accessToken: tokens.accessToken,
+            refreshToken: tokens.refreshToken,
+            tokenExpiresAt: tokens.expiresAt || null
+        };
     } catch (error) {
         logMainError('Failed to load token store tokens', error, { tokenStorePath }, {
             eventType: 'configuration',
@@ -1415,7 +1415,7 @@ async function main(overrides = {}) {
             throw error;
         }
 
-        await hydrateTwitchTokensFromStore();
+        const storedTwitchTokens = await loadTwitchTokensFromStore();
 
         if (!config.general || !config.obs) {
             throw new Error('Display queue requires general and obs config');
@@ -1543,7 +1543,11 @@ async function main(overrides = {}) {
         });
         
         logger.info('About to call validateAuthentication...', 'Main');
-        const authResult = await validateAuthentication(config, null, { axios: overrides?.axios });
+        const configWithTokens = storedTwitchTokens ? {
+            ...config,
+            twitch: { ...config.twitch, ...storedTwitchTokens }
+        } : config;
+        const authResult = await validateAuthentication(configWithTokens, null, { axios: overrides?.axios });
         logger.info('validateAuthentication returned successfully', 'Main');
         if (!authResult.isValid) {
             logger.warn('Authentication validation failed - continuing with limited functionality', 'Main');
