@@ -19,9 +19,16 @@ function buildGoalsManager(obsManager, dependencies = {}) {
         throw new Error('OBSGoalsManager requires OBSConnectionManager instance');
     }
 
+    if (!dependencies.configManager) {
+        throw new Error('createOBSGoalsManager requires configManager in dependencies');
+    }
+    if (!dependencies.config) {
+        throw new Error('createOBSGoalsManager requires config in dependencies');
+    }
+    
     const { logger } = dependencies.logger ? { logger: dependencies.logger } : require('../core/logging');
-    const configManager = dependencies.configManager || require('../core/config').configManager;
-    const config = dependencies.config || require('../core/config').config;
+    const configManager = dependencies.configManager;
+    const config = dependencies.config;
 
     const updateTextSource = dependencies.updateTextSource || (() => {
         return require('./sources').getDefaultSourcesManager().updateTextSource;

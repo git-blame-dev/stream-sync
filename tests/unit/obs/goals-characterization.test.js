@@ -22,6 +22,7 @@ describe('OBS Goals Module Characterization Tests', () => {
     let goalsModule;
     let mockObsManager;
     let mockConfigManager;
+    let mockConfig;
     let mockSourcesManager;
     let mockGoalTracker;
 
@@ -30,6 +31,18 @@ describe('OBS Goals Module Characterization Tests', () => {
 
         mockObsManager = {
             isConnected: createMockFn().mockReturnValue(true)
+        };
+
+        mockConfig = {
+            goals: {
+                enabled: true,
+                tiktokGoalEnabled: true,
+                youtubeGoalEnabled: true,
+                twitchGoalEnabled: true,
+                tiktokGoalTarget: 1000,
+                youtubeGoalTarget: 100,
+                twitchGoalTarget: 500
+            }
         };
 
         mockConfigManager = {
@@ -86,6 +99,7 @@ describe('OBS Goals Module Characterization Tests', () => {
         goalsModule = createOBSGoalsManager(mockObsManager, {
             logger: noOpLogger,
             configManager: mockConfigManager,
+            config: mockConfig,
             updateTextSource: mockSourcesManager.updateTextSource,
             goalTracker: mockGoalTracker
         });
