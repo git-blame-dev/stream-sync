@@ -231,12 +231,6 @@ class ConfigLoader {
 
     reload() {
         this.isLoaded = false;
-        
-        // Clear cached platform configurations to ensure they reload with new config
-        _tiktokConfig = null;
-        _twitchConfig = null;
-        _youtubeConfig = null;
-        
         this.load();
     }
 }
@@ -413,55 +407,44 @@ const generalConfig = {
     get maxMessageLength() { return configManager.getNumber('general', 'maxMessageLength', DEFAULTS.general.maxMessageLength); }
 };
 
-// Lazy initialization for platform configs to avoid circular dependency
-let _tiktokConfig = null;
-let _twitchConfig = null;
-let _youtubeConfig = null;
-
+// Platform config creation functions (no caching - created fresh on each call)
 function getTiktokConfig() {
-    if (!_tiktokConfig) {
-        // Merge raw section to preserve platform-specific options while keeping standardized getters
-        const rawSection = configManager.getSection('tiktok') || {};
-        _tiktokConfig = Object.assign({}, rawSection, createPlatformConfig('tiktok'));
-    }
-    return _tiktokConfig;
+    const rawSection = configManager.getSection('tiktok') || {};
+    return Object.assign({}, rawSection, createPlatformConfig('tiktok'));
 }
 
 function getTwitchConfig() {
-    if (!_twitchConfig) {
-        // Start with all raw fields from the [twitch] section
-        const rawSection = configManager.getSection('twitch') || {};
-        _twitchConfig = Object.assign({}, rawSection, createPlatformConfig('twitch'));
-        
-        Object.assign(_twitchConfig, {
-            get channel() { return configManager.getString('twitch', 'channel', ''); },
-            get eventsub_enabled() { return configManager.getBoolean('twitch', 'eventsub_enabled', DEFAULTS.twitch.eventsubEnabled); },
-            get tokenStorePath() {
-                const tokenStorePath = configManager.getString('twitch', 'tokenStorePath', DEFAULTS.twitch.tokenStorePath);
-                return tokenStorePath.trim() ? tokenStorePath : DEFAULTS.twitch.tokenStorePath;
-            }
-        });
+    const rawSection = configManager.getSection('twitch') || {};
+    const twitchConfig = Object.assign({}, rawSection, createPlatformConfig('twitch'));
+    
+    Object.assign(twitchConfig, {
+        get channel() { return configManager.getString('twitch', 'channel', ''); },
+        get eventsub_enabled() { return configManager.getBoolean('twitch', 'eventsub_enabled', DEFAULTS.twitch.eventsubEnabled); },
+        get tokenStorePath() {
+            const tokenStorePath = configManager.getString('twitch', 'tokenStorePath', DEFAULTS.twitch.tokenStorePath);
+            return tokenStorePath.trim() ? tokenStorePath : DEFAULTS.twitch.tokenStorePath;
+        }
+    });
 
-        Object.defineProperty(_twitchConfig, 'clientId', {
-            get: function() {
-                return resolveSecretValue('TWITCH_CLIENT_ID');
-            },
-            enumerable: true
-        });
+    Object.defineProperty(twitchConfig, 'clientId', {
+        get: function() {
+            return resolveSecretValue('TWITCH_CLIENT_ID');
+        },
+        enumerable: true
+    });
 
-        Object.defineProperty(_twitchConfig, 'clientSecret', {
-            get: function() {
-                return resolveSecretValue('TWITCH_CLIENT_SECRET');
-            },
-            enumerable: true
-        });
-    }
-    return _twitchConfig;
+    Object.defineProperty(twitchConfig, 'clientSecret', {
+        get: function() {
+            return resolveSecretValue('TWITCH_CLIENT_SECRET');
+        },
+        enumerable: true
+    });
+    
+    return twitchConfig;
 }
 
 function getYoutubeConfig() {
-    if (!_youtubeConfig) _youtubeConfig = createPlatformConfig('youtube');
-    return _youtubeConfig;
+    return createPlatformConfig('youtube');
 }
 
 const obsConfig = {
