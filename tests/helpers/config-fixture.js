@@ -36,6 +36,39 @@ function createHandcamConfigFixture(overrides = {}) {
     };
 }
 
+function createTikTokConfigFixture(overrides = {}) {
+    return {
+        enabled: true,
+        username: 'test-tiktok-user',
+        dataLoggingEnabled: false,
+        dataLoggingPath: './logs',
+        ...overrides
+    };
+}
+
+function createTwitchConfigFixture(overrides = {}) {
+    return {
+        enabled: true,
+        username: 'test-twitch-user',
+        channel: 'test-twitch-channel',
+        broadcasterId: 'test-broadcaster-id',
+        dataLoggingEnabled: false,
+        dataLoggingPath: './logs',
+        ...overrides
+    };
+}
+
+function createYouTubeConfigFixture(overrides = {}) {
+    return {
+        enabled: true,
+        username: 'test-youtube-channel',
+        streamDetectionMethod: 'youtubei',
+        dataLoggingEnabled: false,
+        dataLoggingPath: './logs',
+        ...overrides
+    };
+}
+
 function createConfigFixture(overrides = {}) {
     const { general: generalOverrides, cooldowns: cooldownsOverrides, ...restOverrides } = overrides;
     return {
@@ -60,5 +93,8 @@ module.exports = {
     createSourcesConfigFixture,
     createStreamElementsConfigFixture,
     createHandcamConfigFixture,
+    createTikTokConfigFixture,
+    createTwitchConfigFixture,
+    createYouTubeConfigFixture,
     createConfigFixture
 };
