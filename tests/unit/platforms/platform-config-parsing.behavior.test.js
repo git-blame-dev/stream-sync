@@ -32,7 +32,7 @@ describe('platform config parsing behavior', () => {
 
     test('StreamElementsPlatform stores normalized config values', () => {
         const platform = new StreamElementsPlatform(
-            createStreamElementsConfigFixture({ enabled: true, dataLoggingEnabled: false }),
+            createStreamElementsConfigFixture(),
             { logger: noOpLogger }
         );
 
@@ -43,7 +43,6 @@ describe('platform config parsing behavior', () => {
     test('StreamElementsPlatform uses provided channel IDs and paths', () => {
         const platform = new StreamElementsPlatform(
             createStreamElementsConfigFixture({
-                enabled: true,
                 jwtToken: 'test-jwt-token',
                 youtubeChannelId: 'test-youtube-channel',
                 twitchChannelId: 'test-twitch-channel',

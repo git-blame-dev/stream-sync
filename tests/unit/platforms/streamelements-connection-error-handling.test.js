@@ -11,7 +11,7 @@ afterEach(() => {
 describe('StreamElementsPlatform connection error handling', () => {
     it('routes connection errors through error handler and retry handler', () => {
 
-        const platform = new StreamElementsPlatform(createStreamElementsConfigFixture({ enabled: true }), { logger: noOpLogger });
+        const platform = new StreamElementsPlatform(createStreamElementsConfigFixture(), { logger: noOpLogger });
         const errorHandlerCalls = [];
         const errorHandler = { handleConnectionError: (...args) => errorHandlerCalls.push(args) };
         platform.errorHandler = errorHandler;

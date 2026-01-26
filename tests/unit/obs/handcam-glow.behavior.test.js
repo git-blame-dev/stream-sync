@@ -46,7 +46,7 @@ describe('handcam-glow', () => {
 
         await handcamGlow.initializeHandcamGlow(
             obs,
-            createHandcamConfigFixture({ enabled: true, sourceName: 'testCam', glowFilterName: 'testGlow' })
+            createHandcamConfigFixture({ sourceName: 'testCam', glowFilterName: 'testGlow' })
         );
 
         expect(obs.call).toHaveBeenCalledWith('SetSourceFilterSettings', {
@@ -61,7 +61,7 @@ describe('handcam-glow', () => {
 
         await expect(handcamGlow.initializeHandcamGlow(
             obs,
-            createHandcamConfigFixture({ enabled: true, sourceName: 'testCam', glowFilterName: 'testGlow' })
+            createHandcamConfigFixture({ sourceName: 'testCam', glowFilterName: 'testGlow' })
         )).resolves.toBeUndefined();
     });
 
@@ -80,7 +80,7 @@ describe('handcam-glow', () => {
             })
         };
 
-        handcamGlow.triggerHandcamGlow(obs, createHandcamConfigFixture({ enabled: true, totalSteps: 1 }));
+        handcamGlow.triggerHandcamGlow(obs, createHandcamConfigFixture({ totalSteps: 1 }));
         await new Promise(resolve => setImmediate(resolve));
         await new Promise(resolve => setImmediate(resolve));
         await new Promise(resolve => setImmediate(resolve));
@@ -112,7 +112,7 @@ describe('handcam-glow', () => {
             })
         };
 
-        handcamGlow.triggerHandcamGlow(obs, createHandcamConfigFixture({ enabled: true, totalSteps: 1 }));
+        handcamGlow.triggerHandcamGlow(obs, createHandcamConfigFixture({ totalSteps: 1 }));
         await new Promise(resolve => setImmediate(resolve));
         await new Promise(resolve => setImmediate(resolve));
         await new Promise(resolve => setImmediate(resolve));
@@ -123,7 +123,7 @@ describe('handcam-glow', () => {
 
     it('triggers fire-and-forget glow without throwing', async () => {
         const obs = { call: createMockFn() };
-        expect(() => handcamGlow.triggerHandcamGlow(obs, createHandcamConfigFixture({ enabled: true }))).not.toThrow();
+        expect(() => handcamGlow.triggerHandcamGlow(obs, createHandcamConfigFixture())).not.toThrow();
         await new Promise(resolve => setImmediate(resolve));
     });
 
