@@ -132,20 +132,20 @@ describe('ConfigService', () => {
         });
     });
 
-    describe('get() - ConfigManager Style', () => {
+    describe('get() - ConfigLoader Style', () => {
         beforeEach(() => {
             configService = new ConfigService(mockConfig, mockEventBus);
         });
 
-        it('should use ConfigManager get method when available', () => {
-            mockConfig.get.mockReturnValue('testConfigManagerValue');
+        it('should use ConfigLoader get method when available', () => {
+            mockConfig.get.mockReturnValue('testConfigLoaderValue');
 
             const result = configService.get('general', 'debugEnabled');
 
-            expect(result).toBe('testConfigManagerValue');
+            expect(result).toBe('testConfigLoaderValue');
         });
 
-        it('should fallback to direct property access when ConfigManager unavailable', () => {
+        it('should fallback to direct property access when ConfigLoader unavailable', () => {
             delete mockConfig.get;
 
             const result = configService.get('general', 'debugEnabled');
@@ -204,7 +204,7 @@ describe('ConfigService', () => {
             configService = new ConfigService(mockConfig, mockEventBus);
         });
 
-        it('should check platform-specific notifications (ConfigManager style)', () => {
+        it('should check platform-specific notifications (ConfigLoader style)', () => {
             mockConfig.get.mockImplementation((section, key) => {
                 if (section === 'twitch' && key === 'followsEnabled') return false;
                 if (section === 'notifications' && key === 'followsEnabled') return true;
@@ -215,7 +215,7 @@ describe('ConfigService', () => {
             expect(result).toBe(false);
         });
 
-        it('should fallback to general notifications (ConfigManager style)', () => {
+        it('should fallback to general notifications (ConfigLoader style)', () => {
             mockConfig.get.mockImplementation((section, key) => {
                 if (section === 'youtube' && key === 'followsEnabled') return undefined;
                 if (section === 'notifications' && key === 'followsEnabled') return true;
@@ -439,7 +439,7 @@ describe('ConfigService', () => {
             configService = new ConfigService(mockConfig, mockEventBus);
         });
 
-        it('should set value using ConfigManager style', () => {
+        it('should set value using ConfigLoader style', () => {
             mockConfig.set.mockReturnValue(true);
 
             const result = configService.set('general', 'debugEnabled', false);
@@ -536,12 +536,12 @@ describe('ConfigService', () => {
             configService = new ConfigService(mockConfig, mockEventBus);
         });
 
-        it('should return configuration summary with ConfigManager', () => {
+        it('should return configuration summary with ConfigLoader', () => {
             const result = configService.getConfigSummary();
 
             expect(result).toEqual({
                 hasConfig: true,
-                configType: 'ConfigManager',
+                configType: 'ConfigLoader',
                 sections: expect.arrayContaining(['general', 'tts', 'commands']),
                 hasEventBus: true,
                 cacheSize: 0

@@ -861,7 +861,7 @@ const createMockDisplayQueue = (queueState = {}, methodOverrides = {}) => {
     };
 };
 
-const createMockConfigManager = (configData = {}, methodOverrides = {}) => {
+const createMockConfigLoader = (configData = {}, methodOverrides = {}) => {
     const baseMethods = {
         get: createMockFn().mockImplementation((key, defaultValue) => {
             const keys = key.split('.');
@@ -943,7 +943,7 @@ const createMockConfigManager = (configData = {}, methodOverrides = {}) => {
         ...baseMethods,
         ...methodOverrides,
         // Meta information for validation
-        _mockType: 'ConfigManager',
+        _mockType: 'ConfigLoader',
         _configData: configData,
         _validMethods: Object.keys(baseMethods)
     };
@@ -3049,7 +3049,8 @@ module.exports = {
     createMockSpamDetector,
     createMockDisplayQueue,
     createMockOBSConnection,
-    createMockConfigManager,
+    createMockConfigLoader,
+    createMockConfigManager: createMockConfigLoader,
     createMockAuthManager,
     
     // Authentication system factories

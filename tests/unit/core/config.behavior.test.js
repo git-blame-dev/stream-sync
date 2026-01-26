@@ -66,7 +66,7 @@ enabled = true
 ${streamelementsSection}
 `;
 
-describe('ConfigManager behavior', () => {
+describe('ConfigLoader behavior', () => {
     const setupConfigMocks = (content) => {
         fs.existsSync = createMockFn((filePath) => filePath === testConfigPath);
         fs.readFileSync = createMockFn((filePath) => {
