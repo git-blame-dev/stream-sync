@@ -39,3 +39,49 @@ describe('config-validator (utility) behavior', () => {
         expect(apiConfig.apiKey).toBeUndefined();
     });
 });
+
+describe('ConfigValidator.normalize() skeleton', () => {
+    const ALL_SECTIONS = [
+        'general', 'http', 'obs', 'tiktok', 'twitch', 'youtube',
+        'handcam', 'goals', 'gifts', 'timing', 'cooldowns', 'tts',
+        'spam', 'displayQueue', 'retry', 'intervals', 'connectionLimits',
+        'api', 'logging', 'farewell', 'commands', 'vfx', 'streamelements',
+        'follows', 'raids', 'paypiggies', 'greetings'
+    ];
+
+    it('returns object with all config sections', () => {
+        const rawConfig = {};
+        const normalized = ConfigValidator.normalize(rawConfig);
+
+        ALL_SECTIONS.forEach(section => {
+            expect(normalized).toHaveProperty(section);
+            expect(typeof normalized[section]).toBe('object');
+        });
+    });
+
+    it('handles empty raw config', () => {
+        const normalized = ConfigValidator.normalize({});
+
+        expect(Object.keys(normalized).length).toBe(ALL_SECTIONS.length);
+    });
+
+    it('passes raw section data to section normalizers', () => {
+        const rawConfig = {
+            general: { debugEnabled: 'true' },
+            obs: { enabled: 'false' }
+        };
+        const normalized = ConfigValidator.normalize(rawConfig);
+
+        expect(normalized.general).toEqual({});
+        expect(normalized.obs).toEqual({});
+    });
+
+    it('handles missing sections gracefully', () => {
+        const rawConfig = { general: { debugEnabled: 'true' } };
+        const normalized = ConfigValidator.normalize(rawConfig);
+
+        expect(normalized.twitch).toEqual({});
+        expect(normalized.youtube).toEqual({});
+        expect(normalized.tiktok).toEqual({});
+    });
+});
