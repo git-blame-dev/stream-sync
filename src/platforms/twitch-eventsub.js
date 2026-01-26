@@ -807,13 +807,7 @@ class TwitchEventSub extends EventEmitter {
         }
 
         try {
-            // Attempt to get a fresh access token, which triggers refresh if needed
-            const token = await this.authManager.getAccessToken();
-            if (token && token !== this.config.accessToken) {
-                // Token was refreshed, update our config reference
-                this.config.accessToken = token;
-                this.logger.debug('Token refreshed before cleanup', 'twitch');
-            }
+            await this.authManager.getAccessToken();
         } catch (error) {
             this.logger.warn('Failed to ensure valid token before cleanup', 'twitch', {
                 error: error.message,

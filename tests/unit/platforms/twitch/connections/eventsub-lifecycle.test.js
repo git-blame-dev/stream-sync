@@ -221,15 +221,6 @@ describe('TwitchEventSub lifecycle', () => {
             expect(eventSub.config.accessToken).toBeUndefined();
         });
 
-        it('updates config token when refreshed', async () => {
-            const mockAuthManager = createAuthManager({ token: 'new-refreshed-token' });
-            eventSub = createEventSub({ accessToken: 'old-token' }, { authManager: mockAuthManager });
-
-            await eventSub._ensureValidToken();
-
-            expect(eventSub.config.accessToken).toBe('new-refreshed-token');
-        });
-
         it('continues when token refresh fails', async () => {
             const mockAuthManager = {
                 ...createAuthManager(),
