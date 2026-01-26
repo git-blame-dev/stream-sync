@@ -355,3 +355,205 @@ describe('ConfigValidator simple command sections', () => {
         expect(result.enabled).toBe(true);
     });
 });
+
+describe('ConfigValidator.validate()', () => {
+    const createMinimalValidConfig = () => ({
+        general: { debugEnabled: false },
+        obs: { enabled: false },
+        commands: { enabled: false },
+        tiktok: { enabled: false },
+        twitch: { enabled: false },
+        youtube: { enabled: false },
+        streamelements: { enabled: false },
+        cooldowns: { defaultCooldown: 60, heavyCommandCooldown: 120, heavyCommandThreshold: 5 },
+        handcam: { maxSize: 50, rampUpDuration: 0.5, holdDuration: 6.0, rampDownDuration: 0.5 },
+        retry: { baseDelay: 1000, maxDelay: 30000, maxRetries: 3 }
+    });
+
+    it('returns valid for minimal config with all required sections', () => {
+        const config = createMinimalValidConfig();
+        const result = ConfigValidator.validate(config);
+
+        expect(result.isValid).toBe(true);
+        expect(result.errors).toEqual([]);
+    });
+
+    it('returns error for missing required section', () => {
+        const config = createMinimalValidConfig();
+        delete config.general;
+
+        const result = ConfigValidator.validate(config);
+
+        expect(result.isValid).toBe(false);
+        expect(result.errors).toContain('Missing required configuration section: general');
+    });
+
+    it('returns error for missing obs section', () => {
+        const config = createMinimalValidConfig();
+        delete config.obs;
+
+        const result = ConfigValidator.validate(config);
+
+        expect(result.isValid).toBe(false);
+        expect(result.errors).toContain('Missing required configuration section: obs');
+    });
+
+    it('returns error for missing commands section', () => {
+        const config = createMinimalValidConfig();
+        delete config.commands;
+
+        const result = ConfigValidator.validate(config);
+
+        expect(result.isValid).toBe(false);
+        expect(result.errors).toContain('Missing required configuration section: commands');
+    });
+
+    it('returns error when enabled platform has no username', () => {
+        const config = createMinimalValidConfig();
+        config.tiktok = { enabled: true, username: '' };
+
+        const result = ConfigValidator.validate(config);
+
+        expect(result.isValid).toBe(false);
+        expect(result.errors).toContain('Missing required configuration: TikTok username');
+    });
+
+    it('returns error when Twitch enabled without username', () => {
+        const config = createMinimalValidConfig();
+        config.twitch = { enabled: true, username: '' };
+
+        const result = ConfigValidator.validate(config);
+
+        expect(result.isValid).toBe(false);
+        expect(result.errors).toContain('Missing required configuration: Twitch username');
+    });
+
+    it('returns error when YouTube enabled without username', () => {
+        const config = createMinimalValidConfig();
+        config.youtube = { enabled: true, username: '' };
+
+        const result = ConfigValidator.validate(config);
+
+        expect(result.isValid).toBe(false);
+        expect(result.errors).toContain('Missing required configuration: YouTube username');
+    });
+
+    it('passes when enabled platform has username', () => {
+        const config = createMinimalValidConfig();
+        config.tiktok = { enabled: true, username: 'test-user' };
+
+        const result = ConfigValidator.validate(config);
+
+        expect(result.isValid).toBe(true);
+        expect(result.errors).toEqual([]);
+    });
+
+    it('returns error when StreamElements enabled without channel ID', () => {
+        const config = createMinimalValidConfig();
+        config.streamelements = { enabled: true, youtubeChannelId: '', twitchChannelId: '' };
+
+        const result = ConfigValidator.validate(config);
+
+        expect(result.isValid).toBe(false);
+        expect(result.errors).toContain('Missing required configuration: StreamElements channel ID (YouTube or Twitch)');
+    });
+
+    it('passes when StreamElements has YouTube channel ID', () => {
+        const config = createMinimalValidConfig();
+        config.streamelements = { enabled: true, youtubeChannelId: 'test-channel', twitchChannelId: '' };
+
+        const result = ConfigValidator.validate(config);
+
+        expect(result.isValid).toBe(true);
+    });
+
+    it('passes when StreamElements has Twitch channel ID', () => {
+        const config = createMinimalValidConfig();
+        config.streamelements = { enabled: true, youtubeChannelId: '', twitchChannelId: 'test-channel' };
+
+        const result = ConfigValidator.validate(config);
+
+        expect(result.isValid).toBe(true);
+    });
+});
+
+describe('ConfigValidator.validate() warnings', () => {
+    const createMinimalValidConfig = () => ({
+        general: { debugEnabled: false },
+        obs: { enabled: false },
+        commands: { enabled: false },
+        cooldowns: { defaultCooldown: 60, heavyCommandCooldown: 120, heavyCommandThreshold: 5 },
+        handcam: { maxSize: 50, rampUpDuration: 0.5, holdDuration: 6.0, rampDownDuration: 0.5 },
+        retry: { baseDelay: 1000, maxDelay: 30000, maxRetries: 3 }
+    });
+
+    it('warns when cooldown.defaultCooldown is too low', () => {
+        const config = createMinimalValidConfig();
+        config.cooldowns.defaultCooldown = 5;
+
+        const result = ConfigValidator.validate(config);
+
+        expect(result.isValid).toBe(true);
+        expect(result.warnings).toContain('cooldowns.defaultCooldown should be between 10 and 3600 seconds');
+    });
+
+    it('warns when cooldown.defaultCooldown is too high', () => {
+        const config = createMinimalValidConfig();
+        config.cooldowns.defaultCooldown = 5000;
+
+        const result = ConfigValidator.validate(config);
+
+        expect(result.isValid).toBe(true);
+        expect(result.warnings).toContain('cooldowns.defaultCooldown should be between 10 and 3600 seconds');
+    });
+
+    it('warns when handcam.maxSize is out of range', () => {
+        const config = createMinimalValidConfig();
+        config.handcam.maxSize = 200;
+
+        const result = ConfigValidator.validate(config);
+
+        expect(result.isValid).toBe(true);
+        expect(result.warnings).toContain('handcam.maxSize should be between 1 and 100');
+    });
+
+    it('warns when retry.baseDelay is too low', () => {
+        const config = createMinimalValidConfig();
+        config.retry.baseDelay = 50;
+
+        const result = ConfigValidator.validate(config);
+
+        expect(result.isValid).toBe(true);
+        expect(result.warnings).toContain('retry.baseDelay should be between 100 and 30000 milliseconds');
+    });
+
+    it('warns when retry.maxRetries is too high', () => {
+        const config = createMinimalValidConfig();
+        config.retry.maxRetries = 50;
+
+        const result = ConfigValidator.validate(config);
+
+        expect(result.isValid).toBe(true);
+        expect(result.warnings).toContain('retry.maxRetries should be between 0 and 20');
+    });
+
+    it('returns multiple warnings for multiple issues', () => {
+        const config = createMinimalValidConfig();
+        config.cooldowns.defaultCooldown = 5;
+        config.handcam.maxSize = 200;
+        config.retry.baseDelay = 50;
+
+        const result = ConfigValidator.validate(config);
+
+        expect(result.isValid).toBe(true);
+        expect(result.warnings.length).toBe(3);
+    });
+
+    it('returns no warnings for valid ranges', () => {
+        const config = createMinimalValidConfig();
+
+        const result = ConfigValidator.validate(config);
+
+        expect(result.warnings).toEqual([]);
+    });
+});
