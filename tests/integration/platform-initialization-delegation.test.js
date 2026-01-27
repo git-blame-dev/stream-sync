@@ -7,7 +7,7 @@ const { createConfigFixture } = require('../helpers/config-fixture');
 
 describe('Platform Initialization Delegation', () => {
     let runtime;
-    let mockConfig;
+    let configFixture;
     let mockDependencies;
     let originalExit;
 
@@ -15,7 +15,7 @@ describe('Platform Initialization Delegation', () => {
         originalExit = process.exit;
         process.exit = createMockFn();
 
-        mockConfig = {
+        configFixture = {
             general: {
                 debugEnabled: false,
                 commandPrefix: '!',
@@ -38,7 +38,7 @@ describe('Platform Initialization Delegation', () => {
         };
 
         const platformLifecycleService = new PlatformLifecycleService({
-            config: mockConfig,
+            config: configFixture,
             eventBus: null,
             streamDetector: null,
             dependencyFactory: null,
@@ -49,7 +49,7 @@ describe('Platform Initialization Delegation', () => {
             logging: noOpLogger,
             displayQueue: { addItem: createMockFn() },
             eventBus: { subscribe: createMockFn(), emit: createMockFn(), unsubscribe: createMockFn() },
-            configService: { get: createMockFn().mockReturnValue(mockConfig.general) },
+            configService: { get: createMockFn().mockReturnValue(configFixture.general) },
             config: createConfigFixture(),
             vfxCommandService: { executeCommandForKey: createMockFn().mockResolvedValue({ success: true }) },
             ttsService: { speak: createMockFn().mockResolvedValue({ success: true }) },
@@ -77,7 +77,7 @@ describe('Platform Initialization Delegation', () => {
 
     describe('Service-Based Platform Management', () => {
         it('should delegate platform initialization to PlatformLifecycleService', async () => {
-            runtime = new AppRuntime(mockConfig, mockDependencies);
+            runtime = new AppRuntime(configFixture, mockDependencies);
 
             expect(runtime.platforms).toBeDefined();
             expect(runtime.platformLifecycleService).toBeDefined();
@@ -86,14 +86,14 @@ describe('Platform Initialization Delegation', () => {
         });
 
         it('should wire StreamDetector into PlatformLifecycleService', () => {
-            runtime = new AppRuntime(mockConfig, mockDependencies);
+            runtime = new AppRuntime(configFixture, mockDependencies);
 
             expect(runtime.platformLifecycleService.streamDetector).toBeDefined();
             expect(runtime.platformLifecycleService.streamDetector).toBe(runtime.streamDetector);
         });
 
         it('should delegate platform access through service methods', async () => {
-            runtime = new AppRuntime(mockConfig, mockDependencies);
+            runtime = new AppRuntime(configFixture, mockDependencies);
 
             expect(runtime.platformLifecycleService.getPlatform).toBeDefined();
             expect(runtime.platformLifecycleService.isPlatformAvailable).toBeDefined();
@@ -101,7 +101,7 @@ describe('Platform Initialization Delegation', () => {
         });
 
         it('should track connection times in service, not AppRuntime', async () => {
-            runtime = new AppRuntime(mockConfig, mockDependencies);
+            runtime = new AppRuntime(configFixture, mockDependencies);
 
             expect(runtime.platformConnectionTimes).toBeUndefined();
             expect(runtime.platformLifecycleService.getPlatformConnectionTime).toBeDefined();
@@ -111,7 +111,7 @@ describe('Platform Initialization Delegation', () => {
 
     describe('Event Handler Integration', () => {
         it('should maintain AppRuntime handler methods for platform events', async () => {
-            runtime = new AppRuntime(mockConfig, mockDependencies);
+            runtime = new AppRuntime(configFixture, mockDependencies);
 
             expect(runtime.handleChatMessage).toBeDefined();
             expect(runtime.updateViewerCount).toBeDefined();
@@ -123,7 +123,7 @@ describe('Platform Initialization Delegation', () => {
 
     describe('Platform Lifecycle Coordination', () => {
         it('should not contain duplicate platform initialization logic', async () => {
-            runtime = new AppRuntime(mockConfig, mockDependencies);
+            runtime = new AppRuntime(configFixture, mockDependencies);
 
             expect(runtime.initializePlatformWithStreamDetection).toBeUndefined();
             expect(runtime.shouldRunPlatformInBackground).toBeUndefined();
@@ -131,7 +131,7 @@ describe('Platform Initialization Delegation', () => {
         });
 
         it('should delegate platform disconnection to service', async () => {
-            runtime = new AppRuntime(mockConfig, mockDependencies);
+            runtime = new AppRuntime(configFixture, mockDependencies);
             await runtime.initializePlatforms();
 
             await runtime.shutdown();
@@ -142,26 +142,26 @@ describe('Platform Initialization Delegation', () => {
 
     describe('Background Initialization Coordination', () => {
         it('should delegate background platform initialization to service', async () => {
-            mockConfig.tiktok = {
+            configFixture.tiktok = {
                 enabled: true,
                 username: '@test_user'
             };
-            mockConfig.twitch.enabled = false;
-            runtime = new AppRuntime(mockConfig, mockDependencies);
+            configFixture.twitch.enabled = false;
+            runtime = new AppRuntime(configFixture, mockDependencies);
             await runtime.initializePlatforms();
             expect(runtime.backgroundPlatformInits).toBeUndefined();
             expect(runtime.platformLifecycleService.backgroundPlatformInits).toBeDefined();
         });
 
         it('tracks platform health during background initialization', async () => {
-            mockConfig.tiktok = {
+            configFixture.tiktok = {
                 enabled: true,
                 username: '@test_user'
             };
-            mockConfig.twitch.enabled = false;
+            configFixture.twitch.enabled = false;
 
             const platformLifecycleService = new PlatformLifecycleService({
-                config: mockConfig,
+                config: configFixture,
                 eventBus: null,
                 streamDetector: null,
                 dependencyFactory: null,
@@ -173,7 +173,7 @@ describe('Platform Initialization Delegation', () => {
                 platformLifecycleService
             };
 
-            runtime = new AppRuntime(mockConfig, deps);
+            runtime = new AppRuntime(configFixture, deps);
             await runtime.initializePlatforms();
 
             const status = platformLifecycleService.getStatus();

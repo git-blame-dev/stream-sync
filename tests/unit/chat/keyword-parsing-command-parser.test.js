@@ -11,10 +11,10 @@ describe('CommandParser Keyword Parsing', () => {
     });
 
     let commandParser;
-    let mockConfig;
+    let configFixture;
 
     beforeEach(() => {
-        mockConfig = {
+        configFixture = {
             commands: {
                 'hello-there': '!hello, vfx bottom green',
                 'im-a-mod': '!mod, vfx top, mod|mods',
@@ -31,7 +31,7 @@ describe('CommandParser Keyword Parsing', () => {
 
     describe('Keyword Parsing Enabled (Default)', () => {
         beforeEach(() => {
-            commandParser = new CommandParser(mockConfig);
+            commandParser = new CommandParser(configFixture);
         });
 
         test('should detect ! prefix commands when keyword parsing is enabled', () => {
@@ -64,8 +64,8 @@ describe('CommandParser Keyword Parsing', () => {
 
     describe('Keyword Parsing Disabled', () => {
         beforeEach(() => {
-            mockConfig.general = { keywordParsingEnabled: false };
-            commandParser = new CommandParser(mockConfig);
+            configFixture.general = { keywordParsingEnabled: false };
+            commandParser = new CommandParser(configFixture);
         });
 
         test('should still detect ! prefix commands when keyword parsing is disabled', () => {
@@ -102,26 +102,26 @@ describe('CommandParser Keyword Parsing', () => {
 
     describe('Configuration Precedence', () => {
         test('should use config setting when no command line override', () => {
-            mockConfig.general = { keywordParsingEnabled: false };
-            commandParser = new CommandParser(mockConfig);
+            configFixture.general = { keywordParsingEnabled: false };
+            commandParser = new CommandParser(configFixture);
 
             const result = commandParser.getVFXConfig('i', 'I am a mod and I approve this message');
             expect(result).toBeNull();
         });
 
         test('should allow command line override of config setting', () => {
-            mockConfig.general = { keywordParsingEnabled: true };
-            mockConfig.cliArgs = { disableKeywordParsing: true };
-            commandParser = new CommandParser(mockConfig);
+            configFixture.general = { keywordParsingEnabled: true };
+            configFixture.cliArgs = { disableKeywordParsing: true };
+            commandParser = new CommandParser(configFixture);
 
             const result = commandParser.getVFXConfig('i', 'I am a mod and I approve this message');
             expect(result).toBeNull();
         });
 
         test('should prioritize command line argument over config setting', () => {
-            mockConfig.general = { keywordParsingEnabled: true };
-            mockConfig.cliArgs = { disableKeywordParsing: true };
-            commandParser = new CommandParser(mockConfig);
+            configFixture.general = { keywordParsingEnabled: true };
+            configFixture.cliArgs = { disableKeywordParsing: true };
+            commandParser = new CommandParser(configFixture);
 
             const prefixResult = commandParser.getVFXConfig('!hello', '!hello everyone!');
             expect(prefixResult).toBeDefined();
@@ -133,7 +133,7 @@ describe('CommandParser Keyword Parsing', () => {
 
     describe('Backward Compatibility', () => {
         test('should work with existing config when keyword parsing setting is missing', () => {
-            commandParser = new CommandParser(mockConfig);
+            commandParser = new CommandParser(configFixture);
 
             const result = commandParser.getVFXConfig('i', 'I am a mod and I approve this message');
             expect(result).toBeDefined();
@@ -141,8 +141,8 @@ describe('CommandParser Keyword Parsing', () => {
         });
 
         test('should preserve all existing functionality when keyword parsing is enabled', () => {
-            mockConfig.general = { keywordParsingEnabled: true };
-            commandParser = new CommandParser(mockConfig);
+            configFixture.general = { keywordParsingEnabled: true };
+            commandParser = new CommandParser(configFixture);
 
             const prefixResult = commandParser.getVFXConfig('!hello', '!hello everyone!');
             expect(prefixResult).toBeDefined();
@@ -159,8 +159,8 @@ describe('CommandParser Keyword Parsing', () => {
 
     describe('Performance Impact', () => {
         test('should not impact performance when keyword parsing is disabled', () => {
-            mockConfig.general = { keywordParsingEnabled: false };
-            commandParser = new CommandParser(mockConfig);
+            configFixture.general = { keywordParsingEnabled: false };
+            commandParser = new CommandParser(configFixture);
 
             const startTime = testClock.now();
 
@@ -177,8 +177,8 @@ describe('CommandParser Keyword Parsing', () => {
         });
 
         test('should skip keyword checking when keyword parsing is disabled', () => {
-            mockConfig.general = { keywordParsingEnabled: false };
-            commandParser = new CommandParser(mockConfig);
+            configFixture.general = { keywordParsingEnabled: false };
+            commandParser = new CommandParser(configFixture);
 
             const originalKeywordCheck = commandParser.parsedCommands.keywords;
             commandParser.parsedCommands.keywords = new Map();

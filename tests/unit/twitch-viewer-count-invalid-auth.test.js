@@ -13,7 +13,7 @@ describe('Twitch Viewer Count with Invalid Authentication', () => {
 
   let mockApiClient;
   let mockConnectionStateFactory;
-  let mockConfig;
+  let configFixture;
   let viewerCountProvider;
   let mockLogger;
   
@@ -26,7 +26,7 @@ describe('Twitch Viewer Count with Invalid Authentication', () => {
       createTwitchState: createMockFn()
     };
 
-    mockConfig = {
+    configFixture = {
       channel: 'hero_stream',
       username: 'hero_stream',
       accessToken: 'new_access_123456789',
@@ -45,7 +45,7 @@ describe('Twitch Viewer Count with Invalid Authentication', () => {
       viewerCountProvider = new TwitchViewerCountProvider(
         mockApiClient,
         mockConnectionStateFactory,
-        mockConfig,
+        configFixture,
         null,
         mockLogger
       );
@@ -107,7 +107,7 @@ describe('Twitch Viewer Count with Invalid Authentication', () => {
       viewerCountProvider = new TwitchViewerCountProvider(
         mockApiClient,
         mockConnectionStateFactory,
-        mockConfig,
+        configFixture,
         null,
         mockLogger
       );
@@ -145,7 +145,7 @@ describe('Twitch Viewer Count with Invalid Authentication', () => {
       viewerCountProvider = new TwitchViewerCountProvider(
         mockApiClient,
         mockConnectionStateFactory,
-        mockConfig,
+        configFixture,
         null,
         mockLogger
       );

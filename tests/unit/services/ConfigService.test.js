@@ -5,7 +5,7 @@ const { ConfigService, createConfigService } = require('../../../src/services/Co
 
 describe('ConfigService', () => {
     let configService;
-    let mockConfig;
+    let configFixture;
     let mockEventBus;
 
     beforeEach(() => {
@@ -15,7 +15,7 @@ describe('ConfigService', () => {
             emit: createMockFn()
         };
 
-        mockConfig = {
+        configFixture = {
             general: {
                 debugEnabled: true,
                 filterOldMessages: true,
@@ -71,32 +71,32 @@ describe('ConfigService', () => {
 
     describe('Constructor', () => {
         it('should initialize with config and EventBus', () => {
-            configService = new ConfigService(mockConfig, mockEventBus);
+            configService = new ConfigService(configFixture, mockEventBus);
 
-            expect(configService.config).toBe(mockConfig);
+            expect(configService.config).toBe(configFixture);
             expect(configService.eventBus).toBe(mockEventBus);
             expect(configService.cache).toBeInstanceOf(Map);
         });
 
         it('should initialize without EventBus', () => {
-            configService = new ConfigService(mockConfig);
+            configService = new ConfigService(configFixture);
 
-            expect(configService.config).toBe(mockConfig);
+            expect(configService.config).toBe(configFixture);
             expect(configService.eventBus).toBeNull();
         });
     });
 
     describe('Factory Function', () => {
         it('should create ConfigService instance', () => {
-            const service = createConfigService(mockConfig, mockEventBus);
+            const service = createConfigService(configFixture, mockEventBus);
 
             expect(service).toBeInstanceOf(ConfigService);
-            expect(service.config).toBe(mockConfig);
+            expect(service.config).toBe(configFixture);
             expect(service.eventBus).toBe(mockEventBus);
         });
 
         it('should create ConfigService without EventBus', () => {
-            const service = createConfigService(mockConfig);
+            const service = createConfigService(configFixture);
 
             expect(service).toBeInstanceOf(ConfigService);
             expect(service.eventBus).toBeNull();
@@ -105,7 +105,7 @@ describe('ConfigService', () => {
 
     describe('get() - Direct Path Access', () => {
         beforeEach(() => {
-            configService = new ConfigService(mockConfig, mockEventBus);
+            configService = new ConfigService(configFixture, mockEventBus);
         });
 
         it('should get value by dot notation path', () => {
@@ -125,7 +125,7 @@ describe('ConfigService', () => {
         });
 
         it('should handle deep nested paths', () => {
-            mockConfig.deep = { nested: { value: 'test' } };
+            configFixture.deep = { nested: { value: 'test' } };
 
             const result = configService.get('deep.nested.value');
             expect(result).toBe('test');
@@ -138,7 +138,7 @@ describe('ConfigService', () => {
 
     describe('get() - Section Key Access', () => {
         beforeEach(() => {
-            configService = new ConfigService(mockConfig, mockEventBus);
+            configService = new ConfigService(configFixture, mockEventBus);
         });
 
         it('should get value by section and key', () => {
@@ -157,12 +157,12 @@ describe('ConfigService', () => {
 
     describe('get() - Section Access', () => {
         beforeEach(() => {
-            configService = new ConfigService(mockConfig, mockEventBus);
+            configService = new ConfigService(configFixture, mockEventBus);
         });
 
         it('should return entire section', () => {
             const result = configService.get('general');
-            expect(result).toBe(mockConfig.general);
+            expect(result).toBe(configFixture.general);
         });
 
         it('should throw for missing section', () => {
@@ -178,7 +178,7 @@ describe('ConfigService', () => {
 
     describe('getPlatformConfig()', () => {
         beforeEach(() => {
-            configService = new ConfigService(mockConfig, mockEventBus);
+            configService = new ConfigService(configFixture, mockEventBus);
         });
 
         it('should return platform-specific config when available', () => {
@@ -197,7 +197,7 @@ describe('ConfigService', () => {
 
     describe('areNotificationsEnabled()', () => {
         beforeEach(() => {
-            configService = new ConfigService(mockConfig, mockEventBus);
+            configService = new ConfigService(configFixture, mockEventBus);
         });
 
         it('should check platform-specific notifications', () => {
@@ -222,7 +222,7 @@ describe('ConfigService', () => {
 
     describe('getTTSConfig()', () => {
         beforeEach(() => {
-            configService = new ConfigService(mockConfig, mockEventBus);
+            configService = new ConfigService(configFixture, mockEventBus);
         });
 
         it('should return complete TTS configuration', () => {
@@ -240,12 +240,12 @@ describe('ConfigService', () => {
         });
 
         it('should throw when TTS config is missing', () => {
-            delete mockConfig.tts;
+            delete configFixture.tts;
             expect(() => configService.getTTSConfig()).toThrow('Missing tts config');
         });
 
         it('should return TTS config even when partial', () => {
-            mockConfig.tts = { voice: 'custom' };
+            configFixture.tts = { voice: 'custom' };
             const result = configService.getTTSConfig();
             expect(result.enabled).toBe(true);
             expect(result.voice).toBe('custom');
@@ -255,7 +255,7 @@ describe('ConfigService', () => {
 
     describe('getTimingConfig()', () => {
         beforeEach(() => {
-            configService = new ConfigService(mockConfig, mockEventBus);
+            configService = new ConfigService(configFixture, mockEventBus);
         });
 
         it('should return complete timing configuration', () => {
@@ -270,12 +270,12 @@ describe('ConfigService', () => {
         });
 
         it('should throw when timing config is missing', () => {
-            delete mockConfig.timing;
+            delete configFixture.timing;
             expect(() => configService.getTimingConfig()).toThrow('Missing config section: timing');
         });
 
         it('should return timing config when partial', () => {
-            mockConfig.timing = { greetingDuration: 10000 };
+            configFixture.timing = { greetingDuration: 10000 };
             const result = configService.getTimingConfig();
             expect(result.greetingDuration).toBe(10000);
             expect(result.commandDuration).toBeUndefined();
@@ -284,7 +284,7 @@ describe('ConfigService', () => {
 
     describe('getCommand()', () => {
         beforeEach(() => {
-            configService = new ConfigService(mockConfig, mockEventBus);
+            configService = new ConfigService(configFixture, mockEventBus);
         });
 
         it('should get event command from section config', () => {
@@ -302,18 +302,18 @@ describe('ConfigService', () => {
         });
 
         it('should throw when commands section is missing for non-event command', () => {
-            delete mockConfig.commands;
+            delete configFixture.commands;
             expect(() => configService.getCommand('custom')).toThrow('Missing command config');
         });
 
         it('should use section-level command for event keys even when commands map has entry', () => {
-            mockConfig.commands.greetings = '!deprecated-command';
+            configFixture.commands.greetings = '!deprecated-command';
             const result = configService.getCommand('greetings');
             expect(result).toBe('!greet');
         });
 
         it('should throw when event section command is missing', () => {
-            delete mockConfig.greetings.command;
+            delete configFixture.greetings.command;
             expect(() => configService.getCommand('greetings')).toThrow('Missing command config');
         });
 
@@ -325,7 +325,7 @@ describe('ConfigService', () => {
 
     describe('isDebugEnabled()', () => {
         beforeEach(() => {
-            configService = new ConfigService(mockConfig, mockEventBus);
+            configService = new ConfigService(configFixture, mockEventBus);
         });
 
         it('should return debug enabled status', () => {
@@ -334,7 +334,7 @@ describe('ConfigService', () => {
         });
 
         it('should return false when debug not configured', () => {
-            delete mockConfig.general.debugEnabled;
+            delete configFixture.general.debugEnabled;
 
             expect(() => configService.isDebugEnabled()).toThrow('Missing general.debugEnabled config');
         });
@@ -342,7 +342,7 @@ describe('ConfigService', () => {
 
     describe('getSpamConfig()', () => {
         beforeEach(() => {
-            configService = new ConfigService(mockConfig, mockEventBus);
+            configService = new ConfigService(configFixture, mockEventBus);
         });
 
         it('should return spam configuration', () => {
@@ -354,21 +354,21 @@ describe('ConfigService', () => {
         });
 
         it('should throw when spam config is missing', () => {
-            delete mockConfig.spam;
+            delete configFixture.spam;
             expect(() => configService.getSpamConfig()).toThrow('Missing config section: spam');
         });
     });
 
     describe('set()', () => {
         beforeEach(() => {
-            configService = new ConfigService(mockConfig, mockEventBus);
+            configService = new ConfigService(configFixture, mockEventBus);
         });
 
         it('should set value and emit change event', () => {
             const result = configService.set('general', 'debugEnabled', false);
 
             expect(result).toBe(true);
-            expect(mockConfig.general.debugEnabled).toBe(false);
+            expect(configFixture.general.debugEnabled).toBe(false);
             expect(configService.cache.size).toBe(0);
             expect(mockEventBus.emit).toHaveBeenCalledWith('config:changed', {
                 section: 'general',
@@ -380,7 +380,7 @@ describe('ConfigService', () => {
         it('should set new key in existing section', () => {
             const result = configService.set('general', 'newKey', 'testNewValue');
 
-            expect(mockConfig.general.newKey).toBe('testNewValue');
+            expect(configFixture.general.newKey).toBe('testNewValue');
             expect(result).toBe(true);
             expect(mockEventBus.emit).toHaveBeenCalledWith('config:changed', {
                 section: 'general',
@@ -392,7 +392,7 @@ describe('ConfigService', () => {
         it('should create new section when missing', () => {
             const result = configService.set('newSection', 'key', 'testValue');
 
-            expect(mockConfig.newSection).toEqual({ key: 'testValue' });
+            expect(configFixture.newSection).toEqual({ key: 'testValue' });
             expect(result).toBe(true);
         });
 
@@ -406,18 +406,18 @@ describe('ConfigService', () => {
         });
 
         it('should work without EventBus', () => {
-            configService = new ConfigService(mockConfig);
+            configService = new ConfigService(configFixture);
 
             const result = configService.set('general', 'key', 'testValue');
 
             expect(result).toBe(true);
-            expect(mockConfig.general.key).toBe('testValue');
+            expect(configFixture.general.key).toBe('testValue');
         });
     });
 
     describe('reload()', () => {
         beforeEach(() => {
-            configService = new ConfigService(mockConfig, mockEventBus);
+            configService = new ConfigService(configFixture, mockEventBus);
         });
 
         it('should clear cache and emit reloaded event', () => {
@@ -431,7 +431,7 @@ describe('ConfigService', () => {
         });
 
         it('should work without EventBus', () => {
-            configService = new ConfigService(mockConfig);
+            configService = new ConfigService(configFixture);
 
             const result = configService.reload();
 
@@ -441,7 +441,7 @@ describe('ConfigService', () => {
 
     describe('getConfigSummary()', () => {
         beforeEach(() => {
-            configService = new ConfigService(mockConfig, mockEventBus);
+            configService = new ConfigService(configFixture, mockEventBus);
         });
 
         it('should return configuration summary', () => {
@@ -473,7 +473,7 @@ describe('ConfigService', () => {
 
     describe('Error Handling', () => {
         beforeEach(() => {
-            configService = new ConfigService(mockConfig, mockEventBus);
+            configService = new ConfigService(configFixture, mockEventBus);
         });
 
         it('should handle errors in get() gracefully', () => {
@@ -514,7 +514,7 @@ describe('ConfigService', () => {
 
     describe('EventBus Integration', () => {
         beforeEach(() => {
-            configService = new ConfigService(mockConfig, mockEventBus);
+            configService = new ConfigService(configFixture, mockEventBus);
         });
 
         it('should emit config:changed event on set', () => {
@@ -534,7 +534,7 @@ describe('ConfigService', () => {
         });
 
         it('should not emit events without EventBus', () => {
-            configService = new ConfigService(mockConfig);
+            configService = new ConfigService(configFixture);
 
             configService.set('general', 'key', 'testValue');
             configService.reload();
@@ -545,7 +545,7 @@ describe('ConfigService', () => {
 
     describe('Performance and Memory', () => {
         beforeEach(() => {
-            configService = new ConfigService(mockConfig, mockEventBus);
+            configService = new ConfigService(configFixture, mockEventBus);
         });
 
         it('should clear cache on configuration changes', () => {

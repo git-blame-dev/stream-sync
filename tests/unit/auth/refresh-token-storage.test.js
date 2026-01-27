@@ -22,10 +22,10 @@ describe('Refresh Token Storage and Update Handling (Twitch Best Practices)', ()
     });
 
     let mockLogger;
-    let mockConfig;
+    let configFixture;
     let tokenRefresh;
     let authService;
-    let mockConfigContent;
+    let configFixtureContent;
     let tokenStorePath;
 
     beforeEach(() => {
@@ -42,7 +42,7 @@ describe('Refresh Token Storage and Update Handling (Twitch Best Practices)', ()
         mockLogger = noOpLogger;
 
         tokenStorePath = '/test/token-store.json';
-        mockConfig = {
+        configFixture = {
             clientId: 'test_client_id',
             clientSecret: 'test_client_secret',
             accessToken: 'old_access_token_123',
@@ -50,7 +50,7 @@ describe('Refresh Token Storage and Update Handling (Twitch Best Practices)', ()
             tokenStorePath
         };
 
-        mockConfigContent = JSON.stringify({
+        configFixtureContent = JSON.stringify({
             otherKey: 'keep_me',
             twitch: {
                 accessToken: 'old_access_token_123',
@@ -58,13 +58,13 @@ describe('Refresh Token Storage and Update Handling (Twitch Best Practices)', ()
             }
         }, null, 2);
 
-        fsPromises.readFile.mockResolvedValue(mockConfigContent);
+        fsPromises.readFile.mockResolvedValue(configFixtureContent);
         fsPromises.writeFile.mockResolvedValue();
 
-        tokenRefresh = new TwitchTokenRefresh(mockConfig, { fs, retryAttempts: 1, retryDelay: 0 });
+        tokenRefresh = new TwitchTokenRefresh(configFixture, { fs, retryAttempts: 1, retryDelay: 0 });
         tokenRefresh.logger = mockLogger;
 
-        authService = new TwitchAuthService(mockConfig, { logger: mockLogger });
+        authService = new TwitchAuthService(configFixture, { logger: mockLogger });
     });
 
     describe('Refresh Token Updates During Refresh', () => {
@@ -78,12 +78,12 @@ describe('Refresh Token Storage and Update Handling (Twitch Best Practices)', ()
             const result = await tokenRefresh.updateConfig(newTokenData);
 
             expect(result).toBe(true);
-            expect(mockConfig.refreshToken).toBe('new_refresh_token_012');
-            expect(mockConfig.accessToken).toBe('new_access_token_789');
+            expect(configFixture.refreshToken).toBe('new_refresh_token_012');
+            expect(configFixture.accessToken).toBe('new_access_token_789');
         });
 
         test('should replace old refresh token, not duplicate it', async () => {
-            const originalRefreshToken = mockConfig.refreshToken;
+            const originalRefreshToken = configFixture.refreshToken;
             expect(originalRefreshToken).toBe('old_refresh_token_456');
 
             const newTokenData = {
@@ -94,8 +94,8 @@ describe('Refresh Token Storage and Update Handling (Twitch Best Practices)', ()
 
             await tokenRefresh.updateConfig(newTokenData);
 
-            expect(mockConfig.refreshToken).toBe('completely_new_refresh_token_999');
-            expect(mockConfig.refreshToken).not.toBe(originalRefreshToken);
+            expect(configFixture.refreshToken).toBe('completely_new_refresh_token_999');
+            expect(configFixture.refreshToken).not.toBe(originalRefreshToken);
 
             const writtenPayload = JSON.parse(fsPromises.writeFile.mock.calls[0][1]);
             expect(writtenPayload.twitch.refreshToken).toBe('completely_new_refresh_token_999');
@@ -110,8 +110,8 @@ describe('Refresh Token Storage and Update Handling (Twitch Best Practices)', ()
 
             await tokenRefresh.updateConfig(newTokenData);
 
-            expect(mockConfig.accessToken).toBe('new_access_789');
-            expect(mockConfig.refreshToken).toBe('new_refresh_012');
+            expect(configFixture.accessToken).toBe('new_access_789');
+            expect(configFixture.refreshToken).toBe('new_refresh_012');
 
             const writtenPayload = JSON.parse(fsPromises.writeFile.mock.calls[0][1]);
             expect(writtenPayload.twitch.accessToken).toBe('new_access_789');
@@ -124,13 +124,13 @@ describe('Refresh Token Storage and Update Handling (Twitch Best Practices)', ()
                 expires_in: 3600
             };
 
-            const originalRefreshToken = mockConfig.refreshToken;
+            const originalRefreshToken = configFixture.refreshToken;
 
             const result = await tokenRefresh.updateConfig(newTokenData);
 
             expect(result).toBe(true);
-            expect(mockConfig.accessToken).toBe('new_access_token_only');
-            expect(mockConfig.refreshToken).toBe(originalRefreshToken);
+            expect(configFixture.accessToken).toBe('new_access_token_only');
+            expect(configFixture.refreshToken).toBe(originalRefreshToken);
 
             const writtenPayload = JSON.parse(fsPromises.writeFile.mock.calls[0][1]);
             expect(writtenPayload.twitch.refreshToken).toBe(originalRefreshToken);
@@ -193,8 +193,8 @@ describe('Refresh Token Storage and Update Handling (Twitch Best Practices)', ()
                 .rejects.toThrow('Token configuration update failed');
 
             const memoryConsistent = (
-                (mockConfig.accessToken === 'atomic_access_123' && mockConfig.refreshToken === 'atomic_refresh_456') ||
-                (mockConfig.accessToken === 'old_access_token_123' && mockConfig.refreshToken === 'old_refresh_token_456')
+                (configFixture.accessToken === 'atomic_access_123' && configFixture.refreshToken === 'atomic_refresh_456') ||
+                (configFixture.accessToken === 'old_access_token_123' && configFixture.refreshToken === 'old_refresh_token_456')
             );
             expect(memoryConsistent).toBe(true);
         });
@@ -236,8 +236,8 @@ describe('Refresh Token Storage and Update Handling (Twitch Best Practices)', ()
 
             await tokenRefresh.updateConfig(newTokenData);
 
-            expect(mockConfig.accessToken).toBe('consistency_access_789');
-            expect(mockConfig.refreshToken).toBe('consistency_refresh_012');
+            expect(configFixture.accessToken).toBe('consistency_access_789');
+            expect(configFixture.refreshToken).toBe('consistency_refresh_012');
 
             expect(writtenContent).toBeTruthy();
             const writtenPayload = JSON.parse(writtenContent);
@@ -286,8 +286,8 @@ describe('Refresh Token Storage and Update Handling (Twitch Best Practices)', ()
             fsPromises.writeFile.mockRejectedValue(fileError);
 
             const originalTokens = {
-                accessToken: mockConfig.accessToken,
-                refreshToken: mockConfig.refreshToken
+                accessToken: configFixture.accessToken,
+                refreshToken: configFixture.refreshToken
             };
 
             const newTokenData = {
@@ -299,8 +299,8 @@ describe('Refresh Token Storage and Update Handling (Twitch Best Practices)', ()
             await expect(tokenRefresh.updateConfig(newTokenData))
                 .rejects.toThrow('Token configuration update failed');
 
-            expect(mockConfig.accessToken).toBe(originalTokens.accessToken);
-            expect(mockConfig.refreshToken).toBe(originalTokens.refreshToken);
+            expect(configFixture.accessToken).toBe(originalTokens.accessToken);
+            expect(configFixture.refreshToken).toBe(originalTokens.refreshToken);
         });
     });
 
@@ -308,15 +308,15 @@ describe('Refresh Token Storage and Update Handling (Twitch Best Practices)', ()
         test('should handle new refresh token same as old token', async () => {
             const sameTokenData = {
                 access_token: 'new_access_different',
-                refresh_token: mockConfig.refreshToken,
+                refresh_token: configFixture.refreshToken,
                 expires_in: 3600
             };
 
             const result = await tokenRefresh.updateConfig(sameTokenData);
 
             expect(result).toBe(true);
-            expect(mockConfig.accessToken).toBe('new_access_different');
-            expect(mockConfig.refreshToken).toBe(sameTokenData.refresh_token);
+            expect(configFixture.accessToken).toBe('new_access_different');
+            expect(configFixture.refreshToken).toBe(sameTokenData.refresh_token);
         });
 
         test('should handle malformed refresh token responses', async () => {
@@ -326,13 +326,13 @@ describe('Refresh Token Storage and Update Handling (Twitch Best Practices)', ()
                 expires_in: 3600
             };
 
-            const originalRefreshToken = mockConfig.refreshToken;
+            const originalRefreshToken = configFixture.refreshToken;
 
             const result = await tokenRefresh.updateConfig(malformedData);
 
             expect(result).toBe(true);
-            expect(mockConfig.accessToken).toBe('valid_access_123');
-            expect(mockConfig.refreshToken).toBe(originalRefreshToken);
+            expect(configFixture.accessToken).toBe('valid_access_123');
+            expect(configFixture.refreshToken).toBe(originalRefreshToken);
         });
 
         test('should handle missing refresh token in API response', async () => {
@@ -341,13 +341,13 @@ describe('Refresh Token Storage and Update Handling (Twitch Best Practices)', ()
                 expires_in: 3600
             };
 
-            const originalRefreshToken = mockConfig.refreshToken;
+            const originalRefreshToken = configFixture.refreshToken;
 
             const result = await tokenRefresh.updateConfig(incompleteData);
 
             expect(result).toBe(true);
-            expect(mockConfig.accessToken).toBe('incomplete_access_456');
-            expect(mockConfig.refreshToken).toBe(originalRefreshToken);
+            expect(configFixture.accessToken).toBe('incomplete_access_456');
+            expect(configFixture.refreshToken).toBe(originalRefreshToken);
 
             const writtenPayload = JSON.parse(fsPromises.writeFile.mock.calls[0][1]);
             expect(writtenPayload.twitch.refreshToken).toBe(originalRefreshToken);
@@ -374,8 +374,8 @@ describe('Refresh Token Storage and Update Handling (Twitch Best Practices)', ()
 
     describe('Concurrent Access Protection', () => {
         test('should prevent multiple refresh attempts from corrupting storage', async () => {
-            const tokenRefresh1 = new TwitchTokenRefresh(mockConfig, { fs });
-            const tokenRefresh2 = new TwitchTokenRefresh(mockConfig, { fs });
+            const tokenRefresh1 = new TwitchTokenRefresh(configFixture, { fs });
+            const tokenRefresh2 = new TwitchTokenRefresh(configFixture, { fs });
 
             tokenRefresh1.logger = mockLogger;
             tokenRefresh2.logger = mockLogger;
@@ -400,8 +400,8 @@ describe('Refresh Token Storage and Update Handling (Twitch Best Practices)', ()
             expect(result1.status).toBe('fulfilled');
             expect(result2.status).toBe('fulfilled');
 
-            const finalAccessToken = mockConfig.accessToken;
-            const finalRefreshToken = mockConfig.refreshToken;
+            const finalAccessToken = configFixture.accessToken;
+            const finalRefreshToken = configFixture.refreshToken;
             
             const validCombinations = [
                 { access: 'concurrent_access_1', refresh: 'concurrent_refresh_1' },
@@ -447,7 +447,7 @@ describe('Refresh Token Storage and Update Handling (Twitch Best Practices)', ()
         test('should use refresh token lock to prevent simultaneous refreshes', async () => {
             const mockTokenRefresh = {
                 isRefreshing: false,
-                config: mockConfig,
+                config: configFixture,
                 logger: mockLogger,
                 refreshToken: async function(refreshToken) {
                     if (this.isRefreshing) {
@@ -485,7 +485,7 @@ describe('Refresh Token Storage and Update Handling (Twitch Best Practices)', ()
             authService.updateRefreshToken('auth_service_refresh_999');
 
             expect(authService.getRefreshToken()).toBe('auth_service_refresh_999');
-            expect(mockConfig.refreshToken).toBe('auth_service_refresh_999');
+            expect(configFixture.refreshToken).toBe('auth_service_refresh_999');
         });
 
         test('should maintain consistency between auth service and token refresh utility', async () => {

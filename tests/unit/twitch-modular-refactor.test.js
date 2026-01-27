@@ -220,7 +220,7 @@ describe('TwitchPlatform Modular Refactor', () => {
 
     describe('TwitchViewerCountProvider Module', () => {
         let mockApiClient;
-        let mockConfig;
+        let configFixture;
         let mockLogger;
         let provider;
 
@@ -229,11 +229,11 @@ describe('TwitchPlatform Modular Refactor', () => {
             mockApiClient = {
                 getStreamInfo: createMockFn()
             };
-            mockConfig = {
+            configFixture = {
                 channel: 'test_channel',
                 eventSub: { isActive: () => true }
             };
-            provider = new TwitchViewerCountProvider(mockApiClient, ConnectionStateFactory, mockConfig, null, mockLogger);
+            provider = new TwitchViewerCountProvider(mockApiClient, ConnectionStateFactory, configFixture, null, mockLogger);
         });
 
         describe('when provider is ready', () => {
@@ -263,7 +263,7 @@ describe('TwitchPlatform Modular Refactor', () => {
 
         describe('when provider is not ready', () => {
             beforeEach(() => {
-                const notReadyConfig = { ...mockConfig, channel: null };
+                const notReadyConfig = { ...configFixture, channel: null };
                 provider = new TwitchViewerCountProvider(mockApiClient, ConnectionStateFactory, notReadyConfig, null, mockLogger);
             });
 

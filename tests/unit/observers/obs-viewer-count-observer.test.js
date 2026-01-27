@@ -23,10 +23,10 @@ describe('OBSViewerCountObserver - Behavior-Focused Testing', () => {
     let obsManager;
     let observer;
     let logger;
-    let mockConfig;
+    let configFixture;
 
     beforeEach(() => {
-        mockConfig = createMockConfig();
+        configFixture = createMockConfig();
         logger = noOpLogger;
 
         obsManager = createMockOBSManager('connected', {
@@ -34,7 +34,7 @@ describe('OBSViewerCountObserver - Behavior-Focused Testing', () => {
             isConnected: createMockFn().mockReturnValue(true)
         });
 
-        observer = new OBSViewerCountObserver(obsManager, logger, { config: mockConfig });
+        observer = new OBSViewerCountObserver(obsManager, logger, { config: configFixture });
     });
 
     describe('Observer Initialization & Interface Compliance', () => {
@@ -59,7 +59,7 @@ describe('OBSViewerCountObserver - Behavior-Focused Testing', () => {
         });
 
         test('should initialize with provided OBS manager dependency', () => {
-            const testObserver = new OBSViewerCountObserver(obsManager, logger, { config: mockConfig });
+            const testObserver = new OBSViewerCountObserver(obsManager, logger, { config: configFixture });
 
             expect(testObserver).toBeDefined();
             expect(testObserver.obsManager).toBe(obsManager);
@@ -67,7 +67,7 @@ describe('OBSViewerCountObserver - Behavior-Focused Testing', () => {
 
         test('should handle initialization without OBS connection gracefully', async () => {
             const disconnectedOBS = createMockOBSManager('disconnected');
-            const testObserver = new OBSViewerCountObserver(disconnectedOBS, logger, { config: mockConfig });
+            const testObserver = new OBSViewerCountObserver(disconnectedOBS, logger, { config: configFixture });
 
             const initPromise = testObserver.initialize();
 
@@ -294,7 +294,7 @@ describe('OBSViewerCountObserver - Behavior-Focused Testing', () => {
 
     describe('Configuration-Driven Behavior', () => {
         test('should respect platform-specific enable/disable settings', async () => {
-            mockConfig.youtube = {
+            configFixture.youtube = {
                 viewerCountEnabled: false,
                 viewerCountSource: 'youtube viewer count'
             };
@@ -310,11 +310,11 @@ describe('OBSViewerCountObserver - Behavior-Focused Testing', () => {
         });
 
         test('should use configured OBS source names per platform', async () => {
-            mockConfig.youtube = { viewerCountEnabled: true, viewerCountSource: 'yt_viewers' };
-            mockConfig.twitch = { viewerCountEnabled: true, viewerCountSource: 'ttv_viewers' };
-            mockConfig.tiktok = { viewerCountEnabled: true, viewerCountSource: 'tt_viewers' };
+            configFixture.youtube = { viewerCountEnabled: true, viewerCountSource: 'yt_viewers' };
+            configFixture.twitch = { viewerCountEnabled: true, viewerCountSource: 'ttv_viewers' };
+            configFixture.tiktok = { viewerCountEnabled: true, viewerCountSource: 'tt_viewers' };
 
-            for (const [platform, config] of Object.entries({ youtube: mockConfig.youtube, twitch: mockConfig.twitch, tiktok: mockConfig.tiktok })) {
+            for (const [platform, config] of Object.entries({ youtube: configFixture.youtube, twitch: configFixture.twitch, tiktok: configFixture.tiktok })) {
                 obsManager.call.mockClear();
 
                 await observer.onViewerCountUpdate({
@@ -334,7 +334,7 @@ describe('OBSViewerCountObserver - Behavior-Focused Testing', () => {
         });
 
         test('should handle missing configuration gracefully', async () => {
-            delete mockConfig.unknown;
+            delete configFixture.unknown;
 
             const updatePromise = observer.onViewerCountUpdate({
                 platform: 'unknown',
@@ -348,7 +348,7 @@ describe('OBSViewerCountObserver - Behavior-Focused Testing', () => {
         });
 
         test('should adapt to configuration changes at runtime', async () => {
-            mockConfig.youtube = { viewerCountEnabled: false, viewerCountSource: 'source1' };
+            configFixture.youtube = { viewerCountEnabled: false, viewerCountSource: 'source1' };
 
             await observer.onViewerCountUpdate({
                 platform: 'youtube',
@@ -359,7 +359,7 @@ describe('OBSViewerCountObserver - Behavior-Focused Testing', () => {
 
             expect(obsManager.call).not.toHaveBeenCalled();
 
-            mockConfig.youtube = { viewerCountEnabled: true, viewerCountSource: 'source2' };
+            configFixture.youtube = { viewerCountEnabled: true, viewerCountSource: 'source2' };
 
             await observer.onViewerCountUpdate({
                 platform: 'youtube',
@@ -380,7 +380,7 @@ describe('OBSViewerCountObserver - Behavior-Focused Testing', () => {
     describe('Error Recovery & Resilience', () => {
         test('should continue operating when OBS connection unavailable', async () => {
             const disconnectedOBS = createMockOBSManager('disconnected');
-            const resilientObserver = new OBSViewerCountObserver(disconnectedOBS, logger, { config: mockConfig });
+            const resilientObserver = new OBSViewerCountObserver(disconnectedOBS, logger, { config: configFixture });
 
             const updatePromise = resilientObserver.onViewerCountUpdate({
                 platform: 'youtube',
@@ -395,7 +395,7 @@ describe('OBSViewerCountObserver - Behavior-Focused Testing', () => {
         test('should handle missing OBS sources gracefully', async () => {
             obsManager.call.mockRejectedValue(new Error('Source not found'));
 
-            mockConfig.youtube = {
+            configFixture.youtube = {
                 viewerCountEnabled: true,
                 viewerCountSource: 'missing_source'
             };
@@ -415,7 +415,7 @@ describe('OBSViewerCountObserver - Behavior-Focused Testing', () => {
                 .mockRejectedValueOnce(new Error('Temporary failure'))
                 .mockResolvedValueOnce({ status: 'success' });
 
-            mockConfig.youtube = {
+            configFixture.youtube = {
                 viewerCountEnabled: true,
                 viewerCountSource: 'test_source'
             };
@@ -440,7 +440,7 @@ describe('OBSViewerCountObserver - Behavior-Focused Testing', () => {
         test('should maintain system stability during OBS errors', async () => {
             obsManager.call.mockRejectedValue(new Error('OBS disconnected'));
 
-            mockConfig.youtube = {
+            configFixture.youtube = {
                 viewerCountEnabled: true,
                 viewerCountSource: 'test_source'
             };

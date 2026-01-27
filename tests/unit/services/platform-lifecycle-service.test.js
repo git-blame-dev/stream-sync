@@ -15,7 +15,7 @@ const createDeferred = () => {
 describe('PlatformLifecycleService', () => {
     let service;
     let mockEventBus;
-    let mockConfig;
+    let configFixture;
     let mockStreamDetector;
 
     beforeEach(() => {
@@ -24,7 +24,7 @@ describe('PlatformLifecycleService', () => {
             subscribe: createMockFn().mockReturnValue(() => {})
         };
 
-        mockConfig = {
+        configFixture = {
             twitch: { enabled: false },
             youtube: { enabled: false },
             tiktok: { enabled: false }
@@ -37,7 +37,7 @@ describe('PlatformLifecycleService', () => {
         };
 
         service = new PlatformLifecycleService({
-            config: mockConfig,
+            config: configFixture,
             eventBus: mockEventBus,
             logger: noOpLogger,
             streamDetector: mockStreamDetector
@@ -46,7 +46,7 @@ describe('PlatformLifecycleService', () => {
 
     describe('Service Status Reporting', () => {
         it('reports ready platforms and stream statuses', async () => {
-            mockConfig.twitch = {
+            configFixture.twitch = {
                 enabled: true,
                 channel: 'test-channel',
                 clientId: 'test-client-id',
@@ -72,7 +72,7 @@ describe('PlatformLifecycleService', () => {
 
             service.dispose();
             service = new PlatformLifecycleService({
-                config: mockConfig,
+                config: configFixture,
                 eventBus: mockEventBus,
                 logger: noOpLogger,
                 streamDetector
@@ -90,7 +90,7 @@ describe('PlatformLifecycleService', () => {
         });
 
         it('reports failed platforms with error context', async () => {
-            mockConfig.youtube = { enabled: true, username: 'channel' };
+            configFixture.youtube = { enabled: true, username: 'channel' };
 
             const mockPlatformClass = createMockFn().mockImplementation(() => ({
                 initialize: createMockFn().mockRejectedValue(new Error('connect failed')),
@@ -121,7 +121,7 @@ describe('PlatformLifecycleService', () => {
 
     describe('Platform Initialization', () => {
         it('should initialize enabled platforms', async () => {
-            mockConfig.twitch = {
+            configFixture.twitch = {
                 enabled: true,
                 channel: 'test-channel',
                 clientId: 'test-client-id',
@@ -175,7 +175,7 @@ describe('PlatformLifecycleService', () => {
         });
 
         it('should emit platform:initialized event when platform is ready', async () => {
-            mockConfig.youtube = { enabled: true, username: 'test-channel' };
+            configFixture.youtube = { enabled: true, username: 'test-channel' };
 
             const mockPlatformClass = createMockFn().mockImplementation(() => ({
                 initialize: createMockFn().mockResolvedValue(true),
@@ -193,7 +193,7 @@ describe('PlatformLifecycleService', () => {
         });
 
         it('should emit EventBus platform events when default handlers are used', async () => {
-            mockConfig.twitch = { enabled: true };
+            configFixture.twitch = { enabled: true };
             const timestamp = new Date().toISOString();
 
             const mockPlatformClass = createMockFn().mockImplementation(() => ({
@@ -279,7 +279,7 @@ describe('PlatformLifecycleService', () => {
         });
 
         it('should validate PlatformClass is a constructor', async () => {
-            mockConfig.twitch = { enabled: true };
+            configFixture.twitch = { enabled: true };
             const platformModules = { twitch: null };
 
             await service.initializeAllPlatforms(platformModules, {});
@@ -312,7 +312,7 @@ describe('PlatformLifecycleService', () => {
 
             service.dispose();
             service = new PlatformLifecycleService({
-                config: mockConfig,
+                config: configFixture,
                 eventBus: mockEventBus,
                 logger: noOpLogger,
                 dependencyFactory: mockFactory,
@@ -397,7 +397,7 @@ describe('PlatformLifecycleService', () => {
 
     describe('Stream Detection Coordination', () => {
         it('should connect YouTube directly without invoking StreamDetector (platform-managed detection)', async () => {
-            mockConfig.youtube = { enabled: true, username: 'test-channel' };
+            configFixture.youtube = { enabled: true, username: 'test-channel' };
 
             const platformInitSpy = createMockFn().mockResolvedValue(true);
             const mockPlatformClass = createMockFn().mockImplementation(() => ({
@@ -412,7 +412,7 @@ describe('PlatformLifecycleService', () => {
 
             service.dispose();
             service = new PlatformLifecycleService({
-                config: mockConfig,
+                config: configFixture,
                 eventBus: mockEventBus,
                 logger: noOpLogger,
                 streamDetector
@@ -428,7 +428,7 @@ describe('PlatformLifecycleService', () => {
 
     describe('Background Initialization', () => {
         it('should run TikTok initialization in background without blocking', async () => {
-            mockConfig.tiktok = { enabled: true, username: 'streamer' };
+            configFixture.tiktok = { enabled: true, username: 'streamer' };
 
             const deferred = createDeferred();
             const platformInitSpy = createMockFn().mockImplementation(() => deferred.promise);
@@ -451,7 +451,7 @@ describe('PlatformLifecycleService', () => {
 
     describe('Error Handling and Recovery', () => {
         it('marks platform failed when stream detection throws', async () => {
-            mockConfig.custom = { enabled: true };
+            configFixture.custom = { enabled: true };
 
             const platformInitSpy = createMockFn().mockResolvedValue(true);
             const mockPlatformClass = createMockFn().mockImplementation(() => ({
@@ -466,7 +466,7 @@ describe('PlatformLifecycleService', () => {
 
             service.dispose();
             service = new PlatformLifecycleService({
-                config: mockConfig,
+                config: configFixture,
                 eventBus: mockEventBus,
                 logger: noOpLogger,
                 streamDetector
@@ -485,7 +485,7 @@ describe('PlatformLifecycleService', () => {
         });
 
         it('marks platform failed when stream detection is unavailable', async () => {
-            mockConfig.custom = { enabled: true };
+            configFixture.custom = { enabled: true };
 
             const platformInitSpy = createMockFn().mockResolvedValue(true);
             const mockPlatformClass = createMockFn().mockImplementation(() => ({
@@ -496,7 +496,7 @@ describe('PlatformLifecycleService', () => {
 
             service.dispose();
             service = new PlatformLifecycleService({
-                config: mockConfig,
+                config: configFixture,
                 eventBus: mockEventBus,
                 logger: noOpLogger,
                 streamDetector: null
@@ -518,7 +518,7 @@ describe('PlatformLifecycleService', () => {
 
     describe('Platform Shutdown', () => {
         it('should cleanup all platforms gracefully on service shutdown', async () => {
-            mockConfig.twitch = { enabled: true };
+            configFixture.twitch = { enabled: true };
 
             const cleanupSpy = createMockFn().mockResolvedValue();
             const mockPlatformClass = createMockFn().mockImplementation(() => ({
@@ -536,7 +536,7 @@ describe('PlatformLifecycleService', () => {
         });
 
         it('prefers cleanup even when a disconnect method exists', async () => {
-            mockConfig.twitch = { enabled: true };
+            configFixture.twitch = { enabled: true };
 
             const cleanupSpy = createMockFn().mockResolvedValue();
             const disconnectSpy = createMockFn().mockResolvedValue();

@@ -21,7 +21,7 @@ describe('OBS Goals Module Characterization Tests', () => {
 
     let goalsModule;
     let mockObsManager;
-    let mockConfig;
+    let configFixture;
     let mockSourcesManager;
     let mockGoalTracker;
 
@@ -32,7 +32,7 @@ describe('OBS Goals Module Characterization Tests', () => {
             isConnected: createMockFn().mockReturnValue(true)
         };
 
-        mockConfig = {
+        configFixture = {
             goals: {
                 enabled: true,
                 tiktokGoalEnabled: true,
@@ -79,7 +79,7 @@ describe('OBS Goals Module Characterization Tests', () => {
 
         goalsModule = createOBSGoalsManager(mockObsManager, {
             logger: noOpLogger,
-            config: mockConfig,
+            config: configFixture,
             updateTextSource: mockSourcesManager.updateTextSource,
             goalTracker: mockGoalTracker
         });

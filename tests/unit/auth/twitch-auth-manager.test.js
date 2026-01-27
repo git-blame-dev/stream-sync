@@ -4,14 +4,14 @@ const { noOpLogger } = require('../../helpers/mock-factories');
 
 describe('TwitchAuthManager', () => {
     let TwitchAuthManager;
-    let mockConfig;
+    let configFixture;
     let MockTwitchAuthService;
     let MockTwitchAuthInitializer;
     let mockAuthServiceInstance;
     let mockAuthInitializerInstance;
 
     beforeEach(() => {
-        mockConfig = {
+        configFixture = {
             clientId: 'test-client-id',
             clientSecret: 'test-client-secret',
             accessToken: 'test-access-token',
@@ -20,7 +20,7 @@ describe('TwitchAuthManager', () => {
         };
 
         mockAuthServiceInstance = {
-            config: { ...mockConfig },
+            config: { ...configFixture },
             userId: 123456789,
             tokenExpiresAt: 9999999999999,
             initialize: createMockFn().mockResolvedValue(),
@@ -52,7 +52,7 @@ describe('TwitchAuthManager', () => {
         delete require.cache[require.resolve('../../../src/auth/TwitchAuthManager')];
     });
 
-    function createManager(config = mockConfig, extraDeps = {}) {
+    function createManager(config = configFixture, extraDeps = {}) {
         return TwitchAuthManager.getInstance(config, {
             logger: noOpLogger,
             TwitchAuthService: MockTwitchAuthService,
@@ -100,7 +100,7 @@ describe('TwitchAuthManager', () => {
         });
 
         test('should transition to ERROR state on initialization failure', async () => {
-            const invalidConfig = { ...mockConfig, clientId: null };
+            const invalidConfig = { ...configFixture, clientId: null };
             const manager = createManager(invalidConfig);
 
             await expect(manager.initialize()).rejects.toThrow();
@@ -152,19 +152,19 @@ describe('TwitchAuthManager', () => {
 
     describe('Error Handling and Recovery', () => {
         test('should allow reinitialization after error state', async () => {
-            const invalidConfig = { ...mockConfig, clientId: null };
+            const invalidConfig = { ...configFixture, clientId: null };
             const manager = createManager(invalidConfig);
 
             await expect(manager.initialize()).rejects.toThrow();
             expect(manager.getState()).toBe('ERROR');
 
-            manager.updateConfig(mockConfig);
+            manager.updateConfig(configFixture);
             await manager.initialize();
             expect(manager.getState()).toBe('READY');
         });
 
         test('should provide error details when in ERROR state', async () => {
-            const invalidConfig = { ...mockConfig, clientId: null };
+            const invalidConfig = { ...configFixture, clientId: null };
             const manager = createManager(invalidConfig);
 
             await expect(manager.initialize()).rejects.toThrow();
@@ -184,7 +184,7 @@ describe('TwitchAuthManager', () => {
         });
 
         test('requires client credentials even when tokens are present', () => {
-            const invalidConfig = { ...mockConfig, clientSecret: undefined };
+            const invalidConfig = { ...configFixture, clientSecret: undefined };
             const manager = createManager(invalidConfig);
 
             expect(() => manager.validateConfig()).toThrow('missing fields [clientSecret]');
@@ -193,7 +193,7 @@ describe('TwitchAuthManager', () => {
         test('should allow config updates', () => {
             const manager = createManager();
 
-            const newConfig = { ...mockConfig, accessToken: 'new-token' };
+            const newConfig = { ...configFixture, accessToken: 'new-token' };
             manager.updateConfig(newConfig);
 
             expect(manager.getConfig().accessToken).toBe('new-token');
@@ -205,7 +205,7 @@ describe('TwitchAuthManager', () => {
             await manager.initialize();
             expect(manager.getState()).toBe('READY');
 
-            manager.updateConfig({ ...mockConfig, accessToken: 'new-token' });
+            manager.updateConfig({ ...configFixture, accessToken: 'new-token' });
             expect(manager.getState()).toBe('UNINITIALIZED');
         });
     });
