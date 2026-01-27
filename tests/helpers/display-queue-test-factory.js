@@ -49,7 +49,6 @@ function createRealGoalsManager(mockOBS, realSourcesManager, realGoalTracker) {
     return createOBSGoalsManager(mockOBS, {
         logger: noOpLogger,
         config,
-        configManager: { getSection: () => ({}) },
         updateTextSource: realSourcesManager.updateTextSource,
         goalTracker: realGoalTracker
     });
