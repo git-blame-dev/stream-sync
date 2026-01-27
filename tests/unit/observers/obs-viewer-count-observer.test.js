@@ -7,25 +7,26 @@ const { expectNoTechnicalArtifacts } = require('../../helpers/behavior-validatio
 
 const defaultPlatforms = ['twitch', 'youtube', 'tiktok'];
 
-function createMockConfigManager(overrides = {}) {
-    return {
-        getSection: createMockFn().mockImplementation((platform) => ({
+function createMockConfig(overrides = {}) {
+    const config = {};
+    for (const platform of defaultPlatforms) {
+        config[platform] = {
             viewerCountEnabled: true,
             viewerCountSource: `${platform} viewer count`,
             ...overrides[platform]
-        })),
-        getPlatforms: createMockFn().mockReturnValue(defaultPlatforms)
-    };
+        };
+    }
+    return config;
 }
 
 describe('OBSViewerCountObserver - Behavior-Focused Testing', () => {
     let obsManager;
     let observer;
     let logger;
-    let mockConfigManager;
+    let mockConfig;
 
     beforeEach(() => {
-        mockConfigManager = createMockConfigManager();
+        mockConfig = createMockConfig();
         logger = noOpLogger;
 
         obsManager = createMockOBSManager('connected', {
@@ -33,7 +34,7 @@ describe('OBSViewerCountObserver - Behavior-Focused Testing', () => {
             isConnected: createMockFn().mockReturnValue(true)
         });
 
-        observer = new OBSViewerCountObserver(obsManager, logger, { configManager: mockConfigManager });
+        observer = new OBSViewerCountObserver(obsManager, logger, { config: mockConfig });
     });
 
     describe('Observer Initialization & Interface Compliance', () => {
@@ -58,7 +59,7 @@ describe('OBSViewerCountObserver - Behavior-Focused Testing', () => {
         });
 
         test('should initialize with provided OBS manager dependency', () => {
-            const testObserver = new OBSViewerCountObserver(obsManager, logger, { configManager: mockConfigManager });
+            const testObserver = new OBSViewerCountObserver(obsManager, logger, { config: mockConfig });
 
             expect(testObserver).toBeDefined();
             expect(testObserver.obsManager).toBe(obsManager);
@@ -66,7 +67,7 @@ describe('OBSViewerCountObserver - Behavior-Focused Testing', () => {
 
         test('should handle initialization without OBS connection gracefully', async () => {
             const disconnectedOBS = createMockOBSManager('disconnected');
-            const testObserver = new OBSViewerCountObserver(disconnectedOBS, logger, { configManager: mockConfigManager });
+            const testObserver = new OBSViewerCountObserver(disconnectedOBS, logger, { config: mockConfig });
 
             const initPromise = testObserver.initialize();
 
@@ -293,10 +294,10 @@ describe('OBSViewerCountObserver - Behavior-Focused Testing', () => {
 
     describe('Configuration-Driven Behavior', () => {
         test('should respect platform-specific enable/disable settings', async () => {
-            mockConfigManager.getSection.mockReturnValue({
+            mockConfig.youtube = {
                 viewerCountEnabled: false,
                 viewerCountSource: 'youtube viewer count'
-            });
+            };
 
             await observer.onViewerCountUpdate({
                 platform: 'youtube',
@@ -309,15 +310,11 @@ describe('OBSViewerCountObserver - Behavior-Focused Testing', () => {
         });
 
         test('should use configured OBS source names per platform', async () => {
-            const platformConfigs = {
-                'youtube': { viewerCountEnabled: true, viewerCountSource: 'yt_viewers' },
-                'twitch': { viewerCountEnabled: true, viewerCountSource: 'ttv_viewers' },
-                'tiktok': { viewerCountEnabled: true, viewerCountSource: 'tt_viewers' }
-            };
+            mockConfig.youtube = { viewerCountEnabled: true, viewerCountSource: 'yt_viewers' };
+            mockConfig.twitch = { viewerCountEnabled: true, viewerCountSource: 'ttv_viewers' };
+            mockConfig.tiktok = { viewerCountEnabled: true, viewerCountSource: 'tt_viewers' };
 
-            mockConfigManager.getSection.mockImplementation(platform => platformConfigs[platform]);
-
-            for (const [platform, config] of Object.entries(platformConfigs)) {
+            for (const [platform, config] of Object.entries({ youtube: mockConfig.youtube, twitch: mockConfig.twitch, tiktok: mockConfig.tiktok })) {
                 obsManager.call.mockClear();
 
                 await observer.onViewerCountUpdate({
@@ -337,7 +334,7 @@ describe('OBSViewerCountObserver - Behavior-Focused Testing', () => {
         });
 
         test('should handle missing configuration gracefully', async () => {
-            mockConfigManager.getSection.mockReturnValue(null);
+            delete mockConfig.unknown;
 
             const updatePromise = observer.onViewerCountUpdate({
                 platform: 'unknown',
@@ -351,9 +348,7 @@ describe('OBSViewerCountObserver - Behavior-Focused Testing', () => {
         });
 
         test('should adapt to configuration changes at runtime', async () => {
-            mockConfigManager.getSection
-                .mockReturnValueOnce({ viewerCountEnabled: false, viewerCountSource: 'source1' })
-                .mockReturnValueOnce({ viewerCountEnabled: true, viewerCountSource: 'source2' });
+            mockConfig.youtube = { viewerCountEnabled: false, viewerCountSource: 'source1' };
 
             await observer.onViewerCountUpdate({
                 platform: 'youtube',
@@ -363,6 +358,8 @@ describe('OBSViewerCountObserver - Behavior-Focused Testing', () => {
             });
 
             expect(obsManager.call).not.toHaveBeenCalled();
+
+            mockConfig.youtube = { viewerCountEnabled: true, viewerCountSource: 'source2' };
 
             await observer.onViewerCountUpdate({
                 platform: 'youtube',
@@ -383,7 +380,7 @@ describe('OBSViewerCountObserver - Behavior-Focused Testing', () => {
     describe('Error Recovery & Resilience', () => {
         test('should continue operating when OBS connection unavailable', async () => {
             const disconnectedOBS = createMockOBSManager('disconnected');
-            const resilientObserver = new OBSViewerCountObserver(disconnectedOBS, logger, { configManager: mockConfigManager });
+            const resilientObserver = new OBSViewerCountObserver(disconnectedOBS, logger, { config: mockConfig });
 
             const updatePromise = resilientObserver.onViewerCountUpdate({
                 platform: 'youtube',
@@ -398,10 +395,10 @@ describe('OBSViewerCountObserver - Behavior-Focused Testing', () => {
         test('should handle missing OBS sources gracefully', async () => {
             obsManager.call.mockRejectedValue(new Error('Source not found'));
 
-            mockConfigManager.getSection.mockReturnValue({
+            mockConfig.youtube = {
                 viewerCountEnabled: true,
                 viewerCountSource: 'missing_source'
-            });
+            };
 
             const updatePromise = observer.onViewerCountUpdate({
                 platform: 'youtube',
@@ -418,10 +415,10 @@ describe('OBSViewerCountObserver - Behavior-Focused Testing', () => {
                 .mockRejectedValueOnce(new Error('Temporary failure'))
                 .mockResolvedValueOnce({ status: 'success' });
 
-            mockConfigManager.getSection.mockReturnValue({
+            mockConfig.youtube = {
                 viewerCountEnabled: true,
                 viewerCountSource: 'test_source'
-            });
+            };
 
             await observer.onViewerCountUpdate({
                 platform: 'youtube',
@@ -443,10 +440,10 @@ describe('OBSViewerCountObserver - Behavior-Focused Testing', () => {
         test('should maintain system stability during OBS errors', async () => {
             obsManager.call.mockRejectedValue(new Error('OBS disconnected'));
 
-            mockConfigManager.getSection.mockReturnValue({
+            mockConfig.youtube = {
                 viewerCountEnabled: true,
                 viewerCountSource: 'test_source'
-            });
+            };
 
             const operations = [
                 observer.onViewerCountUpdate({
@@ -494,8 +491,6 @@ describe('OBSViewerCountObserver - Behavior-Focused Testing', () => {
         });
 
         test('should validate platform names and reject invalid platforms', async () => {
-            mockConfigManager.getSection.mockReturnValue(null);
-
             const updatePromise = observer.onViewerCountUpdate({
                 platform: 'invalid-platform',
                 count: 1000,
