@@ -381,11 +381,8 @@ function createDonationSpamDetection(config, dependencies) {
     return new DonationSpamDetection(config, dependencies);
 }
 
-// Export both classes and functions for flexibility
 module.exports = {
-    // Class exports
     SpamDetectionConfig,
-    DonationSpamDetection,
     createSpamDetectionConfig,
     createDonationSpamDetection
 }; 
