@@ -2,7 +2,16 @@ const { describe, it, expect, beforeEach, afterEach } = require('bun:test');
 const { createMockFn, restoreAllMocks } = require('../../helpers/bun-mock-utils');
 
 const fs = require('fs');
-const { config, configManager } = require('../../../src/core/config');
+const CONFIG_MODULE_PATH = require.resolve('../../../src/core/config');
+
+function resetConfigModule() {
+    delete require.cache[CONFIG_MODULE_PATH];
+}
+
+function loadFreshConfig() {
+    resetConfigModule();
+    return require('../../../src/core/config');
+}
 
 let originalReadFileSync;
 let originalExistsSync;
@@ -67,28 +76,37 @@ ${streamelementsSection}
 `;
 
 describe('ConfigLoader behavior', () => {
-    const setupConfigMocks = (content) => {
-        fs.existsSync = createMockFn((filePath) => filePath === testConfigPath);
+    let currentConfig;
+    let currentConfigManager;
+
+    const setupConfigMocks = (content, configPath = testConfigPath) => {
+        fs.existsSync = createMockFn((filePath) => filePath === configPath);
         fs.readFileSync = createMockFn((filePath) => {
-            if (filePath === testConfigPath) return content;
+            if (filePath === configPath) return content;
             throw new Error(`ENOENT: no such file: ${filePath}`);
         });
+    };
+
+    const reloadConfig = (content, configPath = testConfigPath) => {
+        setupConfigMocks(content, configPath);
+        process.env.CHAT_BOT_CONFIG_PATH = configPath;
+        const fresh = loadFreshConfig();
+        currentConfig = fresh.config;
+        currentConfigManager = fresh.configManager;
+        return { config: currentConfig, configManager: currentConfigManager };
     };
 
     beforeEach(() => {
         originalReadFileSync = fs.readFileSync;
         originalExistsSync = fs.existsSync;
-        configManager.config = null;
-        configManager.isLoaded = false;
     });
 
     afterEach(() => {
         fs.readFileSync = originalReadFileSync;
         fs.existsSync = originalExistsSync;
         restoreAllMocks();
-        configManager.config = null;
-        configManager.isLoaded = false;
-        configManager.configPath = configManager.defaultConfigPath;
+        resetConfigModule();
+        delete process.env.CHAT_BOT_CONFIG_PATH;
     });
 
     it('throws user-friendly error when config file is missing in non-test environment', () => {
@@ -99,11 +117,9 @@ describe('ConfigLoader behavior', () => {
         process.env.NODE_ENV = 'production';
         try {
             fs.existsSync = createMockFn(() => false);
-            configManager.config = null;
-            configManager.isLoaded = false;
-            configManager.configPath = '/tmp/non-existent-config.ini';
+            process.env.CHAT_BOT_CONFIG_PATH = '/tmp/non-existent-config.ini';
 
-            expect(() => configManager.load()).toThrow(/Configuration file not found/);
+            expect(() => loadFreshConfig()).toThrow(/Configuration file not found/);
             expect(stderrOutput.join('')).toContain('SETTINGS FILE MISSING');
         } finally {
             process.env.NODE_ENV = originalNodeEnv;
@@ -116,11 +132,9 @@ describe('ConfigLoader behavior', () => {
         process.stderr.write = () => {};
         try {
             setupConfigMocks('[general]\ndebugEnabled = true\n');
-            configManager.config = null;
-            configManager.isLoaded = false;
-            configManager.configPath = testConfigPath;
+            process.env.CHAT_BOT_CONFIG_PATH = testConfigPath;
 
-            expect(() => configManager.load()).toThrow(/Missing required configuration sections/);
+            expect(() => loadFreshConfig()).toThrow(/Missing required configuration sections/);
         } finally {
             process.stderr.write = originalStderrWrite;
         }
@@ -199,15 +213,11 @@ heavyCommandThreshold = 4
 heavyCommandWindow = 360
 maxEntries = 1000
 `;
-        setupConfigMocks(configWithInvalid);
-        configManager.config = null;
-        configManager.isLoaded = false;
-        configManager.configPath = testConfigPath;
-        configManager.load();
+        reloadConfig(configWithInvalid);
 
-        expect(configManager.getBoolean('general', 'debugEnabled', false)).toBe(false);
-        expect(configManager.getNumber('general', 'streamRetryInterval', 15)).toBe(15);
-        expect(configManager.get('missing', 'key', 'default')).toBe('default');
+        expect(currentConfigManager.getBoolean('general', 'debugEnabled', false)).toBe(false);
+        expect(currentConfigManager.getNumber('general', 'streamRetryInterval', 15)).toBe(15);
+        expect(currentConfigManager.get('missing', 'key', 'default')).toBe('default');
     });
 
     it('exposes cooldown configuration on the config facade', () => {
@@ -270,32 +280,26 @@ cheermoteDefaultType = cheer
 [commands]
 enabled = true
 `;
-        setupConfigMocks(cooldownConfig);
-        configManager.config = null;
-        configManager.isLoaded = false;
-        configManager.configPath = testConfigPath;
+        reloadConfig(cooldownConfig);
 
-        configManager.load();
-
-        expect(config.cooldowns).toBeDefined();
-        expect(config.cooldowns.defaultCooldown).toBe(60);
-        expect(config.cooldowns.heavyCommandCooldown).toBe(300);
-        expect(config.cooldowns.maxEntries).toBe(1000);
+        expect(currentConfig.cooldowns).toBeDefined();
+        expect(currentConfig.cooldowns.defaultCooldown).toBe(60);
+        expect(currentConfig.cooldowns.heavyCommandCooldown).toBe(300);
+        expect(currentConfig.cooldowns.maxEntries).toBe(1000);
     });
 
     it('throws error when StreamElements enabled without channel IDs', () => {
         const originalStderrWrite = process.stderr.write;
         process.stderr.write = () => {};
         try {
-            setupConfigMocks(buildConfig({
+            const content = buildConfig({
                 streamelementsSection: `enabled = true
 jwtToken = se-jwt-token`
-            }));
-            configManager.config = null;
-            configManager.isLoaded = false;
-            configManager.configPath = testConfigPath;
+            });
+            setupConfigMocks(content);
+            process.env.CHAT_BOT_CONFIG_PATH = testConfigPath;
 
-            expect(() => configManager.load()).toThrow(/StreamElements channel ID/);
+            expect(() => loadFreshConfig()).toThrow(/StreamElements channel ID/);
         } finally {
             process.stderr.write = originalStderrWrite;
         }
@@ -305,39 +309,30 @@ jwtToken = se-jwt-token`
         const originalStderrWrite = process.stderr.write;
         process.stderr.write = () => {};
         try {
-            setupConfigMocks(buildConfig({
+            const content = buildConfig({
                 youtubeSection: `enabled = true
  username = TestChannel
  enableAPI = true
  streamDetectionMethod = youtubei
  viewerCountMethod = youtubei`
-            }));
-            configManager.config = null;
-            configManager.isLoaded = false;
-            configManager.configPath = testConfigPath;
+            });
+            setupConfigMocks(content);
+            process.env.CHAT_BOT_CONFIG_PATH = testConfigPath;
 
-            expect(() => configManager.load()).not.toThrow();
+            expect(() => loadFreshConfig()).not.toThrow();
         } finally {
             process.stderr.write = originalStderrWrite;
         }
     });
 
     it('resolves anonymousUsername defaults and overrides', () => {
-        setupConfigMocks(buildConfig());
-        configManager.config = null;
-        configManager.isLoaded = false;
-        configManager.configPath = testConfigPath;
-        configManager.load();
+        reloadConfig(buildConfig());
 
-        expect(config.general.anonymousUsername).toBe('Anonymous User');
+        expect(currentConfig.general.anonymousUsername).toBe('Anonymous User');
 
         const overriddenConfig = buildConfig().replace('[general]\n', '[general]\nanonymousUsername = Test Anonymous\n');
-        setupConfigMocks(overriddenConfig);
-        configManager.config = null;
-        configManager.isLoaded = false;
-        configManager.configPath = testConfigPath;
-        configManager.load();
+        reloadConfig(overriddenConfig);
 
-        expect(config.general.anonymousUsername).toBe('Test Anonymous');
+        expect(currentConfig.general.anonymousUsername).toBe('Test Anonymous');
     });
 });
