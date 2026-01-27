@@ -243,20 +243,9 @@ const SECRET_DEFINITIONS = [
     }
 ];
 
-const setConfigValue = (config, configManager, section, key, value) => {
-    if (!value) return;
-    if (configManager && configManager.config && configManager.config[section]) {
-        configManager.config[section][key] = value;
-    }
-    if (config && config[section]) {
-        config[section][key] = value;
-    }
-};
-
 async function ensureSecrets(options = {}) {
     const {
         config,
-        configManager = null,
         logger: loggerCandidate = null,
         promptFor = defaultPromptFor,
         interactive,
@@ -296,17 +285,11 @@ async function ensureSecrets(options = {}) {
     const persistUpdates = {};
 
     const getConfigSection = (section) => {
-        if (config && config[section]) return config[section];
-        if (configManager && configManager.config && configManager.config[section]) {
-            return configManager.config[section];
-        }
-        return {};
+        return config?.[section] ?? {};
     };
 
     for (const secret of SECRET_DEFINITIONS) {
-        const { id, envKey, configPath, requiredWhen, promptText, mask, optional } = secret;
-        const section = configPath[0];
-        const key = configPath[1];
+        const { id, envKey, requiredWhen, promptText, mask, optional } = secret;
         const enabledConfig = {
             tiktok: getConfigSection('tiktok'),
             twitch: getConfigSection('twitch'),
@@ -320,7 +303,6 @@ async function ensureSecrets(options = {}) {
         let value = existingEnv || null;
 
         if (value) {
-            setConfigValue(config, configManager, section, key, value);
             process.env[envKey] = value;
             applied[id] = { source: 'env' };
             safeLogger.debug?.(`Using ${id} (${mask ? mask(value) : maskValue(value)})`, 'secret-manager');
@@ -331,7 +313,6 @@ async function ensureSecrets(options = {}) {
             const userInput = await promptFor(id, promptText);
             value = normalize(userInput);
             if (value) {
-                setConfigValue(config, configManager, section, key, value);
                 process.env[envKey] = value;
                 persistUpdates[envKey] = value;
                 applied[id] = { source: 'prompt' };

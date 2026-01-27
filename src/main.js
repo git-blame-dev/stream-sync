@@ -1399,7 +1399,6 @@ async function main(overrides = {}) {
 
         try {
             await ensureSecrets({
-                configManager,
                 config,
                 logger,
                 interactive: Boolean(process.stdin && process.stdin.isTTY),
