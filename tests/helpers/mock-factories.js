@@ -1373,7 +1373,7 @@ const createInvalidEventBuilder = () => {
 // EXPORTS
 // ================================================================================================
 
-const createMockConfig = (configOverrides = {}) => {
+const createConfigFixture = (configOverrides = {}) => {
     const baseConfig = {
         general: {
             debugEnabled: false,
@@ -2956,7 +2956,7 @@ module.exports = {
     createMockFileSystem,
     noOpLogger,
     createTestApp,
-    createMockConfig,
+    createConfigFixture,
     // createMockGiftDataLogger, // REMOVED - redundant
     createMockSpamDetector,
     createMockDisplayQueue,

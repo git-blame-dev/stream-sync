@@ -7,7 +7,7 @@ const { YouTubeViewerExtractor } = require('../../src/extractors/youtube-viewer-
 const { InnertubeFactory } = require('../../src/factories/innertube-factory');
 const InnertubeInstanceManager = require('../../src/services/innertube-instance-manager');
 const { OBSViewerCountObserver } = require('../../src/observers/obs-viewer-count-observer');
-const { createMockOBSManager, createMockConfig } = require('../helpers/mock-factories');
+const { createMockOBSManager } = require('../helpers/mock-factories');
 const { expectNoTechnicalArtifacts } = require('../helpers/behavior-validation');
 const { createSilentLogger } = require('../helpers/test-logger');
 const { createConfigFixture } = require('../helpers/config-fixture');
@@ -129,7 +129,7 @@ describe('System Resilience and Error Recovery Integration', () => {
         });
 
         test('should handle missing OBS configuration', async () => {
-            createMockConfig({
+            createConfigFixture({
                 youtube: {
                     viewerCountEnabled: true
                 }

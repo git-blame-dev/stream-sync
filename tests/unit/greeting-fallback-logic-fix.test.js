@@ -1,6 +1,6 @@
 const { describe, expect, beforeEach, it, afterEach } = require('bun:test');
 const { restoreAllMocks } = require('../helpers/bun-mock-utils');
-const { noOpLogger, createMockConfig } = require('../helpers/mock-factories');
+const { noOpLogger, createConfigFixture } = require('../helpers/mock-factories');
 const { createTestAppRuntime } = require('../helpers/runtime-test-harness');
 
 describe('Greeting Fallback Logic Fix', () => {
@@ -12,7 +12,7 @@ describe('Greeting Fallback Logic Fix', () => {
     let configFixture;
 
     beforeEach(() => {
-        configFixture = createMockConfig({
+        configFixture = createConfigFixture({
             general: {
                 greetingsEnabled: true,
                 streamDetectionEnabled: false,

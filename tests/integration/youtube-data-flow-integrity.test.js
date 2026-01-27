@@ -3,7 +3,7 @@ const { describe, test, afterEach, expect } = require('bun:test');
 const EventEmitter = require('events');
 const NotificationManager = require('../../src/notifications/NotificationManager');
 const { YouTubePlatform } = require('../../src/platforms/youtube');
-const { initializeTestLogging, createMockConfig, createMockPlatformDependencies } = require('../helpers/test-setup');
+const { initializeTestLogging, createConfigFixture, createMockPlatformDependencies } = require('../helpers/test-setup');
 const { getSyntheticFixture } = require('../helpers/platform-test-data');
 const { createMockDisplayQueue, noOpLogger } = require('../helpers/mock-factories');
 const { createTextProcessingManager } = require('../../src/utils/text-processing');
@@ -27,7 +27,7 @@ const createEventBus = () => {
 
 const createPlatformHarness = () => {
     const logger = noOpLogger;
-    const config = createMockConfig('youtube', {
+    const config = createConfigFixture('youtube', {
         enabled: true,
         username: 'test-channel',
         apiKey: 'test-key'

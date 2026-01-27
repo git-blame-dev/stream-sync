@@ -2,7 +2,7 @@
 const { describe, test, expect, beforeEach, afterEach } = require('bun:test');
 const { createMockFn, spyOn, restoreAllMocks } = require('../../../helpers/bun-mock-utils');
 const { noOpLogger } = require('../../../helpers/mock-factories');
-const { initializeTestLogging, createMockPlatformDependencies, createMockConfig } = require('../../../helpers/test-setup');
+const { initializeTestLogging, createMockPlatformDependencies, createConfigFixture } = require('../../../helpers/test-setup');
 
 initializeTestLogging();
 
@@ -21,7 +21,7 @@ describe('YouTube Platform Configuration Validation', () => {
     
     describe('Configuration Key Normalization (After Refactor)', () => {
         test('should handle config with apiKey (camelCase)', async () => {
-            const configWithCamelCase = createMockConfig('youtube', {
+            const configWithCamelCase = createConfigFixture('youtube', {
                 enabled: true,
                 username: 'testuser',
                 apiKey: 'valid-api-key-here'
@@ -36,7 +36,7 @@ describe('YouTube Platform Configuration Validation', () => {
     
     describe('Configuration Validation Edge Cases', () => {
         test('should handle missing API key gracefully', async () => {
-            const configWithoutApiKey = createMockConfig('youtube', {
+            const configWithoutApiKey = createConfigFixture('youtube', {
                 enabled: true,
                 username: 'testuser'
             });
@@ -48,7 +48,7 @@ describe('YouTube Platform Configuration Validation', () => {
         });
         
         test('should handle disabled platform', async () => {
-            const disabledConfig = createMockConfig('youtube', {
+            const disabledConfig = createConfigFixture('youtube', {
                 enabled: false,
                 username: 'testuser',
                 apiKey: 'valid-api-key'
@@ -61,7 +61,7 @@ describe('YouTube Platform Configuration Validation', () => {
         });
 
         test('should handle missing username', async () => {
-            const configWithoutUsername = createMockConfig('youtube', {
+            const configWithoutUsername = createConfigFixture('youtube', {
                 enabled: true,
                 apiKey: 'valid-api-key'
             });
@@ -76,7 +76,7 @@ describe('YouTube Platform Configuration Validation', () => {
     describe('Configuration Normalization', () => {
         test('should honor INI-like numeric strings for retryAttempts and streamPollingInterval', () => {
             const platform = new YouTubePlatform(
-                createMockConfig('youtube', {
+                createConfigFixture('youtube', {
                     retryAttempts: '4',
                     streamPollingInterval: '30'
                 }),
@@ -91,7 +91,7 @@ describe('YouTube Platform Configuration Validation', () => {
     describe('Platform initialization', () => {
         test('initializes disabled platform without errors', async () => {
             const platform = new YouTubePlatform(
-                createMockConfig('youtube', { enabled: false, username: '' }),
+                createConfigFixture('youtube', { enabled: false, username: '' }),
                 { ...mockDependencies, logger: noOpLogger }
             );
 
@@ -103,7 +103,7 @@ describe('YouTube Platform Configuration Validation', () => {
     });
 
     describe('Dependency Validation', () => {
-        const baseConfig = createMockConfig('youtube', {
+        const baseConfig = createConfigFixture('youtube', {
             enabled: true,
             username: 'channel-owner',
             apiKey: 'valid-api-key'

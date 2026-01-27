@@ -4,7 +4,7 @@ const { noOpLogger } = require('../../helpers/mock-factories');
 
 const TwitchAuthManager = require('../../../src/auth/TwitchAuthManager');
 
-function createMockConfiguration(overrides = {}) {
+function createConfigFixture(overrides = {}) {
     return {
         clientId: overrides.clientId || 'test-client-id',
         clientSecret: overrides.clientSecret || 'test-client-secret',
@@ -43,12 +43,12 @@ describe('TwitchAuthManager Configuration Isolation', () => {
 
     describe('Independent Configuration Management', () => {
         test('should maintain independent configurations for different auth manager instances', () => {
-            const prodConfig = createMockConfiguration({
+            const prodConfig = createConfigFixture({
                 environment: 'production',
                 accessToken: 'prod-token-123',
                 channel: 'prod-channel'
             });
-            const testConfig = createMockConfiguration({
+            const testConfig = createConfigFixture({
                 environment: 'test',
                 accessToken: 'test-token-456',
                 channel: 'test-channel'
@@ -63,11 +63,11 @@ describe('TwitchAuthManager Configuration Isolation', () => {
         });
 
         test('should allow configuration updates without affecting other instances', () => {
-            const config1 = createMockConfiguration({
+            const config1 = createConfigFixture({
                 environment: 'instance1',
                 accessToken: 'token1'
             });
-            const config2 = createMockConfiguration({
+            const config2 = createConfigFixture({
                 environment: 'instance2',
                 accessToken: 'token2'
             });
@@ -75,7 +75,7 @@ describe('TwitchAuthManager Configuration Isolation', () => {
             const authManager1 = createAuthManager(config1);
             const authManager2 = createAuthManager(config2);
 
-            const updatedConfig1 = createMockConfiguration({
+            const updatedConfig1 = createConfigFixture({
                 environment: 'instance1-updated',
                 accessToken: 'token1-updated'
             });
@@ -87,7 +87,7 @@ describe('TwitchAuthManager Configuration Isolation', () => {
         });
 
         test('should deep copy configuration to prevent shared state', () => {
-            const sharedConfigObject = createMockConfiguration({ environment: 'shared' });
+            const sharedConfigObject = createConfigFixture({ environment: 'shared' });
 
             const authManager1 = createAuthManager(sharedConfigObject);
             const authManager2 = createAuthManager(sharedConfigObject);
@@ -101,8 +101,8 @@ describe('TwitchAuthManager Configuration Isolation', () => {
 
     describe('State Independence', () => {
         test('should start with UNINITIALIZED state independently', () => {
-            const config1 = createMockConfiguration({ environment: 'instance1' });
-            const config2 = createMockConfiguration({ environment: 'instance2' });
+            const config1 = createConfigFixture({ environment: 'instance1' });
+            const config2 = createConfigFixture({ environment: 'instance2' });
 
             const authManager1 = createAuthManager(config1);
             const authManager2 = createAuthManager(config2);
@@ -112,21 +112,21 @@ describe('TwitchAuthManager Configuration Isolation', () => {
         });
 
         test('should reset state independently via updateConfig', () => {
-            const config1 = createMockConfiguration({ environment: 'instance1' });
-            const config2 = createMockConfiguration({ environment: 'instance2' });
+            const config1 = createConfigFixture({ environment: 'instance1' });
+            const config2 = createConfigFixture({ environment: 'instance2' });
 
             const authManager1 = createAuthManager(config1);
             const authManager2 = createAuthManager(config2);
 
-            authManager1.updateConfig(createMockConfiguration({ environment: 'updated' }));
+            authManager1.updateConfig(createConfigFixture({ environment: 'updated' }));
 
             expect(authManager1.getState()).toBe('UNINITIALIZED');
             expect(authManager2.getState()).toBe('UNINITIALIZED');
         });
 
         test('should maintain independent error state via lastError', () => {
-            const config1 = createMockConfiguration({ environment: 'instance1' });
-            const config2 = createMockConfiguration({ environment: 'instance2' });
+            const config1 = createConfigFixture({ environment: 'instance1' });
+            const config2 = createConfigFixture({ environment: 'instance2' });
 
             const authManager1 = createAuthManager(config1);
             const authManager2 = createAuthManager(config2);
@@ -138,8 +138,8 @@ describe('TwitchAuthManager Configuration Isolation', () => {
 
     describe('Resource Management Independence', () => {
         test('should allow cleanup of uninitialized instances without errors', async () => {
-            const config1 = createMockConfiguration({ environment: 'instance1' });
-            const config2 = createMockConfiguration({ environment: 'instance2' });
+            const config1 = createConfigFixture({ environment: 'instance1' });
+            const config2 = createConfigFixture({ environment: 'instance2' });
 
             const authManager1 = createAuthManager(config1);
             const authManager2 = createAuthManager(config2);
@@ -152,9 +152,9 @@ describe('TwitchAuthManager Configuration Isolation', () => {
 
         test('should create new instance on each getInstance call with independent config', () => {
             const configs = [
-                createMockConfiguration({ environment: 'test1', accessToken: 'token1' }),
-                createMockConfiguration({ environment: 'test2', accessToken: 'token2' }),
-                createMockConfiguration({ environment: 'test3', accessToken: 'token3' })
+                createConfigFixture({ environment: 'test1', accessToken: 'token1' }),
+                createConfigFixture({ environment: 'test2', accessToken: 'token2' }),
+                createConfigFixture({ environment: 'test3', accessToken: 'token3' })
             ];
 
             const authManagers = configs.map(config => createAuthManager(config));
