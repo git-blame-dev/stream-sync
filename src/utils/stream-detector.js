@@ -25,11 +25,11 @@ class StreamDetector {
         const {
             youtubeDetectionService = null,
             tiktokDetectionService = null,
-            configManager = null
+            config: fullConfig = null
         } = services || {};
         this._youtubeDetectionService = youtubeDetectionService || null;
         this._tiktokDetectionService = tiktokDetectionService || null;
-        this._configManager = configManager || null;
+        this._fullConfig = fullConfig || null;
 
         this.httpClient = services.httpClient || createHttpClient();
 
@@ -146,7 +146,7 @@ class StreamDetector {
             const dependencies = this._dependencyFactory.createYoutubeDependencies(config, {
                 Innertube: LazyInnertube,
                 logger: this._getYoutubeLoggerBridge(),
-                config: this._configManager
+                config: this._fullConfig
             });
 
             if (!dependencies || !dependencies.streamDetectionService) {

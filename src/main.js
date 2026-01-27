@@ -505,7 +505,7 @@ class AppRuntime {
             continuousMonitoringInterval
         }, {
             youtubeDetectionService,
-            configManager: this.configManager
+            config: this.config
         });
 
         this.gracefulExitTargetCount = cliArgs.chat;
