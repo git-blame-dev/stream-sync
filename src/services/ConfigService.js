@@ -1,4 +1,3 @@
-
 const { logger } = require('../core/logging');
 const { createPlatformErrorHandler } = require('../utils/platform-error-handler');
 const { NOTIFICATION_CONFIGS } = require('../core/constants');
@@ -35,17 +34,14 @@ class ConfigService {
         try {
             this._assertConfigAvailable('get');
 
-            // Handle direct path access: get('general.debugEnabled')
             if (key === null && section.includes('.')) {
                 return this._getByPath(section);
             }
 
-            // Handle ConfigLoader style: get('general', 'debugEnabled', false)
             if (key !== null) {
-                return this._getConfigLoaderStyle(section, key);
+                return this._getSectionKey(section, key);
             }
 
-            // Handle section access: get('general')
             const sectionValue = this.config[section];
             if (sectionValue === undefined) {
                 throw new Error(`Missing config section: ${section}`);
@@ -62,21 +58,9 @@ class ConfigService {
         try {
             this._assertConfigAvailable('get-platform-config');
 
-            // Try platform-specific first
-            let platformSpecific;
-            
-            // Handle both ConfigLoader style and direct property access
-            if (typeof this.config?.get === 'function') {
-                platformSpecific = this.config.get(platform, key);
-            }
-            
-            // If ConfigLoader didn't return a value, try direct property access
-            if (platformSpecific === undefined && this.config?.[platform]) {
-                platformSpecific = this.config[platform][key];
-            }
-            
-            if (platformSpecific !== undefined) {
-                return platformSpecific;
+            const platformConfig = this.config[platform];
+            if (platformConfig && platformConfig[key] !== undefined) {
+                return platformConfig[key];
             }
 
             throw new Error(`Missing platform config: ${platform}.${key}`);
@@ -91,28 +75,14 @@ class ConfigService {
         try {
             this._assertConfigAvailable('notifications');
 
-            // Handle both ConfigLoader style and direct property access
-            let platformEnabled, generalEnabled;
-            
             if (platform) {
-                // Check platform-specific setting first
-                if (typeof this.config?.get === 'function') {
-                    // ConfigLoader style
-                    platformEnabled = this.config.get(platform, notificationType);
-                    generalEnabled = this.config.get('notifications', notificationType);
-                } else {
-                    // Direct property access style
-                    const platformConfig = this.config?.[platform];
-                    platformEnabled = platformConfig?.[notificationType];
-                    generalEnabled = this.config?.general?.[notificationType];
-                }
-                
-                // Platform-specific takes precedence
-                if (platformEnabled !== undefined) {
-                    return !!platformEnabled;
+                const platformConfig = this.config[platform];
+                if (platformConfig && platformConfig[notificationType] !== undefined) {
+                    return !!platformConfig[notificationType];
                 }
             }
             
+            const generalEnabled = this.config.general?.[notificationType];
             if (generalEnabled !== undefined) {
                 return !!generalEnabled;
             }
@@ -129,24 +99,12 @@ class ConfigService {
         try {
             this._assertConfigAvailable('tts');
 
-            // Try to access the tts config directly to trigger any getter errors
-            let ttsConfig;
-            if (this.config && 'tts' in this.config) {
-                ttsConfig = this.config.tts;
-            } else {
-                ttsConfig = this.get('tts');
-            }
-
+            const ttsConfig = this.config.tts;
             if (!ttsConfig) {
                 throw new Error('Missing tts config');
             }
 
-            let enabled;
-            if (this.config?.general && this.config.general.ttsEnabled !== undefined) {
-                enabled = this.config.general.ttsEnabled;
-            } else if (typeof this.config?.get === 'function') {
-                enabled = this.config.get('general', 'ttsEnabled', false);
-            }
+            const enabled = this.config.general?.ttsEnabled;
             
             return {
                 enabled: Boolean(enabled),
@@ -193,28 +151,13 @@ class ConfigService {
 
             const useSectionCommand = SECTION_COMMAND_KEYS.has(commandKey);
 
-            // Handle both ConfigLoader style and direct property access
-            if (typeof this.config?.get === 'function') {
-                if (useSectionCommand) {
-                    const sectionCommand = this.config.get(commandKey, 'command');
-                    if (sectionCommand) {
-                        return sectionCommand;
-                    }
-                } else {
-                    const command = this.config.get('commands', commandKey);
-                    if (command) {
-                        return command;
-                    }
+            if (useSectionCommand) {
+                const sectionCommand = this.config?.[commandKey]?.command;
+                if (sectionCommand) {
+                    return sectionCommand;
                 }
-            } else {
-                if (useSectionCommand) {
-                    const sectionCommand = this.config?.[commandKey]?.command;
-                    if (sectionCommand) {
-                        return sectionCommand;
-                    }
-                } else if (this.config?.commands && this.config.commands[commandKey]) {
-                    return this.config.commands[commandKey];
-                }
+            } else if (this.config?.commands?.[commandKey]) {
+                return this.config.commands[commandKey];
             }
 
             throw new Error(`Missing command config: ${commandKey}`);
@@ -229,18 +172,7 @@ class ConfigService {
         try {
             this._assertConfigAvailable('debug');
 
-            // Handle both ConfigLoader style and direct property access
-            let debugEnabled;
-            
-            if (typeof this.config?.get === 'function') {
-                debugEnabled = this.config.get('general', 'debugEnabled');
-            }
-            
-            // If ConfigLoader didn't return a value, try direct property access
-            if (debugEnabled === undefined && this.config?.general) {
-                debugEnabled = this.config.general.debugEnabled;
-            }
-            
+            const debugEnabled = this.config.general?.debugEnabled;
             if (debugEnabled === undefined) {
                 throw new Error('Missing general.debugEnabled config');
             }
@@ -265,21 +197,13 @@ class ConfigService {
                 return false;
             }
 
-            // Handle ConfigLoader style setting
-            if (typeof this.config.set === 'function') {
-                this.config.set(section, key, value);
-            } else {
-                // Handle direct property modification
-                if (!this.config[section]) {
-                    this.config[section] = {};
-                }
-                this.config[section][key] = value;
+            if (!this.config[section]) {
+                this.config[section] = {};
             }
+            this.config[section][key] = value;
 
-            // Clear cache for this path
             this.cache.clear();
 
-            // Emit change event if EventBus is available
             if (this.eventBus) {
                 this.eventBus.emit('config:changed', { section, key, value });
             }
@@ -296,10 +220,6 @@ class ConfigService {
     reload() {
         try {
             this.cache.clear();
-            
-            if (typeof this.config.reload === 'function') {
-                this.config.reload();
-            }
 
             if (this.eventBus) {
                 this.eventBus.emit('config:reloaded');
@@ -318,7 +238,7 @@ class ConfigService {
         try {
             return {
                 hasConfig: !!this.config,
-                configType: typeof this.config?.get === 'function' ? 'ConfigLoader' : 'Object',
+                configType: 'Object',
                 sections: this.config ? Object.keys(this.config) : [],
                 hasEventBus: !!this.eventBus,
                 cacheSize: this.cache.size
@@ -328,8 +248,6 @@ class ConfigService {
             throw error;
         }
     }
-
-    // Private methods
 
     _assertConfigAvailable(context) {
         if (!this.config) {
@@ -354,19 +272,9 @@ class ConfigService {
         return current;
     }
 
-    _getConfigLoaderStyle(section, key) {
-        this._assertConfigAvailable('get-config-loader-style');
+    _getSectionKey(section, key) {
+        this._assertConfigAvailable('get-section-key');
 
-        // Try ConfigLoader style first
-        if (typeof this.config.get === 'function') {
-            const value = this.config.get(section, key);
-            if (value === undefined) {
-                throw new Error(`Missing config: ${section}.${key}`);
-            }
-            return value;
-        }
-        
-        // Fallback to direct property access
         const sectionConfig = this.config[section];
         if (sectionConfig && typeof sectionConfig === 'object') {
             if (sectionConfig[key] === undefined) {
@@ -383,7 +291,6 @@ function createConfigService(config, eventBus = null) {
     return new ConfigService(config, eventBus);
 }
 
-// Export the class and factory
 module.exports = {
     ConfigService,
     createConfigService
