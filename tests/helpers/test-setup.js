@@ -213,7 +213,7 @@ const createTestRetrySystem = (overrides = {}) => ({
     ...overrides
 });
 
-const createMockConfig = (platform = 'tiktok', overrides = {}) => {
+const createConfigFixture = (platform = 'tiktok', overrides = {}) => {
     const baseConfig = {
         enabled: true,
         username: 'testuser',
@@ -263,7 +263,7 @@ const createTestSetup = (overrides = {}) => ({
         warn: createMockFn(), 
         error: createMockFn() 
     },
-    config: createMockConfig(),
+    config: createConfigFixture(),
     app: createTestApp(),
     retrySystem: createTestRetrySystem(),
     ...overrides
@@ -595,7 +595,7 @@ module.exports = {
     createTestNotification,
     createMockPlatformDependencies,
     createTestApp,
-    createMockConfig,
+    createConfigFixture,
     createTestRetrySystem,
     
     // Fixture utilities

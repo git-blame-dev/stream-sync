@@ -4,14 +4,14 @@ const { createMockFn, restoreAllMocks } = require('../../../../helpers/bun-mock-
 
 const { YouTubePlatform } = require('../../../../../src/platforms/youtube');
 const { createYouTubeSuperChatEvent } = require('../../../../helpers/youtube-test-data');
-const { createMockPlatformDependencies, createMockConfig } = require('../../../../helpers/test-setup');
+const { createMockPlatformDependencies, createConfigFixture } = require('../../../../helpers/test-setup');
 
 describe('YouTube monetized event pipeline', () => {
     afterEach(() => {
         restoreAllMocks();
     });
 
-    const baseConfig = createMockConfig('youtube', {
+    const baseConfig = createConfigFixture('youtube', {
         enabled: true,
         username: 'notification-test',
         apiKey: 'notification-key'

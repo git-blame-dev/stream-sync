@@ -7,7 +7,7 @@ const { expectNoTechnicalArtifacts } = require('../../helpers/behavior-validatio
 
 const defaultPlatforms = ['twitch', 'youtube', 'tiktok'];
 
-function createMockConfig(overrides = {}) {
+function createConfigFixture(overrides = {}) {
     const config = {};
     for (const platform of defaultPlatforms) {
         config[platform] = {
@@ -26,7 +26,7 @@ describe('OBSViewerCountObserver - Behavior-Focused Testing', () => {
     let configFixture;
 
     beforeEach(() => {
-        configFixture = createMockConfig();
+        configFixture = createConfigFixture();
         logger = noOpLogger;
 
         obsManager = createMockOBSManager('connected', {

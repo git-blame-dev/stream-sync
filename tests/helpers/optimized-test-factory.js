@@ -58,7 +58,7 @@ class OptimizedTestFactory {
         return payload;
     }
 
-    static createMockConfig(platformOverrides = {}) {
+    static createConfigFixture(platformOverrides = {}) {
         return {
             general: {
                 obsWebSocketUrl: 'ws://localhost:4455',
@@ -126,7 +126,7 @@ class OptimizedTestFactory {
             notificationBuilder: {
                 build: createMockFn().mockImplementation((payload) => NotificationBuilder.build(payload))
             },
-            config: this.createMockConfig()
+            config: this.createConfigFixture()
         };
     }
 
@@ -205,7 +205,7 @@ class OptimizedTestFactory {
             size: createMockFn().mockReturnValue(0)
         };
 
-        harness.configService = overrides.configService || this.createMockConfig();
+        harness.configService = overrides.configService || this.createConfigFixture();
 
         harness.notificationBridge = overrides.notificationBridge || null;
 

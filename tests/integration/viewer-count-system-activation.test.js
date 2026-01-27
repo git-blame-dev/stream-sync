@@ -3,7 +3,7 @@ const { createMockFn, restoreAllMocks } = require('../helpers/bun-mock-utils');
 const { TEST_TIMEOUTS } = require('../helpers/test-setup');
 const {
     noOpLogger,
-    createMockConfig,
+    createConfigFixture,
     createMockOBSConnection,
     createMockTwitchPlatform,
     createMockYouTubePlatform,
@@ -14,7 +14,6 @@ const { setupAutomatedCleanup } = require('../helpers/mock-lifecycle');
 const { createAppRuntimeTestDependencies } = require('../helpers/runtime-test-harness');
 const testClock = require('../helpers/test-clock');
 const { safeDelay } = require('../../src/utils/timeout-validator');
-const { createConfigFixture } = require('../helpers/config-fixture');
 
 const createMockPlatformLifecycleService = () => ({
     platforms: {},
@@ -76,7 +75,7 @@ describe('ViewerCount System Activation Integration', () => {
     beforeEach(() => {
         testClock.reset();
 
-        configFixture = createMockConfig({
+        configFixture = createConfigFixture({
             general: {
                 debug: true,
                 viewerCountPollingInterval: 60,

@@ -178,7 +178,7 @@ describe('Observer Pattern Integration', () => {
     });
 
     describe('OBS Observer Integration', () => {
-        const createMockConfig = () => ({
+        const createConfigFixture = () => ({
             twitch: { viewerCountEnabled: true, viewerCountSource: 'test-viewer-count-source' },
             youtube: { viewerCountEnabled: true, viewerCountSource: 'test-viewer-count-source' },
             tiktok: { viewerCountEnabled: true, viewerCountSource: 'test-viewer-count-source' }
@@ -187,7 +187,7 @@ describe('Observer Pattern Integration', () => {
         test('should integrate OBS observer with ViewerCountSystem', async () => {
             const obsManager = createMockOBSManager();
             const obsObserver = new OBSViewerCountObserver(obsManager, createSilentLogger(), {
-                config: createMockConfig()
+                config: createConfigFixture()
             });
             viewerCountSystem.addObserver(obsObserver);
 
@@ -207,7 +207,7 @@ describe('Observer Pattern Integration', () => {
         test('should handle OBS observer initialization and cleanup', async () => {
             const obsManager = createMockOBSManager();
             const obsObserver = new OBSViewerCountObserver(obsManager, createSilentLogger(), {
-                config: createMockConfig()
+                config: createConfigFixture()
             });
 
             viewerCountSystem.addObserver(obsObserver);

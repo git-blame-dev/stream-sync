@@ -1,6 +1,6 @@
 
 const { initializeTestLogging, createTestUser, TEST_TIMEOUTS } = require('../../helpers/test-setup');
-const { noOpLogger, createMockConfig } = require('../../helpers/mock-factories');
+const { noOpLogger, createConfigFixture } = require('../../helpers/mock-factories');
 const { setupAutomatedCleanup } = require('../../helpers/mock-lifecycle');
 
 initializeTestLogging();
@@ -17,7 +17,7 @@ describe('CommandParser Keyword vs Command Display Fix', () => {
 
     beforeEach(() => {
         mockLogger = noOpLogger;
-        mockConfig = createMockConfig({
+        mockConfig = createConfigFixture({
             commands: {
                 'im-a-mod': '!mod, vfx top, mod|mods',
                 'hello-world': '!hello|!hi, vfx center, hello|hi|greetings',
@@ -120,7 +120,7 @@ describe('CommandParser Keyword vs Command Display Fix', () => {
         });
 
         it('should handle case where no keywords are defined', () => {
-            mockConfig = createMockConfig({
+            mockConfig = createConfigFixture({
                 commands: {
                     'simple-command': '!simple, vfx center'
                 }

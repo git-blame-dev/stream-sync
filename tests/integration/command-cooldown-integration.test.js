@@ -4,7 +4,7 @@ const { describe, test, expect, beforeEach, afterEach } = require('bun:test');
 const { TEST_TIMEOUTS } = require('../helpers/test-setup');
 
 const {
-  createMockConfig
+  createConfigFixture
 } = require('../helpers/mock-factories');
 
 const { setupAutomatedCleanup } = require('../helpers/mock-lifecycle');
@@ -26,7 +26,7 @@ describe('Command Cooldown Integration', () => {
 
   beforeEach(() => {
     testClock.reset();
-    createMockConfig({
+    createConfigFixture({
       general: {
         cmdCooldownMs: 5000,
         globalCmdCooldownMs: 3000
