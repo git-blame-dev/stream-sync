@@ -432,7 +432,7 @@ class AppRuntime {
             const dependencies = dependencyFactory.createYoutubeDependencies(youtubeConfig, {
                 Innertube: LazyInnertube,
                 logger: this.logger,
-                config: this.configManager
+                config: this.config
             });
 
             if (!dependencies || !dependencies.streamDetectionService) {
@@ -1578,7 +1578,7 @@ async function main(overrides = {}) {
             authManager: authResult.authManager,
             authFactory: authResult.authFactory,
             USER_AGENTS: config.http.userAgents,
-            config: configManager,
+            config,
             Innertube: dependencies.lazyInnertube,
             axios: dependencies.axios,
             WebSocketCtor: dependencies.WebSocketCtor,
