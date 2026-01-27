@@ -314,7 +314,6 @@ function createProductionDependencies(overrides = {}) {
         notificationManager: null,
         timestampService: timestampService,
         dependencyFactory: resolvedOverrides.dependencyFactory || new DependencyFactory(),
-        configManager: configManager,
         lazyInnertube: InnertubeFactory.createLazyReference(),
         axios: resolvedOverrides.axios,
         WebSocketCtor: resolvedOverrides.WebSocketCtor,
@@ -460,7 +459,6 @@ class AppRuntime {
         this.dependencies = dependencies;
 
         this.authManager = this.dependencies.authManager;
-        this.configManager = this.dependencies.configManager;
         
         // Initialize logging using unified logger
         this.logger = this.dependencies.logging;
