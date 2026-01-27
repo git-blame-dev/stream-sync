@@ -29,7 +29,6 @@ class OptimizedTestFactory {
             type
         };
 
-        // Type-specific minimal data
         const typeDefaults = {
             'platform:gift': {},
             'platform:follow': {
@@ -68,7 +67,6 @@ class OptimizedTestFactory {
                 enableTTS: false,
                 enableVFX: true,
                 debugEnabled: false,
-                // Add all required notification-specific settings for NotificationManager
                 messagesEnabled: true,
                 farewellsEnabled: true,
                 followsEnabled: true,
@@ -128,9 +126,7 @@ class OptimizedTestFactory {
             notificationBuilder: {
                 build: createMockFn().mockImplementation((payload) => NotificationBuilder.build(payload))
             },
-            configManager: {
-                getConfig: createMockFn().mockReturnValue(this.createMockConfig())
-            }
+            config: this.createMockConfig()
         };
     }
 
@@ -222,7 +218,7 @@ class OptimizedTestFactory {
         expect(notification.notificationData).toBeDefined();
         expect(notification.notificationData.platform).toBe(expectedPlatform);
         expect(notification.notificationData.displayMessage).toBeDefined();
-        expect(notification.notificationData.displayMessage).not.toMatch(/\{.*\}/); // No template placeholders
+        expect(notification.notificationData.displayMessage).not.toMatch(/\{.*\}/);
     }
 
     static validateDataProcessing(input, output, expectedTransformations) {

@@ -861,94 +861,6 @@ const createMockDisplayQueue = (queueState = {}, methodOverrides = {}) => {
     };
 };
 
-const createMockConfigLoader = (configData = {}, methodOverrides = {}) => {
-    const baseMethods = {
-        get: createMockFn().mockImplementation((key, defaultValue) => {
-            const keys = key.split('.');
-            let value = configData;
-            for (const k of keys) {
-                if (value && typeof value === 'object' && k in value) {
-                    value = value[k];
-                } else {
-                    return defaultValue;
-                }
-            }
-            return value;
-        }),
-        set: createMockFn().mockImplementation((key, value) => {
-            const keys = key.split('.');
-            let current = configData;
-            for (let i = 0; i < keys.length - 1; i++) {
-                if (!(keys[i] in current) || typeof current[keys[i]] !== 'object') {
-                    current[keys[i]] = {};
-                }
-                current = current[keys[i]];
-            }
-            current[keys[keys.length - 1]] = value;
-            return true;
-        }),
-        has: createMockFn().mockImplementation((key) => {
-            const keys = key.split('.');
-            let value = configData;
-            for (const k of keys) {
-                if (value && typeof value === 'object' && k in value) {
-                    value = value[k];
-                } else {
-                    return false;
-                }
-            }
-            return true;
-        }),
-        delete: createMockFn().mockImplementation((key) => {
-            const keys = key.split('.');
-            let current = configData;
-            for (let i = 0; i < keys.length - 1; i++) {
-                if (!(keys[i] in current) || typeof current[keys[i]] !== 'object') {
-                    return false;
-                }
-                current = current[keys[i]];
-            }
-            delete current[keys[keys.length - 1]];
-            return true;
-        }),
-        getAll: createMockFn().mockReturnValue(configData),
-        load: createMockFn().mockResolvedValue(true),
-        save: createMockFn().mockResolvedValue(true),
-        reload: createMockFn().mockResolvedValue(true),
-        validate: createMockFn().mockReturnValue({ valid: true, errors: [] }),
-        getSection: createMockFn().mockImplementation((section) => configData[section] || {}),
-        setSection: createMockFn().mockImplementation((section, data) => {
-            configData[section] = data;
-            return true;
-        }),
-        on: createMockFn(),
-        off: createMockFn(),
-        once: createMockFn(),
-        emit: createMockFn(),
-        
-        updateTokens: createMockFn().mockResolvedValue(true),
-        validateConfigData: createMockFn().mockResolvedValue(true),
-        updateWithBackup: createMockFn().mockResolvedValue(true),
-        handleConfigUpdateError: createMockFn().mockResolvedValue({ handled: true }),
-        attemptUpdateWithRollback: createMockFn().mockResolvedValue(true),
-        getErrorRecoveryGuidance: createMockFn().mockResolvedValue({ guidance: 'retry' }),
-        performStateChange: createMockFn().mockResolvedValue(true),
-        getSynchronizedConfig: createMockFn().mockResolvedValue({}),
-        performConfigOperation: createMockFn().mockResolvedValue(true),
-        performComprehensiveValidation: createMockFn().mockResolvedValue({ valid: true }),
-        getCurrentState: createMockFn().mockResolvedValue({})
-    };
-
-    return {
-        ...baseMethods,
-        ...methodOverrides,
-        // Meta information for validation
-        _mockType: 'ConfigLoader',
-        _configData: configData,
-        _validMethods: Object.keys(baseMethods)
-    };
-};
-
 // ================================================================================================
 // MOCK LIFECYCLE MANAGEMENT
 // ================================================================================================
@@ -3049,8 +2961,6 @@ module.exports = {
     createMockSpamDetector,
     createMockDisplayQueue,
     createMockOBSConnection,
-    createMockConfigLoader,
-    createMockConfigManager: createMockConfigLoader,
     createMockAuthManager,
     
     // Authentication system factories
