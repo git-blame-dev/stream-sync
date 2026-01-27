@@ -9,10 +9,10 @@ describe('Greeting Fallback Logic Fix', () => {
     });
 
     let runtime;
-    let mockConfig;
+    let configFixture;
 
     beforeEach(() => {
-        mockConfig = createMockConfig({
+        configFixture = createMockConfig({
             general: {
                 greetingsEnabled: true,
                 streamDetectionEnabled: false,
@@ -25,7 +25,7 @@ describe('Greeting Fallback Logic Fix', () => {
             }
         });
 
-        ({ runtime } = createTestAppRuntime(mockConfig, {
+        ({ runtime } = createTestAppRuntime(configFixture, {
             logger: noOpLogger
         }));
     });

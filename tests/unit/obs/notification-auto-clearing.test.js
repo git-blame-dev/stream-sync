@@ -46,7 +46,7 @@ describe('Notification Auto-Clearing Behavior', () => {
             }
         };
 
-        const mockConfig = {
+        const configFixture = {
             autoProcess: false,
             chat: {
                 sourceName: 'chat_text',
@@ -87,7 +87,7 @@ describe('Notification Auto-Clearing Behavior', () => {
             initializeGoalDisplay: createMockFn().mockResolvedValue()
         };
 
-        displayQueue = new DisplayQueue(mockObsManager, mockConfig, mockConstants, null, {
+        displayQueue = new DisplayQueue(mockObsManager, configFixture, mockConstants, null, {
             sourcesManager: realSourcesManager,
             goalsManager: mockGoalsManager
         });

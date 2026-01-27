@@ -5,11 +5,11 @@ const { DependencyFactory } = require('../../../src/utils/dependency-factory');
 
 describe('DependencyFactory behavior', () => {
     let factory;
-    let mockPlainConfig;
+    let configFixture;
 
     beforeEach(() => {
         factory = new DependencyFactory();
-        mockPlainConfig = {
+        configFixture = {
             general: { ignoreSelfMessages: false },
             twitch: { ignoreSelfMessages: false },
             youtube: { ignoreSelfMessages: false },
@@ -26,7 +26,7 @@ describe('DependencyFactory behavior', () => {
             expect(() => factory.createYoutubeDependencies({
                 enableAPI: true,
                 username: 'channel'
-            }, { logger: noOpLogger, config: mockPlainConfig })).toThrow(/YouTube API key is required/);
+            }, { logger: noOpLogger, config: configFixture })).toThrow(/YouTube API key is required/);
         });
 
         it('creates dependencies object with expected structure when config is valid', () => {
@@ -34,7 +34,7 @@ describe('DependencyFactory behavior', () => {
                 enableAPI: false,
                 username: 'channel',
                 apiKey: 'testKey'
-            }, { logger: noOpLogger, config: mockPlainConfig });
+            }, { logger: noOpLogger, config: configFixture });
 
             expect(deps).toHaveProperty('apiClient');
             expect(deps).toHaveProperty('connectionManager');
@@ -44,19 +44,19 @@ describe('DependencyFactory behavior', () => {
 
     describe('TikTok dependency validation', () => {
         it('requires TikTok username', () => {
-            expect(() => factory.createTiktokDependencies({}, { logger: noOpLogger, config: mockPlainConfig }))
+            expect(() => factory.createTiktokDependencies({}, { logger: noOpLogger, config: configFixture }))
                 .toThrow(/TikTok username is required/);
         });
     });
 
     describe('Twitch dependency validation', () => {
         it('requires Twitch channel', () => {
-            expect(() => factory.createTwitchDependencies({}, { logger: noOpLogger, config: mockPlainConfig }))
+            expect(() => factory.createTwitchDependencies({}, { logger: noOpLogger, config: configFixture }))
                 .toThrow(/Twitch channel is required/);
         });
 
         it('requires Twitch client credentials for auth manager', () => {
-            expect(() => factory.createTwitchDependencies({ channel: 'me' }, { logger: noOpLogger, config: mockPlainConfig }))
+            expect(() => factory.createTwitchDependencies({ channel: 'me' }, { logger: noOpLogger, config: configFixture }))
                 .toThrow(/missing fields \[clientId, clientSecret\]/);
         });
     });

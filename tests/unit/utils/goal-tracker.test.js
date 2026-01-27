@@ -10,12 +10,12 @@ describe('Goal Tracker - Core Functionality', () => {
     });
 
     let goalTracker;
-    let mockConfig;
+    let configFixture;
     let mockFileSystem;
 
     beforeEach(() => {
         mockFileSystem = createMockFileSystem();
-        mockConfig = {
+        configFixture = {
             enabled: true,
             goalScene: 'v efx goals',
             tiktokGoalEnabled: true,
@@ -38,7 +38,7 @@ describe('Goal Tracker - Core Functionality', () => {
         const { GoalTracker } = require('../../../src/utils/goal-tracker');
         goalTracker = new GoalTracker({
             logger: noOpLogger,
-            config: { goals: mockConfig },
+            config: { goals: configFixture },
             fileSystem: mockFileSystem
         });
     });

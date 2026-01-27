@@ -7,7 +7,7 @@ const EventEmitter = require('events');
 describe('DisplayQueue - Twitch Bits Goal Calculation', () => {
     let displayQueue;
     let mockOBSManager;
-    let mockConfig;
+    let configFixture;
     let mockGoalsManager;
 
     beforeEach(() => {
@@ -20,7 +20,7 @@ describe('DisplayQueue - Twitch Bits Goal Calculation', () => {
             processDonationGoal: createMockFn().mockResolvedValue()
         };
 
-        mockConfig = {
+        configFixture = {
             goals: { enabled: true, targetAmount: 1000 },
             timing: { notificationDuration: 5000, lingerChatDuration: 10000 },
             notification: {
@@ -50,7 +50,7 @@ describe('DisplayQueue - Twitch Bits Goal Calculation', () => {
 
         displayQueue = new DisplayQueue(
             mockOBSManager,
-            mockConfig,
+            configFixture,
             {},
             null,
             { goalsManager: mockGoalsManager, sourcesManager: mockSourcesManager }

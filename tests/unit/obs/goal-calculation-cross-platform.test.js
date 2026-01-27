@@ -7,7 +7,7 @@ const EventEmitter = require('events');
 describe('Cross-Platform Goal Calculation', () => {
     let displayQueue;
     let mockOBSManager;
-    let mockConfig;
+    let configFixture;
     let mockConstants;
     
     beforeEach(() => {
@@ -16,7 +16,7 @@ describe('Cross-Platform Goal Calculation', () => {
         mockOBSManager.isConnected = createMockFn().mockReturnValue(true);
         mockOBSManager.isReady = createMockFn().mockResolvedValue(true);
 
-        mockConfig = {
+        configFixture = {
             autoProcess: false,
             goals: {
                 enabled: true,
@@ -74,7 +74,7 @@ describe('Cross-Platform Goal Calculation', () => {
             }
         };
 
-        displayQueue = new DisplayQueue(mockOBSManager, mockConfig, mockConstants, null, mockDependencies);
+        displayQueue = new DisplayQueue(mockOBSManager, configFixture, mockConstants, null, mockDependencies);
         displayQueue.__goalTotals = goalTotals;
     });
     
@@ -87,7 +87,7 @@ describe('Cross-Platform Goal Calculation', () => {
     
     describe('TikTok gifts should use total amount correctly', () => {
         it('should use the total TikTok amount for goal tracking', async () => {
-            mockConfig.goals.enabled = true;
+            configFixture.goals.enabled = true;
             
             const tiktokGift = {
                 type: 'platform:gift',
@@ -112,7 +112,7 @@ describe('Cross-Platform Goal Calculation', () => {
         });
         
         it('should use TikTok total amount derived from repeat count', async () => {
-            mockConfig.goals.enabled = true;
+            configFixture.goals.enabled = true;
             
             const tiktokDiamonds = {
                 type: 'platform:gift',
@@ -139,7 +139,7 @@ describe('Cross-Platform Goal Calculation', () => {
     
     describe('YouTube donations should use total amount correctly', () => {
         it('should use the total YouTube amount for goal tracking', async () => {
-            mockConfig.goals.enabled = true;
+            configFixture.goals.enabled = true;
             
             const youtubeDonation = {
                 type: 'platform:gift',
@@ -166,7 +166,7 @@ describe('Cross-Platform Goal Calculation', () => {
     
     describe('Twitch bits should NOT multiply', () => {
         it('should use Twitch bits value directly without multiplication', async () => {
-            mockConfig.goals.enabled = true;
+            configFixture.goals.enabled = true;
             
             const twitchBits = {
                 type: 'platform:gift',
@@ -195,7 +195,7 @@ describe('Cross-Platform Goal Calculation', () => {
     
     describe('Edge cases', () => {
         it('should handle gifts with zero or missing values gracefully', async () => {
-            mockConfig.goals.enabled = true;
+            configFixture.goals.enabled = true;
             
             const edgeCases = [
                 {
@@ -244,7 +244,7 @@ describe('Cross-Platform Goal Calculation', () => {
         });
 
         it('should skip goal tracking for error gifts', async () => {
-            mockConfig.goals.enabled = true;
+            configFixture.goals.enabled = true;
 
             const errorGift = {
                 type: 'platform:gift',

@@ -7,7 +7,7 @@ describe('OBS Startup Display Clearing - Detailed Behavior', () => {
     let mockOBSManager;
     let hideAllDisplays;
     let clearTextSource;
-    let mockConfig;
+    let configFixture;
     let deps;
 
     beforeEach(() => {
@@ -19,7 +19,7 @@ describe('OBS Startup Display Clearing - Detailed Behavior', () => {
         hideAllDisplays = createMockFn().mockResolvedValue();
         clearTextSource = createMockFn().mockResolvedValue();
 
-        mockConfig = {
+        configFixture = {
             general: {
                 chatMsgScene: 'stream pkmn switch',
                 chatMsgTxt: 'notification streamlabs',
@@ -55,13 +55,13 @@ describe('OBS Startup Display Clearing - Detailed Behavior', () => {
 
     describe('Behavior', () => {
         it('should call hideAllDisplays with correct parameters based on config', async () => {
-            await clearStartupDisplays(mockConfig, deps);
+            await clearStartupDisplays(configFixture, deps);
 
             expect(hideAllDisplays).toHaveBeenCalledWith(
                 'stream pkmn switch',
                 'stream pkmn switch',
-                mockConfig.obs.chatPlatformLogos,
-                mockConfig.obs.notificationPlatformLogos,
+                configFixture.obs.chatPlatformLogos,
+                configFixture.obs.notificationPlatformLogos,
                 'tts txt',
                 'notification streamlabs'
             );
@@ -84,7 +84,7 @@ describe('OBS Startup Display Clearing - Detailed Behavior', () => {
         });
 
         it('should not clear text sources directly on startup', async () => {
-            await clearStartupDisplays(mockConfig, deps);
+            await clearStartupDisplays(configFixture, deps);
 
             expect(clearTextSource).not.toHaveBeenCalled();
         });
@@ -112,7 +112,7 @@ describe('OBS Startup Display Clearing - Detailed Behavior', () => {
         it('should skip operations when OBS is not connected', async () => {
             mockOBSManager.isConnected = createMockFn(() => false);
 
-            await clearStartupDisplays(mockConfig, deps);
+            await clearStartupDisplays(configFixture, deps);
 
             expect(hideAllDisplays).not.toHaveBeenCalled();
             expect(clearTextSource).not.toHaveBeenCalled();
@@ -121,7 +121,7 @@ describe('OBS Startup Display Clearing - Detailed Behavior', () => {
         it('should not crash startup if entire clearing fails', async () => {
             hideAllDisplays.mockRejectedValue(new Error('OBS connection lost'));
 
-            await expect(clearStartupDisplays(mockConfig, deps)).resolves.toBeUndefined();
+            await expect(clearStartupDisplays(configFixture, deps)).resolves.toBeUndefined();
         });
 
         it('should use provided config for platform logos', async () => {

@@ -26,13 +26,13 @@ describe('YouTube Direct getViewerCount() Integration', () => {
             ...providerOverrides
         });
 
-        const mockConfig = createMockConfig('youtube');
+        const configFixture = createMockConfig('youtube');
         const mockDeps = createMockPlatformDependencies('youtube', {
             logger: noOpLogger,
             viewerCountProvider: mockProvider
         });
 
-        const platform = new YouTubePlatform(mockConfig, mockDeps);
+        const platform = new YouTubePlatform(configFixture, mockDeps);
 
         return { platform, mockProvider };
     };

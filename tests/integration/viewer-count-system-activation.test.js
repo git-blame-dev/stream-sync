@@ -46,7 +46,7 @@ describe('ViewerCount System Activation Integration', () => {
 
     let AppRuntime;
     let ViewerCountSystem;
-    let mockConfig;
+    let configFixture;
     let mockOBSManager;
     let mockYouTubePlatform;
     let mockTwitchPlatform;
@@ -76,7 +76,7 @@ describe('ViewerCount System Activation Integration', () => {
     beforeEach(() => {
         testClock.reset();
 
-        mockConfig = createMockConfig({
+        configFixture = createMockConfig({
             general: {
                 debug: true,
                 viewerCountPollingInterval: 60,
@@ -128,7 +128,7 @@ describe('ViewerCount System Activation Integration', () => {
         buildAppRuntimeDependencies = (overrides = {}) => {
             const logger = noOpLogger;
             return createAppRuntimeTestDependencies({
-                configSnapshot: mockConfig,
+                configSnapshot: configFixture,
                 displayQueue: mockDisplayQueue,
                 logger,
                 config: testConfig,
@@ -150,7 +150,7 @@ describe('ViewerCount System Activation Integration', () => {
 
     describe('when system starts with YouTube enabled and live', () => {
         test('should activate ViewerCount polling system', async () => {
-            const app = new AppRuntime(mockConfig, buildAppRuntimeDependencies());
+            const app = new AppRuntime(configFixture, buildAppRuntimeDependencies());
 
             app.viewerCountSystem = new ViewerCountSystem({
                 platformProvider: () => app.getPlatforms(),
@@ -174,7 +174,7 @@ describe('ViewerCount System Activation Integration', () => {
         }, TEST_TIMEOUTS.FAST);
 
         test('should poll viewer counts for all live platforms', async () => {
-            const app = new AppRuntime(mockConfig, buildAppRuntimeDependencies());
+            const app = new AppRuntime(configFixture, buildAppRuntimeDependencies());
 
             app.viewerCountSystem = new ViewerCountSystem({
                 platformProvider: () => app.getPlatforms(),
@@ -202,7 +202,7 @@ describe('ViewerCount System Activation Integration', () => {
         }, TEST_TIMEOUTS.FAST);
 
         test('should not poll platforms that are offline', async () => {
-            const app = new AppRuntime(mockConfig, buildAppRuntimeDependencies());
+            const app = new AppRuntime(configFixture, buildAppRuntimeDependencies());
 
             app.viewerCountSystem = new ViewerCountSystem({
                 platformProvider: () => app.getPlatforms(),
@@ -232,7 +232,7 @@ describe('ViewerCount System Activation Integration', () => {
 
     describe('when ViewerCount system activation is driven by app.start()', () => {
         test('should demonstrate the integration flow that should work', async () => {
-            const app = new AppRuntime(mockConfig, buildAppRuntimeDependencies());
+            const app = new AppRuntime(configFixture, buildAppRuntimeDependencies());
 
             app.viewerCountSystem = new ViewerCountSystem({
                 platformProvider: () => app.getPlatforms(),
@@ -257,7 +257,7 @@ describe('ViewerCount System Activation Integration', () => {
 
     describe('when stream status changes after startup', () => {
         test('should start polling when stream goes live', async () => {
-            const app = new AppRuntime(mockConfig, buildAppRuntimeDependencies());
+            const app = new AppRuntime(configFixture, buildAppRuntimeDependencies());
 
             app.viewerCountSystem = new ViewerCountSystem({
                 platformProvider: () => app.getPlatforms(),
@@ -282,7 +282,7 @@ describe('ViewerCount System Activation Integration', () => {
         }, TEST_TIMEOUTS.FAST);
 
         test('should stop polling when stream goes offline', async () => {
-            const app = new AppRuntime(mockConfig, buildAppRuntimeDependencies());
+            const app = new AppRuntime(configFixture, buildAppRuntimeDependencies());
 
             app.viewerCountSystem = new ViewerCountSystem({
                 platformProvider: () => app.getPlatforms(),

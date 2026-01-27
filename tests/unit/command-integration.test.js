@@ -13,10 +13,10 @@ const { CommandParser } = require('../../src/chat/commands');
 
 describe('Command Integration System', () => {
     let commandParser;
-    let mockConfig;
+    let configFixture;
 
     beforeEach(() => {
-        mockConfig = {
+        configFixture = {
             commands: {
                 'hello-there': '!hello, vfx bottom green',
                 'im-a-mod': '!mod, vfx top, mod|mods',
@@ -70,7 +70,7 @@ describe('Command Integration System', () => {
             }
         };
 
-        commandParser = new CommandParser(mockConfig);
+        commandParser = new CommandParser(configFixture);
     });
 
     describe('Command Parsing', () => {
