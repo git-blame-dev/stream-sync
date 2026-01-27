@@ -32,18 +32,12 @@ describe('Spam Config Export Missing', () => {
                 expect(ownProps).toContain('spam');
             });
 
-            it('should FAIL if spam getter is not correctly implemented', () => {
+            it('should provide spam config as accessible property', () => {
                 const { config } = require('../../../src/core/config');
 
-                const spamDescriptor = Object.getOwnPropertyDescriptor(config, 'spam');
-                expect(spamDescriptor).toBeDefined();
-
-                expect(spamDescriptor.get).toBeDefined();
-                expect(typeof spamDescriptor.get).toBe('function');
-
-                const spamResult = spamDescriptor.get.call(config);
-                expect(spamResult).toBeDefined();
-                expect(typeof spamResult).toBe('object');
+                expect(config.spam).toBeDefined();
+                expect(typeof config.spam).toBe('object');
+                expect(config.spam.spamDetectionEnabled).toBeDefined();
             });
         });
 

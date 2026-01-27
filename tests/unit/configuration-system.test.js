@@ -3,7 +3,17 @@ const { createMockFn, restoreAllMocks } = require('../helpers/bun-mock-utils');
 const { expectNoTechnicalArtifacts } = require('../helpers/assertion-helpers');
 
 const fs = require('fs');
-const { config, configManager } = require('../../src/core/config');
+const CONFIG_MODULE_PATH = require.resolve('../../src/core/config');
+
+function resetConfigModule() {
+    delete require.cache[CONFIG_MODULE_PATH];
+}
+
+function loadFreshConfig() {
+    resetConfigModule();
+    const { config, configManager } = require('../../src/core/config');
+    return { config, configManager };
+}
 
 let originalReadFileSync;
 let originalExistsSync;
@@ -85,32 +95,29 @@ maxEntries = 1000
 `;
 
 describe('Configuration System Behavior Tests', () => {
-    let configContent;
-    let originalDefaultConfigPath;
+    let currentConfig;
     const testConfigPath = '/test/config.ini';
 
-    const setupConfigMocks = (content) => {
-        configContent = content;
-        fs.existsSync = createMockFn((filePath) => filePath === testConfigPath);
+    const setupConfigMocks = (content, configPath = testConfigPath) => {
+        fs.existsSync = createMockFn((filePath) => filePath === configPath);
         fs.readFileSync = createMockFn((filePath) => {
-            if (filePath === testConfigPath) return configContent;
+            if (filePath === configPath) return content;
             throw new Error(`ENOENT: no such file: ${filePath}`);
         });
     };
 
-    const reloadConfig = () => {
-        configManager.configPath = testConfigPath;
-        configManager.isLoaded = false;
-        configManager.config = null;
-        configManager.load();
+    const reloadConfig = (content = testConfigContent, configPath = testConfigPath) => {
+        setupConfigMocks(content, configPath);
+        process.env.CHAT_BOT_CONFIG_PATH = configPath;
+        const { config } = loadFreshConfig();
+        currentConfig = config;
+        return { config };
     };
 
     beforeEach(() => {
         originalReadFileSync = fs.readFileSync;
         originalExistsSync = fs.existsSync;
         originalWriteFileSync = fs.writeFileSync;
-        originalDefaultConfigPath = configManager.defaultConfigPath;
-        setupConfigMocks(testConfigContent);
         reloadConfig();
     });
 
@@ -119,17 +126,15 @@ describe('Configuration System Behavior Tests', () => {
         fs.existsSync = originalExistsSync;
         fs.writeFileSync = originalWriteFileSync;
         restoreAllMocks();
-        configManager.isLoaded = false;
-        configManager.config = null;
-        configManager.defaultConfigPath = originalDefaultConfigPath;
-        configManager.configPath = originalDefaultConfigPath;
+        resetConfigModule();
+        delete process.env.CHAT_BOT_CONFIG_PATH;
     });
 
     describe('System Startup Behavior', () => {
         it('should enable platform connections when configuration enables them', () => {
-            const youtubeEnabled = config.youtube.enabled;
-            const youtubeUsername = config.youtube.username;
-            const youtubeApiKey = config.youtube.apiKey;
+            const youtubeEnabled = currentConfig.youtube.enabled;
+            const youtubeUsername = currentConfig.youtube.username;
+            const youtubeApiKey = currentConfig.youtube.apiKey;
 
             expect(youtubeEnabled).toBe(true);
             expect(youtubeUsername).toBe('TestChannel');
@@ -149,10 +154,8 @@ debugEnabled = true
 [obs]
 enabled = true
 `;
-                setupConfigMocks(incompleteConfig);
-
                 expect(() => {
-                    reloadConfig();
+                    reloadConfig(incompleteConfig);
                 }).toThrow(/Missing required configuration sections/);
             } finally {
                 process.stderr.write = originalStderrWrite;
@@ -183,10 +186,8 @@ innertubeInstanceTtlMs = 300000
 innertubeMinTtlMs = 60000
 userAgents = test-agent-1|test-agent-2
 `;
-                setupConfigMocks(missingUsernameConfig);
-
                 expect(() => {
-                    reloadConfig();
+                    reloadConfig(missingUsernameConfig);
                 }).toThrow(/Twitch.*username/i);
             } finally {
                 process.stderr.write = originalStderrWrite;
@@ -201,9 +202,10 @@ userAgents = test-agent-1|test-agent-2
             process.env.NODE_ENV = 'production';
             try {
                 fs.existsSync = createMockFn(() => false);
+                process.env.CHAT_BOT_CONFIG_PATH = '/nonexistent/config.ini';
 
                 expect(() => {
-                    reloadConfig();
+                    loadFreshConfig();
                 }).toThrow(/Configuration file not found/);
                 expect(stderrOutput.join('')).toContain('SETTINGS FILE MISSING');
             } finally {
@@ -219,13 +221,9 @@ userAgents = test-agent-1|test-agent-2
             process.env.NODE_ENV = 'production';
             try {
                 fs.existsSync = createMockFn((path) => path === '/default/config.ini');
+                process.env.CHAT_BOT_CONFIG_PATH = '/nonexistent/config.ini';
 
-                configManager.configPath = '/nonexistent/config.ini';
-                configManager.defaultConfigPath = '/default/config.ini';
-                configManager.isLoaded = false;
-                configManager.config = null;
-
-                expect(() => configManager.load()).toThrow(/Configuration file not found/);
+                expect(() => loadFreshConfig()).toThrow(/Configuration file not found/);
             } finally {
                 process.env.NODE_ENV = originalNodeEnv;
                 process.stderr.write = originalStderrWrite;
@@ -235,9 +233,9 @@ userAgents = test-agent-1|test-agent-2
 
     describe('Platform Integration Behavior', () => {
         it('should deliver correct configuration to platform factories', () => {
-            const youtubeConfig = config.youtube;
-            const twitchConfig = config.twitch;
-            const tiktokConfig = config.tiktok;
+            const youtubeConfig = currentConfig.youtube;
+            const twitchConfig = currentConfig.twitch;
+            const tiktokConfig = currentConfig.tiktok;
 
             expect(youtubeConfig.enabled).toBe(true);
             expect(youtubeConfig.username).toBe('TestChannel');
@@ -266,10 +264,9 @@ messagesEnabled = false
 followsEnabled = false
 giftsEnabled = true
 `;
-            setupConfigMocks(configWithOverrides);
-            reloadConfig();
+            reloadConfig(configWithOverrides);
 
-            const youtubeConfig = config.youtube;
+            const youtubeConfig = currentConfig.youtube;
 
             expect(youtubeConfig.messagesEnabled).toBe(false);
             expect(youtubeConfig.followsEnabled).toBe(false);
@@ -306,21 +303,20 @@ notificationPlatformLogoTikTok = tiktok-img
 [commands]
 enabled = 1
 `;
-            setupConfigMocks(booleanConfig);
-            reloadConfig();
+            reloadConfig(booleanConfig);
 
-            expect(config.general.debugEnabled).toBe(true);
-            expect(config.general.messagesEnabled).toBe(false);
-            expect(config.general.ttsEnabled).toBe(true);
-            expect(config.general.greetingsEnabled).toBe(false);
-            expect(config.obs.enabled).toBe(false);
-            expect(config.commands.enabled).toBe(false);
+            expect(currentConfig.general.debugEnabled).toBe(true);
+            expect(currentConfig.general.messagesEnabled).toBe(false);
+            expect(currentConfig.general.ttsEnabled).toBe(true);
+            expect(currentConfig.general.greetingsEnabled).toBe(false);
+            expect(currentConfig.obs.enabled).toBe(false);
+            expect(currentConfig.commands.enabled).toBe(false);
         });
     });
 
     describe('Runtime Configuration Behavior', () => {
         it('should apply dynamic config path changes correctly', () => {
-            const initialEnabled = config.youtube.enabled;
+            const initialEnabled = currentConfig.youtube.enabled;
             expect(initialEnabled).toBe(true);
 
             const newConfigContent = `
@@ -395,24 +391,22 @@ heavyCommandThreshold = 4
 heavyCommandWindow = 360
 maxEntries = 1000
 `;
-            setupConfigMocks(newConfigContent);
-            reloadConfig();
+            reloadConfig(newConfigContent);
 
-            expect(config.youtube.enabled).toBe(false);
-            expect(config.youtube.username).toBe('DifferentChannel');
-            expect(config.general.debugEnabled).toBe(false);
+            expect(currentConfig.youtube.enabled).toBe(false);
+            expect(currentConfig.youtube.username).toBe('DifferentChannel');
+            expect(currentConfig.general.debugEnabled).toBe(false);
         });
 
         it('should handle configuration reloading without system restart', () => {
-            const initialUsername = config.youtube.username;
+            const initialUsername = currentConfig.youtube.username;
             expect(initialUsername).toBe('TestChannel');
 
             const updatedConfig = testConfigContent.replace('TestChannel', 'UpdatedChannel');
-            setupConfigMocks(updatedConfig);
-            configManager.reload();
+            reloadConfig(updatedConfig);
 
-            expect(config.youtube.username).toBe('UpdatedChannel');
-            expect(config.youtube.enabled).toBe(true);
+            expect(currentConfig.youtube.username).toBe('UpdatedChannel');
+            expect(currentConfig.youtube.enabled).toBe(true);
         });
 
         it('should support explicit config path overrides', () => {
@@ -450,12 +444,11 @@ innertubeInstanceTtlMs = 300000
 innertubeMinTtlMs = 60000
 userAgents = test-agent-1|test-agent-2
 `;
-            setupConfigMocks(overrideConfig);
-            reloadConfig();
+            reloadConfig(overrideConfig);
 
-            expect(config.general.debugEnabled).toBe(false);
-            expect(config.youtube.username).toBe('CLIChannel');
-            expect(config.obs.password).toBe(process.env.OBS_PASSWORD);
+            expect(currentConfig.general.debugEnabled).toBe(false);
+            expect(currentConfig.youtube.username).toBe('CLIChannel');
+            expect(currentConfig.obs.password).toBe(process.env.OBS_PASSWORD);
         });
     });
 
@@ -474,12 +467,9 @@ userAgents = test-agent-1|test-agent-2
                     throw new Error(`ENOENT: no such file: ${path}`);
                 });
 
-                configManager.configPath = '/nonexistent/missing.ini';
-                configManager.defaultConfigPath = fallbackPath;
-                configManager.isLoaded = false;
-                configManager.config = null;
+                process.env.CHAT_BOT_CONFIG_PATH = '/nonexistent/missing.ini';
 
-                expect(() => configManager.load()).toThrow(/Configuration file not found/);
+                expect(() => loadFreshConfig()).toThrow(/Configuration file not found/);
             } finally {
                 process.env.NODE_ENV = originalNodeEnv;
                 process.stderr.write = originalStderrWrite;
@@ -497,10 +487,8 @@ broken syntax here
 [obs]
 enabled =
 `;
-                setupConfigMocks(corruptedConfig);
-
                 expect(() => {
-                    reloadConfig();
+                    reloadConfig(corruptedConfig);
                 }).toThrow();
             } finally {
                 process.stderr.write = originalStderrWrite;
@@ -510,14 +498,14 @@ enabled =
         it('should maintain system stability during config errors', () => {
             reloadConfig();
 
-            const initialYoutubeEnabled = config.youtube.enabled;
+            const initialYoutubeEnabled = currentConfig.youtube.enabled;
             expect(initialYoutubeEnabled).toBe(true);
 
-            expect(config.youtube.enabled).toBe(true);
-            expect(config.youtube.username).toBe('TestChannel');
+            expect(currentConfig.youtube.enabled).toBe(true);
+            expect(currentConfig.youtube.username).toBe('TestChannel');
 
-            expect(config.general.debugEnabled).toBe(true);
-            expect(config.obs.enabled).toBe(true);
+            expect(currentConfig.general.debugEnabled).toBe(true);
+            expect(currentConfig.obs.enabled).toBe(true);
         });
 
         it('should handle invalid boolean values gracefully', () => {
@@ -547,14 +535,13 @@ notificationPlatformLogoTikTok = tiktok-img
 [commands]
 enabled = notabool
 `;
-            setupConfigMocks(invalidBooleanConfig);
-            reloadConfig();
+            reloadConfig(invalidBooleanConfig);
 
-            expect(config.general.debugEnabled).toBe(false);
-            expect(config.general.messagesEnabled).toBe(true);
-            expect(config.general.ttsEnabled).toBe(false);
-            expect(config.obs.enabled).toBe(false);
-            expect(config.commands.enabled).toBe(false);
+            expect(currentConfig.general.debugEnabled).toBe(false);
+            expect(currentConfig.general.messagesEnabled).toBe(true);
+            expect(currentConfig.general.ttsEnabled).toBe(false);
+            expect(currentConfig.obs.enabled).toBe(false);
+            expect(currentConfig.commands.enabled).toBe(false);
         });
     });
 
@@ -574,10 +561,9 @@ messagesEnabled = true
 giftsEnabled = false
 followsEnabled = true
 `;
-            setupConfigMocks(notificationConfig);
-            reloadConfig();
+            reloadConfig(notificationConfig);
 
-            const youtubeConfig = config.youtube;
+            const youtubeConfig = currentConfig.youtube;
 
             expect(youtubeConfig.messagesEnabled).toBe(true);
             expect(youtubeConfig.giftsEnabled).toBe(false);
@@ -598,10 +584,9 @@ chatMsgGroup = statusbar chat grp
 viewerCountPollingInterval = 60
 maxMessageLength = 500
 `;
-            setupConfigMocks(ttsConfig);
-            reloadConfig();
+            reloadConfig(ttsConfig);
 
-            const generalConfig = config.general;
+            const generalConfig = currentConfig.general;
 
             expect(generalConfig.ttsEnabled).toBe(true);
             expect(generalConfig.messagesEnabled).toBe(true);
@@ -626,10 +611,9 @@ notificationPlatformLogoTwitch = twitch-img
 notificationPlatformLogoYouTube = youtube-img
 notificationPlatformLogoTikTok = tiktok-img
 `;
-            setupConfigMocks(obsConfig);
-            reloadConfig();
+            reloadConfig(obsConfig);
 
-            const obsSettings = config.obs;
+            const obsSettings = currentConfig.obs;
 
             expect(obsSettings.enabled).toBe(true);
             expect(obsSettings.address).toBe('ws://localhost:4455');
@@ -666,12 +650,11 @@ enabled = true
 username = 李小明直播
 apiKey = tiktok-key
 `;
-            setupConfigMocks(internationalConfig);
-            reloadConfig();
+            reloadConfig(internationalConfig);
 
-            const youtubeUsername = config.youtube.username;
-            const twitchUsername = config.twitch.username;
-            const tiktokUsername = config.tiktok.username;
+            const youtubeUsername = currentConfig.youtube.username;
+            const twitchUsername = currentConfig.twitch.username;
+            const tiktokUsername = currentConfig.tiktok.username;
 
             expect(youtubeUsername).toBe('김철수_Gaming');
             expect(twitchUsername).toBe('José_Streamer');
@@ -683,7 +666,7 @@ apiKey = tiktok-key
         });
 
         it('should expose stream detection settings with defaults when not configured', () => {
-            const general = config.general;
+            const general = currentConfig.general;
 
             expect(general.streamDetectionEnabled).toBe(true);
             expect(general.streamRetryInterval).toBe(15);
@@ -707,10 +690,9 @@ chatMsgGroup = statusbar chat grp
 viewerCountPollingInterval = 60
 maxMessageLength = 500
 `;
-            setupConfigMocks(detectionConfig);
-            reloadConfig();
+            reloadConfig(detectionConfig);
 
-            const general = config.general;
+            const general = currentConfig.general;
 
             expect(general.streamDetectionEnabled).toBe(false);
             expect(general.streamRetryInterval).toBe(45);
@@ -728,10 +710,8 @@ maxMessageLength = 500
 [general]
 debugEnabled = true
 `;
-                setupConfigMocks(minimalConfig);
-
                 expect(() => {
-                    reloadConfig();
+                    reloadConfig(minimalConfig);
                 }).toThrow(/Missing required configuration sections.*obs.*commands/);
             } finally {
                 process.stderr.write = originalStderrWrite;
@@ -753,10 +733,8 @@ innertubeInstanceTtlMs = 300000
 innertubeMinTtlMs = 60000
 userAgents = test-agent-1|test-agent-2
 `;
-                setupConfigMocks(incompleteConfig);
-
                 expect(() => {
-                    reloadConfig();
+                    reloadConfig(incompleteConfig);
                 }).toThrow(/YouTube.*username/i);
             } finally {
                 process.stderr.write = originalStderrWrite;
@@ -780,11 +758,10 @@ fadeDuration = 750
 transitionDelay = 200
 notificationClearDelay = 500
 `;
-            setupConfigMocks(timingConfig);
-            reloadConfig();
+            reloadConfig(timingConfig);
 
-            const cmdCooldown = config.general.cmdCooldownMs;
-            const pollingInterval = config.general.viewerCountPollingIntervalMs;
+            const cmdCooldown = currentConfig.general.cmdCooldownMs;
+            const pollingInterval = currentConfig.general.viewerCountPollingIntervalMs;
 
             expect(cmdCooldown).toBe(30000);
             expect(pollingInterval).toBe(45000);

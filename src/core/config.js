@@ -2,7 +2,6 @@
 const fs = require('fs');
 const ini = require('ini');
 const { handleUserFacingError } = require('../utils/user-friendly-errors');
-const { DEFAULT_HTTP_USER_AGENTS, parseUserAgentList } = require('./http-config');
 const { DEFAULTS } = require('./config-defaults');
 const { ConfigValidator } = require('../utils/config-validator');
 
@@ -64,8 +63,6 @@ class ConfigLoader {
                     process.stdout.write(`[WARN] [Config] ${warning}\n`);
                 });
             }
-            
-            Object.freeze(normalized);
             
             this.config = normalized;
             this.isLoaded = true;
@@ -205,17 +202,7 @@ class ConfigLoader {
     }
 }
 
-// Create global configuration loader instance
 const configManager = new ConfigLoader();
-
-const resolveConfigValue = (section, key) => {
-    const rawValue = configManager.get(section, key);
-    if (rawValue === undefined || rawValue === null) {
-        return undefined;
-    }
-    const trimmed = String(rawValue).trim();
-    return trimmed.length > 0 ? trimmed : undefined;
-};
 
 const resolveSecretValue = (envKey) => {
     const rawValue = process.env[envKey];
@@ -226,366 +213,216 @@ const resolveSecretValue = (envKey) => {
     return trimmed.length > 0 ? trimmed : undefined;
 };
 
-const resolvePlatformApiKey = (platformName) => {
-    switch (platformName) {
-        case 'tiktok':
-            return resolveSecretValue('TIKTOK_API_KEY');
-        case 'youtube':
-            return resolveSecretValue('YOUTUBE_API_KEY');
-        default:
-            return undefined;
-    }
-};
-
-const resolveHttpUserAgents = () => {
-    const rawAgents = configManager.get('http', 'userAgents');
-    const parsed = parseUserAgentList(rawAgents);
-    return parsed.length > 0 ? parsed : DEFAULT_HTTP_USER_AGENTS.slice();
-};
-
-const httpConfig = {
-    get userAgents() { return resolveHttpUserAgents(); },
-    get defaultTimeoutMs() { return configManager.getNumber('http', 'defaultTimeoutMs', DEFAULTS.http.defaultTimeoutMs); },
-    get reachabilityTimeoutMs() { return configManager.getNumber('http', 'reachabilityTimeoutMs', DEFAULTS.http.reachabilityTimeoutMs); },
-    get enhancedTimeoutMs() { return configManager.getNumber('http', 'enhancedTimeoutMs', DEFAULTS.http.enhancedTimeoutMs); },
-    get enhancedReachabilityTimeoutMs() { return configManager.getNumber('http', 'enhancedReachabilityTimeoutMs', DEFAULTS.http.enhancedReachabilityTimeoutMs); }
-};
-
-// Helper function to create platform-specific config objects with fallback logic
-function createPlatformConfig(platformName) {
-    const platformConfig = {
-        get enabled() { return configManager.getBoolean(platformName, 'enabled', false); },
-        get username() { return configManager.getString(platformName, 'username', ''); },
-        get greetNewCommentors() {
-            const value = configManager.get(platformName, 'greetNewCommentors');
-            return value != null ? configManager.getBoolean(platformName, 'greetNewCommentors', false) : generalConfig.greetNewCommentors;
-        },
-        get viewerCountEnabled() { return configManager.getBoolean(platformName, 'viewerCountEnabled', true); },
-        get viewerCountSource() { return configManager.getString(platformName, 'viewerCountSource', `${platformName} viewer count`); },
-        get pollInterval() { 
-            // Use platform-specific poll interval if available, otherwise fall back to the general setting.
-            // The value from config is in seconds, so convert to milliseconds.
-            const platformInterval = configManager.getNumber(platformName, 'pollInterval');
-            if (platformInterval) {
-                return platformInterval * 1000;
-            }
-            return generalConfig.viewerCountPollingIntervalMs;
-        },
-        get dataLoggingEnabled() { return configManager.getBoolean('logging', 'platformDataLoggingEnabled', DEFAULTS.logging.platformDataLoggingEnabled); },
-        get dataLoggingPath() { return DEFAULTS.LOG_DIRECTORY; }
+function buildGeneralConfig(normalized) {
+    const g = normalized.general;
+    return {
+        ...g,
+        cmdCooldownMs: g.cmdCoolDown * 1000,
+        globalCmdCooldownMs: g.globalCmdCoolDown * 1000,
+        viewerCountPollingIntervalMs: g.viewerCountPollingInterval * 1000,
+        suppressionWindowMs: g.suppressionWindow * 1000,
+        suppressionDurationMs: g.suppressionDuration * 1000,
+        suppressionCleanupIntervalMs: g.suppressionCleanupInterval * 1000
     };
+}
 
-    if (platformName !== 'twitch') {
-        // Unified apiKey for all platforms except Twitch (token-only auth)
-        Object.defineProperty(platformConfig, 'apiKey', {
-            get: function() { 
-                return resolvePlatformApiKey(platformName);
-            },
-            enumerable: true
-        });
-    }
+function buildHttpConfig(normalized) {
+    return { ...normalized.http };
+}
 
-    // Add notification flags with fallback
+function buildPlatformConfig(platformName, normalized, generalConfig) {
+    const platform = normalized[platformName] || {};
     const notificationFlags = [
-        'messagesEnabled',    // Chat messages
-        'commandsEnabled',    // VFX commands
-        'greetingsEnabled',   // First-time user greetings
-        'farewellsEnabled',   // User farewells
-        'followsEnabled',     // Follow/subscribe notifications
-        'giftsEnabled',       // Gift/donation notifications
-        'raidsEnabled',       // Raid notifications (Twitch only)
-        'paypiggiesEnabled',  // Paypiggy notifications
-        'ignoreSelfMessages'  // Filter broadcaster's own messages
+        'messagesEnabled', 'commandsEnabled', 'greetingsEnabled', 'farewellsEnabled',
+        'followsEnabled', 'giftsEnabled', 'raidsEnabled', 'paypiggiesEnabled', 'ignoreSelfMessages'
     ];
-    notificationFlags.forEach(flag => {
-        Object.defineProperty(platformConfig, flag, {
-            get: function() {
-                // Prioritize platform-specific setting, then fall back to general setting
-                const platformValue = configManager.get(platformName, flag, null);
-                if (platformValue !== null) {
-                    return configManager.getBoolean(platformName, flag);
-                }
-                return generalConfig[flag];
-            },
-            enumerable: true
-        });
-    });
-
-    if (platformName === 'youtube') {
-        Object.assign(platformConfig, {
-            get enableAPI() {
-                return configManager.getBoolean('youtube', 'enableAPI', DEFAULTS.youtube.enableAPI);
-            },
-            get streamDetectionMethod() {
-                const method = configManager.getString('youtube', 'streamDetectionMethod', DEFAULTS.youtube.streamDetectionMethod).toLowerCase();
-                return ['youtubei', 'api'].includes(method) ? method : DEFAULTS.youtube.streamDetectionMethod;
-            },
-            get viewerCountMethod() {
-                const method = configManager.getString('youtube', 'viewerCountMethod', DEFAULTS.youtube.viewerCountMethod).toLowerCase();
-                return ['youtubei', 'api'].includes(method) ? method : DEFAULTS.youtube.viewerCountMethod;
-            },
-            get chatMethod() { return 'scraping'; },
-            get maxStreams() { return configManager.getNumber('youtube', 'maxStreams', DEFAULTS.youtube.maxStreams); },
-        });
-    }
-
-    return platformConfig;
-}
-
-// --- Main Configuration Objects ---
-
-const generalConfig = {
-    get cmdCooldownMs() { return configManager.getNumber('general', 'cmdCoolDown', DEFAULTS.general.cmdCoolDown) * 1000; },
-    get globalCmdCooldownMs() { return configManager.getNumber('general', 'globalCmdCoolDown', DEFAULTS.general.globalCmdCoolDown) * 1000; },
-    get viewerCountPollingIntervalMs() { return configManager.getNumber('general', 'viewerCountPollingInterval', DEFAULTS.general.viewerCountPollingInterval) * 1000; },
-    get viewerCountScene() { return configManager.get('general', 'viewerCountScene', DEFAULTS.general.viewerCountScene); },
-    get chatMsgTxt() { return configManager.get('general', 'chatMsgTxt', DEFAULTS.general.chatMsgTxt); },
-    get chatMsgScene() { return configManager.get('general', 'chatMsgScene', DEFAULTS.general.chatMsgScene); },
-    get chatMsgGroup() { return configManager.get('general', 'chatMsgGroup', DEFAULTS.general.chatMsgGroup); },
-    get debugEnabled() { return configManager.getBoolean('general', 'debugEnabled', DEFAULTS.general.debugEnabled); },
-    get envFilePath() {
-        const envFilePath = configManager.getString('general', 'envFilePath', DEFAULTS.general.envFilePath);
-        return envFilePath && envFilePath.trim() ? envFilePath : DEFAULTS.general.envFilePath;
-    },
-    get envFileReadEnabled() { return configManager.getBoolean('general', 'envFileReadEnabled', DEFAULTS.general.envFileReadEnabled); },
-    get envFileWriteEnabled() { return configManager.getBoolean('general', 'envFileWriteEnabled', DEFAULTS.general.envFileWriteEnabled); },
-    get messagesEnabled() { return configManager.getBoolean('general', 'messagesEnabled', DEFAULTS.general.messagesEnabled); },
-    get commandsEnabled() { return configManager.getBoolean('general', 'commandsEnabled', DEFAULTS.general.commandsEnabled); },
-    get greetingsEnabled() { return configManager.getBoolean('general', 'greetingsEnabled', DEFAULTS.general.greetingsEnabled); },
-    get farewellsEnabled() { return configManager.getBoolean('general', 'farewellsEnabled', DEFAULTS.general.farewellsEnabled); },
-    get followsEnabled() { return configManager.getBoolean('general', 'followsEnabled', DEFAULTS.general.followsEnabled); },
-    get giftsEnabled() { return configManager.getBoolean('general', 'giftsEnabled', DEFAULTS.general.giftsEnabled); },
-    get raidsEnabled() { return configManager.getBoolean('general', 'raidsEnabled', DEFAULTS.general.raidsEnabled); },
-    get paypiggiesEnabled() { return configManager.getBoolean('general', 'paypiggiesEnabled', DEFAULTS.general.paypiggiesEnabled); },
-    get greetNewCommentors() { return configManager.getBoolean('general', 'greetNewCommentors', DEFAULTS.general.greetNewCommentors); },
-    get filterOldMessages() { return configManager.getBoolean('general', 'filterOldMessages', DEFAULTS.general.filterOldMessages); },
-    get logChatMessages() { return configManager.getBoolean('general', 'logChatMessages', DEFAULTS.general.logChatMessages); },
-    get keywordParsingEnabled() { return configManager.getBoolean('general', 'keywordParsingEnabled', DEFAULTS.general.keywordParsingEnabled); },
-    get ignoreSelfMessages() { return configManager.getBoolean('general', 'ignoreSelfMessages', DEFAULTS.general.ignoreSelfMessages); },
-    get fallbackUsername() { return configManager.getString('general', 'fallbackUsername', DEFAULTS.general.fallbackUsername); },
-    get anonymousUsername() { return configManager.getString('general', 'anonymousUsername', DEFAULTS.general.anonymousUsername); },
-    get userSuppressionEnabled() { return configManager.getBoolean('general', 'userSuppressionEnabled', DEFAULTS.general.userSuppressionEnabled); },
-    get maxNotificationsPerUser() { return configManager.getNumber('general', 'maxNotificationsPerUser', DEFAULTS.general.maxNotificationsPerUser); },
-    get suppressionWindowMs() { return configManager.getNumber('general', 'suppressionWindow', DEFAULTS.general.suppressionWindow) * 1000; },
-    get suppressionDurationMs() { return configManager.getNumber('general', 'suppressionDuration', DEFAULTS.general.suppressionDuration) * 1000; },
-    get suppressionCleanupIntervalMs() { return configManager.getNumber('general', 'suppressionCleanupInterval', DEFAULTS.general.suppressionCleanupInterval) * 1000; },
-    get ttsEnabled() { return configManager.getBoolean('general', 'ttsEnabled', DEFAULTS.general.ttsEnabled); },
-    get streamDetectionEnabled() { return configManager.getBoolean('general', 'streamDetectionEnabled', DEFAULTS.general.streamDetectionEnabled); },
-    get streamRetryInterval() { return configManager.getNumber('general', 'streamRetryInterval', DEFAULTS.general.streamRetryInterval); },
-    get streamMaxRetries() { return configManager.getNumber('general', 'streamMaxRetries', DEFAULTS.general.streamMaxRetries); },
-    get continuousMonitoringInterval() { return configManager.getNumber('general', 'continuousMonitoringInterval', DEFAULTS.general.continuousMonitoringInterval); },
-    get maxMessageLength() { return configManager.getNumber('general', 'maxMessageLength', DEFAULTS.general.maxMessageLength); }
-};
-
-// Platform config creation functions (no caching - created fresh on each call)
-function getTiktokConfig() {
-    const rawSection = configManager.getSection('tiktok') || {};
-    return Object.assign({}, rawSection, createPlatformConfig('tiktok'));
-}
-
-function getTwitchConfig() {
-    const rawSection = configManager.getSection('twitch') || {};
-    const twitchConfig = Object.assign({}, rawSection, createPlatformConfig('twitch'));
     
-    Object.assign(twitchConfig, {
-        get channel() { return configManager.getString('twitch', 'channel', ''); },
-        get eventsub_enabled() { return configManager.getBoolean('twitch', 'eventsub_enabled', DEFAULTS.twitch.eventsubEnabled); },
-        get tokenStorePath() {
-            const tokenStorePath = configManager.getString('twitch', 'tokenStorePath', DEFAULTS.twitch.tokenStorePath);
-            return tokenStorePath.trim() ? tokenStorePath : DEFAULTS.twitch.tokenStorePath;
+    const result = {
+        ...platform,
+        pollIntervalMs: platform.pollInterval ? platform.pollInterval * 1000 : generalConfig.viewerCountPollingIntervalMs,
+        dataLoggingPath: DEFAULTS.LOG_DIRECTORY
+    };
+    
+    if (result.greetNewCommentors === null) {
+        result.greetNewCommentors = generalConfig.greetNewCommentors;
+    }
+    
+    notificationFlags.forEach(flag => {
+        if (result[flag] === null) {
+            result[flag] = generalConfig[flag];
         }
     });
+    
+    if (platformName !== 'twitch') {
+        const envKey = platformName === 'tiktok' ? 'TIKTOK_API_KEY' : 'YOUTUBE_API_KEY';
+        Object.defineProperty(result, 'apiKey', {
+            get: () => resolveSecretValue(envKey),
+            enumerable: true
+        });
+    }
+    
+    return result;
+}
 
-    Object.defineProperty(twitchConfig, 'clientId', {
-        get: function() {
-            return resolveSecretValue('TWITCH_CLIENT_ID');
-        },
-        enumerable: true
-    });
+function buildTiktokConfig(normalized, generalConfig) {
+    return buildPlatformConfig('tiktok', normalized, generalConfig);
+}
 
-    Object.defineProperty(twitchConfig, 'clientSecret', {
-        get: function() {
-            return resolveSecretValue('TWITCH_CLIENT_SECRET');
-        },
+function buildTwitchConfig(normalized, generalConfig) {
+    const base = buildPlatformConfig('twitch', normalized, generalConfig);
+    
+    Object.defineProperty(base, 'clientId', {
+        get: () => resolveSecretValue('TWITCH_CLIENT_ID'),
         enumerable: true
     });
     
-    return twitchConfig;
+    Object.defineProperty(base, 'clientSecret', {
+        get: () => resolveSecretValue('TWITCH_CLIENT_SECRET'),
+        enumerable: true
+    });
+    
+    return base;
 }
 
-function getYoutubeConfig() {
-    return createPlatformConfig('youtube');
+function buildYoutubeConfig(normalized, generalConfig) {
+    const base = buildPlatformConfig('youtube', normalized, generalConfig);
+    base.chatMethod = 'scraping';
+    return base;
 }
 
-const obsConfig = {
-    get address() { return configManager.getString('obs', 'address', DEFAULTS.obs.address); },
-    get password() {
-        return resolveSecretValue('OBS_PASSWORD');
-    },
-    get enabled() { return configManager.getBoolean('obs', 'enabled', DEFAULTS.obs.enabled); },
-    get connectionTimeoutMs() { return configManager.getNumber('obs', 'connectionTimeoutMs', DEFAULTS.obs.connectionTimeoutMs); },
-    get notificationTxt() { return configManager.getString('obs', 'notificationTxt', DEFAULTS.obs.notificationTxt); },
-    get chatMsgTxt() { return configManager.getString('obs', 'chatMsgTxt', DEFAULTS.obs.chatMsgTxt); },
-    get notificationScene() { return configManager.getString('obs', 'notificationScene', DEFAULTS.obs.notificationScene); },
-    get notificationMsgGroup() { return configManager.getString('obs', 'notificationMsgGroup', DEFAULTS.obs.notificationMsgGroup); },
-    get ttsTxt() { return configManager.getString('obs', 'ttsTxt', DEFAULTS.obs.ttsTxt); },
-    get ttsScene() { return configManager.getString('obs', 'ttsScene', DEFAULTS.obs.ttsScene); },
-    get chatPlatformLogos() {
-        return {
-            twitch: ConfigValidator.requireString(configManager.get('obs', 'chatPlatformLogoTwitch'), 'obs.chatPlatformLogoTwitch'),
-            youtube: ConfigValidator.requireString(configManager.get('obs', 'chatPlatformLogoYouTube'), 'obs.chatPlatformLogoYouTube'),
-            tiktok: ConfigValidator.requireString(configManager.get('obs', 'chatPlatformLogoTikTok'), 'obs.chatPlatformLogoTikTok')
-        };
-    },
-    get notificationPlatformLogos() {
-        return {
-            twitch: ConfigValidator.requireString(configManager.get('obs', 'notificationPlatformLogoTwitch'), 'obs.notificationPlatformLogoTwitch'),
-            youtube: ConfigValidator.requireString(configManager.get('obs', 'notificationPlatformLogoYouTube'), 'obs.notificationPlatformLogoYouTube'),
-            tiktok: ConfigValidator.requireString(configManager.get('obs', 'notificationPlatformLogoTikTok'), 'obs.notificationPlatformLogoTikTok')
-        };
-    }
-};
+function buildObsConfig(normalized) {
+    const obs = normalized.obs;
+    return {
+        ...obs,
+        get password() { return resolveSecretValue('OBS_PASSWORD'); },
+        chatPlatformLogos: {
+            twitch: obs.chatPlatformLogoTwitch,
+            youtube: obs.chatPlatformLogoYouTube,
+            tiktok: obs.chatPlatformLogoTikTok
+        },
+        notificationPlatformLogos: {
+            twitch: obs.notificationPlatformLogoTwitch,
+            youtube: obs.notificationPlatformLogoYouTube,
+            tiktok: obs.notificationPlatformLogoTikTok
+        }
+    };
+}
 
-const handcamConfig = {
-    get enabled() { return configManager.getBoolean('handcam', 'glowEnabled', DEFAULTS.handcam.glowEnabled); },
-    get sourceName() { return configManager.getString('handcam', 'sourceName', DEFAULTS.handcam.sourceName); },
-    get sceneName() { return configManager.getString('handcam', 'sceneName', DEFAULTS.handcam.sceneName); },
-    get glowFilterName() { return configManager.getString('handcam', 'glowFilterName', DEFAULTS.handcam.glowFilterName); },
-    get maxSize() { return configManager.getNumber('handcam', 'maxSize', DEFAULTS.handcam.maxSize); },
-    get rampUpDuration() { return configManager.getNumber('handcam', 'rampUpDuration', DEFAULTS.handcam.rampUpDuration); },
-    get holdDuration() { return configManager.getNumber('handcam', 'holdDuration', DEFAULTS.handcam.holdDuration); },
-    get rampDownDuration() { return configManager.getNumber('handcam', 'rampDownDuration', DEFAULTS.handcam.rampDownDuration); },
-    get totalSteps() { return configManager.getNumber('handcam', 'totalSteps', DEFAULTS.handcam.totalSteps); },
-    get incrementPercent() { return configManager.getNumber('handcam', 'incrementPercent', DEFAULTS.handcam.incrementPercent); },
-    get easingEnabled() { return configManager.getBoolean('handcam', 'easingEnabled', DEFAULTS.handcam.easingEnabled); },
-    get animationInterval() { return configManager.getNumber('handcam', 'animationInterval', DEFAULTS.handcam.animationInterval); }
-};
+function buildHandcamConfig(normalized) {
+    const h = normalized.handcam;
+    return {
+        enabled: h.glowEnabled,
+        sourceName: h.sourceName,
+        sceneName: h.sceneName,
+        glowFilterName: h.glowFilterName,
+        maxSize: h.maxSize,
+        rampUpDuration: h.rampUpDuration,
+        holdDuration: h.holdDuration,
+        rampDownDuration: h.rampDownDuration,
+        totalSteps: h.totalSteps,
+        incrementPercent: h.incrementPercent,
+        easingEnabled: h.easingEnabled,
+        animationInterval: h.animationInterval
+    };
+}
 
-const goalsConfig = {
-    get enabled() { return configManager.getBoolean('goals', 'enabled', DEFAULTS.goals.enabled); },
-    get goalScene() { return configManager.getString('goals', 'goalScene', DEFAULTS.goals.goalScene); },
-    get tiktokGoalEnabled() { return configManager.getBoolean('goals', 'tiktokGoalEnabled', DEFAULTS.goals.tiktokGoalEnabled); },
-    get tiktokGoalSource() { return configManager.getString('goals', 'tiktokGoalSource'); },
-    get tiktokGoalTarget() { return configManager.getNumber('goals', 'tiktokGoalTarget', DEFAULTS.goals.tiktokGoalTarget); },
-    get tiktokGoalCurrency() { return configManager.getString('goals', 'tiktokGoalCurrency', DEFAULTS.goals.tiktokGoalCurrency); },
-    get tiktokPaypiggyEquivalent() { return configManager.getNumber('goals', 'tiktokPaypiggyEquivalent', DEFAULTS.goals.tiktokPaypiggyEquivalent); },
-    get youtubeGoalEnabled() { return configManager.getBoolean('goals', 'youtubeGoalEnabled', DEFAULTS.goals.youtubeGoalEnabled); },
-    get youtubeGoalSource() { return configManager.getString('goals', 'youtubeGoalSource'); },
-    get youtubeGoalTarget() { return configManager.getNumber('goals', 'youtubeGoalTarget', DEFAULTS.goals.youtubeGoalTarget); },
-    get youtubeGoalCurrency() { return configManager.getString('goals', 'youtubeGoalCurrency', DEFAULTS.goals.youtubeGoalCurrency); },
-    get youtubePaypiggyPrice() { return configManager.getNumber('goals', 'youtubePaypiggyPrice', DEFAULTS.goals.youtubePaypiggyPrice); },
-    get twitchGoalEnabled() { return configManager.getBoolean('goals', 'twitchGoalEnabled', DEFAULTS.goals.twitchGoalEnabled); },
-    get twitchGoalSource() { return configManager.getString('goals', 'twitchGoalSource'); },
-    get twitchGoalTarget() { return configManager.getNumber('goals', 'twitchGoalTarget', DEFAULTS.goals.twitchGoalTarget); },
-    get twitchGoalCurrency() { return configManager.getString('goals', 'twitchGoalCurrency', DEFAULTS.goals.twitchGoalCurrency); },
-    get twitchPaypiggyEquivalent() { return configManager.getNumber('goals', 'twitchPaypiggyEquivalent', DEFAULTS.goals.twitchPaypiggyEquivalent); }
-};
+function buildGoalsConfig(normalized) {
+    return { ...normalized.goals };
+}
 
-const vfxConfig = {
-    get filePath() { return configManager.getString('vfx', 'vfxFilePath', ''); }
-};
+function buildVfxConfig(normalized) {
+    return { filePath: normalized.vfx.vfxFilePath };
+}
 
-const giftConfig = {
-    get command() { return configManager.getString('gifts', 'command', ''); },
-    get giftVideoSource() { return configManager.getString('gifts', 'giftVideoSource', DEFAULTS.gifts.giftVideoSource); },
-    get giftAudioSource() { return configManager.getString('gifts', 'giftAudioSource', DEFAULTS.gifts.giftAudioSource); },
-    get scene() { return configManager.getString('gifts', 'giftScene', DEFAULTS.gifts.giftScene); },
-    get lowValueThreshold() { return configManager.getNumber('gifts', 'lowValueThreshold', DEFAULTS.gifts.lowValueThreshold); },
-    get spamDetectionEnabled() { return configManager.getBoolean('gifts', 'spamDetectionEnabled', DEFAULTS.gifts.spamDetectionEnabled); },
-    get spamDetectionWindow() { return configManager.getNumber('gifts', 'spamDetectionWindow', DEFAULTS.gifts.spamDetectionWindow); },
-    get maxIndividualNotifications() { return configManager.getNumber('gifts', 'maxIndividualNotifications', DEFAULTS.gifts.maxIndividualNotifications); }
-};
+function buildGiftConfig(normalized) {
+    const g = normalized.gifts;
+    return {
+        command: g.command,
+        giftVideoSource: g.giftVideoSource,
+        giftAudioSource: g.giftAudioSource,
+        scene: g.giftScene,
+        lowValueThreshold: g.lowValueThreshold,
+        spamDetectionEnabled: g.spamDetectionEnabled,
+        spamDetectionWindow: g.spamDetectionWindow,
+        maxIndividualNotifications: g.maxIndividualNotifications
+    };
+}
 
-const streamElementsConfig = {
-    get enabled() { return configManager.getBoolean('streamelements', 'enabled', DEFAULTS.streamelements.enabled); },
-    get youtubeChannelId() { return resolveConfigValue('streamelements', 'youtubeChannelId'); },
-    get twitchChannelId() { return resolveConfigValue('streamelements', 'twitchChannelId'); },
-    get jwtToken() { return resolveSecretValue('STREAMELEMENTS_JWT_TOKEN'); },
-    get dataLoggingEnabled() { return configManager.getBoolean('logging', 'streamelementsDataLoggingEnabled', DEFAULTS.logging.streamelementsDataLoggingEnabled); },
-    get dataLoggingPath() { return DEFAULTS.LOG_DIRECTORY; }
-};
+function buildStreamElementsConfig(normalized) {
+    const se = normalized.streamelements;
+    return {
+        enabled: se.enabled,
+        youtubeChannelId: se.youtubeChannelId || undefined,
+        twitchChannelId: se.twitchChannelId || undefined,
+        get jwtToken() { return resolveSecretValue('STREAMELEMENTS_JWT_TOKEN'); },
+        dataLoggingEnabled: se.dataLoggingEnabled,
+        dataLoggingPath: DEFAULTS.LOG_DIRECTORY
+    };
+}
 
-const timingConfig = {
-    get chatMessageDuration() { return configManager.getNumber('timing', 'chatMessageDuration', DEFAULTS.timing.chatMessageDuration); },
-    get defaultNotificationDuration() { return configManager.getNumber('timing', 'defaultNotificationDuration', DEFAULTS.timing.defaultNotificationDuration); },
-    get greetingDuration() { return configManager.getNumber('timing', 'greetingDuration', DEFAULTS.timing.greetingDuration); },
-    get followDuration() { return configManager.getNumber('timing', 'followDuration', DEFAULTS.timing.followDuration); },
-    get giftDuration() { return configManager.getNumber('timing', 'giftDuration', DEFAULTS.timing.giftDuration); },
-    get memberDuration() { return configManager.getNumber('timing', 'memberDuration', DEFAULTS.timing.memberDuration); },
-    get raidDuration() { return configManager.getNumber('timing', 'raidDuration', DEFAULTS.timing.raidDuration); },
-    get fadeDuration() { return configManager.getNumber('timing', 'fadeDuration', DEFAULTS.timing.fadeDuration); },
-    get transitionDelay() { return configManager.getNumber('timing', 'transitionDelay', DEFAULTS.timing.transitionDelay); },
-    get notificationClearDelay() { return configManager.getNumber('timing', 'notificationClearDelay', DEFAULTS.timing.notificationClearDelay); }
-};
+function buildTimingConfig(normalized) {
+    return { ...normalized.timing };
+}
 
-const spamConfig = {
-    get lowValueThreshold() { return configManager.getNumber('gifts', 'lowValueThreshold', DEFAULTS.gifts.lowValueThreshold); },
-    get spamDetectionEnabled() { return configManager.getBoolean('gifts', 'spamDetectionEnabled', DEFAULTS.gifts.spamDetectionEnabled); },
-    get spamDetectionWindow() { return configManager.getNumber('gifts', 'spamDetectionWindow', DEFAULTS.gifts.spamDetectionWindow); },
-    get maxIndividualNotifications() { return configManager.getNumber('gifts', 'maxIndividualNotifications', DEFAULTS.gifts.maxIndividualNotifications); }
-};
+function buildSpamConfig(normalized) {
+    const g = normalized.gifts;
+    return {
+        lowValueThreshold: g.lowValueThreshold,
+        spamDetectionEnabled: g.spamDetectionEnabled,
+        spamDetectionWindow: g.spamDetectionWindow,
+        maxIndividualNotifications: g.maxIndividualNotifications
+    };
+}
 
-const ttsConfig = {
-    get deduplicationEnabled() { return configManager.getBoolean('tts', 'deduplicationEnabled', DEFAULTS.tts.deduplicationEnabled); },
-    get debugDeduplication() { return configManager.getBoolean('tts', 'debugDeduplication', DEFAULTS.tts.debugDeduplication); },
-    get onlyForGifts() { return configManager.getBoolean('tts', 'onlyForGifts', DEFAULTS.tts.onlyForGifts); },
-    get voice() { return configManager.getString('tts', 'voice', DEFAULTS.tts.voice); },
-    get rate() { return configManager.getNumber('tts', 'rate', DEFAULTS.tts.rate); },
-    get volume() { return configManager.getNumber('tts', 'volume', DEFAULTS.tts.volume); },
-    get twitchDeduplicationEnabled() { return configManager.getBoolean('tts', 'twitchDeduplicationEnabled', DEFAULTS.tts.twitchDeduplicationEnabled); },
-    get youtubeDeduplicationEnabled() { return configManager.getBoolean('tts', 'youtubeDeduplicationEnabled', DEFAULTS.tts.youtubeDeduplicationEnabled); },
-    get tiktokDeduplicationEnabled() { return configManager.getBoolean('tts', 'tiktokDeduplicationEnabled', DEFAULTS.tts.tiktokDeduplicationEnabled); },
-    get performanceWarningThreshold() { return configManager.getNumber('tts', 'performanceWarningThreshold', DEFAULTS.tts.performanceWarningThreshold); }
-};
+function buildTtsConfig(normalized) {
+    return { ...normalized.tts };
+}
 
-const cooldownsConfig = {
-    get defaultCooldown() { return configManager.getNumber('cooldowns', 'defaultCooldown', DEFAULTS.cooldowns.defaultCooldown); },
-    get defaultCooldownMs() { return this.defaultCooldown * 1000; },
-    get heavyCommandCooldown() { return configManager.getNumber('cooldowns', 'heavyCommandCooldown', DEFAULTS.cooldowns.heavyCommandCooldown); },
-    get heavyCommandCooldownMs() { return this.heavyCommandCooldown * 1000; },
-    get heavyCommandThreshold() { return configManager.getNumber('cooldowns', 'heavyCommandThreshold', DEFAULTS.cooldowns.heavyCommandThreshold); },
-    get heavyCommandWindow() { return configManager.getNumber('cooldowns', 'heavyCommandWindow', DEFAULTS.cooldowns.heavyCommandWindow); },
-    get heavyCommandWindowMs() { return this.heavyCommandWindow * 1000; },
-    get maxEntries() { return configManager.getNumber('cooldowns', 'maxEntries', DEFAULTS.cooldowns.maxEntries); }
-};
+function buildCooldownsConfig(normalized) {
+    const c = normalized.cooldowns;
+    return {
+        defaultCooldown: c.defaultCooldown,
+        defaultCooldownMs: c.defaultCooldown * 1000,
+        heavyCommandCooldown: c.heavyCommandCooldown,
+        heavyCommandCooldownMs: c.heavyCommandCooldown * 1000,
+        heavyCommandThreshold: c.heavyCommandThreshold,
+        heavyCommandWindow: c.heavyCommandWindow,
+        heavyCommandWindowMs: c.heavyCommandWindow * 1000,
+        maxEntries: c.maxEntries
+    };
+}
 
+function buildConfig(normalized) {
+    const general = buildGeneralConfig(normalized);
+    
+    return {
+        general,
+        http: buildHttpConfig(normalized),
+        tiktok: buildTiktokConfig(normalized, general),
+        twitch: buildTwitchConfig(normalized, general),
+        youtube: buildYoutubeConfig(normalized, general),
+        obs: buildObsConfig(normalized),
+        handcam: buildHandcamConfig(normalized),
+        goals: buildGoalsConfig(normalized),
+        vfx: buildVfxConfig(normalized),
+        gifts: buildGiftConfig(normalized),
+        spam: buildSpamConfig(normalized),
+        timing: buildTimingConfig(normalized),
+        cooldowns: buildCooldownsConfig(normalized),
+        tts: buildTtsConfig(normalized),
+        follows: { command: normalized.follows.command },
+        raids: { command: normalized.raids.command },
+        paypiggies: { command: normalized.paypiggies.command },
+        greetings: { command: normalized.greetings.command },
+        farewell: { ...normalized.farewell },
+        streamelements: buildStreamElementsConfig(normalized),
+        commands: { ...normalized.commands },
+        get raw() { return configManager.getRaw(); }
+    };
+}
 
-// Consolidated config object with lazy initialization
-const config = {
-    get general() { return generalConfig; },
-    get http() { return httpConfig; },
-    get tiktok() { return getTiktokConfig(); },
-    get twitch() { return getTwitchConfig(); },
-    get youtube() { return getYoutubeConfig(); },
-    get obs() { return obsConfig; },
-    get handcam() { return handcamConfig; },
-    get goals() { return goalsConfig; },
-    get vfx() { return vfxConfig; },
-    get gifts() { return giftConfig; },
-    get spam() { return spamConfig; },
-    get timing() { return timingConfig; },
-    get cooldowns() { return cooldownsConfig; },
-    get tts() { return ttsConfig; },
-    get follows() { return { command: configManager.getString('follows', 'command', '') }; },
-    get raids() { return { command: configManager.getString('raids', 'command', '') }; },
-    get paypiggies() { return { command: configManager.getString('paypiggies', 'command', '') }; },
-    get greetings() { return { command: configManager.getString('greetings', 'command', '') }; },
-    get farewell() {
-        return {
-            enabled: configManager.getBoolean('farewell', 'enabled', DEFAULTS.farewell.enabled),
-            command: configManager.getString('farewell', 'command', '')
-        };
-    },
-    get streamelements() { return streamElementsConfig; },
-    get commands() {
-        const commandsSection = configManager.getSection('commands');
-        return {
-            ...commandsSection,
-            get enabled() { return configManager.getBoolean('commands', 'enabled', DEFAULTS.commands.enabled); }
-        };
-    },
-    get raw() { return configManager.getRaw(); }
-};
+configManager.load();
+const config = buildConfig(configManager.config);
 
 const DEFAULT_LOGGING_CONFIG = {
     console: { enabled: true, level: 'console' }, // Only user-facing messages (chat, notifications, errors)
@@ -662,9 +499,5 @@ module.exports = {
     config,
     configManager,
     validateLoggingConfig,
-    DEFAULT_LOGGING_CONFIG,
-    // Export getter functions for direct access if needed
-    getTiktokConfig,
-    getTwitchConfig,
-    getYoutubeConfig
+    DEFAULT_LOGGING_CONFIG
 }; 
