@@ -206,7 +206,6 @@ describe('secret-manager', () => {
         process.env.STREAMELEMENTS_JWT_TOKEN = 'env_jwt_token';
 
         const result = await ensureSecrets({
-            configManager,
             config: {
                 tiktok: configManager.getSection('tiktok'),
                 twitch: configManager.getSection('twitch'),
@@ -221,10 +220,9 @@ describe('secret-manager', () => {
         });
 
         expect(result.missingRequired).toEqual([]);
-        const updatedTwitch = configManager.getSection('twitch');
-        expect(updatedTwitch.clientId).toBe('env_client_id');
-        expect(configManager.getSection('tiktok').apiKey).toBe('env_tiktok_key');
-        expect(configManager.getSection('obs').password).toBe('env_obs_password');
+        expect(process.env.TWITCH_CLIENT_ID).toBe('env_client_id');
+        expect(process.env.TIKTOK_API_KEY).toBe('env_tiktok_key');
+        expect(process.env.OBS_PASSWORD).toBe('env_obs_password');
         expect(envFilePath in fileStore).toBe(false);
         expect(logger.entries.some((entry) => entry.message.includes('env_tiktok_key'))).toBe(false);
     });
@@ -244,7 +242,6 @@ describe('secret-manager', () => {
         fileStore[envFilePath] = 'EXISTING=keep\n';
 
         const result = await ensureSecrets({
-            configManager,
             config: {
                 tiktok: configManager.getSection('tiktok'),
                 twitch: configManager.getSection('twitch'),
@@ -264,7 +261,7 @@ describe('secret-manager', () => {
         expect(envContent).toContain('TIKTOK_API_KEY=prompt_tiktok');
         expect(envContent).toContain('TWITCH_CLIENT_ID=prompt_client_id');
         expect(envContent).toContain('OBS_PASSWORD=prompt_obs_password');
-        expect(configManager.getSection('twitch').clientSecret).toBe('prompt_client_secret');
+        expect(process.env.TWITCH_CLIENT_SECRET).toBe('prompt_client_secret');
         expect(result.persisted.sort()).toEqual(
             expect.arrayContaining(['TIKTOK_API_KEY', 'TWITCH_CLIENT_ID', 'TWITCH_CLIENT_SECRET', 'OBS_PASSWORD', 'STREAMELEMENTS_JWT_TOKEN'])
         );
@@ -285,7 +282,6 @@ describe('secret-manager', () => {
         const promptFor = async (secretId) => promptValues[secretId] || '';
 
         await ensureSecrets({
-            configManager,
             config: {
                 tiktok: configManager.getSection('tiktok'),
                 twitch: configManager.getSection('twitch'),
@@ -322,7 +318,6 @@ describe('secret-manager', () => {
         youtubeSection.viewerCountMethod = 'youtubei';
 
         await expect(ensureSecrets({
-            configManager,
             config: {
                 tiktok: configManager.getSection('tiktok'),
                 twitch: configManager.getSection('twitch'),
@@ -356,7 +351,6 @@ describe('secret-manager', () => {
         };
 
         await ensureSecrets({
-            configManager,
             config: {
                 tiktok: configManager.getSection('tiktok'),
                 twitch: configManager.getSection('twitch'),
@@ -387,7 +381,6 @@ describe('secret-manager', () => {
         twitchSection.clientSecret = 'config_client_secret';
 
         await expect(ensureSecrets({
-            configManager,
             config: {
                 tiktok: configManager.getSection('tiktok'),
                 twitch: configManager.getSection('twitch'),
