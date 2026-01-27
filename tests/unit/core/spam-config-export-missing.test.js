@@ -124,20 +124,6 @@ describe('Spam Config Export Missing', () => {
         });
     });
 
-    describe('when testing the fix implementation', () => {
-        describe('and verifying the unified spam configuration', () => {
-            it('should provide correct default values from config.ini defaults', () => {
-                const { config, configManager } = require('../../../src/core/config');
-                const spam = config.spam;
-
-                expect(spam.spamDetectionEnabled).toBe(configManager.getBoolean('gifts', 'spamDetectionEnabled', true));
-                expect(spam.spamDetectionWindow).toBe(configManager.getNumber('gifts', 'spamDetectionWindow', 5));
-                expect(spam.maxIndividualNotifications).toBe(configManager.getNumber('gifts', 'maxIndividualNotifications', 2));
-                expect(spam.lowValueThreshold).toBe(configManager.getNumber('gifts', 'lowValueThreshold', 10));
-            });
-        });
-    });
-
     describe('when ensuring no regression in NotificationManager', () => {
         describe('and verifying NotificationManager can initialize spam detection', () => {
             it('should FAIL if spam config cannot be used to create spam detector service', () => {

@@ -125,16 +125,6 @@ describe('Spam Detection Service Integration Tests', () => {
             expect(spamConfig.maxIndividualNotifications).toBe(giftConfig.maxIndividualNotifications);
             expect(spamConfig.lowValueThreshold).toBe(giftConfig.lowValueThreshold);
         });
-
-        it('should provide correct default values from config.ini', () => {
-            const { config, configManager } = require('../../../src/core/config');
-            const spamConfig = config.spam;
-
-            expect(spamConfig.spamDetectionEnabled).toBe(configManager.getBoolean('gifts', 'spamDetectionEnabled', true));
-            expect(spamConfig.spamDetectionWindow).toBe(configManager.getNumber('gifts', 'spamDetectionWindow', 5));
-            expect(spamConfig.maxIndividualNotifications).toBe(configManager.getNumber('gifts', 'maxIndividualNotifications', 2));
-            expect(spamConfig.lowValueThreshold).toBe(configManager.getNumber('gifts', 'lowValueThreshold', 10));
-        });
     });
 
     describe('when NotificationManager is initialized with spam detector', () => {

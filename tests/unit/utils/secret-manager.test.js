@@ -207,10 +207,10 @@ describe('secret-manager', () => {
 
         const result = await ensureSecrets({
             config: {
-                tiktok: configManager.getSection('tiktok'),
-                twitch: configManager.getSection('twitch'),
-                obs: configManager.getSection('obs'),
-                streamelements: configManager.getSection('streamelements')
+                tiktok: configManager.config.tiktok,
+                twitch: configManager.config.twitch,
+                obs: configManager.config.obs,
+                streamelements: configManager.config.streamelements
             },
             logger,
             interactive: false,
@@ -243,10 +243,10 @@ describe('secret-manager', () => {
 
         const result = await ensureSecrets({
             config: {
-                tiktok: configManager.getSection('tiktok'),
-                twitch: configManager.getSection('twitch'),
-                obs: configManager.getSection('obs'),
-                streamelements: configManager.getSection('streamelements')
+                tiktok: configManager.config.tiktok,
+                twitch: configManager.config.twitch,
+                obs: configManager.config.obs,
+                streamelements: configManager.config.streamelements
             },
             logger,
             interactive: true,
@@ -283,10 +283,10 @@ describe('secret-manager', () => {
 
         await ensureSecrets({
             config: {
-                tiktok: configManager.getSection('tiktok'),
-                twitch: configManager.getSection('twitch'),
-                obs: configManager.getSection('obs'),
-                streamelements: configManager.getSection('streamelements')
+                tiktok: configManager.config.tiktok,
+                twitch: configManager.config.twitch,
+                obs: configManager.config.obs,
+                streamelements: configManager.config.streamelements
             },
             logger,
             interactive: true,
@@ -311,18 +311,20 @@ describe('secret-manager', () => {
         process.env.OBS_PASSWORD = 'env_obs_password';
         process.env.STREAMELEMENTS_JWT_TOKEN = 'env_jwt_token';
 
-        const youtubeSection = configManager.getSection('youtube');
-        youtubeSection.enabled = true;
-        youtubeSection.enableAPI = false;
-        youtubeSection.streamDetectionMethod = 'api';
-        youtubeSection.viewerCountMethod = 'youtubei';
+        const youtubeSection = {
+            ...configManager.config.youtube,
+            enabled: true,
+            enableAPI: false,
+            streamDetectionMethod: 'api',
+            viewerCountMethod: 'youtubei'
+        };
 
         await expect(ensureSecrets({
             config: {
-                tiktok: configManager.getSection('tiktok'),
-                twitch: configManager.getSection('twitch'),
-                obs: configManager.getSection('obs'),
-                streamelements: configManager.getSection('streamelements'),
+                tiktok: configManager.config.tiktok,
+                twitch: configManager.config.twitch,
+                obs: configManager.config.obs,
+                streamelements: configManager.config.streamelements,
                 youtube: youtubeSection
             },
             logger,
@@ -352,10 +354,10 @@ describe('secret-manager', () => {
 
         await ensureSecrets({
             config: {
-                tiktok: configManager.getSection('tiktok'),
-                twitch: configManager.getSection('twitch'),
-                obs: configManager.getSection('obs'),
-                streamelements: configManager.getSection('streamelements')
+                tiktok: configManager.config.tiktok,
+                twitch: configManager.config.twitch,
+                obs: configManager.config.obs,
+                streamelements: configManager.config.streamelements
             },
             logger,
             interactive: true,
@@ -376,16 +378,16 @@ describe('secret-manager', () => {
         process.env.OBS_PASSWORD = 'env_obs_password';
         process.env.STREAMELEMENTS_JWT_TOKEN = 'env_jwt_token';
 
-        const twitchSection = configManager.getSection('twitch');
+        const twitchSection = configManager.config.twitch;
         twitchSection.clientId = 'config_client_id';
         twitchSection.clientSecret = 'config_client_secret';
 
         await expect(ensureSecrets({
             config: {
-                tiktok: configManager.getSection('tiktok'),
-                twitch: configManager.getSection('twitch'),
-                obs: configManager.getSection('obs'),
-                streamelements: configManager.getSection('streamelements')
+                tiktok: configManager.config.tiktok,
+                twitch: configManager.config.twitch,
+                obs: configManager.config.obs,
+                streamelements: configManager.config.streamelements
             },
             logger,
             interactive: false,

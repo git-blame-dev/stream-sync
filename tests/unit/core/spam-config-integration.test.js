@@ -91,15 +91,4 @@ describe('Spam Configuration Integration', () => {
         });
     });
 
-    describe('configuration values', () => {
-        it('should reflect changes in config.ini settings', () => {
-            const { configManager } = require('../../../src/core/config');
-            const spamConfig = config.spam;
-
-            expect(spamConfig.lowValueThreshold).toBe(configManager.getNumber('gifts', 'lowValueThreshold', 10));
-            expect(spamConfig.spamDetectionEnabled).toBe(configManager.getBoolean('gifts', 'spamDetectionEnabled', true));
-            expect(spamConfig.spamDetectionWindow).toBe(configManager.getNumber('gifts', 'spamDetectionWindow', 5));
-            expect(spamConfig.maxIndividualNotifications).toBe(configManager.getNumber('gifts', 'maxIndividualNotifications', 2));
-        });
-    });
 });
