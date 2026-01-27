@@ -16,9 +16,6 @@ describe('ConfigService', () => {
         };
 
         mockConfig = {
-            get: createMockFn(),
-            set: createMockFn(),
-            reload: createMockFn(),
             general: {
                 debugEnabled: true,
                 filterOldMessages: true,
@@ -45,7 +42,14 @@ describe('ConfigService', () => {
             commands: {
                 greetings: '!hello',
                 gifts: '!gift',
-                follows: '!follow'
+                follows: '!follow',
+                custom: '!custom'
+            },
+            greetings: {
+                command: '!greet'
+            },
+            paypiggies: {
+                command: '!member'
             },
             notifications: {
                 followsEnabled: true,
@@ -132,30 +136,22 @@ describe('ConfigService', () => {
         });
     });
 
-    describe('get() - ConfigLoader Style', () => {
+    describe('get() - Section Key Access', () => {
         beforeEach(() => {
             configService = new ConfigService(mockConfig, mockEventBus);
         });
 
-        it('should use ConfigLoader get method when available', () => {
-            mockConfig.get.mockReturnValue('testConfigLoaderValue');
-
-            const result = configService.get('general', 'debugEnabled');
-
-            expect(result).toBe('testConfigLoaderValue');
-        });
-
-        it('should fallback to direct property access when ConfigLoader unavailable', () => {
-            delete mockConfig.get;
-
+        it('should get value by section and key', () => {
             const result = configService.get('general', 'debugEnabled');
             expect(result).toBe(true);
         });
 
         it('should throw when section is missing', () => {
-            delete mockConfig.get;
-
             expect(() => configService.get('nonExistent', 'key')).toThrow('Missing config section');
+        });
+
+        it('should throw when key is missing in section', () => {
+            expect(() => configService.get('general', 'nonExistentKey')).toThrow('Missing config');
         });
     });
 
@@ -204,52 +200,23 @@ describe('ConfigService', () => {
             configService = new ConfigService(mockConfig, mockEventBus);
         });
 
-        it('should check platform-specific notifications (ConfigLoader style)', () => {
-            mockConfig.get.mockImplementation((section, key) => {
-                if (section === 'twitch' && key === 'followsEnabled') return false;
-                if (section === 'notifications' && key === 'followsEnabled') return true;
-                return undefined;
-            });
-
+        it('should check platform-specific notifications', () => {
             const result = configService.areNotificationsEnabled('followsEnabled', 'twitch');
             expect(result).toBe(false);
         });
 
-        it('should fallback to general notifications (ConfigLoader style)', () => {
-            mockConfig.get.mockImplementation((section, key) => {
-                if (section === 'youtube' && key === 'followsEnabled') return undefined;
-                if (section === 'notifications' && key === 'followsEnabled') return true;
-                return undefined;
-            });
-
-            const result = configService.areNotificationsEnabled('followsEnabled', 'youtube');
-            expect(result).toBe(true);
-        });
-
-        it('should check platform-specific notifications (direct access)', () => {
-            delete mockConfig.get;
-
-            const result = configService.areNotificationsEnabled('followsEnabled', 'twitch');
-            expect(result).toBe(false);
-        });
-
-        it('should fallback to general notifications (direct access)', () => {
-            delete mockConfig.get;
-
+        it('should fallback to general notifications when platform setting missing', () => {
             const result = configService.areNotificationsEnabled('giftsEnabled', 'youtube');
             expect(result).toBe(true);
         });
 
         it('should throw when no setting is found', () => {
-            delete mockConfig.get;
-            delete mockConfig.notifications;
-
             expect(() => configService.areNotificationsEnabled('unknownType', 'twitch')).toThrow('Missing notification config');
         });
 
-        it('should throw when platform is not specified', () => {
-            delete mockConfig.get;
-            expect(() => configService.areNotificationsEnabled('followsEnabled')).toThrow('Missing notification config');
+        it('should use general setting when platform not specified', () => {
+            const result = configService.areNotificationsEnabled('followsEnabled');
+            expect(result).toBe(true);
         });
     });
 
@@ -274,7 +241,7 @@ describe('ConfigService', () => {
 
         it('should throw when TTS config is missing', () => {
             delete mockConfig.tts;
-            expect(() => configService.getTTSConfig()).toThrow('Missing config section: tts');
+            expect(() => configService.getTTSConfig()).toThrow('Missing tts config');
         });
 
         it('should return TTS config even when partial', () => {
@@ -321,79 +288,37 @@ describe('ConfigService', () => {
         });
 
         it('should get event command from section config', () => {
-            mockConfig.get.mockImplementation((section, key) => {
-                if (section === 'greetings' && key === 'command') {
-                    return '!testCustomGreeting';
-                }
-                return null;
-            });
-
             const result = configService.getCommand('greetings');
-
-            expect(result).toBe('!testCustomGreeting');
-        });
-
-        it('should get event command using direct property access', () => {
-            delete mockConfig.get;
-            mockConfig.greetings = { command: '!hello' };
-
-            const result = configService.getCommand('greetings');
-            expect(result).toBe('!hello');
+            expect(result).toBe('!greet');
         });
 
         it('should get non-event command from commands map', () => {
-            mockConfig.get.mockReturnValue('!testCustomCommand');
-
             const result = configService.getCommand('custom');
-
-            expect(result).toBe('!testCustomCommand');
+            expect(result).toBe('!custom');
         });
 
         it('should throw for missing command', () => {
-            delete mockConfig.get;
             expect(() => configService.getCommand('nonExistent')).toThrow('Missing command config');
         });
 
         it('should throw when commands section is missing for non-event command', () => {
-            delete mockConfig.get;
             delete mockConfig.commands;
             expect(() => configService.getCommand('custom')).toThrow('Missing command config');
         });
 
         it('should use section-level command for event keys even when commands map has entry', () => {
-            delete mockConfig.get;
-            mockConfig.greetings = { command: '!hello' };
             mockConfig.commands.greetings = '!deprecated-command';
-
             const result = configService.getCommand('greetings');
-
-            expect(result).toBe('!hello');
+            expect(result).toBe('!greet');
         });
 
-        it('should throw when event section command is missing even if commands map has entry', () => {
-            mockConfig.get.mockImplementation((section, key) => {
-                if (section === 'commands' && key === 'greetings') {
-                    return '!deprecated-command';
-                }
-                if (section === 'greetings' && key === 'command') {
-                    return null;
-                }
-                return null;
-            });
-
+        it('should throw when event section command is missing', () => {
+            delete mockConfig.greetings.command;
             expect(() => configService.getCommand('greetings')).toThrow('Missing command config');
         });
 
         it('uses section command for paypiggies', () => {
-            mockConfig.get.mockImplementation((section, key) => {
-                if (section === 'paypiggies' && key === 'command') {
-                    return '!member';
-                }
-                return null;
-            });
-
             const result = configService.getCommand('paypiggies');
-
             expect(result).toBe('!member');
         });
     });
@@ -439,12 +364,11 @@ describe('ConfigService', () => {
             configService = new ConfigService(mockConfig, mockEventBus);
         });
 
-        it('should set value using ConfigLoader style', () => {
-            mockConfig.set.mockReturnValue(true);
-
+        it('should set value and emit change event', () => {
             const result = configService.set('general', 'debugEnabled', false);
 
             expect(result).toBe(true);
+            expect(mockConfig.general.debugEnabled).toBe(false);
             expect(configService.cache.size).toBe(0);
             expect(mockEventBus.emit).toHaveBeenCalledWith('config:changed', {
                 section: 'general',
@@ -453,9 +377,7 @@ describe('ConfigService', () => {
             });
         });
 
-        it('should set value using direct property modification', () => {
-            delete mockConfig.set;
-
+        it('should set new key in existing section', () => {
             const result = configService.set('general', 'newKey', 'testNewValue');
 
             expect(mockConfig.general.newKey).toBe('testNewValue');
@@ -467,9 +389,7 @@ describe('ConfigService', () => {
             });
         });
 
-        it('should create new section when missing (direct access)', () => {
-            delete mockConfig.set;
-
+        it('should create new section when missing', () => {
             const result = configService.set('newSection', 'key', 'testValue');
 
             expect(mockConfig.newSection).toEqual({ key: 'testValue' });
@@ -487,7 +407,6 @@ describe('ConfigService', () => {
 
         it('should work without EventBus', () => {
             configService = new ConfigService(mockConfig);
-            delete mockConfig.set;
 
             const result = configService.set('general', 'key', 'testValue');
 
@@ -501,18 +420,7 @@ describe('ConfigService', () => {
             configService = new ConfigService(mockConfig, mockEventBus);
         });
 
-        it('should reload configuration when supported', () => {
-            mockConfig.reload.mockReturnValue(true);
-
-            const result = configService.reload();
-
-            expect(result).toBe(true);
-            expect(configService.cache.size).toBe(0);
-            expect(mockEventBus.emit).toHaveBeenCalledWith('config:reloaded');
-        });
-
-        it('should clear cache even without reload method', () => {
-            delete mockConfig.reload;
+        it('should clear cache and emit reloaded event', () => {
             configService.cache.set('test', 'testValue');
 
             const result = configService.reload();
@@ -536,25 +444,16 @@ describe('ConfigService', () => {
             configService = new ConfigService(mockConfig, mockEventBus);
         });
 
-        it('should return configuration summary with ConfigLoader', () => {
+        it('should return configuration summary', () => {
             const result = configService.getConfigSummary();
 
             expect(result).toEqual({
                 hasConfig: true,
-                configType: 'ConfigLoader',
+                configType: 'Object',
                 sections: expect.arrayContaining(['general', 'tts', 'commands']),
                 hasEventBus: true,
                 cacheSize: 0
             });
-        });
-
-        it('should return configuration summary with direct access', () => {
-            delete mockConfig.get;
-
-            const result = configService.getConfigSummary();
-
-            expect(result.configType).toBe('Object');
-            expect(result.hasConfig).toBe(true);
         });
 
         it('should handle null config', () => {
@@ -587,20 +486,10 @@ describe('ConfigService', () => {
         });
 
         it('should handle errors in set() gracefully', () => {
-            mockConfig.set.mockImplementation(() => {
-                throw new Error('Set error');
-            });
+            const frozenConfig = Object.freeze({ general: Object.freeze({}) });
+            configService = new ConfigService(frozenConfig, mockEventBus);
 
             const result = configService.set('general', 'key', 'testValue');
-            expect(result).toBe(false);
-        });
-
-        it('should handle errors in reload() gracefully', () => {
-            mockConfig.reload.mockImplementation(() => {
-                throw new Error('Reload error');
-            });
-
-            const result = configService.reload();
             expect(result).toBe(false);
         });
 
@@ -629,8 +518,6 @@ describe('ConfigService', () => {
         });
 
         it('should emit config:changed event on set', () => {
-            delete mockConfig.set;
-
             configService.set('general', 'key', 'testValue');
 
             expect(mockEventBus.emit).toHaveBeenCalledWith('config:changed', {
@@ -648,7 +535,6 @@ describe('ConfigService', () => {
 
         it('should not emit events without EventBus', () => {
             configService = new ConfigService(mockConfig);
-            delete mockConfig.set;
 
             configService.set('general', 'key', 'testValue');
             configService.reload();
@@ -666,7 +552,6 @@ describe('ConfigService', () => {
             configService.cache.set('test', 'testValue');
             expect(configService.cache.size).toBe(1);
 
-            delete mockConfig.set;
             configService.set('general', 'key', 'testValue');
 
             expect(configService.cache.size).toBe(0);
