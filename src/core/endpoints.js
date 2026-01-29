@@ -22,6 +22,7 @@ function buildUrl(baseUrl, path = '', params = {}) {
 const TWITCH = {
     API_BASE: 'https://api.twitch.tv/helix',
     OAUTH: {
+        AUTHORIZE: 'https://id.twitch.tv/oauth2/authorize',
         TOKEN: 'https://id.twitch.tv/oauth2/token',
         VALIDATE: 'https://id.twitch.tv/oauth2/validate',
         REVOKE: 'https://id.twitch.tv/oauth2/revoke'
@@ -73,4 +74,3 @@ module.exports = {
     YOUTUBE,
     STREAMELEMENTS
 };
-
