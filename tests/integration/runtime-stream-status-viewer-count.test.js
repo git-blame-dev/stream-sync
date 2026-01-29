@@ -17,7 +17,6 @@ const testConfig = {
     platform: {
         youtube: {
             enabled: true,
-            apiKey: 'test-youtube-api-key',
             enableViewerCount: true,
             enableNotifications: true
         },

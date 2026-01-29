@@ -3,11 +3,11 @@ const { describe, test, expect, beforeEach, afterEach } = require('bun:test');
 const { noOpLogger } = require('../../helpers/mock-factories');
 
 const TwitchAuthManager = require('../../../src/auth/TwitchAuthManager');
+const { secrets, _resetForTesting, initializeStaticSecrets } = require('../../../src/core/secrets');
 
 function createContextConfiguration(context, overrides = {}) {
     return {
         clientId: `${context}-client-id`,
-        clientSecret: `${context}-client-secret`,
         accessToken: `${context}-access-token`,
         refreshToken: `${context}-refresh-token`,
         channel: `${context}-channel`,
@@ -62,11 +62,15 @@ describe('TwitchAuthManager Instance Management', () => {
 
     beforeEach(() => {
         instanceTracker = new InstanceTracker();
+        _resetForTesting();
+        secrets.twitch.clientSecret = 'test-client-secret';
     });
 
     afterEach(async () => {
         await instanceTracker.cleanupAll();
         TwitchAuthManager.resetInstance();
+        _resetForTesting();
+        initializeStaticSecrets();
     });
 
     describe('Multiple Instance Support', () => {

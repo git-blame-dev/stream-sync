@@ -1,6 +1,7 @@
 const { describe, test, expect, beforeEach, afterEach } = require('bun:test');
 const { createMockFn, clearAllMocks, restoreAllMocks } = require('../../helpers/bun-mock-utils');
 const { noOpLogger } = require('../../helpers/mock-factories');
+const { secrets, _resetForTesting, initializeStaticSecrets } = require('../../../src/core/secrets');
 
 const { initializeTestLogging } = require('../../helpers/test-setup');
 const { OBSConnectionManager, initializeOBSConnection, resetOBSConnectionManager } = require('../../../src/obs/connection');
@@ -24,12 +25,16 @@ describe('OBS Connection Configuration with Getter Properties', () => {
             off: createMockFn(),
             identified: false
         }));
+
+        _resetForTesting();
     });
 
     afterEach(() => {
         restoreAllMocks();
         clearAllMocks();
         resetOBSConnectionManager();
+        _resetForTesting();
+        initializeStaticSecrets();
     });
 
     describe('Configuration with Getter Properties', () => {
@@ -51,6 +56,24 @@ describe('OBS Connection Configuration with Getter Properties', () => {
             expect(obsManager.config.address).toBe('ws://custom-obs-server:4444');
             expect(obsManager.config.password).toBe('secret123');
             expect(obsManager.config.enabled).toBe(true);
+        });
+
+        test('uses secrets password when config omits password', () => {
+            secrets.obs.password = 'secret-from-env';
+
+            const configWithoutPassword = {
+                address: 'ws://custom-obs-server:4444',
+                enabled: true
+            };
+
+            obsManager = new OBSConnectionManager({
+                config: configWithoutPassword,
+                OBSWebSocket: mockOBSWebSocket,
+                logger: noOpLogger,
+                isTestEnvironment: false,
+            });
+
+            expect(obsManager.config.password).toBe('secret-from-env');
         });
 
         test('should properly handle config with getters vs naive spread approach', () => {

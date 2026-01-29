@@ -24,7 +24,7 @@ describe('TikTok Error Message Handling', () => {
         };
 
         const platform = new TikTokPlatform(
-            { enabled: true, username: 'testUser', apiKey: 'testKey' },
+            { enabled: true, username: 'testUser' },
             {
                 WebcastPushConnection: createMockFn(() => mockConnection),
                 WebcastEvent: { GIFT: 'gift', ERROR: 'error', DISCONNECT: 'disconnect' },

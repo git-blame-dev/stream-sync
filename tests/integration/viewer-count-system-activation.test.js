@@ -86,7 +86,6 @@ describe('ViewerCount System Activation Integration', () => {
             },
             youtube: {
                 enabled: true,
-                apiKey: 'test-youtube-key',
                 viewerCountEnabled: true,
                 viewerCountSource: 'youtube-viewer-count'
             },
@@ -97,7 +96,6 @@ describe('ViewerCount System Activation Integration', () => {
             },
             tiktok: {
                 enabled: true,
-                apiKey: 'test-tiktok-key',
                 viewerCountEnabled: true,
                 viewerCountSource: 'tiktok-viewer-count'
             },

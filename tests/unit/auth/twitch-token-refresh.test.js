@@ -7,6 +7,7 @@ const testClock = require('../../helpers/test-clock');
 
 const TwitchAuthInitializer = require('../../../src/auth/TwitchAuthInitializer');
 const TwitchAuthService = require('../../../src/auth/TwitchAuthService');
+const { secrets, _resetForTesting, initializeStaticSecrets } = require('../../../src/core/secrets');
 
 describe('Twitch Token Refresh Implementation', () => {
     let mockHttpClient;
@@ -16,6 +17,9 @@ describe('Twitch Token Refresh Implementation', () => {
 
     beforeEach(() => {
         spyOn(Date, 'now').mockImplementation(() => testClock.now());
+
+        _resetForTesting();
+        secrets.twitch.clientSecret = 'test-client-secret';
 
         mockHttpClient = {
             post: createMockFn()
@@ -36,7 +40,6 @@ describe('Twitch Token Refresh Implementation', () => {
 
         const testConfig = {
             clientId: 'test-client-id',
-            clientSecret: 'test-client-secret',
             accessToken: 'old-access-token',
             refreshToken: 'valid-refresh-token',
             channel: 'test-channel',
@@ -54,6 +57,8 @@ describe('Twitch Token Refresh Implementation', () => {
 
     afterEach(() => {
         restoreAllMocks();
+        _resetForTesting();
+        initializeStaticSecrets();
     });
 
     describe('refreshToken Method Implementation', () => {
@@ -204,7 +209,7 @@ describe('Twitch Token Refresh Implementation', () => {
 
         test('should properly encode form data for token refresh', async () => {
             authService.config.refreshToken = 'token+with/special=chars&symbols';
-            authService.config.clientSecret = 'secret=with&special';
+            secrets.twitch.clientSecret = 'secret=with&special';
 
             mockHttpClient.post.mockResolvedValue({
                 data: { access_token: 'new', refresh_token: 'new', expires_in: 14400 },

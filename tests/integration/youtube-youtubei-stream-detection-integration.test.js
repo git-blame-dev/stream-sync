@@ -107,8 +107,7 @@ describe('YouTube YouTubei Stream Detection Integration - Regression', () => {
         test('should not fall back when youtubei service unavailable at runtime', async () => {
             const platformConfig = {
                 streamDetectionMethod: 'youtubei',
-                username: 'testchannel',
-                apiKey: 'test-api-key'
+                username: 'testchannel'
             };
             mockYouTubeService.detectLiveStreams.mockRejectedValue(
                 new Error('Service unavailable')
@@ -303,8 +302,8 @@ describe('YouTube YouTubei Stream Detection Integration - Regression', () => {
         test('should handle existing scraping configurations alongside new youtubei option', () => {
             const configs = [
                 { streamDetectionMethod: 'scraping', username: 'channel1' },
-                { streamDetectionMethod: 'youtubei', username: 'channel2', apiKey: 'test-key' },
-                { streamDetectionMethod: 'api', username: 'channel3', apiKey: 'test-key' }
+                { streamDetectionMethod: 'youtubei', username: 'channel2' },
+                { streamDetectionMethod: 'api', username: 'channel3' }
             ];
 
             const results = configs.map(config => validateYouTubeConfig(config));

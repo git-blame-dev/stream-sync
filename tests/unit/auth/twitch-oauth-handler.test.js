@@ -1,12 +1,20 @@
-const { describe, test, expect, afterEach } = require('bun:test');
+const { describe, test, expect, beforeEach, afterEach } = require('bun:test');
 const { restoreAllMocks } = require('../../helpers/bun-mock-utils');
 const { noOpLogger } = require('../../helpers/mock-factories');
+const { secrets, _resetForTesting, initializeStaticSecrets } = require('../../../src/core/secrets');
 
 describe('TwitchOAuthHandler', () => {
     let TwitchOAuthHandler;
 
     afterEach(() => {
         restoreAllMocks();
+        _resetForTesting();
+        initializeStaticSecrets();
+    });
+
+    beforeEach(() => {
+        _resetForTesting();
+        secrets.twitch.clientSecret = 'testClientSecret';
     });
 
     test('generates auth URL with required OAuth parameters', () => {
@@ -14,7 +22,6 @@ describe('TwitchOAuthHandler', () => {
 
         const handler = new TwitchOAuthHandler({
             clientId: 'testClientId',
-            clientSecret: 'testClientSecret',
             channel: 'testChannel'
         }, {
             logger: noOpLogger,
@@ -36,7 +43,6 @@ describe('TwitchOAuthHandler', () => {
 
         const handler = new TwitchOAuthHandler({
             clientId: 'testClientId',
-            clientSecret: 'testSecret',
             channel: 'testChannel'
         }, {
             logger: noOpLogger,
@@ -53,7 +59,6 @@ describe('TwitchOAuthHandler', () => {
 
         const handler = new TwitchOAuthHandler({
             clientId: 'testClientId',
-            clientSecret: 'testSecret',
             channel: 'testChannel'
         }, {
             logger: noOpLogger

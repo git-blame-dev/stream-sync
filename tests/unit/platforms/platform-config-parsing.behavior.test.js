@@ -1,11 +1,16 @@
-const { describe, test, expect } = require('bun:test');
+const { describe, test, expect, afterEach } = require('bun:test');
 const { noOpLogger } = require('../../helpers/mock-factories');
 const { createStreamElementsConfigFixture } = require('../../helpers/config-fixture');
+const { secrets, _resetForTesting, initializeStaticSecrets } = require('../../../src/core/secrets');
 
 const TwitchEventSub = require('../../../src/platforms/twitch-eventsub');
 const { StreamElementsPlatform } = require('../../../src/platforms/streamelements');
 
 describe('platform config parsing behavior', () => {
+    afterEach(() => {
+        _resetForTesting();
+        initializeStaticSecrets();
+    });
 
     class MockWebSocket {
         constructor() {
@@ -41,9 +46,10 @@ describe('platform config parsing behavior', () => {
     });
 
     test('StreamElementsPlatform uses provided channel IDs and paths', () => {
+        const jwtToken = 'test-jwt-token';
+        secrets.streamelements.jwtToken = jwtToken;
         const platform = new StreamElementsPlatform(
             createStreamElementsConfigFixture({
-                jwtToken: 'test-jwt-token',
                 youtubeChannelId: 'test-youtube-channel',
                 twitchChannelId: 'test-twitch-channel',
                 dataLoggingPath: './custom-logs'
@@ -51,7 +57,7 @@ describe('platform config parsing behavior', () => {
             { logger: noOpLogger }
         );
 
-        expect(platform.config.jwtToken).toBe('test-jwt-token');
+        expect(platform.config.jwtToken).toBe(jwtToken);
         expect(platform.config.youtubeChannelId).toBe('test-youtube-channel');
         expect(platform.config.twitchChannelId).toBe('test-twitch-channel');
         expect(platform.config.dataLoggingPath).toBe('./custom-logs');

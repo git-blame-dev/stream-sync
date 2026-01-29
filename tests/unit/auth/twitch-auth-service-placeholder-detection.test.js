@@ -2,6 +2,7 @@
 const { initializeTestLogging } = require('../../helpers/test-setup');
 const { noOpLogger } = require('../../helpers/mock-factories');
 const { setupAutomatedCleanup } = require('../../helpers/mock-lifecycle');
+const { secrets, _resetForTesting, initializeStaticSecrets } = require('../../../src/core/secrets');
 
 initializeTestLogging();
 
@@ -19,6 +20,13 @@ describe('TwitchAuthService Placeholder Token Detection', () => {
 
     beforeEach(() => {
         mockLogger = noOpLogger;
+        _resetForTesting();
+        secrets.twitch.clientSecret = 'valid_client_secret';
+    });
+
+    afterEach(() => {
+        _resetForTesting();
+        initializeStaticSecrets();
     });
 
     describe('when placeholder tokens are provided', () => {
@@ -36,7 +44,6 @@ describe('TwitchAuthService Placeholder Token Detection', () => {
             it(`should detect "${token}" as placeholder token`, () => {
                 const config = {
                     clientId: 'valid_client_id',
-                    clientSecret: 'valid_client_secret', 
                     accessToken: token
                 };
 
@@ -48,7 +55,6 @@ describe('TwitchAuthService Placeholder Token Detection', () => {
             it(`should require OAuth flow for "${token}"`, () => {
                 const config = {
                     clientId: 'valid_client_id',
-                    clientSecret: 'valid_client_secret',
                     accessToken: token
                 };
 
@@ -72,7 +78,6 @@ describe('TwitchAuthService Placeholder Token Detection', () => {
             realTokens.forEach(token => {
                 const config = {
                     clientId: 'valid_client_id',
-                    clientSecret: 'valid_client_secret',
                     accessToken: token
                 };
 
@@ -96,7 +101,6 @@ describe('TwitchAuthService Placeholder Token Detection', () => {
             it(`should reject ${description} token`, () => {
                 const config = {
                     clientId: 'valid_client_id',
-                    clientSecret: 'valid_client_secret',
                     accessToken: token
                 };
 

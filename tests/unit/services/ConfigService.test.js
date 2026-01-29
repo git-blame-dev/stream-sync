@@ -60,7 +60,7 @@ describe('ConfigService', () => {
                 followsEnabled: false
             },
             youtube: {
-                apiKey: 'test-youtube-key'
+                enabled: true
             },
             spam: {
                 enabled: true,

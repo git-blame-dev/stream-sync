@@ -2,10 +2,13 @@
 const { describe, test, expect, beforeEach, afterEach } = require('bun:test');
 const { createMockFn, restoreAllMocks } = require('../../helpers/bun-mock-utils');
 const { noOpLogger } = require('../../helpers/mock-factories');
+const { secrets, _resetForTesting, initializeStaticSecrets } = require('../../../src/core/secrets');
 
 describe('HTTP Client Axios Response Behavior', () => {
     afterEach(() => {
         restoreAllMocks();
+        _resetForTesting();
+        initializeStaticSecrets();
     });
 
     let TwitchAuthInitializer;
@@ -25,7 +28,6 @@ describe('HTTP Client Axios Response Behavior', () => {
         mockAuthService = {
             config: {
                 clientId: 'test_client_id',
-                clientSecret: 'test_client_secret',
                 accessToken: 'test_access_token',
                 refreshToken: 'test_refresh_token',
                 channel: 'testchannel'
@@ -41,6 +43,9 @@ describe('HTTP Client Axios Response Behavior', () => {
             updateAccessToken: createMockFn(),
             tokenExpiresAt: null
         };
+
+        _resetForTesting();
+        secrets.twitch.clientSecret = 'test_client_secret';
         
         TwitchAuthInitializer = require('../../../src/auth/TwitchAuthInitializer');
     });

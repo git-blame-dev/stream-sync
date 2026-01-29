@@ -1,16 +1,24 @@
-const { describe, expect, afterEach, it } = require('bun:test');
+const { describe, expect, beforeEach, afterEach, it } = require('bun:test');
 const { createMockFn, clearAllMocks, restoreAllMocks } = require('../../helpers/bun-mock-utils');
 const { noOpLogger } = require('../../helpers/mock-factories');
 
 const TwitchAuthManager = require('../../../src/auth/TwitchAuthManager');
+const { secrets, _resetForTesting, initializeStaticSecrets } = require('../../../src/core/secrets');
 
 describe('TwitchAuthManager OAuth handling', () => {
     const originalEnv = { ...process.env };
+
+    beforeEach(() => {
+        _resetForTesting();
+        secrets.twitch.clientSecret = 'client-secret';
+    });
 
     afterEach(() => {
         restoreAllMocks();
         process.env = { ...originalEnv };
         clearAllMocks();
+        _resetForTesting();
+        initializeStaticSecrets();
     });
 
     it('auto-triggers OAuth flow when access token is missing', async () => {
@@ -26,7 +34,6 @@ describe('TwitchAuthManager OAuth handling', () => {
 
         const manager = TwitchAuthManager.getInstance({
             clientId: 'client-id',
-            clientSecret: 'client-secret',
             channel: 'channel-name',
             accessToken: null,
             refreshToken: null

@@ -4,6 +4,7 @@ const { createMockFn, spyOn, restoreAllMocks } = require('../../helpers/bun-mock
 const { noOpLogger } = require('../../helpers/mock-factories');
 
 const { TokenValidator } = require('../../../src/auth/token-validator');
+const { secrets, _resetForTesting, initializeStaticSecrets } = require('../../../src/core/secrets');
 
 describe('Token Validator Scope Reauth', () => {
     let validator;
@@ -23,18 +24,22 @@ describe('Token Validator Scope Reauth', () => {
 
         validator = new TokenValidator(null, { axios: mockAxios });
         validator.logger = mockLogger;
+
+        _resetForTesting();
+        secrets.twitch.clientSecret = 'test-client-secret';
     });
 
     afterEach(() => {
         restoreAllMocks();
         mockProcessExit.mockRestore();
+        _resetForTesting();
+        initializeStaticSecrets();
     });
 
     describe('when tokens have scope mismatch', () => {
         it('should detect missing user:read:chat scope and trigger reauth', async () => {
             const config = {
                 clientId: 'test-client-id',
-                clientSecret: 'test-client-secret',
                 accessToken: 'test-valid-token-with-wrong-scopes',
                 refreshToken: 'test-valid-refresh-token',
                 channel: 'test-channel'
@@ -56,7 +61,6 @@ describe('Token Validator Scope Reauth', () => {
         it('should trigger complete OAuth flow when scopes are insufficient', async () => {
             const config = {
                 clientId: 'test-client-id',
-                clientSecret: 'test-client-secret',
                 accessToken: 'test-token-missing-scopes',
                 refreshToken: 'test-refresh-token',
                 channel: 'test-channel'
@@ -84,7 +88,6 @@ describe('Token Validator Scope Reauth', () => {
         it('revalidates tokens in-memory after OAuth success without restart', async () => {
             const twitchConfig = {
                 clientId: 'test-client-id',
-                clientSecret: 'test-client-secret',
                 accessToken: 'test-stale-token',
                 refreshToken: 'test-stale-refresh',
                 channel: 'test-channel'
@@ -125,7 +128,6 @@ describe('Token Validator Scope Reauth', () => {
         it('should validate all required EventSub scopes before accepting tokens', async () => {
             const config = {
                 clientId: 'test-client-id',
-                clientSecret: 'test-client-secret',
                 accessToken: 'test-incomplete-scopes-token',
                 refreshToken: 'test-refresh-token',
                 channel: 'test-channel'
@@ -152,7 +154,6 @@ describe('Token Validator Scope Reauth', () => {
         it('should accept tokens with all required EventSub scopes', async () => {
             const config = {
                 clientId: 'test-client-id',
-                clientSecret: 'test-client-secret',
                 accessToken: 'test-complete-scopes-token',
                 refreshToken: 'test-refresh-token',
                 channel: 'test-channel'

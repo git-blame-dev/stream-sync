@@ -325,7 +325,6 @@ const createMockNotificationManager = (overrides = {}) => {
 const createMockYouTubeServices = (configOverrides = {}) => {
     const defaultConfig = {
         enabled: true,
-        apiKey: 'test-youtube-api-key',
         channelHandle: '@testchannel',
         maxConnections: 3,
         connectionTimeout: 30000,
@@ -398,7 +397,6 @@ const createMockYouTubeServices = (configOverrides = {}) => {
 const createMockTikTokServices = (configOverrides = {}) => {
     const defaultConfig = {
         username: 'testuser',
-        apiKey: 'test-tiktok-api-key',
         enabled: true,
         debug: false,
         ...configOverrides
@@ -459,9 +457,7 @@ const createMockTwitchServices = (configOverrides = {}) => {
     const defaultConfig = {
         enabled: true,
         channel: 'testchannel',
-        apiKey: 'test-oauth-token',
         clientId: 'test-client-id',
-        clientSecret: 'test-client-secret',
         accessToken: 'test-access-token',
         refreshToken: 'test-refresh-token',
         eventsub_enabled: true,
@@ -1382,13 +1378,12 @@ const createConfigFixture = (configOverrides = {}) => {
         twitch: {
             enabled: true,
             cmdCooldownMs: 10000,
-            apiKey: 'test-twitch-key',
+            clientId: 'test-client-id',
             username: 'test-twitch-user'
         },
         youtube: {
             enabled: true,
             cmdCooldownMs: 10000,
-            apiKey: 'test-youtube-key',
             username: 'test-youtube-user'
         },
         tiktok: {
@@ -2582,8 +2577,7 @@ const createMockAuthService = (options = {}) => {
     return {
         config: options.config || {
             accessToken: 'test-access-token',
-            refreshToken: 'test-refresh-token',
-            apiKey: 'test-access-token'
+            refreshToken: 'test-refresh-token'
         },
         logger: options.logger || noOpLogger,
 
@@ -2789,8 +2783,7 @@ const createMockTokenRefresh = (options = {}) => {
     return {
         config: options.config || {
             accessToken: 'test-access-token',
-            refreshToken: 'test-refresh-token',
-            apiKey: 'test-access-token'
+            refreshToken: 'test-refresh-token'
         },
         logger: options.logger || noOpLogger,
         fileSystem: options.fileSystem || createMockFileSystem(),
@@ -2835,8 +2828,7 @@ const createMockAuthInitializer = (options = {}) => {
     return {
         config: options.config || {
             accessToken: 'test-access-token',
-            refreshToken: 'test-refresh-token',
-            apiKey: 'test-access-token'
+            refreshToken: 'test-refresh-token'
         },
         logger: options.logger || noOpLogger,
 
@@ -2860,8 +2852,7 @@ const createMockOAuthHandler = (options = {}) => {
     return {
         config: options.config || {
             accessToken: 'test-access-token',
-            refreshToken: 'test-refresh-token',
-            apiKey: 'test-access-token'
+            refreshToken: 'test-refresh-token'
         },
         logger: options.logger || noOpLogger,
         fileSystem: options.fileSystem || createMockFileSystem(),
@@ -2917,8 +2908,7 @@ const createMockHttpClient = (options = {}) => {
         config: options.config || {
             accessToken: 'test-access-token',
             refreshToken: 'test-refresh-token',
-            clientId: 'test-client-id',
-            clientSecret: 'test-client-secret'
+            clientId: 'test-client-id'
         },
         logger: options.logger || noOpLogger,
         axios: options.axios || { request: createMockFn(), get: createMockFn(), post: createMockFn() },

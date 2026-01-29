@@ -69,7 +69,7 @@ describe('Dependency Injection Validation', () => {
             };
 
             const createYouTubePlatform = () => {
-                const config = { youtube: { apiKey: 'test-key' } };
+                const config = { youtube: { enabled: true, username: 'test-user' } };
                 const { YouTubePlatform } = require('../../src/platforms/youtube');
                 return new YouTubePlatform(config, incompleteDependencies);
             };
@@ -82,7 +82,7 @@ describe('Dependency Injection Validation', () => {
             const nullDependencies = null;
 
             const createPlatformWithNullDeps = () => {
-                const config = { youtube: { apiKey: 'test-key' } };
+                const config = { youtube: { enabled: true, username: 'test-user' } };
                 const { YouTubePlatform } = require('../../src/platforms/youtube');
                 return new YouTubePlatform(config, nullDependencies);
             };
@@ -101,7 +101,7 @@ describe('Dependency Injection Validation', () => {
             };
 
             const createPlatformWithInvalidTypes = () => {
-                const config = { youtube: { apiKey: 'test-key' } };
+                const config = { youtube: { enabled: true, username: 'test-user' } };
                 const { YouTubePlatform } = require('../../src/platforms/youtube');
                 return new YouTubePlatform(config, invalidTypeDependencies);
             };
@@ -203,7 +203,7 @@ describe('Dependency Injection Validation', () => {
 
         it('should suggest fixes when dependencies are completely missing', () => {
             const initializeWithoutDeps = () => {
-                const config = { youtube: { apiKey: 'test-key' } };
+                const config = { youtube: { enabled: true, username: 'test-user' } };
                 const { YouTubePlatform } = require('../../src/platforms/youtube');
                 return new YouTubePlatform(config, undefined);
             };
@@ -214,7 +214,7 @@ describe('Dependency Injection Validation', () => {
 
         it('should help users understand dependency injection patterns', () => {
             const attemptIncorrectInjection = () => {
-                const config = { youtube: { apiKey: 'test-key' } };
+                const config = { youtube: { enabled: true, username: 'test-user' } };
                 const { YouTubePlatform } = require('../../src/platforms/youtube');
                 return new YouTubePlatform(config, 'invalid_dependencies_string');
             };
@@ -236,7 +236,7 @@ describe('Dependency Injection Validation', () => {
                     }
                 };
 
-                const config = { youtube: { apiKey: 'test-key' } };
+                const config = { youtube: { enabled: true, username: 'test-user' } };
                 const { YouTubePlatform } = require('../../src/platforms/youtube');
                 return new YouTubePlatform(config, dependencies);
             };
@@ -256,8 +256,8 @@ describe('Dependency Injection Validation', () => {
 
             const testMultiplePlatforms = () => {
                 const config = {
-                    youtube: { apiKey: 'test-key' },
-                    tiktok: { apiKey: 'test-key' }
+                    youtube: { enabled: true, username: 'test-user' },
+                    tiktok: { enabled: true, username: 'test-user' }
                 };
 
                 const { YouTubePlatform } = require('../../src/platforms/youtube');

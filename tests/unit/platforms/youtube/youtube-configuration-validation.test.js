@@ -20,11 +20,10 @@ describe('YouTube Platform Configuration Validation', () => {
     });
     
     describe('Configuration Key Normalization (After Refactor)', () => {
-        test('should handle config with apiKey (camelCase)', async () => {
+        test('should handle config with required username', async () => {
             const configWithCamelCase = createConfigFixture('youtube', {
                 enabled: true,
-                username: 'testuser',
-                apiKey: 'valid-api-key-here'
+                username: 'testuser'
             });
 
             const platform = new YouTubePlatform(configWithCamelCase, mockDependencies);
@@ -50,8 +49,7 @@ describe('YouTube Platform Configuration Validation', () => {
         test('should handle disabled platform', async () => {
             const disabledConfig = createConfigFixture('youtube', {
                 enabled: false,
-                username: 'testuser',
-                apiKey: 'valid-api-key'
+                username: 'testuser'
             });
 
             const platform = new YouTubePlatform(disabledConfig, mockDependencies);
@@ -62,8 +60,7 @@ describe('YouTube Platform Configuration Validation', () => {
 
         test('should handle missing username', async () => {
             const configWithoutUsername = createConfigFixture('youtube', {
-                enabled: true,
-                apiKey: 'valid-api-key'
+                enabled: true
             });
 
             const platform = new YouTubePlatform(configWithoutUsername, mockDependencies);
@@ -105,8 +102,7 @@ describe('YouTube Platform Configuration Validation', () => {
     describe('Dependency Validation', () => {
         const baseConfig = createConfigFixture('youtube', {
             enabled: true,
-            username: 'channel-owner',
-            apiKey: 'valid-api-key'
+            username: 'channel-owner'
         });
 
         test('should fail fast when stream detection service is missing', () => {

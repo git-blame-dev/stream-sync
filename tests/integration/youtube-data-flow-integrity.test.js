@@ -29,8 +29,7 @@ const createPlatformHarness = () => {
     const logger = noOpLogger;
     const config = createConfigFixture('youtube', {
         enabled: true,
-        username: 'test-channel',
-        apiKey: 'test-key'
+        username: 'test-channel'
     });
     const dependencies = createMockPlatformDependencies('youtube', { logger });
     const platform = new YouTubePlatform(config, dependencies);

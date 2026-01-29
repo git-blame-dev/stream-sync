@@ -24,8 +24,7 @@ describe('YouTubePlatform event routing behavior', () => {
 
     const baseConfig = createConfigFixture('youtube', {
         enabled: true,
-        username: 'test-channel',
-        apiKey: 'test-key'
+        username: 'test-channel'
     });
 
     const createPlatform = () => new YouTubePlatform(baseConfig, {

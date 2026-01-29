@@ -3,11 +3,11 @@ const { describe, test, expect, beforeEach, afterEach } = require('bun:test');
 const { noOpLogger } = require('../../helpers/mock-factories');
 
 const TwitchAuthManager = require('../../../src/auth/TwitchAuthManager');
+const { secrets, _resetForTesting, initializeStaticSecrets } = require('../../../src/core/secrets');
 
 function createTestConfiguration(testName, overrides = {}) {
     return {
         clientId: `test-client-${testName}`,
-        clientSecret: `test-secret-${testName}`,
         accessToken: `test-token-${testName}`,
         refreshToken: `test-refresh-${testName}`,
         channel: `test-channel-${testName}`,
@@ -66,11 +66,15 @@ describe('TwitchAuthManager Test Isolation', () => {
 
     beforeEach(() => {
         testCleanup = setupAutomatedCleanup();
+        _resetForTesting();
+        secrets.twitch.clientSecret = 'test-client-secret';
     });
 
     afterEach(async () => {
         await testCleanup.cleanup();
         TwitchAuthManager.resetInstance();
+        _resetForTesting();
+        initializeStaticSecrets();
     });
 
     describe('Test Environment Isolation', () => {

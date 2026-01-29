@@ -2,6 +2,7 @@ const { beforeAll, beforeEach, afterEach, afterAll, expect } = require('bun:test
 const { waitForDelay, scheduleTimeout, scheduleInterval } = require('../helpers/time-utils');
 const testClock = require('../helpers/test-clock');
 const { initializeTestLogging } = require('../helpers/test-setup');
+const { initializeStaticSecrets, _resetForTesting } = require('../../src/core/secrets');
 
 // Initialize logging FIRST at module load time, before any test files import modules
 // This ensures getUnifiedLogger() works when production code falls back to it
@@ -168,9 +169,13 @@ beforeAll(() => {
     process.env.TWITCH_DISABLE_AUTH = 'true';
     process.env.YOUTUBE_DISABLE_AUTH = 'true';
     process.env.TIKTOK_DISABLE_AUTH = 'true';
+    process.env.TWITCH_CLIENT_SECRET = 'test_mock_secret';
     process.env.TWITCH_API_KEY = 'test_mock_key';
     process.env.YOUTUBE_API_KEY = 'test_mock_key';
     process.env.TIKTOK_API_KEY = 'test_mock_key';
+
+    _resetForTesting();
+    initializeStaticSecrets();
 
     global.__TEST_LOGGER__ = createLoggerMock();
 

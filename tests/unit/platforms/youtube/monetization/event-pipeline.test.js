@@ -13,8 +13,7 @@ describe('YouTube monetized event pipeline', () => {
 
     const baseConfig = createConfigFixture('youtube', {
         enabled: true,
-        username: 'notification-test',
-        apiKey: 'notification-key'
+        username: 'notification-test'
     });
 
     const createPlatform = () => new YouTubePlatform(baseConfig, {

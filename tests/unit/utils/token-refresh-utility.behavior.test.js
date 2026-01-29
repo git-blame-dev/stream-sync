@@ -1,9 +1,20 @@
-const { describe, expect, it } = require('bun:test');
+const { describe, expect, it, beforeEach, afterEach } = require('bun:test');
 const { createMockFn } = require('../../helpers/bun-mock-utils');
 const { noOpLogger } = require('../../helpers/mock-factories');
 const TokenRefreshUtility = require('../../../src/utils/token-refresh-utility');
+const { secrets, _resetForTesting, initializeStaticSecrets } = require('../../../src/core/secrets');
 
 describe('TokenRefreshUtility', () => {
+    beforeEach(() => {
+        _resetForTesting();
+        secrets.twitch.clientSecret = 'secret';
+    });
+
+    afterEach(() => {
+        _resetForTesting();
+        initializeStaticSecrets();
+    });
+
     describe('executeTokenRefresh', () => {
         it('returns success with tokens using enhanced client', async () => {
             const enhancedHttpClient = {
@@ -15,8 +26,7 @@ describe('TokenRefreshUtility', () => {
 
             const result = await util.executeTokenRefresh({
                 refreshToken: 'r',
-                clientId: 'id',
-                clientSecret: 'secret'
+                clientId: 'id'
             });
 
             expect(result.success).toBe(true);
@@ -38,8 +48,7 @@ describe('TokenRefreshUtility', () => {
 
             const result = await util.executeTokenRefresh({
                 refreshToken: 'r',
-                clientId: 'id',
-                clientSecret: 'secret'
+                clientId: 'id'
             });
 
             expect(result.success).toBe(false);

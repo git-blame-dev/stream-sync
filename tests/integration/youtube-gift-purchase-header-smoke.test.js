@@ -18,8 +18,7 @@ describe('YouTube Gift Purchase Smoke (Canonical Author)', () => {
     test('routes gift purchase through event pipeline to handler', async () => {
         const config = createConfigFixture('youtube', {
             enabled: true,
-            username: 'test-channel',
-            apiKey: 'test-key'
+            username: 'test-channel'
         });
         const dependencies = createMockPlatformDependencies('youtube', { logger: noOpLogger });
         const platform = new YouTubePlatform(config, dependencies);

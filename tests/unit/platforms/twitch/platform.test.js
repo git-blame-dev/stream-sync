@@ -70,6 +70,7 @@ describe('Twitch Platform', () => {
             enabled: true,
             username: 'testuser',
             channel: 'testchannel',
+            clientId: 'test-client-id',
             eventsub_enabled: true,
             dataLoggingEnabled: false,
             viewerCountEnabled: true
@@ -140,6 +141,7 @@ describe('Twitch Platform', () => {
                 enabled: true,
                 username: 'testuser',
                 channel: 'testchannel',
+                clientId: 'test-client-id',
                 eventsub_enabled: true
             };
 

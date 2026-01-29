@@ -1,5 +1,6 @@
 const { describe, expect, afterEach, it, beforeEach } = require('bun:test');
 const { createMockFn, restoreAllMocks } = require('../../helpers/bun-mock-utils');
+const { secrets, _resetForTesting, initializeStaticSecrets } = require('../../../src/core/secrets');
 
 const { OBSConnectionManager } = require('../../../src/obs/connection');
 
@@ -14,6 +15,8 @@ describe('OBSConnectionManager behavior', () => {
     afterEach(() => {
         process.env.NODE_ENV = originalNodeEnv;
         restoreAllMocks();
+        _resetForTesting();
+        initializeStaticSecrets();
     });
 
     const createDeps = (overrides = {}) => ({
@@ -96,6 +99,16 @@ describe('OBSConnectionManager behavior', () => {
         expect(config.address).toBe('ws://localhost:4455');
         expect(config.password).toBe('testPass');
         expect(config.enabled).toBe(true);
+    });
+
+    it('uses secrets password when config password is undefined', () => {
+        _resetForTesting();
+        secrets.obs.password = 'secret-from-env';
+
+        const deps = createDeps({ config: { address: 'ws://localhost:4455', enabled: true, connectionTimeoutMs: 50 } });
+        const manager = new OBSConnectionManager(deps);
+
+        expect(manager.getConfig().password).toBe('secret-from-env');
     });
 
     it('isConnected returns internal connection state when testConnectionBehavior enabled', () => {

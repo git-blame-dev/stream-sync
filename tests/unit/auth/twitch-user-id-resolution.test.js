@@ -5,6 +5,7 @@ const { noOpLogger } = require('../../helpers/mock-factories');
 
 const TwitchAuthInitializer = require('../../../src/auth/TwitchAuthInitializer');
 const TwitchAuthService = require('../../../src/auth/TwitchAuthService');
+const { secrets, _resetForTesting, initializeStaticSecrets } = require('../../../src/core/secrets');
 
 describe('Twitch User ID Resolution', () => {
     let authService;
@@ -31,7 +32,6 @@ describe('Twitch User ID Resolution', () => {
 
         const config = {
             clientId: 'test_client_id',
-            clientSecret: 'test_client_secret',
             accessToken: 'test_access_token_12345',
             refreshToken: 'test_refresh_token_67890',
             channel: 'hero_stream',
@@ -39,10 +39,15 @@ describe('Twitch User ID Resolution', () => {
         };
 
         authService = new TwitchAuthService(config, { logger: mockLogger });
+
+        _resetForTesting();
+        secrets.twitch.clientSecret = 'test_client_secret';
     });
 
     afterEach(() => {
         restoreAllMocks();
+        _resetForTesting();
+        initializeStaticSecrets();
     });
 
     describe('when initializing authentication', () => {
@@ -109,7 +114,6 @@ describe('Twitch User ID Resolution', () => {
 
                 const config = {
                     clientId: 'test_client_id',
-                    clientSecret: 'test_client_secret',
                     accessToken: `test_access_token_${index}`,
                     refreshToken: `test_refresh_token_${index}`,
                     channel: 'hero_stream',

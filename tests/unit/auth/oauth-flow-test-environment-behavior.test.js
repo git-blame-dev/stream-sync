@@ -4,6 +4,7 @@ const { createMockFn, restoreAllMocks } = require('../../helpers/bun-mock-utils'
 const { noOpLogger } = require('../../helpers/mock-factories');
 
 const TwitchAuthInitializer = require('../../../src/auth/TwitchAuthInitializer');
+const { secrets, _resetForTesting, initializeStaticSecrets } = require('../../../src/core/secrets');
 
 describe('OAuth Flow Test Environment Behavior', () => {
     let mockAuthService;
@@ -39,7 +40,6 @@ describe('OAuth Flow Test Environment Behavior', () => {
         mockAuthService = {
             config: {
                 clientId: 'test-client-id',
-                clientSecret: 'test-client-secret',
                 accessToken: null,
                 refreshToken: null,
                 channel: 'test-channel'
@@ -53,10 +53,15 @@ describe('OAuth Flow Test Environment Behavior', () => {
             }),
             setAuthenticationState: createMockFn()
         };
+
+        _resetForTesting();
+        secrets.twitch.clientSecret = 'test-client-secret';
     });
 
     afterEach(() => {
         restoreAllMocks();
+        _resetForTesting();
+        initializeStaticSecrets();
         if (originalNodeEnv === undefined) {
             delete process.env.NODE_ENV;
         } else {

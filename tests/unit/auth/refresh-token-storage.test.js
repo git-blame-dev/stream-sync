@@ -4,6 +4,7 @@ const { createMockFn, restoreAllMocks } = require('../../helpers/bun-mock-utils'
 
 const { noOpLogger } = require('../../helpers/mock-factories');
 const { setupAutomatedCleanup } = require('../../helpers/mock-lifecycle');
+const { secrets, _resetForTesting, initializeStaticSecrets } = require('../../../src/core/secrets');
 
 setupAutomatedCleanup({
     clearCallsBeforeEach: true,
@@ -19,6 +20,8 @@ const TwitchAuthService = require('../../../src/auth/TwitchAuthService');
 describe('Refresh Token Storage and Update Handling (Twitch Best Practices)', () => {
     afterEach(() => {
         restoreAllMocks();
+        _resetForTesting();
+        initializeStaticSecrets();
     });
 
     let mockLogger;
@@ -44,7 +47,6 @@ describe('Refresh Token Storage and Update Handling (Twitch Best Practices)', ()
         tokenStorePath = '/test/token-store.json';
         configFixture = {
             clientId: 'test_client_id',
-            clientSecret: 'test_client_secret',
             accessToken: 'old_access_token_123',
             refreshToken: 'old_refresh_token_456',
             tokenStorePath
@@ -65,6 +67,9 @@ describe('Refresh Token Storage and Update Handling (Twitch Best Practices)', ()
         tokenRefresh.logger = mockLogger;
 
         authService = new TwitchAuthService(configFixture, { logger: mockLogger });
+
+        _resetForTesting();
+        secrets.twitch.clientSecret = 'test_client_secret';
     });
 
     describe('Refresh Token Updates During Refresh', () => {

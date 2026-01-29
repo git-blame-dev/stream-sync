@@ -24,7 +24,6 @@ describe('YouTube Error Fixes Integration', () => {
         const config = {
             enabled: true,
             username: 'testchannel',
-            apiKey: 'test-api-key',
             enableAPI: 'false'
         };
 

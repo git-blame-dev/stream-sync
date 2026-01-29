@@ -28,7 +28,7 @@ describe('YouTubeViewerCountProvider readiness and error routes', () => {
         };
         const provider = new YouTubeViewerCountProvider(
             {},
-            { apiKey: 'testApiKey' },
+            {},
             () => [],
             null,
             { viewerExtractionService, logger: noOpLogger }
@@ -45,7 +45,7 @@ describe('YouTubeViewerCountProvider readiness and error routes', () => {
         };
         const provider = new YouTubeViewerCountProvider(
             {},
-            { apiKey: 'testApiKey' },
+            {},
             () => ['testVideoId1'],
             null,
             { viewerExtractionService, logger: noOpLogger }
