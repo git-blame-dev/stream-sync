@@ -475,6 +475,16 @@ describe('ConfigValidator.validate()', () => {
         expect(result.errors).toContain('Missing required configuration: Twitch username');
     });
 
+    it('returns error when Twitch enabled without clientId', () => {
+        const config = createMinimalValidConfig();
+        config.twitch = { enabled: true, username: 'test-user', clientId: '' };
+
+        const result = ConfigValidator.validate(config);
+
+        expect(result.isValid).toBe(false);
+        expect(result.errors).toContain('Missing required configuration: Twitch clientId');
+    });
+
     it('returns error when YouTube enabled without username', () => {
         const config = createMinimalValidConfig();
         config.youtube = { enabled: true, username: '' };

@@ -6,7 +6,7 @@ const {
 
 describe('Configuration Normalizer', () => {
     describe('normalizeYouTubeConfig', () => {
-        test('should preserve existing apiKey', () => {
+        test('drops apiKey from normalized config', () => {
             const config = {
                 enabled: true,
                 username: 'testuser',
@@ -15,7 +15,7 @@ describe('Configuration Normalizer', () => {
             
             const normalized = normalizeYouTubeConfig(config);
             
-            expect(normalized.apiKey).toBe('test-api-key');
+            expect(normalized.apiKey).toBeUndefined();
         });
         
         test('should reject deprecated channel_id key', () => {
@@ -74,7 +74,7 @@ describe('Configuration Normalizer', () => {
 
             const normalized = normalizeYouTubeConfig(config);
 
-            expect(normalized.apiKey).toBe('test-api-key');
+            expect(normalized.apiKey).toBeUndefined();
             expect(normalized.retryAttempts).toBe(4);
             expect(normalized.someUnknownKey).toBeUndefined();
         });
@@ -83,24 +83,24 @@ describe('Configuration Normalizer', () => {
     describe('validateRequiredKeys', () => {
         test('should pass when all required keys present', () => {
             const config = {
-                apiKey: 'test-key',
+                clientId: 'test-client-id',
                 username: 'testuser'
             };
             
             expect(() => {
-                validateRequiredKeys(config, ['apiKey', 'username'], 'YouTube');
+                validateRequiredKeys(config, ['clientId', 'username'], 'YouTube');
             }).not.toThrow();
         });
         
         test('should throw when required keys missing', () => {
             const config = {
                 username: 'testuser'
-                // apiKey missing
+                // clientId missing
             };
             
             expect(() => {
-                validateRequiredKeys(config, ['apiKey', 'username'], 'YouTube');
-            }).toThrow('YouTube configuration missing required keys: apiKey');
+                validateRequiredKeys(config, ['clientId', 'username'], 'YouTube');
+            }).toThrow('YouTube configuration missing required keys: clientId');
         });
         
         test('should list all missing keys', () => {
@@ -109,8 +109,8 @@ describe('Configuration Normalizer', () => {
             };
             
             expect(() => {
-                validateRequiredKeys(config, ['apiKey', 'username'], 'YouTube');
-            }).toThrow('YouTube configuration missing required keys: apiKey, username');
+                validateRequiredKeys(config, ['clientId', 'username'], 'YouTube');
+            }).toThrow('YouTube configuration missing required keys: clientId, username');
         });
     });
 });

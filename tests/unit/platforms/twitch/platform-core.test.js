@@ -25,6 +25,7 @@ const createPlatform = (configOverrides = {}, depsOverrides = {}) => {
         enabled: true,
         username: 'teststreamer',
         channel: 'teststreamer',
+        clientId: 'test-client-id',
         eventsub_enabled: true,
         dataLoggingEnabled: false,
         ...configOverrides
@@ -50,13 +51,13 @@ describe('TwitchPlatform core behavior', () => {
         }
     });
 
-    it('treats configuration as valid when authManager is READY without client credentials', () => {
+    it('requires clientId when Twitch is enabled', () => {
         platform = createPlatform({ clientId: undefined, accessToken: undefined });
 
         const validation = platform.validateConfig();
 
-        expect(validation.isValid).toBe(true);
-        expect(validation.errors).toEqual([]);
+        expect(validation.isValid).toBe(false);
+        expect(validation.errors).toContain('clientId: Client ID is required for Twitch authentication');
     });
 
     it('marks non-ready auth state as a warning instead of an invalid config', () => {

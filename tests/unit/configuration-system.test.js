@@ -31,7 +31,6 @@ maxMessageLength = 500
 [obs]
 enabled = true
 address = ws://localhost:4455
-password = testpass
 connectionTimeoutMs = 10000
 notificationMsgGroup = statusbar notification grp
 chatPlatformLogoTwitch = twitch-img
@@ -53,7 +52,6 @@ notificationClearDelay = 500
 [youtube]
 enabled = true
 username = TestChannel
-apiKey = test-api-key
 innertubeInstanceTtlMs = 300000
 innertubeMinTtlMs = 60000
 userAgents = test-agent-1|test-agent-2
@@ -70,7 +68,6 @@ cheermoteDefaultType = cheer
 [tiktok]
 enabled = false
 username =
-apiKey =
 
 [handcam]
 glowEnabled = true
@@ -138,7 +135,7 @@ describe('Configuration System Behavior Tests', () => {
 
             expect(youtubeEnabled).toBe(true);
             expect(youtubeUsername).toBe('TestChannel');
-            expect(youtubeApiKey).toBe(process.env.YOUTUBE_API_KEY);
+            expect(youtubeApiKey).toBeUndefined();
 
             expectNoTechnicalArtifacts(youtubeUsername);
         });
@@ -172,6 +169,7 @@ ${testConfigContent}
 [twitch]
 enabled = true
 username =
+clientId = test-client-id
 cheermoteDefaultGiftCount = 1
 cheermoteGenericCheerName = Cheer
 cheermoteGenericBitsName = Bits
@@ -181,7 +179,6 @@ cheermoteDefaultType = cheer
 [youtube]
 enabled = false
 username = TestChannel
-apiKey = test-api-key
 innertubeInstanceTtlMs = 300000
 innertubeMinTtlMs = 60000
 userAgents = test-agent-1|test-agent-2
@@ -239,7 +236,7 @@ userAgents = test-agent-1|test-agent-2
 
             expect(youtubeConfig.enabled).toBe(true);
             expect(youtubeConfig.username).toBe('TestChannel');
-            expect(youtubeConfig.apiKey).toBe(process.env.YOUTUBE_API_KEY);
+            expect(youtubeConfig.apiKey).toBeUndefined();
 
             expect(twitchConfig.enabled).toBe(false);
             expect(tiktokConfig.enabled).toBe(false);
@@ -256,7 +253,6 @@ ${testConfigContent}
 [youtube]
 enabled = true
 username = TestChannel
-apiKey = test-api-key
 innertubeInstanceTtlMs = 300000
 innertubeMinTtlMs = 60000
 userAgents = test-agent-1|test-agent-2
@@ -289,7 +285,6 @@ maxMessageLength = 500
 
 [obs]
 enabled = yes
-password = testpass
 address = ws://localhost:4455
 connectionTimeoutMs = 10000
 notificationMsgGroup = statusbar notification grp
@@ -351,7 +346,6 @@ notificationClearDelay = 500
 [youtube]
 enabled = false
 username = DifferentChannel
-apiKey = different-key
 innertubeInstanceTtlMs = 300000
 innertubeMinTtlMs = 60000
 userAgents = test-agent-1|test-agent-2
@@ -368,7 +362,6 @@ cheermoteDefaultType = cheer
 [tiktok]
 enabled = false
 username =
-apiKey =
 
 [handcam]
 glowEnabled = true
@@ -423,7 +416,6 @@ maxMessageLength = 500
 [obs]
 enabled = true
 address = ws://localhost:4455
-password = clipass
 connectionTimeoutMs = 10000
 notificationMsgGroup = statusbar notification grp
 chatPlatformLogoTwitch = twitch-img
@@ -439,7 +431,6 @@ enabled = true
 [youtube]
 enabled = true
 username = CLIChannel
-apiKey = cli-key
 innertubeInstanceTtlMs = 300000
 innertubeMinTtlMs = 60000
 userAgents = test-agent-1|test-agent-2
@@ -448,7 +439,7 @@ userAgents = test-agent-1|test-agent-2
 
             expect(currentConfig.general.debugEnabled).toBe(false);
             expect(currentConfig.youtube.username).toBe('CLIChannel');
-            expect(currentConfig.obs.password).toBe(process.env.OBS_PASSWORD);
+            expect(currentConfig.obs.password).toBeUndefined();
         });
     });
 
@@ -553,7 +544,6 @@ ${testConfigContent}
 [youtube]
 enabled = true
 username = TestChannel
-apiKey = test-key
 innertubeInstanceTtlMs = 300000
 innertubeMinTtlMs = 60000
 userAgents = test-agent-1|test-agent-2
@@ -568,7 +558,7 @@ followsEnabled = true
             expect(youtubeConfig.messagesEnabled).toBe(true);
             expect(youtubeConfig.giftsEnabled).toBe(false);
             expect(youtubeConfig.followsEnabled).toBe(true);
-            expect(youtubeConfig.apiKey).toBe(process.env.YOUTUBE_API_KEY);
+            expect(youtubeConfig.apiKey).toBeUndefined();
 
             expectNoTechnicalArtifacts(youtubeConfig.username);
         });
@@ -599,7 +589,6 @@ ${testConfigContent}
 [obs]
 enabled = true
 address = ws://localhost:4455
-password = secure123
 notificationTxt = Live Notifications
 chatMsgTxt = Live Chat Display
 connectionTimeoutMs = 10000
@@ -631,7 +620,6 @@ ${testConfigContent}
 [youtube]
 enabled = true
 username = 김철수_Gaming
-apiKey = test-key
 innertubeInstanceTtlMs = 300000
 innertubeMinTtlMs = 60000
 userAgents = test-agent-1|test-agent-2
@@ -639,6 +627,7 @@ userAgents = test-agent-1|test-agent-2
 [twitch]
 enabled = true
 username = José_Streamer
+clientId = test-client-id
 cheermoteDefaultGiftCount = 1
 cheermoteGenericCheerName = Cheer
 cheermoteGenericBitsName = Bits
@@ -648,7 +637,6 @@ cheermoteDefaultType = cheer
 [tiktok]
 enabled = true
 username = 李小明直播
-apiKey = tiktok-key
 `;
             reloadConfig(internationalConfig);
 
@@ -727,7 +715,6 @@ ${testConfigContent}
 
 [youtube]
 enabled = true
-apiKey = test-key
 username =
 innertubeInstanceTtlMs = 300000
 innertubeMinTtlMs = 60000

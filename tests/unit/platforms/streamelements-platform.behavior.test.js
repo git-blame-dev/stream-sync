@@ -8,6 +8,7 @@ const { safeSetInterval, safeSetTimeout } = require('../../../src/utils/timeout-
 const fs = require('fs').promises;
 const path = require('path');
 const { StreamElementsPlatform } = require('../../../src/platforms/streamelements');
+const { secrets, _resetForTesting, initializeStaticSecrets } = require('../../../src/core/secrets');
 
 class MockWebSocket extends EventEmitter {
     constructor(url) {
@@ -40,10 +41,10 @@ const createPlatform = (configOverrides = {}, dependencyOverrides = {}) => {
         handleConnectionSuccess: createMockFn()
     };
 
+    secrets.streamelements.jwtToken = 'test-jwt-token';
     const platform = new StreamElementsPlatform(
         createStreamElementsConfigFixture({
             enabled: true,
-            jwtToken: 'test-jwt-token',
             youtubeChannelId: 'test-youtube-channel',
             twitchChannelId: 'test-twitch-channel',
             dataLoggingEnabled: true,
@@ -68,6 +69,8 @@ describe('StreamElementsPlatform behavior', () => {
     afterEach(() => {
         useRealTimers();
         restoreAllMocks();
+        _resetForTesting();
+        initializeStaticSecrets();
     });
 
     it('initializes disabled platform and fails prerequisites', async () => {

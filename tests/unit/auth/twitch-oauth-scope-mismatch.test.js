@@ -2,6 +2,7 @@
 const { initializeTestLogging } = require('../../helpers/test-setup');
 const { noOpLogger } = require('../../helpers/mock-factories');
 const { setupAutomatedCleanup } = require('../../helpers/mock-lifecycle');
+const { secrets, _resetForTesting, initializeStaticSecrets } = require('../../../src/core/secrets');
 
 initializeTestLogging();
 
@@ -22,12 +23,19 @@ describe('Twitch OAuth Scope Consistency', () => {
         
         const config = {
             clientId: 'test_client_id',
-            clientSecret: 'test_client_secret',
             accessToken: 'valid_access_token_12345',
             refreshToken: 'valid_refresh_token_67890'
         };
 
         authService = new TwitchAuthService(config, { logger: mockLogger });
+
+        _resetForTesting();
+        secrets.twitch.clientSecret = 'test_client_secret';
+    });
+
+    afterEach(() => {
+        _resetForTesting();
+        initializeStaticSecrets();
     });
 
     describe('when checking OAuth scope consistency', () => {

@@ -51,6 +51,7 @@ function createTwitchConfigFixture(overrides = {}) {
         enabled: true,
         username: 'test-twitch-user',
         channel: 'test-twitch-channel',
+        clientId: 'test-client-id',
         broadcasterId: 'test-broadcaster-id',
         dataLoggingEnabled: false,
         dataLoggingPath: './logs',

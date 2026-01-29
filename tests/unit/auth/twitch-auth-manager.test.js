@@ -1,6 +1,7 @@
 const { describe, test, expect, beforeEach, afterEach } = require('bun:test');
 const { createMockFn } = require('../../helpers/bun-mock-utils');
 const { noOpLogger } = require('../../helpers/mock-factories');
+const { secrets, _resetForTesting, initializeStaticSecrets } = require('../../../src/core/secrets');
 
 describe('TwitchAuthManager', () => {
     let TwitchAuthManager;
@@ -13,7 +14,6 @@ describe('TwitchAuthManager', () => {
     beforeEach(() => {
         configFixture = {
             clientId: 'test-client-id',
-            clientSecret: 'test-client-secret',
             accessToken: 'test-access-token',
             refreshToken: 'test-refresh-token',
             channel: 'test-channel'
@@ -46,10 +46,14 @@ describe('TwitchAuthManager', () => {
         MockTwitchAuthInitializer = createMockFn().mockImplementation(() => mockAuthInitializerInstance);
 
         TwitchAuthManager = require('../../../src/auth/TwitchAuthManager');
+        _resetForTesting();
+        secrets.twitch.clientSecret = 'test-client-secret';
     });
 
     afterEach(() => {
         delete require.cache[require.resolve('../../../src/auth/TwitchAuthManager')];
+        _resetForTesting();
+        initializeStaticSecrets();
     });
 
     function createManager(config = configFixture, extraDeps = {}) {
@@ -184,7 +188,9 @@ describe('TwitchAuthManager', () => {
         });
 
         test('requires client credentials even when tokens are present', () => {
-            const invalidConfig = { ...configFixture, clientSecret: undefined };
+            _resetForTesting();
+            secrets.twitch.clientSecret = null;
+            const invalidConfig = { ...configFixture };
             const manager = createManager(invalidConfig);
 
             expect(() => manager.validateConfig()).toThrow('missing fields [clientSecret]');

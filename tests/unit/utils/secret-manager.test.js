@@ -79,7 +79,6 @@ streamDetectionEnabled = false
 
 [obs]
 enabled = true
-password =
 notificationTxt = notification txt
 
 [commands]
@@ -93,12 +92,12 @@ username = hero_stream
 enabled = true
 username = hero_twitch
 channel = hero_twitch
+clientId = test_twitch_client_id
 
 [streamelements]
 enabled = true
 youtubeChannelId = yt_channel
 twitchChannelId = hero_twitch
-jwtToken =
 ${runtimeConfig}
 `.trim();
 
@@ -173,7 +172,7 @@ describe('secret-manager', () => {
         configManager.load();
         logger = createCapturingLogger();
 
-        ['TIKTOK_API_KEY', 'TWITCH_CLIENT_ID', 'TWITCH_CLIENT_SECRET', 'OBS_PASSWORD', 'STREAMELEMENTS_JWT_TOKEN', 'YOUTUBE_API_KEY'].forEach((key) => {
+        ['TIKTOK_API_KEY', 'TWITCH_CLIENT_SECRET', 'OBS_PASSWORD', 'STREAMELEMENTS_JWT_TOKEN', 'YOUTUBE_API_KEY'].forEach((key) => {
             originalEnv[key] = process.env[key];
             delete process.env[key];
         });
@@ -200,7 +199,6 @@ describe('secret-manager', () => {
 
     it('applies environment secrets without prompting and leaves existing env file untouched', async () => {
         process.env.TIKTOK_API_KEY = 'env_tiktok_key';
-        process.env.TWITCH_CLIENT_ID = 'env_client_id';
         process.env.TWITCH_CLIENT_SECRET = 'env_client_secret';
         process.env.OBS_PASSWORD = 'env_obs_password';
         process.env.STREAMELEMENTS_JWT_TOKEN = 'env_jwt_token';
@@ -220,7 +218,6 @@ describe('secret-manager', () => {
         });
 
         expect(result.missingRequired).toEqual([]);
-        expect(process.env.TWITCH_CLIENT_ID).toBe('env_client_id');
         expect(process.env.TIKTOK_API_KEY).toBe('env_tiktok_key');
         expect(process.env.OBS_PASSWORD).toBe('env_obs_password');
         expect(envFilePath in fileStore).toBe(false);
@@ -232,7 +229,6 @@ describe('secret-manager', () => {
 
         const promptValues = {
             TIKTOK_API_KEY: 'prompt_tiktok',
-            TWITCH_CLIENT_ID: 'prompt_client_id',
             TWITCH_CLIENT_SECRET: 'prompt_client_secret',
             OBS_PASSWORD: 'prompt_obs_password',
             STREAMELEMENTS_JWT_TOKEN: 'prompt_jwt'
@@ -259,11 +255,10 @@ describe('secret-manager', () => {
         const envContent = fileStore[envFilePath];
         expect(envContent).toContain('EXISTING=keep');
         expect(envContent).toContain('TIKTOK_API_KEY=prompt_tiktok');
-        expect(envContent).toContain('TWITCH_CLIENT_ID=prompt_client_id');
         expect(envContent).toContain('OBS_PASSWORD=prompt_obs_password');
         expect(process.env.TWITCH_CLIENT_SECRET).toBe('prompt_client_secret');
         expect(result.persisted.sort()).toEqual(
-            expect.arrayContaining(['TIKTOK_API_KEY', 'TWITCH_CLIENT_ID', 'TWITCH_CLIENT_SECRET', 'OBS_PASSWORD', 'STREAMELEMENTS_JWT_TOKEN'])
+            expect.arrayContaining(['TIKTOK_API_KEY', 'TWITCH_CLIENT_SECRET', 'OBS_PASSWORD', 'STREAMELEMENTS_JWT_TOKEN'])
         );
         expect(logger.entries.some((entry) => entry.message.includes('prompt_client_secret'))).toBe(false);
     });
@@ -273,7 +268,6 @@ describe('secret-manager', () => {
 
         const promptValues = {
             TIKTOK_API_KEY: 'prompt_tiktok',
-            TWITCH_CLIENT_ID: 'prompt_client_id',
             TWITCH_CLIENT_SECRET: 'prompt_client_secret',
             OBS_PASSWORD: 'prompt_obs_password',
             STREAMELEMENTS_JWT_TOKEN: 'prompt_jwt'
@@ -306,7 +300,6 @@ describe('secret-manager', () => {
 
     it('requires a YouTube API key when API methods are selected', async () => {
         process.env.TIKTOK_API_KEY = 'env_tiktok_key';
-        process.env.TWITCH_CLIENT_ID = 'env_client_id';
         process.env.TWITCH_CLIENT_SECRET = 'env_client_secret';
         process.env.OBS_PASSWORD = 'env_obs_password';
         process.env.STREAMELEMENTS_JWT_TOKEN = 'env_jwt_token';
@@ -340,7 +333,6 @@ describe('secret-manager', () => {
 
         const promptValues = {
             TIKTOK_API_KEY: 'prompt_tiktok',
-            TWITCH_CLIENT_ID: 'prompt_client_id',
             TWITCH_CLIENT_SECRET: 'prompt_client_secret',
             OBS_PASSWORD: 'prompt_obs_password',
             STREAMELEMENTS_JWT_TOKEN: 'prompt_jwt'
@@ -377,10 +369,6 @@ describe('secret-manager', () => {
         process.env.TIKTOK_API_KEY = 'env_tiktok_key';
         process.env.OBS_PASSWORD = 'env_obs_password';
         process.env.STREAMELEMENTS_JWT_TOKEN = 'env_jwt_token';
-
-        const twitchSection = configManager.config.twitch;
-        twitchSection.clientId = 'config_client_id';
-        twitchSection.clientSecret = 'config_client_secret';
 
         await expect(ensureSecrets({
             config: {

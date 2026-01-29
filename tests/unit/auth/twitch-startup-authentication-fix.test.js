@@ -3,6 +3,7 @@ const { createMockFn, clearAllMocks } = require('../../helpers/bun-mock-utils');
 const { noOpLogger } = require('../../helpers/mock-factories');
 const TwitchAuthInitializer = require('../../../src/auth/TwitchAuthInitializer');
 const TwitchAuthService = require('../../../src/auth/TwitchAuthService');
+const { secrets, _resetForTesting, initializeStaticSecrets } = require('../../../src/core/secrets');
 
 describe('Twitch Authentication User Experience', () => {
     let authService;
@@ -24,7 +25,6 @@ describe('Twitch Authentication User Experience', () => {
 
         const config = {
             clientId: 'test_client_id',
-            clientSecret: 'test_client_secret',
             accessToken: 'valid_access_token_12345',
             refreshToken: 'valid_refresh_token_67890',
             channel: 'testchannel'
@@ -51,10 +51,15 @@ describe('Twitch Authentication User Experience', () => {
             axios: mockAxios,
             mockOAuthHandler: mockOAuthHandler
         });
+
+        _resetForTesting();
+        secrets.twitch.clientSecret = 'test_client_secret';
     });
 
     afterEach(() => {
         clearAllMocks();
+        _resetForTesting();
+        initializeStaticSecrets();
     });
 
     describe('when network issues occur during authentication', () => {

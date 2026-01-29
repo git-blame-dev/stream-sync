@@ -4,21 +4,25 @@ const { createMockFn, spyOn, restoreAllMocks } = require('../../helpers/bun-mock
 const { noOpLogger } = require('../../helpers/mock-factories');
 
 const { TokenValidator } = require('../../../src/auth/token-validator');
+const { secrets, _resetForTesting, initializeStaticSecrets } = require('../../../src/core/secrets');
 
 describe('token-validator behavior', () => {
     let mockLogger;
 
     afterEach(() => {
         restoreAllMocks();
+        _resetForTesting();
+        initializeStaticSecrets();
     });
 
     beforeEach(() => {
         mockLogger = noOpLogger;
+        _resetForTesting();
+        secrets.twitch.clientSecret = 'test-client-secret';
     });
 
     const baseConfig = {
         clientId: 'test-client-id',
-        clientSecret: 'test-client-secret',
         accessToken: 'test-access-token',
         refreshToken: 'test-refresh-token'
     };
@@ -33,8 +37,7 @@ describe('token-validator behavior', () => {
         validator.logger = mockLogger;
 
         const missing = await validator.validateTwitchTokens({
-            clientId: 'test-client-id',
-            clientSecret: 'test-secret'
+            clientId: 'test-client-id'
         });
         expect(missing.needsNewTokens).toBe(true);
         expect(missing.isValid).toBe(false);

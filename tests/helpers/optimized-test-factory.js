@@ -62,7 +62,6 @@ class OptimizedTestFactory {
         return {
             general: {
                 obsWebSocketUrl: 'ws://localhost:4455',
-                obsWebSocketPassword: 'test-password',
                 enableNotifications: true,
                 enableTTS: false,
                 enableVFX: true,

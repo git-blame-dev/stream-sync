@@ -4,6 +4,7 @@ const { noOpLogger } = require('../helpers/mock-factories');
 const { AppRuntime } = require('../../src/main');
 const PlatformLifecycleService = require('../../src/services/PlatformLifecycleService');
 const { createConfigFixture } = require('../helpers/config-fixture');
+const { secrets, _resetForTesting, initializeStaticSecrets } = require('../../src/core/secrets');
 
 describe('Platform Initialization Delegation', () => {
     let runtime;
@@ -14,6 +15,9 @@ describe('Platform Initialization Delegation', () => {
     beforeEach(() => {
         originalExit = process.exit;
         process.exit = createMockFn();
+
+        _resetForTesting();
+        secrets.twitch.clientSecret = 'test-client-secret';
 
         configFixture = {
             general: {
@@ -29,8 +33,7 @@ describe('Platform Initialization Delegation', () => {
                 enabled: true,
                 username: 'test_channel',
                 channel: 'test_channel',
-                clientId: 'test-client-id',
-                clientSecret: 'test-client-secret'
+                clientId: 'test-client-id'
             },
             youtube: { enabled: false },
             tiktok: { enabled: false },
@@ -73,6 +76,8 @@ describe('Platform Initialization Delegation', () => {
         }
         process.exit = originalExit;
         restoreAllMocks();
+        _resetForTesting();
+        initializeStaticSecrets();
     });
 
     describe('Service-Based Platform Management', () => {

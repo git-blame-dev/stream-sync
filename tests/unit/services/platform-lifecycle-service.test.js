@@ -3,6 +3,7 @@ const { createMockFn, clearAllMocks } = require('../../helpers/bun-mock-utils');
 const { noOpLogger } = require('../../helpers/mock-factories');
 const PlatformLifecycleService = require('../../../src/services/PlatformLifecycleService');
 const testClock = require('../../helpers/test-clock');
+const { secrets, _resetForTesting, initializeStaticSecrets } = require('../../../src/core/secrets');
 
 const createDeferred = () => {
     let resolve;
@@ -23,6 +24,9 @@ describe('PlatformLifecycleService', () => {
             emit: createMockFn(),
             subscribe: createMockFn().mockReturnValue(() => {})
         };
+
+        _resetForTesting();
+        secrets.twitch.clientSecret = 'test-client-secret';
 
         configFixture = {
             twitch: { enabled: false },
@@ -49,8 +53,7 @@ describe('PlatformLifecycleService', () => {
             configFixture.twitch = {
                 enabled: true,
                 channel: 'test-channel',
-                clientId: 'test-client-id',
-                clientSecret: 'test-client-secret'
+                clientId: 'test-client-id'
             };
 
             const mockPlatformClass = createMockFn().mockImplementation(() => ({
@@ -117,6 +120,8 @@ describe('PlatformLifecycleService', () => {
             service.dispose();
         }
         clearAllMocks();
+        _resetForTesting();
+        initializeStaticSecrets();
     });
 
     describe('Platform Initialization', () => {
@@ -124,8 +129,7 @@ describe('PlatformLifecycleService', () => {
             configFixture.twitch = {
                 enabled: true,
                 channel: 'test-channel',
-                clientId: 'test-client-id',
-                clientSecret: 'test-client-secret'
+                clientId: 'test-client-id'
             };
 
             const mockPlatformClass = createMockFn().mockImplementation(() => ({

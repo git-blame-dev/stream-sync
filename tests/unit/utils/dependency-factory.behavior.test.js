@@ -2,6 +2,7 @@ const { describe, expect, beforeEach, it, afterEach } = require('bun:test');
 const { restoreAllMocks } = require('../../helpers/bun-mock-utils');
 const { noOpLogger } = require('../../helpers/mock-factories');
 const { DependencyFactory } = require('../../../src/utils/dependency-factory');
+const { secrets, _resetForTesting, initializeStaticSecrets } = require('../../../src/core/secrets');
 
 describe('DependencyFactory behavior', () => {
     let factory;
@@ -19,10 +20,13 @@ describe('DependencyFactory behavior', () => {
 
     afterEach(() => {
         restoreAllMocks();
+        _resetForTesting();
+        initializeStaticSecrets();
     });
 
     describe('YouTube dependency validation', () => {
         it('requires API key when YouTube API is enabled', () => {
+            _resetForTesting();
             expect(() => factory.createYoutubeDependencies({
                 enableAPI: true,
                 username: 'channel'
@@ -32,8 +36,7 @@ describe('DependencyFactory behavior', () => {
         it('creates dependencies object with expected structure when config is valid', () => {
             const deps = factory.createYoutubeDependencies({
                 enableAPI: false,
-                username: 'channel',
-                apiKey: 'testKey'
+                username: 'channel'
             }, { logger: noOpLogger, config: configFixture });
 
             expect(deps).toHaveProperty('apiClient');
@@ -56,8 +59,10 @@ describe('DependencyFactory behavior', () => {
         });
 
         it('requires Twitch client credentials for auth manager', () => {
+            _resetForTesting();
+            secrets.twitch.clientSecret = 'test-client-secret';
             expect(() => factory.createTwitchDependencies({ channel: 'me' }, { logger: noOpLogger, config: configFixture }))
-                .toThrow(/missing fields \[clientId, clientSecret\]/);
+                .toThrow(/missing fields \[clientId\]/);
         });
     });
 });

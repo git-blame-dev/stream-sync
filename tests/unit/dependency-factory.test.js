@@ -4,10 +4,13 @@ const { createMockFn, restoreAllMocks } = require('../helpers/bun-mock-utils');
 
 const { DependencyFactory } = require('../../src/utils/dependency-factory');
 const { PlatformConnectionFactory } = require('../../src/utils/platform-connection-factory');
+const { secrets, _resetForTesting, initializeStaticSecrets } = require('../../src/core/secrets');
 
 describe('DependencyFactory', () => {
     afterEach(() => {
         restoreAllMocks();
+        _resetForTesting();
+        initializeStaticSecrets();
     });
 
     let factory;
@@ -19,7 +22,6 @@ describe('DependencyFactory', () => {
         configFixture = {
             general: { ignoreSelfMessages: false },
             youtube: {
-                apiKey: 'test-youtube-key',
                 username: 'test-channel-username',
                 enabled: true,
                 ignoreSelfMessages: false
@@ -32,7 +34,6 @@ describe('DependencyFactory', () => {
             twitch: {
                 channel: 'test-channel',
                 clientId: 'client-id',
-                clientSecret: 'client-secret',
                 accessToken: 'access-token',
                 refreshToken: 'refresh-token',
                 enabled: true,
@@ -496,10 +497,13 @@ describe('DependencyFactory', () => {
 
     describe('Configuration Validation', () => {
         it('should validate all required YouTube configuration fields', () => {
+            _resetForTesting();
+            secrets.youtube.apiKey = null;
             const configs = [
                 { enabled: true },
-                { apiKey: 'test' },
-                { enableAPI: true, username: 'test-channel' }
+                { enableAPI: true, username: 'test-channel' },
+                { streamDetectionMethod: 'api', username: 'test-channel' },
+                { viewerCountMethod: 'api', username: 'test-channel' }
             ];
 
             configs.forEach(config => {
@@ -524,11 +528,13 @@ describe('DependencyFactory', () => {
         });
 
         it('should validate all required Twitch configuration fields', () => {
+            _resetForTesting();
+            secrets.twitch.clientSecret = null;
             const configs = [
                 { enabled: true },
                 { channel: 'test' },
                 { channel: 'test', clientId: 'test-client' },
-                { channel: '', clientId: 'test-client', clientSecret: 'test-secret' }
+                { channel: '', clientId: 'test-client' }
             ];
 
             configs.forEach(config => {

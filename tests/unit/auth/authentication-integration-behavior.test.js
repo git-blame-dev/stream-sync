@@ -5,6 +5,7 @@ const { noOpLogger } = require('../../helpers/mock-factories');
 
 const TwitchAuthInitializer = require('../../../src/auth/TwitchAuthInitializer');
 const TwitchAuthService = require('../../../src/auth/TwitchAuthService');
+const { secrets, _resetForTesting, initializeStaticSecrets } = require('../../../src/core/secrets');
 
 describe('Authentication Integration Behavior', () => {
     let mockAxios;
@@ -25,17 +26,21 @@ describe('Authentication Integration Behavior', () => {
             readFileSync: createMockFn().mockReturnValue('[twitch]\naccessToken=old_token\nrefreshToken=old_refresh'),
             writeFileSync: createMockFn()
         };
+
+        _resetForTesting();
+        secrets.twitch.clientSecret = 'test-client-secret';
     });
 
     afterEach(() => {
         restoreAllMocks();
+        _resetForTesting();
+        initializeStaticSecrets();
     });
 
     describe('when authentication initialization completes successfully', () => {
         test('should integrate all auth components for complete workflow', async () => {
             const authConfig = {
                 clientId: 'test-integration-client-id',
-                clientSecret: 'test-integration-client-secret',
                 accessToken: 'test-valid-integration-token',
                 refreshToken: 'test-valid-integration-refresh',
                 channel: 'test-integration-user'
@@ -69,7 +74,6 @@ describe('Authentication Integration Behavior', () => {
         test('should maintain authentication state across component interactions', async () => {
             const authConfig = {
                 clientId: 'test-state-client-id',
-                clientSecret: 'test-state-client-secret',
                 accessToken: 'test-state-test-token',
                 refreshToken: 'test-state-test-refresh',
                 channel: 'test-state-user'
@@ -107,7 +111,6 @@ describe('Authentication Integration Behavior', () => {
         test('should integrate refresh flow with auth service updates', async () => {
             const authConfig = {
                 clientId: 'test-refresh-client-id',
-                clientSecret: 'test-refresh-client-secret',
                 accessToken: 'test-expired-token',
                 refreshToken: 'test-valid-refresh-token',
                 channel: 'test-refresh-user'
@@ -156,7 +159,6 @@ describe('Authentication Integration Behavior', () => {
         test('should handle refresh failure and fallback to OAuth gracefully', async () => {
             const authConfig = {
                 clientId: 'test-fallback-client-id',
-                clientSecret: 'test-fallback-client-secret',
                 accessToken: 'test-expired-token',
                 refreshToken: 'test-invalid-refresh-token',
                 channel: 'test-fallback-user'
@@ -202,7 +204,6 @@ describe('Authentication Integration Behavior', () => {
         test('should integrate retry logic across authentication components', async () => {
             const authConfig = {
                 clientId: 'test-network-client-id',
-                clientSecret: 'test-network-client-secret',
                 accessToken: 'test-network-test-token',
                 refreshToken: 'test-network-test-refresh',
                 channel: 'test-network-user'
@@ -246,7 +247,6 @@ describe('Authentication Integration Behavior', () => {
         test('should integrate config updates across authentication components', async () => {
             const authConfig = {
                 clientId: 'test-config-client-id',
-                clientSecret: 'test-config-client-secret',
                 accessToken: 'test-config-old-token',
                 refreshToken: 'test-config-old-refresh',
                 channel: 'test-config-user'

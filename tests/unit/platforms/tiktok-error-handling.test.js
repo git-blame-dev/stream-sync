@@ -33,7 +33,6 @@ describe('TikTokPlatform Error Handling', () => {
         baseConfig = {
             enabled: true,
             username: 'testUser',
-            apiKey: 'testKey',
             dataLoggingEnabled: false
         };
 

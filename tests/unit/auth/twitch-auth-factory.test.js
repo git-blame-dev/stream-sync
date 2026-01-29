@@ -51,7 +51,6 @@ describe('TwitchAuthFactory', () => {
 
         configFixture = {
             clientId: 'test-client-id',
-            clientSecret: 'test-client-secret',
             accessToken: 'test-access-token',
             refreshToken: 'test-refresh-token',
             channel: 'test-channel'

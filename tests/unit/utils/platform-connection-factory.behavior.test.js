@@ -1,8 +1,13 @@
-const { describe, test, expect } = require('bun:test');
+const { describe, test, expect, afterEach } = require('bun:test');
 const { noOpLogger } = require('../../helpers/mock-factories');
 const { PlatformConnectionFactory } = require('../../../src/utils/platform-connection-factory');
+const { secrets, _resetForTesting, initializeStaticSecrets } = require('../../../src/core/secrets');
 
 describe('platform-connection-factory behavior', () => {
+    afterEach(() => {
+        _resetForTesting();
+        initializeStaticSecrets();
+    });
 
     const createLogCollector = () => {
         const entries = [];
@@ -56,7 +61,8 @@ describe('platform-connection-factory behavior', () => {
         const factory = new PlatformConnectionFactory(logCollector);
 
         const apiKey = 'euler_1234567890abcdef';
-        const config = factory.buildTikTokConnectionConfig({ apiKey });
+        secrets.tiktok.apiKey = apiKey;
+        const config = factory.buildTikTokConnectionConfig({});
 
         expect(config.apiKey).toBe(apiKey);
         expect(logCollector.entries.some((entry) => entry.level === 'debug' && entry.message.includes('EulerStream API key'))).toBe(true);
@@ -67,6 +73,7 @@ describe('platform-connection-factory behavior', () => {
         const logCollector = createLogCollector();
         const factory = new PlatformConnectionFactory(logCollector);
 
+        _resetForTesting();
         const config = factory.buildTikTokConnectionConfig({});
 
         expect(config.apiKey).toBeNull();

@@ -227,9 +227,7 @@ const createConfigFixture = (platform = 'tiktok', overrides = {}) => {
             return {
                 ...baseConfig,
                 channel: 'testchannel',
-                apiKey: 'test-oauth-token',
                 clientId: 'test-client-id',
-                clientSecret: 'test-client-secret',
                 accessToken: 'test-access-token',
                 refreshToken: 'test-refresh-token',
                 eventsub_enabled: true,
@@ -239,7 +237,6 @@ const createConfigFixture = (platform = 'tiktok', overrides = {}) => {
         case 'youtube':
             return {
                 ...baseConfig,
-                apiKey: 'test-youtube-api-key',
                 maxStreams: 1,
                 streamDetectionMethod: 'api',
                 viewerCountMethod: 'api',
@@ -250,7 +247,6 @@ const createConfigFixture = (platform = 'tiktok', overrides = {}) => {
         default:
             return {
                 ...baseConfig,
-                apiKey: 'test-tiktok-api-key',
                 ...overrides
             };
     }

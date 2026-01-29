@@ -172,7 +172,6 @@ notificationClearDelay = 500
 [youtube]
 enabled = true
 username = TestChannel
-apiKey = test-api-key
 innertubeInstanceTtlMs = 300000
 innertubeMinTtlMs = 60000
 userAgents = test-agent-1|test-agent-2
@@ -180,7 +179,6 @@ userAgents = test-agent-1|test-agent-2
 [twitch]
 enabled = false
 username =
-apiKey =
 cheermoteDefaultGiftCount = 1
 cheermoteGenericCheerName = Cheer
 cheermoteGenericBitsName = Bits
@@ -190,7 +188,6 @@ cheermoteDefaultType = cheer
 [tiktok]
 enabled = false
 username =
-apiKey =
 
 [handcam]
 glowEnabled = true
@@ -293,8 +290,7 @@ enabled = true
         process.stderr.write = () => {};
         try {
             const content = buildConfig({
-                streamelementsSection: `enabled = true
-jwtToken = se-jwt-token`
+                streamelementsSection: `enabled = true`
             });
             setupConfigMocks(content);
             process.env.CHAT_BOT_CONFIG_PATH = testConfigPath;

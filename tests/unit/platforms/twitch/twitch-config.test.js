@@ -21,25 +21,21 @@ describe('Twitch config', () => {
         expect(normalized.dataLoggingPath).toBe('./logs');
     });
 
-    test('drops token secrets from normalized config', () => {
+    test('drops token fields from normalized config', () => {
         const rawConfig = {
             enabled: true,
             username: 'streamer',
             channel: 'streamer',
             clientId: 'test-client-id',
-            clientSecret: 'test-client-secret',
             accessToken: 'test-access-token',
-            refreshToken: 'test-refresh-token',
-            apiKey: 'test-api-key'
+            refreshToken: 'test-refresh-token'
         };
 
         const normalized = normalizeTwitchPlatformConfig(rawConfig);
 
         expect(normalized.clientId).toBe('test-client-id');
-        expect(normalized.clientSecret).toBeUndefined();
         expect(normalized.accessToken).toBeUndefined();
         expect(normalized.refreshToken).toBeUndefined();
-        expect(normalized.apiKey).toBeUndefined();
     });
 
     test('validates required fields and emits auth readiness warnings', () => {
@@ -47,7 +43,8 @@ describe('Twitch config', () => {
         const validConfig = {
             enabled: true,
             username: 'streamer',
-            channel: 'streamer'
+            channel: 'streamer',
+            clientId: 'test-client-id'
         };
 
         const validResult = validateTwitchPlatformConfig({
@@ -59,12 +56,20 @@ describe('Twitch config', () => {
         expect(validResult.errors).toEqual([]);
         expect(validResult.warnings.some(msg => msg.toLowerCase().includes('authmanager'))).toBe(true);
 
-        const invalidResult = validateTwitchPlatformConfig({
-            config: { enabled: true, channel: 'streamer' },
+        const missingUsernameResult = validateTwitchPlatformConfig({
+            config: { enabled: true, channel: 'streamer', clientId: 'test-client-id' },
             authManager: { getState: () => 'READY' }
         });
 
-        expect(invalidResult.isValid).toBe(false);
-        expect(invalidResult.errors).toContain('username: Username is required for Twitch authentication');
+        expect(missingUsernameResult.isValid).toBe(false);
+        expect(missingUsernameResult.errors).toContain('username: Username is required for Twitch authentication');
+
+        const missingClientIdResult = validateTwitchPlatformConfig({
+            config: { enabled: true, channel: 'streamer', username: 'streamer' },
+            authManager: { getState: () => 'READY' }
+        });
+
+        expect(missingClientIdResult.isValid).toBe(false);
+        expect(missingClientIdResult.errors).toContain('clientId: Client ID is required for Twitch authentication');
     });
 });

@@ -18,7 +18,7 @@ describe('auth-constants behavior', () => {
     it('defines placeholder patterns and required config fields', () => {
         expect(PLACEHOLDER_TOKEN_PATTERNS.some((re) => re.test('test_token_123'))).toBe(true);
         expect(REQUIRED_CONFIG_FIELDS.BASIC).toEqual(
-            expect.arrayContaining(['clientId', 'clientSecret', 'accessToken', 'channel'])
+            expect.arrayContaining(['clientId', 'accessToken', 'channel'])
         );
     });
 

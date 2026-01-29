@@ -6,6 +6,7 @@ const { noOpLogger } = require('../../helpers/mock-factories');
 const testClock = require('../../helpers/test-clock');
 const TwitchAuthInitializer = require('../../../src/auth/TwitchAuthInitializer');
 const TwitchAuthService = require('../../../src/auth/TwitchAuthService');
+const { secrets, _resetForTesting, initializeStaticSecrets } = require('../../../src/core/secrets');
 
 describe('Twitch Proactive Token Checking', () => {
     let mockAxios;
@@ -21,7 +22,6 @@ describe('Twitch Proactive Token Checking', () => {
 
         const config = {
             clientId: 'test-client-id',
-            clientSecret: 'test-client-secret',
             accessToken: 'valid-access-token',
             refreshToken: 'valid-refresh-token',
             channel: 'test-channel'
@@ -32,10 +32,15 @@ describe('Twitch Proactive Token Checking', () => {
             logger: noOpLogger,
             axios: mockAxios
         });
+
+        _resetForTesting();
+        secrets.twitch.clientSecret = 'test-client-secret';
     });
 
     afterEach(() => {
         restoreAllMocks();
+        _resetForTesting();
+        initializeStaticSecrets();
     });
 
     describe('ensureValidToken (timestamp guard)', () => {

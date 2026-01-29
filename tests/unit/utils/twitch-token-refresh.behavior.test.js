@@ -1,6 +1,7 @@
 const { describe, expect, beforeEach, afterEach, it } = require('bun:test');
 const { createMockFn, spyOn, restoreAllMocks } = require('../../helpers/bun-mock-utils');
 const { noOpLogger } = require('../../helpers/mock-factories');
+const { secrets, _resetForTesting, initializeStaticSecrets } = require('../../../src/core/secrets');
 
 const testClock = require('../../helpers/test-clock');
 const TwitchTokenRefresh = require('../../../src/utils/twitch-token-refresh');
@@ -8,7 +9,6 @@ const TwitchTokenRefresh = require('../../../src/utils/twitch-token-refresh');
 describe('TwitchTokenRefresh behavior edges', () => {
     const baseConfig = {
         clientId: 'testClientId',
-        clientSecret: 'testClientSecret',
         accessToken: 'testOldAccessToken',
         refreshToken: 'testRefreshToken',
         tokenStorePath: '/test/token-store.json'
@@ -23,6 +23,8 @@ describe('TwitchTokenRefresh behavior edges', () => {
 
     beforeEach(() => {
         dateNowSpy = spyOn(Date, 'now').mockImplementation(() => testClock.now());
+        _resetForTesting();
+        secrets.twitch.clientSecret = 'testClientSecret';
     });
 
     afterEach(() => {
@@ -30,6 +32,8 @@ describe('TwitchTokenRefresh behavior edges', () => {
         if (dateNowSpy) {
             dateNowSpy.mockRestore();
         }
+        _resetForTesting();
+        initializeStaticSecrets();
     });
 
     it('returns null when refresh token is missing', async () => {

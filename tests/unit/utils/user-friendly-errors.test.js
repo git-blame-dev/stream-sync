@@ -435,6 +435,10 @@ describe('User-Friendly Error System', () => {
                     expectedTitle: 'Twitch Setup Required'
                 },
                 {
+                    technicalError: 'Invalid configuration: missing fields [clientSecret]',
+                    expectedTitle: 'Twitch Setup Required'
+                },
+                {
                     technicalError: 'ECONNREFUSED - connection refused',
                     expectedTitle: 'Internet Connection Problem'
                 }

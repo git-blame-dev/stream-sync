@@ -104,7 +104,7 @@ describe('YouTubeViewerCountProvider', () => {
         };
         const provider = new YouTubeViewerCountProvider(
             {},
-            { apiKey: 'testApiKey' },
+            {},
             () => ['testVideoId1'],
             null,
             { viewerExtractionService, logger: noOpLogger }
@@ -123,7 +123,7 @@ describe('YouTubeViewerCountProvider', () => {
         };
         const provider = new YouTubeViewerCountProvider(
             {},
-            { apiKey: 'testApiKey' },
+            {},
             () => ['testVideoId1'],
             null,
             { viewerExtractionService, logger: noOpLogger }
@@ -137,7 +137,7 @@ describe('YouTubeViewerCountProvider', () => {
     it('returns 0 without incrementing errors when no active streams', async () => {
         const provider = new YouTubeViewerCountProvider(
             {},
-            { apiKey: 'testApiKey' },
+            {},
             () => [],
             null,
             { viewerExtractionService: { getAggregatedViewerCount: createMockFn() }, logger: noOpLogger }
@@ -157,7 +157,7 @@ describe('YouTubeViewerCountProvider', () => {
         };
         const provider = new YouTubeViewerCountProvider(
             {},
-            { apiKey: 'testApiKey' },
+            {},
             () => ['testVideoId1'],
             null,
             { viewerExtractionService, logger: noOpLogger }

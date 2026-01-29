@@ -1,13 +1,13 @@
 
-const { describe, test, expect, afterEach } = require('bun:test');
+const { describe, test, expect, beforeEach, afterEach } = require('bun:test');
 const { noOpLogger } = require('../../helpers/mock-factories');
 
 const TwitchAuthManager = require('../../../src/auth/TwitchAuthManager');
+const { secrets, _resetForTesting, initializeStaticSecrets } = require('../../../src/core/secrets');
 
 function createConfigFixture(overrides = {}) {
     return {
         clientId: overrides.clientId || 'test-client-id',
-        clientSecret: overrides.clientSecret || 'test-client-secret',
         accessToken: overrides.accessToken || 'test-access-token',
         refreshToken: overrides.refreshToken || 'test-refresh-token',
         channel: overrides.channel || 'test-channel',
@@ -37,8 +37,15 @@ function expectConfigurationMatch(authManager, expectedConfig) {
 }
 
 describe('TwitchAuthManager Configuration Isolation', () => {
+    beforeEach(() => {
+        _resetForTesting();
+        secrets.twitch.clientSecret = 'test-client-secret';
+    });
+
     afterEach(() => {
         TwitchAuthManager.resetInstance();
+        _resetForTesting();
+        initializeStaticSecrets();
     });
 
     describe('Independent Configuration Management', () => {

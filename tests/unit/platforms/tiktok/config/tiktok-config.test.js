@@ -40,22 +40,6 @@ describe('TikTok config helpers', () => {
         expect(normalized.baseDelay).toBeUndefined();
     });
 
-    test('drops blank apiKey values and trims non-empty keys', () => {
-        const configValidator = new ConfigValidator(logger);
-
-        const blankConfig = normalizeTikTokPlatformConfig(
-            { enabled: true, username: 'tester', apiKey: '   ' },
-            configValidator
-        );
-        expect(blankConfig.apiKey).toBeUndefined();
-
-        const keyedConfig = normalizeTikTokPlatformConfig(
-            { enabled: true, username: 'tester', apiKey: '  test-key  ' },
-            configValidator
-        );
-        expect(keyedConfig.apiKey).toBe('test-key');
-    });
-
     test('validates required TikTok config fields', () => {
         expect(validateTikTokPlatformConfig({ username: 'tester' }).valid).toBe(true);
 
