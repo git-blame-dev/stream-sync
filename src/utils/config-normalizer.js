@@ -1,5 +1,6 @@
 const { DEFAULTS } = require('../core/config-defaults');
 const { ConfigValidator } = require('./config-validator');
+const { secrets } = require('../core/secrets');
 
 const dropUndefinedValues = (valueMap) => Object.fromEntries(
     Object.entries(valueMap).filter(([, value]) => value !== undefined)
@@ -31,7 +32,6 @@ function normalizeYouTubeConfig(config) {
     const normalized = {
         enabled: ConfigValidator.parseBoolean(config.enabled),
         username: config.username,
-        apiKey: config.apiKey,
         enableAPI: ConfigValidator.parseBoolean(config.enableAPI),
         streamDetectionMethod: config.streamDetectionMethod,
         viewerCountMethod: config.viewerCountMethod,
@@ -110,7 +110,7 @@ function validateYouTubeConfig(config) {
         };
     }
 
-    if (method === 'api' && !config.apiKey) {
+    if (method === 'api' && !secrets.youtube.apiKey) {
         errors.push('API key required for API-based detection');
         return {
             isValid: false,

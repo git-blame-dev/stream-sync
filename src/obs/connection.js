@@ -2,6 +2,7 @@ const { safeSetTimeout } = require('../utils/timeout-validator');
 const { withTimeout } = require('../utils/timeout-wrapper');
 const { createPlatformErrorHandler } = require('../utils/platform-error-handler');
 const { ERROR_MESSAGES: DEFAULT_ERROR_MESSAGES } = require('../core/constants');
+const { secrets } = require('../core/secrets');
 
 // Dependency injection support
 class OBSConnectionManager {
@@ -25,9 +26,12 @@ class OBSConnectionManager {
         this.testConnectionBehavior = dependencies.testConnectionBehavior || false;
 
         const incomingConfig = dependencies.config || {};
+        const resolvedPassword = incomingConfig.password === undefined
+            ? (secrets.obs.password ?? undefined)
+            : incomingConfig.password;
         this.config = {
             address: incomingConfig.address,
-            password: incomingConfig.password,
+            password: resolvedPassword,
             enabled: incomingConfig.enabled
         };
         this.OBS_CONNECTION_TIMEOUT = incomingConfig.connectionTimeoutMs;

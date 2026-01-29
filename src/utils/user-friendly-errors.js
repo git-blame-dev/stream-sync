@@ -212,7 +212,8 @@ const TECHNICAL_ERROR_PATTERNS = [
     {
         patterns: [
             /Missing clientId or clientSecret/i,
-            /Invalid configuration.*missing fields.*clientId/i
+            /Invalid configuration.*missing fields.*clientId/i,
+            /Invalid configuration.*missing fields.*clientSecret/i
         ],
         errorKey: 'missing_twitch_credentials'
     },

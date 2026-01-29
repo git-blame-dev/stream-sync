@@ -1,5 +1,6 @@
 
 const { PlatformConnectionFactory } = require('./platform-connection-factory');
+const { secrets } = require('../core/secrets');
 
 class DependencyFactory {
     constructor() {
@@ -13,9 +14,10 @@ class DependencyFactory {
         const needsApiKey = config.enableAPI || 
                            config.streamDetectionMethod === 'api' || 
                            config.viewerCountMethod === 'api';
+        const apiKey = secrets.youtube.apiKey || null;
         
-        if (needsApiKey && !config.apiKey) {
-            throw new Error('YouTube API key is required when enableAPI=true or using API methods (use "apiKey" field)');
+        if (needsApiKey && !apiKey) {
+            throw new Error('YouTube API key is required when enableAPI=true or using API methods (set YOUTUBE_API_KEY)');
         }
 
         const normalizedConfig = {
@@ -163,10 +165,10 @@ class DependencyFactory {
                 ...config,
                 channel: channel,
                 clientId: config.clientId,
-                clientSecret: config.clientSecret,
                 accessToken: config.accessToken,
                 refreshToken: config.refreshToken
             };
+            delete normalizedConfig.clientSecret;
             delete normalizedConfig.apiKey;
 
             const sanitizedOptions = { ...options };
@@ -271,7 +273,7 @@ class DependencyFactory {
 
     _createYouTubeApiClient(config, logger) {
         return {
-            apiKey: config.apiKey,
+            apiKey: secrets.youtube.apiKey || null,
             username: config.username,
             logger,
             isValid: true,

@@ -8,6 +8,7 @@ const url = require('url');
 const TokenRefreshUtility = require('../utils/token-refresh-utility');
 const { exec } = require('child_process');
 const { safeSetTimeout } = require('../utils/timeout-validator');
+const { secrets } = require('../core/secrets');
 
 class TwitchOAuthHandler {
     constructor(config, options = {}) {
@@ -205,7 +206,7 @@ class TwitchOAuthHandler {
         
         const postData = querystring.stringify({
             client_id: this.config.clientId,
-            client_secret: this.config.clientSecret,
+            client_secret: secrets.twitch.clientSecret,
             code: code,
             grant_type: 'authorization_code',
             redirect_uri: this.redirectUri

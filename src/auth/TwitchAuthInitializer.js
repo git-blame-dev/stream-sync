@@ -8,6 +8,7 @@ const AuthErrorHandler = require('../utils/auth-error-handler');
 const { createPlatformErrorHandler } = require('../utils/platform-error-handler');
 const TokenRefreshUtility = require('../utils/token-refresh-utility');
 const { resolveLogger } = require('../utils/logger-resolver');
+const { secrets } = require('../core/secrets');
 
 class TwitchAuthInitializer {
     constructor(dependencies = {}) {
@@ -196,7 +197,7 @@ class TwitchAuthInitializer {
     _canPerformTokenRefresh(authService, requireExpirationInfo = true) {
         const hasCredentials = !!(authService.config.refreshToken && 
                                  authService.config.clientId && 
-                                 authService.config.clientSecret);
+                                 secrets.twitch.clientSecret);
         
         if (!requireExpirationInfo) {
             return hasCredentials;
@@ -581,7 +582,7 @@ class TwitchAuthInitializer {
             grant_type: 'refresh_token',
             refresh_token: authService.config.refreshToken,
             client_id: authService.config.clientId,
-            client_secret: authService.config.clientSecret
+            client_secret: secrets.twitch.clientSecret
         };
 
         const response = await this._performTokenRefreshRequest(formData);

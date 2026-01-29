@@ -2,6 +2,7 @@
 const TwitchAuthFactory = require('./TwitchAuthFactory');
 const { handleUserFacingError } = require('../utils/user-friendly-errors');
 const { createPlatformErrorHandler, ensurePlatformErrorHandler } = require('../utils/platform-error-handler');
+const { secrets } = require('../core/secrets');
 
 class TokenValidator {
     constructor(authFactory = null, dependencies = {}) {
@@ -36,7 +37,7 @@ class TokenValidator {
 
         try {
             // Check if basic auth config exists
-            if (!config.clientId || !config.clientSecret) {
+            if (!config.clientId || !secrets.twitch.clientSecret) {
                 validation.errors.push('Missing clientId or clientSecret');
                 validation.needsNewTokens = true;
                 validation.missingClientCredentials = true;

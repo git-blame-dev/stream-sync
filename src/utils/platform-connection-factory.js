@@ -2,6 +2,7 @@
 const { createPlatformErrorHandler } = require('./platform-error-handler');
 const { EventEmitter } = require('events');
 const { validateLoggerInterface } = require('./dependency-validator');
+const { secrets } = require('../core/secrets');
 
 function ensureEmitterInterface(connection, logger, platform = 'tiktok') {
     if (!connection || typeof connection !== 'object') {
@@ -173,7 +174,7 @@ class PlatformConnectionFactory {
     }
     
     buildTikTokConnectionConfig(config, dependencies) {
-        const apiKey = config.apiKey || null;
+        const apiKey = secrets.tiktok.apiKey || null;
 
         const baseConfig = {
             apiKey,
@@ -228,7 +229,7 @@ class PlatformConnectionFactory {
                 removeAllListeners: () => {},
                 
                 // YouTube-specific methods (minimal implementation for state management)
-                getApiKey: () => config.apiKey || null,
+                getApiKey: () => secrets.youtube.apiKey || null,
                 getUsername: () => config.username
             };
             

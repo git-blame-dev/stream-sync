@@ -4,6 +4,7 @@ const { safeSetTimeout, safeSetInterval } = require('../utils/timeout-validator'
 const { createPlatformErrorHandler } = require('../utils/platform-error-handler');
 const { createRetrySystem } = require('../utils/retry-system');
 const { STREAMELEMENTS } = require('../core/endpoints');
+const { secrets } = require('../core/secrets');
 
 
 class StreamElementsPlatform extends EventEmitter {
@@ -30,7 +31,9 @@ class StreamElementsPlatform extends EventEmitter {
             enabled: config.enabled,
             youtubeChannelId: config.youtubeChannelId,
             twitchChannelId: config.twitchChannelId,
-            jwtToken: config.jwtToken,
+            jwtToken: config.jwtToken === undefined
+                ? (secrets.streamelements.jwtToken ?? undefined)
+                : config.jwtToken,
             dataLoggingEnabled: config.dataLoggingEnabled,
             dataLoggingPath: config.dataLoggingPath
         };

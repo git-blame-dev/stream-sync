@@ -4,6 +4,7 @@ const AuthErrorHandler = require('./auth-error-handler');
 const { createPlatformErrorHandler } = require('./platform-error-handler');
 const { validateLoggerInterface } = require('./dependency-validator');
 const tokenStore = require('./token-store');
+const { secrets } = require('../core/secrets');
 
 class TokenRefreshUtility {
     constructor(dependencies = {}) {
@@ -36,7 +37,7 @@ class TokenRefreshUtility {
             };
         }
 
-        if (!config.clientId || !config.clientSecret) {
+        if (!config.clientId || !secrets.twitch.clientSecret) {
             return { 
                 canRefresh: false, 
                 reason: 'Missing client credentials for token refresh' 
@@ -48,7 +49,7 @@ class TokenRefreshUtility {
             context: {
                 hasRefreshToken: !!config.refreshToken,
                 hasClientId: !!config.clientId,
-                hasClientSecret: !!config.clientSecret
+                hasClientSecret: !!secrets.twitch.clientSecret
             }
         };
     }
@@ -196,7 +197,7 @@ class TokenRefreshUtility {
             grant_type: 'refresh_token',
             refresh_token: config.refreshToken,
             client_id: config.clientId,
-            client_secret: config.clientSecret
+            client_secret: secrets.twitch.clientSecret
         };
     }
 
