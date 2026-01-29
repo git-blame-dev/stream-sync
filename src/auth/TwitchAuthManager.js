@@ -9,6 +9,7 @@ const { AUTH_STATES, AuthConstants, TOKEN_REFRESH_CONFIG } = require('../utils/a
 const { createEnhancedHttpClient } = require('../utils/enhanced-http-client');
 const { createRetrySystem } = require('../utils/retry-system');
 const AuthErrorHandler = require('../utils/auth-error-handler');
+const { secrets } = require('../core/secrets');
 
 // No global singleton - create independent instances
 
@@ -80,8 +81,11 @@ class TwitchAuthManager {
     }
 
     validateConfig() {
-        const requiredFields = ['clientId', 'clientSecret', 'channel'];
+        const requiredFields = ['clientId', 'channel'];
         const missingFields = requiredFields.filter(field => !this.config[field]);
+        if (!secrets.twitch.clientSecret) {
+            missingFields.push('clientSecret');
+        }
 
         if (missingFields.length > 0) {
             const errorMessage = AuthConstants.formatErrorMessage('MISSING_CONFIG', {

@@ -204,15 +204,6 @@ class ConfigLoader {
 
 const configManager = new ConfigLoader();
 
-const resolveSecretValue = (envKey) => {
-    const rawValue = process.env[envKey];
-    if (rawValue === undefined || rawValue === null) {
-        return undefined;
-    }
-    const trimmed = String(rawValue).trim();
-    return trimmed.length > 0 ? trimmed : undefined;
-};
-
 function buildGeneralConfig(normalized) {
     const g = normalized.general;
     return {
@@ -253,14 +244,6 @@ function buildPlatformConfig(platformName, normalized, generalConfig) {
         }
     });
     
-    if (platformName !== 'twitch') {
-        const envKey = platformName === 'tiktok' ? 'TIKTOK_API_KEY' : 'YOUTUBE_API_KEY';
-        Object.defineProperty(result, 'apiKey', {
-            get: () => resolveSecretValue(envKey),
-            enumerable: true
-        });
-    }
-    
     return result;
 }
 
@@ -269,19 +252,7 @@ function buildTiktokConfig(normalized, generalConfig) {
 }
 
 function buildTwitchConfig(normalized, generalConfig) {
-    const base = buildPlatformConfig('twitch', normalized, generalConfig);
-    
-    Object.defineProperty(base, 'clientId', {
-        get: () => resolveSecretValue('TWITCH_CLIENT_ID'),
-        enumerable: true
-    });
-    
-    Object.defineProperty(base, 'clientSecret', {
-        get: () => resolveSecretValue('TWITCH_CLIENT_SECRET'),
-        enumerable: true
-    });
-    
-    return base;
+    return buildPlatformConfig('twitch', normalized, generalConfig);
 }
 
 function buildYoutubeConfig(normalized, generalConfig) {
@@ -294,7 +265,6 @@ function buildObsConfig(normalized) {
     const obs = normalized.obs;
     return {
         ...obs,
-        get password() { return resolveSecretValue('OBS_PASSWORD'); },
         chatPlatformLogos: {
             twitch: obs.chatPlatformLogoTwitch,
             youtube: obs.chatPlatformLogoYouTube,
@@ -354,7 +324,6 @@ function buildStreamElementsConfig(normalized) {
         enabled: se.enabled,
         youtubeChannelId: se.youtubeChannelId || undefined,
         twitchChannelId: se.twitchChannelId || undefined,
-        get jwtToken() { return resolveSecretValue('STREAMELEMENTS_JWT_TOKEN'); },
         dataLoggingEnabled: se.dataLoggingEnabled,
         dataLoggingPath: DEFAULTS.LOG_DIRECTORY
     };

@@ -1,6 +1,7 @@
 const TwitchAuthManagerDefault = require('./TwitchAuthManager');
 const { getUnifiedLogger } = require('../core/logging');
 const { createPlatformErrorHandler } = require('../utils/platform-error-handler');
+const { secrets } = require('../core/secrets');
 
 class TwitchAuthFactory {
     constructor(config, dependencies = {}) {
@@ -16,8 +17,11 @@ class TwitchAuthFactory {
     }
     
     validateConfig() {
-        const required = ['clientId', 'clientSecret', 'channel'];
+        const required = ['clientId', 'channel'];
         const missing = required.filter(field => !this.config[field]);
+        if (!secrets.twitch.clientSecret) {
+            missing.push('clientSecret');
+        }
         
         if (missing.length > 0) {
             throw new Error(`Invalid configuration: missing fields [${missing.join(', ')}]`);

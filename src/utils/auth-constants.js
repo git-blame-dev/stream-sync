@@ -42,9 +42,9 @@ const TOKEN_REFRESH_CONFIG = {
 };
 
 const REQUIRED_CONFIG_FIELDS = {
-    BASIC: ['clientId', 'clientSecret', 'accessToken', 'channel'],
-    WITH_REFRESH: ['clientId', 'clientSecret', 'accessToken', 'refreshToken', 'channel'],
-    OAUTH_FLOW: ['clientId', 'clientSecret']
+    BASIC: ['clientId', 'accessToken', 'channel'],
+    WITH_REFRESH: ['clientId', 'accessToken', 'refreshToken', 'channel'],
+    OAUTH_FLOW: ['clientId']
 };
 
 const PLACEHOLDER_TOKEN_PATTERNS = [

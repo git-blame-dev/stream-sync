@@ -2,6 +2,7 @@ const fs = require('fs');
 const readline = require('readline');
 const { createPlatformErrorHandler } = require('./platform-error-handler');
 const { validateLoggerInterface } = require('./dependency-validator');
+const { initializeStaticSecrets } = require('../core/secrets');
 
 const normalize = (value) => {
     if (value === null || value === undefined) return null;
@@ -193,14 +194,6 @@ const SECRET_DEFINITIONS = [
         mask: (value) => maskValue(value, 6, 4)
     },
     {
-        id: 'TWITCH_CLIENT_ID',
-        envKey: 'TWITCH_CLIENT_ID',
-        configPath: ['twitch', 'clientId'],
-        requiredWhen: (config) => boolFromConfig(config?.twitch?.enabled),
-        promptText: 'Paste Twitch Client ID: ',
-        mask: (value) => maskValue(value, 6, 4)
-    },
-    {
         id: 'TWITCH_CLIENT_SECRET',
         envKey: 'TWITCH_CLIENT_SECRET',
         configPath: ['twitch', 'clientSecret'],
@@ -340,6 +333,8 @@ async function ensureSecrets(options = {}) {
     if (missingRequired.length > 0) {
         safeLogger.warn?.(`Secrets missing (interactive): ${missingRequired.join(', ')}`, 'secret-manager');
     }
+
+    initializeStaticSecrets();
 
     return {
         applied,

@@ -11,6 +11,7 @@ const {
 } = require('./auth-errors');
 const { createPlatformErrorHandler } = require('./platform-error-handler');
 const TokenRefreshUtility = require('./token-refresh-utility');
+const { secrets } = require('../core/secrets');
 
 class TwitchTokenRefresh {
     constructor(config, dependencies = {}) {
@@ -76,7 +77,7 @@ class TwitchTokenRefresh {
         try {
             const postData = new URLSearchParams({
                 client_id: this.config.clientId,
-                client_secret: this.config.clientSecret,
+                client_secret: secrets.twitch.clientSecret,
                 grant_type: 'refresh_token',
                 refresh_token: refreshToken
             }).toString();

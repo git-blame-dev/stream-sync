@@ -281,6 +281,7 @@ class ConfigValidator {
         return {
             enabled: ConfigValidator.parseBoolean(raw.enabled, DEFAULTS.twitch.enabled),
             username: ConfigValidator.parseString(raw.username, ''),
+            clientId: ConfigValidator.parseString(raw.clientId, ''),
             channel: ConfigValidator.parseString(raw.channel, ''),
             viewerCountEnabled: ConfigValidator.parseBoolean(raw.viewerCountEnabled, DEFAULTS.twitch.viewerCountEnabled),
             eventsubEnabled: ConfigValidator.parseBoolean(raw.eventsub_enabled, DEFAULTS.twitch.eventsubEnabled),
@@ -546,6 +547,7 @@ class ConfigValidator {
 
         ConfigValidator._validateRequiredSections(config, errors);
         ConfigValidator._validatePlatformUsernames(config, errors);
+        ConfigValidator._validateTwitchClientId(config, errors);
         ConfigValidator._validateStreamElements(config, errors);
         ConfigValidator._validateCooldownRanges(config, warnings);
         ConfigValidator._validateHandcamRanges(config, warnings);
@@ -582,6 +584,21 @@ class ConfigValidator {
                 errors.push(`Missing required configuration: ${displayName} username`);
             }
         });
+    }
+
+    static _validateTwitchClientId(config, errors) {
+        const twitchConfig = config.twitch;
+        if (!twitchConfig || !twitchConfig.enabled) {
+            return;
+        }
+
+        const clientId = typeof twitchConfig.clientId === 'string'
+            ? twitchConfig.clientId.trim()
+            : '';
+
+        if (!clientId) {
+            errors.push('Missing required configuration: Twitch clientId');
+        }
     }
 
     static _validateStreamElements(config, errors) {

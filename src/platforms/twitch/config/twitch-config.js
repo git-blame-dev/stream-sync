@@ -9,7 +9,8 @@ const TWITCH_CONFIG_VALIDATION_RULES = {
     required: {
         enabled: { type: 'boolean', message: 'Platform must be enabled' },
         username: { type: 'string', message: 'Username is required for Twitch authentication' },
-        channel: { type: 'string', message: 'Channel name is required for Twitch chat connection' }
+        channel: { type: 'string', message: 'Channel name is required for Twitch chat connection' },
+        clientId: { type: 'string', message: 'Client ID is required for Twitch authentication' }
     },
     optional: {
         eventsub_enabled: { type: 'boolean', default: true, message: 'EventSub configuration' },
