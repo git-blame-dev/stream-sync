@@ -1,5 +1,5 @@
 const secrets = {
-    twitch: { clientSecret: null },
+    twitch: { clientSecret: null, accessToken: null, refreshToken: null },
     tiktok: { apiKey: null },
     youtube: { apiKey: null },
     obs: { password: null },
