@@ -334,8 +334,17 @@ describe('YouTube YouTubei Stream Detection Integration - Regression', () => {
 });
 
 function validateYouTubeConfig(config) {
-    const { validateYouTubeConfig: configValidator } = require('../../src/utils/config-normalizer');
-    return configValidator(config);
+    if (!config || typeof config !== 'object') {
+        return { isValid: false, errors: ['Configuration must be an object'], userMessage: 'Invalid YouTube configuration format' };
+    }
+    if (!config.username) {
+        return { isValid: false, errors: ['Channel username required'], userMessage: 'YouTube channel username required for search-based stream detection' };
+    }
+    const validMethods = ['scraping', 'api', 'youtubei'];
+    if (!config.streamDetectionMethod || !validMethods.includes(config.streamDetectionMethod)) {
+        return { isValid: false, errors: ['Invalid stream detection method'], userMessage: 'Invalid stream detection method. Use scraping, api, or youtubei.' };
+    }
+    return { isValid: true, errors: [], streamDetectionMethod: config.streamDetectionMethod, userMessage: '' };
 }
 
 function validateYouTubeConfigWithServices(config, serviceStatus) {

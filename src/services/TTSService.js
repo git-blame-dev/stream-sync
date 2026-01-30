@@ -159,26 +159,6 @@ class TTSService {
         };
     }
 
-    updateConfig(newConfig) {
-        try {
-            if (!this.configService) {
-                this.logger.warn('[TTSService] No ConfigService available for config update', 'tts-service');
-                return false;
-            }
-
-            // Update TTS configuration through ConfigService
-            const updated = this.configService.set('tts', newConfig);
-            
-            this.logger.debug('[TTSService] Configuration updated', 'tts-service', newConfig);
-            return updated;
-
-        } catch (error) {
-            const errorMessage = error?.message || String(error);
-            this._handleError(`[TTSService] Error updating config: ${errorMessage}`, error, 'update-config');
-            return false;
-        }
-    }
-
     setProvider(provider) {
         try {
             if (!provider || typeof provider.speak !== 'function') {

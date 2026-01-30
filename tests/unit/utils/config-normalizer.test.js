@@ -1,8 +1,4 @@
-
-const {
-    normalizeYouTubeConfig,
-    validateRequiredKeys
-} = require('../../../src/utils/config-normalizer');
+const { normalizeYouTubeConfig } = require('../../../src/utils/config-normalizer');
 
 describe('Configuration Normalizer', () => {
     describe('normalizeYouTubeConfig', () => {
@@ -77,40 +73,6 @@ describe('Configuration Normalizer', () => {
             expect(normalized.apiKey).toBeUndefined();
             expect(normalized.retryAttempts).toBe(4);
             expect(normalized.someUnknownKey).toBeUndefined();
-        });
-    });
-
-    describe('validateRequiredKeys', () => {
-        test('should pass when all required keys present', () => {
-            const config = {
-                clientId: 'test-client-id',
-                username: 'testuser'
-            };
-            
-            expect(() => {
-                validateRequiredKeys(config, ['clientId', 'username'], 'YouTube');
-            }).not.toThrow();
-        });
-        
-        test('should throw when required keys missing', () => {
-            const config = {
-                username: 'testuser'
-                // clientId missing
-            };
-            
-            expect(() => {
-                validateRequiredKeys(config, ['clientId', 'username'], 'YouTube');
-            }).toThrow('YouTube configuration missing required keys: clientId');
-        });
-        
-        test('should list all missing keys', () => {
-            const config = {
-                // Both missing
-            };
-            
-            expect(() => {
-                validateRequiredKeys(config, ['clientId', 'username'], 'YouTube');
-            }).toThrow('YouTube configuration missing required keys: clientId, username');
         });
     });
 });
