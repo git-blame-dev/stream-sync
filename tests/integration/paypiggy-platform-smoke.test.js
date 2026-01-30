@@ -8,6 +8,7 @@ const { createMockDisplayQueue, noOpLogger } = require('../helpers/mock-factorie
 const { createTextProcessingManager } = require('../../src/utils/text-processing');
 const { expectNoTechnicalArtifacts } = require('../helpers/assertion-helpers');
 const { createMockFn, restoreAllMocks } = require('../helpers/bun-mock-utils');
+const { createConfigFixture } = require('../helpers/config-fixture');
 
 describe('Paypiggy platform flows (smoke)', () => {
     afterEach(() => {
@@ -25,21 +26,6 @@ describe('Paypiggy platform flows (smoke)', () => {
             }
         };
     };
-
-    const createConfigService = (config) => ({
-        areNotificationsEnabled: createMockFn().mockReturnValue(true),
-        getPlatformConfig: createMockFn().mockReturnValue(true),
-        getNotificationSettings: createMockFn().mockReturnValue({ enabled: true, duration: 4000 }),
-        get: createMockFn((section) => {
-            if (!section) {
-                return config;
-            }
-            return config[section] || {};
-        }),
-        isDebugEnabled: createMockFn().mockReturnValue(false),
-        getTTSConfig: createMockFn().mockReturnValue({ enabled: false }),
-        isEnabled: createMockFn().mockReturnValue(true)
-    });
 
     const assertNonEmptyString = (value) => {
         expect(typeof value).toBe('string');
@@ -80,7 +66,11 @@ describe('Paypiggy platform flows (smoke)', () => {
         const logger = noOpLogger;
         const displayQueue = createMockDisplayQueue();
         const textProcessing = createTextProcessingManager({ logger });
-        const configSnapshot = {
+        const platformConfigOverride = { enabled: true, notificationsEnabled: true };
+        if (platformKey === 'youtube') {
+            platformConfigOverride.username = 'test-channel';
+        }
+        const config = createConfigFixture({
             general: {
                 debugEnabled: false,
                 giftsEnabled: true,
@@ -95,16 +85,15 @@ describe('Paypiggy platform flows (smoke)', () => {
                 streamMaxRetries: 3,
                 continuousMonitoringInterval: 60
             },
-            [platformKey]: { enabled: true, notificationsEnabled: true },
+            [platformKey]: platformConfigOverride,
             obs: { enabled: false },
             tts: { enabled: false }
-        };
-        const configService = createConfigService(configSnapshot);
+        });
         const notificationManager = new NotificationManager({
             displayQueue,
             logger,
             eventBus,
-            configService,
+            config,
             constants: require('../../src/core/constants'),
             textProcessing,
             obsGoals: { processDonationGoal: createMockFn() },
@@ -116,21 +105,21 @@ describe('Paypiggy platform flows (smoke)', () => {
         const streamDetector = {
             startStreamDetection: createMockFn(async (_platformName, _config, connectCallback) => connectCallback())
         };
-        const platformConfig = { enabled: true };
+        const lifecyclePlatformConfig = { enabled: true };
         if (platformKey === 'youtube') {
-            platformConfig.username = 'test-channel';
+            lifecyclePlatformConfig.username = 'test-channel';
         }
 
         const platformLifecycleService = new PlatformLifecycleService({
-            config: { [platformKey]: platformConfig },
+            config: { [platformKey]: lifecyclePlatformConfig },
             eventBus,
             logger,
             streamDetector
         });
 
-        const { runtime } = createTestAppRuntime(configSnapshot, {
+        const { runtime } = createTestAppRuntime(config, {
             eventBus,
-            configService,
+            config,
             notificationManager,
             displayQueue,
             logger,
@@ -141,8 +130,7 @@ describe('Paypiggy platform flows (smoke)', () => {
             eventBus,
             logger,
             displayQueue,
-            configSnapshot,
-            configService,
+            config,
             notificationManager,
             platformLifecycleService,
             runtime

@@ -2,6 +2,7 @@
 const { describe, expect, beforeEach, it, afterEach } = require('bun:test');
 const { createMockFn, restoreAllMocks } = require('../../helpers/bun-mock-utils');
 const { noOpLogger } = require('../../helpers/mock-factories');
+const { createConfigFixture } = require('../../helpers/config-fixture');
 
 const EventEmitter = require('events');
 const NotificationManager = require('../../../src/notifications/NotificationManager');
@@ -13,7 +14,7 @@ describe('NotificationManager TikTok monetisation behavior', () => {
 
     let displayQueue;
     let notificationManager;
-    let configService;
+    let config;
 
     const baseDependencies = () => ({
         logger: noOpLogger,
@@ -22,7 +23,7 @@ describe('NotificationManager TikTok monetisation behavior', () => {
         constants: require('../../../src/core/constants'),
         textProcessing: { formatChatMessage: createMockFn() },
         obsGoals: { processDonationGoal: createMockFn() },
-        configService,
+        config,
         vfxCommandService: { getVFXConfig: createMockFn().mockResolvedValue(null) },
         ttsService: { speak: createMockFn() },
         userTrackingService: { isFirstMessage: createMockFn().mockResolvedValue(false) }
@@ -30,26 +31,12 @@ describe('NotificationManager TikTok monetisation behavior', () => {
 
     beforeEach(() => {
         displayQueue = { addItem: createMockFn() };
-        configService = {
-            areNotificationsEnabled: createMockFn().mockReturnValue(true),
-            isEnabled: createMockFn().mockReturnValue(true),
-            getNotificationSettings: createMockFn().mockReturnValue({ enabled: true, duration: 5000 }),
-            getPlatformConfig: createMockFn().mockReturnValue({ notificationsEnabled: true }),
-            get: createMockFn((section) => {
-                if (section !== 'general') {
-                    return {};
-                }
-                return {
-                    userSuppressionEnabled: false,
-                    maxNotificationsPerUser: 5,
-                    suppressionWindowMs: 60000,
-                    suppressionDurationMs: 300000,
-                    suppressionCleanupIntervalMs: 300000
-                };
-            }),
-            isDebugEnabled: createMockFn().mockReturnValue(false),
-            getTTSConfig: createMockFn().mockReturnValue({ enabled: false })
-        };
+        config = createConfigFixture({
+            general: {
+                giftsEnabled: true,
+                paypiggiesEnabled: true
+            }
+        });
         notificationManager = new NotificationManager(baseDependencies());
     });
 
@@ -89,9 +76,23 @@ describe('NotificationManager TikTok monetisation behavior', () => {
     });
 
     it('respects config gating and skips when notifications are disabled', async () => {
-        configService.areNotificationsEnabled.mockReturnValue(false);
+        const disabledConfig = createConfigFixture({
+            general: { paypiggiesEnabled: false }
+        });
+        const disabledManager = new NotificationManager({
+            logger: noOpLogger,
+            displayQueue,
+            eventBus: new EventEmitter(),
+            constants: require('../../../src/core/constants'),
+            textProcessing: { formatChatMessage: createMockFn() },
+            obsGoals: { processDonationGoal: createMockFn() },
+            config: disabledConfig,
+            vfxCommandService: { getVFXConfig: createMockFn().mockResolvedValue(null) },
+            ttsService: { speak: createMockFn() },
+            userTrackingService: { isFirstMessage: createMockFn().mockResolvedValue(false) }
+        });
 
-        await notificationManager.handleNotification('platform:paypiggy', 'tiktok', {
+        await disabledManager.handleNotification('platform:paypiggy', 'tiktok', {
             username: 'GatedUser'
         });
 

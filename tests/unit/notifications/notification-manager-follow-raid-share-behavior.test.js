@@ -1,6 +1,7 @@
 
 const { describe, test, expect, beforeEach, afterEach } = require('bun:test');
 const { createMockFn, restoreAllMocks } = require('../../helpers/bun-mock-utils');
+const { createConfigFixture } = require('../../helpers/config-fixture');
 
 const NotificationManager = require('../../../src/notifications/NotificationManager');
 const constants = require('../../../src/core/constants');
@@ -13,7 +14,7 @@ describe('NotificationManager follow/raid/share behavior', () => {
 
     let queuedItems;
     let displayQueue;
-    let configService;
+    let config;
     let eventBus;
     let vfxCommandService;
     let manager;
@@ -25,26 +26,14 @@ describe('NotificationManager follow/raid/share behavior', () => {
             getQueueLength: createMockFn(() => queuedItems.length)
         };
 
-        configService = {
-            areNotificationsEnabled: createMockFn().mockReturnValue(true),
-            getNotificationSettings: createMockFn().mockReturnValue({ enabled: true }),
-            getTTSConfig: createMockFn().mockReturnValue({ enabled: true }),
-            getPlatformConfig: createMockFn().mockReturnValue({}),
-            getCLIOverrides: createMockFn().mockReturnValue({}),
-            get: createMockFn((section) => {
-                if (section !== 'general') {
-                    return {};
-                }
-                return {
-                    userSuppressionEnabled: false,
-                    maxNotificationsPerUser: 5,
-                    suppressionWindowMs: 60000,
-                    suppressionDurationMs: 300000,
-                    suppressionCleanupIntervalMs: 300000
-                };
-            }),
-            isDebugEnabled: createMockFn().mockReturnValue(false)
-        };
+        config = createConfigFixture({
+            general: {
+                followsEnabled: true,
+                giftsEnabled: true,
+                raidsEnabled: true,
+                sharesEnabled: true
+            }
+        });
 
         vfxCommandService = {
             getVFXConfig: createMockFn().mockImplementation(async (commandKey) => ({
@@ -64,7 +53,7 @@ describe('NotificationManager follow/raid/share behavior', () => {
         manager = new NotificationManager({
             logger: noOpLogger,
             displayQueue,
-            configService,
+            config,
             eventBus,
             constants,
             textProcessing: { formatChatMessage: createMockFn() },
@@ -93,14 +82,21 @@ describe('NotificationManager follow/raid/share behavior', () => {
     });
 
     test('share notifications respect per-platform disabled toggles', async () => {
-        configService.areNotificationsEnabled.mockImplementation((settingKey, platform) => {
-            if (settingKey === 'sharesEnabled' && platform === 'tiktok') {
-                return false;
-            }
-            return true;
+        const disabledConfig = createConfigFixture({
+            general: { sharesEnabled: false }
+        });
+        const disabledManager = new NotificationManager({
+            logger: noOpLogger,
+            displayQueue,
+            config: disabledConfig,
+            eventBus,
+            constants,
+            textProcessing: { formatChatMessage: createMockFn() },
+            obsGoals: { processDonationGoal: createMockFn() },
+            vfxCommandService
         });
 
-        const result = await manager.handleNotification('platform:share', 'tiktok', {
+        const result = await disabledManager.handleNotification('platform:share', 'tiktok', {
             username: 'MutedSharer',
             userId: 'share-2'
         });
@@ -115,14 +111,21 @@ describe('NotificationManager follow/raid/share behavior', () => {
     });
 
     test('follow notifications respect per-platform disabled toggles', async () => {
-        configService.areNotificationsEnabled.mockImplementation((settingKey, platform) => {
-            if (settingKey === 'followsEnabled' && platform === 'twitch') {
-                return false;
-            }
-            return true;
+        const disabledConfig = createConfigFixture({
+            general: { followsEnabled: false }
+        });
+        const disabledManager = new NotificationManager({
+            logger: noOpLogger,
+            displayQueue,
+            config: disabledConfig,
+            eventBus,
+            constants,
+            textProcessing: { formatChatMessage: createMockFn() },
+            obsGoals: { processDonationGoal: createMockFn() },
+            vfxCommandService
         });
 
-        const result = await manager.handleNotification('platform:follow', 'twitch', {
+        const result = await disabledManager.handleNotification('platform:follow', 'twitch', {
             username: 'MutedFollower',
             userId: 'follow-1'
         });
@@ -209,10 +212,22 @@ describe('NotificationManager follow/raid/share behavior', () => {
         }));
     });
 
-    test('returns disabled when notification toggle check fails instead of throwing', async () => {
-        configService.areNotificationsEnabled.mockImplementation(() => { throw new Error('config crash'); });
+    test('returns disabled when notifications are globally disabled', async () => {
+        const disabledConfig = createConfigFixture({
+            general: { followsEnabled: false }
+        });
+        const disabledManager = new NotificationManager({
+            logger: noOpLogger,
+            displayQueue,
+            config: disabledConfig,
+            eventBus,
+            constants,
+            textProcessing: { formatChatMessage: createMockFn() },
+            obsGoals: { processDonationGoal: createMockFn() },
+            vfxCommandService
+        });
 
-        const result = await manager.handleNotification('platform:follow', 'tiktok', {
+        const result = await disabledManager.handleNotification('platform:follow', 'tiktok', {
             username: 'ResilientUser',
             userId: 'follow-err'
         });

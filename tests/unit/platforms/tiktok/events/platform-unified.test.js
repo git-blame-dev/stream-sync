@@ -51,7 +51,7 @@ describe('TikTokPlatform unified event contract (expected behavior)', () => {
             eventBus: mockEventBus,
             runtime,
             notificationManager: { handleNotification: createMockFn() },
-            configService: { areNotificationsEnabled: createMockFn(() => true) },
+            config: { general: { followsEnabled: true, giftsEnabled: true, messagesEnabled: true } },
             logger: noOpLogger
         });
 

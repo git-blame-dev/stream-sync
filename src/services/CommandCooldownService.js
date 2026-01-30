@@ -8,7 +8,6 @@ const CONFIG_CHANGE_EVENTS = ['config:changed', 'config:reloaded'];
 class CommandCooldownService {
     constructor(options = {}) {
         this.eventBus = options.eventBus || null;
-        this.configService = options.configService || null;
         this.logger = options.logger || logger;
         if (!options.config) {
             throw new Error('CommandCooldownService requires config');
@@ -316,25 +315,6 @@ class CommandCooldownService {
     }
 
     getCooldownOverridesFromConfig() {
-        if (!this.configService) {
-            return null;
-        }
-
-        try {
-            if (typeof this.configService.get === 'function') {
-                const section = this.configService.get(COOLDOWN_CONFIG_SECTION);
-                if (section) {
-                    return section;
-                }
-            }
-
-            if (this.configService[COOLDOWN_CONFIG_SECTION]) {
-                return this.configService[COOLDOWN_CONFIG_SECTION];
-            }
-        } catch (error) {
-            this.logger.warn(`Error loading cooldown config overrides: ${error.message}`, 'CommandCooldownService');
-        }
-
         return null;
     }
 

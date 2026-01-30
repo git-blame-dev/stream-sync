@@ -1,6 +1,7 @@
 const { describe, test, expect, afterEach } = require('bun:test');
 const { createMockFn, restoreAllMocks } = require('../../helpers/bun-mock-utils');
 const { noOpLogger } = require('../../helpers/mock-factories');
+const { createConfigFixture } = require('../../helpers/config-fixture');
 
 const EventEmitter = require('events');
 const NotificationManager = require('../../../src/notifications/NotificationManager');
@@ -18,28 +19,17 @@ describe('NotificationManager raid viewer count fallback', () => {
             clearQueue: createMockFn()
         };
 
-        const configService = {
-            get: createMockFn((section) => {
-                if (section !== 'general') {
-                    return {};
-                }
-                return {
-                    userSuppressionEnabled: false,
-                    maxNotificationsPerUser: 5,
-                    suppressionWindowMs: 60000,
-                    suppressionDurationMs: 300000,
-                    suppressionCleanupIntervalMs: 300000
-                };
-            }),
-            areNotificationsEnabled: createMockFn().mockReturnValue(true),
-            isDebugEnabled: createMockFn().mockReturnValue(false)
-        };
+        const config = createConfigFixture({
+            general: {
+                raidsEnabled: true
+            }
+        });
 
         return new NotificationManager({
             logger: noOpLogger,
             displayQueue,
             eventBus: new EventEmitter(),
-            configService,
+            config,
             constants: require('../../../src/core/constants'),
             textProcessing: { formatChatMessage: createMockFn() },
             obsGoals: { processDonationGoal: createMockFn() },

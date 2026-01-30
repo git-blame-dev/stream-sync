@@ -1,6 +1,7 @@
 const { describe, expect, it, afterEach } = require('bun:test');
 const { createMockFn, restoreAllMocks } = require('../../helpers/bun-mock-utils');
 const { noOpLogger } = require('../../helpers/mock-factories');
+const { createConfigFixture } = require('../../helpers/config-fixture');
 
 const NotificationManager = require('../../../src/notifications/NotificationManager');
 const constants = require('../../../src/core/constants');
@@ -14,27 +15,7 @@ const createDisplayQueueStub = () => {
     };
 };
 
-const createConfigServiceStub = () => ({
-    areNotificationsEnabled: () => true,
-    getPlatformConfig: () => ({}),
-    getNotificationSettings: () => ({ enabled: true }),
-    isEnabled: () => true,
-    get: (section) => {
-        if (section !== 'general') {
-            return {};
-        }
-        return {
-            userSuppressionEnabled: false,
-            maxNotificationsPerUser: 5,
-            suppressionWindowMs: 60000,
-            suppressionDurationMs: 300000,
-            suppressionCleanupIntervalMs: 300000
-        };
-    },
-    getTimingConfig: () => ({}),
-    isDebugEnabled: () => false,
-    getTTSConfig: () => ({ enabled: false })
-});
+
 
 describe('NotificationManager paypiggy normalization', () => {
     afterEach(() => {
@@ -46,7 +27,7 @@ describe('NotificationManager paypiggy normalization', () => {
         const manager = new NotificationManager({
             displayQueue,
             eventBus: { emit: createMockFn(), subscribe: createMockFn() },
-            configService: createConfigServiceStub(),
+            config: createConfigFixture(),
             vfxCommandService: { getVFXConfig: createMockFn().mockResolvedValue({ commandKey: 'paypiggies' }) },
             logger: noOpLogger,
             constants,
@@ -74,7 +55,7 @@ describe('NotificationManager paypiggy normalization', () => {
         const manager = new NotificationManager({
             displayQueue,
             eventBus: { emit: createMockFn(), subscribe: createMockFn() },
-            configService: createConfigServiceStub(),
+            config: createConfigFixture(),
             vfxCommandService: { getVFXConfig: createMockFn().mockResolvedValue({ commandKey: 'paypiggies' }) },
             logger: noOpLogger,
             constants,
@@ -99,7 +80,7 @@ describe('NotificationManager paypiggy normalization', () => {
         const manager = new NotificationManager({
             displayQueue,
             eventBus: { emit: createMockFn(), subscribe: createMockFn() },
-            configService: createConfigServiceStub(),
+            config: createConfigFixture(),
             vfxCommandService: { getVFXConfig: createMockFn().mockResolvedValue({ commandKey: 'paypiggies' }) },
             logger: noOpLogger,
             constants,
@@ -121,7 +102,7 @@ describe('NotificationManager paypiggy normalization', () => {
         const manager = new NotificationManager({
             displayQueue,
             eventBus: { emit: createMockFn(), subscribe: createMockFn() },
-            configService: createConfigServiceStub(),
+            config: createConfigFixture(),
             vfxCommandService: { getVFXConfig: createMockFn().mockResolvedValue({ commandKey: 'paypiggies' }) },
             logger: noOpLogger,
             constants,
@@ -143,7 +124,7 @@ describe('NotificationManager paypiggy normalization', () => {
         const manager = new NotificationManager({
             displayQueue,
             eventBus: { emit: createMockFn(), subscribe: createMockFn() },
-            configService: createConfigServiceStub(),
+            config: createConfigFixture(),
             vfxCommandService: { getVFXConfig: createMockFn().mockResolvedValue({ commandKey: 'paypiggies' }) },
             logger: noOpLogger,
             constants,
@@ -165,7 +146,7 @@ describe('NotificationManager paypiggy normalization', () => {
         const manager = new NotificationManager({
             displayQueue,
             eventBus: { emit: createMockFn(), subscribe: createMockFn() },
-            configService: createConfigServiceStub(),
+            config: createConfigFixture(),
             vfxCommandService: { getVFXConfig: createMockFn().mockResolvedValue({ commandKey: 'paypiggies' }) },
             logger: noOpLogger,
             constants,
@@ -187,7 +168,7 @@ describe('NotificationManager paypiggy normalization', () => {
         const manager = new NotificationManager({
             displayQueue,
             eventBus: { emit: createMockFn(), subscribe: createMockFn() },
-            configService: createConfigServiceStub(),
+            config: createConfigFixture(),
             vfxCommandService: { getVFXConfig: createMockFn().mockResolvedValue({ commandKey: 'paypiggies' }) },
             logger: noOpLogger,
             constants,
@@ -214,7 +195,7 @@ describe('NotificationManager paypiggy normalization', () => {
         expect(displayQueue.items[0].data.tier).toBe('superfan');
     });
 
-    it('fails when ConfigService is missing (fail-fast)', async () => {
+    it('fails when config is missing (fail-fast)', async () => {
         const displayQueue = createDisplayQueueStub();
         const originalEnv = process.env.NODE_ENV;
         process.env.NODE_ENV = 'production';
@@ -226,7 +207,7 @@ describe('NotificationManager paypiggy normalization', () => {
             constants,
             textProcessing: { formatChatMessage: createMockFn() },
             obsGoals: { processDonationGoal: createMockFn() }
-        })).toThrow('NotificationManager requires ConfigService dependency');
+        })).toThrow('config');
         process.env.NODE_ENV = originalEnv;
     });
 
@@ -235,7 +216,7 @@ describe('NotificationManager paypiggy normalization', () => {
         const manager = new NotificationManager({
             displayQueue,
             eventBus: { emit: createMockFn(), subscribe: createMockFn() },
-            configService: createConfigServiceStub(),
+            config: createConfigFixture(),
             vfxCommandService: { getVFXConfig: createMockFn().mockResolvedValue(null) },
             logger: noOpLogger,
             constants,

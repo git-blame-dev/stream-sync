@@ -7,6 +7,7 @@ const { createTestAppRuntime } = require('../helpers/runtime-test-harness');
 const { createMockDisplayQueue, noOpLogger } = require('../helpers/mock-factories');
 const { createTextProcessingManager } = require('../../src/utils/text-processing');
 const { createMockFn, restoreAllMocks } = require('../helpers/bun-mock-utils');
+const { createConfigFixture } = require('../helpers/config-fixture');
 
 describe('Twitch bits gift platform flow (smoke)', () => {
     afterEach(() => {
@@ -25,27 +26,12 @@ describe('Twitch bits gift platform flow (smoke)', () => {
         };
     };
 
-    const createConfigService = (config) => ({
-        areNotificationsEnabled: createMockFn().mockReturnValue(true),
-        getPlatformConfig: createMockFn().mockReturnValue(true),
-        getNotificationSettings: createMockFn().mockReturnValue({ enabled: true, duration: 4000 }),
-        get: createMockFn((section) => {
-            if (!section) {
-                return config;
-            }
-            return config[section] || {};
-        }),
-        isDebugEnabled: createMockFn().mockReturnValue(false),
-        getTTSConfig: createMockFn().mockReturnValue({ enabled: false }),
-        isEnabled: createMockFn().mockReturnValue(true)
-    });
-
     test('routes bits gift through lifecycle, router, and runtime as gift', async () => {
         const eventBus = createEventBus();
         const logger = noOpLogger;
         const displayQueue = createMockDisplayQueue();
         const textProcessing = createTextProcessingManager({ logger });
-        const configSnapshot = {
+        const config = createConfigFixture({
             general: {
                 debugEnabled: false,
                 giftsEnabled: true,
@@ -63,13 +49,12 @@ describe('Twitch bits gift platform flow (smoke)', () => {
             twitch: { enabled: true, notificationsEnabled: true },
             obs: { enabled: false },
             tts: { enabled: false }
-        };
-        const configService = createConfigService(configSnapshot);
+        });
         const notificationManager = new NotificationManager({
             displayQueue,
             logger,
             eventBus,
-            configService,
+            config,
             constants: require('../../src/core/constants'),
             textProcessing,
             obsGoals: { processDonationGoal: createMockFn() },
@@ -88,9 +73,9 @@ describe('Twitch bits gift platform flow (smoke)', () => {
             streamDetector
         });
 
-        const { runtime } = createTestAppRuntime(configSnapshot, {
+        const { runtime } = createTestAppRuntime(config, {
             eventBus,
-            configService,
+            config,
             notificationManager,
             displayQueue,
             logger,

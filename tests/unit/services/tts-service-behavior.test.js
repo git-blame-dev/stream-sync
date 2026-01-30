@@ -2,6 +2,7 @@ const { describe, expect, beforeEach, afterEach, it } = require('bun:test');
 const { createMockFn, restoreAllMocks } = require('../../helpers/bun-mock-utils');
 const { useFakeTimers, useRealTimers, runOnlyPendingTimers } = require('../../helpers/bun-timers');
 const { noOpLogger } = require('../../helpers/mock-factories');
+const { createConfigFixture } = require('../../helpers/config-fixture');
 
 const { TTSService } = require('../../../src/services/TTSService');
 const { EventBus } = require('../../../src/core/EventBus');
@@ -12,22 +13,22 @@ const flushPromises = () => Promise.resolve();
 describe('TTS Service behavior', () => {
     let ttsService;
     let eventBus;
-    let mockConfigService;
+    let config;
     let primaryProvider;
     let fallbackProvider;
 
     beforeEach(() => {
         useFakeTimers();
         eventBus = new EventBus();
-        mockConfigService = {
-            getTTSConfig: () => ({
+        config = createConfigFixture({
+            general: { ttsEnabled: true },
+            tts: {
                 enabled: true,
                 voice: 'en-US-Neural',
                 rate: 1.0,
                 volume: 1.0
-            }),
-            set: () => true
-        };
+            }
+        });
 
         primaryProvider = {
             name: 'PrimaryTTS',
@@ -55,7 +56,7 @@ describe('TTS Service behavior', () => {
     });
 
     it('uses the primary provider when it is available', async () => {
-        ttsService = new TTSService(mockConfigService, eventBus, { logger: noOpLogger, provider: primaryProvider });
+        ttsService = new TTSService(config, eventBus, { logger: noOpLogger, provider: primaryProvider });
 
         const result = await ttsService.speak('Hello world');
 
@@ -70,7 +71,7 @@ describe('TTS Service behavior', () => {
 
     it('switches to the fallback provider when the primary provider fails', async () => {
         primaryProvider.speak = createMockFn().mockRejectedValue(new Error('primary down'));
-        ttsService = new TTSService(mockConfigService, eventBus, {
+        ttsService = new TTSService(config, eventBus, {
             logger: noOpLogger,
             provider: primaryProvider,
             fallbackProvider
@@ -89,7 +90,7 @@ describe('TTS Service behavior', () => {
     it('attempts fallback when all providers fail', async () => {
         primaryProvider.speak = createMockFn().mockRejectedValue(new Error('primary down'));
         fallbackProvider.speak = createMockFn().mockRejectedValue(new Error('fallback down'));
-        ttsService = new TTSService(mockConfigService, eventBus, {
+        ttsService = new TTSService(config, eventBus, {
             logger: noOpLogger,
             provider: primaryProvider,
             fallbackProvider
@@ -105,15 +106,18 @@ describe('TTS Service behavior', () => {
     });
 
     it('respects platform-specific TTS enablement settings', async () => {
-        mockConfigService.getTTSConfig = () => ({
-            enabled: true,
-            platformSettings: {
-                twitch: { enabled: false },
-                tiktok: { enabled: true }
+        const platformConfig = createConfigFixture({
+            general: { ttsEnabled: true },
+            tts: {
+                enabled: true,
+                platformSettings: {
+                    twitch: { enabled: false },
+                    tiktok: { enabled: true }
+                }
             }
         });
 
-        ttsService = new TTSService(mockConfigService, eventBus, { logger: noOpLogger, provider: primaryProvider });
+        ttsService = new TTSService(platformConfig, eventBus, { logger: noOpLogger, provider: primaryProvider });
 
         eventBus.emit(PlatformEvents.TTS_SPEECH_REQUESTED, {
             text: 'Should not speak',

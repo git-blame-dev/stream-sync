@@ -2,6 +2,7 @@
 const { describe, expect, beforeEach, it, afterEach } = require('bun:test');
 const { createMockFn, restoreAllMocks } = require('../../helpers/bun-mock-utils');
 const { noOpLogger } = require('../../helpers/mock-factories');
+const { createConfigFixture } = require('../../helpers/config-fixture');
 
 const { setupAutomatedCleanup } = require('../../helpers/mock-lifecycle');
 
@@ -20,7 +21,7 @@ describe('NotificationManager Spam Protection Behavior - Modernized', () => {
     let mockConstants;
     let mockDisplayQueue;
     let mockSpamDetector;
-    let configService;
+    let config;
 
     beforeEach(() => {
         mockLogger = noOpLogger;
@@ -53,25 +54,11 @@ describe('NotificationManager Spam Protection Behavior - Modernized', () => {
             handleDonationSpam: createMockFn().mockReturnValue({ shouldShow: true })
         };
 
-        configService = {
-            areNotificationsEnabled: createMockFn().mockReturnValue(true),
-            getPlatformConfig: createMockFn().mockReturnValue(true),
-            isDebugEnabled: createMockFn().mockReturnValue(false),
-            getTimingConfig: createMockFn().mockReturnValue({ greetingDuration: 5000 }),
-            getTTSConfig: createMockFn().mockReturnValue({ enabled: false }),
-            get: createMockFn((section) => {
-                if (section !== 'general') {
-                    return true;
-                }
-                return {
-                    userSuppressionEnabled: false,
-                    maxNotificationsPerUser: 5,
-                    suppressionWindowMs: 60000,
-                    suppressionDurationMs: 300000,
-                    suppressionCleanupIntervalMs: 300000
-                };
-            })
-        };
+        config = createConfigFixture({
+            general: {
+                giftsEnabled: true
+            }
+        });
 
         NotificationManager = require('../../../src/notifications/NotificationManager');
     });
@@ -83,7 +70,7 @@ describe('NotificationManager Spam Protection Behavior - Modernized', () => {
                 displayQueue: mockDisplayQueue,
                 logger: mockLogger,
                 eventBus: mockEventBus,
-                configService,
+                config,
                 constants: mockConstants,
                 textProcessing: { formatChatMessage: createMockFn() },
                 obsGoals: { processDonationGoal: createMockFn() },
@@ -110,7 +97,7 @@ describe('NotificationManager Spam Protection Behavior - Modernized', () => {
                 displayQueue: mockDisplayQueue,
                 logger: mockLogger,
                 eventBus: mockEventBus,
-                configService,
+                config,
                 constants: mockConstants,
                 textProcessing: { formatChatMessage: createMockFn() },
                 obsGoals: { processDonationGoal: createMockFn() },
@@ -142,7 +129,7 @@ describe('NotificationManager Spam Protection Behavior - Modernized', () => {
                 displayQueue: mockDisplayQueue,
                 logger: mockLogger,
                 eventBus: mockEventBus,
-                configService,
+                config,
                 constants: mockConstants,
                 textProcessing: { formatChatMessage: createMockFn() },
                 obsGoals: { processDonationGoal: createMockFn() },
@@ -173,7 +160,7 @@ describe('NotificationManager Spam Protection Behavior - Modernized', () => {
                 displayQueue: mockDisplayQueue,
                 logger: mockLogger,
                 eventBus: mockEventBus,
-                configService,
+                config,
                 constants: mockConstants,
                 textProcessing: { formatChatMessage: createMockFn() },
                 obsGoals: { processDonationGoal: createMockFn() },
@@ -224,7 +211,7 @@ describe('NotificationManager Spam Protection Behavior - Modernized', () => {
                 displayQueue: mockDisplayQueue,
                 logger: mockLogger,
                 eventBus: mockEventBus,
-                configService,
+                config,
                 constants: mockConstants,
                 textProcessing: { formatChatMessage: createMockFn() },
                 obsGoals: { processDonationGoal: createMockFn() },
@@ -254,7 +241,7 @@ describe('NotificationManager Spam Protection Behavior - Modernized', () => {
                 displayQueue: mockDisplayQueue,
                 logger: mockLogger,
                 eventBus: mockEventBus,
-                configService,
+                config,
                 constants: mockConstants,
                 textProcessing: { formatChatMessage: createMockFn() },
                 obsGoals: { processDonationGoal: createMockFn() },
@@ -284,7 +271,7 @@ describe('NotificationManager Spam Protection Behavior - Modernized', () => {
                 displayQueue: mockDisplayQueue,
                 logger: mockLogger,
                 eventBus: mockEventBus,
-                configService,
+                config,
                 constants: mockConstants,
                 textProcessing: { formatChatMessage: createMockFn() },
                 obsGoals: { processDonationGoal: createMockFn() },

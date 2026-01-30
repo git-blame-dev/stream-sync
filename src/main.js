@@ -214,7 +214,6 @@ const { PlatformEvents } = require('./interfaces/PlatformEvents');
 
 // Event-driven architecture services
 const { createEventBus } = require('./core/EventBus');
-const { createConfigService } = require('./services/ConfigService');
 const { createTTSService } = require('./services/TTSService');
 const { createVFXCommandService } = require('./services/VFXCommandService');
 const { createUserTrackingService } = require('./services/UserTrackingService');
@@ -289,7 +288,6 @@ function createProductionDependencies(overrides = {}) {
         innertubeImporter: resolvedOverrides.innertubeImporter,
 
         eventBus: null,
-        configService: null,
         ttsService: null,
         vfxCommandService: null,
         userTrackingService: null
@@ -439,7 +437,6 @@ class AppRuntime {
         
         // Initialize event-driven services from dependencies
         this.eventBus = this.dependencies.eventBus;
-        this.configService = this.dependencies.configService;
         this.ttsService = this.dependencies.ttsService;
         this.vfxCommandService = this.dependencies.vfxCommandService;
         this.userTrackingService = this.dependencies.userTrackingService;
@@ -498,7 +495,6 @@ class AppRuntime {
             'displayQueue',
             'notificationManager',
             'eventBus',
-            'configService',
             'vfxCommandService',
             'ttsService',
             'userTrackingService',
@@ -518,7 +514,7 @@ class AppRuntime {
             eventBus: this.eventBus,
             runtime: this,
             notificationManager: this.notificationManager,
-            configService: this.configService,
+            config: this.config,
             logger
         });
         this.chatNotificationRouter = new ChatNotificationRouter({
@@ -888,7 +884,7 @@ class AppRuntime {
             if (!this.vfxCommandService) {
                 logger.debug('Creating VFXCommandService after OBS initialization...', 'AppRuntime');
 
-                this.vfxCommandService = createVFXCommandService(this.configService, this.eventBus);
+                this.vfxCommandService = createVFXCommandService(this.config, this.eventBus);
                 logger.debug('VFXCommandService created and ready', 'AppRuntime');
             }
         } catch (error) {
@@ -1472,16 +1468,12 @@ async function main(overrides = {}) {
         const displayQueue = initializeDisplayQueue(obsManager, displayQueueConfig, displayQueueConstants, eventBus);
         logger.debug('Display queue initialized', 'Main');
         
-        logger.debug('Creating ConfigService...', 'Main');
-        const configService = createConfigService(config, eventBus);
-        logger.debug('ConfigService created', 'Main');
-        
         logger.debug('Creating TTSService...', 'Main');
-        const ttsService = createTTSService(configService, eventBus, { logger });
+        const ttsService = createTTSService(config, eventBus, { logger });
         logger.debug('TTSService created', 'Main');
         
         logger.debug('Creating VFXCommandService...', 'Main');
-        const vfxCommandService = createVFXCommandService(configService, eventBus);
+        const vfxCommandService = createVFXCommandService(config, eventBus);
         logger.debug('VFXCommandService created', 'Main');
         
         logger.debug('Creating UserTrackingService...', 'Main');
@@ -1516,7 +1508,7 @@ async function main(overrides = {}) {
         const notificationManager = new NotificationManager({
             displayQueue: displayQueue,
             eventBus: eventBus,
-            configService: configService,
+            config: config,
             ttsService: ttsService,
             vfxCommandService: vfxCommandService,
             userTrackingService: userTrackingService,
@@ -1541,7 +1533,6 @@ async function main(overrides = {}) {
         
         // Add event-driven services to dependencies
         dependencies.eventBus = eventBus;
-        dependencies.configService = configService;
         dependencies.ttsService = ttsService;
         dependencies.vfxCommandService = vfxCommandService;
         dependencies.userTrackingService = userTrackingService;
@@ -1563,7 +1554,6 @@ async function main(overrides = {}) {
 
         const commandCooldownService = new CommandCooldownService({
             eventBus,
-            configService,
             logger,
             config
         });

@@ -21,19 +21,13 @@ describe('VFXCommandService completion events', () => {
     });
 
     test('emits both executed and effect-completed with enriched payload', async () => {
-        const configService = {
-            get: createMockFn((section, key) => {
-                if (section === 'commands') return { greetings: '!hello' };
-                if (section === 'farewell') return {};
-                if (section === 'vfx' && key === 'filePath') return '/tmp';
-                if (section === 'general') return { cmdCoolDown: 60, globalCmdCooldownMs: 60000 };
-                if (section === 'general' && key === 'cmdCoolDown') return 60;
-                if (section === 'general' && key === 'globalCmdCooldownMs') return 60000;
-                return undefined;
-            }),
-            getCommand: createMockFn(() => '!hello')
+        const config = {
+            commands: { greetings: '!hello' },
+            farewell: {},
+            vfx: { filePath: '/tmp' },
+            general: { cmdCoolDown: 60, globalCmdCooldownMs: 60000 }
         };
-        const service = new VFXCommandService(configService, eventBus, {
+        const service = new VFXCommandService(config, eventBus, {
             effectsManager: mockEffectsManager
         });
 

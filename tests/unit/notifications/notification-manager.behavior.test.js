@@ -1,6 +1,7 @@
 const { describe, expect, it, beforeEach, afterEach } = require('bun:test');
 const { createMockFn, restoreAllMocks } = require('../../helpers/bun-mock-utils');
 const { noOpLogger } = require('../../helpers/mock-factories');
+const { createConfigFixture } = require('../../helpers/config-fixture');
 
 const NotificationManager = require('../../../src/notifications/NotificationManager');
 
@@ -21,33 +22,7 @@ describe('NotificationManager behavior', () => {
         logger: noOpLogger,
         displayQueue: { enqueue: createMockFn(), addItem: createMockFn(), getQueueLength: createMockFn(() => 0) },
         eventBus: { on: createMockFn(), emit: createMockFn(), subscribe: createMockFn() },
-        configService: {
-            areNotificationsEnabled: createMockFn(() => true),
-            getPlatformConfig: createMockFn(() => true),
-            isDebugEnabled: createMockFn(() => false),
-            getTimingConfig: createMockFn(() => ({
-                greetingDuration: 1000,
-                commandDuration: 1000,
-                chatDuration: 1000,
-                notificationDuration: 1000
-            })),
-            getTTSConfig: createMockFn(() => ({
-                enabled: false,
-                deduplicationEnabled: true,
-                debugDeduplication: false,
-                onlyForGifts: false,
-                voice: 'default',
-                rate: 1,
-                volume: 1
-            })),
-            get: createMockFn(() => ({
-                userSuppressionEnabled: false,
-                maxNotificationsPerUser: 5,
-                suppressionWindowMs: 60000,
-                suppressionDurationMs: 300000,
-                suppressionCleanupIntervalMs: 300000
-            }))
-        },
+        config: createConfigFixture(),
         constants: {
             PRIORITY_LEVELS: { DEFAULT: 0, FOLLOW: 1, GIFT: 2, ENVELOPE: 3, MEMBER: 4, CHEER: 5, RAID: 6, SHARE: 7, REDEMPTION: 8, GIFTPAYPIGGY: 9, COMMAND: 10, GREETING: 11, CHAT: 12 },
             NOTIFICATION_CONFIGS: { follow: { settingKey: 'followsEnabled', commandKey: 'follows', hasSpecialProcessing: false } }
@@ -66,9 +41,9 @@ describe('NotificationManager behavior', () => {
         expect(() => new NotificationManager(deps)).toThrow('constants dependency');
     });
 
-    it('throws when configService dependency is missing', () => {
-        const deps = createDeps({ configService: null });
-        expect(() => new NotificationManager(deps)).toThrow('ConfigService dependency');
+    it('throws when config dependency is missing', () => {
+        const deps = createDeps({ config: null });
+        expect(() => new NotificationManager(deps)).toThrow('config');
     });
 
     it('throws when displayQueue dependency is missing', () => {
@@ -92,6 +67,6 @@ describe('NotificationManager behavior', () => {
         const manager = new NotificationManager(deps);
         expect(manager).toBeInstanceOf(NotificationManager);
         expect(manager.displayQueue).toBe(deps.displayQueue);
-        expect(manager.configService).toBe(deps.configService);
+        expect(manager.config).toBe(deps.config);
     });
 });

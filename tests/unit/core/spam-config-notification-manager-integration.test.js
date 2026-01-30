@@ -2,6 +2,7 @@
 const { describe, expect, beforeEach, it, afterEach } = require('bun:test');
 const { createMockFn, restoreAllMocks } = require('../../helpers/bun-mock-utils');
 const { noOpLogger } = require('../../helpers/mock-factories');
+const { createConfigFixture } = require('../../helpers/config-fixture');
 
 const { config } = require('../../../src/core/config');
 const NotificationManager = require('../../../src/notifications/NotificationManager');
@@ -34,7 +35,7 @@ describe('Spam Detection Service Integration Tests - Modernized', () => {
     let notificationManager;
     let mockDisplayQueue;
     let mockSpamDetector;
-    let configService;
+    let testConfig;
 
     beforeEach(() => {
         mockDisplayQueue = {
@@ -46,28 +47,18 @@ describe('Spam Detection Service Integration Tests - Modernized', () => {
             handleDonationSpam: createMockFn().mockReturnValue({ shouldShow: true })
         };
 
-        configService = {
-            areNotificationsEnabled: createMockFn().mockReturnValue(true),
-            getPlatformConfig: createMockFn().mockReturnValue(true),
-            isDebugEnabled: createMockFn().mockReturnValue(false),
-            getTimingConfig: createMockFn().mockReturnValue({ greetingDuration: 5000 }),
-            get: createMockFn((section) => {
-                if (section === 'general') {
-                    return {
-                        enabled: true,
-                        giftsEnabled: true,
-                        greetingsEnabled: true,
-                        userSuppressionEnabled: false,
-                        maxNotificationsPerUser: 5,
-                        suppressionWindowMs: 60000,
-                        suppressionDurationMs: 300000,
-                        suppressionCleanupIntervalMs: 300000
-                    };
-                }
-                return {};
-            }),
-            getTTSConfig: createMockFn().mockReturnValue({ enabled: false })
-        };
+        testConfig = createConfigFixture({
+            general: {
+                giftsEnabled: true,
+                greetingsEnabled: true,
+                userSuppressionEnabled: false,
+                maxNotificationsPerUser: 5,
+                suppressionWindowMs: 60000,
+                suppressionDurationMs: 300000,
+                suppressionCleanupIntervalMs: 300000
+            },
+            tts: { enabled: false }
+        });
     });
 
     describe('when spam detection service is provided', () => {
@@ -79,7 +70,7 @@ describe('Spam Detection Service Integration Tests - Modernized', () => {
                 logger: noOpLogger,
                 eventBus: mockEventBus,
                 constants: mockConstants,
-                configService,
+                config: testConfig,
                 donationSpamDetector: mockSpamDetector,
                 textProcessing,
                 obsGoals: { processDonationGoal: createMockFn() },
@@ -158,7 +149,7 @@ describe('Spam Detection Service Integration Tests - Modernized', () => {
                 logger: noOpLogger,
                 eventBus: mockEventBus,
                 constants: mockConstants,
-                configService,
+                config: testConfig,
                 textProcessing: createTextProcessingManager({ logger: noOpLogger }),
                 obsGoals: { processDonationGoal: createMockFn() },
                 vfxCommandService: { getVFXConfig: createMockFn().mockResolvedValue(null) }
@@ -217,7 +208,7 @@ describe('Spam Detection Service Integration Tests - Modernized', () => {
                 logger: noOpLogger,
                 eventBus: mockEventBus,
                 constants: mockConstants,
-                configService,
+                config: testConfig,
                 donationSpamDetector: mockSpamDetector,
                 textProcessing: createTextProcessingManager({ logger: noOpLogger }),
                 obsGoals: { processDonationGoal: createMockFn() },
@@ -272,7 +263,7 @@ describe('Spam Detection Service Integration Tests - Modernized', () => {
                 logger: noOpLogger,
                 eventBus: mockEventBus,
                 constants: mockConstants,
-                configService,
+                config: testConfig,
                 donationSpamDetector: mockSpamDetector,
                 textProcessing: createTextProcessingManager({ logger: noOpLogger }),
                 obsGoals: { processDonationGoal: createMockFn() },
@@ -296,7 +287,7 @@ describe('Spam Detection Service Integration Tests - Modernized', () => {
                 logger: localLogger,
                 eventBus: mockEventBus,
                 constants: mockConstants,
-                configService,
+                config: testConfig,
                 textProcessing: createTextProcessingManager({ logger: noOpLogger }),
                 obsGoals: { processDonationGoal: createMockFn() },
                 vfxCommandService: { getVFXConfig: createMockFn().mockResolvedValue(null) }

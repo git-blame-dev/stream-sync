@@ -1,6 +1,7 @@
 const { describe, expect, it, afterEach } = require('bun:test');
 const { createMockFn, restoreAllMocks } = require('../../helpers/bun-mock-utils');
 const { noOpLogger } = require('../../helpers/mock-factories');
+const { createConfigFixture } = require('../../helpers/config-fixture');
 
 const PlatformEventRouter = require('../../../src/services/PlatformEventRouter');
 
@@ -21,10 +22,7 @@ describe('PlatformEventRouter validation', () => {
             updateViewerCount: createMockFn(),
             ...overrides.runtime
         };
-        const configService = {
-            areNotificationsEnabled: createMockFn(() => true),
-            ...overrides.configService
-        };
+        const config = overrides.config || createConfigFixture();
         const notificationManager = {
             handleNotification: createMockFn(),
             ...overrides.notificationManager
@@ -39,7 +37,7 @@ describe('PlatformEventRouter validation', () => {
                 runtime,
                 eventBus,
                 notificationManager,
-                configService,
+                config,
                 logger: noOpLogger
             }),
             runtime,

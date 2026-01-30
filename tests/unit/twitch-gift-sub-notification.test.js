@@ -5,6 +5,7 @@ const { createMockFn, restoreAllMocks } = require('../helpers/bun-mock-utils');
 const { noOpLogger, createMockDisplayQueue } = require('../helpers/mock-factories');
 const { setupAutomatedCleanup } = require('../helpers/mock-lifecycle');
 const { expectNoTechnicalArtifacts } = require('../helpers/assertion-helpers');
+const { createConfigFixture } = require('../helpers/config-fixture');
 const NotificationManager = require('../../src/notifications/NotificationManager');
 const { createTextProcessingManager } = require('../../src/utils/text-processing');
 
@@ -25,27 +26,18 @@ describe('Twitch gift subscriptions', () => {
 
     const createManager = () => {
         const mockEventBus = { emit: createMockFn(), on: createMockFn(), off: createMockFn() };
-        const mockConfigService = {
-            areNotificationsEnabled: createMockFn().mockReturnValue(true),
-            getPlatformConfig: createMockFn().mockReturnValue(true),
-            get: createMockFn((section) => {
-                if (section === 'general') {
-                    return {
-                        enabled: true,
-                        giftsEnabled: true,
-                        debugEnabled: true,
-                        userSuppressionEnabled: false,
-                        maxNotificationsPerUser: 5,
-                        suppressionWindowMs: 60000,
-                        suppressionDurationMs: 300000,
-                        suppressionCleanupIntervalMs: 300000
-                    };
-                }
-                return {};
-            }),
-            isDebugEnabled: createMockFn().mockReturnValue(false),
-            getTTSConfig: createMockFn().mockReturnValue({ enabled: false })
-        };
+        const config = createConfigFixture({
+            general: {
+                giftsEnabled: true,
+                debugEnabled: true,
+                userSuppressionEnabled: false,
+                maxNotificationsPerUser: 5,
+                suppressionWindowMs: 60000,
+                suppressionDurationMs: 300000,
+                suppressionCleanupIntervalMs: 300000
+            },
+            tts: { enabled: false }
+        });
         const constants = require('../../src/core/constants');
         const textProcessing = createTextProcessingManager({ logger: mockLogger });
         const obsGoals = require('../../src/obs/goals').getDefaultGoalsManager();
@@ -54,7 +46,7 @@ describe('Twitch gift subscriptions', () => {
             displayQueue: mockDisplayQueue,
             logger: mockLogger,
             eventBus: mockEventBus,
-            configService: mockConfigService,
+            config,
             constants,
             textProcessing,
             obsGoals,

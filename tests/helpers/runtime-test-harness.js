@@ -20,61 +20,7 @@ const createEventBusStub = () => {
     };
 };
 
-const createConfigServiceStub = (configSnapshot = {}) => {
-    const snapshot = configSnapshot || {};
-
-    return {
-        get: createMockFn((path) => {
-            if (!path) {
-                if (!snapshot) {
-                    throw new Error('Config snapshot required');
-                }
-                return snapshot;
-            }
-
-            const resolved = path.split('.').reduce((value, key) => {
-                if (value && Object.prototype.hasOwnProperty.call(value, key)) {
-                    return value[key];
-                }
-                return undefined;
-            }, snapshot);
-            if (resolved === undefined) {
-                throw new Error(`Missing config path: ${path}`);
-            }
-            return resolved;
-        }),
-        getPlatformConfig: createMockFn((platform, key) => {
-            const platformConfig = snapshot[platform];
-            if (!platformConfig || platformConfig[key] === undefined) {
-                throw new Error(`Missing platform config: ${platform}.${key}`);
-            }
-            return platformConfig[key];
-        }),
-        areNotificationsEnabled: createMockFn((settingKey, platform) => {
-            const platformConfig = platform ? snapshot[platform] : null;
-            if (platformConfig && platformConfig[settingKey] !== undefined) {
-                return !!platformConfig[settingKey];
-            }
-            if (snapshot.general && snapshot.general[settingKey] !== undefined) {
-                return !!snapshot.general[settingKey];
-            }
-            throw new Error(`Missing notification config: ${settingKey}`);
-        }),
-        getTTSConfig: createMockFn(() => {
-            if (!snapshot.tts) {
-                throw new Error('Missing tts config');
-            }
-            return snapshot.tts;
-        }),
-        isDebugEnabled: createMockFn(() => {
-            if (!snapshot.general || snapshot.general.debugEnabled === undefined) {
-                throw new Error('Missing general.debugEnabled config');
-            }
-            return !!snapshot.general.debugEnabled;
-        }),
-        getCLIOverrides: createMockFn().mockReturnValue({})
-    };
-};
+const { createConfigFixture } = require('./config-fixture');
 
 const createPlatformLifecycleStub = (overrides = {}) => ({
     initializePlatforms: createMockFn().mockResolvedValue({}),
@@ -101,64 +47,12 @@ function createAppRuntimeTestDependencies(options = {}) {
         overrides = {}
     } = options;
 
-    const baseConfigSnapshot = {
-        general: {
-            debugEnabled: false,
-            messagesEnabled: true,
-            greetingsEnabled: true,
-            farewellsEnabled: true,
-            followsEnabled: true,
-            giftsEnabled: true,
-            paypiggiesEnabled: true,
-            raidsEnabled: true,
-            userSuppressionEnabled: false,
-            maxNotificationsPerUser: 5,
-            suppressionWindowMs: 60000,
-            suppressionDurationMs: 300000,
-            suppressionCleanupIntervalMs: 300000,
-            streamDetectionEnabled: false,
-            streamRetryInterval: 15,
-            streamMaxRetries: 3,
-            continuousMonitoringInterval: 60
-        },
-        obs: {
-            notificationTxt: 'obs-notification-text',
-            notificationScene: 'obs-notification-scene',
-            notificationMsgGroup: 'obs-notification-group'
-        },
-        tts: {
-            enabled: false,
-            deduplicationEnabled: true,
-            debugDeduplication: false,
-            onlyForGifts: false,
-            voice: 'default',
-            rate: 1,
-            volume: 1
-        },
-        timing: {
-            greetingDuration: 3000,
-            commandDuration: 3000,
-            chatDuration: 3000,
-            notificationDuration: 3000
-        },
-        monitoring: {}
-    };
-    const mergedConfigSnapshot = {
-        ...baseConfigSnapshot,
-        ...configSnapshot,
-        general: { ...baseConfigSnapshot.general, ...(configSnapshot.general || {}) },
-        obs: { ...baseConfigSnapshot.obs, ...(configSnapshot.obs || {}) },
-        tts: { ...baseConfigSnapshot.tts, ...(configSnapshot.tts || {}) },
-        timing: { ...baseConfigSnapshot.timing, ...(configSnapshot.timing || {}) },
-        monitoring: { ...baseConfigSnapshot.monitoring, ...(configSnapshot.monitoring || {}) }
-    };
-
     const logger = options.logger || noOpLogger;
     const displayQueue = options.displayQueue || createMockDisplayQueue();
     const notificationManager = options.notificationManager ||
         createMockNotificationManager(notificationManagerOverrides);
     const eventBus = options.eventBus || createEventBusStub();
-    const configService = options.configService || createConfigServiceStub(mergedConfigSnapshot);
+    const config = options.config || createConfigFixture(configSnapshot);
     const vfxCommandService = options.vfxCommandService || {
         executeCommand: createMockFn().mockResolvedValue({ success: true }),
         executeCommandForKey: createMockFn().mockResolvedValue({ success: true }),
@@ -192,7 +86,7 @@ function createAppRuntimeTestDependencies(options = {}) {
         displayQueue,
         notificationManager,
         eventBus,
-        configService,
+        config,
         ttsService,
         vfxCommandService,
         userTrackingService,
@@ -216,7 +110,7 @@ function createAppRuntimeTestDependencies(options = {}) {
     dependencies,
     eventBus,
     notificationManager,
-    configService
+    config
   };
 }
 
@@ -229,8 +123,7 @@ module.exports = {
             ...options
         });
 
-        const runtimeConfig = harness.configService.get();
-        const runtime = new AppRuntime(runtimeConfig, harness.dependencies);
+        const runtime = new AppRuntime(harness.config, harness.dependencies);
 
         return {
             runtime,

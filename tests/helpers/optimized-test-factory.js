@@ -1,6 +1,6 @@
-
 const NotificationBuilder = require('../../src/utils/notification-builder');
 const { createMockFn } = require('./bun-mock-utils');
+const { createConfigFixture } = require('./config-fixture');
 
 const BASE_TIMESTAMP_MS = Date.parse('2024-01-01T00:00:00.000Z');
 let sequence = 0;
@@ -58,62 +58,6 @@ class OptimizedTestFactory {
         return payload;
     }
 
-    static createConfigFixture(platformOverrides = {}) {
-        return {
-            general: {
-                obsWebSocketUrl: 'ws://localhost:4455',
-                enableNotifications: true,
-                enableTTS: false,
-                enableVFX: true,
-                debugEnabled: false,
-                messagesEnabled: true,
-                farewellsEnabled: true,
-                followsEnabled: true,
-                giftsEnabled: true,
-                paypiggiesEnabled: true,
-                raidsEnabled: true,
-                greetingsEnabled: true,
-                userSuppressionEnabled: false,
-                maxNotificationsPerUser: 5,
-                suppressionWindowMs: 60000,
-                suppressionDurationMs: 300000,
-                suppressionCleanupIntervalMs: 300000,
-                streamDetectionEnabled: false,
-                streamRetryInterval: 15,
-                streamMaxRetries: 3,
-                continuousMonitoringInterval: 60
-            },
-            obs: {
-                notificationTxt: 'obs-notification-text',
-                notificationScene: 'obs-notification-scene',
-                notificationMsgGroup: 'obs-notification-group'
-            },
-            gifts: {
-                enableGiftDisplay: true,
-                enableGiftTTS: false,
-                minGiftAmount: 1
-            },
-            monitoring: {},
-            spam: {
-                enableSpamDetection: true,
-                maxDuplicateMessages: 3,
-                timeWindowMinutes: 5
-            },
-            twitch: {
-                enabled: false,
-                ...platformOverrides.twitch
-            },
-            youtube: {
-                enabled: false,
-                ...platformOverrides.youtube
-            },
-            tiktok: {
-                enabled: false,
-                ...platformOverrides.tiktok
-            }
-        };
-    }
-
     static createBusinessLogicMocks() {
         return {
             logger: {
@@ -125,7 +69,7 @@ class OptimizedTestFactory {
             notificationBuilder: {
                 build: createMockFn().mockImplementation((payload) => NotificationBuilder.build(payload))
             },
-            config: this.createConfigFixture()
+            config: createConfigFixture()
         };
     }
 
@@ -204,7 +148,7 @@ class OptimizedTestFactory {
             size: createMockFn().mockReturnValue(0)
         };
 
-        harness.configService = overrides.configService || this.createConfigFixture();
+        harness.config = overrides.config || createConfigFixture();
 
         harness.notificationBridge = overrides.notificationBridge || null;
 

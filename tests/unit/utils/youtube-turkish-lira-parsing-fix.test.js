@@ -1,6 +1,7 @@
 
 const { describe, expect, beforeEach, it, afterEach } = require('bun:test');
 const { createMockFn, restoreAllMocks } = require('../../helpers/bun-mock-utils');
+const { createConfigFixture } = require('../../helpers/config-fixture');
 
 const { YouTubeiCurrencyParser } = require('../../../src/utils/youtubei-currency-parser');
 const NotificationManager = require('../../../src/notifications/NotificationManager');
@@ -16,28 +17,17 @@ setupAutomatedCleanup({
     validateAfterCleanup: true
 });
 
-const createMockConfigService = () => ({
-    areNotificationsEnabled: createMockFn().mockReturnValue(true),
-    getPlatformConfig: createMockFn().mockReturnValue(true),
-    get: createMockFn((section) => {
-        if (section === 'general') {
-            return {
-                enabled: true,
-                chatEnabled: true,
-                greetingsEnabled: true,
-                giftsEnabled: true,
-                userSuppressionEnabled: false,
-                maxNotificationsPerUser: 5,
-                suppressionWindowMs: 60000,
-                suppressionDurationMs: 300000,
-                suppressionCleanupIntervalMs: 300000
-            };
-        }
-        return {};
-    }),
-    isDebugEnabled: createMockFn().mockReturnValue(false),
-    getTimingConfig: createMockFn().mockReturnValue({ greetingDuration: 5000 }),
-    getTTSConfig: createMockFn().mockReturnValue({ enabled: false })
+const createTestConfig = () => createConfigFixture({
+    general: {
+        chatEnabled: true,
+        greetingsEnabled: true,
+        giftsEnabled: true,
+        userSuppressionEnabled: false,
+        maxNotificationsPerUser: 5,
+        suppressionWindowMs: 60000,
+        suppressionDurationMs: 300000,
+        suppressionCleanupIntervalMs: 300000
+    }
 });
 
 describe('YouTube Turkish Lira (TRY) Currency Parsing', () => {
@@ -257,7 +247,7 @@ describe('YouTube Turkish Lira (TRY) Currency Parsing', () => {
 
     describe('Notification Manager - Zero Amount Filtering', () => {
         let notificationManager;
-        let mockConfigService;
+        let mockConfig;
         let mockDisplayQueue;
         let mockLogger;
 
@@ -268,7 +258,7 @@ describe('YouTube Turkish Lira (TRY) Currency Parsing', () => {
                 addItem: createMockFn().mockReturnValue(true),
                 getQueueLength: createMockFn().mockReturnValue(0)
             };
-            mockConfigService = createMockConfigService();
+            mockConfig = createTestConfig();
 
             const mockEventBus = { emit: createMockFn(), on: createMockFn(), off: createMockFn() };
             const constants = require('../../../src/core/constants');
@@ -279,7 +269,7 @@ describe('YouTube Turkish Lira (TRY) Currency Parsing', () => {
                 displayQueue: mockDisplayQueue,
                 logger: mockLogger,
                 eventBus: mockEventBus,
-                configService: mockConfigService,
+                config: mockConfig,
                 constants,
                 textProcessing,
                 obsGoals,
@@ -451,7 +441,7 @@ describe('YouTube Turkish Lira (TRY) Currency Parsing', () => {
                 displayQueue: mockDisplayQueue,
                 logger,
                 eventBus: mockEventBus,
-                configService: createMockConfigService(),
+                config: createTestConfig(),
                 constants,
                 textProcessing,
                 obsGoals,

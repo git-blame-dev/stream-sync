@@ -5,6 +5,7 @@ const { initializeTestLogging } = require('../../helpers/test-setup');
 const { noOpLogger } = require('../../helpers/mock-factories');
 const { setupAutomatedCleanup } = require('../../helpers/mock-lifecycle');
 const { expectNoTechnicalArtifacts } = require('../../helpers/assertion-helpers');
+const { createConfigFixture } = require('../../helpers/config-fixture');
 const { createTextProcessingManager } = require('../../../src/utils/text-processing');
 
 initializeTestLogging();
@@ -23,7 +24,7 @@ describe('Spam Detection Service Integration Tests', () => {
     let mockConstants;
     let mockDisplayQueue;
     let mockSpamDetector;
-    let mockConfigService;
+    let mockConfig;
     let mockTextProcessing;
     let mockObsGoals;
     let mockVfxCommandService;
@@ -61,28 +62,7 @@ describe('Spam Detection Service Integration Tests', () => {
             handleDonationSpam: createMockFn().mockReturnValue({ shouldShow: true })
         };
 
-        mockConfigService = {
-            get: createMockFn((section) => {
-                if (section === 'general') {
-                    return {
-                        enabled: true,
-                        chatEnabled: true,
-                        greetingsEnabled: true,
-                        giftsEnabled: true,
-                        userSuppressionEnabled: false,
-                        maxNotificationsPerUser: 5,
-                        suppressionWindowMs: 60000,
-                        suppressionDurationMs: 300000,
-                        suppressionCleanupIntervalMs: 300000
-                    };
-                }
-                return {};
-            }),
-            areNotificationsEnabled: createMockFn(() => true),
-            getPlatformConfig: createMockFn(() => true),
-            getTTSConfig: createMockFn(() => ({ enabled: false })),
-            isDebugEnabled: createMockFn(() => false)
-        };
+        mockConfig = createConfigFixture();
 
         mockTextProcessing = createTextProcessingManager({ logger: mockLogger });
         mockObsGoals = { processDonationGoal: createMockFn() };
@@ -136,7 +116,7 @@ describe('Spam Detection Service Integration Tests', () => {
                 eventBus: mockEventBus,
                 constants: mockConstants,
                 donationSpamDetector: mockSpamDetector,
-                configService: mockConfigService,
+                config: mockConfig,
                 textProcessing: mockTextProcessing,
                 obsGoals: mockObsGoals,
                 vfxCommandService: mockVfxCommandService,
@@ -172,7 +152,7 @@ describe('Spam Detection Service Integration Tests', () => {
                 eventBus: mockEventBus,
                 constants: mockConstants,
                 donationSpamDetector: mockSpamDetector,
-                configService: mockConfigService,
+                config: mockConfig,
                 textProcessing: mockTextProcessing,
                 obsGoals: mockObsGoals,
                 vfxCommandService: mockVfxCommandService,
@@ -192,7 +172,7 @@ describe('Spam Detection Service Integration Tests', () => {
                 eventBus: mockEventBus,
                 constants: mockConstants,
                 donationSpamDetector: mockSpamDetector,
-                configService: mockConfigService,
+                config: mockConfig,
                 textProcessing: mockTextProcessing,
                 obsGoals: mockObsGoals,
                 vfxCommandService: mockVfxCommandService,
@@ -224,7 +204,7 @@ describe('Spam Detection Service Integration Tests', () => {
                 logger: mockLogger,
                 eventBus: mockEventBus,
                 constants: mockConstants,
-                configService: mockConfigService,
+                config: mockConfig,
                 textProcessing: mockTextProcessing,
                 obsGoals: mockObsGoals,
                 vfxCommandService: mockVfxCommandService,
@@ -254,7 +234,7 @@ describe('Spam Detection Service Integration Tests', () => {
                 logger: mockLogger,
                 eventBus: mockEventBus,
                 constants: mockConstants,
-                configService: mockConfigService,
+                config: mockConfig,
                 textProcessing: mockTextProcessing,
                 obsGoals: mockObsGoals,
                 vfxCommandService: mockVfxCommandService,
@@ -274,7 +254,7 @@ describe('Spam Detection Service Integration Tests', () => {
                 eventBus: mockEventBus,
                 constants: mockConstants,
                 donationSpamDetector: mockSpamDetector,
-                configService: mockConfigService,
+                config: mockConfig,
                 textProcessing: mockTextProcessing,
                 obsGoals: mockObsGoals,
                 vfxCommandService: mockVfxCommandService,
@@ -335,7 +315,7 @@ describe('Spam Detection Service Integration Tests', () => {
                 eventBus: mockEventBus,
                 constants: mockConstants,
                 donationSpamDetector: mockSpamDetector,
-                configService: mockConfigService,
+                config: mockConfig,
                 textProcessing: mockTextProcessing,
                 obsGoals: mockObsGoals,
                 vfxCommandService: mockVfxCommandService,
@@ -355,7 +335,7 @@ describe('Spam Detection Service Integration Tests', () => {
                 eventBus: mockEventBus,
                 constants: mockConstants,
                 donationSpamDetector: mockSpamDetector,
-                configService: mockConfigService,
+                config: mockConfig,
                 textProcessing: mockTextProcessing,
                 obsGoals: mockObsGoals,
                 vfxCommandService: mockVfxCommandService,

@@ -1,6 +1,7 @@
 const { describe, it, expect, afterEach } = require('bun:test');
 const { createMockFn, clearAllMocks } = require('../../helpers/bun-mock-utils');
 const { noOpLogger } = require('../../helpers/mock-factories');
+const { createConfigFixture } = require('../../helpers/config-fixture');
 const PlatformEventRouter = require('../../../src/services/PlatformEventRouter');
 
 describe('PlatformEventRouter chat normalization', () => {
@@ -21,9 +22,9 @@ describe('PlatformEventRouter chat normalization', () => {
             ...runtimeOverrides
         };
         const eventBus = { subscribe: createMockFn(() => createMockFn()), emit: createMockFn() };
-        const configService = { areNotificationsEnabled: createMockFn(() => true) };
+        const config = createConfigFixture({ general: { messagesEnabled: true } });
         const notificationManager = { handleNotification: createMockFn() };
-        return { router: new PlatformEventRouter({ runtime, eventBus, notificationManager, configService, logger: noOpLogger }), runtime };
+        return { router: new PlatformEventRouter({ runtime, eventBus, notificationManager, config, logger: noOpLogger }), runtime };
     };
 
     it('flattens nested user/message fields so chat handler receives username', async () => {

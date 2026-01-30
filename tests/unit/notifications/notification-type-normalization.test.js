@@ -1,6 +1,7 @@
 const { describe, expect, beforeEach, it, afterEach } = require('bun:test');
 const { createMockFn, restoreAllMocks } = require('../../helpers/bun-mock-utils');
 const { noOpLogger } = require('../../helpers/mock-factories');
+const { createConfigFixture } = require('../../helpers/config-fixture');
 
 const NotificationManager = require('../../../src/notifications/NotificationManager');
 
@@ -27,24 +28,12 @@ describe('Notification type normalization', () => {
             subscribe: createMockFn(() => () => {})
         };
 
-        const configService = {
-            areNotificationsEnabled: () => true,
-            isDebugEnabled: () => false,
-            getPlatformConfig: () => true,
-            getTTSConfig: () => ({ enabled: false }),
-            get: (section) => {
-                if (section !== 'general') {
-                    return {};
-                }
-                return {
-                    userSuppressionEnabled: false,
-                    maxNotificationsPerUser: 5,
-                    suppressionWindowMs: 60000,
-                    suppressionDurationMs: 300000,
-                    suppressionCleanupIntervalMs: 300000
-                };
+        const config = createConfigFixture({
+            general: {
+                followsEnabled: true,
+                giftsEnabled: true
             }
-        };
+        });
 
         notificationManager = new NotificationManager({
             logger: noOpLogger,
@@ -53,7 +42,7 @@ describe('Notification type normalization', () => {
             constants: require('../../../src/core/constants'),
             textProcessing: { formatChatMessage: createMockFn() },
             obsGoals: { processDonationGoal: createMockFn() },
-            configService,
+            config,
             vfxCommandService: { getVFXConfig: createMockFn().mockResolvedValue(null) },
             ttsService: { speak: createMockFn() }
         });

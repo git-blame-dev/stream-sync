@@ -1,6 +1,7 @@
 const { describe, test, expect, beforeEach, afterEach } = require('bun:test');
 const { createMockFn, restoreAllMocks } = require('../../helpers/bun-mock-utils');
 const { noOpLogger } = require('../../helpers/mock-factories');
+const { createConfigFixture } = require('../../helpers/config-fixture');
 
 const NotificationManager = require('../../../src/notifications/NotificationManager');
 const constants = require('../../../src/core/constants');
@@ -25,25 +26,6 @@ describe('NotificationManager error handling', () => {
             off: createMockFn()
         };
 
-        const mockConfigService = {
-            areNotificationsEnabled: createMockFn().mockReturnValue(true),
-            getNotificationSettings: createMockFn().mockReturnValue({ enabled: true }),
-            getTTSConfig: createMockFn().mockReturnValue({ enabled: false }),
-            get: createMockFn((section) => {
-                if (section !== 'general') {
-                    return {};
-                }
-                return {
-                    userSuppressionEnabled: false,
-                    maxNotificationsPerUser: 5,
-                    suppressionWindowMs: 60000,
-                    suppressionDurationMs: 300000,
-                    suppressionCleanupIntervalMs: 300000
-                };
-            }),
-            isDebugEnabled: createMockFn().mockReturnValue(false)
-        };
-
         manager = new NotificationManager({
             logger: noOpLogger,
             displayQueue: mockDisplayQueue,
@@ -51,7 +33,7 @@ describe('NotificationManager error handling', () => {
             constants,
             textProcessing: { formatChatMessage: createMockFn() },
             obsGoals: { processDonationGoal: createMockFn() },
-            configService: mockConfigService,
+            config: createConfigFixture(),
             vfxCommandService: { getVFXConfig: createMockFn().mockResolvedValue(null) }
         });
     });

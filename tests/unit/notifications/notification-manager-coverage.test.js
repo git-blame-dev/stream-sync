@@ -1,6 +1,7 @@
 const { describe, expect, it, beforeEach, afterEach } = require('bun:test');
 const { createMockFn, restoreAllMocks } = require('../../helpers/bun-mock-utils');
 const { noOpLogger } = require('../../helpers/mock-factories');
+const { createConfigFixture } = require('../../helpers/config-fixture');
 const { safeSetInterval } = require('../../../src/utils/timeout-validator');
 
 const NotificationManager = require('../../../src/notifications/NotificationManager');
@@ -30,33 +31,7 @@ describe('NotificationManager coverage', () => {
             emit: createMockFn(),
             subscribe: createMockFn()
         },
-        configService: {
-            areNotificationsEnabled: createMockFn(() => true),
-            getPlatformConfig: createMockFn(() => true),
-            isDebugEnabled: createMockFn(() => false),
-            getTimingConfig: createMockFn(() => ({
-                greetingDuration: 1000,
-                commandDuration: 1000,
-                chatDuration: 1000,
-                notificationDuration: 1000
-            })),
-            getTTSConfig: createMockFn(() => ({
-                enabled: true,
-                deduplicationEnabled: true,
-                debugDeduplication: false,
-                onlyForGifts: false,
-                voice: 'default',
-                rate: 1,
-                volume: 1
-            })),
-            get: createMockFn(() => ({
-                userSuppressionEnabled: false,
-                maxNotificationsPerUser: 5,
-                suppressionWindowMs: 60000,
-                suppressionDurationMs: 300000,
-                suppressionCleanupIntervalMs: 300000
-            }))
-        },
+        config: createConfigFixture({ general: { ttsEnabled: true }, tts: { enabled: true } }),
         constants: {
             PRIORITY_LEVELS: {
                 DEFAULT: 0, FOLLOW: 1, GIFT: 2, ENVELOPE: 3, MEMBER: 4,
@@ -196,10 +171,7 @@ describe('NotificationManager coverage', () => {
                     emit: (event, data) => emitCalls.push({ event, data }),
                     subscribe: createMockFn()
                 },
-                configService: {
-                    ...createDeps().configService,
-                    getTTSConfig: createMockFn(() => ({ enabled: false }))
-                }
+                config: createConfigFixture({ tts: { enabled: false } })
             });
             const manager = new NotificationManager(deps);
 
@@ -297,8 +269,9 @@ describe('NotificationManager coverage', () => {
         });
 
         it('skips disabled notification types without throwing', async () => {
-            const deps = createDeps();
-            deps.configService.areNotificationsEnabled = createMockFn(() => false);
+            const deps = createDeps({
+                config: createConfigFixture({ general: { giftsEnabled: false } })
+            });
             const manager = new NotificationManager(deps);
 
             await expect(manager.processNotification({
