@@ -1,7 +1,6 @@
-
 class ConnectionState {
     constructor({ isConnected, platform, channel, username }) {
-        this.isConnected = Boolean(isConnected);
+        this.isConnected = !!isConnected;
         this.platform = platform;
         this.channel = channel;
         this.username = username;
@@ -9,7 +8,7 @@ class ConnectionState {
     }
 
     isApiReady() {
-        return Boolean(this.isConnected && this.channel && this.username);
+        return !!(this.isConnected && this.channel && this.username);
     }
 
     getDebugInfo() {

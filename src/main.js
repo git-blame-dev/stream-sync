@@ -1362,7 +1362,7 @@ async function main(overrides = {}) {
             await ensureSecrets({
                 config,
                 logger,
-                interactive: Boolean(process.stdin && process.stdin.isTTY),
+                interactive: !!(process.stdin && process.stdin.isTTY),
                 envFilePath: config.general.envFilePath,
                 envFileReadEnabled: config.general.envFileReadEnabled,
                 envFileWriteEnabled: config.general.envFileWriteEnabled

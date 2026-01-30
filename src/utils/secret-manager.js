@@ -110,7 +110,7 @@ const isInteractiveTTY = (interactiveFlag) => {
     }
     const isTest = (process.env.NODE_ENV || '').toLowerCase() === 'test';
     const isCi = String(process.env.CI || '').toLowerCase() === 'true';
-    return Boolean(process.stdin && process.stdin.isTTY && !isTest && !isCi);
+    return !!(process.stdin && process.stdin.isTTY && !isTest && !isCi);
 };
 
 const defaultPromptFor = async (secretId, promptText) => {
