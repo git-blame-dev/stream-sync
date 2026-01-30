@@ -80,9 +80,9 @@ function normalizeYouTubeMessage(chatItem, platformName = 'youtube', timestampSe
             isBroadcaster,
             metadata: {
                 uniqueId: messageData.id || null,
-                isSuperChat: Boolean(messageData.superchat),
-                isSuperSticker: Boolean(messageData.supersticker),
-                isMembership: Boolean(messageData.isMembership),
+                isSuperChat: !!messageData.superchat,
+                isSuperSticker: !!messageData.supersticker,
+                isMembership: !!messageData.isMembership,
                 authorPhoto: author?.thumbnails?.[0]?.url || null
             },
             rawData: { chatItem }
@@ -139,9 +139,9 @@ function normalizeTikTokMessage(data, platformName = 'tiktok', timestampService 
             username,
             message,
             timestamp,
-            isMod: Boolean(data.isModerator),
-            isSubscriber: Boolean(data.isSubscriber),
-            isBroadcaster: Boolean(data.isOwner),
+            isMod: !!data.isModerator,
+            isSubscriber: !!data.isSubscriber,
+            isBroadcaster: !!data.isOwner,
             metadata: {
                 profilePicture,
                 followRole: userData.followRole ?? null,

@@ -186,7 +186,7 @@ class YouTubeLiveStreamService {
             
             return {
                 streams: this._mapLiveVideos(liveStreams?.videos || [], logger, 'channel_api'),
-                hasContent: Boolean(liveStreams?.videos?.length)
+                hasContent: !!liveStreams?.videos?.length
             };
         } catch (error) {
             this._log(logger, 'debug', `[YouTube] channel.getLiveStreams failed: ${error.message}`);

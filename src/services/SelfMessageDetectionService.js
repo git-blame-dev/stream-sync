@@ -21,10 +21,10 @@ class SelfMessageDetectionService {
 
             const platformConfig = this.config[platform];
             if (platformConfig && platformConfig.ignoreSelfMessages !== undefined) {
-                return Boolean(platformConfig.ignoreSelfMessages);
+                return !!platformConfig.ignoreSelfMessages;
             }
 
-            return Boolean(this.config.general?.ignoreSelfMessages);
+            return !!this.config.general?.ignoreSelfMessages;
         } catch (error) {
             this.logger.warn(`Error checking filtering config for ${platform}: ${error.message}`, 'self-filter');
             // Safe default: don't filter self messages (for testing)
@@ -75,7 +75,7 @@ class SelfMessageDetectionService {
     _isTwitchSelfMessage(messageData, platformConfig) {
         // Twitch provides a direct 'self' flag
         if (messageData.self !== undefined) {
-            return Boolean(messageData.self);
+            return !!messageData.self;
         }
 
         // Fallback: compare usernames if available

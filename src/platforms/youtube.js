@@ -933,13 +933,13 @@ class YouTubePlatform extends EventEmitter {
         
         const liveStatus = basicInfo.live_status;
         const liveSignals = {
-            isLive: Boolean(basicInfo.is_live),
-            isLiveContent: Boolean(basicInfo.is_live_content),
-            isLiveDvr: Boolean(basicInfo.is_live_dvr_enabled),
-            isLowLatency: Boolean(basicInfo.is_low_latency_live_stream),
+            isLive: !!basicInfo.is_live,
+            isLiveContent: !!basicInfo.is_live_content,
+            isLiveDvr: !!basicInfo.is_live_dvr_enabled,
+            isLowLatency: !!basicInfo.is_low_latency_live_stream,
             liveStatusFlag: typeof liveStatus === 'string' && liveStatus.toLowerCase().startsWith('live'),
-            hasHlsManifest: Boolean(streamingData.hls_manifest_url),
-            hasLiveStreamability: Boolean(playabilityStatus.liveStreamability)
+            hasHlsManifest: !!streamingData.hls_manifest_url,
+            hasLiveStreamability: !!playabilityStatus.liveStreamability
         };
         
         const badgeDetectedLive = typeof YouTubeLiveStreamService?.isVideoLive === 'function'
@@ -947,7 +947,7 @@ class YouTubePlatform extends EventEmitter {
             : false;
         
         const isLive = Object.values(liveSignals).some(Boolean) || badgeDetectedLive;
-        const isUpcoming = Boolean(basicInfo.is_upcoming);
+        const isUpcoming = !!basicInfo.is_upcoming;
         
         this.logger.debug('YouTube live validation snapshot', 'youtube', {
             videoId,
@@ -1138,7 +1138,7 @@ class YouTubePlatform extends EventEmitter {
 
     getHealthStatus() {
         const activeConnections = this.connectionManager ? this.connectionManager.getConnectionCount() : 0;
-        const monitoringActive = Boolean(this.monitoringInterval);
+        const monitoringActive = !!this.monitoringInterval;
         const overall = activeConnections > 0 ? 'healthy' : (monitoringActive ? 'idle' : 'degraded');
 
         return {

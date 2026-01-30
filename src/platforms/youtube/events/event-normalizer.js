@@ -30,8 +30,8 @@ function normalizeYouTubeEvent(chatItem) {
             normalizedChatItem: null,
             debugMetadata: {
                 reason: 'unrecognized_structure',
-                hasItem: Boolean(chatItem.item),
-                hasType: Boolean(chatItem.type),
+                hasItem: !!chatItem.item,
+                hasType: !!chatItem.type,
                 keys: Object.keys(chatItem)
             }
         };

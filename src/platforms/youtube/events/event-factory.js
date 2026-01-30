@@ -72,9 +72,9 @@ function createYouTubeEventFactory(options = {}) {
                     text: data.message
                 },
                 timestamp,
-                isMod: Boolean(data.isMod),
-                isSubscriber: Boolean(data.isSubscriber),
-                isBroadcaster: Boolean(data.isBroadcaster),
+                isMod: !!data.isMod,
+                isSubscriber: !!data.isSubscriber,
+                isBroadcaster: !!data.isBroadcaster,
                 metadata: buildEventMetadata({
                     videoId: data.videoId,
                     isMod: data.isMod || false,

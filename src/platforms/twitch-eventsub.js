@@ -192,7 +192,7 @@ class TwitchEventSub extends EventEmitter {
             throw new Error('TwitchAuth is required but not provided');
         } else {
             details.present = true;
-            details.ready = Boolean(this.twitchAuth.isReady?.());
+            details.ready = !!this.twitchAuth.isReady?.();
             
             if (!details.ready) {
                 throw new Error('TwitchAuth is not ready');
@@ -273,7 +273,7 @@ class TwitchEventSub extends EventEmitter {
     }
 
     _isCentralizedAuthReady() {
-        return Boolean(this.twitchAuth?.isReady?.());
+        return !!this.twitchAuth?.isReady?.();
     }
 
     _getAvailableClientId() {

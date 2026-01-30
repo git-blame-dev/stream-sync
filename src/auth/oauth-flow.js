@@ -280,7 +280,7 @@ function openBrowser(authUrl, logger, { skipBrowserOpen = false } = {}) {
     }
 
     const platform = process.platform;
-    const isWsl = Boolean(
+    const isWsl = !!(
         process.env.WSL_DISTRO_NAME
         || process.env.WSLENV
         || (fs.existsSync('/proc/version')

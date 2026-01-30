@@ -105,7 +105,7 @@ function createTwitchEventSubSubscriptionManager(options = {}) {
         }
     };
 
-    const shouldRetrySubscription = (errorDetails) => Boolean(errorDetails?.isRetryable) && !errorDetails?.isCritical;
+    const shouldRetrySubscription = (errorDetails) => !!errorDetails?.isRetryable && !errorDetails?.isCritical;
 
     const retrySubscription = async ({ subscription, payload, retriesRemaining }) => {
         if (retriesRemaining <= 0) {
