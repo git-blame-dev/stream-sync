@@ -148,15 +148,14 @@ class ConnectionStateManager {
     cleanup() {
         if (this.connection) {
             try {
-                // Attempt to clean up connection resources
                 if (typeof this.connection.removeAllListeners === 'function') {
                     this.connection.removeAllListeners();
                 }
                 if (typeof this.connection.disconnect === 'function') {
-                    // Don't await - this is cleanup
-                    this.connection.disconnect().catch(() => {
-                        // Ignore cleanup errors
-                    });
+                    const result = this.connection.disconnect();
+                    if (result && typeof result.catch === 'function') {
+                        result.catch(() => {});
+                    }
                 }
             } catch (error) {
                 this.logger?.debug(`Error during connection cleanup for ${this.platform}: ${error.message}`, this.platform);
