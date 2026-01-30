@@ -2,7 +2,6 @@ const { describe, it, expect, beforeEach, afterEach } = require('bun:test');
 const { createMockFn, restoreAllMocks } = require('../../helpers/bun-mock-utils');
 
 const fs = require('fs');
-const { configManager: globalConfigManager } = require('../../../src/core/config');
 const { ensureSecrets } = require('../../../src/utils/secret-manager');
 
 let originalReadFileSync;
@@ -10,96 +9,6 @@ let originalWriteFileSync;
 let originalExistsSync;
 let originalChmodSync;
 let originalStatSync;
-
-const runtimeConfig = `
-[general]
-chatMsgGroup = statusbar chat grp
-viewerCountPollingInterval = 30
-maxMessageLength = 500
-
-[obs]
-chatPlatformLogoTwitch = twitch-img
-chatPlatformLogoYouTube = youtube-img
-chatPlatformLogoTikTok = tiktok-img
-notificationPlatformLogoTwitch = twitch-img
-notificationPlatformLogoYouTube = youtube-img
-notificationPlatformLogoTikTok = tiktok-img
-notificationMsgGroup = statusbar notification grp
-connectionTimeoutMs = 5000
-
-[timing]
-fadeDuration = 750
-transitionDelay = 200
-chatMessageDuration = 4500
-notificationClearDelay = 200
-
-[youtube]
-innertubeInstanceTtlMs = 300000
-innertubeMinTtlMs = 60000
-userAgents = agent-one
-
-[handcam]
-glowEnabled = true
-sourceName = handcam
-sceneName = handcam scene
-glowFilterName = Glow
-maxSize = 50
-rampUpDuration = 0.5
-holdDuration = 8.0
-rampDownDuration = 0.5
-totalSteps = 30
-incrementPercent = 3.33
-easingEnabled = true
-animationInterval = 16
-
-[cooldowns]
-defaultCooldown = 60
-heavyCommandCooldown = 300
-heavyCommandThreshold = 4
-heavyCommandWindow = 360
-maxEntries = 1000
-
-[twitch]
-cheermoteDefaultGiftCount = 1
-cheermoteGenericCheerName = Cheer
-cheermoteGenericBitsName = Bits
-cheermoteUnknownUserIdPrefix = cheer_
-cheermoteDefaultType = cheer
-`.trim();
-
-const baseConfig = `
-[general]
-messagesEnabled = true
-greetingsEnabled = true
-followsEnabled = true
-giftsEnabled = true
-raidsEnabled = true
-paypiggiesEnabled = true
-streamDetectionEnabled = false
-
-[obs]
-enabled = true
-notificationTxt = notification txt
-
-[commands]
-enabled = true
-
-[tiktok]
-enabled = true
-username = hero_stream
-
-[twitch]
-enabled = true
-username = hero_twitch
-channel = hero_twitch
-clientId = test_twitch_client_id
-
-[streamelements]
-enabled = true
-youtubeChannelId = yt_channel
-twitchChannelId = hero_twitch
-${runtimeConfig}
-`.trim();
 
 const createCapturingLogger = () => {
     const entries = [];
@@ -114,21 +23,16 @@ const createCapturingLogger = () => {
 };
 
 describe('secret-manager', () => {
-    let configManager;
+    let testConfig;
     let logger;
-    let ConfigLoader;
     const originalEnv = {};
-    const configPath = '/test/config.ini';
     const envFilePath = '/test/.env';
 
     let fileStore;
     let filePermissions;
 
     const setupFsMocks = () => {
-        fileStore = {
-            [configPath]: baseConfig,
-            './config.ini': baseConfig
-        };
+        fileStore = {};
         filePermissions = {};
 
         fs.existsSync = createMockFn((path) => path in fileStore);
@@ -164,12 +68,13 @@ describe('secret-manager', () => {
 
         setupFsMocks();
 
-        globalConfigManager.isLoaded = false;
-        globalConfigManager.config = null;
-
-        ConfigLoader = globalConfigManager.constructor;
-        configManager = new ConfigLoader(configPath);
-        configManager.load();
+        testConfig = {
+            tiktok: { enabled: true, username: 'test-tiktok-user' },
+            twitch: { enabled: true, username: 'test-twitch-user', channel: 'test-twitch-channel', clientId: 'test-client-id' },
+            obs: { enabled: true },
+            streamelements: { enabled: true, youtubeChannelId: 'test-yt-channel', twitchChannelId: 'test-twitch-channel' },
+            youtube: { enabled: false }
+        };
         logger = createCapturingLogger();
 
         ['TIKTOK_API_KEY', 'TWITCH_CLIENT_SECRET', 'OBS_PASSWORD', 'STREAMELEMENTS_JWT_TOKEN', 'YOUTUBE_API_KEY'].forEach((key) => {
@@ -193,8 +98,6 @@ describe('secret-manager', () => {
         fs.chmodSync = originalChmodSync;
         fs.statSync = originalStatSync;
         restoreAllMocks();
-        globalConfigManager.isLoaded = false;
-        globalConfigManager.config = null;
     });
 
     it('applies environment secrets without prompting and leaves existing env file untouched', async () => {
@@ -205,10 +108,10 @@ describe('secret-manager', () => {
 
         const result = await ensureSecrets({
             config: {
-                tiktok: configManager.config.tiktok,
-                twitch: configManager.config.twitch,
-                obs: configManager.config.obs,
-                streamelements: configManager.config.streamelements
+                tiktok: testConfig.tiktok,
+                twitch: testConfig.twitch,
+                obs: testConfig.obs,
+                streamelements: testConfig.streamelements
             },
             logger,
             interactive: false,
@@ -239,10 +142,10 @@ describe('secret-manager', () => {
 
         const result = await ensureSecrets({
             config: {
-                tiktok: configManager.config.tiktok,
-                twitch: configManager.config.twitch,
-                obs: configManager.config.obs,
-                streamelements: configManager.config.streamelements
+                tiktok: testConfig.tiktok,
+                twitch: testConfig.twitch,
+                obs: testConfig.obs,
+                streamelements: testConfig.streamelements
             },
             logger,
             interactive: true,
@@ -277,10 +180,10 @@ describe('secret-manager', () => {
 
         await ensureSecrets({
             config: {
-                tiktok: configManager.config.tiktok,
-                twitch: configManager.config.twitch,
-                obs: configManager.config.obs,
-                streamelements: configManager.config.streamelements
+                tiktok: testConfig.tiktok,
+                twitch: testConfig.twitch,
+                obs: testConfig.obs,
+                streamelements: testConfig.streamelements
             },
             logger,
             interactive: true,
@@ -305,7 +208,7 @@ describe('secret-manager', () => {
         process.env.STREAMELEMENTS_JWT_TOKEN = 'env_jwt_token';
 
         const youtubeSection = {
-            ...configManager.config.youtube,
+            ...testConfig.youtube,
             enabled: true,
             enableAPI: false,
             streamDetectionMethod: 'api',
@@ -314,10 +217,10 @@ describe('secret-manager', () => {
 
         await expect(ensureSecrets({
             config: {
-                tiktok: configManager.config.tiktok,
-                twitch: configManager.config.twitch,
-                obs: configManager.config.obs,
-                streamelements: configManager.config.streamelements,
+                tiktok: testConfig.tiktok,
+                twitch: testConfig.twitch,
+                obs: testConfig.obs,
+                streamelements: testConfig.streamelements,
                 youtube: youtubeSection
             },
             logger,
@@ -346,10 +249,10 @@ describe('secret-manager', () => {
 
         await ensureSecrets({
             config: {
-                tiktok: configManager.config.tiktok,
-                twitch: configManager.config.twitch,
-                obs: configManager.config.obs,
-                streamelements: configManager.config.streamelements
+                tiktok: testConfig.tiktok,
+                twitch: testConfig.twitch,
+                obs: testConfig.obs,
+                streamelements: testConfig.streamelements
             },
             logger,
             interactive: true,
@@ -372,10 +275,10 @@ describe('secret-manager', () => {
 
         await expect(ensureSecrets({
             config: {
-                tiktok: configManager.config.tiktok,
-                twitch: configManager.config.twitch,
-                obs: configManager.config.obs,
-                streamelements: configManager.config.streamelements
+                tiktok: testConfig.tiktok,
+                twitch: testConfig.twitch,
+                obs: testConfig.obs,
+                streamelements: testConfig.streamelements
             },
             logger,
             interactive: false,

@@ -131,10 +131,11 @@ describe('validation utilities', () => {
     });
 
     describe('validateConfigStructure', () => {
-        it('throws when required sections missing and returns true when present', () => {
+        it('throws when general section missing and returns true when present', () => {
             expect(() => validateConfigStructure(null)).toThrow();
-            expect(() => validateConfigStructure({ general: {}, obs: {}, commands: {} })).not.toThrow();
-            expect(validateConfigStructure({ general: {}, obs: {}, commands: {} })).toBe(true);
+            expect(() => validateConfigStructure({ obs: {} })).toThrow('Missing required configuration section: general');
+            expect(() => validateConfigStructure({ general: {} })).not.toThrow();
+            expect(validateConfigStructure({ general: {} })).toBe(true);
         });
     });
 

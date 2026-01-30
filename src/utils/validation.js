@@ -364,12 +364,8 @@ function validateConfigStructure(config) {
         throw new Error('Configuration must be an object');
     }
     
-    const requiredSections = ['general', 'obs', 'commands'];
-    // Check required sections
-    for (const section of requiredSections) {
-        if (!config[section]) {
-            throw new Error(`Missing required configuration section: ${section}`);
-        }
+    if (!config.general) {
+        throw new Error('Missing required configuration section: general');
     }
     
     return true;

@@ -5,204 +5,157 @@ const { handleUserFacingError } = require('../utils/user-friendly-errors');
 const { DEFAULTS } = require('./config-defaults');
 const { ConfigValidator } = require('../utils/config-validator');
 
-class ConfigLoader {
-    constructor(defaultConfigPath = './config.ini') {
-        this.defaultConfigPath = defaultConfigPath;
-        this.configPath = defaultConfigPath;
-        this.config = null;
-        this.isLoaded = false;
+let loadedConfig = null;
+let configPath = './config.ini';
+
+function getTestDefaultConfig() {
+    return ConfigValidator.normalize({
+        general: {
+            debugEnabled: 'false',
+            cmdCoolDown: '60',
+            globalCmdCoolDown: '60',
+            viewerCountPollingInterval: '60',
+            chatMsgGroup: 'test-chat-grp',
+            maxMessageLength: '500'
+        },
+        obs: {
+            enabled: 'false',
+            address: 'ws://localhost:4455',
+            connectionTimeoutMs: '5000',
+            notificationMsgGroup: 'test-notification-grp',
+            chatPlatformLogoTwitch: 'test-twitch-img',
+            chatPlatformLogoYouTube: 'test-youtube-img',
+            chatPlatformLogoTikTok: 'test-tiktok-img',
+            notificationPlatformLogoTwitch: 'test-twitch-img',
+            notificationPlatformLogoYouTube: 'test-youtube-img',
+            notificationPlatformLogoTikTok: 'test-tiktok-img'
+        },
+        timing: {
+            fadeDuration: '750',
+            transitionDelay: '200',
+            chatMessageDuration: '4000',
+            notificationClearDelay: '500'
+        },
+        handcam: {
+            glowEnabled: 'false',
+            sourceName: 'test-handcam',
+            sceneName: 'test-handcam-scene',
+            glowFilterName: 'Glow',
+            maxSize: '50',
+            rampUpDuration: '0.5',
+            holdDuration: '8.0',
+            rampDownDuration: '0.5',
+            totalSteps: '30',
+            incrementPercent: '3.33',
+            easingEnabled: 'true',
+            animationInterval: '16'
+        },
+        cooldowns: {
+            defaultCooldown: '60',
+            heavyCommandCooldown: '300',
+            heavyCommandThreshold: '4',
+            heavyCommandWindow: '360',
+            maxEntries: '1000'
+        },
+        commands: { enabled: 'false' },
+        tiktok: { enabled: 'false' },
+        twitch: { enabled: 'false' },
+        youtube: { enabled: 'false' },
+        http: {}
+    });
+}
+
+function loadConfig() {
+    if (loadedConfig) {
+        return loadedConfig;
     }
 
-    load() {
-        try {
-            if (this.isLoaded) {
-                return;
-            }
+    const overridePath = process.env.CHAT_BOT_CONFIG_PATH;
+    if (overridePath && overridePath.trim()) {
+        configPath = overridePath.trim();
+    }
 
-            const overridePath = process.env.CHAT_BOT_CONFIG_PATH;
-            if (overridePath && overridePath.trim()) {
-                this.configPath = overridePath.trim();
+    try {
+        if (!fs.existsSync(configPath)) {
+            if (process.env.NODE_ENV === 'test') {
+                loadedConfig = getTestDefaultConfig();
+                return loadedConfig;
             }
+            throw new Error(`Configuration file not found: ${configPath}`);
+        }
 
-            if (!fs.existsSync(this.configPath)) {
-                if (process.env.NODE_ENV === 'test') {
-                    this.config = this._getTestDefaultConfig();
-                    this.isLoaded = true;
-                    return;
-                }
-                throw new Error(`Configuration file not found: ${this.configPath}`);
-            }
+        const configContent = fs.readFileSync(configPath, 'utf-8');
+        const rawConfig = ini.parse(configContent);
 
-            const configContent = fs.readFileSync(this.configPath, 'utf-8');
-            const rawConfig = ini.parse(configContent);
-            
-            const requiredSections = ['general', 'obs', 'commands'];
-            const missingSections = requiredSections.filter(section => !rawConfig[section]);
-            if (missingSections.length > 0) {
-                throw new Error(`Missing required configuration sections: ${missingSections.join(', ')}`);
-            }
-            
-            const normalized = ConfigValidator.normalize(rawConfig);
-            const validation = ConfigValidator.validate(normalized);
-            
-            if (!validation.isValid) {
-                const error = new Error(`Configuration validation failed: ${validation.errors.join(', ')}`);
-                handleUserFacingError(error, {
-                    category: 'configuration',
-                    operation: 'validation'
-                }, {
-                    showInConsole: true,
-                    includeActions: true,
-                    logTechnical: false
-                });
-                throw error;
-            }
-            
-            if (validation.warnings.length > 0 && process.env.NODE_ENV !== 'test') {
-                validation.warnings.forEach(warning => {
-                    process.stdout.write(`[WARN] [Config] ${warning}\n`);
-                });
-            }
-            
-            this.config = normalized;
-            this.isLoaded = true;
+        if (!rawConfig.general) {
+            throw new Error('Missing required configuration section: general');
+        }
 
-            if (process.env.NODE_ENV !== 'test') {
-                const debugEnabled = normalized.general.debugEnabled;
-                if (debugEnabled) {
-                    process.stdout.write(`[INFO] [Config] Successfully loaded configuration from ${this.configPath}\n`);
-                }
-            }
-        } catch (error) {
-            if (error.code === 'ENOENT') {
-                const configError = new Error(`Configuration file not found: ${this.configPath}`);
-                handleUserFacingError(configError, {
-                    category: 'configuration',
-                    operation: 'startup'
-                }, {
-                    showInConsole: true,
-                    includeActions: true,
-                    logTechnical: false
-                });
-            } else if (!error.message.includes('Configuration validation failed')) {
-                handleUserFacingError(error, {
-                    category: 'configuration',
-                    operation: 'loading'
-                }, {
-                    showInConsole: true,
-                    includeActions: true,
-                    logTechnical: false
-                });
-            }
+        const normalized = ConfigValidator.normalize(rawConfig);
+        const validation = ConfigValidator.validate(normalized);
+
+        if (!validation.isValid) {
+            const error = new Error(`Configuration validation failed: ${validation.errors.join(', ')}`);
+            handleUserFacingError(error, {
+                category: 'configuration',
+                operation: 'validation'
+            }, {
+                showInConsole: true,
+                includeActions: true,
+                logTechnical: false
+            });
             throw error;
         }
-    }
 
-    _getTestDefaultConfig() {
-        return ConfigValidator.normalize({
-            general: {
-                debugEnabled: 'false',
-                cmdCoolDown: '60',
-                globalCmdCoolDown: '60',
-                viewerCountPollingInterval: '60',
-                chatMsgGroup: 'test-chat-grp',
-                maxMessageLength: '500'
-            },
-            obs: {
-                enabled: 'false',
-                address: 'ws://localhost:4455',
-                connectionTimeoutMs: '5000',
-                notificationMsgGroup: 'test-notification-grp',
-                chatPlatformLogoTwitch: 'test-twitch-img',
-                chatPlatformLogoYouTube: 'test-youtube-img',
-                chatPlatformLogoTikTok: 'test-tiktok-img',
-                notificationPlatformLogoTwitch: 'test-twitch-img',
-                notificationPlatformLogoYouTube: 'test-youtube-img',
-                notificationPlatformLogoTikTok: 'test-tiktok-img'
-            },
-            timing: {
-                fadeDuration: '750',
-                transitionDelay: '200',
-                chatMessageDuration: '4000',
-                notificationClearDelay: '500'
-            },
-            handcam: {
-                glowEnabled: 'false',
-                sourceName: 'test-handcam',
-                sceneName: 'test-handcam-scene',
-                glowFilterName: 'Glow',
-                maxSize: '50',
-                rampUpDuration: '0.5',
-                holdDuration: '8.0',
-                rampDownDuration: '0.5',
-                totalSteps: '30',
-                incrementPercent: '3.33',
-                easingEnabled: 'true',
-                animationInterval: '16'
-            },
-            cooldowns: {
-                defaultCooldown: '60',
-                heavyCommandCooldown: '300',
-                heavyCommandThreshold: '4',
-                heavyCommandWindow: '360',
-                maxEntries: '1000'
-            },
-            commands: { enabled: 'false' },
-            tiktok: { enabled: 'false' },
-            twitch: { enabled: 'false' },
-            youtube: { enabled: 'false' },
-            http: {}
-        });
-    }
-
-    get(section, key, defaultValue = undefined) {
-        if (!this.isLoaded) {
-            this.load();
+        if (validation.warnings.length > 0 && process.env.NODE_ENV !== 'test') {
+            validation.warnings.forEach(warning => {
+                process.stdout.write(`[WARN] [Config] ${warning}\n`);
+            });
         }
 
-        if (!this.config[section]) {
-            return defaultValue;
+        loadedConfig = normalized;
+
+        if (process.env.NODE_ENV !== 'test') {
+            const debugEnabled = normalized.general.debugEnabled;
+            if (debugEnabled) {
+                process.stdout.write(`[INFO] [Config] Successfully loaded configuration from ${configPath}\n`);
+            }
         }
 
-        return this.config[section][key] !== undefined ? this.config[section][key] : defaultValue;
-    }
-
-    getBoolean(section, key, defaultValue = false) {
-        const value = this.get(section, key);
-        return ConfigValidator.parseBoolean(value, defaultValue);
-    }
-
-    getNumber(section, key, defaultValue = 0) {
-        const value = this.get(section, key);
-        return ConfigValidator.parseNumber(value, { defaultValue });
-    }
-
-    getString(section, key, defaultValue = '') {
-        const value = this.get(section, key);
-        return ConfigValidator.parseString(value, defaultValue);
-    }
-
-    getSection(section) {
-        if (!this.isLoaded) {
-            this.load();
+        return loadedConfig;
+    } catch (error) {
+        if (error.code === 'ENOENT') {
+            const configError = new Error(`Configuration file not found: ${configPath}`);
+            handleUserFacingError(configError, {
+                category: 'configuration',
+                operation: 'startup'
+            }, {
+                showInConsole: true,
+                includeActions: true,
+                logTechnical: false
+            });
+        } else if (!error.message.includes('Configuration validation failed')) {
+            handleUserFacingError(error, {
+                category: 'configuration',
+                operation: 'loading'
+            }, {
+                showInConsole: true,
+                includeActions: true,
+                logTechnical: false
+            });
         }
-        return this.config[section] || {};
-    }
-
-    getRaw() {
-        if (!this.isLoaded) {
-            this.load();
-        }
-        return this.config;
-    }
-
-    reload() {
-        this.isLoaded = false;
-        this.load();
+        throw error;
     }
 }
 
-const configManager = new ConfigLoader();
+function _resetConfigForTesting() {
+    loadedConfig = null;
+    configPath = './config.ini';
+}
+
+function _getConfigPath() {
+    return configPath;
+}
 
 function buildGeneralConfig(normalized) {
     const g = normalized.general;
@@ -385,13 +338,12 @@ function buildConfig(normalized) {
         greetings: { command: normalized.greetings.command },
         farewell: { ...normalized.farewell },
         streamelements: buildStreamElementsConfig(normalized),
-        commands: { ...normalized.commands },
-        get raw() { return configManager.getRaw(); }
+        commands: { ...normalized.commands }
     };
 }
 
-configManager.load();
-const config = buildConfig(configManager.config);
+const normalizedConfig = loadConfig();
+const config = buildConfig(normalizedConfig);
 
 const DEFAULT_LOGGING_CONFIG = {
     console: { enabled: true, level: 'console' }, // Only user-facing messages (chat, notifications, errors)
@@ -466,7 +418,8 @@ function validateLoggingConfig(userConfig = {}) {
 
 module.exports = {
     config,
-    configManager,
+    loadConfig,
     validateLoggingConfig,
-    DEFAULT_LOGGING_CONFIG
+    _resetConfigForTesting,
+    _getConfigPath
 }; 

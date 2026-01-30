@@ -24,12 +24,12 @@ describe('ConfigValidator normalize + validate integration', () => {
         expect(validation.errors).toEqual([]);
     });
 
-    it('missing required section fails validation (pre-normalize config)', () => {
-        const manualConfig = { general: {}, obs: {} };
+    it('missing general section fails validation', () => {
+        const manualConfig = { obs: {}, commands: {} };
         const validation = ConfigValidator.validate(manualConfig);
 
         expect(validation.isValid).toBe(false);
-        expect(validation.errors).toContain('Missing required configuration section: commands');
+        expect(validation.errors).toContain('Missing required configuration section: general');
     });
 
     it('enabled platform without username fails validation', () => {

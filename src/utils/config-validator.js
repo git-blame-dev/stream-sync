@@ -563,12 +563,9 @@ class ConfigValidator {
     }
 
     static _validateRequiredSections(config, errors) {
-        const requiredSections = ['general', 'obs', 'commands'];
-        requiredSections.forEach(section => {
-            if (!config[section] || typeof config[section] !== 'object') {
-                errors.push(`Missing required configuration section: ${section}`);
-            }
-        });
+        if (!config.general || typeof config.general !== 'object') {
+            errors.push('Missing required configuration section: general');
+        }
     }
 
     static _validatePlatformUsernames(config, errors) {

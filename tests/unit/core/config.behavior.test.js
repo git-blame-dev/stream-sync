@@ -75,9 +75,8 @@ enabled = true
 ${streamelementsSection}
 `;
 
-describe('ConfigLoader behavior', () => {
+describe('Config loading behavior', () => {
     let currentConfig;
-    let currentConfigManager;
 
     const setupConfigMocks = (content, configPath = testConfigPath) => {
         fs.existsSync = createMockFn((filePath) => filePath === configPath);
@@ -92,8 +91,7 @@ describe('ConfigLoader behavior', () => {
         process.env.CHAT_BOT_CONFIG_PATH = configPath;
         const fresh = loadFreshConfig();
         currentConfig = fresh.config;
-        currentConfigManager = fresh.configManager;
-        return { config: currentConfig, configManager: currentConfigManager };
+        return { config: currentConfig };
     };
 
     beforeEach(() => {
@@ -127,20 +125,20 @@ describe('ConfigLoader behavior', () => {
         }
     });
 
-    it('throws error when required sections are missing', () => {
+    it('throws error when general section is missing', () => {
         const originalStderrWrite = process.stderr.write;
         process.stderr.write = () => {};
         try {
-            setupConfigMocks('[general]\ndebugEnabled = true\n');
+            setupConfigMocks('[obs]\nenabled = false\n');
             process.env.CHAT_BOT_CONFIG_PATH = testConfigPath;
 
-            expect(() => loadFreshConfig()).toThrow(/Missing required configuration sections/);
+            expect(() => loadFreshConfig()).toThrow('Missing required configuration section: general');
         } finally {
             process.stderr.write = originalStderrWrite;
         }
     });
 
-    it('parses booleans/numbers with safe defaults when keys are missing or invalid', () => {
+    it('uses safe defaults when values are invalid', () => {
         const configWithInvalid = `
 [general]
 debugEnabled = yes
@@ -212,9 +210,8 @@ maxEntries = 1000
 `;
         reloadConfig(configWithInvalid);
 
-        expect(currentConfigManager.getBoolean('general', 'debugEnabled', false)).toBe(false);
-        expect(currentConfigManager.getNumber('general', 'streamRetryInterval', 15)).toBe(15);
-        expect(currentConfigManager.get('missing', 'key', 'default')).toBe('default');
+        expect(currentConfig.general.debugEnabled).toBe(false);
+        expect(currentConfig.general.streamRetryInterval).toBe(15);
     });
 
     it('exposes cooldown configuration on the config facade', () => {

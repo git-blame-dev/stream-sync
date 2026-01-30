@@ -425,7 +425,7 @@ describe('ConfigValidator.validate()', () => {
         expect(result.errors).toEqual([]);
     });
 
-    it('returns error for missing required section', () => {
+    it('returns error for missing general section', () => {
         const config = createMinimalValidConfig();
         delete config.general;
 
@@ -435,24 +435,22 @@ describe('ConfigValidator.validate()', () => {
         expect(result.errors).toContain('Missing required configuration section: general');
     });
 
-    it('returns error for missing obs section', () => {
+    it('accepts config without obs section (uses defaults)', () => {
         const config = createMinimalValidConfig();
         delete config.obs;
 
         const result = ConfigValidator.validate(config);
 
-        expect(result.isValid).toBe(false);
-        expect(result.errors).toContain('Missing required configuration section: obs');
+        expect(result.isValid).toBe(true);
     });
 
-    it('returns error for missing commands section', () => {
+    it('accepts config without commands section (uses defaults)', () => {
         const config = createMinimalValidConfig();
         delete config.commands;
 
         const result = ConfigValidator.validate(config);
 
-        expect(result.isValid).toBe(false);
-        expect(result.errors).toContain('Missing required configuration section: commands');
+        expect(result.isValid).toBe(true);
     });
 
     it('returns error when enabled platform has no username', () => {

@@ -2,10 +2,20 @@ const { describe, expect, it, beforeEach, afterEach } = require('bun:test');
 const { createMockFn, restoreAllMocks } = require('../../helpers/bun-mock-utils');
 
 const fs = require('fs');
-const { config, configManager } = require('../../../src/core/config');
 
 let originalReadFileSync;
 let originalExistsSync;
+
+const CONFIG_MODULE_PATH = require.resolve('../../../src/core/config');
+
+function resetConfigModule() {
+    delete require.cache[CONFIG_MODULE_PATH];
+}
+
+function loadFreshConfig() {
+    resetConfigModule();
+    return require('../../../src/core/config');
+}
 
 function buildMinimalConfig(overrides = {}) {
     const base = {
@@ -109,18 +119,14 @@ describe('Config path override', () => {
     beforeEach(() => {
         originalReadFileSync = fs.readFileSync;
         originalExistsSync = fs.existsSync;
-        configManager.isLoaded = false;
-        configManager.config = null;
     });
 
     afterEach(() => {
         fs.readFileSync = originalReadFileSync;
         fs.existsSync = originalExistsSync;
         restoreAllMocks();
+        resetConfigModule();
         delete process.env.CHAT_BOT_CONFIG_PATH;
-        configManager.isLoaded = false;
-        configManager.config = null;
-        configManager.configPath = configManager.defaultConfigPath;
     });
 
     it('loads config from CHAT_BOT_CONFIG_PATH when set', () => {
@@ -137,10 +143,9 @@ describe('Config path override', () => {
         });
 
         process.env.CHAT_BOT_CONFIG_PATH = testConfigPath;
-        configManager.load();
+        const { config } = loadFreshConfig();
 
-        const raw = configManager.getRaw();
-        expect(raw.general.chatMsgScene).toBe(uniqueScene);
+        expect(config.general.chatMsgScene).toBe(uniqueScene);
     });
 
     it('provides startup-critical general defaults when values are missing', () => {
@@ -156,7 +161,7 @@ describe('Config path override', () => {
         });
 
         process.env.CHAT_BOT_CONFIG_PATH = testConfigPath;
-        configManager.load();
+        const { config } = loadFreshConfig();
 
         const general = config.general;
         const requiredBooleans = [
