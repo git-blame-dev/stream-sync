@@ -1,6 +1,7 @@
 
 const { describe, test, expect } = require('bun:test');
 const { createMockFn } = require('../../helpers/bun-mock-utils');
+const { createConfigFixture } = require('../../helpers/config-fixture');
 
 const { createTestUser, TEST_TIMEOUTS } = require('../../helpers/test-setup');
 const { setupAutomatedCleanup } = require('../../helpers/mock-lifecycle');
@@ -27,7 +28,7 @@ describe('Terminology Consistency', () => {
         };
         const eventBus = { subscribe: createMockFn(() => () => {}) };
         const notificationManager = { handleNotification: createMockFn(async () => true) };
-        const configService = { areNotificationsEnabled: createMockFn(() => true) };
+        const config = createConfigFixture({ general: { paypiggiesEnabled: true } });
         const logger = {
             debug: createMockFn(),
             info: createMockFn(),
@@ -38,7 +39,7 @@ describe('Terminology Consistency', () => {
             eventBus,
             runtime,
             notificationManager,
-            configService,
+            config,
             logger
         });
         return { handled, router };

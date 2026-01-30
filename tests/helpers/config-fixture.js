@@ -71,12 +71,41 @@ function createYouTubeConfigFixture(overrides = {}) {
 }
 
 function createConfigFixture(overrides = {}) {
-    const { general: generalOverrides, cooldowns: cooldownsOverrides, ...restOverrides } = overrides;
+    const {
+        general: generalOverrides,
+        cooldowns: cooldownsOverrides,
+        tts: ttsOverrides,
+        commands: commandsOverrides,
+        obs: obsOverrides,
+        timing: timingOverrides,
+        monitoring: monitoringOverrides,
+        ...restOverrides
+    } = overrides;
     return {
         general: {
             maxMessageLength: 500,
             viewerCountPollingIntervalMs: 30000,
-            ...(generalOverrides || {})
+            debugEnabled: false,
+            ttsEnabled: false,
+            messagesEnabled: true,
+            commandsEnabled: true,
+            greetingsEnabled: true,
+            farewellsEnabled: true,
+            followsEnabled: true,
+            giftsEnabled: true,
+            raidsEnabled: true,
+            sharesEnabled: true,
+            paypiggiesEnabled: true,
+            userSuppressionEnabled: false,
+            maxNotificationsPerUser: 5,
+            suppressionWindowMs: 60000,
+            suppressionDurationMs: 300000,
+            suppressionCleanupIntervalMs: 300000,
+            streamDetectionEnabled: false,
+            streamRetryInterval: 15,
+            streamMaxRetries: 3,
+            continuousMonitoringInterval: 60,
+            ...generalOverrides
         },
         cooldowns: {
             defaultCooldownMs: 60000,
@@ -84,7 +113,37 @@ function createConfigFixture(overrides = {}) {
             heavyCommandThreshold: 4,
             heavyCommandWindowMs: 360000,
             maxEntries: 1000,
-            ...(cooldownsOverrides || {})
+            ...cooldownsOverrides
+        },
+        tts: {
+            enabled: false,
+            deduplicationEnabled: true,
+            debugDeduplication: false,
+            onlyForGifts: false,
+            voice: 'default',
+            rate: 1,
+            volume: 1,
+            ...ttsOverrides
+        },
+        commands: {
+            enabled: false,
+            ...commandsOverrides
+        },
+        obs: {
+            notificationTxt: 'test-notification-text',
+            notificationScene: 'test-notification-scene',
+            notificationMsgGroup: 'test-notification-group',
+            ...obsOverrides
+        },
+        timing: {
+            greetingDuration: 3000,
+            commandDuration: 3000,
+            chatDuration: 3000,
+            notificationDuration: 3000,
+            ...timingOverrides
+        },
+        monitoring: {
+            ...monitoringOverrides
         },
         ...restOverrides
     };

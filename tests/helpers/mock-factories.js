@@ -2515,7 +2515,7 @@ const createMockTikTokPlatformDependencies = (behaviorOverrides = {}) => {
             ...behaviorOverrides.constants
         },
         notificationBridge: behaviorOverrides.notificationBridge || behaviorOverrides.app || null,
-        configService: behaviorOverrides.configService || null,
+        config: behaviorOverrides.config || null,
         _mockType: 'TikTokPlatformDependencies'
     };
 };

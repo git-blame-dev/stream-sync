@@ -1,6 +1,7 @@
 const { describe, expect, beforeEach, it, afterEach } = require('bun:test');
 const { createMockFn, restoreAllMocks } = require('../../helpers/bun-mock-utils');
 const { noOpLogger } = require('../../helpers/mock-factories');
+const { createConfigFixture } = require('../../helpers/config-fixture');
 
 const PlatformEventRouter = require('../../../src/services/PlatformEventRouter');
 
@@ -10,13 +11,13 @@ describe('PlatformEventRouter paypiggy months handling', () => {
     });
 
     let runtime;
-    let configService;
+    let config;
 
     const buildRouter = () => new PlatformEventRouter({
         eventBus: { subscribe: createMockFn(() => createMockFn()), emit: createMockFn() },
         runtime,
         notificationManager: { handleNotification: createMockFn() },
-        configService,
+        config,
         logger: noOpLogger
     });
 
@@ -24,9 +25,7 @@ describe('PlatformEventRouter paypiggy months handling', () => {
         runtime = {
             handlePaypiggyNotification: createMockFn()
         };
-        configService = {
-            areNotificationsEnabled: createMockFn().mockReturnValue(true)
-        };
+        config = createConfigFixture({ general: { paypiggiesEnabled: true } });
     });
 
     it('passes through superfan tier and months to paypiggy handler', async () => {

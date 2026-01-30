@@ -1,6 +1,7 @@
 const { describe, expect, it, beforeEach, afterEach } = require('bun:test');
 const { createMockFn, restoreAllMocks } = require('../../helpers/bun-mock-utils');
 const { noOpLogger } = require('../../helpers/mock-factories');
+const { createConfigFixture } = require('../../helpers/config-fixture');
 
 const NotificationManager = require('../../../src/notifications/NotificationManager');
 
@@ -21,33 +22,7 @@ describe('NotificationManager input validation', () => {
         logger: noOpLogger,
         displayQueue: { enqueue: createMockFn(), addItem: createMockFn(), getQueueLength: createMockFn(() => 0) },
         eventBus: { on: createMockFn(), emit: createMockFn(), subscribe: createMockFn() },
-        configService: {
-            areNotificationsEnabled: createMockFn(() => true),
-            getPlatformConfig: createMockFn(() => true),
-            isDebugEnabled: createMockFn(() => false),
-            getTimingConfig: createMockFn(() => ({
-                greetingDuration: 1000,
-                commandDuration: 1000,
-                chatDuration: 1000,
-                notificationDuration: 1000
-            })),
-            getTTSConfig: createMockFn(() => ({
-                enabled: false,
-                deduplicationEnabled: true,
-                debugDeduplication: false,
-                onlyForGifts: false,
-                voice: 'default',
-                rate: 1,
-                volume: 1
-            })),
-            get: createMockFn(() => ({
-                userSuppressionEnabled: false,
-                maxNotificationsPerUser: 5,
-                suppressionWindowMs: 60000,
-                suppressionDurationMs: 300000,
-                suppressionCleanupIntervalMs: 300000
-            }))
-        },
+        config: createConfigFixture(),
         constants: {
             PRIORITY_LEVELS: { DEFAULT: 0, FOLLOW: 1, GIFT: 2, ENVELOPE: 3, MEMBER: 4, CHEER: 5, RAID: 6, SHARE: 7, REDEMPTION: 8, GIFTPAYPIGGY: 9, COMMAND: 10, GREETING: 11, CHAT: 12 },
             NOTIFICATION_CONFIGS: {
@@ -96,13 +71,7 @@ describe('NotificationManager input validation', () => {
     describe('userId normalization order', () => {
         it('normalizes userId to string before suppression check', async () => {
             const deps = createDeps();
-            deps.configService.get = createMockFn(() => ({
-                userSuppressionEnabled: true,
-                maxNotificationsPerUser: 5,
-                suppressionWindowMs: 60000,
-                suppressionDurationMs: 300000,
-                suppressionCleanupIntervalMs: 300000
-            }));
+            deps.config = createConfigFixture({ general: { userSuppressionEnabled: true } });
             const manager = new NotificationManager(deps);
 
             // Track the userId that gets passed to isUserSuppressed
@@ -139,11 +108,9 @@ describe('NotificationManager input validation', () => {
     });
 
     describe('error handling - graceful degradation', () => {
-        it('returns disabled when _areNotificationsEnabled throws instead of dropping notification', async () => {
+        it('returns disabled when notifications disabled in config', async () => {
             const deps = createDeps();
-            deps.configService.areNotificationsEnabled = createMockFn(() => {
-                throw new Error('ConfigService error');
-            });
+            deps.config = createConfigFixture({ general: { followsEnabled: false } });
             const manager = new NotificationManager(deps);
 
             const result = await manager.handleNotification('platform:follow', 'tiktok', { username: 'testUser', userId: 'user123' });
@@ -152,11 +119,9 @@ describe('NotificationManager input validation', () => {
             expect(result.disabled).toBe(true);
         });
 
-        it('continues processing when _isDebugEnabled throws instead of dropping notification', async () => {
+        it('continues processing when debug disabled in config', async () => {
             const deps = createDeps();
-            deps.configService.isDebugEnabled = createMockFn(() => {
-                throw new Error('ConfigService error');
-            });
+            deps.config = createConfigFixture({ general: { debugEnabled: false } });
             const manager = new NotificationManager(deps);
 
             const result = await manager.handleNotification('platform:follow', 'tiktok', { username: 'testUser', userId: 'user123' });
@@ -192,18 +157,18 @@ describe('NotificationManager input validation', () => {
     });
 
     describe('config loading safety', () => {
-        it('throws meaningful error when configService.get returns null', () => {
+        it('throws meaningful error when config is null', () => {
             const deps = createDeps();
-            deps.configService.get = createMockFn(() => null);
+            deps.config = null;
 
-            expect(() => new NotificationManager(deps)).toThrow('Invalid suppression config');
+            expect(() => new NotificationManager(deps)).toThrow('config');
         });
 
-        it('throws meaningful error when configService.get returns undefined', () => {
+        it('throws meaningful error when config is undefined', () => {
             const deps = createDeps();
-            deps.configService.get = createMockFn(() => undefined);
+            deps.config = undefined;
 
-            expect(() => new NotificationManager(deps)).toThrow('Invalid suppression config');
+            expect(() => new NotificationManager(deps)).toThrow('config');
         });
     });
 
@@ -223,9 +188,9 @@ describe('NotificationManager input validation', () => {
             expect(result.success).toBe(true);
         });
 
-        it('continues when generateLogMessage throws in debug mode', async () => {
+        it('continues when debug enabled in config', async () => {
             const deps = createDeps();
-            deps.configService.isDebugEnabled = createMockFn(() => true);
+            deps.config = createConfigFixture({ general: { debugEnabled: true } });
             const manager = new NotificationManager(deps);
 
             const result = await manager.handleNotification('platform:follow', 'tiktok', {

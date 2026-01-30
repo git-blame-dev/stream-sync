@@ -1,6 +1,7 @@
 const { describe, expect, it, beforeEach } = require('bun:test');
 const { createMockFn } = require('../../helpers/bun-mock-utils');
 const { noOpLogger } = require('../../helpers/mock-factories');
+const { createConfigFixture } = require('../../helpers/config-fixture');
 const PlatformEventRouter = require('../../../src/services/PlatformEventRouter');
 
 describe('PlatformEventRouter error handling', () => {
@@ -8,7 +9,7 @@ describe('PlatformEventRouter error handling', () => {
     let mockEventBus;
     let mockRuntime;
     let mockNotificationManager;
-    let mockConfigService;
+    let mockConfig;
     let subscriber;
 
     const baseEvent = {
@@ -47,9 +48,7 @@ describe('PlatformEventRouter error handling', () => {
             handleNotification: createMockFn()
         };
 
-        mockConfigService = {
-            areNotificationsEnabled: createMockFn().mockReturnValue(true)
-        };
+        mockConfig = createConfigFixture({ general: { messagesEnabled: true } });
     });
 
     it('continues processing events after handler throws an error', async () => {
@@ -61,7 +60,7 @@ describe('PlatformEventRouter error handling', () => {
             eventBus: mockEventBus,
             runtime: mockRuntime,
             notificationManager: mockNotificationManager,
-            configService: mockConfigService,
+            config: mockConfig,
             logger: mockLogger
         });
 
@@ -78,7 +77,7 @@ describe('PlatformEventRouter error handling', () => {
             eventBus: mockEventBus,
             runtime: mockRuntime,
             notificationManager: mockNotificationManager,
-            configService: mockConfigService,
+            config: mockConfig,
             logger: mockLogger
         });
 

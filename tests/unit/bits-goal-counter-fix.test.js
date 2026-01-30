@@ -3,6 +3,7 @@ const { createMockFn, restoreAllMocks } = require('../helpers/bun-mock-utils');
 const { createTestUser, TEST_TIMEOUTS } = require('../helpers/test-setup');
 const { noOpLogger, createMockNotificationManager } = require('../helpers/mock-factories');
 const { setupAutomatedCleanup } = require('../helpers/mock-lifecycle');
+const { createConfigFixture } = require('../helpers/config-fixture');
 const PlatformEventRouter = require('../../src/services/PlatformEventRouter');
 
 setupAutomatedCleanup({
@@ -65,7 +66,7 @@ describe('Bits Goal Counter Fix', () => {
             eventBus: mockEventBus,
             runtime: mockAppRuntime,
             notificationManager: mockNotificationManager,
-            configService: { areNotificationsEnabled: createMockFn(() => true) },
+            config: createConfigFixture({ general: { followsEnabled: true, giftsEnabled: true, messagesEnabled: true } }),
             logger: mockLogger
         });
     });

@@ -31,26 +31,7 @@ describe('Display items avoid hardcoded durations', () => {
                 constants: require('../../../src/core/constants'),
                 textProcessing: { formatChatMessage: createMockFn() },
                 obsGoals: { processDonationGoal: createMockFn() },
-                configService: {
-                    areNotificationsEnabled: createMockFn().mockReturnValue(true),
-                    isEnabled: createMockFn().mockReturnValue(true),
-                    getNotificationSettings: createMockFn().mockReturnValue({ enabled: true, greetingsEnabled: true }),
-                    getPlatformConfig: createMockFn().mockReturnValue(true),
-                    get: createMockFn((section) => {
-                        if (section !== 'general') {
-                            return {};
-                        }
-                        return {
-                            userSuppressionEnabled: false,
-                            maxNotificationsPerUser: 5,
-                            suppressionWindowMs: 60000,
-                            suppressionDurationMs: 300000,
-                            suppressionCleanupIntervalMs: 300000
-                        };
-                    }),
-                    isDebugEnabled: createMockFn().mockReturnValue(false),
-                    getTTSConfig: createMockFn().mockReturnValue({ enabled: true })
-                },
+                config: createConfigFixture({ tts: { enabled: true } }),
                 vfxCommandService: {
                     executeCommand: createMockFn().mockResolvedValue({ success: true }),
                     getVFXConfig: createMockFn().mockResolvedValue(null)

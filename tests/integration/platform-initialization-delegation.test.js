@@ -52,7 +52,6 @@ describe('Platform Initialization Delegation', () => {
             logging: noOpLogger,
             displayQueue: { addItem: createMockFn() },
             eventBus: { subscribe: createMockFn(), emit: createMockFn(), unsubscribe: createMockFn() },
-            configService: { get: createMockFn().mockReturnValue(configFixture.general) },
             config: createConfigFixture(),
             vfxCommandService: { executeCommandForKey: createMockFn().mockResolvedValue({ success: true }) },
             ttsService: { speak: createMockFn().mockResolvedValue({ success: true }) },

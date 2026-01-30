@@ -7,6 +7,7 @@ const { createMonetizationErrorPayload } = require('../../src/utils/monetization
 const { createMockDisplayQueue, noOpLogger } = require('../helpers/mock-factories');
 const { createTextProcessingManager } = require('../../src/utils/text-processing');
 const { PlatformEvents } = require('../../src/interfaces/PlatformEvents');
+const { createConfigFixture } = require('../helpers/config-fixture');
 
 describe('Monetization error-path platform flows (smoke)', () => {
     const createEventBus = () => {
@@ -26,27 +27,16 @@ describe('Monetization error-path platform flows (smoke)', () => {
         restoreAllMocks();
     });
 
-    const createConfigService = (config) => ({
-        areNotificationsEnabled: createMockFn(() => true),
-        getPlatformConfig: createMockFn(() => true),
-        getNotificationSettings: createMockFn(() => ({ enabled: true, duration: 4000 })),
-        get: createMockFn((section) => {
-            if (!section) {
-                return config;
-            }
-            return config[section] || {};
-        }),
-        isDebugEnabled: createMockFn(() => false),
-        getTTSConfig: createMockFn(() => ({ enabled: false })),
-        isEnabled: createMockFn(() => true)
-    });
-
     const createHarness = (platformKey) => {
         const eventBus = createEventBus();
         const logger = noOpLogger;
         const displayQueue = createMockDisplayQueue();
         const textProcessing = createTextProcessingManager({ logger });
-        const configSnapshot = {
+        const platformConfigOverride = { enabled: true, notificationsEnabled: true };
+        if (platformKey === 'youtube') {
+            platformConfigOverride.username = 'test-channel';
+        }
+        const config = createConfigFixture({
             general: {
                 debugEnabled: false,
                 giftsEnabled: true,
@@ -61,19 +51,15 @@ describe('Monetization error-path platform flows (smoke)', () => {
                 streamMaxRetries: 3,
                 continuousMonitoringInterval: 60
             },
-            [platformKey]: { enabled: true, notificationsEnabled: true },
+            [platformKey]: platformConfigOverride,
             obs: { enabled: false },
             tts: { enabled: false }
-        };
-        if (platformKey === 'youtube') {
-            configSnapshot.youtube.username = 'test-channel';
-        }
-        const configService = createConfigService(configSnapshot);
+        });
         const notificationManager = new NotificationManager({
             displayQueue,
             logger,
             eventBus,
-            configService,
+            config,
             constants: require('../../src/core/constants'),
             textProcessing,
             obsGoals: { processDonationGoal: createMockFn() },
@@ -118,7 +104,7 @@ describe('Monetization error-path platform flows (smoke)', () => {
             eventBus,
             logger,
             displayQueue,
-            configService,
+            config,
             notificationManager,
             platformLifecycleService
         };

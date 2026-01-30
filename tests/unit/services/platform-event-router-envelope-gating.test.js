@@ -1,6 +1,7 @@
 const { describe, expect, it, afterEach } = require('bun:test');
 const { createMockFn, restoreAllMocks } = require('../../helpers/bun-mock-utils');
 const { noOpLogger } = require('../../helpers/mock-factories');
+const { createConfigFixture } = require('../../helpers/config-fixture');
 
 const PlatformEventRouter = require('../../../src/services/PlatformEventRouter');
 
@@ -9,25 +10,20 @@ describe('PlatformEventRouter envelope gating', () => {
         restoreAllMocks();
     });
 
-    const createRouter = (configService) => new PlatformEventRouter({
+    const createRouter = (config) => new PlatformEventRouter({
         eventBus: { subscribe: createMockFn(() => createMockFn()), emit: createMockFn() },
         runtime: {
             handleEnvelopeNotification: createMockFn()
         },
         notificationManager: { handleNotification: createMockFn() },
-        configService,
+        config,
         logger: noOpLogger
     });
 
     it('respects giftsEnabled config gating for envelope events', async () => {
-        const configService = {
-            areNotificationsEnabled: createMockFn((settingKey) => {
-                if (settingKey === 'giftsEnabled') return false;
-                return true;
-            })
-        };
+        const config = createConfigFixture({ general: { giftsEnabled: false } });
 
-        const router = createRouter(configService);
+        const router = createRouter(config);
 
         await router.routeEvent({
             platform: 'tiktok',

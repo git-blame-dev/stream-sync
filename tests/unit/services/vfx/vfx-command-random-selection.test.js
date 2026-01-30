@@ -1,6 +1,6 @@
-
 const { describe, test, expect, beforeEach, afterEach } = require('bun:test');
 const { createMockFn } = require('../../../helpers/bun-mock-utils');
+const { createConfigFixture } = require('../../../helpers/config-fixture');
 
 const crypto = require('crypto');
 const { VFXCommandService } = require('../../../../src/services/VFXCommandService');
@@ -10,17 +10,11 @@ describe('VFXCommandService random variant selection', () => {
     let mockEffectsManager;
     let capturedCommands;
 
-    const createConfigService = (commandValue) => ({
-        getCommand: createMockFn().mockReturnValue(commandValue),
-        get: createMockFn((section, key) => {
-            if (section === 'commands') return { gifts: commandValue };
-            if (section === 'farewell') return {};
-            if (section === 'vfx' && key === 'filePath') return '/tmp';
-            if (section === 'general') return { cmdCoolDown: 60, globalCmdCooldownMs: 60000 };
-            if (section === 'general' && key === 'cmdCoolDown') return 60;
-            if (section === 'general' && key === 'globalCmdCooldownMs') return 60000;
-            return undefined;
-        })
+    const createConfig = (commandValue) => createConfigFixture({
+        gifts: { command: commandValue },
+        farewell: {},
+        vfx: { filePath: '/tmp' },
+        general: { cmdCoolDown: 60, globalCmdCooldownMs: 60000 }
     });
 
     beforeEach(() => {
@@ -38,10 +32,10 @@ describe('VFXCommandService random variant selection', () => {
     });
 
     test('selects a single variant based on deterministic random value', async () => {
-        const configService = createConfigService('!one | !two | !three');
+        const config = createConfig('!one | !two | !three');
         crypto.randomInt = createMockFn().mockReturnValue(1); // picks index 1 => !two
 
-        const service = new VFXCommandService(configService, null, {
+        const service = new VFXCommandService(config, null, {
             effectsManager: mockEffectsManager
         });
         service.commandParser = {
@@ -68,9 +62,9 @@ describe('VFXCommandService random variant selection', () => {
     });
 
     test('returns friendly failure when command key is missing from config', async () => {
-        const configService = createConfigService(null);
+        const config = createConfig(null);
 
-        const service = new VFXCommandService(configService, null, {
+        const service = new VFXCommandService(config, null, {
             effectsManager: mockEffectsManager
         });
         const result = await service.executeCommandForKey('gifts', {

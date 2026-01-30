@@ -3,11 +3,12 @@ const { describe, test, afterEach, expect } = require('bun:test');
 const EventEmitter = require('events');
 const NotificationManager = require('../../src/notifications/NotificationManager');
 const { YouTubePlatform } = require('../../src/platforms/youtube');
-const { initializeTestLogging, createConfigFixture, createMockPlatformDependencies } = require('../helpers/test-setup');
+const { initializeTestLogging, createConfigFixture: createPlatformConfigFixture, createMockPlatformDependencies } = require('../helpers/test-setup');
 const { getSyntheticFixture } = require('../helpers/platform-test-data');
 const { createMockDisplayQueue, noOpLogger } = require('../helpers/mock-factories');
 const { createTextProcessingManager } = require('../../src/utils/text-processing');
 const { createMockFn, restoreAllMocks } = require('../helpers/bun-mock-utils');
+const { createConfigFixture } = require('../helpers/config-fixture');
 
 initializeTestLogging();
 
@@ -27,12 +28,12 @@ const createEventBus = () => {
 
 const createPlatformHarness = () => {
     const logger = noOpLogger;
-    const config = createConfigFixture('youtube', {
+    const platformConfig = createPlatformConfigFixture('youtube', {
         enabled: true,
         username: 'test-channel'
     });
     const dependencies = createMockPlatformDependencies('youtube', { logger });
-    const platform = new YouTubePlatform(config, dependencies);
+    const platform = new YouTubePlatform(platformConfig, dependencies);
     let capturedPayload;
 
     platform.handlers = {
@@ -53,7 +54,7 @@ const createNotificationManagerHarness = () => {
     const logger = noOpLogger;
     const textProcessing = createTextProcessingManager({ logger });
     const eventBus = createEventBus();
-    const configSnapshot = {
+    const config = createConfigFixture({
         general: {
             debugEnabled: false,
             giftsEnabled: true,
@@ -65,22 +66,13 @@ const createNotificationManagerHarness = () => {
         },
         youtube: { enabled: true },
         tts: { enabled: false }
-    };
-    const configService = {
-        areNotificationsEnabled: createMockFn().mockReturnValue(true),
-        getPlatformConfig: createMockFn().mockReturnValue(true),
-        getNotificationSettings: createMockFn().mockReturnValue({ enabled: true, duration: 4000 }),
-        get: createMockFn((section) => (section ? configSnapshot[section] || {} : configSnapshot)),
-        isDebugEnabled: createMockFn().mockReturnValue(false),
-        getTTSConfig: createMockFn().mockReturnValue({ enabled: false }),
-        isEnabled: createMockFn().mockReturnValue(true)
-    };
+    });
 
     const notificationManager = new NotificationManager({
         displayQueue,
         logger,
         eventBus,
-        configService,
+        config,
         constants: require('../../src/core/constants'),
         textProcessing,
         obsGoals: { processDonationGoal: createMockFn() },

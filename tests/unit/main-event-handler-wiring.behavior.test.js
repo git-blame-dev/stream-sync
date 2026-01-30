@@ -28,7 +28,7 @@ describe('main.js event handler wiring', () => {
             emit: createMockFn(),
             unsubscribe: createMockFn()
         },
-        configService: overrides.configService || {},
+        config: overrides.config || {},
         vfxCommandService: overrides.vfxCommandService || { executeCommandForKey: createMockFn().mockResolvedValue({ success: true }) },
         ttsService: overrides.ttsService || { speak: createMockFn().mockResolvedValue({ success: true }) },
         userTrackingService: overrides.userTrackingService || { isFirstMessage: createMockFn().mockResolvedValue(false) },

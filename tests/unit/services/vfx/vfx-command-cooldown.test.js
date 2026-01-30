@@ -1,27 +1,21 @@
-
 const { describe, test, expect, beforeEach, afterEach } = require('bun:test');
 const { createMockFn } = require('../../../helpers/bun-mock-utils');
 const { useFakeTimers, useRealTimers, advanceTimersByTime, setSystemTime } = require('../../../helpers/bun-timers');
+const { createConfigFixture } = require('../../../helpers/config-fixture');
 
 const { VFXCommandService } = require('../../../../src/services/VFXCommandService');
 
 describe('VFXCommandService cooldown handling', () => {
     let mockEffectsManager;
 
-    const createConfigService = (commandValue, overrides = {}) => ({
-        getCommand: createMockFn().mockReturnValue(commandValue),
-        get: createMockFn((section, key) => {
-            if (section === 'commands') return { gifts: commandValue };
-            if (section === 'farewell') return {};
-            if (section === 'vfx' && key === 'filePath') return '/tmp';
-            if (section === 'general' && key === 'cmdCoolDown') return overrides.cmdCoolDown ?? 60;
-            if (section === 'general' && key === 'globalCmdCooldownMs') return overrides.globalCmdCooldownMs ?? 60000;
-            if (section === 'general') return {
-                cmdCoolDown: overrides.cmdCoolDown ?? 60,
-                globalCmdCooldownMs: overrides.globalCmdCooldownMs ?? 60000
-            };
-            return undefined;
-        })
+    const createConfig = (commandValue, overrides = {}) => createConfigFixture({
+        gifts: { command: commandValue },
+        farewell: {},
+        vfx: { filePath: '/tmp' },
+        general: {
+            cmdCoolDown: overrides.cmdCoolDown ?? 60,
+            globalCmdCooldownMs: overrides.globalCmdCooldownMs ?? 60000
+        }
     });
 
     const createMockCommandParser = () => ({
@@ -46,7 +40,7 @@ describe('VFXCommandService cooldown handling', () => {
     });
 
     test('blocks repeat VFX command for same user during cooldown window', async () => {
-        const service = new VFXCommandService(createConfigService('!one | !two'), null, {
+        const service = new VFXCommandService(createConfig('!one | !two'), null, {
             effectsManager: mockEffectsManager
         });
         service.commandParser = createMockCommandParser();
@@ -70,7 +64,7 @@ describe('VFXCommandService cooldown handling', () => {
     });
 
     test('honors skipCooldown flag for notification-triggered executions', async () => {
-        const service = new VFXCommandService(createConfigService('!one | !two'), null, {
+        const service = new VFXCommandService(createConfig('!one | !two'), null, {
             effectsManager: mockEffectsManager
         });
         service.commandParser = createMockCommandParser();
@@ -97,7 +91,7 @@ describe('VFXCommandService cooldown handling', () => {
         const failingEffectsManager = {
             playMediaInOBS: createMockFn().mockRejectedValue(new Error('vfx failed'))
         };
-        const service = new VFXCommandService(createConfigService('!one | !two'), null, {
+        const service = new VFXCommandService(createConfig('!one | !two'), null, {
             effectsManager: failingEffectsManager
         });
         service.commandParser = createMockCommandParser();
@@ -114,7 +108,7 @@ describe('VFXCommandService cooldown handling', () => {
     });
 
     test('allows disabling user and global cooldowns via zero config values', async () => {
-        const service = new VFXCommandService(createConfigService('!one', {
+        const service = new VFXCommandService(createConfig('!one', {
             cmdCoolDown: 0,
             globalCmdCooldownMs: 0
         }), null, {
@@ -143,7 +137,7 @@ describe('VFXCommandService cooldown handling', () => {
         useFakeTimers();
         setSystemTime(new Date(0));
         try {
-            const service = new VFXCommandService(createConfigService('!spark', {
+            const service = new VFXCommandService(createConfig('!spark', {
                 cmdCoolDown: 0,
                 globalCmdCooldownMs: 2000
             }), null, {
@@ -182,11 +176,11 @@ describe('VFXCommandService cooldown handling', () => {
         }
     });
 
-    test('honors configured cooldown duration from config service', async () => {
+    test('honors configured cooldown duration from config', async () => {
         useFakeTimers();
         setSystemTime(new Date(1000));
         try {
-            const service = new VFXCommandService(createConfigService('!one', {
+            const service = new VFXCommandService(createConfig('!one', {
                 cmdCoolDown: 1,
                 globalCmdCooldownMs: 1
             }), null, {

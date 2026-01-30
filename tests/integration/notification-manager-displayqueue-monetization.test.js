@@ -9,6 +9,7 @@ const constants = require('../../src/core/constants');
 const { createMockOBSConnection, noOpLogger } = require('../helpers/mock-factories');
 const { createTextProcessingManager } = require('../../src/utils/text-processing');
 const { PlatformEvents } = require('../../src/interfaces/PlatformEvents');
+const { createConfigFixture } = require('../helpers/config-fixture');
 
 describe('Monetisation pipeline integration', () => {
     let eventBus;
@@ -16,7 +17,7 @@ describe('Monetisation pipeline integration', () => {
     let displayQueue;
     let notificationManager;
     let router;
-    let configFlags;
+    let config;
     const fixedTimestamp = '2025-01-01T00:00:00.000Z';
 
     const createEventBus = () => {
@@ -36,13 +37,7 @@ describe('Monetisation pipeline integration', () => {
         recordedEvents = [];
         eventBus.on(PlatformEvents.VFX_COMMAND_RECEIVED, (data) => recordedEvents.push(data));
 
-        configFlags = {
-            paypiggiesEnabled: true,
-            giftsEnabled: true,
-            notificationsEnabled: true
-        };
-
-        const config = {
+        const displayQueueConfig = {
             autoProcess: false,
             maxQueueSize: 25,
             ttsEnabled: false,
@@ -59,7 +54,7 @@ describe('Monetisation pipeline integration', () => {
         mockObs.isReady = createMockFn().mockResolvedValue(true);
         mockObs.call = createMockFn().mockResolvedValue({ success: true });
 
-        displayQueue = new DisplayQueue(mockObs, config, constants, eventBus);
+        displayQueue = new DisplayQueue(mockObs, displayQueueConfig, constants, eventBus);
         displayQueue.playGiftVideoAndAudio = createMockFn().mockResolvedValue();
         displayQueue.isTTSEnabled = createMockFn(() => false);
         displayQueue.getDuration = createMockFn(() => 0);
@@ -91,27 +86,20 @@ describe('Monetisation pipeline integration', () => {
             }))
         };
 
-        const configService = {
-            get: createMockFn((section) => {
-                if (section === 'general') {
-                    return {
-                        userSuppressionEnabled: true,
-                        maxNotificationsPerUser: 5,
-                        suppressionWindowMs: 60000,
-                        suppressionDurationMs: 300000,
-                        suppressionCleanupIntervalMs: 300000
-                    };
-                }
-                return undefined;
-            }),
-            areNotificationsEnabled: createMockFn((settingKey) => configFlags[settingKey] !== false),
-            isEnabled: createMockFn(() => true),
-            getPlatformConfig: createMockFn(() => ({ notificationsEnabled: true })),
-            getNotificationSettings: createMockFn(() => ({ enabled: true })),
-            getTTSConfig: createMockFn(() => ({ enabled: false })),
-            getTimingConfig: createMockFn(() => ({ greetingDuration: 5000 })),
-            isDebugEnabled: createMockFn(() => false)
-        };
+        config = createConfigFixture({
+            general: {
+                userSuppressionEnabled: true,
+                maxNotificationsPerUser: 5,
+                suppressionWindowMs: 60000,
+                suppressionDurationMs: 300000,
+                suppressionCleanupIntervalMs: 300000,
+                giftsEnabled: true,
+                paypiggiesEnabled: true
+            },
+            twitch: { notificationsEnabled: true },
+            youtube: { notificationsEnabled: true },
+            tiktok: { notificationsEnabled: true }
+        });
 
         const textProcessing = createTextProcessingManager({ logger: noOpLogger });
 
@@ -122,7 +110,7 @@ describe('Monetisation pipeline integration', () => {
             obsGoals: { processDonationGoal: createMockFn() },
             displayQueue,
             eventBus,
-            configService,
+            config,
             vfxCommandService,
             ttsService: { speak: createMockFn() },
             userTrackingService: { isFirstMessage: createMockFn().mockResolvedValue(false) }
@@ -147,7 +135,7 @@ describe('Monetisation pipeline integration', () => {
             eventBus,
             runtime,
             notificationManager,
-            configService,
+            config,
             logger: noOpLogger
         });
     });
@@ -226,7 +214,7 @@ describe('Monetisation pipeline integration', () => {
     });
 
     test('respects paypiggiesEnabled gating', async () => {
-        configFlags.paypiggiesEnabled = false;
+        config.general.paypiggiesEnabled = false;
 
         eventBus.emit('platform:event', {
             platform: 'twitch',
@@ -242,7 +230,7 @@ describe('Monetisation pipeline integration', () => {
     });
 
     test('respects giftsEnabled gating for all gift-like monetisation', async () => {
-        configFlags.giftsEnabled = false;
+        config.general.giftsEnabled = false;
 
         eventBus.emit('platform:event', {
             platform: 'twitch',

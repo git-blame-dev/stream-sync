@@ -5,8 +5,11 @@ const { createPlatformErrorHandler } = require('../utils/platform-error-handler'
 const { PlatformEvents } = require('../interfaces/PlatformEvents');
 
 class TTSService {
-    constructor(configService, eventBus = null, options = {}) {
-        this.configService = configService;
+    constructor(config, eventBus = null, options = {}) {
+        if (!config || typeof config !== 'object') {
+            throw new Error('TTSService requires config object');
+        }
+        this.config = config;
         this.eventBus = eventBus;
         validateLoggerInterface(options.logger);
         this.logger = options.logger;
@@ -41,7 +44,7 @@ class TTSService {
         }
 
         this.logger.debug('[TTSService] Initialized', 'tts-service', {
-            hasConfigService: !!configService,
+            hasConfig: !!config,
             hasEventBus: !!eventBus,
             hasProvider: !!this.provider,
             hasFallback: !!this.fallbackProvider
@@ -151,11 +154,15 @@ class TTSService {
     }
 
     getConfig() {
-        return this.configService ? this.configService.getTTSConfig() : {
-            enabled: false,
-            voice: 'default',
-            rate: 1.0,
-            volume: 1.0
+        const ttsConfig = this.config.tts || {};
+        return {
+            enabled: !!this.config.general?.ttsEnabled,
+            deduplicationEnabled: ttsConfig.deduplicationEnabled,
+            debugDeduplication: ttsConfig.debugDeduplication,
+            onlyForGifts: ttsConfig.onlyForGifts,
+            voice: ttsConfig.voice || 'default',
+            rate: ttsConfig.rate || 1.0,
+            volume: ttsConfig.volume || 1.0
         };
     }
 
@@ -307,12 +314,7 @@ class TTSService {
     // Private methods
 
     _isTTSEnabled() {
-        if (!this.configService) {
-            return false;
-        }
-        
-        const ttsConfig = this.configService.getTTSConfig();
-        return ttsConfig.enabled;
+        return this.getConfig().enabled;
     }
 
     _cleanText(text) {
@@ -541,23 +543,16 @@ class TTSService {
     }
 
     _isPlatformTTSEnabled(platform) {
-        if (!this.configService) {
-            return true;
+        const platformSettings = this.config.tts?.platformSettings;
+        if (platformSettings && platformSettings[platform]) {
+            return platformSettings[platform].enabled !== false;
         }
-
-        const ttsConfig = this.configService.getTTSConfig();
-
-        // Check platform-specific settings
-        if (ttsConfig.platformSettings && ttsConfig.platformSettings[platform]) {
-            return ttsConfig.platformSettings[platform].enabled !== false;
-        }
-
         return true;
     }
 }
 
-function createTTSService(configService, eventBus = null, options = {}) {
-    return new TTSService(configService, eventBus, options);
+function createTTSService(config, eventBus = null, options = {}) {
+    return new TTSService(config, eventBus, options);
 }
 
 // Export the class and factory

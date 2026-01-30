@@ -24,10 +24,10 @@ class PlatformEventRouter {
         this.eventBus = options.eventBus;
         this.runtime = options.runtime;
         this.notificationManager = options.notificationManager;
-        this.configService = options.configService;
+        this.config = options.config;
         this.logger = options.logger;
-        if (!this.eventBus || !this.runtime || !this.notificationManager || !this.configService || !this.logger) {
-            throw new Error('PlatformEventRouter requires eventBus, runtime, notificationManager, configService, and logger');
+        if (!this.eventBus || !this.runtime || !this.notificationManager || !this.config || !this.logger) {
+            throw new Error('PlatformEventRouter requires eventBus, runtime, notificationManager, config, and logger');
         }
         this.errorHandler = createPlatformErrorHandler(this.logger, 'platform-event-router');
         this.subscription = null;
@@ -155,17 +155,25 @@ class PlatformEventRouter {
     }
 
     _isNotificationEnabled(type, platform) {
-        const config = NOTIFICATION_CONFIGS[type];
-        const settingKey = config?.settingKey;
-        if (!settingKey || !this.configService || typeof this.configService.areNotificationsEnabled !== 'function') {
-            throw new Error('ConfigService.areNotificationsEnabled required for notification gating');
+        const notifConfig = NOTIFICATION_CONFIGS[type];
+        const settingKey = notifConfig?.settingKey;
+        if (!settingKey || !this.config) {
+            throw new Error('Config required for notification gating');
         }
 
-        try {
-            return this.configService.areNotificationsEnabled(settingKey, platform);
-        } catch (error) {
-            throw error;
+        if (platform) {
+            const platformConfig = this.config[platform];
+            if (platformConfig && platformConfig[settingKey] !== undefined) {
+                return !!platformConfig[settingKey];
+            }
         }
+        
+        const generalEnabled = this.config.general?.[settingKey];
+        if (generalEnabled !== undefined) {
+            return !!generalEnabled;
+        }
+        
+        throw new Error(`Missing notification config: ${platform ? `${platform}.` : ''}${settingKey}`);
     }
 
     async forwardToNotificationManager(type, platform, data) {

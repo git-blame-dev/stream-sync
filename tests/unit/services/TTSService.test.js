@@ -2,13 +2,14 @@ const { describe, it, beforeEach, expect } = require('bun:test');
 const { createMockFn, clearAllMocks } = require('../../helpers/bun-mock-utils');
 const { noOpLogger } = require('../../helpers/mock-factories');
 const { expectNoTechnicalArtifacts } = require('../../helpers/assertion-helpers');
+const { createConfigFixture } = require('../../helpers/config-fixture');
 
 const { TTSService, createTTSService } = require('../../../src/services/TTSService');
 const testClock = require('../../helpers/test-clock');
 
 describe('TTSService', () => {
     let ttsService;
-    let mockConfigService;
+    let mockConfig;
     let mockEventBus;
 
     beforeEach(() => {
@@ -18,8 +19,9 @@ describe('TTSService', () => {
             emit: createMockFn()
         };
 
-        mockConfigService = {
-            getTTSConfig: createMockFn(() => ({
+        mockConfig = createConfigFixture({
+            general: { ttsEnabled: true },
+            tts: {
                 enabled: true,
                 deduplicationEnabled: true,
                 debugDeduplication: false,
@@ -27,16 +29,15 @@ describe('TTSService', () => {
                 voice: 'default',
                 rate: 1.0,
                 volume: 1.0
-            })),
-            set: createMockFn(() => true)
-        };
+            }
+        });
     });
 
     describe('Constructor', () => {
-        it('should initialize with ConfigService and EventBus', () => {
-            ttsService = new TTSService(mockConfigService, mockEventBus, { logger: noOpLogger });
+        it('should initialize with config and EventBus', () => {
+            ttsService = new TTSService(mockConfig, mockEventBus, { logger: noOpLogger });
 
-            expect(ttsService.configService).toBe(mockConfigService);
+            expect(ttsService.config).toBe(mockConfig);
             expect(ttsService.eventBus).toBe(mockEventBus);
             expect(ttsService.ttsQueue).toEqual([]);
             expect(ttsService.isProcessing).toBe(false);
@@ -44,14 +45,14 @@ describe('TTSService', () => {
         });
 
         it('should initialize without EventBus', () => {
-            ttsService = new TTSService(mockConfigService, null, { logger: noOpLogger });
+            ttsService = new TTSService(mockConfig, null, { logger: noOpLogger });
 
-            expect(ttsService.configService).toBe(mockConfigService);
+            expect(ttsService.config).toBe(mockConfig);
             expect(ttsService.eventBus).toBeNull();
         });
 
         it('should initialize performance stats', () => {
-            ttsService = new TTSService(mockConfigService, null, { logger: noOpLogger });
+            ttsService = new TTSService(mockConfig, null, { logger: noOpLogger });
 
             expect(ttsService.stats).toEqual({
                 totalRequests: 0,
@@ -66,15 +67,15 @@ describe('TTSService', () => {
 
     describe('Factory Function', () => {
         it('should create TTSService instance', () => {
-            const service = createTTSService(mockConfigService, mockEventBus, { logger: noOpLogger });
+            const service = createTTSService(mockConfig, mockEventBus, { logger: noOpLogger });
 
             expect(service).toBeInstanceOf(TTSService);
-            expect(service.configService).toBe(mockConfigService);
+            expect(service.config).toBe(mockConfig);
             expect(service.eventBus).toBe(mockEventBus);
         });
 
         it('should create TTSService without EventBus', () => {
-            const service = createTTSService(mockConfigService, null, { logger: noOpLogger });
+            const service = createTTSService(mockConfig, null, { logger: noOpLogger });
 
             expect(service).toBeInstanceOf(TTSService);
             expect(service.eventBus).toBeNull();
@@ -83,7 +84,7 @@ describe('TTSService', () => {
 
     describe('speak()', () => {
         beforeEach(() => {
-            ttsService = new TTSService(mockConfigService, mockEventBus, { logger: noOpLogger });
+            ttsService = new TTSService(mockConfig, mockEventBus, { logger: noOpLogger });
         });
 
         it('should speak text successfully', async () => {
@@ -95,7 +96,8 @@ describe('TTSService', () => {
         });
 
         it('should not speak when TTS disabled', async () => {
-            mockConfigService.getTTSConfig.mockReturnValue({ enabled: false });
+            const disabledConfig = createConfigFixture({ general: { ttsEnabled: false }, tts: { enabled: false } });
+            ttsService = new TTSService(disabledConfig, mockEventBus, { logger: noOpLogger });
 
             const result = await ttsService.speak('Hello world');
 
@@ -153,16 +155,14 @@ describe('TTSService', () => {
             expect(ttsService.stats.totalRequests).toBe(1);
         });
 
-        it('should work without ConfigService', async () => {
-            ttsService = new TTSService(null, mockEventBus, { logger: noOpLogger });
-
-            const result = await ttsService.speak('Hello world');
-
-            expect(result).toBe(false);
+        it('should throw without config', () => {
+            expect(() => {
+                new TTSService(null, mockEventBus, { logger: noOpLogger });
+            }).toThrow('TTSService requires config object');
         });
 
         it('should work without EventBus', async () => {
-            ttsService = new TTSService(mockConfigService, null, { logger: noOpLogger });
+            ttsService = new TTSService(mockConfig, null, { logger: noOpLogger });
 
             const result = await ttsService.speak('Hello world');
 
@@ -172,7 +172,7 @@ describe('TTSService', () => {
 
     describe('getStatus()', () => {
         beforeEach(() => {
-            ttsService = new TTSService(mockConfigService, mockEventBus, { logger: noOpLogger });
+            ttsService = new TTSService(mockConfig, mockEventBus, { logger: noOpLogger });
         });
 
         it('should return complete TTS status', () => {
@@ -211,7 +211,8 @@ describe('TTSService', () => {
         });
 
         it('should handle disabled TTS', () => {
-            mockConfigService.getTTSConfig.mockReturnValue({ enabled: false });
+            const disabledConfig = createConfigFixture({ general: { ttsEnabled: false }, tts: { enabled: false } });
+            ttsService = new TTSService(disabledConfig, mockEventBus, { logger: noOpLogger });
 
             const status = ttsService.getStatus();
 
@@ -221,10 +222,10 @@ describe('TTSService', () => {
 
     describe('getConfig()', () => {
         beforeEach(() => {
-            ttsService = new TTSService(mockConfigService, mockEventBus, { logger: noOpLogger });
+            ttsService = new TTSService(mockConfig, mockEventBus, { logger: noOpLogger });
         });
 
-        it('should return TTS configuration from ConfigService', () => {
+        it('should return TTS configuration from config', () => {
             const config = ttsService.getConfig();
 
             expect(config).toEqual({
@@ -238,23 +239,16 @@ describe('TTSService', () => {
             });
         });
 
-        it('should return default config without ConfigService', () => {
-            ttsService = new TTSService(null, null, { logger: noOpLogger });
-
-            const config = ttsService.getConfig();
-
-            expect(config).toEqual({
-                enabled: false,
-                voice: 'default',
-                rate: 1.0,
-                volume: 1.0
-            });
+        it('should throw without config', () => {
+            expect(() => {
+                new TTSService(null, null, { logger: noOpLogger });
+            }).toThrow('TTSService requires config object');
         });
     });
 
     describe('Text Sanitization', () => {
         beforeEach(() => {
-            ttsService = new TTSService(mockConfigService, mockEventBus, { logger: noOpLogger });
+            ttsService = new TTSService(mockConfig, mockEventBus, { logger: noOpLogger });
         });
 
         it('should preserve profanity', () => {
@@ -302,7 +296,7 @@ describe('TTSService', () => {
 
     describe('Default Settings', () => {
         beforeEach(() => {
-            ttsService = new TTSService(mockConfigService, mockEventBus, { logger: noOpLogger });
+            ttsService = new TTSService(mockConfig, mockEventBus, { logger: noOpLogger });
         });
 
         it('should get default voice setting', () => {
@@ -311,9 +305,8 @@ describe('TTSService', () => {
         });
 
         it('should get custom voice setting', () => {
-            mockConfigService.getTTSConfig.mockReturnValue({
-                voice: 'custom-voice'
-            });
+            const customConfig = createConfigFixture({ tts: { voice: 'custom-voice' } });
+            ttsService = new TTSService(customConfig, mockEventBus, { logger: noOpLogger });
 
             const voice = ttsService._getDefaultVoice();
             expect(voice).toBe('custom-voice');
@@ -325,9 +318,8 @@ describe('TTSService', () => {
         });
 
         it('should get custom rate setting', () => {
-            mockConfigService.getTTSConfig.mockReturnValue({
-                rate: 1.5
-            });
+            const customConfig = createConfigFixture({ tts: { rate: 1.5 } });
+            ttsService = new TTSService(customConfig, mockEventBus, { logger: noOpLogger });
 
             const rate = ttsService._getDefaultRate();
             expect(rate).toBe(1.5);
@@ -339,9 +331,8 @@ describe('TTSService', () => {
         });
 
         it('should get custom volume setting', () => {
-            mockConfigService.getTTSConfig.mockReturnValue({
-                volume: 0.7
-            });
+            const customConfig = createConfigFixture({ tts: { volume: 0.7 } });
+            ttsService = new TTSService(customConfig, mockEventBus, { logger: noOpLogger });
 
             const volume = ttsService._getDefaultVolume();
             expect(volume).toBe(0.7);

@@ -31,7 +31,7 @@ class NotificationManager extends EventEmitter {
         }
         
         this.eventBus = dependencies.eventBus;
-        this.configService = dependencies.configService;
+        this.config = dependencies.config;
         this.ttsService = dependencies.ttsService;
         this.vfxCommandService = dependencies.vfxCommandService;
         this.userTrackingService = dependencies.userTrackingService;
@@ -40,8 +40,8 @@ class NotificationManager extends EventEmitter {
         if (!this.displayQueue) {
             throw new Error('NotificationManager requires displayQueue dependency');
         }
-        if (!this.configService) {
-            throw new Error('NotificationManager requires ConfigService dependency');
+        if (!this.config || typeof this.config !== 'object') {
+            throw new Error('NotificationManager requires config dependency');
         }
 
         this.logger.debug('[NotificationManager] Initialized', 'notification-manager');
@@ -61,10 +61,6 @@ class NotificationManager extends EventEmitter {
 
         if (!this.eventBus) {
             throw new Error('NotificationManager requires EventBus dependency');
-        }
-
-        if (!this.configService) {
-            throw new Error('NotificationManager requires ConfigService dependency');
         }
         
         const { PRIORITY_LEVELS, NOTIFICATION_CONFIGS } = this.constants;
@@ -138,7 +134,6 @@ class NotificationManager extends EventEmitter {
             return { success: false, error: 'Invalid platform type', notificationType, platform };
         }
 
-        // Check if we have configuration access through ConfigService or app
         if (!this._hasConfigAccess()) {
             this.logger.warn(`[NotificationManager] No configuration access available, cannot process notification`, platform, { notificationType, data });
             return { success: false, error: 'Configuration unavailable', notificationType, platform };
@@ -640,7 +635,7 @@ class NotificationManager extends EventEmitter {
     // ================================================================================================
 
     _loadSuppressionConfig() {
-        const generalConfig = this.configService.get('general');
+        const generalConfig = this.config.general;
         if (!generalConfig || typeof generalConfig !== 'object') {
             throw new Error('Invalid suppression config: general config is missing or invalid');
         }
@@ -666,12 +661,24 @@ class NotificationManager extends EventEmitter {
     }
 
     _hasConfigAccess() {
-        return !!this.configService;
+        return !!this.config;
     }
 
     _areNotificationsEnabled(settingKey, platform) {
         try {
-            return this.configService.areNotificationsEnabled(settingKey, platform);
+            if (platform) {
+                const platformConfig = this.config[platform];
+                if (platformConfig && platformConfig[settingKey] !== undefined) {
+                    return !!platformConfig[settingKey];
+                }
+            }
+            
+            const generalEnabled = this.config.general?.[settingKey];
+            if (generalEnabled !== undefined) {
+                return !!generalEnabled;
+            }
+            
+            throw new Error(`Missing notification config: ${platform ? `${platform}.` : ''}${settingKey}`);
         } catch (error) {
             this._handleNotificationError(
                 `[NotificationManager] Error checking notifications enabled: ${error.message}`,
@@ -684,17 +691,7 @@ class NotificationManager extends EventEmitter {
     }
 
     _isDebugEnabled() {
-        try {
-            return this.configService.isDebugEnabled();
-        } catch (error) {
-            this._handleNotificationError(
-                `[NotificationManager] Error checking debug enabled: ${error.message}`,
-                error,
-                null,
-                { eventType: 'debug-enabled' }
-            );
-            return false;
-        }
+        return !!this.config.general?.debugEnabled;
     }
 
     async _isFirstMessage(userId, context = {}) {
@@ -745,8 +742,7 @@ class NotificationManager extends EventEmitter {
     async _processTTS(notificationType, platform, data) {
         try {
             // Check if TTS is enabled
-            const ttsConfig = this.configService.getTTSConfig();
-            const ttsEnabled = ttsConfig.enabled;
+            const ttsEnabled = !!this.config.general?.ttsEnabled;
             
             if (!ttsEnabled) {
                 return;
@@ -833,9 +829,7 @@ class NotificationManager extends EventEmitter {
         try {
             this.logger.debug(`[NotificationManager] Processing TTS for ${ttsNotification.type}`, 'notification-manager');
 
-            // Check TTS enabled through ConfigService
-            const ttsConfig = this.configService.getTTSConfig();
-            const ttsEnabled = ttsConfig.enabled;
+            const ttsEnabled = !!this.config.general?.ttsEnabled;
 
             if (!ttsEnabled) {
                 this.logger.debug('[NotificationManager] TTS disabled, skipping', 'notification-manager');

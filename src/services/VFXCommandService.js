@@ -4,8 +4,15 @@ const { logger } = require('../core/logging');
 const { CommandParser, runCommand } = require('../chat/commands');
 const { createPlatformErrorHandler } = require('../utils/platform-error-handler');
 const { PlatformEvents } = require('../interfaces/PlatformEvents');
+const { NOTIFICATION_CONFIGS } = require('../core/constants');
 
 const vfxCommandErrorHandler = createPlatformErrorHandler(logger, 'vfx-service');
+
+const SECTION_COMMAND_KEYS = new Set(
+    Object.values(NOTIFICATION_CONFIGS)
+        .map((notifConfig) => notifConfig.commandKey)
+        .filter((commandKey) => commandKey && !['commands', 'chat', 'general'].includes(commandKey))
+);
 
 function handleVFXCommandError(message, error, eventType) {
     if (!eventType) {
@@ -19,11 +26,11 @@ function handleVFXCommandError(message, error, eventType) {
 }
 
 class VFXCommandService {
-    constructor(configService, eventBus, options = {}) {
-        if (!configService) {
-            throw new Error('VFXCommandService requires configService');
+    constructor(config, eventBus, options = {}) {
+        if (!config || typeof config !== 'object') {
+            throw new Error('VFXCommandService requires config object');
         }
-        this.configService = configService;
+        this.config = config;
         this.eventBus = eventBus;
         this._effectsManager = options.effectsManager || null;
 
@@ -50,7 +57,7 @@ class VFXCommandService {
         };
         
         logger.debug('[VFXCommandService] Initialized', 'vfx-service', {
-            hasConfigService: !!configService,
+            hasConfig: !!config,
             hasEventBus: !!eventBus,
             hasCommandParser: !!this.commandParser
         });
@@ -231,7 +238,7 @@ class VFXCommandService {
 
         try {
             // Get command from configuration
-            const command = this.configService.getCommand(commandKey);
+            const command = this._getCommand(commandKey);
             
             if (!command) {
                 logger.debug(`[VFXCommandService] No command configured for key: ${commandKey}`, 'vfx-service');
@@ -277,7 +284,7 @@ class VFXCommandService {
                 throw new Error('executeCommandForKey requires username');
             }
 
-            const command = this.configService.getCommand(commandKey);
+            const command = this._getCommand(commandKey);
             if (!command) {
                 return {
                     success: false,
@@ -316,10 +323,8 @@ class VFXCommandService {
     checkCommandCooldown(userId, command) {
         try {
             const now = Date.now();
-            const userCooldownSecRaw = this.configService.get('general', 'cmdCoolDown');
-            const globalCooldownMsRaw = this.configService.get('general', 'globalCmdCooldownMs');
-            const userCooldownSec = Number(userCooldownSecRaw);
-            const globalCooldownMs = Number(globalCooldownMsRaw);
+            const userCooldownSec = this.config.general.cmdCoolDown;
+            const globalCooldownMs = this.config.general.globalCmdCooldownMs;
             if (!Number.isFinite(userCooldownSec) || !Number.isFinite(globalCooldownMs)) {
                 throw new Error('Cooldown config values must be numeric');
             }
@@ -378,9 +383,7 @@ class VFXCommandService {
             const oldParser = this.commandParser;
             this._initializeCommandParser();
             
-            // Check if initialization was successful
-            if (!this.commandParser && this.configService) {
-                // Restore old parser on failure
+            if (!this.commandParser && this.config) {
                 this.commandParser = oldParser;
                 return false;
             }
@@ -397,23 +400,39 @@ class VFXCommandService {
 
     _initializeCommandParser() {
         try {
-            // Get configuration in format expected by CommandParser
-            const config = {
-                commands: this.configService.get('commands'),
-                farewell: this.configService.get('farewell'),
+            const parserConfig = {
+                commands: this.config.commands,
+                farewell: this.config.farewell,
                 vfx: {
-                    filePath: this.configService.get('vfx', 'filePath')
+                    filePath: this.config.vfx?.filePath
                 },
-                general: this.configService.get('general')
+                general: this.config.general
             };
 
-            this.commandParser = new CommandParser(config);
+            this.commandParser = new CommandParser(parserConfig);
             logger.debug('[VFXCommandService] CommandParser initialized', 'vfx-service');
 
         } catch (error) {
             handleVFXCommandError(`[VFXCommandService] Error initializing CommandParser: ${error.message}`, error, 'parser-init');
             this.commandParser = null;
         }
+    }
+
+    _getCommand(commandKey) {
+        if (commandKey === 'members') {
+            return null;
+        }
+
+        if (SECTION_COMMAND_KEYS.has(commandKey)) {
+            const sectionCommand = this.config[commandKey]?.command;
+            if (sectionCommand) {
+                return sectionCommand;
+            }
+        } else if (this.config.commands?.[commandKey]) {
+            return this.config.commands[commandKey];
+        }
+
+        return null;
     }
 
     async _executeVFXCommand(vfxConfig, context) {
@@ -505,11 +524,11 @@ class VFXCommandService {
 
 }
 
-function createVFXCommandService(configService, eventBus = null) {
+function createVFXCommandService(config, eventBus = null) {
     if (arguments.length < 2) {
-        throw new Error('createVFXCommandService requires configService and eventBus (use null when none)');
+        throw new Error('createVFXCommandService requires config and eventBus (use null when none)');
     }
-    return new VFXCommandService(configService, eventBus);
+    return new VFXCommandService(config, eventBus);
 }
 
 // Export the class and factory

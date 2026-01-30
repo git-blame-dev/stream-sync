@@ -8,6 +8,7 @@ const { createMockDisplayQueue, noOpLogger } = require('../helpers/mock-factorie
 const { expectNoTechnicalArtifacts } = require('../helpers/assertion-helpers');
 const { createTextProcessingManager } = require('../../src/utils/text-processing');
 const { createMockFn, restoreAllMocks } = require('../helpers/bun-mock-utils');
+const { createConfigFixture } = require('../helpers/config-fixture');
 
 describe('YouTube gift platform flow (smoke)', () => {
     afterEach(() => {
@@ -25,21 +26,6 @@ describe('YouTube gift platform flow (smoke)', () => {
             }
         };
     };
-
-    const createConfigService = (config) => ({
-        areNotificationsEnabled: createMockFn().mockReturnValue(true),
-        getPlatformConfig: createMockFn().mockReturnValue(true),
-        getNotificationSettings: createMockFn().mockReturnValue({ enabled: true, duration: 4000 }),
-        get: createMockFn((section) => {
-            if (!section) {
-                return config;
-            }
-            return config[section] || {};
-        }),
-        isDebugEnabled: createMockFn().mockReturnValue(false),
-        getTTSConfig: createMockFn().mockReturnValue({ enabled: false }),
-        isEnabled: createMockFn().mockReturnValue(true)
-    });
 
     const assertNonEmptyString = (value) => {
         expect(typeof value).toBe('string');
@@ -68,10 +54,10 @@ describe('YouTube gift platform flow (smoke)', () => {
         }
     };
 
-    const buildRuntime = (configSnapshot, eventBus, configService, notificationManager, displayQueue, logger, platformLifecycleService) => (
-        createTestAppRuntime(configSnapshot, {
+    const buildRuntime = (configForRuntime, eventBus, config, notificationManager, displayQueue, logger, platformLifecycleService) => (
+        createTestAppRuntime(configForRuntime, {
             eventBus,
-            configService,
+            config,
             notificationManager,
             displayQueue,
             logger,
@@ -84,7 +70,7 @@ describe('YouTube gift platform flow (smoke)', () => {
         const logger = noOpLogger;
         const displayQueue = createMockDisplayQueue();
         const textProcessing = createTextProcessingManager({ logger });
-        const configSnapshot = {
+        const config = createConfigFixture({
             general: {
                 debugEnabled: false,
                 giftsEnabled: true,
@@ -102,13 +88,12 @@ describe('YouTube gift platform flow (smoke)', () => {
             youtube: { enabled: true, notificationsEnabled: true, username: 'test-channel' },
             obs: { enabled: false },
             tts: { enabled: false }
-        };
-        const configService = createConfigService(configSnapshot);
+        });
         const notificationManager = new NotificationManager({
             displayQueue,
             logger,
             eventBus,
-            configService,
+            config,
             constants: require('../../src/core/constants'),
             textProcessing,
             obsGoals: { processDonationGoal: createMockFn() },
@@ -128,9 +113,9 @@ describe('YouTube gift platform flow (smoke)', () => {
         });
 
         const runtimeBundle = buildRuntime(
-            configSnapshot,
+            config,
             eventBus,
-            configService,
+            config,
             notificationManager,
             displayQueue,
             logger,
@@ -141,8 +126,7 @@ describe('YouTube gift platform flow (smoke)', () => {
             eventBus,
             logger,
             displayQueue,
-            configSnapshot,
-            configService,
+            config,
             notificationManager,
             platformLifecycleService,
             runtimeBundle

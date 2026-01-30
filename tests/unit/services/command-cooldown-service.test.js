@@ -218,43 +218,23 @@ describe('CommandCooldownService', () => {
     });
 
     describe('Cooldown Configuration', () => {
-        it('should load cooldown overrides from ConfigService when provided', () => {
-            const overrides = { defaultCooldown: 30 };
-            const updatedOverrides = { defaultCooldown: 120, heavyCommandThreshold: 7 };
-            const mockConfigService = {
-                get: createMockFn((section) => {
-                    if (section === 'cooldowns') {
-                        return overrides;
-                    }
-                    return null;
-                })
-            };
+        it('should load cooldown overrides from config when provided', () => {
+            const customConfig = createConfigFixture({
+                cooldowns: { 
+                    defaultCooldownMs: 30000,
+                    heavyCommandThreshold: 7
+                }
+            });
 
             service.dispose();
             service = new CommandCooldownService({
                 eventBus: mockEventBus,
                 logger: noOpLogger,
-                configService: mockConfigService,
-                config: testConfig
+                config: customConfig
             });
 
             expect(service.getStatus().config.defaultCooldown).toBe(30000);
-
-            mockConfigService.get.mockImplementation((section) => {
-                if (section === 'cooldowns') {
-                    return updatedOverrides;
-                }
-                return null;
-            });
-
-            const handler = eventSubscriptions['config:changed'];
-            expect(typeof handler).toBe('function');
-
-            handler({ section: 'cooldowns' });
-
-            const updatedStatus = service.getStatus();
-            expect(updatedStatus.config.defaultCooldown).toBe(120000);
-            expect(updatedStatus.config.heavyCommandThreshold).toBe(7);
+            expect(service.getStatus().config.heavyCommandThreshold).toBe(7);
         });
 
         it('should report service status metrics for observability', () => {

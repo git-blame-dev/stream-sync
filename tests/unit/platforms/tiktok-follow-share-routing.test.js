@@ -1,6 +1,7 @@
 const { describe, it, expect } = require('bun:test');
 const { createMockFn } = require('../../helpers/bun-mock-utils');
 const { noOpLogger } = require('../../helpers/mock-factories');
+const { createConfigFixture } = require('../../helpers/config-fixture');
 const EventEmitter = require('events');
 const PlatformEventRouter = require('../../../src/services/PlatformEventRouter');
 
@@ -36,7 +37,7 @@ describe('TikTok follow/share routing', () => {
             eventBus,
             runtime,
             notificationManager: { handleNotification: createMockFn() },
-            configService: { areNotificationsEnabled: createMockFn(() => true) },
+            config: createConfigFixture({ general: { followsEnabled: true, giftsEnabled: true, messagesEnabled: true, sharesEnabled: true } }),
             logger: noOpLogger
         });
 
@@ -58,7 +59,7 @@ describe('TikTok follow/share routing', () => {
             eventBus,
             runtime,
             notificationManager: { handleNotification: createMockFn() },
-            configService: { areNotificationsEnabled: createMockFn(() => true) },
+            config: createConfigFixture({ general: { followsEnabled: true, giftsEnabled: true, messagesEnabled: true, sharesEnabled: true } }),
             logger: noOpLogger
         });
         const emitted = [];

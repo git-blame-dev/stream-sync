@@ -3,6 +3,7 @@ const { createMockFn, restoreAllMocks, spyOn } = require('../../../helpers/bun-m
 const { noOpLogger } = require('../../../helpers/mock-factories');
 const { expectNoTechnicalArtifacts } = require('../../../helpers/assertion-helpers');
 const { createTwitchFollowEvent } = require('../../../helpers/twitch-test-data');
+const { createConfigFixture } = require('../../../helpers/config-fixture');
 
 const { TwitchPlatform } = require('../../../../src/platforms/twitch');
 const PlatformEventRouter = require('../../../../src/services/PlatformEventRouter');
@@ -128,7 +129,7 @@ describe('Twitch Platform', () => {
             eventBus,
             runtime,
             notificationManager: mockApp,
-            configService: { areNotificationsEnabled: createMockFn(() => true) },
+            config: createConfigFixture({ general: { followsEnabled: true, giftsEnabled: true, messagesEnabled: true } }),
             logger: noOpLogger
         });
     });
