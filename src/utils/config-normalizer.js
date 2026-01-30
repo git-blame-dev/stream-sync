@@ -1,6 +1,5 @@
 const { DEFAULTS } = require('../core/config-defaults');
 const { ConfigValidator } = require('./config-validator');
-const { secrets } = require('../core/secrets');
 
 const dropUndefinedValues = (valueMap) => Object.fromEntries(
     Object.entries(valueMap).filter(([, value]) => value !== undefined)
@@ -59,79 +58,6 @@ function normalizeYouTubeConfig(config) {
     return dropUndefinedValues(normalized);
 }
 
-function validateRequiredKeys(config, requiredKeys, platformName = 'Platform') {
-    const missing = requiredKeys.filter(key => !config[key]);
-
-    if (missing.length > 0) {
-        throw new Error(
-            `${platformName} configuration missing required keys: ${missing.join(', ')}`
-        );
-    }
-}
-
-function validateYouTubeConfig(config) {
-    if (!config || typeof config !== 'object') {
-        return {
-            isValid: false,
-            errors: ['Configuration must be an object'],
-            userMessage: 'Invalid YouTube configuration format'
-        };
-    }
-
-    const errors = [];
-
-    if (!config.username) {
-        errors.push('Channel username required');
-        return {
-            isValid: false,
-            errors,
-            userMessage: 'YouTube channel username required for search-based stream detection'
-        };
-    }
-
-    const validMethods = ['scraping', 'api', 'youtubei'];
-    const method = config.streamDetectionMethod;
-
-    if (!method) {
-        errors.push('Stream detection method required');
-        return {
-            isValid: false,
-            errors,
-            userMessage: 'Stream detection method required. Use scraping, api, or youtubei.'
-        };
-    }
-
-    if (!validMethods.includes(method)) {
-        errors.push(`Invalid stream detection method: ${method}`);
-        return {
-            isValid: false,
-            errors,
-            userMessage: 'Invalid stream detection method. Use scraping, api, or youtubei.'
-        };
-    }
-
-    if (method === 'api' && !secrets.youtube.apiKey) {
-        errors.push('API key required for API-based detection');
-        return {
-            isValid: false,
-            errors,
-            userMessage: 'API key required for advanced stream detection methods'
-        };
-    }
-
-    const normalizedConfig = normalizeYouTubeConfig(config);
-
-    return {
-        isValid: true,
-        errors: [],
-        streamDetectionMethod: normalizedConfig.streamDetectionMethod,
-        userMessage: '',
-        ...normalizedConfig
-    };
-}
-
 module.exports = {
-    normalizeYouTubeConfig,
-    validateRequiredKeys,
-    validateYouTubeConfig
+    normalizeYouTubeConfig
 };

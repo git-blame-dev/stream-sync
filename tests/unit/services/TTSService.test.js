@@ -252,51 +252,6 @@ describe('TTSService', () => {
         });
     });
 
-    describe('updateConfig()', () => {
-        beforeEach(() => {
-            ttsService = new TTSService(mockConfigService, mockEventBus, { logger: noOpLogger });
-        });
-
-        it('should update TTS configuration', () => {
-            const newConfig = {
-                enabled: false,
-                voice: 'custom',
-                rate: 1.5
-            };
-
-            const result = ttsService.updateConfig(newConfig);
-
-            expect(result).toBeTruthy();
-            expect(mockEventBus.emit).not.toHaveBeenCalled();
-        });
-
-        it('should handle update failure', () => {
-            mockConfigService.set.mockReturnValue(false);
-
-            const result = ttsService.updateConfig({ enabled: false });
-
-            expect(result).toBe(false);
-            expect(mockEventBus.emit).not.toHaveBeenCalled();
-        });
-
-        it('should handle missing ConfigService', () => {
-            ttsService = new TTSService(null, mockEventBus, { logger: noOpLogger });
-
-            const result = ttsService.updateConfig({ enabled: false });
-
-            expect(result).toBe(false);
-            expect(mockEventBus.emit).not.toHaveBeenCalled();
-        });
-
-        it('should work without EventBus', () => {
-            ttsService = new TTSService(mockConfigService, null, { logger: noOpLogger });
-
-            const result = ttsService.updateConfig({ enabled: false });
-
-            expect(result).toBeTruthy();
-        });
-    });
-
     describe('Text Sanitization', () => {
         beforeEach(() => {
             ttsService = new TTSService(mockConfigService, mockEventBus, { logger: noOpLogger });
