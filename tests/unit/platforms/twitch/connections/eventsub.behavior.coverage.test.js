@@ -1,6 +1,7 @@
-const { describe, it, expect, afterEach } = require('bun:test');
+const { describe, it, expect, afterEach, beforeEach } = require('bun:test');
 const { createMockFn } = require('../../../../helpers/bun-mock-utils');
 const { noOpLogger } = require('../../../../helpers/mock-factories');
+const { secrets, _resetForTesting, initializeStaticSecrets } = require('../../../../../src/core/secrets');
 
 const TwitchEventSub = require('../../../../../src/platforms/twitch-eventsub');
 
@@ -8,24 +9,19 @@ class MockChatFileLoggingService {
     logRawPlatformData() {}
 }
 
-const createAuthManager = (overrides = {}) => ({
-    getState: () => overrides.state || 'READY',
-    getScopes: async () => overrides.scopes || [],
-    getAccessToken: async () => 'test-token',
-    getUserId: () => 'test-user-123',
-    getClientId: () => overrides.clientId || null,
-    clientId: overrides.clientId || null,
-    twitchAuth: { triggerOAuthFlow: createMockFn().mockRejectedValue(new Error('oauth fail')) },
-    authState: { executeWhenReady: async (fn) => fn() },
+const createTwitchAuth = (overrides = {}) => ({
+    isReady: () => ('ready' in overrides ? overrides.ready : true),
+    refreshTokens: createMockFn().mockResolvedValue(true),
+    getUserId: () => overrides.userId || 'test-user-123',
     ...overrides
 });
 
 const createEventSub = (configOverrides = {}, depsOverrides = {}) => {
     return new TwitchEventSub(
-        { dataLoggingEnabled: false, ...configOverrides },
+        { dataLoggingEnabled: false, clientId: 'test-client-id', ...configOverrides },
         {
             logger: noOpLogger,
-            authManager: createAuthManager(),
+            twitchAuth: createTwitchAuth(),
             axios: { post: createMockFn(), get: createMockFn(), delete: createMockFn() },
             WebSocketCtor: class { close() {} },
             ChatFileLoggingService: MockChatFileLoggingService,
@@ -37,35 +33,41 @@ const createEventSub = (configOverrides = {}, depsOverrides = {}) => {
 describe('TwitchEventSub behavior guardrails', () => {
     let eventSub;
 
+    beforeEach(() => {
+        _resetForTesting();
+        initializeStaticSecrets();
+        secrets.twitch.accessToken = 'test-token';
+    });
+
     afterEach(() => {
         if (eventSub?.cleanup) {
             eventSub.cleanup().catch(() => {});
         }
+        _resetForTesting();
+        initializeStaticSecrets();
     });
 
     it('validates config fields and generates warnings for type mismatches', () => {
         eventSub = createEventSub(
             { dataLoggingEnabled: 'not-bool', broadcasterId: 'test-broadcaster-id' },
-            { authManager: createAuthManager() }
+            { twitchAuth: createTwitchAuth() }
         );
 
         const result = eventSub._validateConfigurationFields();
 
         expect(result.valid).toBe(true);
         expect(result.details.broadcasterId.valid).toBe(true);
-        expect(result.warnings.some((w) => w.includes('centralized auth'))).toBe(true);
     });
 
-    it('throws when auth manager is missing or not ready', () => {
+    it('throws when Twitch auth is missing or not ready', () => {
         expect(() => {
-            const es = createEventSub({ broadcasterId: 'test-broadcaster-id' }, { authManager: null });
-            es._validateAuthManager();
-        }).toThrow('AuthManager is required');
+            createEventSub({ broadcasterId: 'test-broadcaster-id' }, { twitchAuth: null });
+        }).toThrow('TwitchEventSub subscription manager requires twitchAuth');
 
+        const es = createEventSub({ broadcasterId: 'test-broadcaster-id' }, { twitchAuth: createTwitchAuth({ ready: false }) });
         expect(() => {
-            const es = createEventSub({ broadcasterId: 'test-broadcaster-id' }, { authManager: createAuthManager({ state: 'STALE' }) });
-            es._validateAuthManager();
-        }).toThrow("AuthManager state is 'STALE'");
+            es._validateTwitchAuth();
+        }).toThrow('TwitchAuth is not ready');
     });
 
     it('returns false from connection validation when session/connection is invalid', () => {
@@ -102,27 +104,15 @@ describe('TwitchEventSub behavior guardrails', () => {
         expect(fallback.isRetryable).toBe(true);
     });
 
-    it('detects missing scopes via token validation', async () => {
+    it('validates Twitch auth is ready', () => {
         eventSub = createEventSub(
             { broadcasterId: 'test-broadcaster-id' },
-            { authManager: createAuthManager({ scopes: ['user:read:chat'], clientId: 'test-client' }) }
+            { twitchAuth: createTwitchAuth({ ready: true }) }
         );
 
-        const result = await eventSub._validateTokenScopes();
-
-        expect(result.valid).toBe(false);
-        expect(result.missingScopes.length).toBeGreaterThan(0);
-    });
-
-    it('validates auth manager state is READY', () => {
-        eventSub = createEventSub(
-            { broadcasterId: 'test-broadcaster-id' },
-            { authManager: createAuthManager({ state: 'READY' }) }
-        );
-
-        const result = eventSub._validateAuthManager();
+        const result = eventSub._validateTwitchAuth();
 
         expect(result.valid).toBe(true);
-        expect(result.details.state).toBe('READY');
+        expect(result.details.ready).toBe(true);
     });
 });

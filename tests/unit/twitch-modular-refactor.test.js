@@ -2,7 +2,8 @@
 const { describe, expect, beforeEach, it, afterEach } = require('bun:test');
 const { createMockFn, restoreAllMocks } = require('../helpers/bun-mock-utils');
 
-const { noOpLogger, createMockAuthManager } = require('../helpers/mock-factories');
+const { noOpLogger } = require('../helpers/mock-factories');
+const { secrets, _resetForTesting, initializeStaticSecrets } = require('../../src/core/secrets');
 const { setupAutomatedCleanup } = require('../helpers/mock-lifecycle');
 setupAutomatedCleanup({
     clearCallsBeforeEach: true,
@@ -17,7 +18,7 @@ const { TwitchViewerCountProvider } = require('../../src/utils/viewer-count-prov
 class TwitchPlatform {
     constructor(config, dependencies) {
         this.config = config;
-        this.authManager = dependencies.authManager;
+        this.twitchAuth = dependencies.twitchAuth;
         this.eventSub = new dependencies.TwitchEventSub();
         this.enhancedHttpClient = dependencies.enhancedHttpClient;
         this.apiClient = null;
@@ -26,7 +27,7 @@ class TwitchPlatform {
     }
 
     async initialize(handlers) {
-        this.apiClient = new TwitchApiClient(this.authManager, { clientId: this.config.clientId }, this.logger, {
+        this.apiClient = new TwitchApiClient(this.twitchAuth, { clientId: this.config.clientId }, this.logger, {
             enhancedHttpClient: this.enhancedHttpClient
         });
         this.viewerCountProvider = new TwitchViewerCountProvider(
@@ -54,9 +55,11 @@ class TwitchPlatform {
 }
 
 describe('TwitchPlatform Modular Refactor', () => {
-    afterEach(() => {
-        restoreAllMocks();
-    });
+        afterEach(() => {
+            restoreAllMocks();
+            _resetForTesting();
+            initializeStaticSecrets();
+        });
 
     
     describe('ConnectionState Module', () => {
@@ -118,20 +121,20 @@ describe('TwitchPlatform Modular Refactor', () => {
     });
 
     describe('TwitchApiClient Module', () => {
-        let mockAuthManager;
+        let mockTwitchAuth;
         let mockHttpClient;
         let mockLogger;
         let apiClient;
 
         beforeEach(() => {
+            _resetForTesting();
+            initializeStaticSecrets();
+            secrets.twitch.accessToken = 'test_token';
             mockLogger = noOpLogger;
-            mockAuthManager = createMockAuthManager('READY', {
-                accessToken: 'test_token',
-                clientId: 'test_client_id'
-            });
+            mockTwitchAuth = { isReady: () => true, refreshTokens: createMockFn().mockResolvedValue(true) };
             mockHttpClient = { get: createMockFn() };
             apiClient = new TwitchApiClient(
-                mockAuthManager,
+                mockTwitchAuth,
                 { clientId: 'test_client_id' },
                 mockLogger,
                 { enhancedHttpClient: mockHttpClient }
@@ -287,16 +290,16 @@ describe('TwitchPlatform Modular Refactor', () => {
     });
 
     describe('TwitchPlatform Integration', () => {
-        let mockAuthManager;
+        let mockTwitchAuth;
         let mockEventSub;
         let mockHttpClient;
         let twitchPlatform;
 
         beforeEach(() => {
-            mockAuthManager = createMockAuthManager('READY', {
-                accessToken: 'test_token',
-                clientId: 'test_client_id'
-            });
+            _resetForTesting();
+            initializeStaticSecrets();
+            secrets.twitch.accessToken = 'test_token';
+            mockTwitchAuth = { isReady: () => true, refreshTokens: createMockFn().mockResolvedValue(true) };
             
             mockEventSub = {
                 isActive: () => true,
@@ -312,7 +315,7 @@ describe('TwitchPlatform Modular Refactor', () => {
             };
 
             twitchPlatform = new TwitchPlatform(config, {
-                authManager: mockAuthManager,
+                twitchAuth: mockTwitchAuth,
                 enhancedHttpClient: mockHttpClient,
                 TwitchEventSub: class MockTwitchEventSub {
                     constructor() { return mockEventSub; }

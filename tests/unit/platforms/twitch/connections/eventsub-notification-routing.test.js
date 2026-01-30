@@ -3,26 +3,31 @@ const { createMockFn } = require('../../../../helpers/bun-mock-utils');
 const { noOpLogger } = require('../../../../helpers/mock-factories');
 
 const TwitchEventSub = require('../../../../../src/platforms/twitch-eventsub');
+const { secrets, _resetForTesting, initializeStaticSecrets } = require('../../../../../src/core/secrets');
+
+const createReadyTwitchAuth = () => ({
+    isReady: () => true,
+    refreshTokens: createMockFn().mockResolvedValue(true),
+    getUserId: () => 'test-user-123'
+});
 
 const createEventSub = (configOverrides = {}, depsOverrides = {}) => {
     const config = {
         clientId: 'test-client-id',
-        accessToken: 'test-token',
         channel: 'teststreamer',
         username: 'teststreamer',
         dataLoggingEnabled: false,
         broadcasterId: 'test-broadcaster-id',
         ...configOverrides
     };
-    const authManager = depsOverrides.authManager || {
-        getState: () => 'READY',
-        getUserId: () => 'test-user-123',
-        getAccessToken: async () => 'test-token',
-        authState: { executeWhenReady: async (fn) => fn() }
-    };
+    secrets.twitch.accessToken = 'test-token';
+    if (!depsOverrides.twitchAuth) {
+        throw new Error('twitchAuth is required - provide explicit mock');
+    }
+    const twitchAuth = depsOverrides.twitchAuth;
     return new TwitchEventSub(config, {
         logger: noOpLogger,
-        authManager,
+        twitchAuth,
         axios: { post: createMockFn().mockResolvedValue({ data: {} }), get: createMockFn().mockResolvedValue({ data: {} }), delete: createMockFn().mockResolvedValue({ data: {} }) },
         WebSocketCtor: class { close() {} },
         ChatFileLoggingService: class { logRawPlatformData() {} },
@@ -37,10 +42,12 @@ describe('TwitchEventSub notification routing', () => {
         if (eventSub?.cleanup) {
             eventSub.cleanup().catch(() => {});
         }
+        _resetForTesting();
+        initializeStaticSecrets();
     });
 
     it('routes chat notifications and emits chat message event', async () => {
-        eventSub = createEventSub();
+        eventSub = createEventSub({}, { twitchAuth: createReadyTwitchAuth() });
         const messageEvents = [];
         eventSub.on('chatMessage', (data) => messageEvents.push(data));
 
@@ -66,7 +73,7 @@ describe('TwitchEventSub notification routing', () => {
     });
 
     it('routes follow notifications and emits follow event', async () => {
-        eventSub = createEventSub();
+        eventSub = createEventSub({}, { twitchAuth: createReadyTwitchAuth() });
         const followEvents = [];
         eventSub.on('follow', (data) => followEvents.push(data));
 
@@ -89,7 +96,7 @@ describe('TwitchEventSub notification routing', () => {
     });
 
     it('emits subscription events with canonical months for renewal handling', () => {
-        eventSub = createEventSub();
+        eventSub = createEventSub({}, { twitchAuth: createReadyTwitchAuth() });
         const paypiggyEvents = [];
         eventSub.on('paypiggy', (data) => paypiggyEvents.push(data));
 
@@ -113,7 +120,7 @@ describe('TwitchEventSub notification routing', () => {
     });
 
     it('emits resubscription messages with canonical months for renewal handling', () => {
-        eventSub = createEventSub();
+        eventSub = createEventSub({}, { twitchAuth: createReadyTwitchAuth() });
         const paypiggyMessageEvents = [];
         eventSub.on('paypiggyMessage', (data) => paypiggyMessageEvents.push(data));
 
@@ -138,7 +145,7 @@ describe('TwitchEventSub notification routing', () => {
     });
 
     it('routes raid events and emits raid event', async () => {
-        eventSub = createEventSub();
+        eventSub = createEventSub({}, { twitchAuth: createReadyTwitchAuth() });
         const raidEvents = [];
         eventSub.on('raid', (data) => raidEvents.push(data));
 

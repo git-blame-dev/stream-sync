@@ -3,6 +3,7 @@ const { createMockFn } = require('../../../../helpers/bun-mock-utils');
 const { noOpLogger } = require('../../../../helpers/mock-factories');
 const testClock = require('../../../../helpers/test-clock');
 const { safeSetTimeout, safeDelay } = require('../../../../../src/utils/timeout-validator');
+const { secrets, _resetForTesting, initializeStaticSecrets } = require('../../../../../src/core/secrets');
 
 const TwitchEventSub = require('../../../../../src/platforms/twitch-eventsub');
 
@@ -21,15 +22,10 @@ class MockChatFileLoggingService {
     logRawPlatformData() {}
 }
 
-const createAuthManager = (overrides = {}) => ({
-    getState: () => 'state' in overrides ? overrides.state : 'READY',
-    getScopes: async () => 'scopes' in overrides ? overrides.scopes : ['user:read:chat', 'moderator:read:followers', 'channel:read:subscriptions', 'bits:read'],
-    getAccessToken: async () => 'token' in overrides ? overrides.token : 'test-token',
-    getUserId: () => 'test-user-123',
-    getClientId: () => 'clientId' in overrides ? overrides.clientId : 'test-client-id',
-    clientId: 'clientId' in overrides ? overrides.clientId : 'test-client-id',
-    twitchAuth: { triggerOAuthFlow: createMockFn() },
-    authState: { executeWhenReady: async (fn) => fn() },
+const createTwitchAuth = (overrides = {}) => ({
+    isReady: () => ('ready' in overrides ? overrides.ready : true),
+    refreshTokens: createMockFn().mockResolvedValue(true),
+    getUserId: () => overrides.userId || 'test-user-123',
     ...overrides
 });
 
@@ -38,7 +34,7 @@ const createEventSub = (configOverrides = {}, depsOverrides = {}) => {
         { dataLoggingEnabled: false, broadcasterId: 'test-broadcaster', clientId: 'test-client-id', ...configOverrides },
         {
             logger: noOpLogger,
-            authManager: createAuthManager(),
+            twitchAuth: createTwitchAuth(),
             axios: { post: createMockFn(), get: createMockFn(), delete: createMockFn() },
             WebSocketCtor: MockWebSocket,
             ChatFileLoggingService: MockChatFileLoggingService,
@@ -55,6 +51,8 @@ describe('TwitchEventSub lifecycle', () => {
             await eventSub.cleanup().catch(() => {});
             eventSub = null;
         }
+        _resetForTesting();
+        initializeStaticSecrets();
     });
 
     describe('periodic cleanup', () => {
@@ -207,30 +205,6 @@ describe('TwitchEventSub lifecycle', () => {
             await eventSub.cleanup();
 
             expect(eventSub.ws).toBeNull();
-        });
-    });
-
-    describe('token validation', () => {
-        it('skips validation when auth manager is not ready', async () => {
-            eventSub = createEventSub({}, {
-                authManager: createAuthManager({ state: 'PENDING' })
-            });
-
-            await eventSub._ensureValidToken();
-
-            expect(eventSub.config.accessToken).toBeUndefined();
-        });
-
-        it('continues when token refresh fails', async () => {
-            const mockAuthManager = {
-                ...createAuthManager(),
-                getAccessToken: async () => { throw new Error('refresh failed'); }
-            };
-            eventSub = createEventSub({}, { authManager: mockAuthManager });
-
-            await eventSub._ensureValidToken();
-
-            expect(eventSub.config.accessToken).toBeUndefined();
         });
     });
 
@@ -445,16 +419,16 @@ describe('TwitchEventSub lifecycle', () => {
             await expect(eventSub.sendMessage('   ')).rejects.toThrow('non-empty message');
         });
 
-        it('throws when auth manager is missing', async () => {
+        it('throws when Twitch auth is missing', async () => {
             eventSub = createEventSub();
-            eventSub.authManager = null;
+            eventSub.twitchAuth = null;
 
-            await expect(eventSub.sendMessage('test')).rejects.toThrow('auth manager');
+            await expect(eventSub.sendMessage('test')).rejects.toThrow('Twitch auth');
         });
 
         it('throws when user ID is not available', async () => {
             eventSub = createEventSub({}, {
-                authManager: { ...createAuthManager(), getUserId: () => null }
+                twitchAuth: { ...createTwitchAuth(), getUserId: () => null }
             });
 
             await expect(eventSub.sendMessage('test')).rejects.toThrow('user ID');
@@ -462,7 +436,7 @@ describe('TwitchEventSub lifecycle', () => {
 
         it('throws when client ID is not available', async () => {
             eventSub = createEventSub({ clientId: null }, {
-                authManager: { ...createAuthManager(), getClientId: () => null, clientId: null }
+                twitchAuth: createTwitchAuth()
             });
 
             await expect(eventSub.sendMessage('test')).rejects.toThrow('clientId');
@@ -478,6 +452,7 @@ describe('TwitchEventSub lifecycle', () => {
                 get: createMockFn(),
                 delete: createMockFn()
             };
+            secrets.twitch.accessToken = 'test-token';
             eventSub = createEventSub({}, { axios: mockAxios });
 
             const result = await eventSub.sendMessage('Hello stream!');
@@ -486,6 +461,37 @@ describe('TwitchEventSub lifecycle', () => {
             expect(result.platform).toBe('twitch');
             expect(postCalls.length).toBe(1);
             expect(postCalls[0].payload.message).toBe('Hello stream!');
+        });
+
+        it('retries once after refresh on 401', async () => {
+            let callCount = 0;
+            const mockAxios = {
+                post: createMockFn().mockImplementation(() => {
+                    callCount += 1;
+                    if (callCount === 1) {
+                        const error = new Error('Unauthorized');
+                        error.response = { status: 401 };
+                        return Promise.reject(error);
+                    }
+                    return Promise.resolve({});
+                }),
+                get: createMockFn(),
+                delete: createMockFn()
+            };
+            const refreshedToken = 'refreshed-token';
+            const twitchAuth = createTwitchAuth({
+                refreshTokens: createMockFn().mockImplementation(async () => {
+                    secrets.twitch.accessToken = refreshedToken;
+                    return true;
+                })
+            });
+            secrets.twitch.accessToken = 'expired-token';
+            eventSub = createEventSub({}, { axios: mockAxios, twitchAuth });
+
+            const result = await eventSub.sendMessage('Retry message');
+
+            expect(result.success).toBe(true);
+            expect(mockAxios.post.mock.calls.length).toBe(2);
         });
 
         it('handles API error and throws', async () => {
@@ -541,9 +547,9 @@ describe('TwitchEventSub lifecycle', () => {
             expect(eventSub._validateConnectionForSubscriptions()).toBe(false);
         });
 
-        it('returns false when auth manager is not ready', () => {
+        it('returns false when Twitch auth is not ready', () => {
             eventSub = createEventSub({}, {
-                authManager: createAuthManager({ state: 'STALE' })
+                twitchAuth: createTwitchAuth({ ready: false })
             });
             eventSub.sessionId = 'test-session';
             eventSub._isConnected = true;
@@ -554,8 +560,9 @@ describe('TwitchEventSub lifecycle', () => {
         });
 
         it('returns false when token provider is missing', () => {
-            eventSub = createEventSub({ accessToken: null }, {
-                authManager: { ...createAuthManager(), getAccessToken: undefined }
+            secrets.twitch.accessToken = null;
+            eventSub = createEventSub({ clientId: 'test-client-id' }, {
+                twitchAuth: createTwitchAuth()
             });
             eventSub.sessionId = 'test-session';
             eventSub._isConnected = true;
@@ -676,36 +683,6 @@ describe('TwitchEventSub lifecycle', () => {
             await eventSub._handleSubscriptionRevocation({ type: 'channel.follow', id: 'sub-1', status: 'revoked' });
 
             expect(eventSub.subscriptionsReady).toBe(false);
-        });
-    });
-
-    describe('sendMessage with executeWhenReady', () => {
-        it('uses authState.executeWhenReady when available', async () => {
-            const postCalls = [];
-            let executeWhenReadyCalled = false;
-            const mockAxios = {
-                post: createMockFn().mockImplementation((url, payload) => {
-                    postCalls.push({ url, payload });
-                    return Promise.resolve({});
-                }),
-                get: createMockFn(),
-                delete: createMockFn()
-            };
-            const mockAuthManager = {
-                ...createAuthManager(),
-                authState: {
-                    executeWhenReady: async (fn) => {
-                        executeWhenReadyCalled = true;
-                        return fn();
-                    }
-                }
-            };
-            eventSub = createEventSub({}, { axios: mockAxios, authManager: mockAuthManager });
-
-            await eventSub.sendMessage('test message');
-
-            expect(executeWhenReadyCalled).toBe(true);
-            expect(postCalls.length).toBe(1);
         });
     });
 

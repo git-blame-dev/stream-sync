@@ -4,25 +4,14 @@ const { noOpLogger } = require('../../../helpers/mock-factories');
 
 const { TwitchPlatform } = require('../../../../src/platforms/twitch');
 const TwitchEventSub = require('../../../../src/platforms/twitch-eventsub');
+const { secrets, _resetForTesting, initializeStaticSecrets } = require('../../../../src/core/secrets');
 
-const createAuthManager = (overrides = {}) => {
-    const requiredScopes = overrides.scopes || [
-        'user:read:chat',
-        'moderator:read:followers',
-        'channel:read:subscriptions',
-        'bits:read'
-    ];
-
-    return {
-        getState: createMockFn().mockReturnValue(overrides.state || 'READY'),
-        getScopes: createMockFn().mockResolvedValue(requiredScopes),
-        getUserId: createMockFn().mockReturnValue(overrides.userId),
-        getAccessToken: createMockFn().mockResolvedValue(overrides.accessToken || 'centralized-token'),
-        authState: { executeWhenReady: createMockFn().mockImplementation(async (fn) => fn()) },
-        twitchAuth: { triggerOAuthFlow: createMockFn() },
-        ...overrides
-    };
-};
+const createTwitchAuth = (overrides = {}) => ({
+    isReady: createMockFn().mockReturnValue(overrides.ready ?? true),
+    refreshTokens: createMockFn().mockResolvedValue(true),
+    getUserId: createMockFn().mockReturnValue(overrides.userId || 'test-user-id'),
+    ...overrides
+});
 
 const createMockApiClient = () => ({
     getBroadcasterId: createMockFn().mockResolvedValue('test-broadcaster-id')
@@ -41,14 +30,19 @@ const baseConfig = {
 describe('TwitchPlatform event behaviors', () => {
     afterEach(() => {
         restoreAllMocks();
+        _resetForTesting();
+        initializeStaticSecrets();
     });
 
     it('accepts centralized auth for EventSub validation without raw tokens', async () => {
+        _resetForTesting();
+        initializeStaticSecrets();
+        secrets.twitch.accessToken = 'centralized-token';
         const MockWebSocket = class { constructor() {} };
         const eventSub = new TwitchEventSub(
-            { enabled: true, eventsub_enabled: true, broadcasterId: TEST_USER_ID },
+            { enabled: true, eventsub_enabled: true, broadcasterId: TEST_USER_ID, clientId: 'test-client-id' },
             {
-                authManager: createAuthManager({ userId: TEST_USER_ID }),
+                twitchAuth: createTwitchAuth({ userId: TEST_USER_ID }),
                 logger: noOpLogger,
                 WebSocketCtor: MockWebSocket
             }
@@ -58,12 +52,12 @@ describe('TwitchPlatform event behaviors', () => {
 
         expect(validation.valid).toBe(true);
         expect(validation.components.configuration.issues).toHaveLength(0);
-        expect(validation.components.authManager.details.state).toBe('READY');
+        expect(validation.components.twitchAuth.details.ready).toBe(true);
     });
 
     it('keeps stream lifecycle transitions from crashing when polling hooks are missing', async () => {
         const platform = new TwitchPlatform(baseConfig, {
-            authManager: createAuthManager({ userId: TEST_USER_ID }),
+            twitchAuth: createTwitchAuth({ userId: TEST_USER_ID }),
             TwitchApiClient: createMockFn().mockImplementation(() => createMockApiClient()),
             logger: noOpLogger
         });
@@ -75,7 +69,7 @@ describe('TwitchPlatform event behaviors', () => {
 
     it('emits raid events with normalized user shape and metadata', async () => {
         const platform = new TwitchPlatform(baseConfig, {
-            authManager: createAuthManager({ userId: TEST_USER_ID }),
+            twitchAuth: createTwitchAuth({ userId: TEST_USER_ID }),
             logger: noOpLogger
         });
 
@@ -97,7 +91,7 @@ describe('TwitchPlatform event behaviors', () => {
 
     it('emits paypiggy error payloads when timestamps are missing', async () => {
         const platform = new TwitchPlatform(baseConfig, {
-            authManager: createAuthManager({ userId: TEST_USER_ID }),
+            twitchAuth: createTwitchAuth({ userId: TEST_USER_ID }),
             logger: noOpLogger
         });
 
@@ -122,7 +116,7 @@ describe('TwitchPlatform event behaviors', () => {
 
     it('emits gift error payloads when usernames are missing', async () => {
         const platform = new TwitchPlatform(baseConfig, {
-            authManager: createAuthManager({ userId: TEST_USER_ID }),
+            twitchAuth: createTwitchAuth({ userId: TEST_USER_ID }),
             logger: noOpLogger
         });
 
@@ -149,7 +143,7 @@ describe('TwitchPlatform event behaviors', () => {
 
     it('emits giftpaypiggy error payloads when timestamps are missing', async () => {
         const platform = new TwitchPlatform(baseConfig, {
-            authManager: createAuthManager({ userId: TEST_USER_ID }),
+            twitchAuth: createTwitchAuth({ userId: TEST_USER_ID }),
             logger: noOpLogger
         });
 
@@ -175,7 +169,7 @@ describe('TwitchPlatform event behaviors', () => {
 
     it('skips follow event emission when timestamp is missing', async () => {
         const platform = new TwitchPlatform(baseConfig, {
-            authManager: createAuthManager({ userId: TEST_USER_ID }),
+            twitchAuth: createTwitchAuth({ userId: TEST_USER_ID }),
             logger: noOpLogger
         });
 
@@ -192,7 +186,7 @@ describe('TwitchPlatform event behaviors', () => {
 
     it('emits chat events from EventSub payloads', async () => {
         const platform = new TwitchPlatform(baseConfig, {
-            authManager: createAuthManager({ userId: TEST_USER_ID }),
+            twitchAuth: createTwitchAuth({ userId: TEST_USER_ID }),
             logger: noOpLogger
         });
 
@@ -214,7 +208,7 @@ describe('TwitchPlatform event behaviors', () => {
 
     it('returns user-friendly errors when sending without an EventSub connection', async () => {
         const platform = new TwitchPlatform(baseConfig, {
-            authManager: createAuthManager({ userId: TEST_USER_ID }),
+            twitchAuth: createTwitchAuth({ userId: TEST_USER_ID }),
             logger: noOpLogger
         });
 
@@ -234,7 +228,7 @@ describe('TwitchPlatform event behaviors', () => {
         const platform = new TwitchPlatform(
             { ...baseConfig, dataLoggingEnabled: true },
             {
-                authManager: createAuthManager({ userId: TEST_USER_ID }),
+                twitchAuth: createTwitchAuth({ userId: TEST_USER_ID }),
                 logger: noOpLogger,
                 ChatFileLoggingService: RecordingLoggingService
             }

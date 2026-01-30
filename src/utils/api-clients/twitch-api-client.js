@@ -1,11 +1,12 @@
 
 const { getUnifiedLogger } = require('../../core/logging');
+const { secrets } = require('../../core/secrets');
 const { createEnhancedHttpClient } = require('../enhanced-http-client');
 const { createRetrySystem } = require('../retry-system');
 
 class TwitchApiClient {
-    constructor(authManager, config = {}, logger = null, dependencies = {}) {
-        this.authManager = authManager;
+    constructor(twitchAuth, config = {}, logger = null, dependencies = {}) {
+        this.twitchAuth = twitchAuth;
         this.config = config;
         this.logger = logger || getUnifiedLogger();
         this.httpClient = dependencies.enhancedHttpClient || createEnhancedHttpClient({
@@ -16,22 +17,10 @@ class TwitchApiClient {
     }
 
     async makeRequest(endpoint, options = {}) {
-        // Proactively ensure token is valid before making API calls
-        // This prevents 401 errors and improves user experience
-        if (this.authManager.ensureValidToken) {
-            this.logger.debug('Checking token validity before API call', 'twitch-api');
-            try {
-                await this.authManager.ensureValidToken();
-            } catch (error) {
-                this.logger.warn(`Token validation check failed: ${error.message}`, 'twitch-api');
-                // Continue anyway - the token might still work
-            }
-        }
-
         const url = `${this.baseUrl}${endpoint}`;
 
         const executeRequest = async () => {
-            const accessToken = await this.authManager.getAccessToken();
+            const accessToken = secrets.twitch.accessToken;
             if (!accessToken) {
                 throw new Error('No access token available for Twitch API');
             }
@@ -61,13 +50,16 @@ class TwitchApiClient {
             return response.data;
         } catch (error) {
             const isAuthError = error?.response?.status === 401;
-            if (!isAuthError || !this.authManager.ensureValidToken) {
+            if (!isAuthError || !this.twitchAuth) {
                 throw error;
             }
 
             this.logger.info('Received 401 from Twitch API, refreshing token and retrying once', 'twitch-api');
             try {
-                await this.authManager.ensureValidToken({ forceRefresh: true });
+                const refreshed = await this.twitchAuth.refreshTokens();
+                if (!refreshed) {
+                    throw error;
+                }
                 const retryResponse = await executeRequest();
                 this.logger.debug('Twitch API retry after refresh succeeded', 'twitch-api');
                 return retryResponse.data;

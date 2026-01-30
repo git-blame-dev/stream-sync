@@ -25,7 +25,6 @@ function normalizeTwitchPlatformConfig(rawConfig = {}) {
         channel: rawConfig.channel,
         clientId: rawConfig.clientId,
         tokenStorePath: rawConfig.tokenStorePath,
-        tokenExpiresAt: rawConfig.tokenExpiresAt,
         eventsub_enabled: ConfigValidator.parseBoolean(rawConfig.eventsub_enabled, DEFAULTS.twitch.eventsubEnabled),
         dataLoggingEnabled: ConfigValidator.parseBoolean(rawConfig.dataLoggingEnabled, DEFAULTS.twitch.dataLoggingEnabled),
         dataLoggingPath: DEFAULTS.LOG_DIRECTORY,
@@ -48,17 +47,17 @@ function normalizeTwitchPlatformConfig(rawConfig = {}) {
 }
 
 function validateTwitchPlatformConfig(options = {}) {
-    const { config = {}, authManager } = options;
+    const { config = {}, twitchAuth } = options;
     const validation = validatePlatformConfig(config, TWITCH_CONFIG_VALIDATION_RULES);
 
     const errors = [...validation.errors];
     const warnings = [...validation.warnings];
-    const authState = authManager?.getState?.();
+    const authReady = twitchAuth?.isReady?.();
 
-    if (!authManager) {
-        errors.push('authManager: TwitchPlatform requires an injected authManager');
-    } else if (config.enabled && authState !== 'READY') {
-        warnings.push(`authManager: expected READY state but found ${authState}`);
+    if (!twitchAuth) {
+        errors.push('twitchAuth: TwitchPlatform requires an injected twitchAuth');
+    } else if (config.enabled && !authReady) {
+        warnings.push('twitchAuth: expected ready auth but found not ready');
     }
 
     return {
@@ -66,7 +65,7 @@ function validateTwitchPlatformConfig(options = {}) {
         isValid: errors.length === 0,
         errors,
         warnings,
-        authState
+        authReady
     };
 }
 

@@ -172,8 +172,16 @@ class RetrySystem {
     handleConnectionError(platform, error, reconnectFunction, cleanupFunction = null, setConnectionStateFn = null) {
         const errorMessage = this.extractErrorMessage(error);
         
+        const normalizedError = errorMessage.toLowerCase();
+
         // Check for unauthorized errors (401) and stop retrying
-        if (errorMessage.includes('401') || errorMessage.includes('Unauthorized') || errorMessage.includes('Client ID and OAuth token do not match')) {
+        if (normalizedError.includes('401')
+            || normalizedError.includes('unauthorized')
+            || normalizedError.includes('client id and oauth token do not match')
+            || normalizedError.includes('clientid is required for twitch authentication')
+            || normalizedError.includes('clientsecret is required for twitch authentication')
+            || normalizedError.includes('expectedusername is required for twitch authentication')
+            || normalizedError.includes('twitch authentication is not ready')) {
             this.logger.warn(`Connection failed due to unauthorized access (401). This is likely due to invalid credentials. Stopping retry attempts.`, platform);
             
             // Perform cleanup without retrying

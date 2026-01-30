@@ -36,7 +36,7 @@ describe('TwitchPlatform monetisation mapping', () => {
             { username: 'tester', eventsub_enabled: true },
             {
                 logger: noOpLogger,
-                authManager: { getState: createMockFn(), isTokenValid: createMockFn().mockReturnValue(true) },
+                twitchAuth: { isReady: createMockFn().mockReturnValue(true), getUserId: () => 'test-user-id' },
                 ChatFileLoggingService: createMockFn(() => ({ start: createMockFn(), stop: createMockFn() })),
                 TwitchEventSub,
                 eventBus

@@ -213,7 +213,9 @@ const TECHNICAL_ERROR_PATTERNS = [
         patterns: [
             /Missing clientId or clientSecret/i,
             /Invalid configuration.*missing fields.*clientId/i,
-            /Invalid configuration.*missing fields.*clientSecret/i
+            /Invalid configuration.*missing fields.*clientSecret/i,
+            /clientId is required for Twitch authentication/i,
+            /clientSecret is required for Twitch authentication/i
         ],
         errorKey: 'missing_twitch_credentials'
     },
@@ -261,7 +263,8 @@ const TECHNICAL_ERROR_PATTERNS = [
     {
         patterns: [
             /Missing required configuration: Twitch username/i,
-            /Missing.*Twitch.*username/i
+            /Missing.*Twitch.*username/i,
+            /expectedUsername is required for Twitch authentication/i
         ],
         errorKey: 'missing_twitch_username'
     },

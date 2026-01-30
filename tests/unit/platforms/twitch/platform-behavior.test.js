@@ -4,6 +4,12 @@ const { noOpLogger } = require('../../../helpers/mock-factories');
 
 const { TwitchPlatform } = require('../../../../src/platforms/twitch');
 
+const createReadyTwitchAuth = () => ({
+    isReady: () => true,
+    refreshTokens: async () => true,
+    getUserId: () => 'test-user-id'
+});
+
 const createPlatform = (configOverrides = {}, depsOverrides = {}) => {
     const config = {
         enabled: true,
@@ -13,11 +19,10 @@ const createPlatform = (configOverrides = {}, depsOverrides = {}) => {
         dataLoggingEnabled: false,
         ...configOverrides
     };
-    const authManager = depsOverrides.authManager || {
-        getState: () => 'READY',
-        getAccessToken: async () => 'test-token',
-        initialize: async () => {}
-    };
+    if (!depsOverrides.twitchAuth) {
+        throw new Error('twitchAuth is required - provide explicit mock');
+    }
+    const twitchAuth = depsOverrides.twitchAuth;
     const TwitchEventSub = depsOverrides.TwitchEventSub || createMockFn().mockImplementation(() => ({
         initialize: createMockFn().mockResolvedValue(),
         connect: createMockFn().mockResolvedValue(),
@@ -28,7 +33,7 @@ const createPlatform = (configOverrides = {}, depsOverrides = {}) => {
     }));
     return new TwitchPlatform(config, {
         logger: noOpLogger,
-        authManager,
+        twitchAuth,
         timestampService: { extractTimestamp: () => new Date().toISOString() },
         TwitchEventSub,
         ChatFileLoggingService: class { logRawPlatformData() {} },
@@ -46,7 +51,7 @@ describe('TwitchPlatform behavior standards', () => {
     });
 
     it('emits chat events using the standardized schema', async () => {
-        platform = createPlatform();
+        platform = createPlatform({}, { twitchAuth: createReadyTwitchAuth() });
         const emitted = [];
         platform.on('platform:event', (payload) => {
             if (payload.type === 'platform:chat-message') emitted.push(payload.data);
@@ -71,7 +76,7 @@ describe('TwitchPlatform behavior standards', () => {
     });
 
     it('emits connection lifecycle events for EventSub changes', () => {
-        platform = createPlatform();
+        platform = createPlatform({}, { twitchAuth: createReadyTwitchAuth() });
         const connectedEvents = [];
         platform.on('platform:event', (payload) => {
             if (payload.type === 'platform:connection') connectedEvents.push(payload.data);
@@ -87,7 +92,7 @@ describe('TwitchPlatform behavior standards', () => {
     });
 
     it('maps resubscription data to months and isRenewal in subscription events', () => {
-        platform = createPlatform();
+        platform = createPlatform({}, { twitchAuth: createReadyTwitchAuth() });
         const resubData = {
             tier: '1000',
             months: 5,
@@ -105,7 +110,7 @@ describe('TwitchPlatform behavior standards', () => {
     });
 
     it('uses provided months for resubscription messages', () => {
-        platform = createPlatform();
+        platform = createPlatform({}, { twitchAuth: createReadyTwitchAuth() });
         const resubData = {
             tier: '1000',
             months: 7,
@@ -123,7 +128,7 @@ describe('TwitchPlatform behavior standards', () => {
     });
 
     it('routes paypiggy events through the canonical handler', () => {
-        platform = createPlatform();
+        platform = createPlatform({}, { twitchAuth: createReadyTwitchAuth() });
         const paypiggyHandlerCalls = [];
 
         platform.handlers = { onPaypiggy: (payload) => paypiggyHandlerCalls.push(payload) };
@@ -136,7 +141,7 @@ describe('TwitchPlatform behavior standards', () => {
     });
 
     it('returns zero when viewer count provider is missing', async () => {
-        platform = createPlatform();
+        platform = createPlatform({}, { twitchAuth: createReadyTwitchAuth() });
 
         const count = await platform.getViewerCount();
 
@@ -144,7 +149,7 @@ describe('TwitchPlatform behavior standards', () => {
     });
 
     it('returns zero when viewer count provider throws', async () => {
-        platform = createPlatform();
+        platform = createPlatform({}, { twitchAuth: createReadyTwitchAuth() });
         platform.viewerCountProvider = {
             getViewerCount: async () => { throw new Error('test viewer count failure'); }
         };

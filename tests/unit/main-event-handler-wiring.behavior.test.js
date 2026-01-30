@@ -35,7 +35,7 @@ describe('main.js event handler wiring', () => {
         commandCooldownService: overrides.commandCooldownService || { updateCooldown: createMockFn() },
         platformLifecycleService: overrides.platformLifecycleService || { getAllPlatforms: createMockFn(() => ({})) },
         dependencyFactory: overrides.dependencyFactory || { createYoutubeDependencies: createMockFn(() => ({})) },
-        authManager: overrides.authManager || {},
+        twitchAuth: overrides.twitchAuth || null,
         obsEventService: overrides.obsEventService || {},
         sceneManagementService: overrides.sceneManagementService || {}
     });

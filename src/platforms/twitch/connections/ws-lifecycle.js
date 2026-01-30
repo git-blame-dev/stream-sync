@@ -55,10 +55,8 @@ function createTwitchEventSubWsLifecycle(options = {}) {
                     state.logger?.info?.('WebSocket connection details', 'twitch', {
                         url: 'wss://eventsub.wss.twitch.tv/ws',
                         readyState: state.ws.readyState,
-                        hasAuthManager: !!state.authManager,
-                        authState: state.authManager?.getState?.(),
-                        hasAccessToken: !!state.config?.accessToken,
-                        tokenLength: state.config?.accessToken?.length || 0,
+                        hasTwitchAuth: !!state.twitchAuth,
+                        authReady: state.twitchAuth?.isReady?.(),
                         userId: state.userId,
                         clientId: state.config?.clientId
                     });
@@ -333,9 +331,9 @@ function createTwitchEventSubWsLifecycle(options = {}) {
                 'twitch'
             );
 
-            if (!state.authManager || state.authManager.getState?.() !== 'READY') {
-                state._logEventSubError?.('Cannot reconnect - AuthManager not ready', null, 'reconnect-auth');
-                throw new Error('AuthManager not ready for reconnection');
+            if (!state.twitchAuth || !state.twitchAuth.isReady?.()) {
+                state._logEventSubError?.('Cannot reconnect - Twitch auth not ready', null, 'reconnect-auth');
+                throw new Error('Twitch auth not ready for reconnection');
             }
 
             if (state.ws) {

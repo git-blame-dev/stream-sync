@@ -1,24 +1,29 @@
 const { describe, test, expect } = require('bun:test');
 const { noOpLogger } = require('../../../../helpers/mock-factories');
 const { createTwitchEventSubSubscriptionManager } = require('../../../../../src/platforms/twitch/connections/eventsub-subscription-manager');
+const { secrets, _resetForTesting, initializeStaticSecrets } = require('../../../../../src/core/secrets');
 
-const createAuthManager = (overrides = {}) => ({
-    authState: { executeWhenReady: async (fn) => fn() },
-    getAccessToken: async () => 'testToken',
-    getClientId: () => 'authClientId',
+const createTwitchAuth = (overrides = {}) => ({
+    refreshTokens: async () => true,
+    isReady: () => true,
     ...overrides
 });
 
-const createManager = (overrides = {}) => createTwitchEventSubSubscriptionManager({
-    logger: noOpLogger,
-    authManager: createAuthManager(),
-    config: { clientId: 'testClientId', accessToken: 'testAccessToken' },
-    subscriptions: new Map(),
-    getClientId: () => 'testClientId',
-    validateConnectionForSubscriptions: () => true,
-    logError: () => {},
-    ...overrides
-});
+const createManager = (overrides = {}) => {
+    _resetForTesting();
+    initializeStaticSecrets();
+    secrets.twitch.accessToken = 'testAccessToken';
+    return createTwitchEventSubSubscriptionManager({
+        logger: noOpLogger,
+        twitchAuth: createTwitchAuth(),
+        config: { clientId: 'testClientId' },
+        subscriptions: new Map(),
+        getClientId: () => 'testClientId',
+        validateConnectionForSubscriptions: () => true,
+        logError: () => {},
+        ...overrides
+    });
+};
 
 describe('Twitch EventSub subscription manager', () => {
     test('categorizes subscription errors as critical or retryable', () => {
@@ -73,22 +78,14 @@ describe('Twitch EventSub subscription manager', () => {
         expect(postCalls[0].payload.type).toBe('channel.follow');
     });
 
-    test('uses auth-provided clientId and token when config is missing', async () => {
+    test('uses config clientId and secrets token for subscription requests', async () => {
         const postCalls = [];
         const post = async (url, payload, options) => {
             postCalls.push({ url, payload, headers: options?.headers });
             return { data: { data: [{ id: 'sub-1', status: 'enabled' }] } };
         };
-        const authManager = createAuthManager({
-            getClientId: () => 'authClientId',
-            getAccessToken: async () => 'authToken'
-        });
-        const manager = createManager({
-            authManager,
-            config: {},
-            axios: { post },
-            getClientId: () => authManager.getClientId()
-        });
+        const manager = createManager({ axios: { post } });
+        secrets.twitch.accessToken = 'authToken';
 
         const result = await manager.setupEventSubscriptions({
             requiredSubscriptions: [{
@@ -106,12 +103,12 @@ describe('Twitch EventSub subscription manager', () => {
 
         expect(result.successful).toBe(1);
         expect(postCalls).toHaveLength(1);
-        expect(postCalls[0].headers['Client-Id']).toBe('authClientId');
+        expect(postCalls[0].headers['Client-Id']).toBe('testClientId');
         expect(postCalls[0].headers['Authorization']).toBe('Bearer authToken');
         expect(postCalls[0].payload.type).toBe('channel.chat.message');
     });
 
-    test('uses auth-provided clientId and token for cleanup when config is missing', async () => {
+    test('uses config clientId and secrets token for cleanup', async () => {
         const getCalls = [];
         const deleteCalls = [];
         const get = async (url, options) => {
@@ -126,21 +123,13 @@ describe('Twitch EventSub subscription manager', () => {
             deleteCalls.push({ url, headers: options?.headers });
             return {};
         };
-        const authManager = createAuthManager({
-            getClientId: () => 'authClientId',
-            getAccessToken: async () => 'authToken'
-        });
-        const manager = createManager({
-            authManager,
-            config: {},
-            axios: { get, delete: deleteCall },
-            getClientId: () => authManager.getClientId()
-        });
+        const manager = createManager({ axios: { get, delete: deleteCall } });
+        secrets.twitch.accessToken = 'authToken';
 
         await manager.cleanupAllWebSocketSubscriptions({ sessionId: 'session-1' });
 
         expect(getCalls).toHaveLength(1);
-        expect(getCalls[0].headers['Client-Id']).toBe('authClientId');
+        expect(getCalls[0].headers['Client-Id']).toBe('testClientId');
         expect(getCalls[0].headers['Authorization']).toBe('Bearer authToken');
         expect(deleteCalls).toHaveLength(1);
         expect(deleteCalls[0].url).toContain('sub-1');

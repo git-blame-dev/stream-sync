@@ -1,12 +1,13 @@
 const { describe, expect, it, beforeEach, afterEach } = require('bun:test');
 const { createMockFn, restoreAllMocks } = require('../helpers/bun-mock-utils');
 const { noOpLogger } = require('../helpers/mock-factories');
+const { secrets, _resetForTesting, initializeStaticSecrets } = require('../../src/core/secrets');
 const { TwitchApiClient } = require('../../src/utils/api-clients/twitch-api-client');
 
 describe('TwitchApiClient authentication', () => {
     let mockLogger;
     let mockHttpClient;
-    let mockAuthManager;
+    let mockTwitchAuth;
     let apiClient;
 
     const createMockHttpClient = () => ({
@@ -14,20 +15,22 @@ describe('TwitchApiClient authentication', () => {
         post: createMockFn()
     });
 
-    const createMockAuthManager = (overrides = {}) => ({
-        getAccessToken: createMockFn().mockResolvedValue('test-access-token'),
-        ensureValidToken: createMockFn().mockResolvedValue(true),
-        getState: createMockFn().mockReturnValue('READY'),
+    const createMockTwitchAuth = (overrides = {}) => ({
+        refreshTokens: createMockFn().mockResolvedValue(true),
+        isReady: createMockFn().mockReturnValue(true),
         ...overrides
     });
 
     beforeEach(() => {
+        _resetForTesting();
+        initializeStaticSecrets();
+        secrets.twitch.accessToken = 'test-access-token';
         mockLogger = noOpLogger;
         mockHttpClient = createMockHttpClient();
-        mockAuthManager = createMockAuthManager();
+        mockTwitchAuth = createMockTwitchAuth();
 
         apiClient = new TwitchApiClient(
-            mockAuthManager,
+            mockTwitchAuth,
             { clientId: 'test-client-id', channel: 'test-channel' },
             mockLogger,
             { enhancedHttpClient: mockHttpClient }
@@ -36,6 +39,8 @@ describe('TwitchApiClient authentication', () => {
 
     afterEach(() => {
         restoreAllMocks();
+        _resetForTesting();
+        initializeStaticSecrets();
     });
 
     describe('API request authentication', () => {
@@ -126,9 +131,11 @@ describe('TwitchApiClient authentication', () => {
                     data: { data: [{ id: 'test-user-id', login: 'testuser' }] }
                 });
 
-            mockAuthManager.getAccessToken
-                .mockResolvedValueOnce('expired-token')
-                .mockResolvedValueOnce('refreshed-token');
+            secrets.twitch.accessToken = 'expired-token';
+            mockTwitchAuth.refreshTokens = createMockFn().mockImplementation(async () => {
+                secrets.twitch.accessToken = 'refreshed-token';
+                return true;
+            });
 
             const result = await apiClient.getUserInfo('testuser');
 
@@ -143,9 +150,11 @@ describe('TwitchApiClient authentication', () => {
                     data: { data: [{ id: 'user-123' }] }
                 });
 
-            mockAuthManager.getAccessToken
-                .mockResolvedValueOnce('old-token')
-                .mockResolvedValueOnce('new-refreshed-token');
+            secrets.twitch.accessToken = 'old-token';
+            mockTwitchAuth.refreshTokens = createMockFn().mockImplementation(async () => {
+                secrets.twitch.accessToken = 'new-refreshed-token';
+                return true;
+            });
 
             await apiClient.getUserInfo('testuser');
 
@@ -176,7 +185,7 @@ describe('TwitchApiClient authentication', () => {
 
     describe('auth failure handling', () => {
         it('returns offline status when getAccessToken throws', async () => {
-            mockAuthManager.getAccessToken.mockRejectedValue(new Error('Auth failed'));
+            secrets.twitch.accessToken = null;
 
             const result = await apiClient.getStreamInfo('test-channel');
 
@@ -185,10 +194,10 @@ describe('TwitchApiClient authentication', () => {
         });
 
         it('throws when no access token available', async () => {
-            mockAuthManager.getAccessToken.mockResolvedValue(null);
+            secrets.twitch.accessToken = null;
 
             await expect(apiClient.makeRequest('/test')).rejects.toThrow(
-                'No access token available'
+                'No access token available for Twitch API'
             );
         });
     });

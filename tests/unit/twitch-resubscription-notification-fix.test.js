@@ -3,16 +3,19 @@ const { EventEmitter } = require('events');
 
 const TwitchEventSub = require('../../src/platforms/twitch-eventsub');
 const { noOpLogger } = require('../helpers/mock-factories');
+const { secrets, _resetForTesting, initializeStaticSecrets } = require('../../src/core/secrets');
 
 describe('TwitchEventSub Resubscription Notification Fix', () => {
     let eventSub;
 
     beforeEach(() => {
-        const mockAuthManager = {
-            getState: () => 'READY',
+        _resetForTesting();
+        initializeStaticSecrets();
+        secrets.twitch.accessToken = 'testAccessToken';
+        const mockTwitchAuth = {
+            isReady: () => true,
             getUserId: () => 'testUser123',
-            authState: { executeWhenReady: async (fn) => fn() },
-            getAccessToken: async () => 'testAccessToken'
+            refreshTokens: async () => true
         };
 
         class MockWebSocket extends EventEmitter {
@@ -24,7 +27,6 @@ describe('TwitchEventSub Resubscription Notification Fix', () => {
         eventSub = new TwitchEventSub(
             {
                 clientId: 'testClientId',
-                accessToken: 'testToken',
                 channel: 'testStreamer',
                 username: 'testStreamer',
                 broadcasterId: 'test-broadcaster-id',
@@ -32,7 +34,7 @@ describe('TwitchEventSub Resubscription Notification Fix', () => {
             },
             {
                 logger: noOpLogger,
-                authManager: mockAuthManager,
+                twitchAuth: mockTwitchAuth,
                 WebSocketCtor: MockWebSocket,
                 ChatFileLoggingService: class {}
             }
@@ -41,6 +43,8 @@ describe('TwitchEventSub Resubscription Notification Fix', () => {
 
     afterEach(() => {
         eventSub?.removeAllListeners();
+        _resetForTesting();
+        initializeStaticSecrets();
     });
 
     describe('when resubscription message received', () => {
