@@ -5,9 +5,9 @@ const { YouTubePlatform } = require('../../../../../src/platforms/youtube');
 const { getSyntheticFixture } = require('../../../../helpers/platform-test-data');
 const {
     initializeTestLogging,
-    createConfigFixture,
     createMockPlatformDependencies
 } = require('../../../../helpers/test-setup');
+const { createYouTubeConfigFixture } = require('../../../../helpers/config-fixture');
 
 initializeTestLogging();
 
@@ -22,7 +22,7 @@ describe('YouTubePlatform event routing behavior', () => {
         restoreAllMocks();
     });
 
-    const baseConfig = createConfigFixture('youtube', {
+    const baseConfig = createYouTubeConfigFixture({
         enabled: true,
         username: 'test-channel'
     });

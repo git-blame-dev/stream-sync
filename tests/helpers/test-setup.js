@@ -213,58 +213,6 @@ const createTestRetrySystem = (overrides = {}) => ({
     ...overrides
 });
 
-const createConfigFixture = (platform = 'tiktok', overrides = {}) => {
-    const baseConfig = {
-        enabled: true,
-        username: 'testuser',
-        debug: false,
-        ...overrides
-    };
-
-    // Platform-specific config additions
-    switch (platform) {
-        case 'twitch':
-            return {
-                ...baseConfig,
-                channel: 'testchannel',
-                clientId: 'test-client-id',
-                accessToken: 'test-access-token',
-                refreshToken: 'test-refresh-token',
-                eventsub_enabled: true,
-                ...overrides
-            };
-        
-        case 'youtube':
-            return {
-                ...baseConfig,
-                maxStreams: 1,
-                streamDetectionMethod: 'api',
-                viewerCountMethod: 'api',
-                ...overrides
-            };
-        
-        case 'tiktok':
-        default:
-            return {
-                ...baseConfig,
-                ...overrides
-            };
-    }
-};
-
-const createTestSetup = (overrides = {}) => ({
-    logger: { 
-        debug: createMockFn(), 
-        info: createMockFn(), 
-        warn: createMockFn(), 
-        error: createMockFn() 
-    },
-    config: createConfigFixture(),
-    app: createTestApp(),
-    retrySystem: createTestRetrySystem(),
-    ...overrides
-});
-
 const expectValidNotificationData = (data) => {
     expect(data).toHaveProperty('id');
     expect(data).toHaveProperty('type');
@@ -579,7 +527,6 @@ const validateActiveMocks = () => {
 module.exports = {
     // Setup functions
     initializeTestLogging,
-    createTestSetup,
     
     // Enhanced lifecycle management
     setupAutomatedCleanup,
@@ -591,7 +538,6 @@ module.exports = {
     createTestNotification,
     createMockPlatformDependencies,
     createTestApp,
-    createConfigFixture,
     createTestRetrySystem,
     
     // Fixture utilities

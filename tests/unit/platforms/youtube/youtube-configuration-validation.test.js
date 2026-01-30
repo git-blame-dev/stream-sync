@@ -2,7 +2,8 @@
 const { describe, test, expect, beforeEach, afterEach } = require('bun:test');
 const { createMockFn, spyOn, restoreAllMocks } = require('../../../helpers/bun-mock-utils');
 const { noOpLogger } = require('../../../helpers/mock-factories');
-const { initializeTestLogging, createMockPlatformDependencies, createConfigFixture } = require('../../../helpers/test-setup');
+const { initializeTestLogging, createMockPlatformDependencies } = require('../../../helpers/test-setup');
+const { createYouTubeConfigFixture } = require('../../../helpers/config-fixture');
 
 initializeTestLogging();
 
@@ -21,7 +22,7 @@ describe('YouTube Platform Configuration Validation', () => {
     
     describe('Configuration Key Normalization (After Refactor)', () => {
         test('should handle config with required username', async () => {
-            const configWithCamelCase = createConfigFixture('youtube', {
+            const configWithCamelCase = createYouTubeConfigFixture({
                 enabled: true,
                 username: 'testuser'
             });
@@ -35,7 +36,7 @@ describe('YouTube Platform Configuration Validation', () => {
     
     describe('Configuration Validation Edge Cases', () => {
         test('should handle missing API key gracefully', async () => {
-            const configWithoutApiKey = createConfigFixture('youtube', {
+            const configWithoutApiKey = createYouTubeConfigFixture({
                 enabled: true,
                 username: 'testuser'
             });
@@ -47,7 +48,7 @@ describe('YouTube Platform Configuration Validation', () => {
         });
         
         test('should handle disabled platform', async () => {
-            const disabledConfig = createConfigFixture('youtube', {
+            const disabledConfig = createYouTubeConfigFixture({
                 enabled: false,
                 username: 'testuser'
             });
@@ -59,7 +60,7 @@ describe('YouTube Platform Configuration Validation', () => {
         });
 
         test('should handle missing username', async () => {
-            const configWithoutUsername = createConfigFixture('youtube', {
+            const configWithoutUsername = createYouTubeConfigFixture({
                 enabled: true
             });
 
@@ -73,7 +74,7 @@ describe('YouTube Platform Configuration Validation', () => {
     describe('Configuration Normalization', () => {
         test('should honor INI-like numeric strings for retryAttempts and streamPollingInterval', () => {
             const platform = new YouTubePlatform(
-                createConfigFixture('youtube', {
+                createYouTubeConfigFixture({
                     retryAttempts: '4',
                     streamPollingInterval: '30'
                 }),
@@ -88,7 +89,7 @@ describe('YouTube Platform Configuration Validation', () => {
     describe('Platform initialization', () => {
         test('initializes disabled platform without errors', async () => {
             const platform = new YouTubePlatform(
-                createConfigFixture('youtube', { enabled: false, username: '' }),
+                createYouTubeConfigFixture({ enabled: false, username: '' }),
                 { ...mockDependencies, logger: noOpLogger }
             );
 
@@ -100,7 +101,7 @@ describe('YouTube Platform Configuration Validation', () => {
     });
 
     describe('Dependency Validation', () => {
-        const baseConfig = createConfigFixture('youtube', {
+        const baseConfig = createYouTubeConfigFixture({
             enabled: true,
             username: 'channel-owner'
         });

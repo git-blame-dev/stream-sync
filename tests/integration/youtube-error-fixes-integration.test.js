@@ -1,11 +1,10 @@
 const { describe, test, beforeEach, afterEach, expect } = require('bun:test');
 
-const { createTestSetup } = require('../helpers/test-setup');
+const { createMockPlatformDependencies } = require('../helpers/test-setup');
 const { noOpLogger } = require('../helpers/mock-factories');
 const { createMockFn, restoreAllMocks, spyOn } = require('../helpers/bun-mock-utils');
 
 describe('YouTube Error Fixes Integration', () => {
-    let testSetup;
     let mockApp;
     let youtubePlatform;
 
@@ -14,8 +13,6 @@ describe('YouTube Error Fixes Integration', () => {
     });
 
     beforeEach(() => {
-        testSetup = createTestSetup();
-
         mockApp = {
             handleGiftNotification: createMockFn()
         };
@@ -23,25 +20,15 @@ describe('YouTube Error Fixes Integration', () => {
         const { YouTubePlatform } = require('../../src/platforms/youtube');
         const config = {
             enabled: true,
-            username: 'testchannel',
+            username: 'test-channel',
             enableAPI: 'false'
         };
 
+        const platformMocks = createMockPlatformDependencies('youtube');
         const dependencies = {
-            USER_AGENTS: testSetup.mockUserAgents,
-            google: testSetup.mockGoogle,
-            Innertube: testSetup.mockInnertube,
-            axios: testSetup.mockAxios,
+            ...platformMocks,
             app: mockApp,
-            logger: noOpLogger,
-            notificationManager: {
-                emit: createMockFn().mockImplementation(() => true),
-                on: createMockFn().mockImplementation(() => true),
-                removeListener: createMockFn().mockImplementation(() => true)
-            },
-            streamDetectionService: {
-                detectLiveStreams: createMockFn().mockResolvedValue({ success: true, videoIds: [] })
-            }
+            logger: noOpLogger
         };
 
         youtubePlatform = new YouTubePlatform(config, dependencies);

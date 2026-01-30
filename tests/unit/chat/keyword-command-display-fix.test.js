@@ -1,6 +1,7 @@
 
 const { initializeTestLogging, createTestUser, TEST_TIMEOUTS } = require('../../helpers/test-setup');
-const { noOpLogger, createConfigFixture } = require('../../helpers/mock-factories');
+const { noOpLogger } = require('../../helpers/mock-factories');
+const { createConfigFixture } = require('../../helpers/config-fixture');
 const { setupAutomatedCleanup } = require('../../helpers/mock-lifecycle');
 
 initializeTestLogging();

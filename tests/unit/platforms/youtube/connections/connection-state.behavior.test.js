@@ -1,7 +1,8 @@
 const { describe, it, expect, beforeEach, afterEach } = require('bun:test');
 const { createMockFn, restoreAllMocks } = require('../../../../helpers/bun-mock-utils');
 
-const { initializeTestLogging, createConfigFixture, createMockPlatformDependencies } = require('../../../../helpers/test-setup');
+const { initializeTestLogging, createMockPlatformDependencies } = require('../../../../helpers/test-setup');
+const { createYouTubeConfigFixture } = require('../../../../helpers/config-fixture');
 
 initializeTestLogging();
 
@@ -12,7 +13,7 @@ describe('YouTubePlatform connection state reporting', () => {
     let dependencies;
 
     beforeEach(() => {
-        config = createConfigFixture('youtube', {
+        config = createYouTubeConfigFixture({
             enabled: true,
             username: 'test-channel'
         });
