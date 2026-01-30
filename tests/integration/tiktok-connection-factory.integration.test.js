@@ -1,6 +1,6 @@
 const { describe, expect, it } = require('bun:test');
 const { noOpLogger } = require('../helpers/mock-factories');
-const { createMockFn } = require('../helpers/bun-mock-utils');
+const { createConfigFixture } = require('../helpers/config-fixture');
 
 const { EventEmitter } = require('events');
 const { DependencyFactory } = require('../../src/utils/dependency-factory');
@@ -12,15 +12,9 @@ const mockRetrySystem = {
     delay: () => Promise.resolve()
 };
 
-const mockConfigManager = {
-    getBoolean: createMockFn().mockReturnValue(false),
-    getString: createMockFn().mockReturnValue(''),
-    getNumber: createMockFn().mockReturnValue(0)
-};
-
 describe('TikTokPlatform connection factory integration', () => {
 
-    const config = { enabled: true, username: 'factory_tester' };
+    const config = { enabled: true, username: 'test-factory-user' };
 
     const createPlatform = () => {
         class MockTikTokWebSocketClient extends EventEmitter {
@@ -45,7 +39,7 @@ describe('TikTokPlatform connection factory integration', () => {
             TikTokWebSocketClient: MockTikTokWebSocketClient,
             logger: noOpLogger,
             retrySystem: mockRetrySystem,
-            config: mockConfigManager
+            config: createConfigFixture()
         });
         return new TikTokPlatform(config, dependencies);
     };
