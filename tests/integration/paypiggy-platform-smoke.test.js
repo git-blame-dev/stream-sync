@@ -70,7 +70,7 @@ describe('Paypiggy platform flows (smoke)', () => {
         if (platformKey === 'youtube') {
             platformConfigOverride.username = 'test-channel';
         }
-        const config = createConfigFixture({
+        const configOverrides = {
             general: {
                 debugEnabled: false,
                 giftsEnabled: true,
@@ -88,7 +88,8 @@ describe('Paypiggy platform flows (smoke)', () => {
             [platformKey]: platformConfigOverride,
             obs: { enabled: false },
             tts: { enabled: false }
-        });
+        };
+        const config = createConfigFixture(configOverrides);
         const notificationManager = new NotificationManager({
             displayQueue,
             logger,
@@ -117,9 +118,8 @@ describe('Paypiggy platform flows (smoke)', () => {
             streamDetector
         });
 
-        const { runtime } = createTestAppRuntime(config, {
+        const { runtime } = createTestAppRuntime(configOverrides, {
             eventBus,
-            config,
             notificationManager,
             displayQueue,
             logger,

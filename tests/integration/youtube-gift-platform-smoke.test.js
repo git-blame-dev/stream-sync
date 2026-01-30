@@ -54,41 +54,32 @@ describe('YouTube gift platform flow (smoke)', () => {
         }
     };
 
-    const buildRuntime = (configForRuntime, eventBus, config, notificationManager, displayQueue, logger, platformLifecycleService) => (
-        createTestAppRuntime(configForRuntime, {
-            eventBus,
-            config,
-            notificationManager,
-            displayQueue,
-            logger,
-            platformLifecycleService
-        })
-    );
+    const configOverrides = {
+        general: {
+            debugEnabled: false,
+            giftsEnabled: true,
+            paypiggiesEnabled: true,
+            userSuppressionEnabled: false,
+            maxNotificationsPerUser: 5,
+            suppressionWindowMs: 60000,
+            suppressionDurationMs: 300000,
+            suppressionCleanupIntervalMs: 300000,
+            streamDetectionEnabled: false,
+            streamRetryInterval: 15,
+            streamMaxRetries: 3,
+            continuousMonitoringInterval: 60
+        },
+        youtube: { enabled: true, notificationsEnabled: true, username: 'test-channel' },
+        obs: { enabled: false },
+        tts: { enabled: false }
+    };
 
     const createRuntimeDeps = () => {
         const eventBus = createEventBus();
         const logger = noOpLogger;
         const displayQueue = createMockDisplayQueue();
         const textProcessing = createTextProcessingManager({ logger });
-        const config = createConfigFixture({
-            general: {
-                debugEnabled: false,
-                giftsEnabled: true,
-                paypiggiesEnabled: true,
-                userSuppressionEnabled: false,
-                maxNotificationsPerUser: 5,
-                suppressionWindowMs: 60000,
-                suppressionDurationMs: 300000,
-                suppressionCleanupIntervalMs: 300000,
-                streamDetectionEnabled: false,
-                streamRetryInterval: 15,
-                streamMaxRetries: 3,
-                continuousMonitoringInterval: 60
-            },
-            youtube: { enabled: true, notificationsEnabled: true, username: 'test-channel' },
-            obs: { enabled: false },
-            tts: { enabled: false }
-        });
+        const config = createConfigFixture(configOverrides);
         const notificationManager = new NotificationManager({
             displayQueue,
             logger,
@@ -112,15 +103,13 @@ describe('YouTube gift platform flow (smoke)', () => {
             streamDetector
         });
 
-        const runtimeBundle = buildRuntime(
-            config,
+        const runtimeBundle = createTestAppRuntime(configOverrides, {
             eventBus,
-            config,
             notificationManager,
             displayQueue,
             logger,
             platformLifecycleService
-        );
+        });
 
         return {
             eventBus,

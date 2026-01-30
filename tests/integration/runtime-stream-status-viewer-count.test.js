@@ -4,38 +4,27 @@ const { restoreAllMocks } = require('../helpers/bun-mock-utils');
 const { AppRuntime } = require('../../src/main');
 const { createAppRuntimeTestDependencies } = require('../helpers/runtime-test-harness');
 
-const testConfig = {
+const configOverrides = {
     general: {
         streamDetectionEnabled: false,
         streamRetryInterval: 15,
         streamMaxRetries: 3,
         continuousMonitoringInterval: 60000,
-        ttsEnabled: false,
-        chatMsgTxt: 'test-chat-source',
-        chatMsgScene: 'test-scene'
+        ttsEnabled: false
     },
-    platform: {
-        youtube: {
-            enabled: true,
-            enableViewerCount: true,
-            enableNotifications: true
-        },
-        twitch: { enabled: false },
-        tiktok: { enabled: false }
+    youtube: {
+        enabled: true,
+        viewerCountEnabled: true,
+        notificationsEnabled: true
     },
-    obs: {
-        websocket: { enabled: false },
-        notificationTxt: 'test-notification-source',
-        notificationScene: 'test-scene'
-    },
-    viewerCount: { updateInterval: 30000, aggregateMode: 'sum' },
-    handcam: { enabled: false },
-    gifts: { enabled: false }
+    twitch: { enabled: false },
+    tiktok: { enabled: false },
+    obs: { enabled: false }
 };
 
 const buildAppRuntimeDependencies = (options = {}) => (
     createAppRuntimeTestDependencies({
-        configSnapshot: testConfig,
+        configOverrides,
         ...options
     })
 );
@@ -53,10 +42,10 @@ describe('AppRuntime stream-status viewer count routing', () => {
 
     test('updates viewer count system when stream-status platform:event arrives', async () => {
         const harness = buildAppRuntimeDependencies();
-        const { dependencies, eventBus } = harness;
+        const { dependencies, eventBus, configFixture } = harness;
         const updates = [];
 
-        runtime = new AppRuntime(testConfig, dependencies);
+        runtime = new AppRuntime(configFixture, dependencies);
         runtime.viewerCountSystem.updateStreamStatus = async (platform, isLive) => {
             updates.push({ platform, isLive });
         };
@@ -74,10 +63,10 @@ describe('AppRuntime stream-status viewer count routing', () => {
 
     test('ignores stream-status events without boolean isLive', async () => {
         const harness = buildAppRuntimeDependencies();
-        const { dependencies, eventBus } = harness;
+        const { dependencies, eventBus, configFixture } = harness;
         const updates = [];
 
-        runtime = new AppRuntime(testConfig, dependencies);
+        runtime = new AppRuntime(configFixture, dependencies);
         runtime.viewerCountSystem.updateStreamStatus = async (platform, isLive) => {
             updates.push({ platform, isLive });
         };

@@ -6,6 +6,7 @@ const {
     noOpLogger
 } = require('./mock-factories');
 const testClock = require('./test-clock');
+const { createConfigFixture } = require('./config-fixture');
 
 const createEventBusStub = () => {
     const emitter = new EventEmitter();
@@ -19,8 +20,6 @@ const createEventBusStub = () => {
         reset: createMockFn(() => emitter.removeAllListeners())
     };
 };
-
-const { createConfigFixture } = require('./config-fixture');
 
 const createPlatformLifecycleStub = (overrides = {}) => ({
     initializePlatforms: createMockFn().mockResolvedValue({}),
@@ -42,7 +41,7 @@ const createPlatformLifecycleStub = (overrides = {}) => ({
 
 function createAppRuntimeTestDependencies(options = {}) {
     const {
-        configSnapshot = {},
+        configOverrides = {},
         notificationManagerOverrides = {},
         overrides = {}
     } = options;
@@ -52,7 +51,7 @@ function createAppRuntimeTestDependencies(options = {}) {
     const notificationManager = options.notificationManager ||
         createMockNotificationManager(notificationManagerOverrides);
     const eventBus = options.eventBus || createEventBusStub();
-    const config = options.config || createConfigFixture(configSnapshot);
+    const config = createConfigFixture(configOverrides);
     const vfxCommandService = options.vfxCommandService || {
         executeCommand: createMockFn().mockResolvedValue({ success: true }),
         executeCommandForKey: createMockFn().mockResolvedValue({ success: true }),
@@ -110,20 +109,20 @@ function createAppRuntimeTestDependencies(options = {}) {
     dependencies,
     eventBus,
     notificationManager,
-    config
+    configFixture: config
   };
 }
 
 module.exports = {
     createAppRuntimeTestDependencies,
-    createTestAppRuntime: (configSnapshot = {}, options = {}) => {
+    createTestAppRuntime: (configOverrides = {}, options = {}) => {
         const { AppRuntime } = require('../../src/main');
         const harness = createAppRuntimeTestDependencies({
-            configSnapshot,
+            configOverrides,
             ...options
         });
 
-        const runtime = new AppRuntime(harness.config, harness.dependencies);
+        const runtime = new AppRuntime(harness.configFixture, harness.dependencies);
 
         return {
             runtime,
