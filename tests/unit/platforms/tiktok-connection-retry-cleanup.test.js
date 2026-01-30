@@ -17,7 +17,6 @@ describe('TikTokPlatform connection recovery', () => {
         connection.id = id;
         connection.isConnecting = false;
         connection.isConnected = false;
-        connection.connected = false;
         connection.connect = createMockFn(() => {
             connection.isConnecting = true;
             if (shouldReject) {
@@ -25,7 +24,6 @@ describe('TikTokPlatform connection recovery', () => {
             }
             connection.isConnecting = false;
             connection.isConnected = true;
-            connection.connected = true;
             return Promise.resolve(true);
         });
         connection.disconnect = createMockFn().mockResolvedValue(true);

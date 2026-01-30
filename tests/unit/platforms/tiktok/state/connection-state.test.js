@@ -116,18 +116,18 @@ describe('TikTokPlatform connection state', () => {
             expect(platform.connectionStatus).toBe(false);
         });
 
-        it('returns true when connection.connected is true', () => {
+        it('returns true when connection.isConnected is true', () => {
             const platform = createPlatform();
-            platform.connection = { connected: true, isConnected: false };
+            platform.connection = { isConnected: true };
 
             expect(platform.connectionStatus).toBe(true);
         });
 
-        it('returns true when connection.isConnected is true', () => {
+        it('returns false when connection.isConnected is false', () => {
             const platform = createPlatform();
-            platform.connection = { connected: false, isConnected: true };
+            platform.connection = { isConnected: false };
 
-            expect(platform.connectionStatus).toBe(true);
+            expect(platform.connectionStatus).toBe(false);
         });
     });
 
@@ -189,7 +189,7 @@ describe('TikTokPlatform connection state', () => {
     describe('getStats', () => {
         it('returns platform, enabled, connected state', () => {
             const platform = createPlatform({ enabled: true, username: 'testUser' });
-            platform.connection = { connected: true, isConnected: false, isConnecting: false };
+            platform.connection = { isConnected: true, isConnecting: false };
 
             const stats = platform.getStats();
 
@@ -222,7 +222,6 @@ describe('TikTokPlatform connection state', () => {
                 username: 'testStreamer'
             });
             platform.connection = {
-                connected: true,
                 isConnected: true,
                 isConnecting: false,
                 connectionId: 'conn-456'
@@ -235,7 +234,6 @@ describe('TikTokPlatform connection state', () => {
             expect(status.username).toBe('testStreamer');
             expect(status.isConnecting).toBe(false);
             expect(status.isConnected).toBe(true);
-            expect(status.connectionStatus).toBe(true);
             expect(status.hasConnection).toBe(true);
             expect(status.connectionId).toBe('conn-456');
         });
