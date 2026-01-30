@@ -223,7 +223,7 @@ class TikTokViewerCountProvider extends ViewerCountProvider {
     isReady() {
         if (!this.platform) return false;
         const connection = this.platform.connection;
-        return !!(connection && (connection.isConnected || connection.connected));
+        return !!(connection && connection.isConnected);
     }
 
     async getViewerCount() {

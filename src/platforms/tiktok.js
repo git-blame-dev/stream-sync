@@ -179,7 +179,7 @@ class TikTokPlatform extends EventEmitter {
     }
     
     get connectionStatus() {
-        return !!(this.connection && (this.connection.connected || this.connection.isConnected));
+        return !!(this.connection && this.connection.isConnected);
     }
 
     get isConnecting() {
@@ -200,7 +200,7 @@ class TikTokPlatform extends EventEmitter {
         return {
             platform: 'tiktok',
             enabled: this.config.enabled,
-            connected: !!(this.connection && (this.connection.connected || this.connection.isConnected)),
+            connected: !!(this.connection && this.connection.isConnected),
             connecting: this.connection ? this.connection.isConnecting : false,
             config: {
                 username: this.config.username,
@@ -654,8 +654,7 @@ class TikTokPlatform extends EventEmitter {
             enabled: this.config.enabled,
             username: this.config.username,
             isConnecting: this.connection ? this.connection.isConnecting : false,
-            isConnected: !!(this.connection && (this.connection.connected || this.connection.isConnected)),
-            connectionStatus: this.connectionStatus,
+            isConnected: !!(this.connection && this.connection.isConnected),
             hasConnection: !!this.connection,
             connectionId: this.connection?.connectionId || 'N/A'
         };
@@ -958,9 +957,9 @@ class TikTokPlatform extends EventEmitter {
 
         const connection = this.connection;
         if (connection && typeof connection.disconnect === 'function') {
-            const hasStateFlags = ('isConnected' in connection) || ('isConnecting' in connection) || ('connected' in connection);
+            const hasStateFlags = ('isConnected' in connection) || ('isConnecting' in connection);
             const shouldDisconnect = hasStateFlags
-                ? !!(connection.isConnected || connection.isConnecting || connection.connected)
+                ? !!(connection.isConnected || connection.isConnecting)
                 : true;
             if (shouldDisconnect) {
                 try {

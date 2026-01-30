@@ -15,7 +15,6 @@ describe('TikTokPlatform initialize failure propagation', () => {
         const failingConnection = new EventEmitter();
         failingConnection.isConnecting = false;
         failingConnection.isConnected = false;
-        failingConnection.connected = false;
         failingConnection.connect = createMockFn().mockRejectedValue(new Error('room id failure'));
         failingConnection.disconnect = createMockFn().mockResolvedValue();
 

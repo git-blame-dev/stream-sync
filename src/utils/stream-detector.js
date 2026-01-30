@@ -316,11 +316,6 @@ class StreamDetector {
                 this.logger.debug(`TikTok stream status via boolean isConnected for ${config.username}: ${connection.isConnected ? 'LIVE' : 'NOT LIVE'}`, 'stream-detector');
                 return connection.isConnected;
             }
-
-            if (typeof connection.connected === 'boolean') {
-                this.logger.debug(`TikTok stream status via boolean connected for ${config.username}: ${connection.connected ? 'LIVE' : 'NOT LIVE'}`, 'stream-detector');
-                return connection.connected;
-            }
         }
 
         // With WebSocket client, treat detection as live to allow connection; EulerStream manages live gating
