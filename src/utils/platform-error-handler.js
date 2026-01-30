@@ -85,16 +85,7 @@ function createPlatformErrorHandler(logger, platformName) {
     return new PlatformErrorHandler(logger, platformName);
 }
 
-function ensurePlatformErrorHandler(existingHandler, logger, platformName) {
-    if (existingHandler instanceof PlatformErrorHandler) {
-        return existingHandler;
-    }
-
-    return createPlatformErrorHandler(logger, platformName);
-}
-
 module.exports = {
     PlatformErrorHandler,
-    createPlatformErrorHandler,
-    ensurePlatformErrorHandler
+    createPlatformErrorHandler
 };
