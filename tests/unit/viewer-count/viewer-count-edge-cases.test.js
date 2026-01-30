@@ -1,4 +1,3 @@
-
 const { describe, test, expect, beforeEach, afterEach } = require('bun:test');
 const { createMockFn, restoreAllMocks } = require('../../helpers/bun-mock-utils');
 const { useFakeTimers, useRealTimers } = require('../../helpers/bun-timers');
@@ -57,9 +56,8 @@ const createEdgeCasePlatform = (platformName = 'tiktok', edgeCaseConfig = {}) =>
 
 const createEdgeCaseTestEnvironment = (config = {}) => {
     const {
-        pollingInterval = 1, // 1ms for fast testing
-        platforms = { tiktok: {}, twitch: {}, youtube: {} },
-        configOverrides = {}
+        pollingInterval = 1,
+        platforms = { tiktok: {}, twitch: {}, youtube: {} }
     } = config;
     
     const mockPlatforms = {};
@@ -67,39 +65,14 @@ const createEdgeCaseTestEnvironment = (config = {}) => {
         mockPlatforms[platformName] = createEdgeCasePlatform(platformName, platformConfig);
     });
     
-    const defaultConfig = {
-        viewerCountPollingInterval: pollingInterval,
-        enableViewerCount: true,
-        ...configOverrides
-    };
-    
-    const mockConfigManager = {
-        getNumber: createMockFn((section, key, defaultValue) => {
-            if (section === 'general' && key === 'viewerCountPollingInterval') {
-                return defaultConfig.viewerCountPollingInterval ?? defaultValue;
-            }
-            return defaultValue;
-        }),
-        
-        getBoolean: createMockFn((section, key, defaultValue) => {
-            if (section === 'general' && key === 'enableViewerCount') {
-                return defaultConfig.enableViewerCount ?? defaultValue;
-            }
-            return defaultValue;
-        }),
-        
-        getSection: createMockFn((platform) => ({
-            viewerCountEnabled: true,
-            viewerCountSource: `${platform} viewer count`
-        }))
-    };
-    
     const system = new ViewerCountSystem({
         platformProvider: () => mockPlatforms,
-        config: createConfigFixture()
+        config: createConfigFixture({
+            general: { viewerCountPollingIntervalMs: pollingInterval }
+        })
     });
     
-    return { system, mockPlatforms, mockConfigManager };
+    return { system, mockPlatforms };
 };
 
 const createEdgeCaseObserver = (observerId = 'edge-case-observer', edgeCaseBehavior = {}) => {
@@ -430,7 +403,7 @@ describe('Viewer Count & OBS Observer Edge Case Tests', () => {
     describe('Configuration Edge Cases', () => {
         test('should handle negative polling intervals by disabling polling', () => {
             const { system } = createEdgeCaseTestEnvironment({
-                configOverrides: { viewerCountPollingInterval: -30 }
+                pollingInterval: -30
             });
             
             const startOperation = () => system.startPolling();
@@ -442,7 +415,7 @@ describe('Viewer Count & OBS Observer Edge Case Tests', () => {
 
         test('should handle zero polling interval gracefully', () => {
             const { system } = createEdgeCaseTestEnvironment({
-                configOverrides: { viewerCountPollingInterval: 0 }
+                pollingInterval: 0
             });
 
             const startOperation = () => system.startPolling();
@@ -452,70 +425,41 @@ describe('Viewer Count & OBS Observer Edge Case Tests', () => {
             expect(typeof system.isPolling).toBe('boolean');
         });
 
-        test('should handle missing configuration values with sensible defaults', () => {
-            const { system, mockConfigManager } = createEdgeCaseTestEnvironment();
-            
-            mockConfigManager.getNumber.mockReturnValue(undefined);
-            mockConfigManager.getBoolean.mockReturnValue(undefined);
-            
-            const startOperation = () => system.startPolling();
-            
-            expect(startOperation).not.toThrow();
-            expectSystemStability(system);
+        test('throws when config is null', () => {
+            expect(() => new ViewerCountSystem({
+                platformProvider: () => ({}),
+                config: null
+            })).toThrow('ViewerCountSystem requires config');
         });
 
-        test('should handle corrupted configuration data appropriately', () => {
-            const { system, mockConfigManager } = createEdgeCaseTestEnvironment();
-            
-            mockConfigManager.getNumber.mockReturnValue("not-a-number");
-            mockConfigManager.getBoolean.mockReturnValue("not-a-boolean");
-            
-            const configOperation = () => {
-                system.startPolling();
-                return system.isPolling;
-            };
-            
-            expect(configOperation).not.toThrow();
-            expectSystemStability(system);
+        test('throws when config.general is missing', () => {
+            expect(() => new ViewerCountSystem({
+                platformProvider: () => ({}),
+                config: {}
+            })).toThrow();
         });
 
-        test('should adapt to configuration changes during runtime without disruption', async () => {
-            const { system, mockConfigManager } = createEdgeCaseTestEnvironment({
-                configOverrides: { viewerCountPollingInterval: 10 }
+        test('handles undefined pollingIntervalMs gracefully', () => {
+            const system = new ViewerCountSystem({
+                platformProvider: () => ({}),
+                config: createConfigFixture({
+                    general: { viewerCountPollingIntervalMs: undefined }
+                })
             });
-            
-            system.startPolling();
-            expect(system.isPolling).toBe(true);
-            
-            mockConfigManager.getNumber.mockReturnValue(5);
-            
-            system.stopPolling();
-            system.startPolling();
-            
-            expect(system.isPolling).toBe(true);
+
+            expect(system.pollingIntervalMs).toBeUndefined();
             expectSystemStability(system);
         });
 
-        test('should handle platform configuration conflicts gracefully', async () => {
-            const { system, mockConfigManager } = createEdgeCaseTestEnvironment();
-            
-            mockConfigManager.getSection.mockImplementation((platform) => {
-                if (platform === 'tiktok') {
-                    return null;
-                }
-                return {
-                    viewerCountEnabled: true,
-                    viewerCountSource: `${platform} viewer count`
-                };
+        test('reads pollingIntervalMs from config', () => {
+            const system = new ViewerCountSystem({
+                platformProvider: () => ({}),
+                config: createConfigFixture({
+                    general: { viewerCountPollingIntervalMs: 5000 }
+                })
             });
-            
-            const observer = createEdgeCaseObserver('config-conflict-observer');
-            system.addObserver(observer);
-            
-            await system.notifyObservers('tiktok', 100, 50);
-            await system.notifyObservers('twitch', 200, 150);
-            
-            expect(observer.receivedUpdates).toHaveLength(2);
+
+            expect(system.pollingIntervalMs).toBe(5000);
             expectSystemStability(system);
         });
     });
