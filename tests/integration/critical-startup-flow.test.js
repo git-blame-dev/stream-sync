@@ -3,29 +3,30 @@ const fs = require('fs');
 const path = require('path');
 const os = require('os');
 
+const CONFIG_MODULE_PATH = require.resolve('../../src/core/config');
+
+function resetConfigModule() {
+    delete require.cache[CONFIG_MODULE_PATH];
+}
+
+function loadFreshConfig() {
+    resetConfigModule();
+    return require('../../src/core/config');
+}
+
 describe('Critical Startup Flow', () => {
     let tempDir;
     let originalEnv;
-    let originalConfigPath;
-    let originalIsLoaded;
-    let configManager;
 
     beforeEach(() => {
         originalEnv = { ...process.env };
         tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'startup-test-'));
-
-        const configModule = require('../../src/core/config');
-        configManager = configModule.configManager;
-        originalConfigPath = configManager.configPath;
-        originalIsLoaded = configManager.isLoaded;
     });
 
     afterEach(() => {
         process.env = originalEnv;
-        if (configManager) {
-            configManager.configPath = originalConfigPath;
-            configManager.isLoaded = originalIsLoaded;
-        }
+        delete process.env.CHAT_BOT_CONFIG_PATH;
+        resetConfigModule();
         if (tempDir && fs.existsSync(tempDir)) {
             fs.rmSync(tempDir, { recursive: true, force: true });
         }
@@ -38,10 +39,9 @@ describe('Critical Startup Flow', () => {
         process.env.NODE_ENV = 'production';
         try {
             const nonExistentPath = path.join(tempDir, 'does-not-exist.ini');
-            configManager.configPath = nonExistentPath;
-            configManager.isLoaded = false;
+            process.env.CHAT_BOT_CONFIG_PATH = nonExistentPath;
 
-            expect(() => configManager.load()).toThrow('Configuration file not found');
+            expect(() => loadFreshConfig()).toThrow('Configuration file not found');
         } finally {
             process.env.NODE_ENV = originalNodeEnv;
             process.stderr.write = originalStderrWrite;
@@ -54,10 +54,9 @@ describe('Critical Startup Flow', () => {
         try {
             const configPath = path.join(tempDir, 'incomplete.ini');
             fs.writeFileSync(configPath, '[minimal]\nkey=value\n');
-            configManager.configPath = configPath;
-            configManager.isLoaded = false;
+            process.env.CHAT_BOT_CONFIG_PATH = configPath;
 
-            expect(() => configManager.load()).toThrow('Missing required configuration sections');
+            expect(() => loadFreshConfig()).toThrow('Missing required configuration section: general');
         } finally {
             process.stderr.write = originalStderrWrite;
         }
@@ -71,10 +70,8 @@ describe('Critical Startup Flow', () => {
         try {
             const overridePath = path.join(tempDir, 'override.ini');
             process.env.CHAT_BOT_CONFIG_PATH = overridePath;
-            configManager.configPath = './default.ini';
-            configManager.isLoaded = false;
 
-            expect(() => configManager.load()).toThrow(overridePath);
+            expect(() => loadFreshConfig()).toThrow(overridePath);
         } finally {
             process.env.NODE_ENV = originalNodeEnv;
             process.stderr.write = originalStderrWrite;

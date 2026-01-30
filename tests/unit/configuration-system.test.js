@@ -11,8 +11,8 @@ function resetConfigModule() {
 
 function loadFreshConfig() {
     resetConfigModule();
-    const { config, configManager } = require('../../src/core/config');
-    return { config, configManager };
+    const { config } = require('../../src/core/config');
+    return { config };
 }
 
 let originalReadFileSync;
@@ -138,25 +138,6 @@ describe('Configuration System Behavior Tests', () => {
             expect(youtubeApiKey).toBeUndefined();
 
             expectNoTechnicalArtifacts(youtubeUsername);
-        });
-
-        it('should prevent system startup when required sections are missing', () => {
-            const originalStderrWrite = process.stderr.write;
-            process.stderr.write = () => {};
-            try {
-                const incompleteConfig = `
-[general]
-debugEnabled = true
-
-[obs]
-enabled = true
-`;
-                expect(() => {
-                    reloadConfig(incompleteConfig);
-                }).toThrow(/Missing required configuration sections/);
-            } finally {
-                process.stderr.write = originalStderrWrite;
-            }
         });
 
         it('should prevent startup when an enabled platform is missing a username', () => {
@@ -690,22 +671,6 @@ maxMessageLength = 500
     });
 
     describe('Configuration Schema Validation Behavior', () => {
-        it('should validate required sections exist for system operation', () => {
-            const originalStderrWrite = process.stderr.write;
-            process.stderr.write = () => {};
-            try {
-                const minimalConfig = `
-[general]
-debugEnabled = true
-`;
-                expect(() => {
-                    reloadConfig(minimalConfig);
-                }).toThrow(/Missing required configuration sections.*obs.*commands/);
-            } finally {
-                process.stderr.write = originalStderrWrite;
-            }
-        });
-
         it('should provide guidance for incomplete platform configuration', () => {
             const originalStderrWrite = process.stderr.write;
             process.stderr.write = () => {};

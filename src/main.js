@@ -113,11 +113,8 @@ const { InnertubeFactory } = require('./factories/innertube-factory');
 // Now that logging is initialized, we can safely import other modules
 const { config: configModule, logging } = require('./core');
 const wireStreamStatusHandlers = require('./viewer-count/stream-status-handler');
-const { configManager, config } = configModule;
+const { config } = configModule;
 
-// --- STEP 3: CONFIGURATION LOADING ---
-// Load config once and only once
-configManager.load();
 const innertubeInstanceManager = require('./services/innertube-instance-manager');
 
 const loggingInitWarnings = [];
