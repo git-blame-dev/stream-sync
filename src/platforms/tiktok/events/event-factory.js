@@ -46,6 +46,9 @@ function createTikTokEventFactory(options = {}) {
                     text: normalized.message
                 },
                 timestamp: normalized.timestamp,
+                isMod: !!normalized.isMod,
+                isSubscriber: !!normalized.isSubscriber,
+                isBroadcaster: !!normalized.isBroadcaster,
                 metadata: buildEventMetadata(normalized?.metadata)
             };
         },
