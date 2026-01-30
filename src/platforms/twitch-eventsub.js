@@ -2,6 +2,7 @@
 const { safeSetTimeout, safeSetInterval, validateTimeout, safeDelay } = require('../utils/timeout-validator');
 const { EventEmitter } = require('events');
 const { createPlatformErrorHandler } = require('../utils/platform-error-handler');
+const { secrets } = require('../core/secrets');
 const { extractHttpErrorDetails } = require('../utils/http-error-utils');
 const { createTwitchEventSubSubscriptions } = require('./twitch/connections/eventsub-subscriptions');
 const { createTwitchEventSubEventRouter } = require('./twitch/events/event-router');
@@ -17,7 +18,7 @@ class TwitchEventSub extends EventEmitter {
         validateLoggerInterface(dependencies.logger);
         this.logger = dependencies.logger;
         this.errorHandler = createPlatformErrorHandler(this.logger, 'twitch-eventsub');
-        this.authManager = dependencies.authManager || dependencies.twitchAuth;
+        this.twitchAuth = dependencies.twitchAuth;
         this.axios = dependencies.axios || require('axios');
         this.WebSocketCtor = dependencies.WebSocketCtor || require('ws');
         this.broadcasterId = this.config.broadcasterId;
@@ -76,7 +77,7 @@ class TwitchEventSub extends EventEmitter {
 
         this.subscriptionManager = createTwitchEventSubSubscriptionManager({
             logger: this.logger,
-            authManager: this.authManager,
+            twitchAuth: this.twitchAuth,
             config: this.config,
             subscriptions: this.subscriptions,
             axios: this.axios,
@@ -162,9 +163,8 @@ class TwitchEventSub extends EventEmitter {
             issues: [],
             warnings: [],
             components: {
-                authManager: this._validateAuthManager(),
-                configuration: this._validateConfigurationFields(),
-                tokenScopes: await this._validateTokenScopes()
+                twitchAuth: this._validateTwitchAuth(),
+                configuration: this._validateConfigurationFields()
             },
             validatedAt: new Date().toISOString()
         };
@@ -181,26 +181,21 @@ class TwitchEventSub extends EventEmitter {
         
         validation.valid = validation.issues.length === 0;
         
-        // Handle OAuth flow for missing scopes
-        if (!validation.components.tokenScopes.valid && this.authManager?.twitchAuth) {
-            this._handleMissingScopes(validation.components.tokenScopes.missingScopes);
-        }
-        
         return validation;
     }
 
-    _validateAuthManager() {
+    _validateTwitchAuth() {
         const issues = [];
         const details = {};
         
-        if (!this.authManager) {
-            throw new Error('AuthManager is required but not provided');
+        if (!this.twitchAuth) {
+            throw new Error('TwitchAuth is required but not provided');
         } else {
             details.present = true;
-            details.state = this.authManager.getState?.() || 'unknown';
+            details.ready = Boolean(this.twitchAuth.isReady?.());
             
-            if (details.state !== 'READY') {
-                throw new Error(`AuthManager state is '${details.state}', expected 'READY'`);
+            if (!details.ready) {
+                throw new Error('TwitchAuth is not ready');
             }
         }
         
@@ -215,8 +210,6 @@ class TwitchEventSub extends EventEmitter {
         const issues = [];
         const warnings = [];
         const details = {};
-        const usesCentralAuth = this._isCentralizedAuthReady();
-        const tokenSourceAvailable = !!(this.config.accessToken || (usesCentralAuth && typeof this.authManager.getAccessToken === 'function'));
         const clientIdSource = this._getAvailableClientId();
         this.broadcasterId = this.config.broadcasterId;
         details.broadcasterId = { value: this.broadcasterId, required: true };
@@ -228,38 +221,30 @@ class TwitchEventSub extends EventEmitter {
             details.broadcasterId.valid = true;
         }
 
-        // Validate token availability when centralized auth isn't ready
-        if (!tokenSourceAvailable) {
-            const accessToken = this.config.accessToken;
-            details.accessToken = { value: accessToken, required: !usesCentralAuth };
-            if (!accessToken) {
-                issues.push('Access token is required for EventSub authentication');
-                details.accessToken.valid = false;
-            } else {
-                details.accessToken.valid = true;
-            }
+        if (!secrets.twitch.accessToken) {
+            details.accessToken = { value: null, required: true };
+            issues.push('Access token is required for EventSub authentication');
+            details.accessToken.valid = false;
         } else {
             details.accessToken = {
-                value: this.config.accessToken || null,
-                required: false,
+                value: 'present',
+                required: true,
                 valid: true,
-                source: usesCentralAuth ? 'authManager' : 'config'
+                source: 'secrets'
             };
         }
 
-        // Client ID validation - warn instead of error when centralized auth will provide it
+        // Client ID validation
         details.clientId = {
             value: clientIdSource,
-            required: !usesCentralAuth,
-            valid: !!clientIdSource || usesCentralAuth,
-            source: this.config.clientId ? 'config' : 'authManager'
+            required: true,
+            valid: !!clientIdSource,
+            source: 'config'
         };
 
-        if (!clientIdSource && !usesCentralAuth) {
+        if (!clientIdSource) {
             issues.push('Twitch Client ID is required for EventSub API access');
             details.clientId.valid = false;
-        } else if (!clientIdSource && usesCentralAuth) {
-            warnings.push('Using centralized auth for clientId resolution');
         }
 
         // Optional fields
@@ -288,85 +273,11 @@ class TwitchEventSub extends EventEmitter {
     }
 
     _isCentralizedAuthReady() {
-        return !!(this.authManager && this.authManager.getState() === 'READY');
+        return Boolean(this.twitchAuth?.isReady?.());
     }
 
     _getAvailableClientId() {
-        if (this.config.clientId) {
-            return this.config.clientId;
-        }
-        if (this.authManager?.clientId) {
-            return this.authManager.clientId;
-        }
-        if (typeof this.authManager?.getClientId === 'function') {
-            const maybeClientId = this.authManager.getClientId();
-            if (typeof maybeClientId === 'string' && maybeClientId.trim().length > 0) {
-                return maybeClientId;
-            }
-        }
-        return null;
-    }
-
-    _handleMissingScopes(missingScopes) {
-        this.logger.info('Auto-triggering OAuth flow for missing EventSub scopes...', 'twitch');
-        setImmediate(async () => {
-            try {
-                await this.authManager.twitchAuth.triggerOAuthFlow(missingScopes);
-            } catch (error) {
-                this._logEventSubError('Failed to trigger OAuth flow for missing scopes', error, 'oauth-flow');
-            }
-        });
-    }
-
-    async _validateTokenScopes() {
-        const requiredScopes = new Set();
-        
-        // Map subscription types to required scopes
-        for (const subscription of this.requiredSubscriptions) {
-            switch (subscription.type) {
-                case 'channel.chat.message':
-                    requiredScopes.add('user:read:chat');
-                    break;
-                case 'channel.follow':
-                    requiredScopes.add('moderator:read:followers');
-                    break;
-                case 'channel.subscribe':
-                case 'channel.subscription.gift':
-                case 'channel.subscription.message':
-                    requiredScopes.add('channel:read:subscriptions');
-                    break;
-                case 'channel.bits.use':
-                    requiredScopes.add('bits:read');
-                    break;
-                case 'channel.raid':
-                    // No scope required for raids
-                    break;
-            }
-        }
-        
-        // Get actual scopes from auth manager
-        const actualScopes = await this.authManager.getScopes?.() || [];
-        const actualScopeSet = new Set(actualScopes);
-        
-        const missingScopes = [...requiredScopes].filter(scope => !actualScopeSet.has(scope));
-        
-        const issues = [];
-        if (missingScopes.length > 0) {
-            issues.push(`Missing required OAuth scopes: ${missingScopes.join(', ')}`);
-            this.logger.warn('Token missing required scopes', 'twitch', {
-                required: [...requiredScopes],
-                actual: actualScopes,
-                missing: missingScopes
-            });
-        }
-        
-        return {
-            valid: missingScopes.length === 0,
-            issues,
-            requiredScopes: [...requiredScopes],
-            actualScopes,
-            missingScopes
-        };
+        return this.config.clientId || null;
     }
 
     async initialize() {
@@ -374,10 +285,10 @@ class TwitchEventSub extends EventEmitter {
         this.logger.debug('[EVENTSUB-DEBUG] Starting EventSub initialization...', 'twitch');
         this.logger.debug('[EVENTSUB-DEBUG] Current state:', 'twitch', {
             isInitialized: this.isInitialized,
-            hasAuthManager: !!this.authManager,
-            authState: this.authManager?.getState?.(),
+            hasTwitchAuth: !!this.twitchAuth,
+            authReady: this.twitchAuth?.isReady?.(),
             hasConfig: !!this.config,
-            hasAccessToken: !!this.config.accessToken,
+            hasAccessToken: !!secrets.twitch.accessToken,
             hasClientId: !!this.config.clientId
         });
         
@@ -398,7 +309,7 @@ class TwitchEventSub extends EventEmitter {
             
             // Get user ID from auth manager
             this.logger.debug('[EVENTSUB-DEBUG] Getting user ID from auth manager...', 'twitch');
-            const userIdRaw = this.authManager.getUserId();
+            const userIdRaw = this.twitchAuth.getUserId();
             this.logger.debug('[EVENTSUB-DEBUG] User ID result:', 'twitch', { userIdRaw, type: typeof userIdRaw });
             if (!userIdRaw) {
                 throw new Error('No user ID available from AuthManager');
@@ -407,20 +318,11 @@ class TwitchEventSub extends EventEmitter {
             this.userId = userIdRaw.toString(); // Keep as string for API calls
             this.logger.debug(`Using user ID: ${this.userId}`, 'twitch');
             
-            // PHASE 1: Ensure token is valid before cleanup
-            // This prevents 401 errors during WebSocket subscription cleanup
-            this.logger.debug('[EVENTSUB-DEBUG] PHASE 1: Ensuring valid token...', 'twitch');
-            await this._ensureValidToken();
-            this.logger.debug('[EVENTSUB-DEBUG] Token validation complete', 'twitch');
-            
-            // PHASE 2: Clean up any existing WebSocket subscriptions before connecting
-            // This avoids hitting subscription connection limits on restart
-            this.logger.debug('[EVENTSUB-DEBUG] PHASE 2: Cleaning up existing subscriptions...', 'twitch');
+            this.logger.debug('[EVENTSUB-DEBUG] Cleaning up existing subscriptions...', 'twitch');
             await this._cleanupAllWebSocketSubscriptions();
             this.logger.debug('[EVENTSUB-DEBUG] Cleanup complete', 'twitch');
-            
-            // Connect to EventSub WebSocket
-            this.logger.debug('[EVENTSUB-DEBUG] PHASE 3: Connecting to WebSocket...', 'twitch');
+
+            this.logger.debug('[EVENTSUB-DEBUG] Connecting to WebSocket...', 'twitch');
             await this._connectWebSocket();
             this.logger.debug('[EVENTSUB-DEBUG] WebSocket connection established', 'twitch');
             
@@ -579,20 +481,18 @@ class TwitchEventSub extends EventEmitter {
         }
         
         // Validate auth manager state
-        if (!this.authManager || this.authManager.getState?.() !== 'READY') {
-            this._logEventSubError('Cannot set up subscriptions: AuthManager not ready', null, 'subscription-setup', {
-                hasAuthManager: !!this.authManager,
-                authState: this.authManager?.getState?.() || 'unknown'
+        if (!this.twitchAuth || !this.twitchAuth.isReady?.()) {
+            this._logEventSubError('Cannot set up subscriptions: Twitch auth not ready', null, 'subscription-setup', {
+                hasTwitchAuth: !!this.twitchAuth,
+                authReady: this.twitchAuth?.isReady?.() || false
             });
             return false;
         }
 
-        // Validate tokens/client id availability (config or centralized auth)
-        const hasTokenProvider = !!(this.config.accessToken || typeof this.authManager?.getAccessToken === 'function');
         const clientId = this._getAvailableClientId();
-        if (!hasTokenProvider || !clientId) {
+        if (!secrets.twitch.accessToken || !clientId) {
             this._logEventSubError('Cannot set up subscriptions: missing authentication tokens', null, 'subscription-setup', {
-                hasAccessToken: hasTokenProvider,
+                hasAccessToken: !!secrets.twitch.accessToken,
                 hasClientId: !!clientId
             });
             return false;
@@ -603,7 +503,7 @@ class TwitchEventSub extends EventEmitter {
             isConnected: this._isConnected,
             wsState: this.ws?.readyState,
             isInitialized: this.isInitialized,
-            authState: this.authManager?.getState?.()
+            authReady: this.twitchAuth?.isReady?.()
         });
         
         return true;
@@ -647,11 +547,11 @@ class TwitchEventSub extends EventEmitter {
             throw new Error('EventSub chat send requires a non-empty message');
         }
 
-        if (!this.authManager) {
-            throw new Error('EventSub chat send requires an auth manager');
+        if (!this.twitchAuth) {
+            throw new Error('EventSub chat send requires Twitch auth');
         }
 
-        const userIdRaw = this.authManager.getUserId?.();
+        const userIdRaw = this.twitchAuth.getUserId?.();
         if (!userIdRaw) {
             throw new Error('EventSub chat send requires a valid user ID');
         }
@@ -665,11 +565,14 @@ class TwitchEventSub extends EventEmitter {
         };
         const clientId = this._getAvailableClientId();
         if (!clientId) {
-            throw new Error('EventSub chat send requires a clientId from config or authManager');
+            throw new Error('EventSub chat send requires a clientId from config');
         }
 
         const postMessage = async () => {
-            const token = await this.authManager.getAccessToken();
+            const token = secrets.twitch.accessToken;
+            if (!token) {
+                throw new Error('EventSub chat send requires an access token');
+            }
             await this.axios.post('https://api.twitch.tv/helix/chat/messages', payload, {
                 headers: {
                     'Authorization': `Bearer ${token}`,
@@ -680,11 +583,7 @@ class TwitchEventSub extends EventEmitter {
         };
 
         try {
-            if (this.authManager.authState?.executeWhenReady) {
-                await this.authManager.authState.executeWhenReady(postMessage);
-            } else {
-                await postMessage();
-            }
+            await postMessage();
 
             this.logger.info('EventSub chat message sent', 'twitch', {
                 broadcasterId,
@@ -698,6 +597,30 @@ class TwitchEventSub extends EventEmitter {
                 senderId
             };
         } catch (error) {
+            if (error?.response?.status === 401) {
+                const refreshed = await this.twitchAuth.refreshTokens();
+                if (refreshed) {
+                    try {
+                        await postMessage();
+                        this.logger.info('EventSub chat message sent after refresh', 'twitch', {
+                            broadcasterId,
+                            senderId
+                        });
+                        return {
+                            success: true,
+                            platform: 'twitch',
+                            broadcasterId,
+                            senderId
+                        };
+                    } catch (retryError) {
+                        this._logEventSubError('Failed to send EventSub chat message after refresh', retryError, 'eventsub-chat-send', {
+                            broadcasterId,
+                            senderId
+                        });
+                        throw new Error('EventSub chat send failed');
+                    }
+                }
+            }
             this._logEventSubError('Failed to send EventSub chat message', error, 'eventsub-chat-send', {
                 broadcasterId,
                 senderId
@@ -798,23 +721,6 @@ class TwitchEventSub extends EventEmitter {
         this.connectionStartTime = null;
         
         this.logger.info('EventSub cleanup completed', 'twitch');
-    }
-
-    async _ensureValidToken() {
-        if (!this.authManager || this.authManager.getState?.() !== 'READY') {
-            this.logger.debug('Skipping token validation - auth manager not ready', 'twitch');
-            return;
-        }
-
-        try {
-            await this.authManager.getAccessToken();
-        } catch (error) {
-            this.logger.warn('Failed to ensure valid token before cleanup', 'twitch', {
-                error: error.message,
-                willContinueAnyway: true
-            });
-            // Continue anyway - cleanup failure is not critical
-        }
     }
 
     async _cleanupAllWebSocketSubscriptions() {

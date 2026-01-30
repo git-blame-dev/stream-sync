@@ -5,6 +5,11 @@ const { noOpLogger } = require('../../../helpers/mock-factories');
 const { PlatformEvents } = require('../../../../src/interfaces/PlatformEvents');
 const { TwitchPlatform } = require('../../../../src/platforms/twitch');
 
+const createReadyTwitchAuth = () => ({
+    isReady: () => true,
+    getUserId: () => 'test-user-id'
+});
+
 class StubChatFileLoggingService {
     constructor() {
         this.logRawPlatformDataCalls = [];
@@ -30,11 +35,14 @@ const createPlatform = (configOverrides = {}, depsOverrides = {}) => {
         dataLoggingEnabled: false,
         ...configOverrides
     };
-    const authManager = depsOverrides.authManager || { getState: () => 'READY' };
+    if (!depsOverrides.twitchAuth) {
+        throw new Error('twitchAuth is required - provide explicit mock');
+    }
+    const twitchAuth = depsOverrides.twitchAuth;
 
     return new TwitchPlatform(config, {
         logger: noOpLogger,
-        authManager,
+        twitchAuth,
         timestampService: { extractTimestamp: () => new Date().toISOString() },
         ChatFileLoggingService: StubChatFileLoggingService,
         TwitchApiClient: createMockFn().mockImplementation(() => createMockApiClient()),
@@ -52,7 +60,7 @@ describe('TwitchPlatform core behavior', () => {
     });
 
     it('requires clientId when Twitch is enabled', () => {
-        platform = createPlatform({ clientId: undefined, accessToken: undefined });
+        platform = createPlatform({ clientId: undefined, accessToken: undefined }, { twitchAuth: createReadyTwitchAuth() });
 
         const validation = platform.validateConfig();
 
@@ -61,18 +69,18 @@ describe('TwitchPlatform core behavior', () => {
     });
 
     it('marks non-ready auth state as a warning instead of an invalid config', () => {
-        platform = createPlatform({}, { authManager: { getState: () => 'PENDING' } });
+        platform = createPlatform({}, { twitchAuth: { isReady: () => false } });
 
         const validation = platform.validateConfig();
 
         expect(validation.isValid).toBe(true);
         expect(validation.errors).toEqual([]);
-        expect(validation.warnings.some((msg) => msg.toLowerCase().includes('authmanager') && msg.toLowerCase().includes('ready'))).toBe(true);
+        expect(validation.warnings.some((msg) => msg.toLowerCase().includes('twitchauth') && msg.toLowerCase().includes('ready'))).toBe(true);
     });
 
     it('skips EventSub initialization when auth is not ready', async () => {
-        const pendingAuth = { getState: () => 'PENDING' };
-        platform = createPlatform({}, { authManager: pendingAuth, TwitchEventSub: createMockFn() });
+        const pendingAuth = { isReady: () => false };
+        platform = createPlatform({}, { twitchAuth: pendingAuth, TwitchEventSub: createMockFn() });
 
         await platform.initializeEventSub();
 
@@ -80,7 +88,7 @@ describe('TwitchPlatform core behavior', () => {
     });
 
     it('guards stream-status handlers so consumer errors are captured without throwing', () => {
-        platform = createPlatform();
+        platform = createPlatform({}, { twitchAuth: createReadyTwitchAuth() });
         platform.handlers = {
             onStreamStatus: () => { throw new Error('boom'); }
         };
@@ -89,7 +97,7 @@ describe('TwitchPlatform core behavior', () => {
     });
 
     it('adds correlation metadata to stream-status events', () => {
-        platform = createPlatform();
+        platform = createPlatform({}, { twitchAuth: createReadyTwitchAuth() });
         let emittedPayload;
         platform.handlers = { onStreamStatus: (payload) => { emittedPayload = payload; } };
 
@@ -101,7 +109,7 @@ describe('TwitchPlatform core behavior', () => {
     });
 
     it('does not emit stream status when stream online lacks started_at', () => {
-        platform = createPlatform();
+        platform = createPlatform({}, { twitchAuth: createReadyTwitchAuth() });
         const emitted = [];
         platform.on('platform:event', (payload) => {
             if (payload.type === PlatformEvents.STREAM_STATUS) {
@@ -115,7 +123,7 @@ describe('TwitchPlatform core behavior', () => {
     });
 
     it('does not emit stream status when stream offline lacks timestamp', () => {
-        platform = createPlatform();
+        platform = createPlatform({}, { twitchAuth: createReadyTwitchAuth() });
         const emitted = [];
         platform.on('platform:event', (payload) => {
             if (payload.type === PlatformEvents.STREAM_STATUS) {
@@ -129,7 +137,7 @@ describe('TwitchPlatform core behavior', () => {
     });
 
     it('logs raw platform data for non-chat events when enabled', async () => {
-        platform = createPlatform({ dataLoggingEnabled: true });
+        platform = createPlatform({ dataLoggingEnabled: true }, { twitchAuth: createReadyTwitchAuth() });
 
         await platform.handleFollowEvent({
             userId: 'test-123',
@@ -142,13 +150,13 @@ describe('TwitchPlatform core behavior', () => {
     });
 
     it('rejects sending messages when EventSub is unavailable', async () => {
-        platform = createPlatform();
+        platform = createPlatform({}, { twitchAuth: createReadyTwitchAuth() });
 
         await expect(platform.sendMessage('hello')).rejects.toThrow(/eventsub/i);
     });
 
     it('surfaces a friendly error when EventSub is disconnected before sending', async () => {
-        platform = createPlatform();
+        platform = createPlatform({}, { twitchAuth: createReadyTwitchAuth() });
         const sendMessageCalls = [];
         const mockEventSub = {
             sendMessage: (msg) => sendMessageCalls.push(msg),
@@ -162,7 +170,7 @@ describe('TwitchPlatform core behavior', () => {
     });
 
     it('keeps emitting chat events when logging fails', async () => {
-        platform = createPlatform({ dataLoggingEnabled: true });
+        platform = createPlatform({ dataLoggingEnabled: true }, { twitchAuth: createReadyTwitchAuth() });
         platform._logRawEvent = createMockFn().mockRejectedValue(new Error('disk full'));
         let emittedChat;
         platform.handlers = { onChat: (payload) => { emittedChat = payload; } };
@@ -190,7 +198,7 @@ describe('TwitchPlatform core behavior', () => {
     });
 
     it('emits canonical raid payloads without duplicate user fields', async () => {
-        platform = createPlatform();
+        platform = createPlatform({}, { twitchAuth: createReadyTwitchAuth() });
         let emittedRaid;
         platform.handlers = { onRaid: (payload) => { emittedRaid = payload; } };
 
@@ -233,7 +241,7 @@ describe('TwitchPlatform core behavior', () => {
 
         platform = createPlatform({}, {
             TwitchEventSub: createMockFn(() => eventSubStub),
-            authManager: { getState: () => 'READY', initialize: createMockFn().mockResolvedValue() }
+            twitchAuth: { isReady: () => true }
         });
 
         await platform.initialize({});
@@ -251,7 +259,7 @@ describe('TwitchPlatform core behavior', () => {
     });
 
     it('does not throw when viewer count stop fails during stream offline', () => {
-        platform = createPlatform();
+        platform = createPlatform({}, { twitchAuth: createReadyTwitchAuth() });
         platform.viewerCountProvider = {
             stopPolling: () => { throw new Error('stop failed'); }
         };
@@ -260,7 +268,7 @@ describe('TwitchPlatform core behavior', () => {
     });
 
     it('sends messages successfully when EventSub is connected and active', async () => {
-        platform = createPlatform();
+        platform = createPlatform({}, { twitchAuth: createReadyTwitchAuth() });
         const sendMessageCalls = [];
         const mockEventSub = {
             sendMessage: async (msg) => { sendMessageCalls.push(msg); },
@@ -276,7 +284,7 @@ describe('TwitchPlatform core behavior', () => {
     });
 
     it('returns connection state with EventSub active status', () => {
-        platform = createPlatform();
+        platform = createPlatform({}, { twitchAuth: createReadyTwitchAuth() });
         const mockEventSub = {
             isConnected: () => true,
             isActive: () => true
@@ -291,7 +299,7 @@ describe('TwitchPlatform core behavior', () => {
     });
 
     it('returns stats with EventSub connection state', () => {
-        platform = createPlatform();
+        platform = createPlatform({}, { twitchAuth: createReadyTwitchAuth() });
         const mockEventSub = {
             isConnected: () => true,
             isActive: () => true
@@ -306,7 +314,7 @@ describe('TwitchPlatform core behavior', () => {
     });
 
     it('validates configuration and returns warnings for pending auth', () => {
-        platform = createPlatform({}, { authManager: { getState: () => 'PENDING' } });
+        platform = createPlatform({}, { twitchAuth: { isReady: () => false } });
 
         const validation = platform.validateConfig();
 
@@ -315,7 +323,7 @@ describe('TwitchPlatform core behavior', () => {
     });
 
     it('returns configured status based on validation result', () => {
-        platform = createPlatform();
+        platform = createPlatform({}, { twitchAuth: createReadyTwitchAuth() });
 
         const isConfigured = platform.isConfigured();
 
@@ -323,7 +331,7 @@ describe('TwitchPlatform core behavior', () => {
     });
 
     it('initializes viewer count provider when stream comes online', () => {
-        platform = createPlatform();
+        platform = createPlatform({}, { twitchAuth: createReadyTwitchAuth() });
         const startPollingCalls = [];
         const mockProvider = {
             startPolling: () => startPollingCalls.push(true)
@@ -337,7 +345,7 @@ describe('TwitchPlatform core behavior', () => {
     });
 
     it('returns zero viewer count when provider is not initialized', async () => {
-        platform = createPlatform();
+        platform = createPlatform({}, { twitchAuth: createReadyTwitchAuth() });
         platform.viewerCountProvider = null;
 
         const count = await platform.getViewerCount();
@@ -346,7 +354,7 @@ describe('TwitchPlatform core behavior', () => {
     });
 
     it('returns zero viewer count when provider throws', async () => {
-        platform = createPlatform();
+        platform = createPlatform({}, { twitchAuth: createReadyTwitchAuth() });
         platform.viewerCountProvider = {
             getViewerCount: async () => { throw new Error('API error'); }
         };
@@ -357,7 +365,7 @@ describe('TwitchPlatform core behavior', () => {
     });
 
     it('cleans up EventSub and resets connection state', async () => {
-        platform = createPlatform();
+        platform = createPlatform({}, { twitchAuth: createReadyTwitchAuth() });
         const cleanupCalls = [];
         const disconnectCalls = [];
         const mockEventSub = {
@@ -377,7 +385,7 @@ describe('TwitchPlatform core behavior', () => {
     });
 
     it('emits connection events on EventSub state changes', () => {
-        platform = createPlatform();
+        platform = createPlatform({}, { twitchAuth: createReadyTwitchAuth() });
         const emitted = [];
         platform.on('platform:event', (payload) => {
             if (payload.type === PlatformEvents.PLATFORM_CONNECTION) {
@@ -393,7 +401,7 @@ describe('TwitchPlatform core behavior', () => {
     });
 
     it('returns connection status with timestamp', async () => {
-        platform = createPlatform();
+        platform = createPlatform({}, { twitchAuth: createReadyTwitchAuth() });
 
         const status = await platform.getConnectionStatus();
 

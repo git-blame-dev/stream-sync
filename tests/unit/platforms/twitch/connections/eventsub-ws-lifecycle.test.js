@@ -56,8 +56,8 @@ describe('Twitch EventSub WS lifecycle', () => {
 
         const state = {
             logger: noOpLogger,
-            authManager: { getState: createMockFn(() => 'READY') },
-            config: { accessToken: 'testAccessToken', clientId: 'testClientId' },
+            twitchAuth: { isReady: createMockFn(() => true) },
+            config: { clientId: 'testClientId' },
             userId: 'testUserId',
             ws: null,
             welcomeTimer: null,
@@ -503,17 +503,17 @@ describe('Twitch EventSub WS lifecycle', () => {
         expect(state.retryAttempts).toBe(0);
     });
 
-    test('reconnect logs error when AuthManager is not ready', async () => {
+    test('reconnect logs error when Twitch auth is not ready', async () => {
         const lifecycle = buildLifecycle();
 
         const state = createState({
             isInitialized: true,
-            authManager: { getState: () => 'PENDING' }
+            twitchAuth: { isReady: () => false }
         });
 
         await lifecycle.reconnect(state);
 
-        const authErrorLog = state.logEventSubErrorCalls.find(c => c.msg === 'Cannot reconnect - AuthManager not ready');
+        const authErrorLog = state.logEventSubErrorCalls.find(c => c.msg === 'Cannot reconnect - Twitch auth not ready');
         expect(authErrorLog).toBeTruthy();
         expect(authErrorLog.type).toBe('reconnect-auth');
     });

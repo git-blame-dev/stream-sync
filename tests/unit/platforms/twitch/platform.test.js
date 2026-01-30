@@ -14,7 +14,7 @@ describe('Twitch Platform', () => {
     });
 
     let mockTwitchEventSub;
-    let mockAuthManager;
+    let mockTwitchAuth;
     let mockApiClient;
     let mockViewerCountProvider;
     let mockApp;
@@ -31,12 +31,10 @@ describe('Twitch Platform', () => {
         viewerCountProviderCalls = { startPolling: [], stopPolling: [] };
         eventSubCalls = { initialize: [], disconnect: [] };
 
-        mockAuthManager = {
-            getState: createMockFn().mockReturnValue('READY'),
-            getAccessToken: createMockFn().mockResolvedValue('mock-access-token'),
-            refreshToken: createMockFn().mockResolvedValue('new-access-token'),
-            validateToken: createMockFn().mockResolvedValue(true),
-            initialize: createMockFn().mockResolvedValue()
+        mockTwitchAuth = {
+            isReady: createMockFn().mockReturnValue(true),
+            refreshTokens: createMockFn().mockResolvedValue(true),
+            getUserId: createMockFn().mockReturnValue('test-user-id')
         };
         mockApiClient = {
             getChannelInfo: createMockFn().mockResolvedValue({ id: '123456', name: 'testchannel' }),
@@ -79,7 +77,7 @@ describe('Twitch Platform', () => {
         platform = new TwitchPlatform(config, {
             TwitchEventSub: createMockFn().mockImplementation(() => mockTwitchEventSub),
             TwitchApiClient: createMockFn().mockImplementation(() => mockApiClient),
-            authManager: mockAuthManager,
+            twitchAuth: mockTwitchAuth,
             notificationBridge: mockApp,
             logger: noOpLogger,
             timestampService: {
@@ -145,7 +143,7 @@ describe('Twitch Platform', () => {
                 eventsub_enabled: true
             };
 
-            const testPlatform = new TwitchPlatform(validConfig, { authManager: mockAuthManager });
+            const testPlatform = new TwitchPlatform(validConfig, { twitchAuth: mockTwitchAuth });
             const validation = testPlatform.validateConfig();
 
             expect(validation.isValid).toBe(true);
@@ -155,7 +153,7 @@ describe('Twitch Platform', () => {
         it('should prevent connection when critical configuration is missing', () => {
             const invalidConfig = {};
 
-            const invalidPlatform = new TwitchPlatform(invalidConfig, { authManager: mockAuthManager });
+            const invalidPlatform = new TwitchPlatform(invalidConfig, { twitchAuth: mockTwitchAuth });
             const validation = invalidPlatform.validateConfig();
 
             expect(validation.isValid).toBe(false);
@@ -166,19 +164,19 @@ describe('Twitch Platform', () => {
         it('should ensure user experience fails gracefully without auth dependencies', () => {
             expect(() => {
                 new TwitchPlatform(config, {});
-            }).toThrow('TwitchPlatform requires authManager via dependency injection');
+            }).toThrow('TwitchPlatform requires twitchAuth via dependency injection');
         });
     });
 
     describe('when initializing EventSub for real-time events', () => {
         it('should enable real-time event notifications when user has EventSub configured', async () => {
             platform.config.eventsub_enabled = true;
-            mockAuthManager.getState.mockReturnValue('READY');
+            mockTwitchAuth.isReady.mockReturnValue(true);
 
             await platform.initializeEventSub();
 
             expect(platform.config.eventsub_enabled).toBe(true);
-            expect(mockAuthManager.getState.mock.calls.length).toBeGreaterThan(0);
+            expect(mockTwitchAuth.isReady.mock.calls.length).toBeGreaterThan(0);
         });
 
         it('should operate without real-time events when user disables EventSub', async () => {
@@ -190,7 +188,7 @@ describe('Twitch Platform', () => {
         });
 
         it('should delay EventSub until authentication completes for user security', async () => {
-            mockAuthManager.getState.mockReturnValue('PENDING');
+            mockTwitchAuth.isReady.mockReturnValue(false);
 
             await platform.initializeEventSub();
 
@@ -615,7 +613,7 @@ describe('Twitch Platform', () => {
         });
 
         it('should return false for invalid configuration', () => {
-            const invalidPlatform = new TwitchPlatform({}, { authManager: mockAuthManager });
+            const invalidPlatform = new TwitchPlatform({}, { twitchAuth: mockTwitchAuth });
             const isConfigured = invalidPlatform.isConfigured();
             expect(isConfigured).toBe(false);
         });
@@ -669,10 +667,9 @@ describe('Twitch Platform', () => {
 
     describe('error handling', () => {
         it('should handle authentication errors', async () => {
-            mockAuthManager.getState.mockReturnValue('PENDING');
-            mockAuthManager.initialize.mockRejectedValue(new Error('Auth failed'));
+            mockTwitchAuth.isReady.mockReturnValue(false);
 
-            await expect(platform.initialize({})).rejects.toThrow('Auth failed');
+            await expect(platform.initialize({})).rejects.toThrow('Twitch authentication is not ready');
         });
 
         it('should handle EventSub initialization errors gracefully', async () => {

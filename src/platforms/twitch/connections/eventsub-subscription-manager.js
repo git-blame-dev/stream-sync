@@ -1,11 +1,12 @@
 const { safeDelay, validateTimeout } = require('../../../utils/timeout-validator');
 const { extractHttpErrorDetails } = require('../../../utils/http-error-utils');
 const { validateLoggerInterface } = require('../../../utils/dependency-validator');
+const { secrets } = require('../../../core/secrets');
 
 function createTwitchEventSubSubscriptionManager(options = {}) {
     const {
         logger,
-        authManager,
+        twitchAuth,
         config,
         subscriptions,
         axios: injectedAxios,
@@ -27,6 +28,9 @@ function createTwitchEventSubSubscriptionManager(options = {}) {
     })();
     const safeLogError = typeof logError === 'function' ? logError : () => {};
     const safeGetClientId = typeof getClientId === 'function' ? getClientId : () => null;
+    if (!twitchAuth) {
+        throw new Error('TwitchEventSub subscription manager requires twitchAuth');
+    }
     const safeValidateConnection = typeof validateConnectionForSubscriptions === 'function'
         ? validateConnectionForSubscriptions
         : () => false;
@@ -63,7 +67,7 @@ function createTwitchEventSubSubscriptionManager(options = {}) {
     };
 
      const getAuthHeaders = async () => ({
-         'Authorization': `Bearer ${await authManager.getAccessToken()}`,
+         'Authorization': `Bearer ${secrets.twitch.accessToken}`,
          'Client-Id': safeGetClientId(),
          'Content-Type': 'application/json'
      });
@@ -73,7 +77,7 @@ function createTwitchEventSubSubscriptionManager(options = {}) {
 
     const ensureAuthReady = async () => {
         const clientId = safeGetClientId();
-        const accessToken = await authManager.getAccessToken?.();
+        const accessToken = secrets.twitch.accessToken;
 
         if (!clientId || !accessToken) {
             safeLogError('Missing authentication tokens for EventSub subscriptions', null, 'subscription-auth-missing', {
@@ -84,6 +88,21 @@ function createTwitchEventSubSubscriptionManager(options = {}) {
         }
 
         return true;
+    };
+
+    const requestWithAuthRetry = async (requestFn) => {
+        try {
+            return await requestFn();
+        } catch (error) {
+            if (error?.response?.status !== 401) {
+                throw error;
+            }
+            const refreshed = await twitchAuth.refreshTokens();
+            if (!refreshed || !secrets.twitch.accessToken) {
+                throw error;
+            }
+            return await requestFn();
+        }
     };
 
     const shouldRetrySubscription = (errorDetails) => Boolean(errorDetails?.isRetryable) && !errorDetails?.isCritical;
@@ -99,7 +118,7 @@ function createTwitchEventSubSubscriptionManager(options = {}) {
             'twitchEventSub:subscription-retry'
         );
 
-        const response = await authManager.authState.executeWhenReady(async () => {
+        const response = await requestWithAuthRetry(async () => {
             return await axios.post('https://api.twitch.tv/helix/eventsub/subscriptions', payload, {
                 headers: await getAuthHeaders()
             });
@@ -179,7 +198,7 @@ function createTwitchEventSubSubscriptionManager(options = {}) {
                     sessionId: sessionId?.substring(0, 8) + '...'
                 });
 
-                const response = await authManager.authState.executeWhenReady(async () => {
+                const response = await requestWithAuthRetry(async () => {
                     return await axios.post('https://api.twitch.tv/helix/eventsub/subscriptions', subscriptionPayload, {
                         headers: await getAuthHeaders()
                     });
@@ -287,7 +306,7 @@ function createTwitchEventSubSubscriptionManager(options = {}) {
         try {
             safeLogger.info('Cleaning up existing WebSocket subscriptions before connecting...', 'twitch');
 
-            const response = await authManager.authState.executeWhenReady(async () => {
+            const response = await requestWithAuthRetry(async () => {
                 return await axios.get('https://api.twitch.tv/helix/eventsub/subscriptions', {
                     headers: await getAuthHeaders(),
                     timeout: 5000
@@ -315,7 +334,7 @@ function createTwitchEventSubSubscriptionManager(options = {}) {
 
             for (const subscription of webSocketSubscriptions) {
                 try {
-                    await authManager.authState.executeWhenReady(async () => {
+                    await requestWithAuthRetry(async () => {
                         return await axios.delete(`https://api.twitch.tv/helix/eventsub/subscriptions?id=${subscription.id}`, {
                             headers: await getAuthHeaders()
                         });
@@ -355,7 +374,7 @@ function createTwitchEventSubSubscriptionManager(options = {}) {
         try {
             safeLogger.info('Fetching existing EventSub subscriptions for cleanup...', 'twitch');
 
-            const response = await authManager.authState.executeWhenReady(async () => {
+            const response = await requestWithAuthRetry(async () => {
                 return await axios.get('https://api.twitch.tv/helix/eventsub/subscriptions', {
                     headers: await getAuthHeaders()
                 });
@@ -381,7 +400,7 @@ function createTwitchEventSubSubscriptionManager(options = {}) {
 
             for (const subscription of ourSubscriptions) {
                 try {
-                    await authManager.authState.executeWhenReady(async () => {
+                    await requestWithAuthRetry(async () => {
                         return await axios.delete(`https://api.twitch.tv/helix/eventsub/subscriptions?id=${subscription.id}`, {
                             headers: await getAuthHeaders()
                         });

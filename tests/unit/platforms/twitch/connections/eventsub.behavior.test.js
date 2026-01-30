@@ -1,6 +1,7 @@
 const { describe, it, expect, beforeEach } = require('bun:test');
 const { createMockFn } = require('../../../../helpers/bun-mock-utils');
 const { noOpLogger } = require('../../../../helpers/mock-factories');
+const { secrets, _resetForTesting, initializeStaticSecrets } = require('../../../../../src/core/secrets');
 
 const TwitchEventSub = require('../../../../../src/platforms/twitch-eventsub');
 
@@ -13,24 +14,23 @@ class MockWebSocket {
 }
 
 describe('TwitchEventSub behavior', () => {
-    let mockAuthManager;
+    let mockTwitchAuth;
     let MockChatFileLoggingService;
     let mockDependencies;
 
     beforeEach(() => {
-        mockAuthManager = {
-            getState: () => 'READY',
-            getUserId: () => 'testUser123',
-            getAccessToken: async () => 'testAccessToken',
-            getClientId: () => 'testClientId',
-            getScopes: async () => ['user:read:chat'],
-            authState: { executeWhenReady: async (fn) => fn() },
-            twitchAuth: { triggerOAuthFlow: createMockFn() }
+        _resetForTesting();
+        initializeStaticSecrets();
+        secrets.twitch.accessToken = 'testAccessToken';
+        mockTwitchAuth = {
+            isReady: () => true,
+            refreshTokens: createMockFn().mockResolvedValue(true),
+            getUserId: () => 'testUser123'
         };
         MockChatFileLoggingService = class { constructor() {} };
         mockDependencies = {
             logger: noOpLogger,
-            authManager: mockAuthManager,
+            twitchAuth: mockTwitchAuth,
             ChatFileLoggingService: MockChatFileLoggingService,
             WebSocketCtor: MockWebSocket
         };
@@ -38,7 +38,7 @@ describe('TwitchEventSub behavior', () => {
 
     it('routes follow events to handlers and emits follow event', () => {
         const instance = new TwitchEventSub(
-            { channel: 'testChannel', clientId: 'testClientId', accessToken: 'testToken', broadcasterId: 'test-broadcaster-id' },
+            { channel: 'testChannel', clientId: 'testClientId', broadcasterId: 'test-broadcaster-id' },
             mockDependencies
         );
 
@@ -58,7 +58,7 @@ describe('TwitchEventSub behavior', () => {
 
     it('routes chat message events and includes timestamp', () => {
         const instance = new TwitchEventSub(
-            { channel: 'testChannel', clientId: 'testClientId', accessToken: 'testToken', broadcasterId: 'test-broadcaster-id' },
+            { channel: 'testChannel', clientId: 'testClientId', broadcasterId: 'test-broadcaster-id' },
             mockDependencies
         );
 
@@ -79,7 +79,7 @@ describe('TwitchEventSub behavior', () => {
 
     it('ignores duplicate notification message ids', () => {
         const instance = new TwitchEventSub(
-            { channel: 'testChannel', clientId: 'testClientId', accessToken: 'testToken', broadcasterId: 'test-broadcaster-id' },
+            { channel: 'testChannel', clientId: 'testClientId', broadcasterId: 'test-broadcaster-id' },
             mockDependencies
         );
 
@@ -105,7 +105,7 @@ describe('TwitchEventSub behavior', () => {
 
     it('retries subscriptions when a revocation arrives', async () => {
         const instance = new TwitchEventSub(
-            { channel: 'testChannel', clientId: 'testClientId', accessToken: 'testToken', broadcasterId: 'test-broadcaster-id' },
+            { channel: 'testChannel', clientId: 'testClientId', broadcasterId: 'test-broadcaster-id' },
             mockDependencies
         );
         const resubscribeCalls = [];
@@ -137,19 +137,19 @@ describe('TwitchEventSub behavior', () => {
 
     it('validates configuration using centralized auth fallback', () => {
         const instance = new TwitchEventSub(
-            { channel: 'testChannel', broadcasterId: 'test-broadcaster-id' },
+            { channel: 'testChannel', clientId: 'testClientId', broadcasterId: 'test-broadcaster-id' },
             mockDependencies
         );
 
         const result = instance._validateConfigurationFields();
 
         expect(result.valid).toBe(true);
-        expect(result.details.accessToken.source).toBe('authManager');
+        expect(result.details.accessToken.source).toBe('secrets');
     });
 
     it('parses subscription errors with critical flag for auth failures', () => {
         const instance = new TwitchEventSub(
-            { channel: 'testChannel', clientId: 'testClientId', accessToken: 'testToken', broadcasterId: 'test-broadcaster-id' },
+            { channel: 'testChannel', clientId: 'testClientId', broadcasterId: 'test-broadcaster-id' },
             mockDependencies
         );
 
@@ -163,7 +163,7 @@ describe('TwitchEventSub behavior', () => {
 
     it('parses subscription errors with retryable flag for rate limits', () => {
         const instance = new TwitchEventSub(
-            { channel: 'testChannel', clientId: 'testClientId', accessToken: 'testToken', broadcasterId: 'test-broadcaster-id' },
+            { channel: 'testChannel', clientId: 'testClientId', broadcasterId: 'test-broadcaster-id' },
             mockDependencies
         );
 
@@ -177,7 +177,7 @@ describe('TwitchEventSub behavior', () => {
 
     it('validates connection readiness before subscription setup', () => {
         const instance = new TwitchEventSub(
-            { channel: 'testChannel', clientId: 'testClientId', accessToken: 'testToken', broadcasterId: 'test-broadcaster-id' },
+            { channel: 'testChannel', clientId: 'testClientId', broadcasterId: 'test-broadcaster-id' },
             mockDependencies
         );
         instance.ws = { readyState: 1 };
@@ -192,7 +192,7 @@ describe('TwitchEventSub behavior', () => {
 
     it('continues reconnecting when WebSocket close throws', async () => {
         const instance = new TwitchEventSub(
-            { channel: 'testChannel', clientId: 'testClientId', accessToken: 'testToken', broadcasterId: 'test-broadcaster-id' },
+            { channel: 'testChannel', clientId: 'testClientId', broadcasterId: 'test-broadcaster-id' },
             mockDependencies
         );
         instance.isInitialized = true;
@@ -227,7 +227,7 @@ describe('TwitchEventSub behavior', () => {
         };
 
         const instance = new TwitchEventSub(
-            { channel: 'testChannel', clientId: 'testClientId', accessToken: 'testToken', broadcasterId: 'test-broadcaster-id' },
+            { channel: 'testChannel', clientId: 'testClientId', broadcasterId: 'test-broadcaster-id' },
             { ...mockDependencies, axios: mockAxios }
         );
         instance._logEventSubError = (message, error, eventType, payload) => {
@@ -259,7 +259,7 @@ describe('TwitchEventSub behavior', () => {
         };
 
         const instance = new TwitchEventSub(
-            { channel: 'testChannel', clientId: 'testClientId', accessToken: 'testToken', broadcasterId: 'test-broadcaster-id' },
+            { channel: 'testChannel', clientId: 'testClientId', broadcasterId: 'test-broadcaster-id' },
             { ...mockDependencies, axios: mockAxios }
         );
         instance._logEventSubError = (message, error, eventType, payload) => {

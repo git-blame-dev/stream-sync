@@ -39,7 +39,7 @@ describe('Twitch config', () => {
     });
 
     test('validates required fields and emits auth readiness warnings', () => {
-        const authManager = { getState: () => 'PENDING' };
+        const twitchAuth = { isReady: () => false };
         const validConfig = {
             enabled: true,
             username: 'streamer',
@@ -49,16 +49,16 @@ describe('Twitch config', () => {
 
         const validResult = validateTwitchPlatformConfig({
             config: validConfig,
-            authManager
+            twitchAuth
         });
 
         expect(validResult.isValid).toBe(true);
         expect(validResult.errors).toEqual([]);
-        expect(validResult.warnings.some(msg => msg.toLowerCase().includes('authmanager'))).toBe(true);
+        expect(validResult.warnings.some((msg) => msg.toLowerCase().includes('twitchauth'))).toBe(true);
 
         const missingUsernameResult = validateTwitchPlatformConfig({
             config: { enabled: true, channel: 'streamer', clientId: 'test-client-id' },
-            authManager: { getState: () => 'READY' }
+            twitchAuth: { isReady: () => true }
         });
 
         expect(missingUsernameResult.isValid).toBe(false);
@@ -66,7 +66,7 @@ describe('Twitch config', () => {
 
         const missingClientIdResult = validateTwitchPlatformConfig({
             config: { enabled: true, channel: 'streamer', username: 'streamer' },
-            authManager: { getState: () => 'READY' }
+            twitchAuth: { isReady: () => true }
         });
 
         expect(missingClientIdResult.isValid).toBe(false);

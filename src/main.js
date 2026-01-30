@@ -84,7 +84,7 @@ const {
 const { safeSetTimeout, safeSetInterval } = require('./utils/timeout-validator');
 const { createPlatformErrorHandler } = require('./utils/platform-error-handler');
 const { ensureSecrets } = require('./utils/secret-manager');
-const { loadTokens } = require('./utils/token-store');
+const TwitchAuth = require('./auth/TwitchAuth');
 
 // Set up logging system immediately
 setConfigValidator(validateLoggingConfig);
@@ -104,8 +104,7 @@ if (cliArgs.disableKeywordParsing) {
 const { createRetrySystem } = require('./utils/retry-system');
 const { getSystemTimestampISO } = require('./utils/validation');
 
-// Import authentication validation
-const { validateAuthentication } = require('./auth/token-validator');
+// Import authentication
 // Import stream detection system
 const { StreamDetector } = require('./utils/stream-detector');
 const { InnertubeFactory } = require('./factories/innertube-factory');
@@ -167,34 +166,6 @@ function logMainError(message, error, payload, options) {
     }
 
     handler.logOperationalError(message, logContext, payload);
-}
-
-async function loadTwitchTokensFromStore() {
-    const twitchConfig = config.twitch;
-    if (!twitchConfig || !twitchConfig.enabled) {
-        return null;
-    }
-
-    const tokenStorePath = twitchConfig.tokenStorePath;
-
-    try {
-        const tokens = await loadTokens({ tokenStorePath, logger });
-        if (!tokens) {
-            return null;
-        }
-
-        return {
-            accessToken: tokens.accessToken,
-            refreshToken: tokens.refreshToken,
-            tokenExpiresAt: tokens.expiresAt || null
-        };
-    } catch (error) {
-        logMainError('Failed to load token store tokens', error, { tokenStorePath }, {
-            eventType: 'configuration',
-            logContext: 'token-store'
-        });
-        throw error;
-    }
 }
 
 // Log command line argument overrides after logger is initialized
@@ -400,8 +371,7 @@ class AppRuntime {
 
     buildPlatformSharedDependencies() {
         return {
-            authManager: this.authManager,
-            authFactory: this.dependencies.authFactory,
+            twitchAuth: this.twitchAuth,
             notificationManager: this.notificationManager,
             timestampService: this.dependencies.timestampService,
             logger: logging.getUnifiedLogger(),
@@ -458,7 +428,7 @@ class AppRuntime {
         this.config = config;
         this.dependencies = dependencies;
 
-        this.authManager = this.dependencies.authManager;
+        this.twitchAuth = this.dependencies.twitchAuth;
         
         // Initialize logging using unified logger
         this.logger = this.dependencies.logging;
@@ -1412,7 +1382,27 @@ async function main(overrides = {}) {
             throw error;
         }
 
-        const storedTwitchTokens = await loadTwitchTokensFromStore();
+        let twitchAuth = null;
+        let authValid = true;
+        if (config.twitch.enabled) {
+            twitchAuth = new TwitchAuth({
+                tokenStorePath: config.twitch.tokenStorePath,
+                clientId: config.twitch.clientId,
+                expectedUsername: config.twitch.username,
+                logger,
+                httpClient: overrides?.axios
+            });
+            try {
+                await twitchAuth.initialize();
+                authValid = twitchAuth.isReady();
+            } catch (error) {
+                authValid = false;
+                logMainError('Twitch authentication failed - continuing with limited functionality', error, null, {
+                    eventType: 'authentication',
+                    logContext: 'Main'
+                });
+            }
+        }
 
         if (!config.general || !config.obs) {
             throw new Error('Display queue requires general and obs config');
@@ -1539,25 +1529,18 @@ async function main(overrides = {}) {
             obsGoals
         });
         
-        logger.info('About to call validateAuthentication...', 'Main');
-        const configWithTokens = storedTwitchTokens ? {
-            ...config,
-            twitch: { ...config.twitch, ...storedTwitchTokens }
-        } : config;
-        const authResult = await validateAuthentication(configWithTokens, null, { axios: overrides?.axios });
-        logger.info('validateAuthentication returned successfully', 'Main');
-        if (!authResult.isValid) {
-            logger.warn('Authentication validation failed - continuing with limited functionality', 'Main');
-            // Don't exit process - allow startup to continue for core functionality
-        } else {
-            logger.info('Authentication validation successful', 'Main');
+        if (config.twitch.enabled) {
+            if (!authValid) {
+                logger.warn('Authentication validation failed - continuing with limited functionality', 'Main');
+            } else {
+                logger.info('Authentication validation successful', 'Main');
+            }
         }
         
         const dependencies = createProductionDependencies(overrides);
         dependencies.displayQueue = displayQueue;
         dependencies.notificationManager = notificationManager;
-        dependencies.authFactory = authResult.authFactory;
-        dependencies.authManager = authResult.authManager;
+        dependencies.twitchAuth = twitchAuth;
         
         // Add event-driven services to dependencies
         dependencies.eventBus = eventBus;
@@ -1572,8 +1555,7 @@ async function main(overrides = {}) {
             logger,
             notificationManager,
             timestampService: dependencies.timestampService,
-            authManager: authResult.authManager,
-            authFactory: authResult.authFactory,
+            twitchAuth,
             USER_AGENTS: config.http.userAgents,
             config,
             Innertube: dependencies.lazyInnertube,
@@ -1623,7 +1605,7 @@ async function main(overrides = {}) {
                 success: true,
                 appStarted: true,
                 viewerCountActive: app && app.viewerCountSystem ? app.viewerCountSystem.isPolling : false,
-                authValid: authResult.isValid
+                authValid
             };
         }
         
@@ -1662,7 +1644,7 @@ async function main(overrides = {}) {
             success: true,
             appStarted: true,
             viewerCountActive: app && app.viewerCountSystem ? app.viewerCountSystem.isPolling : false,
-            authValid: authResult.isValid
+            authValid
         };
 
     } catch (error) {

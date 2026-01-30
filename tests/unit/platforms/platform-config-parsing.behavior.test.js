@@ -20,9 +20,15 @@ describe('platform config parsing behavior', () => {
     }
 
     test('TwitchEventSub stores normalized config values', () => {
+        secrets.twitch.accessToken = 'test-token';
+        const twitchAuth = {
+            isReady: () => true,
+            refreshTokens: async () => true,
+            getUserId: () => 'test-user-id'
+        };
         const eventSub = new TwitchEventSub(
-            { dataLoggingEnabled: true, broadcasterId: 'test-broadcaster-id', dataLoggingPath: './logs' },
-            { logger: noOpLogger, WebSocketCtor: MockWebSocket }
+            { dataLoggingEnabled: true, broadcasterId: 'test-broadcaster-id', dataLoggingPath: './logs', clientId: 'test-client-id' },
+            { logger: noOpLogger, WebSocketCtor: MockWebSocket, twitchAuth }
         );
 
         try {

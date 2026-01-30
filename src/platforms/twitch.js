@@ -39,10 +39,10 @@ class TwitchPlatform extends EventEmitter {
         this.timestampService = dependencies.timestampService
             || new TimestampExtractionService({ logger: this.logger });
         
-        // Require auth manager via dependency injection
-        this.authManager = dependencies.authManager;
-        if (!this.authManager) {
-            throw new Error('TwitchPlatform requires authManager via dependency injection. Please update your initialization code to use TwitchAuthFactory.');
+        // Require TwitchAuth via dependency injection
+        this.twitchAuth = dependencies.twitchAuth;
+        if (!this.twitchAuth) {
+            throw new Error('TwitchPlatform requires twitchAuth via dependency injection.');
         }
 
         // Initialize chat file logging service via dependency injection
@@ -79,8 +79,8 @@ class TwitchPlatform extends EventEmitter {
     async initializeEventSub(broadcasterId) {
         this.logger.debug('initializeEventSub called', 'twitch', {
             eventsub_enabled: this.config.eventsub_enabled,
-            authState: this.authManager?.getState?.(),
-            hasAuthManager: !!this.authManager,
+            authReady: this.twitchAuth?.isReady?.(),
+            hasTwitchAuth: !!this.twitchAuth,
             broadcasterId
         });
 
@@ -90,10 +90,10 @@ class TwitchPlatform extends EventEmitter {
         }
 
         // Ensure authentication is ready before creating EventSub
-        if (this.authManager.getState() !== 'READY') {
-            this.logger.warn('Cannot initialize EventSub - Authentication not ready', 'twitch', {
-                authState: this.authManager?.getState?.(),
-                authManagerExists: !!this.authManager
+        if (!this.twitchAuth.isReady()) {
+            this.logger.warn('Cannot initialize EventSub - Twitch authentication not ready', 'twitch', {
+                authReady: this.twitchAuth?.isReady?.(),
+                hasTwitchAuth: !!this.twitchAuth
             });
             return;
         }
@@ -102,7 +102,7 @@ class TwitchPlatform extends EventEmitter {
             this.logger.debug('Creating TwitchEventSub instance...', 'twitch');
             this.eventSub = new this.TwitchEventSub({ ...this.config, broadcasterId }, {
                 logger: this.logger,
-                authManager: this.authManager,
+                twitchAuth: this.twitchAuth,
                 axios: this.dependencies?.axios,
                 WebSocketCtor: this.dependencies?.WebSocketCtor
             });
@@ -130,22 +130,17 @@ class TwitchPlatform extends EventEmitter {
 
         try {
             // Initialize authentication via injected auth manager
-            this.logger.debug('Using centralized auth manager...', 'twitch', {
-                authState: this.authManager?.getState?.(),
-                hasAuthManager: !!this.authManager
+            this.logger.debug('Using centralized Twitch auth...', 'twitch', {
+                authReady: this.twitchAuth?.isReady?.(),
+                hasTwitchAuth: !!this.twitchAuth
             });
-            // Auth manager should already be initialized by token validator
-            if (this.authManager.getState() !== 'READY') {
-                this.logger.debug('Auth manager not ready, initializing...', 'twitch');
-                await this.authManager.initialize();
+            if (!this.twitchAuth.isReady()) {
+                throw new Error('Twitch authentication is not ready');
             }
-            this.logger.debug('Auth manager ready', 'twitch', {
-                finalAuthState: this.authManager?.getState?.()
-            });
 
             // Initialize modular components
             const TwitchApiClientClass = this.dependencies.TwitchApiClient || TwitchApiClient;
-            this.apiClient = new TwitchApiClientClass(this.authManager, this.config);
+            this.apiClient = new TwitchApiClientClass(this.twitchAuth, this.config);
             this.viewerCountProvider = ViewerCountProviderFactory.createTwitchProvider(
                 this.apiClient,
                 ConnectionStateFactory,
@@ -648,7 +643,7 @@ class TwitchPlatform extends EventEmitter {
     validateConfig() {
         return validateTwitchPlatformConfig({
             config: this.config,
-            authManager: this.authManager
+            twitchAuth: this.twitchAuth
         });
     }
 

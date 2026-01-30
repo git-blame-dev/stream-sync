@@ -164,25 +164,18 @@ class DependencyFactory {
             const normalizedConfig = {
                 ...config,
                 channel: channel,
-                clientId: config.clientId,
-                accessToken: config.accessToken,
-                refreshToken: config.refreshToken
+                clientId: config.clientId
             };
             delete normalizedConfig.clientSecret;
             delete normalizedConfig.apiKey;
 
             const sanitizedOptions = { ...options };
-            const injectedAuthManager = sanitizedOptions.authManager;
-            const injectedAuthFactory = sanitizedOptions.authFactory;
-            delete sanitizedOptions.authManager;
-            delete sanitizedOptions.authFactory;
+            const injectedTwitchAuth = sanitizedOptions.twitchAuth;
+            delete sanitizedOptions.twitchAuth;
 
-            const authResources = this._resolveTwitchAuthResources(
-                normalizedConfig,
-                logger,
-                injectedAuthManager,
-                injectedAuthFactory
-            );
+            if (!injectedTwitchAuth) {
+                throw new Error('createTwitchDependencies requires twitchAuth');
+            }
 
             // Create extracted services for clean architecture
             const ChatFileLoggingService = options.ChatFileLoggingService || require('../services/ChatFileLoggingService');
@@ -198,14 +191,13 @@ class DependencyFactory {
             // Create Twitch-specific dependencies
             const dependencies = {
                 logger,
-                authManager: authResources.authManager,
-                authFactory: authResources.authFactory,
+                twitchAuth: injectedTwitchAuth,
                 apiClient: this._createTwitchApiClient(normalizedConfig, logger),
                 ChatFileLoggingService, // Include extracted service
                 selfMessageDetectionService,
                 axios: options.axios,
                 WebSocketCtor: options.WebSocketCtor,
-                ...sanitizedOptions // Allow options to override defaults (without overriding auth resources)
+                ...sanitizedOptions // Allow options to override defaults
             };
 
             // Validate critical dependencies only if logger was created by factory
@@ -510,39 +502,6 @@ class DependencyFactory {
             setState: (state) => {},
             isConnected: () => false,
             reset: () => {}
-        };
-    }
-
-    _resolveTwitchAuthResources(config, logger, injectedAuthManager, injectedAuthFactory) {
-        if (injectedAuthManager) {
-            return {
-                authManager: injectedAuthManager,
-                authFactory: injectedAuthFactory || null
-            };
-        }
-
-        if (injectedAuthFactory && typeof injectedAuthFactory.createAuthManager === 'function') {
-            const createdAuthManager = injectedAuthFactory.createAuthManager();
-            if (!createdAuthManager || typeof createdAuthManager.initialize !== 'function') {
-                throw new Error('Provided authFactory did not return a valid Twitch auth manager');
-            }
-            return {
-                authManager: createdAuthManager,
-                authFactory: injectedAuthFactory
-            };
-        }
-
-        const TwitchAuthFactory = require('../auth/TwitchAuthFactory');
-        const authFactory = new TwitchAuthFactory(config, { logger });
-        const authManager = authFactory.createAuthManager();
-
-        if (!authManager || typeof authManager.initialize !== 'function') {
-            throw new Error('Failed to create Twitch auth manager via TwitchAuthFactory');
-        }
-
-        return {
-            authManager,
-            authFactory
         };
     }
 

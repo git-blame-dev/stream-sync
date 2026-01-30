@@ -2,7 +2,7 @@ const { describe, expect, beforeEach, it, afterEach } = require('bun:test');
 const { restoreAllMocks } = require('../../helpers/bun-mock-utils');
 const { noOpLogger } = require('../../helpers/mock-factories');
 const { DependencyFactory } = require('../../../src/utils/dependency-factory');
-const { secrets, _resetForTesting, initializeStaticSecrets } = require('../../../src/core/secrets');
+const { _resetForTesting, initializeStaticSecrets } = require('../../../src/core/secrets');
 
 describe('DependencyFactory behavior', () => {
     let factory;
@@ -54,15 +54,14 @@ describe('DependencyFactory behavior', () => {
 
     describe('Twitch dependency validation', () => {
         it('requires Twitch channel', () => {
-            expect(() => factory.createTwitchDependencies({}, { logger: noOpLogger, config: configFixture }))
+            const twitchAuth = { isReady: () => true };
+            expect(() => factory.createTwitchDependencies({}, { logger: noOpLogger, config: configFixture, twitchAuth }))
                 .toThrow(/Twitch channel is required/);
         });
 
-        it('requires Twitch client credentials for auth manager', () => {
-            _resetForTesting();
-            secrets.twitch.clientSecret = 'test-client-secret';
+        it('requires twitchAuth to be injected', () => {
             expect(() => factory.createTwitchDependencies({ channel: 'me' }, { logger: noOpLogger, config: configFixture }))
-                .toThrow(/missing fields \[clientId\]/);
+                .toThrow(/createTwitchDependencies requires twitchAuth/);
         });
     });
 });
