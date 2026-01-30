@@ -2,11 +2,7 @@
 const { describe, test, expect, beforeEach, afterEach } = require('bun:test');
 
 const { TEST_TIMEOUTS } = require('../helpers/test-setup');
-
-const {
-  createConfigFixture
-} = require('../helpers/mock-factories');
-
+const { createConfigFixture } = require('../helpers/config-fixture');
 const { setupAutomatedCleanup } = require('../helpers/mock-lifecycle');
 const testClock = require('../helpers/test-clock');
 const { restoreAllMocks, spyOn } = require('../helpers/bun-mock-utils');

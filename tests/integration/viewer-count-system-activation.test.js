@@ -1,9 +1,9 @@
 const { describe, test, beforeEach, afterEach, expect } = require('bun:test');
 const { createMockFn, restoreAllMocks } = require('../helpers/bun-mock-utils');
 const { TEST_TIMEOUTS } = require('../helpers/test-setup');
+const { createConfigFixture } = require('../helpers/config-fixture');
 const {
     noOpLogger,
-    createConfigFixture,
     createMockOBSConnection,
     createMockTwitchPlatform,
     createMockYouTubePlatform,

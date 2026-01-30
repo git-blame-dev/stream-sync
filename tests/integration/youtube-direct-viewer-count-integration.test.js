@@ -1,7 +1,8 @@
 const { describe, test, beforeEach, afterEach, expect } = require('bun:test');
 const { createMockFn, restoreAllMocks } = require('../helpers/bun-mock-utils');
 const { noOpLogger } = require('../helpers/mock-factories');
-const { createMockPlatformDependencies, createConfigFixture } = require('../helpers/test-setup');
+const { createMockPlatformDependencies } = require('../helpers/test-setup');
+const { createYouTubeConfigFixture } = require('../helpers/config-fixture');
 const testClock = require('../helpers/test-clock');
 
 const createMockViewerCountProvider = (overrides = {}) => ({
@@ -26,7 +27,7 @@ describe('YouTube Direct getViewerCount() Integration', () => {
             ...providerOverrides
         });
 
-        const configFixture = createConfigFixture('youtube');
+        const configFixture = createYouTubeConfigFixture();
         const mockDeps = createMockPlatformDependencies('youtube', {
             logger: noOpLogger,
             viewerCountProvider: mockProvider

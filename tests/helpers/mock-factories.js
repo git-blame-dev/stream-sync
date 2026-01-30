@@ -1,5 +1,4 @@
 
-// Import setupAutomatedCleanup for re-export
 const { setupAutomatedCleanup } = require('./mock-lifecycle');
 const { waitForDelay } = require('./time-utils');
 const { createMockFn, isMockFunction } = require('./bun-mock-utils');
@@ -1368,46 +1367,6 @@ const createInvalidEventBuilder = () => {
 // ================================================================================================
 // EXPORTS
 // ================================================================================================
-
-const createConfigFixture = (configOverrides = {}) => {
-    const baseConfig = {
-        general: {
-            debugEnabled: false,
-            exitAfterMessages: null
-        },
-        twitch: {
-            enabled: true,
-            cmdCooldownMs: 10000,
-            clientId: 'test-client-id',
-            username: 'test-twitch-user'
-        },
-        youtube: {
-            enabled: true,
-            cmdCooldownMs: 10000,
-            username: 'test-youtube-user'
-        },
-        tiktok: {
-            enabled: true,
-            cmdCooldownMs: 10000,
-            username: 'test-tiktok-user'
-        },
-        obs: {
-            enabled: true,
-            host: 'localhost',
-            port: 4455
-        },
-        commands: {
-            test: { vfx: 'test-vfx' },
-            hello: { vfx: 'hello-effect' }
-        }
-    };
-
-    return {
-        ...baseConfig,
-        ...configOverrides,
-        _mockType: 'Config'
-    };
-};
 
 const createMockPlatform = (platformName, behaviorConfig = {}) => {
     const methodOverrides = {};
@@ -2946,8 +2905,6 @@ module.exports = {
     createMockFileSystem,
     noOpLogger,
     createTestApp,
-    createConfigFixture,
-    // createMockGiftDataLogger, // REMOVED - redundant
     createMockSpamDetector,
     createMockDisplayQueue,
     createMockOBSConnection,

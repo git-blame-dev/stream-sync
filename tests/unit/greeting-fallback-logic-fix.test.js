@@ -1,6 +1,6 @@
 const { describe, expect, beforeEach, it, afterEach } = require('bun:test');
 const { restoreAllMocks } = require('../helpers/bun-mock-utils');
-const { noOpLogger, createConfigFixture } = require('../helpers/mock-factories');
+const { noOpLogger } = require('../helpers/mock-factories');
 const { createTestAppRuntime } = require('../helpers/runtime-test-harness');
 
 describe('Greeting Fallback Logic Fix', () => {
@@ -9,10 +9,9 @@ describe('Greeting Fallback Logic Fix', () => {
     });
 
     let runtime;
-    let configFixture;
 
     beforeEach(() => {
-        configFixture = createConfigFixture({
+        const configOverrides = {
             general: {
                 greetingsEnabled: true,
                 streamDetectionEnabled: false,
@@ -23,9 +22,9 @@ describe('Greeting Fallback Logic Fix', () => {
             tiktok: {
                 enabled: true
             }
-        });
+        };
 
-        ({ runtime } = createTestAppRuntime(configFixture, {
+        ({ runtime } = createTestAppRuntime(configOverrides, {
             logger: noOpLogger
         }));
     });

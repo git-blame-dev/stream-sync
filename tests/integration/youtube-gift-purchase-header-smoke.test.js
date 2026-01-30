@@ -3,7 +3,8 @@ const { YouTubePlatform } = require('../../src/platforms/youtube');
 const { getSyntheticFixture } = require('../helpers/platform-test-data');
 const { restoreAllMocks } = require('../helpers/bun-mock-utils');
 const { noOpLogger } = require('../helpers/mock-factories');
-const { createMockPlatformDependencies, createConfigFixture } = require('../helpers/test-setup');
+const { createMockPlatformDependencies } = require('../helpers/test-setup');
+const { createYouTubeConfigFixture } = require('../helpers/config-fixture');
 
 const giftPurchaseHeaderOnly = getSyntheticFixture('youtube', 'gift-purchase-header');
 const giftPurchaseTimestamp = new Date(
@@ -16,7 +17,7 @@ describe('YouTube Gift Purchase Smoke (Canonical Author)', () => {
     });
 
     test('routes gift purchase through event pipeline to handler', async () => {
-        const config = createConfigFixture('youtube', {
+        const config = createYouTubeConfigFixture({
             enabled: true,
             username: 'test-channel'
         });
