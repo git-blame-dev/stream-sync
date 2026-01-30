@@ -65,7 +65,7 @@ describe('YouTube giftpaypiggy platform flow (smoke)', () => {
         const logger = noOpLogger;
         const displayQueue = createMockDisplayQueue();
         const textProcessing = createTextProcessingManager({ logger });
-        const config = createConfigFixture({
+        const configOverrides = {
             general: {
                 debugEnabled: false,
                 giftsEnabled: true,
@@ -83,7 +83,8 @@ describe('YouTube giftpaypiggy platform flow (smoke)', () => {
             youtube: { enabled: true, notificationsEnabled: true, username: 'test-channel' },
             obs: { enabled: false },
             tts: { enabled: false }
-        });
+        };
+        const config = createConfigFixture(configOverrides);
         const notificationManager = new NotificationManager({
             displayQueue,
             logger,
@@ -107,9 +108,8 @@ describe('YouTube giftpaypiggy platform flow (smoke)', () => {
             streamDetector
         });
 
-        const { runtime } = createTestAppRuntime(config, {
+        const { runtime } = createTestAppRuntime(configOverrides, {
             eventBus,
-            config,
             notificationManager,
             displayQueue,
             logger,

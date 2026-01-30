@@ -45,6 +45,7 @@ describe('ViewerCount System Activation Integration', () => {
 
     let AppRuntime;
     let ViewerCountSystem;
+    let configOverrides;
     let configFixture;
     let mockOBSManager;
     let mockYouTubePlatform;
@@ -54,7 +55,6 @@ describe('ViewerCount System Activation Integration', () => {
     let mockPlatformLifecycleService;
     let mockGoalsManager;
     let buildAppRuntimeDependencies;
-    let testConfig;
 
     const registerMockPlatforms = () => {
         const platforms = {
@@ -75,7 +75,7 @@ describe('ViewerCount System Activation Integration', () => {
     beforeEach(() => {
         testClock.reset();
 
-        configFixture = createConfigFixture({
+        configOverrides = {
             general: {
                 debug: true,
                 viewerCountPollingInterval: 60,
@@ -100,13 +100,13 @@ describe('ViewerCount System Activation Integration', () => {
                 viewerCountSource: 'tiktok-viewer-count'
             },
             obs: { enabled: true }
-        });
+        };
+        configFixture = createConfigFixture(configOverrides);
 
         mockOBSManager = createMockOBSConnection();
         mockOBSManager.isConnected.mockReturnValue(true);
 
         mockGoalsManager = createMockGoalsManager();
-        testConfig = createConfigFixture();
 
         mockYouTubePlatform = createMockYouTubePlatform();
         mockYouTubePlatform.getViewerCount = createMockFn().mockResolvedValue(150);
@@ -125,10 +125,9 @@ describe('ViewerCount System Activation Integration', () => {
         buildAppRuntimeDependencies = (overrides = {}) => {
             const logger = noOpLogger;
             return createAppRuntimeTestDependencies({
-                configSnapshot: configFixture,
+                configOverrides,
                 displayQueue: mockDisplayQueue,
                 logger,
-                config: testConfig,
                 overrides: {
                     obs: {
                         connectionManager: mockOBSManager,
@@ -152,7 +151,7 @@ describe('ViewerCount System Activation Integration', () => {
             app.viewerCountSystem = new ViewerCountSystem({
                 platformProvider: () => app.getPlatforms(),
                 logger: noOpLogger,
-                config: testConfig
+                config: configFixture
             });
 
             app.viewerCountSystem.updateStreamStatus('youtube', true);
@@ -176,7 +175,7 @@ describe('ViewerCount System Activation Integration', () => {
             app.viewerCountSystem = new ViewerCountSystem({
                 platformProvider: () => app.getPlatforms(),
                 logger: noOpLogger,
-                config: testConfig
+                config: configFixture
             });
 
             app.viewerCountSystem.updateStreamStatus('youtube', true);
@@ -204,7 +203,7 @@ describe('ViewerCount System Activation Integration', () => {
             app.viewerCountSystem = new ViewerCountSystem({
                 platformProvider: () => app.getPlatforms(),
                 logger: noOpLogger,
-                config: testConfig
+                config: configFixture
             });
 
             app.viewerCountSystem.updateStreamStatus('youtube', true);
@@ -234,7 +233,7 @@ describe('ViewerCount System Activation Integration', () => {
             app.viewerCountSystem = new ViewerCountSystem({
                 platformProvider: () => app.getPlatforms(),
                 logger: noOpLogger,
-                config: testConfig
+                config: configFixture
             });
 
             app.initializePlatforms = createMockFn().mockResolvedValue();
@@ -259,7 +258,7 @@ describe('ViewerCount System Activation Integration', () => {
             app.viewerCountSystem = new ViewerCountSystem({
                 platformProvider: () => app.getPlatforms(),
                 logger: noOpLogger,
-                config: testConfig
+                config: configFixture
             });
 
             app.viewerCountSystem.updateStreamStatus('youtube', false);
@@ -284,7 +283,7 @@ describe('ViewerCount System Activation Integration', () => {
             app.viewerCountSystem = new ViewerCountSystem({
                 platformProvider: () => app.getPlatforms(),
                 logger: noOpLogger,
-                config: testConfig
+                config: configFixture
             });
 
             app.viewerCountSystem.updateStreamStatus('youtube', true);

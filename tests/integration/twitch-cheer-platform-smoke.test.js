@@ -31,7 +31,7 @@ describe('Twitch bits gift platform flow (smoke)', () => {
         const logger = noOpLogger;
         const displayQueue = createMockDisplayQueue();
         const textProcessing = createTextProcessingManager({ logger });
-        const config = createConfigFixture({
+        const configOverrides = {
             general: {
                 debugEnabled: false,
                 giftsEnabled: true,
@@ -49,7 +49,8 @@ describe('Twitch bits gift platform flow (smoke)', () => {
             twitch: { enabled: true, notificationsEnabled: true },
             obs: { enabled: false },
             tts: { enabled: false }
-        });
+        };
+        const config = createConfigFixture(configOverrides);
         const notificationManager = new NotificationManager({
             displayQueue,
             logger,
@@ -73,9 +74,8 @@ describe('Twitch bits gift platform flow (smoke)', () => {
             streamDetector
         });
 
-        const { runtime } = createTestAppRuntime(config, {
+        const { runtime } = createTestAppRuntime(configOverrides, {
             eventBus,
-            config,
             notificationManager,
             displayQueue,
             logger,
