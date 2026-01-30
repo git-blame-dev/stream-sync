@@ -67,7 +67,7 @@ describe('ViewerCount System Activation Integration', () => {
         mockPlatformLifecycleService.getAllPlatforms.mockImplementation(() => ({ ...platforms }));
         mockPlatformLifecycleService.getPlatforms.mockImplementation(() => ({ ...platforms }));
         mockPlatformLifecycleService.getPlatform.mockImplementation((platform) => platforms[platform] || null);
-        mockPlatformLifecycleService.isPlatformAvailable.mockImplementation((platform) => Boolean(platforms[platform]));
+        mockPlatformLifecycleService.isPlatformAvailable.mockImplementation((platform) => !!platforms[platform]);
 
         return platforms;
     };
