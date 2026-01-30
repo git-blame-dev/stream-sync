@@ -312,7 +312,7 @@ describe('Optimized Business Logic Performance Tests', () => {
             const endTime = testClock.now();
             const processingTime = endTime - startTime;
 
-            const isWSLEnvironment = Boolean(
+            const isWSLEnvironment = !!(
                 process.env.WSL_DISTRO_NAME ||
                 process.env.WSLENV ||
                 (process.platform === 'linux' && (() => {

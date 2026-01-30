@@ -5,7 +5,7 @@ const path = require('path');
 
 const BOOLEAN_PATTERN = /(?<![a-zA-Z_.])Boolean\(([^)]+)\)/g;
 
-const SOURCE_DIRS = ['src'];
+const SOURCE_DIRS = ['src', 'tests'];
 
 function findJsFiles(dir) {
     const files = [];

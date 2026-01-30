@@ -2,7 +2,7 @@ const { vi } = require('bun:test');
 
 const createMockFn = (implementation) => vi.fn(implementation);
 
-const isMockFunction = (value) => Boolean(value && value.mock && Array.isArray(value.mock.calls));
+const isMockFunction = (value) => !!(value && value.mock && Array.isArray(value.mock.calls));
 
 const mockResolvedValue = (fn, value) => {
     if (isMockFunction(fn)) {
