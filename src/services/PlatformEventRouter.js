@@ -3,7 +3,7 @@ const { logger: defaultLogger } = require('../core/logging');
 const { createPlatformErrorHandler } = require('../utils/platform-error-handler');
 const { NOTIFICATION_CONFIGS } = require('../core/constants');
 const { PlatformEvents } = require('../interfaces/PlatformEvents');
-const { isIsoTimestamp } = require('../utils/validation');
+const { isIsoTimestamp } = require('../utils/timestamp');
 
 const ALIAS_PAID_TYPES = [
     'subscription',

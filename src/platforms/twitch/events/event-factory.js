@@ -1,5 +1,5 @@
 const { PlatformEvents } = require('../../../interfaces/PlatformEvents');
-const { isIsoTimestamp } = require('../../../utils/validation');
+const { isIsoTimestamp } = require('../../../utils/timestamp');
 
 function normalizeIdentity(data) {
     if (!data || typeof data !== 'object') {

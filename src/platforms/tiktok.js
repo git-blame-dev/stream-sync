@@ -8,12 +8,11 @@ const { ConnectionStateManager } = require('../utils/connection-state-manager');
 const { PlatformConnectionFactory } = require('../utils/platform-connection-factory');
 const { PlatformEvents } = require('../interfaces/PlatformEvents');
 const { safeSetTimeout } = require('../utils/timeout-validator');
-const { resolveTikTokTimestampMs } = require('../utils/tiktok-timestamp');
+const { resolveTikTokTimestampMs, resolveTikTokTimestampISO } = require('../utils/platform-timestamp');
+const { getSystemTimestampISO } = require('../utils/timestamp');
 const { createPlatformErrorHandler } = require('../utils/platform-error-handler');
 const { createMonetizationErrorPayload } = require('../utils/monetization-error-utils');
 const { createRetrySystem } = require('../utils/retry-system');
-const TimestampExtractionService = require('../services/TimestampExtractionService');
-const { getSystemTimestampISO } = require('../utils/validation');
 const { extractTikTokUserData, formatCoinAmount } = require('../utils/tiktok-data-extraction');
 const { validateNotificationManagerInterface } = require('../utils/dependency-validator');
 const { normalizeTikTokChatEvent, normalizeTikTokGiftEvent } = require('./tiktok/events/event-normalizer');
@@ -57,8 +56,6 @@ class TikTokPlatform extends EventEmitter {
         this.WebcastEvent = dependencies.WebcastEvent;
         this.ControlEvent = dependencies.ControlEvent;
         this.retrySystem = dependencies.retrySystem || createRetrySystem({ logger: this.logger });
-        this.timestampService = dependencies.timestampService
-            || new TimestampExtractionService({ logger: this.logger });
         this._validateDependencies(dependencies, this.config);
         
         this.platformName = 'tiktok';
@@ -69,10 +66,8 @@ class TikTokPlatform extends EventEmitter {
             getPlatformMessageId: (data) => this._getPlatformMessageId(data),
             buildEventMetadata: (metadata) => this._buildEventMetadata(metadata),
             normalizeChatEvent: (data) => normalizeTikTokChatEvent(data, {
-                platformName: this.platformName,
-                timestampService: this.timestampService
-            }),
-            timestampService: this.timestampService
+                platformName: this.platformName
+            })
         });
 
         // Track planned vs unexpected disconnections
@@ -669,7 +664,6 @@ class TikTokPlatform extends EventEmitter {
         try {
             const normalizedGift = normalizeTikTokGiftEvent(data, {
                 platformName: this.platformName,
-                timestampService: this.timestampService,
                 getTimestamp: (payload) => this._getTimestamp(payload),
                 getPlatformMessageId: (payload) => this._getPlatformMessageId(payload)
             });
@@ -821,8 +815,7 @@ class TikTokPlatform extends EventEmitter {
     }
 
     static resolveEventTimestampISO(data) {
-        const millis = TikTokPlatform.resolveEventTimestampMs(data);
-        return millis ? new Date(millis).toISOString() : null;
+        return resolveTikTokTimestampISO(data);
     }
 
     async handleTikTokFollow(data) {
@@ -1038,10 +1031,7 @@ class TikTokPlatform extends EventEmitter {
     }
 
     _getTimestamp(data) {
-        if (this.timestampService && typeof this.timestampService.extractTimestamp === 'function') {
-            return this.timestampService.extractTimestamp('tiktok', data);
-        }
-        return TikTokPlatform.resolveEventTimestampISO(data);
+        return resolveTikTokTimestampISO(data);
     }
 
     _buildGiftErrorOverrides(data) {

@@ -102,7 +102,7 @@ if (cliArgs.disableKeywordParsing) {
 }
 
 const { createRetrySystem } = require('./utils/retry-system');
-const { getSystemTimestampISO } = require('./utils/validation');
+const { getSystemTimestampISO } = require('./utils/timestamp');
 
 // Import authentication
 // Import stream detection system
@@ -262,10 +262,6 @@ function createProductionDependencies(overrides = {}) {
         InnertubeFactory.configure({ importer: resolvedOverrides.innertubeImporter });
     }
     
-    // Create TimestampExtractionService instance for dependency injection
-    const TimestampExtractionService = require('./services/TimestampExtractionService');
-    const timestampService = new TimestampExtractionService({ logger });
-    
     return {
         obs: {
             connectionManager: require('./obs/connection').getOBSConnectionManager({ config: config.obs }),
@@ -279,7 +275,6 @@ function createProductionDependencies(overrides = {}) {
         platforms: require('./platforms'),
         displayQueue: null,
         notificationManager: null,
-        timestampService: timestampService,
         dependencyFactory: resolvedOverrides.dependencyFactory || new DependencyFactory(),
         lazyInnertube: InnertubeFactory.createLazyReference(),
         axios: resolvedOverrides.axios,
@@ -368,7 +363,6 @@ class AppRuntime {
         return {
             twitchAuth: this.twitchAuth,
             notificationManager: this.notificationManager,
-            timestampService: this.dependencies.timestampService,
             logger: logging.getUnifiedLogger(),
             platformLogger: logger,
             config: this.config,
@@ -1542,7 +1536,6 @@ async function main(overrides = {}) {
         const sharedPlatformDependencies = {
             logger,
             notificationManager,
-            timestampService: dependencies.timestampService,
             twitchAuth,
             USER_AGENTS: config.http.userAgents,
             config,

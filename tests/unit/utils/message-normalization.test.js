@@ -16,60 +16,7 @@ beforeEach(() => {
     testClock.reset();
 });
 
-const buildTimestampService = () => ({
-    extractTimestamp: (platform, data) => {
-        if (platform === 'twitch') {
-            const raw = data?.timestamp;
-            if (!raw) {
-                throw new Error('Missing twitch timestamp');
-            }
-            const numeric = Number(raw);
-            if (Number.isFinite(numeric)) {
-                return new Date(numeric).toISOString();
-            }
-            const parsed = Date.parse(raw);
-            if (Number.isNaN(parsed)) {
-                throw new Error('Invalid twitch timestamp');
-            }
-            return new Date(parsed).toISOString();
-        }
-        if (platform === 'youtube') {
-            const raw = data?.timestamp ?? data?.timestamp_usec;
-            if (!raw) {
-                throw new Error('Missing youtube timestamp');
-            }
-            const numeric = Number(raw);
-            if (!Number.isFinite(numeric)) {
-                throw new Error('Invalid youtube timestamp');
-            }
-            const resolved = numeric > 10000000000000 ? numeric / 1000 : numeric;
-            return new Date(resolved).toISOString();
-        }
-        if (platform === 'tiktok') {
-            const raw = data?.common?.clientSendTime ?? data?.common?.createTime ?? data?.timestamp;
-            if (!raw) {
-                throw new Error('Missing tiktok timestamp');
-            }
-            const numeric = Number(raw);
-            if (Number.isFinite(numeric)) {
-                return new Date(numeric).toISOString();
-            }
-            const parsed = Date.parse(raw);
-            if (Number.isNaN(parsed)) {
-                throw new Error('Invalid tiktok timestamp');
-            }
-            return new Date(parsed).toISOString();
-        }
-        throw new Error('Unsupported platform');
-    }
-});
-
 describe('Message Normalization', () => {
-    let timestampService;
-
-    beforeEach(() => {
-        timestampService = buildTimestampService();
-    });
 
     describe('when normalizing YouTube messages', () => {
         test('normalizes YouTube.js chat message correctly', () => {
@@ -88,7 +35,7 @@ describe('Message Normalization', () => {
                 }
             };
 
-            const normalized = normalizeYouTubeMessage(chatItem, 'youtube', timestampService);
+            const normalized = normalizeYouTubeMessage(chatItem, 'youtube');
 
             expect(normalized).toMatchObject({
                 platform: 'youtube',
@@ -103,28 +50,6 @@ describe('Message Normalization', () => {
                 uniqueId: 'yt-message-123',
                 isSuperChat: false
             });
-        });
-
-        test('rejects non-string timestamps from the service', () => {
-            const nonStringTimestampService = {
-                extractTimestamp: () => 123456789
-            };
-            const chatItem = {
-                item: {
-                    id: 'yt-message-124',
-                    timestamp: testClock.now(),
-                    author: {
-                        id: 'UC123456789',
-                        name: 'youtubeuser',
-                        is_moderator: false,
-                        badges: []
-                    },
-                    message: { text: 'Hello YouTube!' }
-                }
-            };
-
-            expect(() => normalizeYouTubeMessage(chatItem, 'youtube', nonStringTimestampService))
-                .toThrow('Missing YouTube timestamp');
         });
 
         test('normalizes YouTube super chat correctly', () => {
@@ -147,7 +72,7 @@ describe('Message Normalization', () => {
                 }
             };
 
-            const normalized = normalizeYouTubeMessage(superChatItem, 'youtube', timestampService);
+            const normalized = normalizeYouTubeMessage(superChatItem, 'youtube');
 
             expect(normalized).toMatchObject({
                 platform: 'youtube',
@@ -167,7 +92,7 @@ describe('Message Normalization', () => {
         test('throws on missing YouTube data', () => {
             const incompleteChatItem = {};
 
-            expect(() => normalizeYouTubeMessage(incompleteChatItem, 'youtube', timestampService))
+            expect(() => normalizeYouTubeMessage(incompleteChatItem, 'youtube'))
                 .toThrow('Missing YouTube chat item payload');
         });
 
@@ -187,7 +112,7 @@ describe('Message Normalization', () => {
                 }
             };
 
-            const normalized = normalizeYouTubeMessage(chatItem, 'youtube', timestampService);
+            const normalized = normalizeYouTubeMessage(chatItem, 'youtube');
 
             expect(normalized.isMod).toBe(true);
             expect(normalized.isBroadcaster).toBe(false);
@@ -211,7 +136,7 @@ describe('Message Normalization', () => {
                 }
             };
 
-            const normalized = normalizeYouTubeMessage(chatItem, 'youtube', timestampService);
+            const normalized = normalizeYouTubeMessage(chatItem, 'youtube');
 
             expect(normalized.isBroadcaster).toBe(true);
             expect(normalized.isMod).toBe(false);
@@ -235,7 +160,7 @@ describe('Message Normalization', () => {
                 }
             };
 
-            const normalized = normalizeYouTubeMessage(chatItem, 'youtube', timestampService);
+            const normalized = normalizeYouTubeMessage(chatItem, 'youtube');
 
             expect(normalized.isSubscriber).toBe(true);
         });
@@ -258,7 +183,7 @@ describe('Message Normalization', () => {
                 }
             };
 
-            const normalized = normalizeYouTubeMessage(chatItem, 'youtube', timestampService);
+            const normalized = normalizeYouTubeMessage(chatItem, 'youtube');
 
             expect(normalized.isSubscriber).toBe(true);
         });
@@ -281,7 +206,7 @@ describe('Message Normalization', () => {
                 }
             };
 
-            const normalized = normalizeYouTubeMessage(chatItem, 'youtube', timestampService);
+            const normalized = normalizeYouTubeMessage(chatItem, 'youtube');
 
             expect(normalized.isSubscriber).toBe(false);
         });
@@ -300,7 +225,7 @@ describe('Message Normalization', () => {
                 common: { createTime: testClock.now() }
             };
 
-            const normalized = normalizeTikTokMessage(data, 'tiktok', timestampService);
+            const normalized = normalizeTikTokMessage(data, 'tiktok');
 
             expect(normalized).toMatchObject({
                 platform: 'tiktok',
@@ -317,24 +242,6 @@ describe('Message Normalization', () => {
             });
         });
 
-        test('rejects non-string timestamps from the service', () => {
-            const nonStringTimestampService = {
-                extractTimestamp: () => 123456789
-            };
-            const data = {
-                user: {
-                    userId: 'tt-123',
-                    uniqueId: 'tiktokuser123',
-                    nickname: 'TikTokUser'
-                },
-                comment: 'Hello TikTok!',
-                common: { createTime: testClock.now() }
-            };
-
-            expect(() => normalizeTikTokMessage(data, 'tiktok', nonStringTimestampService))
-                .toThrow('Missing TikTok timestamp');
-        });
-
         test('handles TikTok gift messages', () => {
             const giftTimestamp = new Date(testClock.now()).toISOString();
             const giftData = {
@@ -349,7 +256,7 @@ describe('Message Normalization', () => {
                 timestamp: giftTimestamp
             };
 
-            const normalized = normalizeTikTokMessage(giftData, 'tiktok-gift', timestampService);
+            const normalized = normalizeTikTokMessage(giftData, 'tiktok-gift');
 
             expect(normalized).toMatchObject({
                 platform: 'tiktok-gift',
@@ -373,7 +280,7 @@ describe('Message Normalization', () => {
                 common: { createTime: testClock.now() }
             };
 
-            expect(() => normalizeTikTokMessage(incompleteData, 'tiktok', timestampService))
+            expect(() => normalizeTikTokMessage(incompleteData, 'tiktok'))
                 .toThrow('userId');
         });
 
@@ -391,7 +298,7 @@ describe('Message Normalization', () => {
                 common: { createTime: testClock.now() }
             };
 
-            const normalized = normalizeTikTokMessage(data, 'tiktok', timestampService);
+            const normalized = normalizeTikTokMessage(data, 'tiktok');
 
             expect(normalized.metadata).toMatchObject({
                 profilePicture: 'avatar-fallback.jpg',
@@ -722,7 +629,7 @@ describe('Message Normalization', () => {
                 }
             };
 
-            const normalized = normalizeMessage('YouTube', chatItem, 'YouTube', timestampService);
+            const normalized = normalizeMessage('YouTube', chatItem, 'YouTube');
 
             expect(normalized.platform).toBe('youtube');
         });
@@ -744,7 +651,7 @@ describe('Message Normalization', () => {
                     comment: 'Test message with original timestamp'
                 };
 
-                const normalized = normalizeTikTokMessage(tikTokData, 'tiktok', timestampService);
+                const normalized = normalizeTikTokMessage(tikTokData, 'tiktok');
 
                 const normalizedTime = new Date(normalized.timestamp).getTime();
                 expect(normalizedTime).toBe(originalTime);
@@ -766,7 +673,7 @@ describe('Message Normalization', () => {
                     comment: 'Common timestamp test'
                 };
 
-                const normalized = normalizeTikTokMessage(tikTokData, 'tiktok', timestampService);
+                const normalized = normalizeTikTokMessage(tikTokData, 'tiktok');
 
                 const normalizedTime = new Date(normalized.timestamp).getTime();
                 expect(normalizedTime).toBe(originalTime);
@@ -784,7 +691,7 @@ describe('Message Normalization', () => {
                     comment: 'Test message with fallback timestamp'
                 };
 
-                const normalized = normalizeTikTokMessage(tikTokData, 'tiktok', timestampService);
+                const normalized = normalizeTikTokMessage(tikTokData, 'tiktok');
                 expect(normalized.timestamp).toBe(fallbackTime);
             });
 
@@ -804,7 +711,7 @@ describe('Message Normalization', () => {
 
                 const beforeNormalization = testClock.now();
 
-                const normalized = normalizeTikTokMessage(tikTokData, 'tiktok', timestampService);
+                const normalized = normalizeTikTokMessage(tikTokData, 'tiktok');
 
                 const afterNormalization = testClock.now();
                 const normalizedTime = new Date(normalized.timestamp).getTime();
@@ -832,7 +739,7 @@ describe('Message Normalization', () => {
                     }
                 };
 
-                const normalized = normalizeYouTubeMessage(youTubeData, 'youtube', timestampService);
+                const normalized = normalizeYouTubeMessage(youTubeData, 'youtube');
 
                 const normalizedTime = new Date(normalized.timestamp).getTime();
                 expect(normalizedTime).toBe(originalTimeMs);
@@ -853,7 +760,7 @@ describe('Message Normalization', () => {
                     }
                 };
 
-                const normalized = normalizeYouTubeMessage(youTubeData, 'youtube', timestampService);
+                const normalized = normalizeYouTubeMessage(youTubeData, 'youtube');
 
                 const normalizedTime = new Date(normalized.timestamp).getTime();
                 expect(normalizedTime).toBe(originalTimeMs);
@@ -872,7 +779,7 @@ describe('Message Normalization', () => {
                     }
                 };
 
-                expect(() => normalizeYouTubeMessage(youTubeData, 'youtube', timestampService))
+                expect(() => normalizeYouTubeMessage(youTubeData, 'youtube'))
                     .toThrow('timestamp');
             });
         });
@@ -901,8 +808,8 @@ describe('Message Normalization', () => {
                     }
                 };
 
-                const normalizedTikTok = normalizeTikTokMessage(tikTokData, 'tiktok', timestampService);
-                const normalizedYouTube = normalizeYouTubeMessage(youTubeData, 'youtube', timestampService);
+                const normalizedTikTok = normalizeTikTokMessage(tikTokData, 'tiktok');
+                const normalizedYouTube = normalizeYouTubeMessage(youTubeData, 'youtube');
                 const tikTokTime = new Date(normalizedTikTok.timestamp).getTime();
                 const youTubeTime = new Date(normalizedYouTube.timestamp).getTime();
                 expect(tikTokTime).toBe(baseTime);
@@ -913,42 +820,5 @@ describe('Message Normalization', () => {
             });
         });
 
-        describe('Integration with TimestampExtractionService', () => {
-            test('integrates with TimestampExtractionService when provided via dependency injection', () => {
-                const mockTimestampService = {
-                    extractTimestamp: (platform, data) => {
-                        if (platform === 'tiktok' && data.common?.createTime) {
-                            return new Date(data.common.createTime).toISOString();
-                        }
-                        if (platform === 'youtube' && data.timestamp_usec) {
-                            return new Date(Math.floor(Number(data.timestamp_usec) / 1000)).toISOString();
-                        }
-                        if (platform === 'twitch' && data.timestamp) {
-                            const parsed = Date.parse(data.timestamp);
-                            return new Date(parsed).toISOString();
-                        }
-                        return null;
-                    }
-                };
-
-                const originalTime = testClock.now() - (8 * 60 * 1000);
-                const tikTokData = {
-                    user: {
-                        userId: 'tt-6',
-                        uniqueId: 'TestUser',
-                        nickname: 'Test User'
-                    },
-                    common: {
-                        createTime: originalTime
-                    },
-                    comment: 'Service integration test'
-                };
-
-                const normalized = normalizeTikTokMessage(tikTokData, 'tiktok', mockTimestampService);
-
-                const normalizedTime = new Date(normalized.timestamp).getTime();
-                expect(normalizedTime).toBe(originalTime);
-            });
-        });
     });
 });

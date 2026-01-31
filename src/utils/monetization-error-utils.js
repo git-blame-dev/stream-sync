@@ -26,7 +26,7 @@ function resolvePositiveNumber(value) {
     return Number.isFinite(num) && num > 0 ? num : null;
 }
 
-const { isIsoTimestamp } = require('./validation');
+const { isIsoTimestamp } = require('./timestamp');
 
 function resolveTimestampValue(value) {
     if (typeof value !== 'string') {

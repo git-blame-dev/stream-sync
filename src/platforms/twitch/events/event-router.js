@@ -6,7 +6,7 @@ const {
     normalizeMonths,
     normalizeUserIdentity
 } = require('./event-normalizer');
-const { getSystemTimestampISO } = require('../../../utils/validation');
+const { getSystemTimestampISO } = require('../../../utils/timestamp');
 
 function createTwitchEventSubEventRouter(options = {}) {
     const {
