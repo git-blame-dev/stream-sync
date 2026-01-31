@@ -1,7 +1,7 @@
 const { PlatformEvents } = require('../../../interfaces/PlatformEvents');
 const { normalizeTikTokMessage } = require('../../../utils/message-normalization');
 const { extractTikTokUserData } = require('../../../utils/tiktok-data-extraction');
-const { getSystemTimestampISO } = require('../../../utils/validation');
+const { getSystemTimestampISO } = require('../../../utils/timestamp');
 
 function createTikTokEventFactory(options = {}) {
     const platformName = options.platformName || 'tiktok';

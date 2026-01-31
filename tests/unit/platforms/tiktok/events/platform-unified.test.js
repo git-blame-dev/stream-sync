@@ -118,7 +118,10 @@ describe('TikTokPlatform unified event contract (expected behavior)', () => {
     });
 
     it('routes follow events through platform:event to PlatformEventRouter', async () => {
-        await platform._handleFollow({ user: { userId: 'tt-follow-1', uniqueId: 'follower', nickname: 'Follower' } });
+        await platform._handleFollow({
+            user: { userId: 'tt-follow-1', uniqueId: 'follower', nickname: 'Follower' },
+            common: { createTime: testClock.now() }
+        });
 
         expect(runtime._calls.handleFollowNotification).toHaveLength(1);
         expect(mockEventBus.emitted.find((e) => e.eventName === 'platform:event')).toBeDefined();

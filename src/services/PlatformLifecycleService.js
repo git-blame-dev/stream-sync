@@ -3,7 +3,7 @@ const { logger } = require('../core/logging');
 const { safeDelay } = require('../utils/timeout-validator');
 const { createPlatformErrorHandler } = require('../utils/platform-error-handler');
 const { assertPlatformInterface } = require('../utils/platform-interface-validator');
-const { getSystemTimestampISO } = require('../utils/validation');
+const { getSystemTimestampISO } = require('../utils/timestamp');
 const { PlatformEvents } = require('../interfaces/PlatformEvents');
 
 class PlatformLifecycleService {

@@ -8,8 +8,8 @@ const { PlatformEvents } = require('../interfaces/PlatformEvents');
 const { createPlatformErrorHandler } = require('../utils/platform-error-handler');
 const { validateNormalizedMessage } = require('../utils/message-normalization');
 const { createMonetizationErrorPayload } = require('../utils/monetization-error-utils');
-const { getSystemTimestampISO } = require('../utils/validation');
-const TimestampExtractionService = require('../services/TimestampExtractionService');
+const { resolveTwitchTimestampISO } = require('../utils/platform-timestamp');
+const { getSystemTimestampISO } = require('../utils/timestamp');
 const {
     normalizeTwitchPlatformConfig,
     validateTwitchPlatformConfig
@@ -36,8 +36,6 @@ class TwitchPlatform extends EventEmitter {
 
         // Store configuration and app reference
         this.config = normalizeTwitchPlatformConfig(config);
-        this.timestampService = dependencies.timestampService
-            || new TimestampExtractionService({ logger: this.logger });
         
         // Require TwitchAuth via dependency injection
         this.twitchAuth = dependencies.twitchAuth;
@@ -318,15 +316,7 @@ class TwitchPlatform extends EventEmitter {
     }
 
     _getTimestamp(data) {
-        if (this.timestampService && typeof this.timestampService.extractTimestamp === 'function') {
-            return this.timestampService.extractTimestamp('twitch', data);
-        }
-
-        if (typeof data?.timestamp === 'string') {
-            return data.timestamp;
-        }
-
-        return null;
+        return resolveTwitchTimestampISO(data);
     }
 
     async _handleStandardEvent(eventType, data, options = {}) {

@@ -1,11 +1,10 @@
 const { normalizeTikTokMessage } = require('../../../utils/message-normalization');
 const { extractTikTokUserData, extractTikTokGiftData } = require('../../../utils/tiktok-data-extraction');
-const { resolveTikTokTimestampISO } = require('../../../utils/tiktok-timestamp');
+const { resolveTikTokTimestampISO } = require('../../../utils/platform-timestamp');
 
 function normalizeTikTokChatEvent(data, options = {}) {
     const platformName = options.platformName || 'tiktok';
-    const timestampService = options.timestampService;
-    return normalizeTikTokMessage(data, platformName, timestampService);
+    return normalizeTikTokMessage(data, platformName);
 }
 
 function normalizeTikTokGiftEvent(data, options = {}) {
@@ -20,9 +19,6 @@ function normalizeTikTokGiftEvent(data, options = {}) {
     const resolveTimestamp = () => {
         if (typeof options.getTimestamp === 'function') {
             return options.getTimestamp(data);
-        }
-        if (options.timestampService && typeof options.timestampService.extractTimestamp === 'function') {
-            return options.timestampService.extractTimestamp('tiktok', data);
         }
         return resolveTikTokTimestampISO(data);
     };

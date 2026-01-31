@@ -1,7 +1,7 @@
 
 const { logger } = require('../core/logging');
 const crypto = require('crypto');
-const { getSystemTimestampISO } = require('../utils/validation');
+const { getSystemTimestampISO } = require('../utils/timestamp');
 
 const PlatformEvents = {
     // Platform Events

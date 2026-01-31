@@ -1,6 +1,6 @@
 const { createPlatformErrorHandler } = require('../../../utils/platform-error-handler');
 const { PlatformEvents } = require('../../../interfaces/PlatformEvents');
-const { getSystemTimestampISO } = require('../../../utils/validation');
+const { getSystemTimestampISO } = require('../../../utils/timestamp');
 const { validateLoggerInterface } = require('../../../utils/dependency-validator');
 
 const EVENT_HANDLER_MAP = new Map([

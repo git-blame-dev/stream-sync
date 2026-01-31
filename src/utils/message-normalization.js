@@ -1,6 +1,6 @@
 
 const { logger } = require('../core/logging');
-const { resolveTikTokTimestampMs } = require('./tiktok-timestamp');
+const { resolveTikTokTimestampMs, resolveTikTokTimestampISO, resolveYouTubeTimestampISO } = require('./platform-timestamp');
 const { createPlatformErrorHandler } = require('../utils/platform-error-handler');
 
 const normalizationErrorHandler = createPlatformErrorHandler(logger, 'message-normalization');
@@ -19,11 +19,8 @@ function handleNormalizationError(message, error, eventType = 'normalization', e
 }
 
 
-function normalizeYouTubeMessage(chatItem, platformName = 'youtube', timestampService = null) {
+function normalizeYouTubeMessage(chatItem, platformName = 'youtube') {
     try {
-        if (!timestampService || typeof timestampService.extractTimestamp !== 'function') {
-            throw new Error('Timestamp service is required for YouTube normalization');
-        }
         if (!chatItem || typeof chatItem !== 'object') {
             throw new Error('Missing YouTube chat item');
         }
@@ -57,7 +54,7 @@ function normalizeYouTubeMessage(chatItem, platformName = 'youtube', timestampSe
             throw new Error('Missing YouTube message text');
         }
 
-        const timestamp = timestampService.extractTimestamp('youtube', messageData);
+        const timestamp = resolveYouTubeTimestampISO(chatItem);
         if (!timestamp || typeof timestamp !== 'string') {
             throw new Error('Missing YouTube timestamp');
         }
@@ -98,12 +95,9 @@ function normalizeYouTubeMessage(chatItem, platformName = 'youtube', timestampSe
     }
 }
 
-function normalizeTikTokMessage(data, platformName = 'tiktok', timestampService = null) {
+function normalizeTikTokMessage(data, platformName = 'tiktok') {
     let userData = null;
     try {
-        if (!timestampService || typeof timestampService.extractTimestamp !== 'function') {
-            throw new Error('Timestamp service is required for TikTok normalization');
-        }
         if (!data || typeof data !== 'object') {
             throw new Error('Missing TikTok message data');
         }
@@ -123,7 +117,7 @@ function normalizeTikTokMessage(data, platformName = 'tiktok', timestampService 
             throw new Error('Missing TikTok message text');
         }
 
-        const timestamp = timestampService.extractTimestamp('tiktok', data);
+        const timestamp = resolveTikTokTimestampISO(data);
         if (!timestamp || typeof timestamp !== 'string') {
             throw new Error('Missing TikTok timestamp');
         }

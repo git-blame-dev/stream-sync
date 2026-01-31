@@ -1,5 +1,5 @@
 const { PlatformEvents } = require('../../../interfaces/PlatformEvents');
-const { isIsoTimestamp } = require('../../../utils/validation');
+const { isIsoTimestamp } = require('../../../utils/timestamp');
 
 function createYouTubeEventFactory(options = {}) {
     const platformName = options.platformName || 'youtube';
