@@ -271,6 +271,45 @@ async function exchangeCodeForTokens(code, { clientId, clientSecret, redirectUri
     });
 }
 
+function displayOAuthInstructions(authUrl, logger, { scopes = TWITCH_OAUTH_SCOPES, tokenStorePath = null } = {}) {
+    const resolvedLogger = resolveLogger(logger, 'oauth-flow');
+
+    resolvedLogger.console('\n' + '='.repeat(80), 'oauth-flow');
+    resolvedLogger.console('TWITCH AUTHENTICATION REQUIRED', 'oauth-flow');
+    resolvedLogger.console('='.repeat(80), 'oauth-flow');
+
+    resolvedLogger.console('\nATTEMPTING AUTOMATIC BROWSER OPENING...', 'oauth-flow');
+    resolvedLogger.console('Your browser should open automatically to complete authentication.', 'oauth-flow');
+    resolvedLogger.console('If it doesn\'t open automatically, please copy and paste this URL:', 'oauth-flow');
+    resolvedLogger.console(`\n${authUrl}\n`, 'oauth-flow');
+
+    resolvedLogger.console('WHAT WILL HAPPEN:', 'oauth-flow');
+    resolvedLogger.console('1. Browser opens to Twitch OAuth page', 'oauth-flow');
+    resolvedLogger.console('2. Log in with your Twitch account', 'oauth-flow');
+    resolvedLogger.console('3. Review and authorize the requested permissions', 'oauth-flow');
+    resolvedLogger.console('4. You\'ll be redirected back to a success page', 'oauth-flow');
+    if (tokenStorePath) {
+        resolvedLogger.console(`5. Tokens will be saved to the token store (${tokenStorePath})`, 'oauth-flow');
+    } else {
+        resolvedLogger.console('5. Tokens will be saved to the token store', 'oauth-flow');
+    }
+    resolvedLogger.console('6. The application will continue automatically', 'oauth-flow');
+
+    resolvedLogger.console('\nREQUIRED PERMISSIONS:', 'oauth-flow');
+    scopes.forEach(scope => {
+        resolvedLogger.console(`   - ${scope}`, 'oauth-flow');
+    });
+
+    resolvedLogger.console('\nFUTURE PREVENTION:', 'oauth-flow');
+    resolvedLogger.console('Once you authorize, the bot will automatically refresh tokens', 'oauth-flow');
+    resolvedLogger.console('before they expire, preventing this issue from happening again.', 'oauth-flow');
+
+    resolvedLogger.console('\n' + '='.repeat(80), 'oauth-flow');
+    resolvedLogger.console('WAITING FOR AUTHENTICATION...', 'oauth-flow');
+    resolvedLogger.console('Please complete the authentication in your browser.', 'oauth-flow');
+    resolvedLogger.console('='.repeat(80), 'oauth-flow');
+}
+
 function openBrowser(authUrl, logger, { skipBrowserOpen = false } = {}) {
     const resolvedLogger = resolveLogger(logger, 'oauth-flow');
     if (skipBrowserOpen) {
@@ -340,6 +379,7 @@ async function runOAuthFlow(
         serverRef = server;
 
         const authUrl = buildAuthUrl(clientId, redirectUri, scopes);
+        displayOAuthInstructions(authUrl, resolvedLogger, { scopes, tokenStorePath });
         openBrowserImpl(authUrl, resolvedLogger, { skipBrowserOpen });
 
         const code = await waitForCode;
