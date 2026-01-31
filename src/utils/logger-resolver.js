@@ -31,13 +31,7 @@ function _gatherCandidates(candidate) {
                 candidates.push(logging.logger);
             }
         }
-    } catch {
-        // Logging may not be initialized yet; ignore and continue.
-    }
-
-    if (global.__TEST_LOGGER__) {
-        candidates.push(global.__TEST_LOGGER__);
-    }
+    } catch { }
 
     return candidates;
 }
