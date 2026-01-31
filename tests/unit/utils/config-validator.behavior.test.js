@@ -549,6 +549,34 @@ describe('ConfigValidator.validate() warnings', () => {
         expect(result.warnings).toContain('handcam.maxSize should be between 1 and 100');
     });
 
+    it('warns when handcam.holdDuration is negative', () => {
+        const config = createMinimalValidConfig();
+        config.handcam.holdDuration = -1;
+
+        const result = ConfigValidator.validate(config);
+
+        expect(result.isValid).toBe(true);
+        expect(result.warnings).toContain('handcam.holdDuration must be 0 or greater');
+    });
+
+    it('allows handcam.holdDuration of 0 and large values without warning', () => {
+        const configZero = createMinimalValidConfig();
+        configZero.handcam.holdDuration = 0;
+
+        const resultZero = ConfigValidator.validate(configZero);
+
+        expect(resultZero.isValid).toBe(true);
+        expect(resultZero.warnings.some(w => w.includes('holdDuration'))).toBe(false);
+
+        const configLarge = createMinimalValidConfig();
+        configLarge.handcam.holdDuration = 300;
+
+        const resultLarge = ConfigValidator.validate(configLarge);
+
+        expect(resultLarge.isValid).toBe(true);
+        expect(resultLarge.warnings.some(w => w.includes('holdDuration'))).toBe(false);
+    });
+
     it('warns when retry.baseDelay is too low', () => {
         const config = createMinimalValidConfig();
         config.retry.baseDelay = 50;
