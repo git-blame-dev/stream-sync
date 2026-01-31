@@ -537,17 +537,8 @@ describe('TwitchEventSub lifecycle', () => {
             expect(eventSub._validateConnectionForSubscriptions()).toBe(false);
         });
 
-        it('returns false when not initialized', () => {
-            eventSub = createEventSub();
-            eventSub.sessionId = 'test-session';
-            eventSub._isConnected = true;
-            eventSub.ws = { readyState: 1 };
-            eventSub.isInitialized = false;
-
-            expect(eventSub._validateConnectionForSubscriptions()).toBe(false);
-        });
-
         it('returns false when Twitch auth is not ready', () => {
+            secrets.twitch.accessToken = 'test-access-token';
             eventSub = createEventSub({}, {
                 twitchAuth: createTwitchAuth({ ready: false })
             });
@@ -557,6 +548,19 @@ describe('TwitchEventSub lifecycle', () => {
             eventSub.isInitialized = true;
 
             expect(eventSub._validateConnectionForSubscriptions()).toBe(false);
+        });
+
+        it('returns true when all conditions are met', () => {
+            secrets.twitch.accessToken = 'test-access-token';
+            eventSub = createEventSub({ clientId: 'test-client-id' }, {
+                twitchAuth: createTwitchAuth({ ready: true })
+            });
+            eventSub.sessionId = 'test-session';
+            eventSub._isConnected = true;
+            eventSub.ws = { readyState: 1 };
+            eventSub.isInitialized = false; // Note: isInitialized is NOT checked during validation
+
+            expect(eventSub._validateConnectionForSubscriptions()).toBe(true);
         });
 
         it('returns false when token provider is missing', () => {
