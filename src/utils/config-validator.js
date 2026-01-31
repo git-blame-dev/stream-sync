@@ -526,8 +526,8 @@ class ConfigValidator {
             warnings.push('handcam.rampUpDuration should be between 0.1 and 10.0 seconds');
         }
 
-        if (handcam.holdDuration < 0.1 || handcam.holdDuration > 10.0) {
-            warnings.push('handcam.holdDuration should be between 0.1 and 10.0 seconds');
+        if (handcam.holdDuration < 0) {
+            warnings.push('handcam.holdDuration must be 0 or greater');
         }
 
         if (handcam.rampDownDuration < 0.1 || handcam.rampDownDuration > 10.0) {
