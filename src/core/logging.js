@@ -40,17 +40,7 @@ function safeObjectStringify(obj, maxDepth = 3) {
     }
 }
 
-// Config validation function - should be injected by the application
 let validateLoggingConfig = null;
-
-// Default test config - used when running in test environment without explicit initialization
-const DEFAULT_TEST_CONFIG = {
-    console: { enabled: false },
-    file: { enabled: false, directory: './logs' },
-    debug: { enabled: false },
-    platforms: { tiktok: { enabled: true }, twitch: { enabled: true }, youtube: { enabled: true } },
-    chat: { enabled: false, separateFiles: true, directory: './logs' }
-};
 
 function setConfigValidator(validator) {
     if (typeof validator === 'function') {
@@ -62,10 +52,6 @@ function setConfigValidator(validator) {
 
 function getValidateLoggingConfig() {
     if (!validateLoggingConfig) {
-        if (process.env.NODE_ENV === 'test') {
-            validateLoggingConfig = () => DEFAULT_TEST_CONFIG;
-            return validateLoggingConfig;
-        }
         throw new Error('Logging config validator not set. Call setConfigValidator() before using logging system.');
     }
     return validateLoggingConfig;
@@ -131,14 +117,9 @@ function ensureLogDirectory(dirPath) {
         }
         return true;
     } catch (err) {
-        // Use original console.error to avoid recursive calls, but only if not in test environment
-        if (process.env.NODE_ENV !== 'test') {
-            try {
-                originalConsoleError(`[Logging System] Error creating log directory: ${err && err.message ? err.message : 'Unknown error'}`);
-            } catch {
-                // Ignore console errors in test environment to prevent EPIPE
-            }
-        }
+        try {
+            originalConsoleError(`[Logging System] Error creating log directory: ${err && err.message ? err.message : 'Unknown error'}`);
+        } catch { }
         return false;
     }
 }
@@ -205,17 +186,11 @@ function logProgram(message) {
     }
     
     try {
-        // Write to program log file synchronously to ensure immediate persistence
         fs.appendFileSync(path.join(logDir, 'program-log.txt'), logEntry);
     } catch (err) {
-        // Use original console.error to avoid recursive calls, but only if not in test environment
-        if (process.env.NODE_ENV !== 'test') {
-            try {
-                originalConsoleError(`[Logging System] Error writing to program log: ${err && err.message ? err.message : 'Unknown error'}`);
-            } catch {
-                // Ignore console errors in test environment to prevent EPIPE
-            }
-        }
+        try {
+            originalConsoleError(`[Logging System] Error writing to program log: ${err && err.message ? err.message : 'Unknown error'}`);
+        } catch { }
     }
 }
 
