@@ -1,5 +1,5 @@
 const { describe, it, beforeEach, afterEach, expect } = require('bun:test');
-const { createMockFn, clearAllMocks, restoreAllMocks, spyOn } = require('../../helpers/bun-mock-utils');
+const { createMockFn, clearAllMocks, restoreAllMocks } = require('../../helpers/bun-mock-utils');
 const { noOpLogger } = require('../../helpers/mock-factories');
 const CommandCooldownService = require('../../../src/services/CommandCooldownService');
 const { createConfigFixture } = require('../../helpers/config-fixture');
@@ -10,10 +10,8 @@ describe('CommandCooldownService', () => {
     let mockEventBus;
     let eventSubscriptions;
     let testConfig;
-    let dateNowSpy;
 
     beforeEach(() => {
-        dateNowSpy = spyOn(Date, 'now').mockImplementation(() => testClock.now());
         eventSubscriptions = {};
 
         mockEventBus = {
@@ -37,9 +35,6 @@ describe('CommandCooldownService', () => {
     afterEach(() => {
         if (service) {
             service.dispose();
-        }
-        if (dateNowSpy) {
-            dateNowSpy.mockRestore();
         }
         restoreAllMocks();
         clearAllMocks();

@@ -1,7 +1,8 @@
 const { describe, expect, it } = require('bun:test');
-const { createMockFn, spyOn } = require('../../helpers/bun-mock-utils');
+const { createMockFn } = require('../../helpers/bun-mock-utils');
 const { noOpLogger } = require('../../helpers/mock-factories');
 const { GlobalCommandCooldownManager } = require('../../../src/utils/global-command-cooldown');
+const testClock = require('../../helpers/test-clock');
 
 describe('GlobalCommandCooldownManager behavior', () => {
     it('allows execution on invalid inputs and tracks checks without blocks', () => {
@@ -16,49 +17,42 @@ describe('GlobalCommandCooldownManager behavior', () => {
 
     it('blocks commands still within cooldown window and reports remaining time', () => {
         const manager = new GlobalCommandCooldownManager(noOpLogger);
-        const nowSpy = spyOn(Date, 'now');
 
-        nowSpy.mockReturnValueOnce(1000);
+        testClock.set(1000);
         manager.updateCommandTimestamp('!testhello');
 
-        nowSpy.mockReturnValueOnce(1500);
+        testClock.set(1500);
         const blocked = manager.isCommandOnCooldown('!testhello', 1000);
 
         expect(blocked).toBe(true);
         expect(manager.stats.totalBlocks).toBe(1);
 
-        nowSpy.mockReturnValueOnce(1500);
         expect(manager.getRemainingCooldown('!testhello', 1000)).toBeGreaterThan(0);
-        nowSpy.mockRestore();
     });
 
     it('allows commands after cooldown window has expired', () => {
         const manager = new GlobalCommandCooldownManager(noOpLogger);
-        const nowSpy = spyOn(Date, 'now');
 
-        nowSpy.mockReturnValueOnce(1000);
+        testClock.set(1000);
         manager.updateCommandTimestamp('!testhello');
 
-        nowSpy.mockReturnValueOnce(3000);
+        testClock.set(3000);
         const blocked = manager.isCommandOnCooldown('!testhello', 1000);
 
         expect(blocked).toBe(false);
-        nowSpy.mockRestore();
     });
 
     it('clears expired cooldowns and reports removal count', () => {
         const manager = new GlobalCommandCooldownManager(noOpLogger);
-        const nowSpy = spyOn(Date, 'now');
 
-        nowSpy.mockReturnValue(0);
+        testClock.set(1000);
         manager.updateCommandTimestamp('!testold');
 
-        nowSpy.mockReturnValue(10_000);
+        testClock.set(11_000);
         const removed = manager.clearExpiredCooldowns(1000);
 
         expect(removed).toBe(1);
         expect(manager.commandTimestamps.size).toBe(0);
-        nowSpy.mockRestore();
     });
 
     it('fails open when internal errors occur', () => {

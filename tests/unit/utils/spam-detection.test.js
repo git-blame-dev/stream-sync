@@ -1,6 +1,6 @@
 
 const { describe, expect, beforeEach, afterEach, it } = require('bun:test');
-const { spyOn, restoreAllMocks } = require('../../helpers/bun-mock-utils');
+const { restoreAllMocks } = require('../../helpers/bun-mock-utils');
 
 const { initializeTestLogging } = require('../../helpers/test-setup');
 const { noOpLogger } = require('../../helpers/mock-factories');
@@ -27,7 +27,6 @@ describe('Spam Detection', () => {
 
     beforeEach(() => {
         mockLogger = noOpLogger;
-        spyOn(Date, 'now').mockImplementation(() => testClock.now());
         mockConstants = {
             SPAM_DETECTION: {
                 DEFAULT_THRESHOLD: 10,

@@ -1,6 +1,6 @@
 
 const { describe, expect, beforeEach, afterEach, it } = require('bun:test');
-const { spyOn, restoreAllMocks } = require('../../helpers/bun-mock-utils');
+const { restoreAllMocks } = require('../../helpers/bun-mock-utils');
 
 const {
   initializeTestLogging,
@@ -30,7 +30,6 @@ describe('GlobalCommandCooldownManager', () => {
 
   beforeEach(() => {
     mockLogger = noOpLogger;
-    spyOn(Date, 'now').mockImplementation(() => testClock.now());
 
     delete require.cache[require.resolve('../../../src/utils/global-command-cooldown')];
     const { GlobalCommandCooldownManager } = require('../../../src/utils/global-command-cooldown');

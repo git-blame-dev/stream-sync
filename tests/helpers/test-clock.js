@@ -1,6 +1,8 @@
+const { setSystemTime } = require('bun:test');
+
 const DEFAULT_EPOCH_MS = 1700000000000;
 
-let currentTimeMs = DEFAULT_EPOCH_MS;
+let _preciseTimeMs = DEFAULT_EPOCH_MS;
 
 const assertValidMillis = (value, label) => {
     if (!Number.isFinite(value) || value < 0) {
@@ -8,23 +10,34 @@ const assertValidMillis = (value, label) => {
     }
 };
 
-const now = () => currentTimeMs;
+const syncSystemTime = () => {
+    setSystemTime(new Date(Math.floor(_preciseTimeMs)));
+};
+
+const now = () => _preciseTimeMs;
 
 const advance = (ms) => {
     assertValidMillis(ms, 'advance');
-    currentTimeMs += ms;
-    return currentTimeMs;
+    _preciseTimeMs += ms;
+    syncSystemTime();
+    return _preciseTimeMs;
 };
 
 const set = (ms) => {
     assertValidMillis(ms, 'set');
-    currentTimeMs = ms;
-    return currentTimeMs;
+    _preciseTimeMs = ms;
+    syncSystemTime();
+    return _preciseTimeMs;
 };
 
 const reset = () => {
-    currentTimeMs = DEFAULT_EPOCH_MS;
-    return currentTimeMs;
+    _preciseTimeMs = DEFAULT_EPOCH_MS;
+    syncSystemTime();
+    return _preciseTimeMs;
+};
+
+const useRealTime = () => {
+    setSystemTime();
 };
 
 module.exports = {
@@ -32,5 +45,6 @@ module.exports = {
     now,
     advance,
     set,
-    reset
+    reset,
+    useRealTime
 };
