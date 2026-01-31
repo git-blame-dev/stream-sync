@@ -474,12 +474,6 @@ class TwitchEventSub extends EventEmitter {
             return false;
         }
         
-        // Check initialization state
-        if (!this.isInitialized) {
-            this._logEventSubError('Cannot set up subscriptions: EventSub not initialized', null, 'subscription-setup');
-            return false;
-        }
-        
         // Validate auth manager state
         if (!this.twitchAuth || !this.twitchAuth.isReady?.()) {
             this._logEventSubError('Cannot set up subscriptions: Twitch auth not ready', null, 'subscription-setup', {
