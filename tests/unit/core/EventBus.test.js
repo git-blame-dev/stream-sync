@@ -523,6 +523,7 @@ describe('EventBus', () => {
         });
 
         test('should calculate average duration correctly', async () => {
+            testClock.useRealTime();
             const slowHandler = createMockFn(async () => {
                 await waitForDelay(20);
             });
@@ -710,6 +711,7 @@ describe('EventBus', () => {
         });
 
         test('should measure handler execution time accurately', async () => {
+            testClock.useRealTime();
             const delayMs = 50;
             const slowHandler = createMockFn(async () => {
                 await waitForDelay(delayMs);

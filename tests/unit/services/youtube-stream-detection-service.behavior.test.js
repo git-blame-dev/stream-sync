@@ -1,5 +1,5 @@
 const { describe, it, beforeEach, afterEach, expect } = require('bun:test');
-const { createMockFn, clearAllMocks, restoreAllMocks, spyOn } = require('../../helpers/bun-mock-utils');
+const { createMockFn, clearAllMocks, restoreAllMocks } = require('../../helpers/bun-mock-utils');
 const { noOpLogger } = require('../../helpers/mock-factories');
 const { YouTubeStreamDetectionService } = require('../../../src/services/youtube-stream-detection-service');
 const testClock = require('../../helpers/test-clock');
@@ -7,7 +7,6 @@ const testClock = require('../../helpers/test-clock');
 describe('YouTubeStreamDetectionService behavior', () => {
     beforeEach(() => {
         clearAllMocks();
-        spyOn(Date, 'now').mockImplementation(() => testClock.now());
     });
 
     afterEach(() => {

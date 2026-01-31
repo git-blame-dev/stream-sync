@@ -1,6 +1,6 @@
 const { describe, test, expect, beforeEach, afterEach } = require('bun:test');
 const { createMockFn, restoreAllMocks } = require('../../helpers/bun-mock-utils');
-const { useFakeTimers, useRealTimers } = require('../../helpers/bun-timers');
+const { useFakeTimers, useRealTimers, setSystemTime } = require('../../helpers/bun-timers');
 
 const { ViewerCountSystem } = require('../../../src/utils/viewer-count');
 const { OBSViewerCountObserver } = require('../../../src/observers/obs-viewer-count-observer');
@@ -679,12 +679,9 @@ describe('Viewer Count & OBS Observer Edge Case Tests', () => {
 
             await system.notifyObservers('tiktok', 100, 50);
 
-            const originalNow = global.Date.now;
-            global.Date.now = () => futureDate.getTime();
+            setSystemTime(futureDate);
 
             await system.notifyObservers('twitch', 200, 150);
-
-            global.Date.now = originalNow;
             
             expect(observer.receivedUpdates).toHaveLength(2);
             expect(observer.receivedUpdates[0].timestamp).toBeInstanceOf(Date);

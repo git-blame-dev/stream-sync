@@ -5,7 +5,7 @@ const { TEST_TIMEOUTS } = require('../helpers/test-setup');
 const { createConfigFixture } = require('../helpers/config-fixture');
 const { setupAutomatedCleanup } = require('../helpers/mock-lifecycle');
 const testClock = require('../helpers/test-clock');
-const { restoreAllMocks, spyOn } = require('../helpers/bun-mock-utils');
+const { restoreAllMocks } = require('../helpers/bun-mock-utils');
 
 setupAutomatedCleanup({
   clearCallsBeforeEach: true,
@@ -63,7 +63,6 @@ describe('Command Cooldown Integration', () => {
     });
 
     testWithTimeout('should allow same command after cooldown expires', () => {
-      const dateNowSpy = spyOn(Date, 'now').mockImplementation(() => testClock.now());
       updateGlobalCommandCooldown('!hello');
 
       testClock.advance(4000);
@@ -71,8 +70,6 @@ describe('Command Cooldown Integration', () => {
       const isBlocked = checkGlobalCommandCooldown('!hello', 3000);
 
       expect(isBlocked).toBe(false);
-
-      dateNowSpy.mockRestore();
     });
   });
 
@@ -106,7 +103,6 @@ describe('Command Cooldown Integration', () => {
     testWithTimeout('should clean up expired cooldowns', () => {
       const commands = ['!old1', '!old2', '!recent'];
 
-      const dateNowSpy = spyOn(Date, 'now').mockImplementation(() => testClock.now());
       commands.forEach(cmd => updateGlobalCommandCooldown(cmd));
 
       testClock.advance(10000);
@@ -114,8 +110,6 @@ describe('Command Cooldown Integration', () => {
       const cleanedCount = clearExpiredGlobalCooldowns(5000);
 
       expect(cleanedCount).toBeGreaterThanOrEqual(0);
-
-      dateNowSpy.mockRestore();
     });
 
     testWithTimeout('should handle cleanup without affecting active cooldowns', () => {

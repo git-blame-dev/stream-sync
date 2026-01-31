@@ -54,6 +54,16 @@ const MOCK_TIMER_PATTERNS = [
         pattern: /\bnow\s*:\s*\(\s*\)\s*=>\s*\w+\.shift\s*\(\s*\)/g,
         message: 'Injecting mock now() with shifting values',
         hint: 'Use setSystemTime() to advance time at specific points in your test'
+    },
+    {
+        pattern: /spyOn\s*\(\s*Date\s*,\s*['"]now['"]\s*\)/g,
+        message: 'Spying on Date.now()',
+        hint: 'Use testClock which wraps setSystemTime - no spy needed'
+    },
+    {
+        pattern: /global\.Date\.now\s*=/g,
+        message: 'Directly assigning global.Date.now',
+        hint: 'Use setSystemTime(date) from tests/helpers/bun-timers.js'
     }
 ];
 
