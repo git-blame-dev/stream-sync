@@ -24,6 +24,7 @@ describe('PlatformEventRouter config gating error handling', () => {
     it('throws when config is missing required notification setting', async () => {
         const config = createConfigFixture({ general: { followsEnabled: undefined } });
         delete config.general.followsEnabled;
+        delete config.twitch.followsEnabled;
         const runtime = {
             handleFollowNotification: createMockFn().mockResolvedValue(true)
         };

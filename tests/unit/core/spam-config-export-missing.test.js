@@ -13,8 +13,6 @@ describe('Spam Config Export Missing', () => {
     describe('when config module is imported', () => {
         describe('and checking for spam configuration export', () => {
             it('should FAIL if config.spam is not properly defined in the main config object', () => {
-                delete require.cache[require.resolve('../../../src/core/config')];
-
                 const { config } = require('../../../src/core/config');
 
                 expect(config.spam).toBeDefined();

@@ -8,63 +8,6 @@ const { ConfigValidator } = require('../utils/config-validator');
 let loadedConfig = null;
 let configPath = './config.ini';
 
-function getTestDefaultConfig() {
-    return ConfigValidator.normalize({
-        general: {
-            debugEnabled: 'false',
-            cmdCoolDown: '60',
-            globalCmdCoolDown: '60',
-            viewerCountPollingInterval: '60',
-            chatMsgGroup: 'test-chat-grp',
-            maxMessageLength: '500'
-        },
-        obs: {
-            enabled: 'false',
-            address: 'ws://localhost:4455',
-            connectionTimeoutMs: '5000',
-            notificationMsgGroup: 'test-notification-grp',
-            chatPlatformLogoTwitch: 'test-twitch-img',
-            chatPlatformLogoYouTube: 'test-youtube-img',
-            chatPlatformLogoTikTok: 'test-tiktok-img',
-            notificationPlatformLogoTwitch: 'test-twitch-img',
-            notificationPlatformLogoYouTube: 'test-youtube-img',
-            notificationPlatformLogoTikTok: 'test-tiktok-img'
-        },
-        timing: {
-            fadeDuration: '750',
-            transitionDelay: '200',
-            chatMessageDuration: '4000',
-            notificationClearDelay: '500'
-        },
-        handcam: {
-            glowEnabled: 'false',
-            sourceName: 'test-handcam',
-            sceneName: 'test-handcam-scene',
-            glowFilterName: 'Glow',
-            maxSize: '50',
-            rampUpDuration: '0.5',
-            holdDuration: '8.0',
-            rampDownDuration: '0.5',
-            totalSteps: '30',
-            incrementPercent: '3.33',
-            easingEnabled: 'true',
-            animationInterval: '16'
-        },
-        cooldowns: {
-            defaultCooldown: '60',
-            heavyCommandCooldown: '300',
-            heavyCommandThreshold: '4',
-            heavyCommandWindow: '360',
-            maxEntries: '1000'
-        },
-        commands: { enabled: 'false' },
-        tiktok: { enabled: 'false' },
-        twitch: { enabled: 'false' },
-        youtube: { enabled: 'false' },
-        http: {}
-    });
-}
-
 function loadConfig() {
     if (loadedConfig) {
         return loadedConfig;
@@ -77,10 +20,6 @@ function loadConfig() {
 
     try {
         if (!fs.existsSync(configPath)) {
-            if (process.env.NODE_ENV === 'test') {
-                loadedConfig = getTestDefaultConfig();
-                return loadedConfig;
-            }
             throw new Error(`Configuration file not found: ${configPath}`);
         }
 
@@ -107,7 +46,7 @@ function loadConfig() {
             throw error;
         }
 
-        if (validation.warnings.length > 0 && process.env.NODE_ENV !== 'test') {
+        if (validation.warnings.length > 0) {
             validation.warnings.forEach(warning => {
                 process.stdout.write(`[WARN] [Config] ${warning}\n`);
             });
@@ -115,11 +54,9 @@ function loadConfig() {
 
         loadedConfig = normalized;
 
-        if (process.env.NODE_ENV !== 'test') {
-            const debugEnabled = normalized.general.debugEnabled;
-            if (debugEnabled) {
-                process.stdout.write(`[INFO] [Config] Successfully loaded configuration from ${configPath}\n`);
-            }
+        const debugEnabled = normalized.general.debugEnabled;
+        if (debugEnabled) {
+            process.stdout.write(`[INFO] [Config] Successfully loaded configuration from ${configPath}\n`);
         }
 
         return loadedConfig;
@@ -150,6 +87,7 @@ function loadConfig() {
 
 function _resetConfigForTesting() {
     loadedConfig = null;
+    _cachedConfig = null;
     configPath = './config.ini';
 }
 
@@ -342,8 +280,14 @@ function buildConfig(normalized) {
     };
 }
 
-const normalizedConfig = loadConfig();
-const config = buildConfig(normalizedConfig);
+let _cachedConfig = null;
+function getConfig() {
+    if (!_cachedConfig) {
+        const normalizedConfig = loadConfig();
+        _cachedConfig = buildConfig(normalizedConfig);
+    }
+    return _cachedConfig;
+}
 
 const DEFAULT_LOGGING_CONFIG = {
     console: { enabled: true, level: 'console' }, // Only user-facing messages (chat, notifications, errors)
@@ -417,9 +361,10 @@ function validateLoggingConfig(userConfig = {}) {
 }
 
 module.exports = {
-    config,
+    get config() { return getConfig(); },
     loadConfig,
     validateLoggingConfig,
     _resetConfigForTesting,
-    _getConfigPath
+    _getConfigPath,
+    _buildConfig: buildConfig
 }; 

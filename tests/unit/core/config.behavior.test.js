@@ -10,11 +10,13 @@ function resetConfigModule() {
 
 function loadFreshConfig() {
     resetConfigModule();
-    return require('../../../src/core/config');
+    const { config } = require('../../../src/core/config');
+    return { config };
 }
 
 let originalReadFileSync;
 let originalExistsSync;
+let originalConfigPath;
 
 const testConfigPath = '/test/config.ini';
 
@@ -97,6 +99,7 @@ describe('Config loading behavior', () => {
     beforeEach(() => {
         originalReadFileSync = fs.readFileSync;
         originalExistsSync = fs.existsSync;
+        originalConfigPath = process.env.CHAT_BOT_CONFIG_PATH;
     });
 
     afterEach(() => {
@@ -104,7 +107,7 @@ describe('Config loading behavior', () => {
         fs.existsSync = originalExistsSync;
         restoreAllMocks();
         resetConfigModule();
-        delete process.env.CHAT_BOT_CONFIG_PATH;
+        process.env.CHAT_BOT_CONFIG_PATH = originalConfigPath;
     });
 
     it('throws user-friendly error when config file is missing in non-test environment', () => {

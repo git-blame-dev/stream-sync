@@ -10,7 +10,6 @@ const resolveTimeout = (value, fallback) => {
 
 class EnhancedHttpClient {
     constructor(config = {}) {
-        // Use dependency injection for better testability
         this.axios = config.axios || require('axios');
         
         this.logger = this._resolveLogger(config.logger);
@@ -21,8 +20,6 @@ class EnhancedHttpClient {
             appConfig.http.enhancedReachabilityTimeoutMs
         );
         this.retrySystem = config.retrySystem || createRetrySystem({ logger: this.logger });
-        
-        // User agent rotation for scraping resilience
         this.userAgents = Array.isArray(config.userAgents)
             ? config.userAgents.slice()
             : appConfig.http.userAgents.slice();

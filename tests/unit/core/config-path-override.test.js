@@ -5,6 +5,7 @@ const fs = require('fs');
 
 let originalReadFileSync;
 let originalExistsSync;
+let originalConfigPath;
 
 const CONFIG_MODULE_PATH = require.resolve('../../../src/core/config');
 
@@ -14,7 +15,8 @@ function resetConfigModule() {
 
 function loadFreshConfig() {
     resetConfigModule();
-    return require('../../../src/core/config');
+    const { config } = require('../../../src/core/config');
+    return { config };
 }
 
 function buildMinimalConfig(overrides = {}) {
@@ -119,6 +121,7 @@ describe('Config path override', () => {
     beforeEach(() => {
         originalReadFileSync = fs.readFileSync;
         originalExistsSync = fs.existsSync;
+        originalConfigPath = process.env.CHAT_BOT_CONFIG_PATH;
     });
 
     afterEach(() => {
@@ -126,7 +129,7 @@ describe('Config path override', () => {
         fs.existsSync = originalExistsSync;
         restoreAllMocks();
         resetConfigModule();
-        delete process.env.CHAT_BOT_CONFIG_PATH;
+        process.env.CHAT_BOT_CONFIG_PATH = originalConfigPath;
     });
 
     it('loads config from CHAT_BOT_CONFIG_PATH when set', () => {
