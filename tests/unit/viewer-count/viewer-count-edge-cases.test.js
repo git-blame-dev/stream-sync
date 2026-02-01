@@ -69,7 +69,8 @@ const createEdgeCaseTestEnvironment = (config = {}) => {
         platformProvider: () => mockPlatforms,
         config: createConfigFixture({
             general: { viewerCountPollingIntervalMs: pollingInterval }
-        })
+        }),
+        logger: noOpLogger
     });
     
     return { system, mockPlatforms };
@@ -428,14 +429,16 @@ describe('Viewer Count & OBS Observer Edge Case Tests', () => {
         test('throws when config is null', () => {
             expect(() => new ViewerCountSystem({
                 platformProvider: () => ({}),
-                config: null
+                config: null,
+                logger: noOpLogger
             })).toThrow('ViewerCountSystem requires config');
         });
 
         test('throws when config.general is missing', () => {
             expect(() => new ViewerCountSystem({
                 platformProvider: () => ({}),
-                config: {}
+                config: {},
+                logger: noOpLogger
             })).toThrow();
         });
 
@@ -444,7 +447,8 @@ describe('Viewer Count & OBS Observer Edge Case Tests', () => {
                 platformProvider: () => ({}),
                 config: createConfigFixture({
                     general: { viewerCountPollingIntervalMs: undefined }
-                })
+                }),
+                logger: noOpLogger
             });
 
             expect(system.pollingIntervalMs).toBeUndefined();
@@ -456,7 +460,8 @@ describe('Viewer Count & OBS Observer Edge Case Tests', () => {
                 platformProvider: () => ({}),
                 config: createConfigFixture({
                     general: { viewerCountPollingIntervalMs: 5000 }
-                })
+                }),
+                logger: noOpLogger
             });
 
             expect(system.pollingIntervalMs).toBe(5000);

@@ -27,13 +27,7 @@ class TextProcessingManager {
             if (logger) {
                 candidates.push(logger);
             }
-        } catch {
-            // Logging may not yet be initialized; fall through to other candidates
-        }
-
-        if (global.__TEST_LOGGER__) {
-            candidates.push(global.__TEST_LOGGER__);
-        }
+        } catch { }
 
         const selected = candidates.find(Boolean);
         if (!selected) {

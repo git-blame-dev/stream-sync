@@ -26,7 +26,8 @@ describe('System Resilience and Error Recovery Integration', () => {
         obsManager = createMockOBSManager();
         viewerCountSystem = new ViewerCountSystem({
             platforms,
-            config: createConfigFixture()
+            config: createConfigFixture(),
+            logger: createSilentLogger()
         });
 
         const obsObserver = new OBSViewerCountObserver(obsManager, createSilentLogger());

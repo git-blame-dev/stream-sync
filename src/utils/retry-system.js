@@ -387,10 +387,6 @@ class RetrySystem {
             candidates.push(logger);
         }
 
-        if (global.__TEST_LOGGER__) {
-            candidates.push(global.__TEST_LOGGER__);
-        }
-
         try {
             const logging = require('../core/logging');
             const unified = typeof logging.getUnifiedLogger === 'function'
@@ -399,9 +395,7 @@ class RetrySystem {
             if (unified) {
                 candidates.push(unified);
             }
-        } catch {
-            // Logging may not be ready yet; continue with other candidates
-        }
+        } catch { }
 
         const selected = candidates.find(Boolean);
         if (!selected) {
