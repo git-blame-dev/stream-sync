@@ -17,14 +17,6 @@ class OBSConnectionManager {
         const { ERROR_MESSAGES } = this.constants;
         this.ERROR_MESSAGES = ERROR_MESSAGES;
 
-        // Test environment detection
-        this.isTestEnvironment = dependencies.isTestEnvironment !== undefined ? 
-            dependencies.isTestEnvironment : 
-            (process.env.NODE_ENV === 'test');
-        
-        // Test connection behavior flag - allows testing actual connection logic with mocks
-        this.testConnectionBehavior = dependencies.testConnectionBehavior || false;
-
         const incomingConfig = dependencies.config || {};
         const resolvedPassword = incomingConfig.password === undefined
             ? (secrets.obs.password ?? undefined)
@@ -36,23 +28,8 @@ class OBSConnectionManager {
         };
         this.OBS_CONNECTION_TIMEOUT = incomingConfig.connectionTimeoutMs;
         
-        // Initialize OBS WebSocket instance
-        if (this.isTestEnvironment) {
-            this.obs = dependencies.mockOBS || {
-                connect: () => Promise.resolve(),
-                disconnect: () => Promise.resolve(),
-                call: () => Promise.resolve({}),
-                on: () => {},
-                off: () => {},
-                once: () => {},
-                identified: false,
-                addEventListener: () => {},
-                removeEventListener: () => {}
-            };
-        } else {
-        this.obs = new this.OBSWebSocket();
+        this.obs = dependencies.obs || new this.OBSWebSocket();
         this.errorHandler = createPlatformErrorHandler(this.logger, 'obs-connection');
-        }
         
         // Internal state
         this.isConnecting = false;
@@ -253,7 +230,6 @@ class OBSConnectionManager {
     }
     
     isConnected() {
-        if (this.isTestEnvironment && !this.testConnectionBehavior) return true;
         return this._isConnected;
     }
 
@@ -436,9 +412,8 @@ async function initializeOBSConnection(config = {}, dependencies = {}) {
     const manager = getOBSConnectionManager(combinedDependencies);
     logger.debug('[OBS] OBS connection manager obtained', 'OBS');
     
-    // Auto-connect if OBS is enabled and not in a test environment
-    logger.debug(`[OBS] Connection Config Check: enabled=${config.enabled}, testEnv=${manager.isTestEnvironment}`, 'OBS');
-    if (config.enabled && !manager.isTestEnvironment) {
+    logger.debug(`[OBS] Connection Config Check: enabled=${config.enabled}`, 'OBS');
+    if (config.enabled) {
         logger.debug('[OBS] OBS is enabled, attempting to connect...', 'OBS');
         try {
             if (dependencies.obsEventService && typeof dependencies.obsEventService.connect === 'function') {
@@ -470,7 +445,7 @@ async function initializeOBSConnection(config = {}, dependencies = {}) {
             // We catch it here to prevent it from crashing the main application startup
         }
     } else {
-        logger.debug('[OBS] OBS is disabled or in test environment, skipping connection', 'OBS');
+        logger.debug('[OBS] OBS is disabled, skipping connection', 'OBS');
     }
     
     logger.debug('[OBS] OBS connection initialization completed', 'OBS');

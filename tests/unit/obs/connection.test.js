@@ -30,9 +30,7 @@ describe('OBS Connection Race Condition - User Experience Validation', () => {
         };
 
         connectionManager = new OBSConnectionManager({
-            mockOBS,
-            isTestEnvironment: true,
-            testConnectionBehavior: true,
+            obs: mockOBS,
             config: {
                 address: 'ws://localhost:4455',
                 password: 'test123',

@@ -33,9 +33,7 @@ describe('OBSConnectionManager reconnection behavior', () => {
         };
 
         manager = new OBSConnectionManager({
-            mockOBS,
-            isTestEnvironment: true,
-            testConnectionBehavior: true,
+            obs: mockOBS,
             config: {
                 address: 'ws://localhost:4455',
                 password: 'test-password',
