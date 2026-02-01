@@ -43,13 +43,12 @@ class PlatformConnectionFactory {
     }
 
     _resolveLogger(logger) {
-        const resolved = logger || global.__TEST_LOGGER__;
-        if (!resolved) {
+        if (!logger) {
             throw new Error('Platform Connection Factory initialization failed: logger dependency is required.');
         }
 
         try {
-            const normalized = this._normalizeLoggerMethods(resolved);
+            const normalized = this._normalizeLoggerMethods(logger);
             validateLoggerInterface(normalized);
             return normalized;
         } catch (error) {

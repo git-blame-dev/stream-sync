@@ -18,12 +18,11 @@ function createTwitchEventSubEventRouter(options = {}) {
     } = options;
 
     const safeLogger = (() => {
-        const resolvedLogger = logger || global.__TEST_LOGGER__;
-        if (!resolvedLogger) {
+        if (!logger) {
             throw new Error('TwitchEventSub event router requires a logger dependency');
         }
-        validateLoggerInterface(resolvedLogger);
-        return resolvedLogger;
+        validateLoggerInterface(logger);
+        return logger;
     })();
     const safeEmit = typeof emit === 'function' ? emit : () => {};
     const safeLogError = typeof logError === 'function' ? logError : () => {};
