@@ -61,13 +61,7 @@ class StreamDetector {
             if (logging.logger) {
                 candidates.push(logging.logger);
             }
-        } catch {
-            // Logging module may not be initialized yet; continue to other candidates
-        }
-
-        if (global.__TEST_LOGGER__) {
-            candidates.push(global.__TEST_LOGGER__);
-        }
+        } catch { }
 
         const selected = candidates.find(Boolean);
         if (!selected) {

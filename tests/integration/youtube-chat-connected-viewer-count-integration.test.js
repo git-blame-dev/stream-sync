@@ -4,6 +4,7 @@ const { createMockFn, restoreAllMocks } = require('../helpers/bun-mock-utils');
 const wireStreamStatusHandlers = require('../../src/viewer-count/stream-status-handler');
 const { ViewerCountSystem } = require('../../src/utils/viewer-count');
 const { createConfigFixture } = require('../helpers/config-fixture');
+const { noOpLogger } = require('../helpers/mock-factories');
 
 const createEventBus = () => {
     const listeners = new Map();
@@ -46,7 +47,8 @@ describe('YouTube stream-status viewer count integration (smoke)', () => {
         eventBus = createEventBus();
         viewerCountSystem = new ViewerCountSystem({
             platformProvider: () => platforms,
-            config: createConfigFixture()
+            config: createConfigFixture(),
+            logger: noOpLogger
         });
 
         await viewerCountSystem.initialize();

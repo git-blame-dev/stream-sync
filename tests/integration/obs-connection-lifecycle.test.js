@@ -34,7 +34,7 @@ describe('OBS Connection Lifecycle Integration', () => {
             tiktok: createStreamingPlatformMock('tiktok', 800)
         };
 
-        viewerCountSystem = new ViewerCountSystem({ platforms: mockPlatforms, config: testConfig });
+        viewerCountSystem = new ViewerCountSystem({ platforms: mockPlatforms, config: testConfig, logger: noOpLogger });
         obsObserver = new OBSViewerCountObserver(obsManager, noOpLogger);
 
         await viewerCountSystem.initialize();

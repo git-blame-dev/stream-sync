@@ -4,7 +4,7 @@ const { restoreAllMocks } = require('../../helpers/bun-mock-utils');
 const { useFakeTimers, useRealTimers, advanceTimersByTime } = require('../../helpers/bun-timers');
 
 const { ViewerCountSystem } = require('../../../src/utils/viewer-count');
-const { setupAutomatedCleanup } = require('../../helpers/mock-factories');
+const { setupAutomatedCleanup, noOpLogger } = require('../../helpers/mock-factories');
 const { createConfigFixture } = require('../../helpers/config-fixture');
 const testClock = require('../../helpers/test-clock');
 
@@ -107,7 +107,8 @@ const createViewerCountTestEnvironment = (envConfig = {}) => {
     const config = buildConfig(pollingInterval);
     const system = new ViewerCountSystem({
         platforms: mockPlatforms,
-        config
+        config,
+        logger: noOpLogger
     });
 
     Object.entries(initialStreamStatus).forEach(([platform, isLive]) => {
@@ -188,19 +189,19 @@ describe('ViewerCountSystem - Comprehensive Behavior Tests', () => {
         });
 
         test('should respect configured polling intervals from config', () => {
-            const system = new ViewerCountSystem({ platforms: {}, config: buildConfig(60000) });
+            const system = new ViewerCountSystem({ platforms: {}, config: buildConfig(60000), logger: noOpLogger });
             system.startPolling();
             expect(system.pollingInterval).toBe(60000);
             expect(system.isPolling).toBe(true);
         });
 
         test('should handle missing configuration gracefully with defaults', () => {
-            const system = new ViewerCountSystem({ platforms: {}, config: buildConfig(60000) });
+            const system = new ViewerCountSystem({ platforms: {}, config: buildConfig(60000), logger: noOpLogger });
             expect(() => system.startPolling()).not.toThrow();
         });
 
         test('should validate polling interval boundaries and disable for invalid values', () => {
-            const system = new ViewerCountSystem({ platforms: {}, config: buildConfig(60000) });
+            const system = new ViewerCountSystem({ platforms: {}, config: buildConfig(60000), logger: noOpLogger });
             system.pollingInterval = 0;
             expect(system.pollingInterval).toBe(0);
             const isValidInterval = system.pollingInterval > 0;
@@ -208,7 +209,7 @@ describe('ViewerCountSystem - Comprehensive Behavior Tests', () => {
         });
 
         test('should handle negative polling intervals by disabling polling', () => {
-            const system = new ViewerCountSystem({ platforms: {}, config: buildConfig(60000) });
+            const system = new ViewerCountSystem({ platforms: {}, config: buildConfig(60000), logger: noOpLogger });
             system.pollingInterval = -10000;
             expect(system.pollingInterval).toBe(-10000);
             const isValidInterval = system.pollingInterval > 0;
@@ -634,7 +635,7 @@ describe('ViewerCountSystem - Comprehensive Behavior Tests', () => {
 
     describe('Configuration Changes & Runtime Adaptation', () => {
         test('should adapt to polling interval changes at runtime', () => {
-            const system = new ViewerCountSystem({ platforms: {}, config: buildConfig(60000) });
+            const system = new ViewerCountSystem({ platforms: {}, config: buildConfig(60000), logger: noOpLogger });
             system.startPolling();
             expect(system.pollingInterval).toBe(60000);
             system.stopPolling();
@@ -653,7 +654,7 @@ describe('ViewerCountSystem - Comprehensive Behavior Tests', () => {
         });
 
         test('should validate configuration changes before applying', () => {
-            const system = new ViewerCountSystem({ platforms: {}, config: buildConfig(60000) });
+            const system = new ViewerCountSystem({ platforms: {}, config: buildConfig(60000), logger: noOpLogger });
             expect(() => system.startPolling()).not.toThrow();
             expect(system.isPolling).toBe(true);
         });
@@ -759,7 +760,7 @@ describe('ViewerCountSystem - Comprehensive Behavior Tests', () => {
         });
 
         test('should handle empty platform registry properly', () => {
-            const system = new ViewerCountSystem({ platforms: {}, config: buildConfig(60000) });
+            const system = new ViewerCountSystem({ platforms: {}, config: buildConfig(60000), logger: noOpLogger });
             expect(() => system.startPolling()).not.toThrow();
         });
 

@@ -28,12 +28,8 @@ class GoalTracker {
             twitch: { current: 0, target: 100, currency: 'bits' }
         };
 
-        // Ensure config is loaded
             if (!this.config || !this.config.goals) {
-            // Only warn in production, suppress in test environment
-            if (process.env.NODE_ENV !== 'test') {
                     this.logger.warn('[Goal Tracker] Config not available, using defaults');
-            }
             return;
         }
         

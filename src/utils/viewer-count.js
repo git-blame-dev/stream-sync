@@ -28,13 +28,11 @@ const resolveTimeProvider = (timeProvider) => {
 
 class ViewerCountSystem {
     constructor(dependencies = {}) {
-        const fallbackLogger = process.env.NODE_ENV === 'test' ? getDefaultTestLogger() : null;
-        const resolvedLogger = dependencies.logger || fallbackLogger;
-        if (!resolvedLogger) {
+        if (!dependencies.logger) {
             throw new Error('ViewerCountSystem requires logger dependency');
         }
-        validateLoggerInterface(resolvedLogger);
-        this.logger = resolvedLogger;
+        validateLoggerInterface(dependencies.logger);
+        this.logger = dependencies.logger;
         this.platformProvider = this._createPlatformProvider(dependencies);
         if (!dependencies.config) {
             throw new Error('ViewerCountSystem requires config');
@@ -743,21 +741,6 @@ function validateObserverInterface(observer) {
     }
     
     return typeof observer.getObserverId === 'function';
-}
-
-function getDefaultTestLogger() {
-    if (global.__TEST_LOGGER__) {
-        return global.__TEST_LOGGER__;
-    }
-    try {
-        const { getUnifiedLogger } = require('../core/logging');
-        if (typeof getUnifiedLogger === 'function') {
-            return getUnifiedLogger();
-        }
-    } catch {
-        // Ignore failures when logging is not initialized
-    }
-    return null;
 }
 
 module.exports = {
