@@ -306,32 +306,6 @@ class DisplayQueue {
         
         // 5. Make the group visible in the scene
         await this.sourcesManager.setChatDisplayVisibility(true, sceneName, platformLogos);
-        
-        // 5. Handle TTS processing for chat message
-        await this.handleChatMessageTTS(item);
-    }
-    
-    async handleChatMessageTTS(item) {
-        try {
-            // Extract username from notification data
-            const username = this.extractUsername(item.data);
-            const message = item.data.message;
-            const platform = item.platform;
-            
-            // Check for monetization deduplication flag
-            if (item.data.skipChatTTS) {
-                logger.debug(`[DisplayQueue] Chat TTS skipped due to monetization deduplication for ${username} on ${platform}`, 'display-queue');
-                return;
-            }
-            
-            // DISABLED: Chat messages should not have TTS - only notifications
-            logger.debug(`[DisplayQueue] Chat TTS disabled - skipping TTS for ${username} on ${platform}`, 'display-queue');
-            return;
-            
-        } catch (error) {
-            handleDisplayQueueError('[DisplayQueue] Error processing chat TTS', error);
-            // Don't throw - continue with chat display even if TTS fails
-        }
     }
 
     async displayNotificationItem(item) {
