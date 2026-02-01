@@ -1,7 +1,3 @@
-
-// Check if we're in a test environment
-const isTestEnvironment = process.env.NODE_ENV === 'test';
-
 // Import safe operations wrapper
 const { safeOBSOperation } = require('./safe-operations');
 
@@ -84,29 +80,6 @@ function createOBSSourcesManager(obsManager, dependencies = {}) {
 
 
     async function updateTextSource(sourceName, message) {
-    // In test environment, use mock OBS manager if available
-    if (isTestEnvironment) {
-        logger.debug(`[OBS Source] Test environment - using mock OBS for text source update: "${sourceName}" with: ${message}`, 'obs-sources');
-        
-        try {
-            const obsManager = getOBSConnectionManager();
-            if (obsManager && typeof obsManager.call === 'function') {
-                // Call the mock to satisfy test expectations
-                const sanitizedMessage = sanitizeForOBS(message);
-                await obsManager.call('SetInputSettings', {
-                    inputName: sourceName,
-                    inputSettings: {
-                        text: sanitizedMessage
-                    }
-                });
-                logger.debug(`[OBS Source] Mock OBS call completed for "${sourceName}"`, 'obs-sources');
-            }
-        } catch (error) {
-            logger.debug(`[OBS Source] Mock OBS call failed (expected in some tests): ${error.message}`, 'obs-sources');
-        }
-        return;
-    }
-    
     const obsManager = getOBSConnectionManager();
     return await safeOBSOperation(
         obsManager,
@@ -212,12 +185,6 @@ function createOBSSourcesManager(obsManager, dependencies = {}) {
     }
 
     async function setSourceVisibility(sceneName, sourceName, visible) {
-    // Skip OBS operations in test environment
-    if (isTestEnvironment) {
-        logger.debug(`[OBS Source] Skipping source visibility change in test environment: ${sourceName} to ${visible}`, 'obs-sources');
-        return;
-    }
-    
     const obsManager = getOBSConnectionManager();
     return await safeOBSOperation(
         obsManager,
@@ -287,11 +254,6 @@ function createOBSSourcesManager(obsManager, dependencies = {}) {
     }
 
     async function setGroupSourceVisibility(sourceName, groupName, visible) {
-    if (isTestEnvironment) {
-        logger.debug(`[OBS Group] Skipping visibility set in test env for ${sourceName} in ${groupName}`, 'obs-sources');
-        return;
-    }
-    
     // DRY: Validate group name before any operations
     if (!validateGroupName(groupName, `setGroupSourceVisibility for ${sourceName}`)) {
         return;
@@ -319,11 +281,6 @@ function createOBSSourcesManager(obsManager, dependencies = {}) {
 
 
     async function setPlatformLogoVisibility(activePlatform, platformLogos) {
-    if (isTestEnvironment) {
-        logger.debug(`[OBS Platform Logo] Skipping platform logo visibility change in test environment: ${activePlatform} to true`, 'obs-sources');
-        return;
-    }
-    
     for (const platform in platformLogos) {
         const logoSource = platformLogos[platform];
         const isVisible = platform.toLowerCase() === activePlatform.toLowerCase();
@@ -358,12 +315,6 @@ function createOBSSourcesManager(obsManager, dependencies = {}) {
     }
 
     async function hideAllPlatformLogos(platformLogos) {
-    if (isTestEnvironment) {
-        logger.debug(`[OBS Platform Logo] Skipping hide all platform logos in test environment`, 'obs-sources');
-        return;
-    }
-    
-    
     for (const platform in platformLogos) {
         await setGroupSourceVisibility(platformLogos[platform], chatGroupName, false);
     }
@@ -378,13 +329,6 @@ function createOBSSourcesManager(obsManager, dependencies = {}) {
 
 
     async function setChatDisplayVisibility(visible, sceneName, platformLogos) {
-        if (isTestEnvironment) {
-            logger.debug(`[OBS Display] Skipping chat display visibility change in test environment: ${visible}`, 'obs-sources');
-            return;
-        }
-        
-        // Chat display visibility - reduced verbosity
-        
         try {
             if (chatGroupName) {
                 if (visible) {
@@ -408,13 +352,6 @@ function createOBSSourcesManager(obsManager, dependencies = {}) {
     }
 
     async function setNotificationDisplayVisibility(visible, sceneName, platformLogos) {
-        if (isTestEnvironment) {
-            logger.debug(`[OBS Display] Skipping notification display visibility change in test environment: ${visible}`, 'obs-sources');
-            return;
-        }
-        
-        // Notification display visibility - reduced verbosity
-        
         try {
             if (notificationGroupName) {
                 if (visible) {
@@ -445,12 +382,6 @@ function createOBSSourcesManager(obsManager, dependencies = {}) {
         ttsSourceName,
         notificationSourceName
     ) {
-        if (isTestEnvironment) {
-            logger.debug(`[OBS Display] Skipping hide all displays in test environment`, 'obs-sources');
-            return;
-        }
-        
-            
             try {
                 // Hide both display systems
                 await Promise.all([
@@ -479,11 +410,6 @@ function createOBSSourcesManager(obsManager, dependencies = {}) {
 
 
     async function setSourceFilterEnabled(sourceName, filterName, enabled) {
-        if (isTestEnvironment) {
-            logger.debug(`[OBS Filter] Skipping filter enable/disable in test environment: ${filterName} on ${sourceName} to ${enabled}`, 'obs-sources');
-            return;
-        }
-        
         try {
             await ensureOBSConnected();
             
@@ -530,11 +456,6 @@ function createOBSSourcesManager(obsManager, dependencies = {}) {
     }
 
     async function setSourceFilterSettings(sourceName, filterName, filterSettings) {
-        if (isTestEnvironment) {
-            logger.debug(`[OBS Filter] Skipping filter settings update in test environment: ${filterName} on ${sourceName}`, 'obs-sources');
-            return;
-        }
-        
         try {
             await ensureOBSConnected();
             

@@ -26,6 +26,25 @@ describe('Notification Auto-Clearing Behavior', () => {
 
     beforeEach(() => {
         mockObsManager = createMockOBSManager('connected');
+        mockObsManager.call.mockImplementation((method) => {
+            if (method === 'GetGroupSceneItemList') {
+                return Promise.resolve({ sceneItems: [
+                    { sourceName: 'tiktok_logo', sceneItemId: 1 },
+                    { sourceName: 'twitch_logo', sceneItemId: 2 },
+                    { sourceName: 'youtube_logo', sceneItemId: 3 },
+                    { sourceName: 'chat_text', sceneItemId: 10 },
+                    { sourceName: 'notification_text', sceneItemId: 11 },
+                    { sourceName: 'tts_text', sceneItemId: 12 }
+                ] });
+            }
+            if (method === 'GetInputSettings') {
+                return Promise.resolve({ inputSettings: {} });
+            }
+            if (method === 'GetSceneItemId') {
+                return Promise.resolve({ sceneItemId: 42 });
+            }
+            return Promise.resolve({});
+        });
 
         mockConstants = {
             CHAT_MESSAGE_DURATION: 5000,

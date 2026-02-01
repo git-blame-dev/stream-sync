@@ -17,19 +17,23 @@ describe('obs/sources behavior', () => {
     });
 
     it('sanitizes text and issues SetInputSettings when updating text source', async () => {
-        const obsManager = {
-            call: createMockFn().mockResolvedValue({}),
-            ensureConnected: createMockFn().mockResolvedValue(),
-            isReady: createMockFn().mockResolvedValue(true)
-        };
+        const mockCall = createMockFn()
+            .mockResolvedValueOnce({ inputSettings: {} })
+            .mockResolvedValueOnce();
+        const mockEnsureConnected = createMockFn().mockResolvedValue();
 
-        const sources = createOBSSourcesManager(obsManager, { logger: mockLogger, ...sourcesConfig });
+        const sources = createOBSSourcesManager(
+            { isReady: createMockFn().mockResolvedValue(true) },
+            { logger: mockLogger, ...sourcesConfig, ensureOBSConnected: mockEnsureConnected, obsCall: mockCall }
+        );
 
         await sources.updateTextSource('TestChatText', 'Hello 🌟');
 
-        expect(obsManager.call).toHaveBeenCalledWith('SetInputSettings', {
+        expect(mockCall).toHaveBeenCalledWith('GetInputSettings', { inputName: 'TestChatText' });
+        expect(mockCall).toHaveBeenCalledWith('SetInputSettings', {
             inputName: 'TestChatText',
-            inputSettings: { text: 'Hello ' }
+            inputSettings: { text: 'Hello ' },
+            overlay: false
         });
     });
 
