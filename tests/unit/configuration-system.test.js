@@ -18,6 +18,7 @@ function loadFreshConfig() {
 let originalReadFileSync;
 let originalExistsSync;
 let originalWriteFileSync;
+let originalConfigPath;
 
 const testConfigContent = `
 [general]
@@ -115,6 +116,7 @@ describe('Configuration System Behavior Tests', () => {
         originalReadFileSync = fs.readFileSync;
         originalExistsSync = fs.existsSync;
         originalWriteFileSync = fs.writeFileSync;
+        originalConfigPath = process.env.CHAT_BOT_CONFIG_PATH;
         reloadConfig();
     });
 
@@ -124,7 +126,7 @@ describe('Configuration System Behavior Tests', () => {
         fs.writeFileSync = originalWriteFileSync;
         restoreAllMocks();
         resetConfigModule();
-        delete process.env.CHAT_BOT_CONFIG_PATH;
+        process.env.CHAT_BOT_CONFIG_PATH = originalConfigPath;
     });
 
     describe('System Startup Behavior', () => {

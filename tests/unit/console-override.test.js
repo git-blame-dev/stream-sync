@@ -14,6 +14,9 @@ let initializeLoggingConfig;
 describe('Console Override Pattern', () => {
     let originalConsoleLog;
     let originalConsoleError;
+    let originalFsExistsSync;
+    let originalFsAppendFileSync;
+    let originalFsMkdirSync;
     let mockAppendFileSync;
     let mockMkdirSync;
     let mockExistsSync;
@@ -45,11 +48,17 @@ describe('Console Override Pattern', () => {
 
         originalConsoleLog = console.log;
         originalConsoleError = console.error;
+        originalFsExistsSync = fs.existsSync;
+        originalFsAppendFileSync = fs.appendFileSync;
+        originalFsMkdirSync = fs.mkdirSync;
     });
 
     afterAll(() => {
         console.log = originalConsoleLog;
         console.error = originalConsoleError;
+        fs.existsSync = originalFsExistsSync;
+        fs.appendFileSync = originalFsAppendFileSync;
+        fs.mkdirSync = originalFsMkdirSync;
     });
 
     beforeEach(() => {

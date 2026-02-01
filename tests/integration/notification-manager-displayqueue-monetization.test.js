@@ -215,6 +215,7 @@ describe('Monetisation pipeline integration', () => {
 
     test('respects paypiggiesEnabled gating', async () => {
         config.general.paypiggiesEnabled = false;
+        config.twitch.paypiggiesEnabled = false;
 
         eventBus.emit('platform:event', {
             platform: 'twitch',
@@ -231,6 +232,7 @@ describe('Monetisation pipeline integration', () => {
 
     test('respects giftsEnabled gating for all gift-like monetisation', async () => {
         config.general.giftsEnabled = false;
+        config.twitch.giftsEnabled = false;
 
         eventBus.emit('platform:event', {
             platform: 'twitch',

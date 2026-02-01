@@ -1,5 +1,15 @@
 process.env.NODE_ENV = 'test';
 
+const os = require('os');
+const fs = require('fs');
+const path = require('path');
+const ini = require('ini');
+const { getRawTestConfig } = require('../helpers/config-fixture');
+
+const tempConfigPath = path.join(os.tmpdir(), 'stream-sync-test-config.ini');
+fs.writeFileSync(tempConfigPath, ini.stringify(getRawTestConfig()));
+process.env.CHAT_BOT_CONFIG_PATH = tempConfigPath;
+
 const originalProcessExit = process.exit;
 
 function noopProcessExit(code = 0) {

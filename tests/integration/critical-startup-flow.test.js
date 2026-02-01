@@ -11,7 +11,8 @@ function resetConfigModule() {
 
 function loadFreshConfig() {
     resetConfigModule();
-    return require('../../src/core/config');
+    const { config } = require('../../src/core/config');
+    return { config };
 }
 
 describe('Critical Startup Flow', () => {
@@ -24,8 +25,10 @@ describe('Critical Startup Flow', () => {
     });
 
     afterEach(() => {
-        process.env = originalEnv;
-        delete process.env.CHAT_BOT_CONFIG_PATH;
+        Object.keys(process.env).forEach(key => {
+            if (!(key in originalEnv)) delete process.env[key];
+        });
+        Object.assign(process.env, originalEnv);
         resetConfigModule();
         if (tempDir && fs.existsSync(tempDir)) {
             fs.rmSync(tempDir, { recursive: true, force: true });

@@ -7,11 +7,6 @@ if (isDebugModeEnabled()) {
     console.log('[DEBUG] [Bootstrap] Script starting...'); // BOOTSTRAP: Pre-logger initialization
 }
 
-// Ensure automated test environments never trigger real OAuth/browser flows
-if ((process.env.NODE_ENV || '').toLowerCase() === 'test' && !process.env.TWITCH_DISABLE_AUTH) {
-    process.env.TWITCH_DISABLE_AUTH = 'true';
-}
-
 // BOOTSTRAP ERROR HANDLING: Use console.error for fatal errors before logger is available
 if (!process.__streamSyncUncaughtExceptionHandlerInstalled) {
     process.__streamSyncUncaughtExceptionHandlerInstalled = true;
