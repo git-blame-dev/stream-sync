@@ -52,14 +52,19 @@ describe('OBS Sources Module Characterization Tests', () => {
     });
 
     describe('Text Source Management', () => {
-        test('updateTextSource should use mock OBS in test environment', async () => {
+        test('updateTextSource should call OBS via safeOBSOperation', async () => {
+            mockObsCall.mockResolvedValueOnce({ inputSettings: {} });
+            mockObsCall.mockResolvedValueOnce();
+
             await sourcesModule.updateTextSource('test-source', 'new message');
 
-            expect(mockObsManager.call).toHaveBeenCalledWith('SetInputSettings', {
+            expect(mockEnsureConnected).toHaveBeenCalled();
+            expect(mockObsCall).toHaveBeenCalledWith('GetInputSettings', { inputName: 'test-source' });
+            expect(mockObsCall).toHaveBeenCalledWith('SetInputSettings', {
                 inputName: 'test-source',
-                inputSettings: { text: 'new message' }
+                inputSettings: { text: 'new message' },
+                overlay: false
             });
-            expect(mockEnsureConnected).not.toHaveBeenCalled();
         }, TEST_TIMEOUTS.FAST);
 
         test('clearTextSource should call OBS with proper safe operations', async () => {
@@ -90,13 +95,16 @@ describe('OBS Sources Module Characterization Tests', () => {
 
         test('updateChatMsgText should format username and delegate to updateTextSource', async () => {
             mockSanitizeDisplayName.mockReturnValue('User');
+            mockObsCall.mockResolvedValueOnce({ inputSettings: {} });
+            mockObsCall.mockResolvedValueOnce();
 
             await sourcesModule.updateChatMsgText('chat-source', 'VeryLongUsername', 'Hello world');
 
             expect(mockSanitizeDisplayName).toHaveBeenCalledWith('VeryLongUsername', 15);
-            expect(mockObsManager.call).toHaveBeenCalledWith('SetInputSettings', {
+            expect(mockObsCall).toHaveBeenCalledWith('SetInputSettings', {
                 inputName: 'chat-source',
-                inputSettings: { text: 'User: Hello world' }
+                inputSettings: { text: 'User: Hello world' },
+                overlay: false
             });
         }, TEST_TIMEOUTS.FAST);
 
@@ -128,10 +136,22 @@ describe('OBS Sources Module Characterization Tests', () => {
             expect(typeof result.sceneName).toBe('string');
         }, TEST_TIMEOUTS.FAST);
 
-        test('setSourceVisibility should skip operations in test environment', async () => {
+        test('setSourceVisibility should call OBS via safeOBSOperation', async () => {
+            mockObsCall.mockResolvedValueOnce({ sceneItemId: 42 });
+            mockObsCall.mockResolvedValueOnce();
+
             await sourcesModule.setSourceVisibility('test-scene', 'test-source', true);
 
-            expect(mockObsCall).not.toHaveBeenCalled();
+            expect(mockEnsureConnected).toHaveBeenCalled();
+            expect(mockObsCall).toHaveBeenCalledWith('GetSceneItemId', {
+                sceneName: 'test-scene',
+                sourceName: 'test-source'
+            });
+            expect(mockObsCall).toHaveBeenCalledWith('SetSceneItemEnabled', {
+                sceneName: 'test-scene',
+                sceneItemId: 42,
+                sceneItemEnabled: true
+            });
         }, TEST_TIMEOUTS.FAST);
 
         test('getSceneItemId should throw error for invalid scene item ID', async () => {
@@ -158,10 +178,19 @@ describe('OBS Sources Module Characterization Tests', () => {
             expect(result).toEqual({ sceneItemId: 20 });
         }, TEST_TIMEOUTS.FAST);
 
-        test('setGroupSourceVisibility should skip operations in test environment', async () => {
+        test('setGroupSourceVisibility should call OBS via safeOBSOperation', async () => {
+            mockObsCall.mockResolvedValueOnce({ sceneItems: [{ sourceName: 'test-source', sceneItemId: 20 }] });
+            mockObsCall.mockResolvedValueOnce();
+
             await sourcesModule.setGroupSourceVisibility('test-source', 'test-group', false);
 
-            expect(mockObsCall).not.toHaveBeenCalled();
+            expect(mockEnsureConnected).toHaveBeenCalled();
+            expect(mockObsCall).toHaveBeenCalledWith('GetGroupSceneItemList', { sceneName: 'test-group' });
+            expect(mockObsCall).toHaveBeenCalledWith('SetSceneItemEnabled', {
+                sceneName: 'test-group',
+                sceneItemId: 20,
+                sceneItemEnabled: false
+            });
         }, TEST_TIMEOUTS.FAST);
 
         test('getGroupSceneItemId should handle missing source in group', async () => {
@@ -177,56 +206,81 @@ describe('OBS Sources Module Characterization Tests', () => {
     });
 
     describe('Platform Logo Management', () => {
-        test('setPlatformLogoVisibility should skip operations in test environment', async () => {
+        test('setPlatformLogoVisibility should call OBS for each platform logo', async () => {
             const mockPlatformLogos = {
                 tiktok: 'tiktok-logo-source',
                 twitch: 'twitch-logo-source',
                 youtube: 'youtube-logo-source'
             };
+
+            mockObsCall.mockResolvedValue({ sceneItems: [
+                { sourceName: 'tiktok-logo-source', sceneItemId: 1 },
+                { sourceName: 'twitch-logo-source', sceneItemId: 2 },
+                { sourceName: 'youtube-logo-source', sceneItemId: 3 }
+            ] });
 
             await sourcesModule.setPlatformLogoVisibility('tiktok', mockPlatformLogos);
 
-            expect(mockObsCall).not.toHaveBeenCalled();
+            expect(mockObsCall).toHaveBeenCalled();
         }, TEST_TIMEOUTS.FAST);
 
-        test('hideAllPlatformLogos should skip operations in test environment', async () => {
+        test('hideAllPlatformLogos should call OBS for each platform logo', async () => {
             const mockPlatformLogos = {
                 tiktok: 'tiktok-logo-source',
                 twitch: 'twitch-logo-source',
                 youtube: 'youtube-logo-source'
             };
 
+            mockObsCall.mockResolvedValue({ sceneItems: [
+                { sourceName: 'tiktok-logo-source', sceneItemId: 1 },
+                { sourceName: 'twitch-logo-source', sceneItemId: 2 },
+                { sourceName: 'youtube-logo-source', sceneItemId: 3 }
+            ] });
+
             await sourcesModule.hideAllPlatformLogos(mockPlatformLogos);
 
-            expect(mockObsCall).not.toHaveBeenCalled();
+            expect(mockObsCall).toHaveBeenCalled();
         }, TEST_TIMEOUTS.FAST);
     });
 
     describe('Display Control', () => {
-        test('setChatDisplayVisibility should skip operations in test environment', async () => {
-            await sourcesModule.setChatDisplayVisibility(true);
+        test('setChatDisplayVisibility should call OBS via safeOBSOperation', async () => {
+            mockObsCall.mockResolvedValue({ sceneItemId: 42 });
 
-            expect(mockObsCall).not.toHaveBeenCalled();
+            await sourcesModule.setChatDisplayVisibility(true, 'test-scene', {});
+
+            expect(mockObsCall).toHaveBeenCalled();
         }, TEST_TIMEOUTS.FAST);
 
-        test('setNotificationDisplayVisibility should skip operations in test environment', async () => {
-            await sourcesModule.setNotificationDisplayVisibility(true);
+        test('setNotificationDisplayVisibility should call OBS via safeOBSOperation', async () => {
+            mockObsCall.mockResolvedValue({ sceneItemId: 42 });
 
-            expect(mockObsCall).not.toHaveBeenCalled();
+            await sourcesModule.setNotificationDisplayVisibility(true, 'test-scene', {});
+
+            expect(mockObsCall).toHaveBeenCalled();
         }, TEST_TIMEOUTS.FAST);
 
-        test('hideAllDisplays should skip operations in test environment', async () => {
-            await sourcesModule.hideAllDisplays();
+        test('hideAllDisplays should call OBS for display operations', async () => {
+            mockObsCall.mockResolvedValue({ sceneItemId: 42, inputSettings: {} });
 
-            expect(mockObsCall).not.toHaveBeenCalled();
+            await sourcesModule.hideAllDisplays('chat-scene', 'notif-scene', {}, {}, 'tts', 'notif');
+
+            expect(mockObsCall).toHaveBeenCalled();
         }, TEST_TIMEOUTS.FAST);
     });
 
     describe('Source Filter Management', () => {
-        test('setSourceFilterEnabled should skip operations in test environment', async () => {
+        test('setSourceFilterEnabled should call OBS', async () => {
+            mockObsCall.mockResolvedValue();
+
             await sourcesModule.setSourceFilterEnabled('test-source', 'test-filter', true);
 
-            expect(mockObsCall).not.toHaveBeenCalled();
+            expect(mockEnsureConnected).toHaveBeenCalled();
+            expect(mockObsCall).toHaveBeenCalledWith('SetSourceFilterEnabled', {
+                sourceName: 'test-source',
+                filterName: 'test-filter',
+                filterEnabled: true
+            });
         }, TEST_TIMEOUTS.FAST);
 
         test('getSourceFilterSettings should call OBS (no test environment check)', async () => {
@@ -244,10 +298,17 @@ describe('OBS Sources Module Characterization Tests', () => {
             expect(result).toEqual(mockSettings);
         }, TEST_TIMEOUTS.FAST);
 
-        test('setSourceFilterSettings should skip operations in test environment', async () => {
+        test('setSourceFilterSettings should call OBS', async () => {
+            mockObsCall.mockResolvedValue();
+
             await sourcesModule.setSourceFilterSettings('test-source', 'test-filter', { key: 'value' });
 
-            expect(mockObsCall).not.toHaveBeenCalled();
+            expect(mockEnsureConnected).toHaveBeenCalled();
+            expect(mockObsCall).toHaveBeenCalledWith('SetSourceFilterSettings', {
+                sourceName: 'test-source',
+                filterName: 'test-filter',
+                filterSettings: { key: 'value' }
+            });
         }, TEST_TIMEOUTS.FAST);
     });
 
@@ -271,6 +332,7 @@ describe('OBS Sources Module Characterization Tests', () => {
 
     describe('Performance Tests', () => {
         test('should handle rapid source operations efficiently', async () => {
+            mockObsCall.mockResolvedValue({ inputSettings: {} });
             const startTime = testClock.now();
 
             const promises = [];
@@ -283,7 +345,7 @@ describe('OBS Sources Module Characterization Tests', () => {
             const duration = testClock.now() - startTime;
 
             expect(duration).toBeLessThan(100);
-            expect(mockObsManager.call).toHaveBeenCalledTimes(10);
+            expect(mockObsCall).toHaveBeenCalledTimes(20);
         }, TEST_TIMEOUTS.FAST);
     });
 }); 
