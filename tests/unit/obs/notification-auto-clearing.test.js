@@ -108,7 +108,8 @@ describe('Notification Auto-Clearing Behavior', () => {
 
         displayQueue = new DisplayQueue(mockObsManager, configFixture, mockConstants, null, {
             sourcesManager: realSourcesManager,
-            goalsManager: mockGoalsManager
+            goalsManager: mockGoalsManager,
+            delay: () => Promise.resolve()
         });
     });
 
