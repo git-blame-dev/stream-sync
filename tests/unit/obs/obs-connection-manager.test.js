@@ -16,18 +16,25 @@ describe('OBSConnectionManager', () => {
         restoreAllMocks();
     });
 
+    const createDefaultMockOBS = () => ({
+        connect: createMockFn().mockResolvedValue({ obsWebSocketVersion: '5', negotiatedRpcVersion: 1 }),
+        disconnect: createMockFn().mockResolvedValue(),
+        call: createMockFn().mockResolvedValue({}),
+        on: createMockFn(),
+        off: createMockFn(),
+        once: createMockFn()
+    });
+
     const createManager = (overrides = {}) => {
         return new OBSConnectionManager({
-            mockOBS: overrides.mockOBS,
+            obs: overrides.obs || overrides.mockOBS || createDefaultMockOBS(),
             OBSWebSocket: overrides.OBSWebSocket,
             config: overrides.config || {
                 address: 'ws://localhost:4455',
                 password: 'testPassword',
                 enabled: true,
                 connectionTimeoutMs: 50
-            },
-            isTestEnvironment: overrides.isTestEnvironment ?? true,
-            testConnectionBehavior: overrides.testConnectionBehavior ?? true
+            }
         });
     };
 

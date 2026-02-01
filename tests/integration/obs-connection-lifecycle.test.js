@@ -17,9 +17,7 @@ describe('OBS Connection Lifecycle Integration', () => {
         mockOBSWebSocket = createMockOBSWebSocket();
 
         obsManager = createOBSConnectionManager({
-            mockOBS: mockOBSWebSocket,
-            isTestEnvironment: true,
-            testConnectionBehavior: true,
+            obs: mockOBSWebSocket,
             config: {
                 address: 'ws://localhost:4455',
                 password: 'testPassword123',

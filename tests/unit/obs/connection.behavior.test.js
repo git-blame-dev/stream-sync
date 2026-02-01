@@ -19,36 +19,38 @@ describe('OBSConnectionManager behavior', () => {
         initializeStaticSecrets();
     });
 
+    const createMockOBS = () => ({
+        connect: createMockFn().mockResolvedValue({ obsWebSocketVersion: '5', negotiatedRpcVersion: 1 }),
+        disconnect: createMockFn().mockResolvedValue(),
+        call: createMockFn().mockResolvedValue({}),
+        on: createMockFn(),
+        off: createMockFn(),
+        once: createMockFn()
+    });
+
     const createDeps = (overrides = {}) => ({
         config: { address: 'ws://localhost:4455', password: 'testPass', enabled: true, connectionTimeoutMs: 50 },
-        mockOBS: {
-            connect: createMockFn().mockResolvedValue({ obsWebSocketVersion: '5', negotiatedRpcVersion: 1 }),
-            disconnect: createMockFn().mockResolvedValue(),
-            call: createMockFn().mockResolvedValue({}),
-            on: createMockFn(),
-            off: createMockFn(),
-            once: createMockFn()
-        },
+        obs: overrides.obs || createMockOBS(),
         constants: {
             ERROR_MESSAGES: { OBS_CONNECTION_TIMEOUT: 'Timed out' }
         },
-        isTestEnvironment: true,
         ...overrides
     });
 
     it('returns true immediately when already connected', async () => {
-        const deps = createDeps();
+        const mockOBS = createMockOBS();
+        const deps = createDeps({ obs: mockOBS });
         const manager = new OBSConnectionManager(deps);
         manager._isConnected = true;
 
         const result = await manager.connect();
 
         expect(result).toBe(true);
-        expect(deps.mockOBS.connect).not.toHaveBeenCalled();
+        expect(mockOBS.connect).not.toHaveBeenCalled();
     });
 
     it('returns existing promise when connection already in progress', async () => {
-        const deps = createDeps({ testConnectionBehavior: true });
+        const deps = createDeps();
         const manager = new OBSConnectionManager(deps);
         manager._isConnected = false;
         manager.isConnecting = true;
@@ -111,20 +113,13 @@ describe('OBSConnectionManager behavior', () => {
         expect(manager.getConfig().password).toBe('secret-from-env');
     });
 
-    it('isConnected returns internal connection state when testConnectionBehavior enabled', () => {
-        const deps = createDeps({ testConnectionBehavior: true });
+    it('isConnected returns internal connection state', () => {
+        const deps = createDeps();
         const manager = new OBSConnectionManager(deps);
 
         expect(manager.isConnected()).toBe(false);
 
         manager._isConnected = true;
-        expect(manager.isConnected()).toBe(true);
-    });
-
-    it('isConnected returns true by default in test environment for convenience', () => {
-        const deps = createDeps();
-        const manager = new OBSConnectionManager(deps);
-
         expect(manager.isConnected()).toBe(true);
     });
 });
