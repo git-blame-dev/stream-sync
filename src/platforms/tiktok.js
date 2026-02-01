@@ -82,8 +82,7 @@ class TikTokPlatform extends EventEmitter {
             };
         }
         
-        // Initialize connection state management (Solution C: Factory + State Manager pattern)
-        this.connectionFactory = dependencies.connectionFactory || new PlatformConnectionFactory();
+        this.connectionFactory = dependencies.connectionFactory || new PlatformConnectionFactory(this.logger);
         this.connectionStateManager = new ConnectionStateManager('tiktok', this.connectionFactory);
         this.connectionStateManager.initialize(this.config, { ...dependencies, logger: this.logger });
         

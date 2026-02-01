@@ -156,16 +156,13 @@ describe('Dependency Injection Validation', () => {
 
     describe('Platform Factory Dependency Validation', () => {
         it('should validate factory dependencies before creating platform instances', () => {
-            const incompleteDeps = {};
-
             const createPlatformViaFactory = () => {
                 const { PlatformConnectionFactory } = require('../../src/utils/platform-connection-factory');
-                const factory = new PlatformConnectionFactory();
-                return factory.createConnection('youtube', {}, incompleteDeps);
+                new PlatformConnectionFactory();
             };
 
             expect(createPlatformViaFactory).toThrow();
-            expect(createPlatformViaFactory).toThrow(/Platform creation failed.*missing dependencies.*logger/i);
+            expect(createPlatformViaFactory).toThrow(/logger dependency is required/i);
         });
 
         it('should ensure factory creates consistent dependency interfaces', () => {

@@ -19,12 +19,11 @@ function createTwitchEventSubSubscriptionManager(options = {}) {
     const axios = injectedAxios || require('axios');
 
     const safeLogger = (() => {
-        const resolvedLogger = logger || global.__TEST_LOGGER__;
-        if (!resolvedLogger) {
+        if (!logger) {
             throw new Error('TwitchEventSub subscription manager requires a logger dependency');
         }
-        validateLoggerInterface(resolvedLogger);
-        return resolvedLogger;
+        validateLoggerInterface(logger);
+        return logger;
     })();
     const safeLogError = typeof logError === 'function' ? logError : () => {};
     const safeGetClientId = typeof getClientId === 'function' ? getClientId : () => null;
