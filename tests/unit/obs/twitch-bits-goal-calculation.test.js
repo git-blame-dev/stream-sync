@@ -53,7 +53,7 @@ describe('DisplayQueue - Twitch Bits Goal Calculation', () => {
             configFixture,
             {},
             null,
-            { goalsManager: mockGoalsManager, sourcesManager: mockSourcesManager }
+            { goalsManager: mockGoalsManager, sourcesManager: mockSourcesManager, delay: () => Promise.resolve() }
         );
     });
 

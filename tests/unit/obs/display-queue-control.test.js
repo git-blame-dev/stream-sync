@@ -42,12 +42,13 @@ describe('DisplayQueue control', () => {
             processDonationGoal: createMockFn().mockResolvedValue({ success: true }),
             processPaypiggyGoal: createMockFn().mockResolvedValue({ success: true }),
             initializeGoalDisplay: createMockFn().mockResolvedValue()
-        }
+        },
+        delay: () => Promise.resolve()
     });
 
     const createQueue = (configOverrides = {}) => {
         const config = createConfig(configOverrides);
-        const queue = new DisplayQueue(createMockOBSManager('connected'), config, constants, null, constants, createMockDependencies());
+        const queue = new DisplayQueue(createMockOBSManager('connected'), config, constants, null, createMockDependencies());
         queue.getDuration = createMockFn().mockReturnValue(0);
         return queue;
     };

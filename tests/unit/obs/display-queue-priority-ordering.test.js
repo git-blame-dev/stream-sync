@@ -34,6 +34,21 @@ describe('DisplayQueue priority ordering', () => {
 
     const createQueue = () => {
         const mockOBS = createMockOBSManager('connected');
+        mockOBS.call.mockImplementation((method) => {
+            if (method === 'GetGroupSceneItemList') {
+                return Promise.resolve({ sceneItems: [
+                    { sourceName: 'chat', sceneItemId: 1 },
+                    { sourceName: 'notification', sceneItemId: 2 }
+                ] });
+            }
+            if (method === 'GetInputSettings') {
+                return Promise.resolve({ inputSettings: {} });
+            }
+            if (method === 'GetSceneItemId') {
+                return Promise.resolve({ sceneItemId: 42 });
+            }
+            return Promise.resolve({});
+        });
 
         const realSourcesManager = createOBSSourcesManager(mockOBS, {
             ...createSourcesConfigFixture(),
@@ -48,9 +63,10 @@ describe('DisplayQueue priority ordering', () => {
             initializeGoalDisplay: createMockFn().mockResolvedValue()
         };
 
-        const queue = new DisplayQueue(mockOBS, config, constants, null, constants, {
+        const queue = new DisplayQueue(mockOBS, config, constants, null, {
             sourcesManager: realSourcesManager,
-            goalsManager: mockGoalsManager
+            goalsManager: mockGoalsManager,
+            delay: () => Promise.resolve()
         });
         queue.getDuration = createMockFn().mockReturnValue(0);
         return queue;

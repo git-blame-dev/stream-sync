@@ -30,13 +30,7 @@ function handleDisplayQueueError(message, error = null, payload = null) {
     }
 }
 
-// Check if we're in a test environment
-const isTestEnv = process.env.NODE_ENV === 'test';
-
-function delay(ms) {
-    if (isTestEnv) {
-        return Promise.resolve();
-    }
+function defaultDelay(ms) {
     const numMs = Number(ms);
     return safeDelay(numMs, Number.isFinite(numMs) ? numMs : 5000, 'DisplayQueue delay');
 }
@@ -58,6 +52,7 @@ class DisplayQueue {
         this.sourcesManager = dependencies.sourcesManager || getDefaultSourcesManager();
         this.goalsManager = dependencies.goalsManager || getDefaultGoalsManager();
         this.eventBus = eventBus;
+        this.delay = dependencies.delay || defaultDelay;
 
         this.config = normalizeDisplayQueueConfig(config);
         
@@ -211,7 +206,7 @@ class DisplayQueue {
                     await this.displayItem(item);
                     
                     // 2. Wait for its display window (TTS-driven)
-                    await delay(this.getDuration(item));
+                    await this.delay(this.getDuration(item));
 
                     // 3. Hide notifications after their display window, but preserve chat messages for lingering
                     if (item.type === 'chat') {
@@ -225,7 +220,7 @@ class DisplayQueue {
                     }
                     
                     // 4. Add a small delay for a smooth transition before the next item
-                    await delay(this.config.timing.transitionDelay);
+                    await this.delay(this.config.timing.transitionDelay);
 
                 } catch (err) {
                     handleDisplayQueueError(`[Display Queue] Error processing ${item.type}`, err, { itemType: item.type });
@@ -261,12 +256,6 @@ class DisplayQueue {
     }
     
     async displayChatItem(item) {
-        // Development-time validation for data structure debugging
-        if (process.env.NODE_ENV !== 'production') {
-            this.debugDataStructure(item.data, `chat item from ${item.platform}`);
-        }
-
-        // Extract username from notification data
         const username = this.extractUsername(item.data);
         const message = item.data.message;
         const platform = item.platform;
@@ -297,7 +286,7 @@ class DisplayQueue {
 
         // 2. Hide the current chat display to create a fade-out effect
         await this.hideCurrentDisplay({ type: 'chat' });
-        await delay(this.config.timing.transitionDelay);
+        await this.delay(this.config.timing.transitionDelay);
 
         // 3. Update the content while it's hidden
         try {
@@ -346,13 +335,6 @@ class DisplayQueue {
     }
 
     async displayNotificationItem(item) {
-        
-        // Development-time validation for data structure debugging
-        if (process.env.NODE_ENV !== 'production') {
-            this.debugDataStructure(item.data, `${item.type} notification from ${item.platform}`);
-        }
-
-        // Extract username from notification data
         const username = this.extractUsername(item.data);
         const platform = item.platform;
         if (!platform || !this.config[platform]) {
@@ -422,7 +404,7 @@ class DisplayQueue {
 
         // 1. Hide chat display (including any lingering chat)
         await this.sourcesManager.setChatDisplayVisibility(false, this.config.chat.sceneName, this.config.chat.platformLogos);
-        await delay(this.config.timing.notificationClearDelay);
+        await this.delay(this.config.timing.notificationClearDelay);
 
         // 2. Update notification text
         try {
@@ -640,7 +622,7 @@ class DisplayQueue {
 
                 const ttsPromise = (async () => {
                     if (stage.delay > 0) {
-                        await delay(stage.delay);
+                        await this.delay(stage.delay);
                     }
                     await this.setTTSText(stage.text);
                 })();
@@ -654,7 +636,7 @@ class DisplayQueue {
         // Step 4: Add VFX with standard gift delay through EventBus (only when config present)
         if (hasVfx) {
             logger.debug('[Gift] Scheduling VFX emission with 2.0s delay', 'display-queue');
-            const vfxPromise = delay(2000).then(() => {
+            const vfxPromise = this.delay(2000).then(() => {
                 let payload;
                 try {
                     const { command, commandKey, filename, mediaSource, vfxFilePath } = vfxConfig;
@@ -727,7 +709,7 @@ class DisplayQueue {
                 logger.debug(`[Sequential] Playing ${stage.type} TTS: ${stage.text}`, 'display-queue');
 
                 if (stage.delay > 0) {
-                    await delay(stage.delay);
+                    await this.delay(stage.delay);
                 }
 
                 await this.setTTSText(stage.text);
@@ -812,7 +794,7 @@ class DisplayQueue {
         
         // Hide notifications but keep chat visible (or show chat if hidden)
         await this.hideCurrentDisplay({ type: 'notification' });
-        await delay(200); // Small delay to avoid flicker
+        await this.delay(200); // Small delay to avoid flicker
         
         // Update chat message text (in case it's not currently displayed)
         // Extract username from notification data
@@ -941,115 +923,6 @@ class DisplayQueue {
         }
 
         return username.trim();
-    }
-
-    validateDataStructure(data, context = 'unknown') {
-        const result = {
-            isValid: true,
-            warnings: [],
-            errors: [],
-            structure: {
-                format: 'unknown',
-                hasUsername: false,
-                extractableUsername: null,
-                confidence: 0
-            },
-            suggestions: []
-        };
-
-        // Basic existence check
-        if (!data) {
-            result.isValid = false;
-            result.errors.push('Data object is null or undefined');
-            result.suggestions.push('Ensure notification data is properly created before processing');
-            return result;
-        }
-
-        if (typeof data !== 'object') {
-            result.isValid = false;
-            result.errors.push(`Expected object but received ${typeof data}`);
-            result.suggestions.push('Check data source - may need JSON parsing or object conversion');
-            return result;
-        }
-
-        const username = data.username;
-        if (typeof username === 'string' && username.trim()) {
-            result.structure.hasUsername = true;
-            result.structure.format = 'flat';
-            result.structure.extractableUsername = username.trim();
-            result.structure.confidence += 80;
-        }
-
-        // Final validation
-        if (!result.structure.hasUsername) {
-            result.isValid = false;
-            result.errors.push('No extractable username found in data structure');
-            result.suggestions.push('Use NotificationBuilder.build() with { username } fields');
-        }
-
-        // Context-specific validation
-        if (context.includes('chat') && !data.message) {
-            result.warnings.push('Chat context but no message field found');
-        }
-
-        if ((context.includes('gift') || context.includes('platform:gift')) && data.amount === undefined) {
-            result.warnings.push('Gift context but no monetary amount field found');
-        }
-
-        // Structure confidence assessment
-        if (result.structure.confidence >= 70) {
-            result.structure.confidence = 'high';
-        } else if (result.structure.confidence >= 40) {
-            result.structure.confidence = 'medium';
-        } else {
-            result.structure.confidence = 'low';
-            result.warnings.push('Low confidence in data structure format');
-        }
-
-        return result;
-    }
-
-    logDataStructureValidation(data, validation, context = 'unknown', logLevel = 'debug') {
-        const logData = {
-            context,
-            validation: {
-                isValid: validation.isValid,
-                format: validation.structure.format,
-                confidence: validation.structure.confidence,
-                extractableUsername: validation.structure.extractableUsername
-            },
-            dataKeys: data ? Object.keys(data) : null
-        };
-
-        if (validation.isValid) {
-            logger[logLevel](`[DisplayQueue] Data structure validation PASSED for ${context}`, 'display-queue', logData);
-        } else {
-            logger.warn(`[DisplayQueue] Data structure validation FAILED for ${context}`, 'display-queue', {
-                ...logData,
-                errors: validation.errors,
-                warnings: validation.warnings,
-                suggestions: validation.suggestions
-            });
-        }
-
-        // Log suggestions for improvement
-        if (validation.suggestions.length > 0) {
-            logger.info(`[DisplayQueue] Data structure suggestions for ${context}:`, 'display-queue', {
-                suggestions: validation.suggestions
-            });
-        }
-    }
-
-    debugDataStructure(data, context) {
-        // Only run in development/test environments
-        if (process.env.NODE_ENV === 'production') {
-            return true; // Skip validation in production for performance
-        }
-
-        const validation = this.validateDataStructure(data, context);
-        this.logDataStructureValidation(data, validation, context, 'debug');
-        
-        return validation.isValid;
     }
 
     // ============================================================================
@@ -1239,11 +1112,6 @@ function createDisplayQueue(obsManager, config = {}, constants = {}, eventBus = 
 function initializeDisplayQueue(obsManager, config = {}, constants = {}, eventBus = null) {
     if (!obsManager) {
         throw new Error('DisplayQueue requires OBSConnectionManager instance');
-    }
-
-    if (process.env.NODE_ENV === 'test') {
-        displayQueueInstance = createDisplayQueue(obsManager, config, constants, eventBus);
-        return displayQueueInstance;
     }
 
     if (!displayQueueInstance) {
