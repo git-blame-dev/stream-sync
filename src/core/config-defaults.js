@@ -127,15 +127,7 @@ const DEFAULTS = {
         requestTimeout: 5000
     },
 
-    logging: {
-        level: 'info',
-        enableDebug: false,
-        enableConsole: true,
-        enableFile: false,
-        maxFileSize: 10485760,
-        platformDataLoggingEnabled: false,
-        streamelementsDataLoggingEnabled: false
-    },
+    logging: {},
 
     timing: {
         fadeDuration: 750,

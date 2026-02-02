@@ -296,12 +296,10 @@ describe('ConfigValidator._normalizeIntervalsSection()', () => {
 });
 
 describe('ConfigValidator._normalizeLoggingSection()', () => {
-    it('applies logging defaults', () => {
+    it('returns empty object (logging handled separately in config.js)', () => {
         const result = ConfigValidator._normalizeLoggingSection({});
 
-        expect(result.level).toBe('info');
-        expect(result.enableConsole).toBe(true);
-        expect(result.enableFile).toBe(false);
+        expect(result).toEqual({});
     });
 });
 
