@@ -91,7 +91,7 @@ function createHandcamConfigFixture(overrides = {}) {
         glowFilterName: 'test-glow-filter',
         maxSize: 50,
         rampUpDuration: 0.5,
-        holdDuration: 6.0,
+        holdDuration: 8.0,
         rampDownDuration: 0.5,
         totalSteps: 30,
         easingEnabled: true,

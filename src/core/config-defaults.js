@@ -141,14 +141,14 @@ const DEFAULTS = {
         glowFilterName: 'Glow',
         maxSize: 50,
         rampUpDuration: 0.5,
-        holdDuration: 6.0,
+        holdDuration: 8.0,
         rampDownDuration: 0.5,
         totalSteps: 30,
         easingEnabled: true
     },
 
     cooldowns: {
-        defaultCooldown: 5,
+        defaultCooldown: 60,
         heavyCommandCooldown: 30,
         heavyCommandThreshold: 3,
         heavyCommandWindow: 60,
