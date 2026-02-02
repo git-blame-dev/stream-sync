@@ -232,16 +232,13 @@ describe('Config field presence - all normalizers return expected fields', () =>
         const EXPECTED_FIELDS = [
             'glowEnabled',
             'sourceName',
-            'sceneName',
             'glowFilterName',
             'maxSize',
             'rampUpDuration',
             'holdDuration',
             'rampDownDuration',
             'totalSteps',
-            'incrementPercent',
-            'easingEnabled',
-            'animationInterval'
+            'easingEnabled'
         ];
 
         it('returns all expected fields', () => {

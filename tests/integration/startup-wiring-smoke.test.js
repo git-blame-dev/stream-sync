@@ -49,16 +49,13 @@ streamDetectionMethod=api
 [handcam]
 glowEnabled=false
 sourceName=smoke handcam
-sceneName=smoke scene
 glowFilterName=smoke glow
 maxSize=50
 rampUpDuration=0.5
 holdDuration=1
 rampDownDuration=0.5
 totalSteps=10
-incrementPercent=5
 easingEnabled=true
-animationInterval=16
 
 [cooldowns]
 defaultCooldown=10

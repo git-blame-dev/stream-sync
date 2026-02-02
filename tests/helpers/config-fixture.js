@@ -34,16 +34,13 @@ const RAW_TEST_CONFIG = {
     handcam: {
         glowEnabled: 'false',
         sourceName: 'test-handcam',
-        sceneName: 'test-handcam-scene',
         glowFilterName: 'Glow',
         maxSize: '50',
         rampUpDuration: '0.5',
         holdDuration: '8.0',
         rampDownDuration: '0.5',
         totalSteps: '30',
-        incrementPercent: '3.33',
-        easingEnabled: 'true',
-        animationInterval: '16'
+        easingEnabled: 'true'
     },
     cooldowns: {
         defaultCooldown: '60',
@@ -91,16 +88,13 @@ function createHandcamConfigFixture(overrides = {}) {
     return {
         enabled: true,
         sourceName: 'test-handcam-source',
-        sceneName: 'test-handcam-scene',
         glowFilterName: 'test-glow-filter',
         maxSize: 50,
         rampUpDuration: 0.5,
         holdDuration: 6.0,
         rampDownDuration: 0.5,
         totalSteps: 30,
-        incrementPercent: 3.33,
         easingEnabled: true,
-        animationInterval: 16,
         ...overrides
     };
 }

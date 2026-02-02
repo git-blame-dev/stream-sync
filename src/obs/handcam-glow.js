@@ -58,11 +58,8 @@ function createHandcamGlowConfig(handcamConfig) {
         holdDuration: Number(handcamConfig.holdDuration),
         rampDownDuration: Number(handcamConfig.rampDownDuration),
         totalSteps: Number(handcamConfig.totalSteps),
-        incrementPercent: Number(handcamConfig.incrementPercent),
         easingEnabled: handcamConfig.easingEnabled,
-        animationInterval: Number(handcamConfig.animationInterval),
         sourceName: handcamConfig.sourceName,
-        sceneName: handcamConfig.sceneName,
         filterName: handcamConfig.glowFilterName,
 
         get totalDuration() {
