@@ -262,7 +262,7 @@ describe('ConfigValidator._normalizeCooldownsSection()', () => {
     it('applies cooldown defaults', () => {
         const result = ConfigValidator._normalizeCooldownsSection({});
 
-        expect(result.defaultCooldown).toBe(5);
+        expect(result.defaultCooldown).toBe(60);
         expect(result.heavyCommandCooldown).toBe(30);
     });
 });

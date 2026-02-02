@@ -71,7 +71,7 @@ describe('ConfigValidator normalize + validate integration', () => {
         expect(normalized.general.cmdCoolDown).toBe(60);
         expect(normalized.general.messagesEnabled).toBe(true);
         expect(normalized.http.defaultTimeoutMs).toBe(10000);
-        expect(normalized.cooldowns.defaultCooldown).toBe(5);
+        expect(normalized.cooldowns.defaultCooldown).toBe(60);
         expect(normalized.retry.maxRetries).toBe(3);
     });
 
