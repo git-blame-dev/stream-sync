@@ -292,16 +292,10 @@ class ConfigValidator {
 
     static _normalizeTtsSection(raw) {
         return {
-            deduplicationEnabled: ConfigValidator.parseBoolean(raw.deduplicationEnabled, DEFAULTS.tts.deduplicationEnabled),
-            debugDeduplication: ConfigValidator.parseBoolean(raw.debugDeduplication, DEFAULTS.tts.debugDeduplication),
             onlyForGifts: ConfigValidator.parseBoolean(raw.onlyForGifts, DEFAULTS.tts.onlyForGifts),
             voice: ConfigValidator.parseString(raw.voice, DEFAULTS.tts.voice),
             rate: ConfigValidator.parseNumber(raw.rate, { defaultValue: DEFAULTS.tts.rate }),
-            volume: ConfigValidator.parseNumber(raw.volume, { defaultValue: DEFAULTS.tts.volume }),
-            twitchDeduplicationEnabled: ConfigValidator.parseBoolean(raw.twitchDeduplicationEnabled, DEFAULTS.tts.twitchDeduplicationEnabled),
-            youtubeDeduplicationEnabled: ConfigValidator.parseBoolean(raw.youtubeDeduplicationEnabled, DEFAULTS.tts.youtubeDeduplicationEnabled),
-            tiktokDeduplicationEnabled: ConfigValidator.parseBoolean(raw.tiktokDeduplicationEnabled, DEFAULTS.tts.tiktokDeduplicationEnabled),
-            performanceWarningThreshold: ConfigValidator.parseNumber(raw.performanceWarningThreshold, { defaultValue: DEFAULTS.tts.performanceWarningThreshold })
+            volume: ConfigValidator.parseNumber(raw.volume, { defaultValue: DEFAULTS.tts.volume })
         };
     }
 

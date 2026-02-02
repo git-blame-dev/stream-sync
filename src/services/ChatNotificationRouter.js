@@ -1,7 +1,6 @@
 
 const { logChatMessageWithConfig, logChatMessageSkipped } = require('../utils/chat-logger');
 const NotificationBuilder = require('../utils/notification-builder');
-const MonetizationDetector = require('../utils/monetization-detector');
 const { validateNormalizedMessage } = require('../utils/message-normalization');
 const { checkGlobalCommandCooldown, updateGlobalCommandCooldown } = require('../utils/command-parser');
 const { createPlatformErrorHandler } = require('../utils/platform-error-handler');
@@ -66,11 +65,6 @@ class ChatNotificationRouter {
                 maxMessageLength: 200
             });
 
-            const monetizationResult = this.detectMonetization(platform, normalizedData);
-            if (monetizationResult?.detected) {
-                normalizedData.skipChatTTS = true;
-            }
-
             const isFirstMessage = this.isFirstMessage(normalizedData, platform);
             const greetingsEnabled = this.isGreetingEnabled(platform);
 
@@ -125,31 +119,6 @@ class ChatNotificationRouter {
             }
         }
         return false;
-    }
-
-    detectMonetization(platform, normalizedData) {
-        const deduplicationEnabled = this.runtime.config?.tts?.deduplicationEnabled !== false;
-        if (!deduplicationEnabled) {
-            return null;
-        }
-
-        try {
-            const result = MonetizationDetector.detectMonetization(normalizedData, platform) || { detected: false };
-            if (result.detected) {
-                this.logger.info(`TTS deduplication: Skipping chat TTS for ${result.type}`, platform, {
-                    type: result.type,
-                    details: result.details,
-                    detectionTime: result.timingMs,
-                    username: normalizedData.username
-                });
-            }
-            return result;
-        } catch (error) {
-            this._handleRouterError('Monetization detection error - continuing without deduplication', error, 'monetization');
-            normalizedData.skipChatTTS = false;
-            normalizedData.monetizationDetectionError = error.message;
-            return null;
-        }
     }
 
     async detectCommand(normalizedData) {
@@ -213,8 +182,7 @@ class ChatNotificationRouter {
             platform,
             username: normalizedData.username,
             userId: normalizedData.userId,
-            message: sanitizedMessage,
-            skipChatTTS: normalizedData.skipChatTTS
+            message: sanitizedMessage
         };
 
         const chatData = NotificationBuilder.build(baseChatData) || baseChatData;

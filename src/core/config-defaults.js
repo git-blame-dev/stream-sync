@@ -205,16 +205,10 @@ const DEFAULTS = {
     },
 
     tts: {
-        deduplicationEnabled: true,
-        debugDeduplication: false,
         onlyForGifts: false,
         voice: 'default',
         rate: 1.0,
-        volume: 1.0,
-        twitchDeduplicationEnabled: true,
-        youtubeDeduplicationEnabled: true,
-        tiktokDeduplicationEnabled: true,
-        performanceWarningThreshold: 50
+        volume: 1.0
     },
 
     farewell: {

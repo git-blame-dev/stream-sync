@@ -32,7 +32,6 @@ describe('ChatNotificationRouter', () => {
                     heavyCommandCooldownMs: 300000,
                     globalCmdCooldownMs: 45000
                 },
-                tts: { deduplicationEnabled: false },
                 twitch: {}
             },
             platformLifecycleService: {
