@@ -101,16 +101,18 @@ describe('notification command routing integration', () => {
             obs: {},
             commands: {},
             follows: { command: '!test-follow' },
-            gifts: { command: '!test-gift' },
+            gifts: {},
             raids: { command: '!test-raid' },
             paypiggies: { command: '!test-paypiggy' },
             greetings: { command: '!test-greeting' },
-            farewell: { enabled: 'true', command: '!test-farewell' }
+            farewell: { command: '!test-farewell' }
         });
 
-        for (const [, sectionName] of Object.entries(commandBasedTypes)) {
+        for (const [typeName, sectionName] of Object.entries(commandBasedTypes)) {
             expect(normalized[sectionName]).toBeDefined();
-            expect(normalized[sectionName].command).toBeDefined();
+            if (typeName !== 'platform:gift') {
+                expect(normalized[sectionName].command).toBeDefined();
+            }
         }
     });
 });

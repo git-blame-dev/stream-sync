@@ -35,7 +35,6 @@ describe('Config field presence - all normalizers return expected fields', () =>
             'streamMaxRetries',
             'continuousMonitoringInterval',
             'maxMessageLength',
-            'viewerCountScene',
             'chatMsgTxt',
             'chatMsgScene',
             'chatMsgGroup',
@@ -253,7 +252,6 @@ describe('Config field presence - all normalizers return expected fields', () =>
     describe('_normalizeGoalsSection', () => {
         const EXPECTED_FIELDS = [
             'enabled',
-            'goalScene',
             'tiktokGoalEnabled',
             'tiktokGoalSource',
             'tiktokGoalTarget',
@@ -282,7 +280,6 @@ describe('Config field presence - all normalizers return expected fields', () =>
 
     describe('_normalizeGiftsSection', () => {
         const EXPECTED_FIELDS = [
-            'command',
             'giftVideoSource',
             'giftAudioSource',
             'giftScene'
@@ -462,7 +459,6 @@ describe('Config field presence - all normalizers return expected fields', () =>
 
     describe('_normalizeFarewellSection', () => {
         const EXPECTED_FIELDS = [
-            'enabled',
             'command'
         ];
 
@@ -555,20 +551,18 @@ describe('Config field presence - all normalizers return expected fields', () =>
     });
 
     describe('_normalizeCommandsSection', () => {
-        it('returns enabled field', () => {
+        it('returns empty object for empty input', () => {
             const result = ConfigValidator._normalizeCommandsSection({});
 
-            expect(result).toHaveProperty('enabled');
+            expect(result).toEqual({});
         });
 
         it('preserves command definitions', () => {
             const raw = {
-                enabled: 'true',
                 'test-cmd': '!test, vfx top'
             };
             const result = ConfigValidator._normalizeCommandsSection(raw);
 
-            expect(result.enabled).toBe(true);
             expect(result['test-cmd']).toBe('!test, vfx top');
         });
     });

@@ -32,7 +32,6 @@ const DEFAULTS = {
         continuousMonitoringInterval: 60,
         envFileReadEnabled: true,
         envFileWriteEnabled: true,
-        viewerCountScene: 'viewer-count-scene',
         chatMsgTxt: 'chat-message-text',
         chatMsgScene: 'chat-message-scene',
         chatMsgGroup: 'chat-message-group',
@@ -168,7 +167,6 @@ const DEFAULTS = {
 
     goals: {
         enabled: false,
-        goalScene: 'goals-scene',
         tiktokGoalEnabled: true,
         tiktokGoalTarget: 1000,
         tiktokGoalCurrency: 'coins',
@@ -196,13 +194,9 @@ const DEFAULTS = {
         volume: 1.0
     },
 
-    farewell: {
-        enabled: false
-    },
+    farewell: {},
 
-    commands: {
-        enabled: false
-    }
+    commands: {}
 };
 
 module.exports = { DEFAULTS };
