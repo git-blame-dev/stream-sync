@@ -133,20 +133,19 @@ function createYouTubeConfigFixture(overrides = {}) {
     };
 }
 
-const NOTIFICATION_FLAGS = [
-    'messagesEnabled', 'commandsEnabled', 'greetingsEnabled', 'farewellsEnabled',
-    'followsEnabled', 'giftsEnabled', 'raidsEnabled', 'paypiggiesEnabled', 'redemptionsEnabled', 'sharesEnabled', 'ignoreSelfMessages'
-];
-
-function propagateNotificationFlags(generalOverrides, platformConfig) {
-    if (!generalOverrides) return platformConfig;
+function applyInheritableOverrides(generalOverrides, platformConfig, platformOverrides) {
+    if (!generalOverrides) return { ...platformConfig, ...platformOverrides };
+    
+    const inheritableFlags = Object.keys(ConfigValidator._parseInheritableFlags({}));
     const propagated = { ...platformConfig };
-    NOTIFICATION_FLAGS.forEach(flag => {
+    
+    for (const flag of inheritableFlags) {
         if (generalOverrides[flag] !== undefined) {
             propagated[flag] = generalOverrides[flag];
         }
-    });
-    return propagated;
+    }
+    
+    return { ...propagated, ...platformOverrides };
 }
 
 function createConfigFixture(overrides = {}) {
@@ -180,9 +179,9 @@ function createConfigFixture(overrides = {}) {
         spam: { ...base.spam, ...spamOverrides },
         http: { ...base.http, ...httpOverrides },
         handcam: { ...base.handcam, ...handcamOverrides },
-        tiktok: { ...propagateNotificationFlags(generalOverrides, base.tiktok), ...tiktokOverrides },
-        twitch: { ...propagateNotificationFlags(generalOverrides, base.twitch), ...twitchOverrides },
-        youtube: { ...propagateNotificationFlags(generalOverrides, base.youtube), ...youtubeOverrides },
+        tiktok: applyInheritableOverrides(generalOverrides, base.tiktok, tiktokOverrides),
+        twitch: applyInheritableOverrides(generalOverrides, base.twitch, twitchOverrides),
+        youtube: applyInheritableOverrides(generalOverrides, base.youtube, youtubeOverrides),
         ...restOverrides
     };
 }

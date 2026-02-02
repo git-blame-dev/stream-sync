@@ -1,6 +1,61 @@
 const { describe, expect, it } = require('bun:test');
 const { ConfigValidator } = require('../../../src/utils/config-validator');
 
+describe('_parseInheritableFlags', () => {
+    const EXPECTED_INHERITABLE_FLAGS = [
+        'messagesEnabled',
+        'commandsEnabled',
+        'greetingsEnabled',
+        'farewellsEnabled',
+        'followsEnabled',
+        'giftsEnabled',
+        'raidsEnabled',
+        'paypiggiesEnabled',
+        'redemptionsEnabled',
+        'sharesEnabled',
+        'ignoreSelfMessages'
+    ];
+
+    it('returns all inheritable flag fields', () => {
+        const result = ConfigValidator._parseInheritableFlags({});
+
+        EXPECTED_INHERITABLE_FLAGS.forEach(field => {
+            expect(result).toHaveProperty(field);
+        });
+    });
+
+    it('returns null for all flags when raw config is empty', () => {
+        const result = ConfigValidator._parseInheritableFlags({});
+
+        EXPECTED_INHERITABLE_FLAGS.forEach(field => {
+            expect(result[field]).toBe(null);
+        });
+    });
+
+    it('parses boolean values from raw config', () => {
+        const raw = {
+            messagesEnabled: 'true',
+            commandsEnabled: 'false',
+            greetingsEnabled: true,
+            giftsEnabled: false
+        };
+        const result = ConfigValidator._parseInheritableFlags(raw);
+
+        expect(result.messagesEnabled).toBe(true);
+        expect(result.commandsEnabled).toBe(false);
+        expect(result.greetingsEnabled).toBe(true);
+        expect(result.giftsEnabled).toBe(false);
+    });
+
+    it('returns exactly the expected fields and no extra fields', () => {
+        const result = ConfigValidator._parseInheritableFlags({});
+        const keys = Object.keys(result);
+
+        expect(keys.length).toBe(EXPECTED_INHERITABLE_FLAGS.length);
+        expect(keys.sort()).toEqual(EXPECTED_INHERITABLE_FLAGS.slice().sort());
+    });
+});
+
 describe('Config field presence - all normalizers return expected fields', () => {
     describe('_normalizeGeneralSection', () => {
         const EXPECTED_FIELDS = [
@@ -128,6 +183,7 @@ describe('Config field presence - all normalizers return expected fields', () =>
             'raidsEnabled',
             'paypiggiesEnabled',
             'redemptionsEnabled',
+            'sharesEnabled',
             'ignoreSelfMessages',
             'pollInterval'
         ];
@@ -162,12 +218,14 @@ describe('Config field presence - all normalizers return expected fields', () =>
             'greetNewCommentors',
             'messagesEnabled',
             'commandsEnabled',
+            'greetingsEnabled',
             'farewellsEnabled',
             'followsEnabled',
             'giftsEnabled',
             'raidsEnabled',
             'paypiggiesEnabled',
             'redemptionsEnabled',
+            'sharesEnabled',
             'ignoreSelfMessages',
             'pollInterval'
         ];
@@ -205,12 +263,14 @@ describe('Config field presence - all normalizers return expected fields', () =>
             'greetNewCommentors',
             'messagesEnabled',
             'commandsEnabled',
+            'greetingsEnabled',
             'farewellsEnabled',
             'followsEnabled',
             'giftsEnabled',
             'raidsEnabled',
             'paypiggiesEnabled',
             'redemptionsEnabled',
+            'sharesEnabled',
             'ignoreSelfMessages',
             'pollInterval'
         ];
