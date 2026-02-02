@@ -77,33 +77,22 @@ describe('Spam Detection Service Integration Tests', () => {
             const { config } = require('../../../src/core/config');
 
             expect(config.spam).toBeDefined();
-            expect(config.spam.spamDetectionEnabled).toBe(true);
+            expect(config.spam.enabled).toBe(true);
         });
 
         it('should contain all required spam detection properties in config', () => {
             const { config } = require('../../../src/core/config');
             const spamConfig = config.spam;
 
-            expect(spamConfig).toHaveProperty('spamDetectionEnabled');
-            expect(spamConfig).toHaveProperty('spamDetectionWindow');
+            expect(spamConfig).toHaveProperty('enabled');
+            expect(spamConfig).toHaveProperty('detectionWindow');
             expect(spamConfig).toHaveProperty('maxIndividualNotifications');
             expect(spamConfig).toHaveProperty('lowValueThreshold');
 
-            expect(typeof spamConfig.spamDetectionEnabled).toBe('boolean');
-            expect(typeof spamConfig.spamDetectionWindow).toBe('number');
+            expect(typeof spamConfig.enabled).toBe('boolean');
+            expect(typeof spamConfig.detectionWindow).toBe('number');
             expect(typeof spamConfig.maxIndividualNotifications).toBe('number');
             expect(typeof spamConfig.lowValueThreshold).toBe('number');
-        });
-
-        it('should map to existing gift configuration values exactly', () => {
-            const { config } = require('../../../src/core/config');
-            const spamConfig = config.spam;
-            const giftConfig = config.gifts;
-
-            expect(spamConfig.spamDetectionEnabled).toBe(giftConfig.spamDetectionEnabled);
-            expect(spamConfig.spamDetectionWindow).toBe(giftConfig.spamDetectionWindow);
-            expect(spamConfig.maxIndividualNotifications).toBe(giftConfig.maxIndividualNotifications);
-            expect(spamConfig.lowValueThreshold).toBe(giftConfig.lowValueThreshold);
         });
     });
 
@@ -280,12 +269,12 @@ describe('Spam Detection Service Integration Tests', () => {
             const { config } = require('../../../src/core/config');
             const spamConfig = config.spam;
 
-            expect(typeof spamConfig.spamDetectionEnabled).toBe('boolean');
-            expect(typeof spamConfig.spamDetectionWindow).toBe('number');
+            expect(typeof spamConfig.enabled).toBe('boolean');
+            expect(typeof spamConfig.detectionWindow).toBe('number');
             expect(typeof spamConfig.maxIndividualNotifications).toBe('number');
             expect(typeof spamConfig.lowValueThreshold).toBe('number');
 
-            expect(spamConfig.spamDetectionWindow).toBeGreaterThan(0);
+            expect(spamConfig.detectionWindow).toBeGreaterThan(0);
             expect(spamConfig.maxIndividualNotifications).toBeGreaterThan(0);
             expect(spamConfig.lowValueThreshold).toBeGreaterThanOrEqual(0);
         });
@@ -297,12 +286,12 @@ describe('Spam Detection Service Integration Tests', () => {
             const spamConfig = config.spam;
 
             expect(spamConfig).toBeTruthy();
-            expect(spamConfig.spamDetectionEnabled).toBeDefined();
-            expect(spamConfig.spamDetectionWindow).toBeDefined();
+            expect(spamConfig.enabled).toBeDefined();
+            expect(spamConfig.detectionWindow).toBeDefined();
             expect(spamConfig.maxIndividualNotifications).toBeDefined();
             expect(spamConfig.lowValueThreshold).toBeDefined();
 
-            expect(spamConfig.spamDetectionWindow).toBeGreaterThan(0);
+            expect(spamConfig.detectionWindow).toBeGreaterThan(0);
             expect(spamConfig.maxIndividualNotifications).toBeGreaterThan(0);
             expect(spamConfig.lowValueThreshold).toBeGreaterThan(0);
         });
@@ -368,8 +357,8 @@ describe('Spam Detection Service Integration Tests', () => {
             const { config } = require('../../../src/core/config');
             const spamConfig = config.spam;
 
-            expect(spamConfig).toHaveProperty('spamDetectionEnabled');
-            expect(spamConfig).toHaveProperty('spamDetectionWindow');
+            expect(spamConfig).toHaveProperty('enabled');
+            expect(spamConfig).toHaveProperty('detectionWindow');
             expect(spamConfig).toHaveProperty('maxIndividualNotifications');
             expect(spamConfig).toHaveProperty('lowValueThreshold');
         });

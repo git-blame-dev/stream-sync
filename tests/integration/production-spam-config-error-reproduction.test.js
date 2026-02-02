@@ -13,8 +13,8 @@ describe('Production Spam Config Error Reproduction - Modernized', () => {
             it('should FAIL if spam config structure is incomplete', () => {
                 const spamConfig = config.spam;
 
-                expect(spamConfig.spamDetectionEnabled).toBeDefined();
-                expect(spamConfig.spamDetectionWindow).toBeDefined();
+                expect(spamConfig.enabled).toBeDefined();
+                expect(spamConfig.detectionWindow).toBeDefined();
                 expect(spamConfig.maxIndividualNotifications).toBeDefined();
                 expect(spamConfig.lowValueThreshold).toBeDefined();
             });
@@ -27,13 +27,13 @@ describe('Production Spam Config Error Reproduction - Modernized', () => {
                 const { config: freshConfig } = require('../../src/core/config');
 
                 expect(freshConfig.spam).toBeDefined();
-                expect(freshConfig.spam.spamDetectionEnabled).toBeDefined();
+                expect(freshConfig.spam.enabled).toBeDefined();
             });
 
             it('should FAIL if spam config is not immediately accessible', () => {
                 expect(config).toBeDefined();
                 expect(config.spam).toBeDefined();
-                expect(config.spam.spamDetectionEnabled).toBeDefined();
+                expect(config.spam.enabled).toBeDefined();
             });
         });
 
@@ -41,13 +41,13 @@ describe('Production Spam Config Error Reproduction - Modernized', () => {
             it('should FAIL if config structure differs from service expectations', () => {
                 const spamConfig = config.spam;
 
-                expect(spamConfig).toHaveProperty('spamDetectionEnabled');
-                expect(spamConfig).toHaveProperty('spamDetectionWindow');
+                expect(spamConfig).toHaveProperty('enabled');
+                expect(spamConfig).toHaveProperty('detectionWindow');
                 expect(spamConfig).toHaveProperty('maxIndividualNotifications');
                 expect(spamConfig).toHaveProperty('lowValueThreshold');
 
-                expect(typeof spamConfig.spamDetectionEnabled).toBe('boolean');
-                expect(typeof spamConfig.spamDetectionWindow).toBe('number');
+                expect(typeof spamConfig.enabled).toBe('boolean');
+                expect(typeof spamConfig.detectionWindow).toBe('number');
                 expect(typeof spamConfig.maxIndividualNotifications).toBe('number');
                 expect(typeof spamConfig.lowValueThreshold).toBe('number');
             });
@@ -55,7 +55,7 @@ describe('Production Spam Config Error Reproduction - Modernized', () => {
             it('should FAIL if spam config values are invalid for service initialization', () => {
                 const spamConfig = config.spam;
 
-                expect(spamConfig.spamDetectionWindow).toBeGreaterThan(0);
+                expect(spamConfig.detectionWindow).toBeGreaterThan(0);
                 expect(spamConfig.maxIndividualNotifications).toBeGreaterThan(0);
                 expect(spamConfig.lowValueThreshold).toBeGreaterThanOrEqual(0);
             });
@@ -71,11 +71,11 @@ describe('Production Spam Config Error Reproduction - Modernized', () => {
                     if (!spamConfig) {
                         throw new Error('Spam config missing');
                     }
-                    if (typeof spamConfig.spamDetectionEnabled !== 'boolean') {
-                        throw new Error('Invalid spamDetectionEnabled');
+                    if (typeof spamConfig.enabled !== 'boolean') {
+                        throw new Error('Invalid enabled');
                     }
-                    if (typeof spamConfig.spamDetectionWindow !== 'number') {
-                        throw new Error('Invalid spamDetectionWindow');
+                    if (typeof spamConfig.detectionWindow !== 'number') {
+                        throw new Error('Invalid detectionWindow');
                     }
                     if (typeof spamConfig.maxIndividualNotifications !== 'number') {
                         throw new Error('Invalid maxIndividualNotifications');
@@ -89,8 +89,8 @@ describe('Production Spam Config Error Reproduction - Modernized', () => {
             it('should provide config values that enable spam detection', () => {
                 const spamConfig = config.spam;
 
-                expect(typeof spamConfig.spamDetectionEnabled).toBe('boolean');
-                expect(spamConfig.spamDetectionEnabled).toBe(true);
+                expect(typeof spamConfig.enabled).toBe('boolean');
+                expect(spamConfig.enabled).toBe(true);
             });
         });
 
@@ -98,8 +98,8 @@ describe('Production Spam Config Error Reproduction - Modernized', () => {
             it('should provide reasonable production defaults', () => {
                 const spamConfig = config.spam;
 
-                expect(spamConfig.spamDetectionWindow).toBeGreaterThan(0);
-                expect(spamConfig.spamDetectionWindow).toBeLessThan(3600);
+                expect(spamConfig.detectionWindow).toBeGreaterThan(0);
+                expect(spamConfig.detectionWindow).toBeLessThan(3600);
 
                 expect(spamConfig.maxIndividualNotifications).toBeGreaterThan(0);
                 expect(spamConfig.maxIndividualNotifications).toBeLessThan(100);
@@ -112,8 +112,8 @@ describe('Production Spam Config Error Reproduction - Modernized', () => {
                 const firstAccess = config.spam;
                 const secondAccess = config.spam;
 
-                expect(firstAccess.spamDetectionEnabled).toBe(secondAccess.spamDetectionEnabled);
-                expect(firstAccess.spamDetectionWindow).toBe(secondAccess.spamDetectionWindow);
+                expect(firstAccess.enabled).toBe(secondAccess.enabled);
+                expect(firstAccess.detectionWindow).toBe(secondAccess.detectionWindow);
                 expect(firstAccess.maxIndividualNotifications).toBe(secondAccess.maxIndividualNotifications);
                 expect(firstAccess.lowValueThreshold).toBe(secondAccess.lowValueThreshold);
             });

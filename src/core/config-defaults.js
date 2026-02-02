@@ -85,8 +85,16 @@ const DEFAULTS = {
     },
 
     spam: {
+        enabled: true,
+        lowValueThreshold: 10,
         detectionWindow: 5,
-        maxIndividualNotifications: 2
+        maxIndividualNotifications: 2,
+        tiktokEnabled: true,
+        tiktokLowValueThreshold: null,
+        twitchEnabled: true,
+        twitchLowValueThreshold: null,
+        youtubeEnabled: false,
+        youtubeLowValueThreshold: 1.00
     },
 
     displayQueue: {
@@ -197,11 +205,7 @@ const DEFAULTS = {
     gifts: {
         giftVideoSource: 'gift-video',
         giftAudioSource: 'gift-audio',
-        giftScene: 'gift-scene',
-        lowValueThreshold: 10,
-        spamDetectionEnabled: true,
-        spamDetectionWindow: 5,
-        maxIndividualNotifications: 2
+        giftScene: 'gift-scene'
     },
 
     tts: {

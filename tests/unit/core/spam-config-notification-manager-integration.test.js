@@ -193,9 +193,9 @@ describe('Spam Detection Service Integration Tests - Modernized', () => {
     describe('when verifying spam configuration availability', () => {
         it('should have spam configuration accessible from config module', () => {
             expect(config.spam).toBeDefined();
-            expect(config.spam.spamDetectionEnabled).toBeDefined();
+            expect(config.spam.enabled).toBeDefined();
             expect(config.spam.lowValueThreshold).toBeDefined();
-            expect(config.spam.spamDetectionWindow).toBeDefined();
+            expect(config.spam.detectionWindow).toBeDefined();
             expect(config.spam.maxIndividualNotifications).toBeDefined();
         });
     });

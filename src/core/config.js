@@ -201,11 +201,7 @@ function buildGiftConfig(normalized) {
         command: g.command,
         giftVideoSource: g.giftVideoSource,
         giftAudioSource: g.giftAudioSource,
-        scene: g.giftScene,
-        lowValueThreshold: g.lowValueThreshold,
-        spamDetectionEnabled: g.spamDetectionEnabled,
-        spamDetectionWindow: g.spamDetectionWindow,
-        maxIndividualNotifications: g.maxIndividualNotifications
+        scene: g.giftScene
     };
 }
 
@@ -225,12 +221,18 @@ function buildTimingConfig(normalized) {
 }
 
 function buildSpamConfig(normalized) {
-    const g = normalized.gifts;
+    const s = normalized.spam;
     return {
-        lowValueThreshold: g.lowValueThreshold,
-        spamDetectionEnabled: g.spamDetectionEnabled,
-        spamDetectionWindow: g.spamDetectionWindow,
-        maxIndividualNotifications: g.maxIndividualNotifications
+        enabled: s.enabled,
+        lowValueThreshold: s.lowValueThreshold,
+        detectionWindow: s.detectionWindow,
+        maxIndividualNotifications: s.maxIndividualNotifications,
+        tiktokEnabled: s.tiktokEnabled,
+        tiktokLowValueThreshold: s.tiktokLowValueThreshold,
+        twitchEnabled: s.twitchEnabled,
+        twitchLowValueThreshold: s.twitchLowValueThreshold,
+        youtubeEnabled: s.youtubeEnabled,
+        youtubeLowValueThreshold: s.youtubeLowValueThreshold
     };
 }
 

@@ -257,11 +257,7 @@ class ConfigValidator {
             command: ConfigValidator.parseString(raw.command, ''),
             giftVideoSource: ConfigValidator.parseString(raw.giftVideoSource, DEFAULTS.gifts.giftVideoSource),
             giftAudioSource: ConfigValidator.parseString(raw.giftAudioSource, DEFAULTS.gifts.giftAudioSource),
-            giftScene: ConfigValidator.parseString(raw.giftScene, DEFAULTS.gifts.giftScene),
-            lowValueThreshold: ConfigValidator.parseNumber(raw.lowValueThreshold, { defaultValue: DEFAULTS.gifts.lowValueThreshold }),
-            spamDetectionEnabled: ConfigValidator.parseBoolean(raw.spamDetectionEnabled, DEFAULTS.gifts.spamDetectionEnabled),
-            spamDetectionWindow: ConfigValidator.parseNumber(raw.spamDetectionWindow, { defaultValue: DEFAULTS.gifts.spamDetectionWindow }),
-            maxIndividualNotifications: ConfigValidator.parseNumber(raw.maxIndividualNotifications, { defaultValue: DEFAULTS.gifts.maxIndividualNotifications })
+            giftScene: ConfigValidator.parseString(raw.giftScene, DEFAULTS.gifts.giftScene)
         };
     }
 
@@ -301,8 +297,16 @@ class ConfigValidator {
 
     static _normalizeSpamSection(raw) {
         return {
+            enabled: ConfigValidator.parseBoolean(raw.enabled, DEFAULTS.spam.enabled),
+            lowValueThreshold: ConfigValidator.parseNumber(raw.lowValueThreshold, { defaultValue: DEFAULTS.spam.lowValueThreshold }),
             detectionWindow: ConfigValidator.parseNumber(raw.detectionWindow, { defaultValue: DEFAULTS.spam.detectionWindow }),
-            maxIndividualNotifications: ConfigValidator.parseNumber(raw.maxIndividualNotifications, { defaultValue: DEFAULTS.spam.maxIndividualNotifications })
+            maxIndividualNotifications: ConfigValidator.parseNumber(raw.maxIndividualNotifications, { defaultValue: DEFAULTS.spam.maxIndividualNotifications }),
+            tiktokEnabled: ConfigValidator.parseBoolean(raw.tiktokEnabled, DEFAULTS.spam.tiktokEnabled),
+            tiktokLowValueThreshold: ConfigValidator.parseNumber(raw.tiktokLowValueThreshold, { defaultValue: DEFAULTS.spam.tiktokLowValueThreshold }),
+            twitchEnabled: ConfigValidator.parseBoolean(raw.twitchEnabled, DEFAULTS.spam.twitchEnabled),
+            twitchLowValueThreshold: ConfigValidator.parseNumber(raw.twitchLowValueThreshold, { defaultValue: DEFAULTS.spam.twitchLowValueThreshold }),
+            youtubeEnabled: ConfigValidator.parseBoolean(raw.youtubeEnabled, DEFAULTS.spam.youtubeEnabled),
+            youtubeLowValueThreshold: ConfigValidator.parseNumber(raw.youtubeLowValueThreshold, { defaultValue: DEFAULTS.spam.youtubeLowValueThreshold })
         };
     }
 
