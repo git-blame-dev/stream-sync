@@ -215,16 +215,13 @@ class ConfigValidator {
         return {
             glowEnabled: ConfigValidator.parseBoolean(raw.glowEnabled, DEFAULTS.handcam.glowEnabled),
             sourceName: ConfigValidator.parseString(raw.sourceName, DEFAULTS.handcam.sourceName),
-            sceneName: ConfigValidator.parseString(raw.sceneName, DEFAULTS.handcam.sceneName),
             glowFilterName: ConfigValidator.parseString(raw.glowFilterName, DEFAULTS.handcam.glowFilterName),
             maxSize: ConfigValidator.parseNumber(raw.maxSize, { defaultValue: DEFAULTS.handcam.maxSize }),
             rampUpDuration: ConfigValidator.parseNumber(raw.rampUpDuration, { defaultValue: DEFAULTS.handcam.rampUpDuration }),
             holdDuration: ConfigValidator.parseNumber(raw.holdDuration, { defaultValue: DEFAULTS.handcam.holdDuration }),
             rampDownDuration: ConfigValidator.parseNumber(raw.rampDownDuration, { defaultValue: DEFAULTS.handcam.rampDownDuration }),
             totalSteps: ConfigValidator.parseNumber(raw.totalSteps, { defaultValue: DEFAULTS.handcam.totalSteps }),
-            incrementPercent: ConfigValidator.parseNumber(raw.incrementPercent, { defaultValue: DEFAULTS.handcam.incrementPercent }),
-            easingEnabled: ConfigValidator.parseBoolean(raw.easingEnabled, DEFAULTS.handcam.easingEnabled),
-            animationInterval: ConfigValidator.parseNumber(raw.animationInterval, { defaultValue: DEFAULTS.handcam.animationInterval })
+            easingEnabled: ConfigValidator.parseBoolean(raw.easingEnabled, DEFAULTS.handcam.easingEnabled)
         };
     }
 

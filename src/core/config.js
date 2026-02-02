@@ -174,16 +174,13 @@ function buildHandcamConfig(normalized) {
     return {
         enabled: h.glowEnabled,
         sourceName: h.sourceName,
-        sceneName: h.sceneName,
         glowFilterName: h.glowFilterName,
         maxSize: h.maxSize,
         rampUpDuration: h.rampUpDuration,
         holdDuration: h.holdDuration,
         rampDownDuration: h.rampDownDuration,
         totalSteps: h.totalSteps,
-        incrementPercent: h.incrementPercent,
-        easingEnabled: h.easingEnabled,
-        animationInterval: h.animationInterval
+        easingEnabled: h.easingEnabled
     };
 }
 

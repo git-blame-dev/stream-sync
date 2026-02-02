@@ -49,16 +49,13 @@ ${youtubeSection}
 [handcam]
 glowEnabled = true
 sourceName = handcam
-sceneName = handcam scene
 glowFilterName = Glow
 maxSize = 50
 rampUpDuration = 0.5
 holdDuration = 8.0
 rampDownDuration = 0.5
 totalSteps = 30
-incrementPercent = 3.33
 easingEnabled = true
-animationInterval = 16
 
 [cooldowns]
 defaultCooldown = 60
@@ -193,16 +190,13 @@ username =
 [handcam]
 glowEnabled = true
 sourceName = handcam
-sceneName = handcam scene
 glowFilterName = Glow
 maxSize = 50
 rampUpDuration = 0.5
 holdDuration = 8.0
 rampDownDuration = 0.5
 totalSteps = 30
-incrementPercent = 3.33
 easingEnabled = true
-animationInterval = 16
 
 [cooldowns]
 defaultCooldown = 60
@@ -249,16 +243,13 @@ userAgents = agent-one|agent-two
 [handcam]
 glowEnabled = true
 sourceName = handcam
-sceneName = handcam scene
 glowFilterName = Glow
 maxSize = 50
 rampUpDuration = 0.5
 holdDuration = 8.0
 rampDownDuration = 0.5
 totalSteps = 30
-incrementPercent = 3.33
 easingEnabled = true
-animationInterval = 16
 
 [cooldowns]
 defaultCooldown = 60

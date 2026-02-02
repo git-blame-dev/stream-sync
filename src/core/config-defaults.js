@@ -139,16 +139,13 @@ const DEFAULTS = {
     handcam: {
         glowEnabled: false,
         sourceName: 'handcam-source',
-        sceneName: 'handcam-scene',
         glowFilterName: 'Glow',
         maxSize: 50,
         rampUpDuration: 0.5,
         holdDuration: 6.0,
         rampDownDuration: 0.5,
         totalSteps: 30,
-        incrementPercent: 3.33,
-        easingEnabled: true,
-        animationInterval: 16
+        easingEnabled: true
     },
 
     cooldowns: {
