@@ -450,10 +450,18 @@ describe('Config field presence - all normalizers return expected fields', () =>
     });
 
     describe('_normalizeLoggingSection', () => {
-        it('returns empty object (logging handled separately in config.js)', () => {
+        const EXPECTED_FIELDS = [
+            'consoleLevel',
+            'fileLevel',
+            'fileLoggingEnabled'
+        ];
+
+        it('returns all expected fields', () => {
             const result = ConfigValidator._normalizeLoggingSection({});
 
-            expect(result).toEqual({});
+            EXPECTED_FIELDS.forEach(field => {
+                expect(result).toHaveProperty(field);
+            });
         });
     });
 

@@ -10,13 +10,13 @@ describe('Twitch config', () => {
             enabled: true,
             username: 'streamer',
             channel: 'streamer',
-            eventsub_enabled: 'false',
+            eventsubEnabled: 'false',
             dataLoggingEnabled: 'true'
         };
 
         const normalized = normalizeTwitchPlatformConfig(rawConfig);
 
-        expect(normalized.eventsub_enabled).toBe(false);
+        expect(normalized.eventsubEnabled).toBe(false);
         expect(normalized.dataLoggingEnabled).toBe(true);
         expect(normalized.dataLoggingPath).toBe('./logs');
     });

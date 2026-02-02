@@ -13,7 +13,7 @@ const TWITCH_CONFIG_VALIDATION_RULES = {
         clientId: { type: 'string', message: 'Client ID is required for Twitch authentication' }
     },
     optional: {
-        eventsub_enabled: { type: 'boolean', default: true, message: 'EventSub configuration' },
+        eventsubEnabled: { type: 'boolean', default: true, message: 'EventSub configuration' },
         dataLoggingEnabled: { type: 'boolean', default: false, message: 'Data logging configuration' }
     }
 };
@@ -25,7 +25,7 @@ function normalizeTwitchPlatformConfig(rawConfig = {}) {
         channel: rawConfig.channel,
         clientId: rawConfig.clientId,
         tokenStorePath: rawConfig.tokenStorePath,
-        eventsub_enabled: ConfigValidator.parseBoolean(rawConfig.eventsub_enabled, DEFAULTS.twitch.eventsubEnabled),
+        eventsubEnabled: ConfigValidator.parseBoolean(rawConfig.eventsubEnabled, DEFAULTS.twitch.eventsubEnabled),
         dataLoggingEnabled: ConfigValidator.parseBoolean(rawConfig.dataLoggingEnabled, DEFAULTS.twitch.dataLoggingEnabled),
         dataLoggingPath: DEFAULTS.LOG_DIRECTORY,
         viewerCountEnabled: ConfigValidator.parseBoolean(rawConfig.viewerCountEnabled),

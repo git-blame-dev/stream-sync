@@ -5,16 +5,13 @@ function normalizeHandcamConfig(input = {}) {
     return {
         enabled: ConfigValidator.parseBoolean(input.enabled, DEFAULTS.handcam.glowEnabled),
         sourceName: ConfigValidator.parseString(input.sourceName, DEFAULTS.handcam.sourceName),
-        sceneName: ConfigValidator.parseString(input.sceneName, DEFAULTS.handcam.sceneName),
         glowFilterName: ConfigValidator.parseString(input.glowFilterName, DEFAULTS.handcam.glowFilterName),
         maxSize: ConfigValidator.parseNumber(input.maxSize, { defaultValue: DEFAULTS.handcam.maxSize, min: 0 }),
         rampUpDuration: ConfigValidator.parseNumber(input.rampUpDuration, { defaultValue: DEFAULTS.handcam.rampUpDuration, min: 0 }),
         holdDuration: ConfigValidator.parseNumber(input.holdDuration, { defaultValue: DEFAULTS.handcam.holdDuration, min: 0 }),
         rampDownDuration: ConfigValidator.parseNumber(input.rampDownDuration, { defaultValue: DEFAULTS.handcam.rampDownDuration, min: 0 }),
         totalSteps: ConfigValidator.parseNumber(input.totalSteps, { defaultValue: DEFAULTS.handcam.totalSteps, min: 1 }),
-        incrementPercent: ConfigValidator.parseNumber(input.incrementPercent, { defaultValue: DEFAULTS.handcam.incrementPercent, min: 0 }),
-        easingEnabled: ConfigValidator.parseBoolean(input.easingEnabled, DEFAULTS.handcam.easingEnabled),
-        animationInterval: ConfigValidator.parseNumber(input.animationInterval, { defaultValue: DEFAULTS.handcam.animationInterval, min: 1 })
+        easingEnabled: ConfigValidator.parseBoolean(input.easingEnabled, DEFAULTS.handcam.easingEnabled)
     };
 }
 

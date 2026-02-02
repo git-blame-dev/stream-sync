@@ -23,7 +23,7 @@ const baseConfig = {
     enabled: true,
     username: 'tester',
     channel: 'tester',
-    eventsub_enabled: false,
+    eventsubEnabled: false,
     dataLoggingEnabled: false
 };
 
@@ -40,7 +40,7 @@ describe('TwitchPlatform event behaviors', () => {
         secrets.twitch.accessToken = 'centralized-token';
         const MockWebSocket = class { constructor() {} };
         const eventSub = new TwitchEventSub(
-            { enabled: true, eventsub_enabled: true, broadcasterId: TEST_USER_ID, clientId: 'test-client-id' },
+            { enabled: true, eventsubEnabled: true, broadcasterId: TEST_USER_ID, clientId: 'test-client-id' },
             {
                 twitchAuth: createTwitchAuth({ userId: TEST_USER_ID }),
                 logger: noOpLogger,

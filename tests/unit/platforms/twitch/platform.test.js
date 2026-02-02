@@ -70,7 +70,7 @@ describe('Twitch Platform', () => {
             username: 'testuser',
             channel: 'testchannel',
             clientId: 'test-client-id',
-            eventsub_enabled: true,
+            eventsubEnabled: true,
             dataLoggingEnabled: false,
             viewerCountEnabled: true
         };
@@ -141,7 +141,7 @@ describe('Twitch Platform', () => {
                 username: 'testuser',
                 channel: 'testchannel',
                 clientId: 'test-client-id',
-                eventsub_enabled: true
+                eventsubEnabled: true
             };
 
             const testPlatform = new TwitchPlatform(validConfig, { twitchAuth: mockTwitchAuth });
@@ -171,17 +171,17 @@ describe('Twitch Platform', () => {
 
     describe('when initializing EventSub for real-time events', () => {
         it('should enable real-time event notifications when user has EventSub configured', async () => {
-            platform.config.eventsub_enabled = true;
+            platform.config.eventsubEnabled = true;
             mockTwitchAuth.isReady.mockReturnValue(true);
 
             await platform.initializeEventSub();
 
-            expect(platform.config.eventsub_enabled).toBe(true);
+            expect(platform.config.eventsubEnabled).toBe(true);
             expect(mockTwitchAuth.isReady.mock.calls.length).toBeGreaterThan(0);
         });
 
         it('should operate without real-time events when user disables EventSub', async () => {
-            platform.config.eventsub_enabled = false;
+            platform.config.eventsubEnabled = false;
 
             await platform.initializeEventSub();
 

@@ -275,7 +275,8 @@ function buildConfig(normalized) {
         shares: { command: normalized.shares.command },
         farewell: { ...normalized.farewell },
         streamelements: buildStreamElementsConfig(normalized),
-        commands: { ...normalized.commands }
+        commands: { ...normalized.commands },
+        logging: { ...normalized.logging }
     };
 }
 
@@ -346,7 +347,7 @@ function validateLoggingConfig(userConfig = {}) {
         if (userConfig.logging.fileLevel && validLevels.includes(userConfig.logging.fileLevel)) {
             config.file.level = userConfig.logging.fileLevel;
         }
-        if (userConfig.logging.fileLoggingEnabled !== undefined) {
+        if (userConfig.logging.fileLoggingEnabled !== undefined && userConfig.logging.fileLoggingEnabled !== null) {
             config.file.enabled = userConfig.logging.fileLoggingEnabled;
         }
     }
