@@ -340,32 +340,23 @@ describe('ConfigValidator simple command sections', () => {
     });
 
     it('normalizes farewell section', () => {
-        const result = ConfigValidator._normalizeFarewellSection({ enabled: 'true', command: 'bye-cmd' });
-        expect(result.enabled).toBe(true);
+        const result = ConfigValidator._normalizeFarewellSection({ command: 'bye-cmd' });
         expect(result.command).toBe('bye-cmd');
-    });
-
-    it('normalizes commands section enabled flag', () => {
-        const result = ConfigValidator._normalizeCommandsSection({ enabled: 'true' });
-        expect(result.enabled).toBe(true);
     });
 
     it('normalizes commands section preserves command definitions', () => {
         const raw = {
-            enabled: 'true',
             'test-single': '!testsingle, vfx bottom green',
             'test-multi': '!testalpha|!testbravo, vfx center green, alpha|bravo'
         };
         const result = ConfigValidator._normalizeCommandsSection(raw);
 
-        expect(result.enabled).toBe(true);
         expect(result['test-single']).toBe('!testsingle, vfx bottom green');
         expect(result['test-multi']).toBe('!testalpha|!testbravo, vfx center green, alpha|bravo');
     });
 
-    it('normalizes commands section ignores non-string values except enabled', () => {
+    it('normalizes commands section ignores non-string values', () => {
         const raw = {
-            enabled: 'false',
             'valid-command': '!cmd, vfx top',
             'invalid-number': 123,
             'invalid-object': { foo: 'bar' },
@@ -373,18 +364,16 @@ describe('ConfigValidator simple command sections', () => {
         };
         const result = ConfigValidator._normalizeCommandsSection(raw);
 
-        expect(result.enabled).toBe(false);
         expect(result['valid-command']).toBe('!cmd, vfx top');
         expect(result['invalid-number']).toBeUndefined();
         expect(result['invalid-object']).toBeUndefined();
         expect(result['invalid-null']).toBeUndefined();
     });
 
-    it('normalizes commands section with empty input returns only enabled', () => {
+    it('normalizes commands section with empty input returns empty object', () => {
         const result = ConfigValidator._normalizeCommandsSection({});
 
-        expect(result.enabled).toBe(false);
-        expect(Object.keys(result)).toEqual(['enabled']);
+        expect(Object.keys(result)).toEqual([]);
     });
 });
 
@@ -392,7 +381,7 @@ describe('ConfigValidator.validate()', () => {
     const createMinimalValidConfig = () => ({
         general: { debugEnabled: false },
         obs: { enabled: false },
-        commands: { enabled: false },
+        commands: {},
         tiktok: { enabled: false },
         twitch: { enabled: false },
         youtube: { enabled: false },
@@ -521,7 +510,7 @@ describe('ConfigValidator.validate() warnings', () => {
     const createMinimalValidConfig = () => ({
         general: { debugEnabled: false },
         obs: { enabled: false },
-        commands: { enabled: false },
+        commands: {},
         cooldowns: { defaultCooldown: 60, heavyCommandCooldown: 120, heavyCommandThreshold: 5 },
         handcam: { maxSize: 50, rampUpDuration: 0.5, holdDuration: 6.0, rampDownDuration: 0.5 },
         retry: { baseDelay: 1000, maxDelay: 30000, maxRetries: 3 }

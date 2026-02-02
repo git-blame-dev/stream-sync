@@ -11,20 +11,16 @@ describe('VFX gift resolution smoke E2E', () => {
         },
         obs: { enabled: 'false' },
         commands: {
-            enabled: 'true',
             'test-single': '!testsingle, vfx top',
             'test-keyword': '!testkeyword, vfx top, test phrase',
             'test-multi': '!testalpha|!testbravo, vfx center green, alpha|bravo|charlie',
             'test-triple': '!testone|!testtwo|!testthree, vfx bottom green, one|two'
         },
-        gifts: {
-            command: '!testsingle|!testkeyword|!testalpha|!testone'
-        },
+        gifts: {},
         vfx: {
             vfxFilePath: '/test/vfx/path'
         },
         farewell: {
-            enabled: 'false',
             command: ''
         }
     });
@@ -34,7 +30,6 @@ describe('VFX gift resolution smoke E2E', () => {
 
         const normalized = ConfigValidator.normalize(rawConfig);
 
-        expect(normalized.commands.enabled).toBe(true);
         expect(normalized.commands['test-single']).toBe('!testsingle, vfx top');
         expect(normalized.commands['test-keyword']).toBe('!testkeyword, vfx top, test phrase');
         expect(normalized.commands['test-multi']).toBe('!testalpha|!testbravo, vfx center green, alpha|bravo|charlie');
@@ -138,49 +133,5 @@ describe('VFX gift resolution smoke E2E', () => {
         expect(vfxConfig.filename).toBe('test-keyword');
         expect(vfxConfig.keyword).toBe('test phrase');
         expect(vfxConfig.matchType).toBe('keyword');
-    });
-
-    it('gift command selection resolves to valid VFX config', () => {
-        const rawConfig = createRawConfig();
-        const normalized = ConfigValidator.normalize(rawConfig);
-
-        const commandParser = new CommandParser({
-            commands: normalized.commands,
-            vfx: { filePath: normalized.vfx.vfxFilePath },
-            general: normalized.general
-        });
-
-        const giftCommands = normalized.gifts.command.split('|').map(c => c.trim());
-        
-        giftCommands.forEach(giftCommand => {
-            const vfxConfig = commandParser.getVFXConfig(giftCommand, giftCommand);
-            expect(vfxConfig).not.toBeNull();
-            expect(vfxConfig.filename).toBeDefined();
-            expect(vfxConfig.mediaSource).toBeDefined();
-        });
-    });
-
-    it('full path: raw config → normalize → CommandParser → VFX config for gift', () => {
-        const rawConfig = createRawConfig();
-
-        const normalized = ConfigValidator.normalize(rawConfig);
-
-        const commandParser = new CommandParser({
-            commands: normalized.commands,
-            vfx: { filePath: normalized.vfx.vfxFilePath },
-            general: normalized.general
-        });
-
-        const giftCommands = normalized.gifts.command.split('|');
-        const selectedCommand = giftCommands[0];
-
-        const vfxConfig = commandParser.getVFXConfig(selectedCommand, selectedCommand);
-
-        expect(vfxConfig).not.toBeNull();
-        expect(vfxConfig.filename).toBe('test-single');
-        expect(vfxConfig.mediaSource).toBe('vfx top');
-        expect(vfxConfig.vfxFilePath).toBe('/test/vfx/path');
-        expect(vfxConfig.commandKey).toBe('test-single');
-        expect(vfxConfig.command).toBe('!testsingle');
     });
 });

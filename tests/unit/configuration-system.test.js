@@ -285,7 +285,6 @@ enabled = 1
             expect(currentConfig.general.ttsEnabled).toBe(true);
             expect(currentConfig.general.greetingsEnabled).toBe(false);
             expect(currentConfig.obs.enabled).toBe(false);
-            expect(currentConfig.commands.enabled).toBe(false);
         });
     });
 
@@ -509,7 +508,6 @@ enabled = notabool
             expect(currentConfig.general.messagesEnabled).toBe(true);
             expect(currentConfig.general.ttsEnabled).toBe(false);
             expect(currentConfig.obs.enabled).toBe(false);
-            expect(currentConfig.commands.enabled).toBe(false);
         });
     });
 

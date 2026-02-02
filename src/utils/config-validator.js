@@ -94,7 +94,6 @@ class ConfigValidator {
             streamMaxRetries: ConfigValidator.parseNumber(raw.streamMaxRetries, { defaultValue: DEFAULTS.general.streamMaxRetries }),
             continuousMonitoringInterval: ConfigValidator.parseNumber(raw.continuousMonitoringInterval, { defaultValue: DEFAULTS.general.continuousMonitoringInterval }),
             maxMessageLength: ConfigValidator.parseNumber(raw.maxMessageLength, { defaultValue: DEFAULTS.general.maxMessageLength }),
-            viewerCountScene: ConfigValidator.parseString(raw.viewerCountScene, DEFAULTS.general.viewerCountScene),
             chatMsgTxt: ConfigValidator.parseString(raw.chatMsgTxt, DEFAULTS.general.chatMsgTxt),
             chatMsgScene: ConfigValidator.parseString(raw.chatMsgScene, DEFAULTS.general.chatMsgScene),
             chatMsgGroup: ConfigValidator.parseString(raw.chatMsgGroup, DEFAULTS.general.chatMsgGroup),
@@ -228,7 +227,6 @@ class ConfigValidator {
     static _normalizeGoalsSection(raw) {
         return {
             enabled: ConfigValidator.parseBoolean(raw.enabled, DEFAULTS.goals.enabled),
-            goalScene: ConfigValidator.parseString(raw.goalScene, DEFAULTS.goals.goalScene),
             tiktokGoalEnabled: ConfigValidator.parseBoolean(raw.tiktokGoalEnabled, DEFAULTS.goals.tiktokGoalEnabled),
             tiktokGoalSource: ConfigValidator.parseString(raw.tiktokGoalSource, ''),
             tiktokGoalTarget: ConfigValidator.parseNumber(raw.tiktokGoalTarget, { defaultValue: DEFAULTS.goals.tiktokGoalTarget }),
@@ -249,7 +247,6 @@ class ConfigValidator {
 
     static _normalizeGiftsSection(raw) {
         return {
-            command: ConfigValidator.parseString(raw.command, ''),
             giftVideoSource: ConfigValidator.parseString(raw.giftVideoSource, DEFAULTS.gifts.giftVideoSource),
             giftAudioSource: ConfigValidator.parseString(raw.giftAudioSource, DEFAULTS.gifts.giftAudioSource),
             giftScene: ConfigValidator.parseString(raw.giftScene, DEFAULTS.gifts.giftScene)
@@ -345,15 +342,12 @@ class ConfigValidator {
 
     static _normalizeFarewellSection(raw) {
         return {
-            enabled: ConfigValidator.parseBoolean(raw.enabled, DEFAULTS.farewell.enabled),
             command: ConfigValidator.parseString(raw.command, '')
         };
     }
 
     static _normalizeCommandsSection(raw) {
-        const normalized = {
-            enabled: ConfigValidator.parseBoolean(raw.enabled, DEFAULTS.commands.enabled)
-        };
+        const normalized = {};
 
         for (const [key, value] of Object.entries(raw)) {
             if (key === 'enabled') continue;

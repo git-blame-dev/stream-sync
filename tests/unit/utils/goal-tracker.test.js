@@ -17,7 +17,6 @@ describe('Goal Tracker - Core Functionality', () => {
         mockFileSystem = createMockFileSystem();
         configFixture = {
             enabled: true,
-            goalScene: 'v efx goals',
             tiktokGoalEnabled: true,
             tiktokGoalSource: 'tiktok goal txt',
             tiktokGoalTarget: 1000,

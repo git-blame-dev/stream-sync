@@ -6,7 +6,7 @@ describe('ConfigValidator normalize + validate integration', () => {
         const rawConfig = {
             general: { debugEnabled: 'true', cmdCoolDown: '60' },
             obs: { enabled: 'false', address: 'ws://localhost:4455' },
-            commands: { enabled: 'false' },
+            commands: {},
             tiktok: { enabled: 'false' },
             twitch: { enabled: 'false' },
             youtube: { enabled: 'false' }
@@ -249,7 +249,7 @@ describe('ConfigValidator normalize + validate integration', () => {
                 address: 'ws://192.168.1.100:4455',
                 connectionTimeoutMs: '8000'
             },
-            commands: { enabled: 'true' },
+            commands: {},
             tiktok: { enabled: 'true', username: 'test-tiktok' },
             twitch: { enabled: 'false' },
             youtube: { enabled: 'false' },
@@ -294,11 +294,10 @@ describe('ConfigValidator normalize + validate integration', () => {
 
         const normalized = ConfigValidator.normalize(rawConfig);
 
-        expect(normalized.commands.enabled).toBe(true);
         expect(normalized.commands['test-single']).toBe('!testsingle, vfx bottom green');
         expect(normalized.commands['test-multi']).toBe('!testalpha|!testbravo, vfx top, alpha|bravo');
         expect(normalized.commands['test-keywords']).toBe('!testcmd|!testalt, vfx center green, keyword1|keyword2|keyword3');
-        expect(Object.keys(normalized.commands).length).toBe(4);
+        expect(Object.keys(normalized.commands).length).toBe(3);
     });
 
     it('sharesEnabled is preserved through normalization with correct default', () => {

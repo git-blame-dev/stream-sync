@@ -61,7 +61,6 @@ describe('Spam Configuration Integration', () => {
         it('should expose the canonical gift configuration properties', () => {
             const giftConfig = config.gifts;
 
-            expect(giftConfig.command).toBeDefined();
             expect(giftConfig.giftVideoSource).toBeDefined();
             expect(giftConfig.giftAudioSource).toBeDefined();
             expect(giftConfig.scene).toBeDefined();

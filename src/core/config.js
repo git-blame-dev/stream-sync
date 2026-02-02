@@ -195,7 +195,6 @@ function buildVfxConfig(normalized) {
 function buildGiftConfig(normalized) {
     const g = normalized.gifts;
     return {
-        command: g.command,
         giftVideoSource: g.giftVideoSource,
         giftAudioSource: g.giftAudioSource,
         scene: g.giftScene
