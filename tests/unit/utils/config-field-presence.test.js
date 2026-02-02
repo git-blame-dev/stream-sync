@@ -284,6 +284,7 @@ describe('Config field presence - all normalizers return expected fields', () =>
 
     describe('_normalizeGiftsSection', () => {
         const EXPECTED_FIELDS = [
+            'command',
             'giftVideoSource',
             'giftAudioSource',
             'giftScene'

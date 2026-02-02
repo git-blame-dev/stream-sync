@@ -233,8 +233,15 @@ describe('ConfigValidator._normalizeGiftsSection()', () => {
     it('applies gifts defaults', () => {
         const result = ConfigValidator._normalizeGiftsSection({});
 
+        expect(result.command).toBe('');
         expect(result.giftVideoSource).toBe('gift-video');
         expect(result.giftAudioSource).toBe('gift-audio');
+    });
+
+    it('preserves command value from raw config', () => {
+        const result = ConfigValidator._normalizeGiftsSection({ command: '!gift|!donate' });
+
+        expect(result.command).toBe('!gift|!donate');
     });
 });
 

@@ -252,6 +252,7 @@ class ConfigValidator {
 
     static _normalizeGiftsSection(raw) {
         return {
+            command: ConfigValidator.parseString(raw.command, ''),
             giftVideoSource: ConfigValidator.parseString(raw.giftVideoSource, DEFAULTS.gifts.giftVideoSource),
             giftAudioSource: ConfigValidator.parseString(raw.giftAudioSource, DEFAULTS.gifts.giftAudioSource),
             giftScene: ConfigValidator.parseString(raw.giftScene, DEFAULTS.gifts.giftScene)
