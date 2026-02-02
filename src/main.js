@@ -1032,7 +1032,7 @@ class AppRuntime {
         if (!options.rewardTitle || options.rewardCost === undefined) {
             throw new Error('handleRedemptionNotification requires rewardTitle and rewardCost');
         }
-        return this.handleUnifiedNotification('platform:redemption', platform, username, {
+        return this.handleUnifiedNotification('redemption', platform, username, {
             rewardTitle: options.rewardTitle,
             rewardCost: options.rewardCost,
             ...options
@@ -1151,7 +1151,7 @@ class AppRuntime {
         if (!options.command) {
             throw new Error('handleFarewellNotification requires command');
         }
-        return this.handleUnifiedNotification('platform:farewell', platform, username, {
+        return this.handleUnifiedNotification('farewell', platform, username, {
             command: options.command,
             ...options
         });

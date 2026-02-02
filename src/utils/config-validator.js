@@ -74,6 +74,7 @@ class ConfigValidator {
             raidsEnabled: ConfigValidator.parseBoolean(raw.raidsEnabled, DEFAULTS.general.raidsEnabled),
             sharesEnabled: ConfigValidator.parseBoolean(raw.sharesEnabled, DEFAULTS.general.sharesEnabled),
             paypiggiesEnabled: ConfigValidator.parseBoolean(raw.paypiggiesEnabled, DEFAULTS.general.paypiggiesEnabled),
+            redemptionsEnabled: ConfigValidator.parseBoolean(raw.redemptionsEnabled, DEFAULTS.general.redemptionsEnabled),
             greetNewCommentors: ConfigValidator.parseBoolean(raw.greetNewCommentors, DEFAULTS.general.greetNewCommentors),
             filterOldMessages: ConfigValidator.parseBoolean(raw.filterOldMessages, DEFAULTS.general.filterOldMessages),
             logChatMessages: ConfigValidator.parseBoolean(raw.logChatMessages, DEFAULTS.general.logChatMessages),
@@ -152,6 +153,7 @@ class ConfigValidator {
             giftsEnabled: ConfigValidator.parseBoolean(raw.giftsEnabled, null),
             raidsEnabled: ConfigValidator.parseBoolean(raw.raidsEnabled, null),
             paypiggiesEnabled: ConfigValidator.parseBoolean(raw.paypiggiesEnabled, null),
+            redemptionsEnabled: ConfigValidator.parseBoolean(raw.redemptionsEnabled, null),
             ignoreSelfMessages: ConfigValidator.parseBoolean(raw.ignoreSelfMessages, null),
             pollInterval: ConfigValidator.parseNumber(raw.pollInterval, { defaultValue: null })
         };
@@ -176,6 +178,7 @@ class ConfigValidator {
             giftsEnabled: ConfigValidator.parseBoolean(raw.giftsEnabled, null),
             raidsEnabled: ConfigValidator.parseBoolean(raw.raidsEnabled, null),
             paypiggiesEnabled: ConfigValidator.parseBoolean(raw.paypiggiesEnabled, null),
+            redemptionsEnabled: ConfigValidator.parseBoolean(raw.redemptionsEnabled, null),
             ignoreSelfMessages: ConfigValidator.parseBoolean(raw.ignoreSelfMessages, null),
             pollInterval: ConfigValidator.parseNumber(raw.pollInterval, { defaultValue: null })
         };
@@ -206,6 +209,7 @@ class ConfigValidator {
             giftsEnabled: ConfigValidator.parseBoolean(raw.giftsEnabled, null),
             raidsEnabled: ConfigValidator.parseBoolean(raw.raidsEnabled, null),
             paypiggiesEnabled: ConfigValidator.parseBoolean(raw.paypiggiesEnabled, null),
+            redemptionsEnabled: ConfigValidator.parseBoolean(raw.redemptionsEnabled, null),
             ignoreSelfMessages: ConfigValidator.parseBoolean(raw.ignoreSelfMessages, null),
             pollInterval: ConfigValidator.parseNumber(raw.pollInterval, { defaultValue: null })
         };

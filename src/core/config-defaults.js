@@ -15,6 +15,7 @@ const DEFAULTS = {
         raidsEnabled: true,
         sharesEnabled: true,
         paypiggiesEnabled: true,
+        redemptionsEnabled: true,
         greetNewCommentors: false,
         filterOldMessages: true,
         logChatMessages: true,

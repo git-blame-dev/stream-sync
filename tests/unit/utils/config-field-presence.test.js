@@ -14,6 +14,7 @@ describe('Config field presence - all normalizers return expected fields', () =>
             'raidsEnabled',
             'sharesEnabled',
             'paypiggiesEnabled',
+            'redemptionsEnabled',
             'greetNewCommentors',
             'filterOldMessages',
             'logChatMessages',
@@ -126,6 +127,7 @@ describe('Config field presence - all normalizers return expected fields', () =>
             'giftsEnabled',
             'raidsEnabled',
             'paypiggiesEnabled',
+            'redemptionsEnabled',
             'ignoreSelfMessages',
             'pollInterval'
         ];
@@ -165,6 +167,7 @@ describe('Config field presence - all normalizers return expected fields', () =>
             'giftsEnabled',
             'raidsEnabled',
             'paypiggiesEnabled',
+            'redemptionsEnabled',
             'ignoreSelfMessages',
             'pollInterval'
         ];
@@ -207,6 +210,7 @@ describe('Config field presence - all normalizers return expected fields', () =>
             'giftsEnabled',
             'raidsEnabled',
             'paypiggiesEnabled',
+            'redemptionsEnabled',
             'ignoreSelfMessages',
             'pollInterval'
         ];
