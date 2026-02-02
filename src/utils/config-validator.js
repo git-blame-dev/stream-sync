@@ -57,7 +57,8 @@ class ConfigValidator {
             follows: ConfigValidator._normalizeFollowsSection(rawConfig.follows || {}),
             raids: ConfigValidator._normalizeRaidsSection(rawConfig.raids || {}),
             paypiggies: ConfigValidator._normalizePaypiggiesSection(rawConfig.paypiggies || {}),
-            greetings: ConfigValidator._normalizeGreetingsSection(rawConfig.greetings || {})
+            greetings: ConfigValidator._normalizeGreetingsSection(rawConfig.greetings || {}),
+            shares: ConfigValidator._normalizeSharesSection(rawConfig.shares || {})
         };
     }
 
@@ -393,6 +394,12 @@ class ConfigValidator {
     }
 
     static _normalizeGreetingsSection(raw) {
+        return {
+            command: ConfigValidator.parseString(raw.command, '')
+        };
+    }
+
+    static _normalizeSharesSection(raw) {
         return {
             command: ConfigValidator.parseString(raw.command, '')
         };
