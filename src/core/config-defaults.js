@@ -164,11 +164,9 @@ const DEFAULTS = {
         connectionTimeoutMs: 10000,
         address: 'ws://localhost:4455',
         notificationTxt: 'notification-text',
-        chatMsgTxt: 'chat-message-text',
         notificationScene: 'notification-scene',
         notificationMsgGroup: 'notification-group',
-        ttsTxt: 'tts-text',
-        ttsScene: 'tts-scene'
+        ttsTxt: 'tts-text'
     },
 
     goals: {

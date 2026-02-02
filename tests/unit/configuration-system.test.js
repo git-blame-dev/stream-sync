@@ -573,7 +573,6 @@ ${testConfigContent}
 enabled = true
 address = ws://localhost:4455
 notificationTxt = Live Notifications
-chatMsgTxt = Live Chat Display
 connectionTimeoutMs = 10000
 notificationMsgGroup = statusbar notification grp
 chatPlatformLogoTwitch = twitch-img
@@ -590,10 +589,8 @@ notificationPlatformLogoTikTok = tiktok-img
             expect(obsSettings.enabled).toBe(true);
             expect(obsSettings.address).toBe('ws://localhost:4455');
             expect(obsSettings.notificationTxt).toBe('Live Notifications');
-            expect(obsSettings.chatMsgTxt).toBe('Live Chat Display');
 
             expectNoTechnicalArtifacts(obsSettings.notificationTxt);
-            expectNoTechnicalArtifacts(obsSettings.chatMsgTxt);
         });
 
         it('should handle platform username configuration for user identification', () => {
