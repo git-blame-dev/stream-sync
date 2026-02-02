@@ -318,4 +318,20 @@ describe('ConfigValidator normalize + validate integration', () => {
         expect(normalizedExplicit.general.sharesEnabled).toBe(true);
         expect(normalizedDefault.general.sharesEnabled).toBe(true);
     });
+
+    it('shares section is normalized with command field', () => {
+        const rawConfigWithCommand = {
+            general: {},
+            shares: { command: '!share' }
+        };
+        const rawConfigEmpty = {
+            general: {}
+        };
+
+        const normalizedWithCommand = ConfigValidator.normalize(rawConfigWithCommand);
+        const normalizedEmpty = ConfigValidator.normalize(rawConfigEmpty);
+
+        expect(normalizedWithCommand.shares.command).toBe('!share');
+        expect(normalizedEmpty.shares.command).toBe('');
+    });
 });

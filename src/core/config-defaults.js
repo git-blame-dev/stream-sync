@@ -196,7 +196,11 @@ const DEFAULTS = {
 
     farewell: {},
 
-    commands: {}
+    commands: {},
+
+    shares: {
+        command: ''
+    }
 };
 
 module.exports = { DEFAULTS };

@@ -23,7 +23,7 @@ describe('ConfigValidator.normalize()', () => {
         'handcam', 'goals', 'gifts', 'timing', 'cooldowns', 'tts',
         'spam', 'displayQueue', 'retry', 'intervals', 'connectionLimits',
         'api', 'logging', 'farewell', 'commands', 'vfx', 'streamelements',
-        'follows', 'raids', 'paypiggies', 'greetings'
+        'follows', 'raids', 'paypiggies', 'greetings', 'shares'
     ];
 
     it('returns object with all config sections', () => {
@@ -331,6 +331,16 @@ describe('ConfigValidator simple command sections', () => {
 
     it('normalizes greetings section', () => {
         const result = ConfigValidator._normalizeGreetingsSection({});
+        expect(result.command).toBe('');
+    });
+
+    it('normalizes shares section', () => {
+        const result = ConfigValidator._normalizeSharesSection({ command: 'share-cmd' });
+        expect(result.command).toBe('share-cmd');
+    });
+
+    it('normalizes shares section with default', () => {
+        const result = ConfigValidator._normalizeSharesSection({});
         expect(result.command).toBe('');
     });
 

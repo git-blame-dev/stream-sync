@@ -272,6 +272,7 @@ function buildConfig(normalized) {
         raids: { command: normalized.raids.command },
         paypiggies: { command: normalized.paypiggies.command },
         greetings: { command: normalized.greetings.command },
+        shares: { command: normalized.shares.command },
         farewell: { ...normalized.farewell },
         streamelements: buildStreamElementsConfig(normalized),
         commands: { ...normalized.commands }

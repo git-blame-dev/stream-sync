@@ -550,6 +550,18 @@ describe('Config field presence - all normalizers return expected fields', () =>
         });
     });
 
+    describe('_normalizeSharesSection', () => {
+        const EXPECTED_FIELDS = ['command'];
+
+        it('returns all expected fields', () => {
+            const result = ConfigValidator._normalizeSharesSection({});
+
+            EXPECTED_FIELDS.forEach(field => {
+                expect(result).toHaveProperty(field);
+            });
+        });
+    });
+
     describe('_normalizeCommandsSection', () => {
         it('returns empty object for empty input', () => {
             const result = ConfigValidator._normalizeCommandsSection({});
