@@ -28,6 +28,7 @@ describe('ChatNotificationRouter', () => {
                 general: {
                     messagesEnabled: true,
                     greetingsEnabled: true,
+                    greetNewCommentors: true,
                     cmdCoolDownMs: 60000,
                     heavyCommandCooldownMs: 300000,
                     globalCmdCooldownMs: 45000
@@ -111,6 +112,48 @@ describe('ChatNotificationRouter', () => {
 
         expect(greetingItem).toBeDefined();
         expect(greetingItem?.data?.userId).toBe(baseMessage.userId);
+    });
+
+    it('does not queue greeting when greetNewCommentors is false', async () => {
+        const { router, runtime } = createRouter({
+            runtime: {
+                config: {
+                    general: { greetingsEnabled: true, greetNewCommentors: false, messagesEnabled: true },
+                    twitch: {}
+                },
+                isFirstMessage: createMockFn().mockReturnValue(true)
+            }
+        });
+
+        await router.handleChatMessage('twitch', { ...baseMessage });
+
+        const queuedItems = runtime.displayQueue.addItem.mock.calls.map(c => c[0]);
+        const greetingItem = queuedItems.find((item) => item.type === 'greeting');
+        const chatItem = queuedItems.find((item) => item.type === 'chat');
+
+        expect(chatItem).toBeDefined();
+        expect(greetingItem).toBeUndefined();
+    });
+
+    it('respects platform-level greetNewCommentors override', async () => {
+        const { router, runtime } = createRouter({
+            runtime: {
+                config: {
+                    general: { greetingsEnabled: true, greetNewCommentors: true, messagesEnabled: true },
+                    twitch: { greetNewCommentors: false }
+                },
+                isFirstMessage: createMockFn().mockReturnValue(true)
+            }
+        });
+
+        await router.handleChatMessage('twitch', { ...baseMessage });
+
+        const queuedItems = runtime.displayQueue.addItem.mock.calls.map(c => c[0]);
+        const greetingItem = queuedItems.find((item) => item.type === 'greeting');
+        const chatItem = queuedItems.find((item) => item.type === 'chat');
+
+        expect(chatItem).toBeDefined();
+        expect(greetingItem).toBeUndefined();
     });
 
     it('queues command when cooldowns pass', async () => {
