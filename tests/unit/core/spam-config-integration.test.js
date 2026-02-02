@@ -11,32 +11,22 @@ describe('Spam Configuration Integration', () => {
         it('should have all required spam detection properties', () => {
             const spamConfig = config.spam;
 
+            expect(spamConfig.enabled).toBeDefined();
             expect(spamConfig.lowValueThreshold).toBeDefined();
-            expect(spamConfig.spamDetectionEnabled).toBeDefined();
-            expect(spamConfig.spamDetectionWindow).toBeDefined();
+            expect(spamConfig.detectionWindow).toBeDefined();
             expect(spamConfig.maxIndividualNotifications).toBeDefined();
-        });
-
-        it('should map to existing gift configuration values', () => {
-            const spamConfig = config.spam;
-            const giftConfig = config.gifts;
-
-            expect(spamConfig.lowValueThreshold).toBe(giftConfig.lowValueThreshold);
-            expect(spamConfig.spamDetectionEnabled).toBe(giftConfig.spamDetectionEnabled);
-            expect(spamConfig.spamDetectionWindow).toBe(giftConfig.spamDetectionWindow);
-            expect(spamConfig.maxIndividualNotifications).toBe(giftConfig.maxIndividualNotifications);
         });
 
         it('should provide proper default values', () => {
             const spamConfig = config.spam;
 
+            expect(typeof spamConfig.enabled).toBe('boolean');
             expect(typeof spamConfig.lowValueThreshold).toBe('number');
-            expect(typeof spamConfig.spamDetectionEnabled).toBe('boolean');
-            expect(typeof spamConfig.spamDetectionWindow).toBe('number');
+            expect(typeof spamConfig.detectionWindow).toBe('number');
             expect(typeof spamConfig.maxIndividualNotifications).toBe('number');
 
             expect(spamConfig.lowValueThreshold).toBeGreaterThan(0);
-            expect(spamConfig.spamDetectionWindow).toBeGreaterThan(0);
+            expect(spamConfig.detectionWindow).toBeGreaterThan(0);
             expect(spamConfig.maxIndividualNotifications).toBeGreaterThan(0);
         });
     });
@@ -46,9 +36,9 @@ describe('Spam Configuration Integration', () => {
             const spamConfig = config.spam;
 
             const expectedProperties = [
+                'enabled',
                 'lowValueThreshold',
-                'spamDetectionEnabled',
-                'spamDetectionWindow',
+                'detectionWindow',
                 'maxIndividualNotifications'
             ];
 
@@ -75,20 +65,14 @@ describe('Spam Configuration Integration', () => {
             expect(giftConfig.giftVideoSource).toBeDefined();
             expect(giftConfig.giftAudioSource).toBeDefined();
             expect(giftConfig.scene).toBeDefined();
-            expect(giftConfig.lowValueThreshold).toBeDefined();
-            expect(giftConfig.spamDetectionEnabled).toBeDefined();
-            expect(giftConfig.spamDetectionWindow).toBeDefined();
-            expect(giftConfig.maxIndividualNotifications).toBeDefined();
         });
 
-        it('should not break any existing functionality', () => {
+        it('should not include spam fields in gift config', () => {
             const giftConfig = config.gifts;
 
-            expect(typeof giftConfig.lowValueThreshold).toBe('number');
-            expect(typeof giftConfig.spamDetectionEnabled).toBe('boolean');
-            expect(typeof giftConfig.spamDetectionWindow).toBe('number');
-            expect(typeof giftConfig.maxIndividualNotifications).toBe('number');
+            expect(giftConfig.enabled).toBeUndefined();
+            expect(giftConfig.lowValueThreshold).toBeUndefined();
+            expect(giftConfig.detectionWindow).toBeUndefined();
         });
     });
-
 });

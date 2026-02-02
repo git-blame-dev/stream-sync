@@ -22,11 +22,11 @@ describe('SpamDetection behavior', () => {
 
     it('gracefully allows when spam detection disabled', () => {
         const config = createSpamDetectionConfig({
-            spamDetectionEnabled: false,
+            enabled: false,
             lowValueThreshold: 10,
-            spamDetectionWindow: 5,
+            detectionWindow: 5,
             maxIndividualNotifications: 2
-        });
+        }, { logger: noOpLogger });
         detection = createDonationSpamDetection(config, { logger: noOpLogger, autoCleanup: false });
 
         const result = detection.handleDonationSpam('u', 'User', 1, 'Rose', 1, 'tiktok');
@@ -36,11 +36,11 @@ describe('SpamDetection behavior', () => {
     it('suppresses notifications after threshold and resets after window', () => {
         useFakeTimers();
         const config = createSpamDetectionConfig({
-            spamDetectionEnabled: true,
-            spamDetectionWindow: 0.2,
+            enabled: true,
+            detectionWindow: 0.2,
             maxIndividualNotifications: 1,
             lowValueThreshold: 10
-        });
+        }, { logger: noOpLogger });
         detection = createDonationSpamDetection(config, { logger: noOpLogger, autoCleanup: false });
 
         expect(detection.handleDonationSpam('u', 'User', 1, 'Rose', 1, 'tiktok').shouldShow).toBe(true);
@@ -52,47 +52,50 @@ describe('SpamDetection behavior', () => {
 
     it('treats high-value donations as non-spam', () => {
         const config = createSpamDetectionConfig({
-            spamDetectionEnabled: true,
+            enabled: true,
             lowValueThreshold: 5,
+            detectionWindow: 5,
             maxIndividualNotifications: 1
-        });
+        }, { logger: noOpLogger });
         detection = createDonationSpamDetection(config, { logger: noOpLogger, autoCleanup: false });
 
         const result = detection.handleDonationSpam('u', 'User', 20, 'Lion', 1, 'tiktok');
         expect(result.shouldShow).toBe(true);
     });
 
-    it('allows youtube donations and suppresses tiktok after threshold', () => {
+    it('applies same threshold across all platforms', () => {
         const config = createSpamDetectionConfig({
-            spamDetectionEnabled: true,
+            enabled: true,
             lowValueThreshold: 10,
-            spamDetectionWindow: 5,
+            detectionWindow: 5,
             maxIndividualNotifications: 1
-        });
+        }, { logger: noOpLogger });
         detection = createDonationSpamDetection(config, { logger: noOpLogger, autoCleanup: false });
 
-        const ytResult = detection.handleDonationSpam('yt', 'YTUser', 0.50, 'Super Chat', 1, 'youtube');
-        const tkFirst = detection.handleDonationSpam('tk', 'TKUser', 1, 'Rose', 1, 'tiktok');
-        const tkSecond = detection.handleDonationSpam('tk', 'TKUser', 1, 'Rose', 1, 'tiktok');
+        const ytFirst = detection.handleDonationSpam('yt', 'YTUser', 5, 'Super Chat', 1, 'youtube');
+        const ytSecond = detection.handleDonationSpam('yt', 'YTUser', 5, 'Super Chat', 1, 'youtube');
+        const tkFirst = detection.handleDonationSpam('tk', 'TKUser', 5, 'Rose', 1, 'tiktok');
+        const tkSecond = detection.handleDonationSpam('tk', 'TKUser', 5, 'Rose', 1, 'tiktok');
 
-        expect(ytResult.shouldShow).toBe(true);
+        expect(ytFirst.shouldShow).toBe(true);
+        expect(ytSecond.shouldShow).toBe(false);
         expect(tkFirst.shouldShow).toBe(true);
         expect(tkSecond.shouldShow).toBe(false);
     });
 
     it('falls back to global config for unknown platform lookups', () => {
         const config = createSpamDetectionConfig({
-            spamDetectionEnabled: true,
+            enabled: true,
             lowValueThreshold: 5,
-            spamDetectionWindow: 2,
+            detectionWindow: 2,
             maxIndividualNotifications: 1
-        });
+        }, { logger: noOpLogger });
 
         const fallback = config.getPlatformConfig('unknown');
 
         expect(fallback.enabled).toBe(true);
         expect(fallback.lowValueThreshold).toBe(5);
-        expect(fallback.spamDetectionWindow).toBe(2);
+        expect(fallback.detectionWindow).toBe(2);
         expect(fallback.maxIndividualNotifications).toBe(1);
     });
 });

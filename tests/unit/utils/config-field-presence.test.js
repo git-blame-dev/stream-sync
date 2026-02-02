@@ -290,11 +290,7 @@ describe('Config field presence - all normalizers return expected fields', () =>
             'command',
             'giftVideoSource',
             'giftAudioSource',
-            'giftScene',
-            'lowValueThreshold',
-            'spamDetectionEnabled',
-            'spamDetectionWindow',
-            'maxIndividualNotifications'
+            'giftScene'
         ];
 
         it('returns all expected fields', () => {
@@ -366,8 +362,16 @@ describe('Config field presence - all normalizers return expected fields', () =>
 
     describe('_normalizeSpamSection', () => {
         const EXPECTED_FIELDS = [
+            'enabled',
+            'lowValueThreshold',
             'detectionWindow',
-            'maxIndividualNotifications'
+            'maxIndividualNotifications',
+            'tiktokEnabled',
+            'tiktokLowValueThreshold',
+            'twitchEnabled',
+            'twitchLowValueThreshold',
+            'youtubeEnabled',
+            'youtubeLowValueThreshold'
         ];
 
         it('returns all expected fields', () => {

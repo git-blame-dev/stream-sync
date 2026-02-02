@@ -58,8 +58,8 @@ const RAW_TEST_CONFIG = {
     youtube: { enabled: 'false' },
     http: {},
     spam: {
-        spamDetectionEnabled: 'true',
-        spamDetectionWindow: '60',
+        enabled: 'true',
+        detectionWindow: '60',
         maxIndividualNotifications: '5',
         lowValueThreshold: '10'
     }

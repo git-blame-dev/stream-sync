@@ -35,7 +35,7 @@ describe('Spam Config Export Missing', () => {
 
                 expect(config.spam).toBeDefined();
                 expect(typeof config.spam).toBe('object');
-                expect(config.spam.spamDetectionEnabled).toBeDefined();
+                expect(config.spam.enabled).toBeDefined();
             });
         });
 
@@ -46,11 +46,11 @@ describe('Spam Config Export Missing', () => {
 
                 expect(spam).toBeDefined();
 
-                expect(spam.spamDetectionEnabled).toBeDefined();
-                expect(spam.spamDetectionEnabled).not.toBeUndefined();
+                expect(spam.enabled).toBeDefined();
+                expect(spam.enabled).not.toBeUndefined();
 
-                expect(spam.spamDetectionWindow).toBeDefined();
-                expect(spam.spamDetectionWindow).not.toBeUndefined();
+                expect(spam.detectionWindow).toBeDefined();
+                expect(spam.detectionWindow).not.toBeUndefined();
 
                 expect(spam.maxIndividualNotifications).toBeDefined();
                 expect(spam.maxIndividualNotifications).not.toBeUndefined();
@@ -63,16 +63,16 @@ describe('Spam Config Export Missing', () => {
                 const { config } = require('../../../src/core/config');
                 const spam = config.spam;
 
-                expect(typeof spam.spamDetectionEnabled).toBe('boolean');
-                expect(typeof spam.spamDetectionWindow).toBe('number');
+                expect(typeof spam.enabled).toBe('boolean');
+                expect(typeof spam.detectionWindow).toBe('number');
                 expect(typeof spam.maxIndividualNotifications).toBe('number');
                 expect(typeof spam.lowValueThreshold).toBe('number');
 
-                expect(Number.isInteger(spam.spamDetectionWindow)).toBe(true);
+                expect(Number.isInteger(spam.detectionWindow)).toBe(true);
                 expect(Number.isInteger(spam.maxIndividualNotifications)).toBe(true);
                 expect(Number.isFinite(spam.lowValueThreshold)).toBe(true);
 
-                expect(spam.spamDetectionWindow).toBeGreaterThan(0);
+                expect(spam.detectionWindow).toBeGreaterThan(0);
                 expect(spam.maxIndividualNotifications).toBeGreaterThan(0);
                 expect(spam.lowValueThreshold).toBeGreaterThan(0);
             });
@@ -96,8 +96,8 @@ describe('Spam Config Export Missing', () => {
                 expect(hasSpamConfig).toBeTruthy();
 
                 const spamConfig = mockApp.config.spam;
-                expect(spamConfig.spamDetectionEnabled).toBeDefined();
-                expect(spamConfig.spamDetectionWindow).toBeDefined();
+                expect(spamConfig.enabled).toBeDefined();
+                expect(spamConfig.detectionWindow).toBeDefined();
                 expect(spamConfig.maxIndividualNotifications).toBeDefined();
                 expect(spamConfig.lowValueThreshold).toBeDefined();
             });
@@ -109,13 +109,13 @@ describe('Spam Config Export Missing', () => {
                 expect(spamConfig).toBeTruthy();
                 expect(typeof spamConfig).toBe('object');
 
-                expect(spamConfig.spamDetectionEnabled).toBeDefined();
-                expect(spamConfig.spamDetectionWindow).toBeDefined();
+                expect(spamConfig.enabled).toBeDefined();
+                expect(spamConfig.detectionWindow).toBeDefined();
                 expect(spamConfig.maxIndividualNotifications).toBeDefined();
                 expect(spamConfig.lowValueThreshold).toBeDefined();
 
-                expect(typeof spamConfig.spamDetectionEnabled).toBe('boolean');
-                expect(typeof spamConfig.spamDetectionWindow).toBe('number');
+                expect(typeof spamConfig.enabled).toBe('boolean');
+                expect(typeof spamConfig.detectionWindow).toBe('number');
                 expect(typeof spamConfig.maxIndividualNotifications).toBe('number');
                 expect(typeof spamConfig.lowValueThreshold).toBe('number');
             });
@@ -128,17 +128,17 @@ describe('Spam Config Export Missing', () => {
                 const { config } = require('../../../src/core/config');
 
                 expect(config.spam).toBeDefined();
-                expect(config.spam.spamDetectionEnabled).toBeDefined();
-                expect(config.spam.spamDetectionWindow).toBeDefined();
+                expect(config.spam.enabled).toBeDefined();
+                expect(config.spam.detectionWindow).toBeDefined();
                 expect(config.spam.maxIndividualNotifications).toBeDefined();
                 expect(config.spam.lowValueThreshold).toBeDefined();
 
-                expect(typeof config.spam.spamDetectionEnabled).toBe('boolean');
-                expect(typeof config.spam.spamDetectionWindow).toBe('number');
+                expect(typeof config.spam.enabled).toBe('boolean');
+                expect(typeof config.spam.detectionWindow).toBe('number');
                 expect(typeof config.spam.maxIndividualNotifications).toBe('number');
                 expect(typeof config.spam.lowValueThreshold).toBe('number');
 
-                expect(config.spam.spamDetectionWindow).toBeGreaterThan(0);
+                expect(config.spam.detectionWindow).toBeGreaterThan(0);
                 expect(config.spam.maxIndividualNotifications).toBeGreaterThan(0);
                 expect(config.spam.lowValueThreshold).toBeGreaterThanOrEqual(0);
             });

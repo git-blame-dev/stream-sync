@@ -233,8 +233,19 @@ describe('ConfigValidator._normalizeGiftsSection()', () => {
     it('applies gifts defaults', () => {
         const result = ConfigValidator._normalizeGiftsSection({});
 
+        expect(result.giftVideoSource).toBe('gift-video');
+        expect(result.giftAudioSource).toBe('gift-audio');
+    });
+});
+
+describe('ConfigValidator._normalizeSpamSection()', () => {
+    it('applies spam defaults', () => {
+        const result = ConfigValidator._normalizeSpamSection({});
+
+        expect(result.enabled).toBe(true);
         expect(result.lowValueThreshold).toBe(10);
-        expect(result.spamDetectionEnabled).toBe(true);
+        expect(result.detectionWindow).toBe(5);
+        expect(result.maxIndividualNotifications).toBe(2);
     });
 });
 

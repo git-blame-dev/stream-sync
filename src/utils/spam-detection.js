@@ -3,67 +3,48 @@ const { safeSetTimeout, safeSetInterval } = require('./timeout-validator');
 const { createPlatformErrorHandler } = require('./platform-error-handler');
 
 class SpamDetectionConfig {
-    constructor(config = {}) {
-        const { logger } = require('../core/logging');
-        this.logger = logger;
+    constructor(config = {}, dependencies = {}) {
+        if (!dependencies.logger) {
+            throw new Error('SpamDetectionConfig requires logger dependency');
+        }
+        this.logger = dependencies.logger;
 
+        this.enabled = config.enabled;
         this.lowValueThreshold = config.lowValueThreshold;
-        this.spamDetectionEnabled = config.spamDetectionEnabled;
-        this.spamDetectionWindow = config.spamDetectionWindow;
+        this.detectionWindow = config.detectionWindow;
         this.maxIndividualNotifications = config.maxIndividualNotifications;
-
-        this.platformConfigs = {
-            tiktok: {
-                enabled: this.spamDetectionEnabled,
-                lowValueThreshold: this.lowValueThreshold,
-                spamDetectionWindow: this.spamDetectionWindow,
-                maxIndividualNotifications: this.maxIndividualNotifications
-            },
-            twitch: {
-                enabled: this.spamDetectionEnabled,
-                lowValueThreshold: this.lowValueThreshold,
-                spamDetectionWindow: this.spamDetectionWindow,
-                maxIndividualNotifications: this.maxIndividualNotifications
-            },
-            youtube: {
-                enabled: false,
-                lowValueThreshold: 1.00,
-                spamDetectionWindow: this.spamDetectionWindow,
-                maxIndividualNotifications: this.maxIndividualNotifications
-            }
-        };
+        this.tiktokEnabled = config.tiktokEnabled;
+        this.tiktokLowValueThreshold = config.tiktokLowValueThreshold;
+        this.twitchEnabled = config.twitchEnabled;
+        this.twitchLowValueThreshold = config.twitchLowValueThreshold;
+        this.youtubeEnabled = config.youtubeEnabled;
+        this.youtubeLowValueThreshold = config.youtubeLowValueThreshold;
 
         this.logConfiguration();
     }
 
-    getPlatformConfig(platform) {
-        const platformKey = platform.toLowerCase();
-        const config = this.platformConfigs[platformKey];
+    getPlatformConfig(platform = 'unknown') {
+        const p = platform.toLowerCase();
+        const platformEnabledKey = `${p}Enabled`;
+        const platformThresholdKey = `${p}LowValueThreshold`;
         
-        if (!config) {
-            this.logger.debug(`No platform config found for ${platform}, using defaults`, 'spam-detection');
-            return {
-                enabled: this.spamDetectionEnabled,
-                lowValueThreshold: this.lowValueThreshold,
-                spamDetectionWindow: this.spamDetectionWindow,
-                maxIndividualNotifications: this.maxIndividualNotifications
-            };
-        }
+        const platformEnabled = this[platformEnabledKey] ?? this.enabled;
+        const platformThreshold = this[platformThresholdKey] ?? this.lowValueThreshold;
         
-        return config;
+        return {
+            enabled: platformEnabled,
+            lowValueThreshold: platformThreshold,
+            detectionWindow: this.detectionWindow,
+            maxIndividualNotifications: this.maxIndividualNotifications
+        };
     }
 
     logConfiguration() {
         const configSummary = {
-            enabled: this.spamDetectionEnabled,
+            enabled: this.enabled,
             threshold: this.lowValueThreshold,
-            window: this.spamDetectionWindow,
-            maxNotifications: this.maxIndividualNotifications,
-            platforms: {
-                tiktok: this.platformConfigs.tiktok,
-                twitch: this.platformConfigs.twitch,
-                youtube: this.platformConfigs.youtube
-            }
+            window: this.detectionWindow,
+            maxNotifications: this.maxIndividualNotifications
         };
         
         this.logger.info(`Spam detection initialized: ${JSON.stringify(configSummary)}`, 'spam-detection');
@@ -72,17 +53,17 @@ class SpamDetectionConfig {
 
 class DonationSpamDetection {
     constructor(config, dependencies = {}) {
-        // Use global logger directly
-        const { logger } = require('../core/logging');
-        this.logger = logger;
+        if (!dependencies.logger) {
+            throw new Error('DonationSpamDetection requires logger dependency');
+        }
+        this.logger = dependencies.logger;
         this.errorHandler = createPlatformErrorHandler(this.logger, 'spam-detection');
         this.onAggregatedDonation = dependencies.onAggregatedDonation || null;
         
         this.config = config;
-        this.cleanupInterval = null; // To hold the interval ID
+        this.cleanupInterval = null;
         this.donationSpamTracker = {};
         
-        // Only setup periodic cleanup if autoCleanup is not explicitly false
         const autoCleanup = dependencies.autoCleanup !== false;
         if (autoCleanup) {
             this.setupPeriodicCleanup();
@@ -117,16 +98,14 @@ class DonationSpamDetection {
             
             const platformConfig = this.config.getPlatformConfig(platform);
             
-            // If spam detection is disabled or not a low value donation, always show
             if (!platformConfig.enabled || !this.isLowValueDonation(unitAmount, platform)) {
                 this.logger.debug(`Allowing donation: ${!platformConfig.enabled ? 'system disabled' : 'high value'}`, 'spam-detection');
                 return { shouldShow: true, aggregatedMessage: null };
             }
 
             const now = Date.now();
-            const windowMs = platformConfig.spamDetectionWindow * 1000;
+            const windowMs = platformConfig.detectionWindow * 1000;
             
-            // Initialize or clean up old entries for this user
             if (!this.donationSpamTracker[userId]) {
                 this.donationSpamTracker[userId] = {
                     notifications: [],
@@ -141,7 +120,6 @@ class DonationSpamDetection {
 
             const userTracker = this.donationSpamTracker[userId];
             
-            // Clean up old notifications outside the detection window
             const originalCount = userTracker.notifications.length;
             userTracker.notifications = userTracker.notifications.filter(
                 notification => (now - notification.timestamp) <= windowMs
@@ -151,7 +129,6 @@ class DonationSpamDetection {
                 this.logger.debug(`Cleaned ${originalCount - userTracker.notifications.length} old notifications for ${userId}`, 'spam-detection');
             }
 
-            // Add current donation to tracker
             userTracker.notifications.push({
                 timestamp: now,
                 coinValue: unitAmount,
@@ -163,26 +140,22 @@ class DonationSpamDetection {
             const currentNotificationCount = userTracker.notifications.length;
             this.logger.debug(`${username}: ${currentNotificationCount}/${platformConfig.maxIndividualNotifications} notifications in window`, 'spam-detection');
 
-            // Check if we've exceeded the individual notification limit
             if (currentNotificationCount <= platformConfig.maxIndividualNotifications) {
-                // Still within individual notification limit - show normally
                 this.logger.info(`${platform} - ${username}: Individual notification ${currentNotificationCount}/${platformConfig.maxIndividualNotifications} - showing normally`, 'spam-detection');
                 return { shouldShow: true, aggregatedMessage: null };
             } else {
-                // Exceeded limit - start aggregating
                 userTracker.aggregatedCount += giftCount;
-                userTracker.username = username; // Update username in case it changed
+                userTracker.username = username;
                 userTracker.platform = platform;
                 
                 this.logger.debug(`Spam threshold exceeded - aggregating notifications for ${userId}`, 'spam-detection');
                 
-                // If this is the first time we're aggregating for this user, start the timer
                 if (!userTracker.aggregationTimer) {
-                    this.logger.info(`${platform} - ${username}: Starting aggregation timer (${platformConfig.spamDetectionWindow}s)`, 'spam-detection');
+                    this.logger.info(`${platform} - ${username}: Starting aggregation timer (${platformConfig.detectionWindow}s)`, 'spam-detection');
                     
                     userTracker.aggregationTimer = safeSetTimeout(() => {
                         this.processAggregatedDonation(userId, userTracker);
-                    }, platformConfig.spamDetectionWindow * 1000);
+                    }, platformConfig.detectionWindow * 1000);
                 }
                 
                 this.logger.info(`${platform} - ${username}: Suppressing individual notification ${currentNotificationCount} (aggregating)`, 'spam-detection');
@@ -197,7 +170,6 @@ class DonationSpamDetection {
             });
             this.logger.debug(errorMsg, 'spam-detection');
             
-            // On error, default to showing the notification
             return { shouldShow: true, aggregatedMessage: null };
         }
     }
@@ -224,7 +196,6 @@ class DonationSpamDetection {
 
             this.logger.info(`${userTracker.platform} - Processing aggregated donation: ${aggregatedMessage}`, 'spam-detection');
 
-            // Call the callback if provided
             if (this.onAggregatedDonation) {
                 const aggregatedData = {
                     userId: userId,
@@ -240,20 +211,17 @@ class DonationSpamDetection {
                 this.onAggregatedDonation(aggregatedData);
             }
 
-            // Clear the timer and reset tracking for this user
             if (userTracker.aggregationTimer) {
                 clearTimeout(userTracker.aggregationTimer);
                 userTracker.aggregationTimer = null;
             }
             
-            // Reset the user's tracking data
             userTracker.notifications = [];
             userTracker.aggregatedCount = 0;
             userTracker.lastReset = Date.now();
             
             this.logger.debug(`Aggregated donation processed and tracking reset for user ${userId}`, 'spam-detection');
 
-            // Return result object expected by tests
             return {
                 shouldShow: true,
                 aggregatedMessage: aggregatedMessage,
@@ -273,7 +241,7 @@ class DonationSpamDetection {
     cleanupSpamDetection(forceCleanup = false) {
         try {
             const now = Date.now();
-            const windowMs = forceCleanup ? 0 : this.config.spamDetectionWindow * 1000 * 2; // Keep data for 2x the window, or 0 for force cleanup
+            const windowMs = forceCleanup ? 0 : this.config.detectionWindow * 1000 * 2;
             let cleanedUsers = 0;
             let totalUsers = Object.keys(this.donationSpamTracker).length;
             
@@ -282,16 +250,13 @@ class DonationSpamDetection {
             for (const userId in this.donationSpamTracker) {
                 const userTracker = this.donationSpamTracker[userId];
                 
-                // Remove notifications older than the extended window
                 const originalNotifications = userTracker.notifications.length;
                 userTracker.notifications = userTracker.notifications.filter(
                     notification => (now - notification.timestamp) <= windowMs
                 );
                 
-                // If no recent notifications or force cleanup, remove the user entry entirely
                 if (userTracker.notifications.length === 0 && 
                     (forceCleanup || (now - userTracker.lastReset) > windowMs)) {
-                    // Clear any pending timers before deleting
                     if (userTracker.aggregationTimer) {
                         clearTimeout(userTracker.aggregationTimer);
                         userTracker.aggregationTimer = null;
@@ -328,7 +293,7 @@ class DonationSpamDetection {
         return {
             trackedUsers: userCount,
             totalNotifications: totalNotifications,
-            enabled: this.config.spamDetectionEnabled,
+            enabled: this.config.enabled,
             threshold: this.config.lowValueThreshold
         };
     }
@@ -347,7 +312,6 @@ class DonationSpamDetection {
             this.logger.debug('Periodic cleanup interval cleared', 'spam-detection');
         }
         
-        // Clear all aggregation timers and tracking data to prevent memory leaks
         for (const userId in this.donationSpamTracker) {
             const userTracker = this.donationSpamTracker[userId];
             if (userTracker.aggregationTimer) {
@@ -373,11 +337,11 @@ DonationSpamDetection.prototype._handleSpamDetectionError = function(message, er
     this.errorHandler.logOperationalError(message, 'spam-detection', payload);
 };
 
-function createSpamDetectionConfig(config, dependencies) {
+function createSpamDetectionConfig(config, dependencies = {}) {
     return new SpamDetectionConfig(config, dependencies);
 }
 
-function createDonationSpamDetection(config, dependencies) {
+function createDonationSpamDetection(config, dependencies = {}) {
     return new DonationSpamDetection(config, dependencies);
 }
 
@@ -385,4 +349,4 @@ module.exports = {
     SpamDetectionConfig,
     createSpamDetectionConfig,
     createDonationSpamDetection
-}; 
+};

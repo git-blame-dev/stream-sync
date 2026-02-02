@@ -178,13 +178,13 @@ describe('NotificationManager Spam Protection Behavior - Modernized', () => {
                 const { config } = require('../../../src/core/config');
                 const spamConfig = config.spam;
 
-                expect(spamConfig.spamDetectionEnabled).toBeDefined();
-                expect(spamConfig.spamDetectionWindow).toBeDefined();
+                expect(spamConfig.enabled).toBeDefined();
+                expect(spamConfig.detectionWindow).toBeDefined();
                 expect(spamConfig.maxIndividualNotifications).toBeDefined();
                 expect(spamConfig.lowValueThreshold).toBeDefined();
 
-                expect(typeof spamConfig.spamDetectionEnabled).toBe('boolean');
-                expect(typeof spamConfig.spamDetectionWindow).toBe('number');
+                expect(typeof spamConfig.enabled).toBe('boolean');
+                expect(typeof spamConfig.detectionWindow).toBe('number');
                 expect(typeof spamConfig.maxIndividualNotifications).toBe('number');
                 expect(typeof spamConfig.lowValueThreshold).toBe('number');
             });
@@ -194,8 +194,8 @@ describe('NotificationManager Spam Protection Behavior - Modernized', () => {
                 const spamConfig = config.spam;
 
                 expect(spamConfig).toBeTruthy();
-                expect(spamConfig.spamDetectionEnabled).toBeDefined();
-                expect(spamConfig.spamDetectionWindow).toBeGreaterThan(0);
+                expect(spamConfig.enabled).toBeDefined();
+                expect(spamConfig.detectionWindow).toBeGreaterThan(0);
                 expect(spamConfig.maxIndividualNotifications).toBeGreaterThan(0);
                 expect(spamConfig.lowValueThreshold).toBeGreaterThan(0);
             });
