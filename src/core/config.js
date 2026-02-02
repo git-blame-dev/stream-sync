@@ -116,7 +116,7 @@ function buildPlatformConfig(platformName, normalized, generalConfig) {
     const platform = normalized[platformName] || {};
     const notificationFlags = [
         'messagesEnabled', 'commandsEnabled', 'greetingsEnabled', 'farewellsEnabled',
-        'followsEnabled', 'giftsEnabled', 'raidsEnabled', 'paypiggiesEnabled', 'ignoreSelfMessages'
+        'followsEnabled', 'giftsEnabled', 'raidsEnabled', 'paypiggiesEnabled', 'redemptionsEnabled', 'sharesEnabled', 'ignoreSelfMessages'
     ];
     
     const result = {

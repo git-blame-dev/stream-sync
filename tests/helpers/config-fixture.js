@@ -135,7 +135,7 @@ function createYouTubeConfigFixture(overrides = {}) {
 
 const NOTIFICATION_FLAGS = [
     'messagesEnabled', 'commandsEnabled', 'greetingsEnabled', 'farewellsEnabled',
-    'followsEnabled', 'giftsEnabled', 'raidsEnabled', 'paypiggiesEnabled', 'sharesEnabled'
+    'followsEnabled', 'giftsEnabled', 'raidsEnabled', 'paypiggiesEnabled', 'redemptionsEnabled', 'sharesEnabled', 'ignoreSelfMessages'
 ];
 
 function propagateNotificationFlags(generalOverrides, platformConfig) {
