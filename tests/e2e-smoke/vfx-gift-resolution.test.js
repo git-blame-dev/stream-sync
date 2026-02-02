@@ -1,8 +1,9 @@
 const { describe, expect, it } = require('bun:test');
 const { ConfigValidator } = require('../../src/utils/config-validator');
 const { CommandParser } = require('../../src/chat/commands');
+const { VFXCommandService } = require('../../src/services/VFXCommandService');
 
-describe('VFX gift resolution smoke E2E', () => {
+describe('VFX chat command resolution smoke E2E', () => {
     const createRawConfig = () => ({
         general: {
             giftsEnabled: 'true',
@@ -133,5 +134,112 @@ describe('VFX gift resolution smoke E2E', () => {
         expect(vfxConfig.filename).toBe('test-keyword');
         expect(vfxConfig.keyword).toBe('test phrase');
         expect(vfxConfig.matchType).toBe('keyword');
+    });
+});
+
+describe('VFX notification resolution smoke E2E', () => {
+    const createRawConfig = () => ({
+        general: {
+            giftsEnabled: 'true',
+            commandsEnabled: 'true',
+            keywordParsingEnabled: 'true'
+        },
+        obs: { enabled: 'false' },
+        commands: {
+            'test-gift-vfx': '!testgift, vfx top',
+            'test-follow-vfx': '!testfollow, vfx bottom green',
+            'test-raid-vfx': '!testraid, vfx center green'
+        },
+        gifts: {
+            command: '!testgift'
+        },
+        follows: {
+            command: '!testfollow'
+        },
+        raids: {
+            command: '!testraid'
+        },
+        paypiggies: {
+            command: ''
+        },
+        greetings: {
+            command: ''
+        },
+        shares: {
+            command: ''
+        },
+        vfx: {
+            vfxFilePath: '/test/vfx/path'
+        },
+        farewell: {
+            command: ''
+        }
+    });
+
+    it('gifts.command survives config normalization', () => {
+        const rawConfig = createRawConfig();
+        const normalized = ConfigValidator.normalize(rawConfig);
+
+        expect(normalized.gifts.command).toBe('!testgift');
+    });
+
+    it('follows.command survives config normalization', () => {
+        const rawConfig = createRawConfig();
+        const normalized = ConfigValidator.normalize(rawConfig);
+
+        expect(normalized.follows.command).toBe('!testfollow');
+    });
+
+    it('raids.command survives config normalization', () => {
+        const rawConfig = createRawConfig();
+        const normalized = ConfigValidator.normalize(rawConfig);
+
+        expect(normalized.raids.command).toBe('!testraid');
+    });
+
+    it('VFXCommandService.getVFXConfig returns valid config for gifts', async () => {
+        const rawConfig = createRawConfig();
+        const normalized = ConfigValidator.normalize(rawConfig);
+        const vfxService = new VFXCommandService(normalized, null);
+
+        const vfxConfig = await vfxService.getVFXConfig('gifts', null);
+
+        expect(vfxConfig).not.toBeNull();
+        expect(vfxConfig.filename).toBe('test-gift-vfx');
+        expect(vfxConfig.mediaSource).toBe('vfx top');
+    });
+
+    it('VFXCommandService.getVFXConfig returns valid config for follows', async () => {
+        const rawConfig = createRawConfig();
+        const normalized = ConfigValidator.normalize(rawConfig);
+        const vfxService = new VFXCommandService(normalized, null);
+
+        const vfxConfig = await vfxService.getVFXConfig('follows', null);
+
+        expect(vfxConfig).not.toBeNull();
+        expect(vfxConfig.filename).toBe('test-follow-vfx');
+        expect(vfxConfig.mediaSource).toBe('vfx bottom green');
+    });
+
+    it('VFXCommandService.getVFXConfig returns valid config for raids', async () => {
+        const rawConfig = createRawConfig();
+        const normalized = ConfigValidator.normalize(rawConfig);
+        const vfxService = new VFXCommandService(normalized, null);
+
+        const vfxConfig = await vfxService.getVFXConfig('raids', null);
+
+        expect(vfxConfig).not.toBeNull();
+        expect(vfxConfig.filename).toBe('test-raid-vfx');
+        expect(vfxConfig.mediaSource).toBe('vfx center green');
+    });
+
+    it('VFXCommandService.getVFXConfig returns null when no command configured', async () => {
+        const rawConfig = createRawConfig();
+        const normalized = ConfigValidator.normalize(rawConfig);
+        const vfxService = new VFXCommandService(normalized, null);
+
+        const vfxConfig = await vfxService.getVFXConfig('paypiggies', null);
+
+        expect(vfxConfig).toBeNull();
     });
 });
