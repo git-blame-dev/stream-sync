@@ -76,13 +76,13 @@ class TwitchPlatform extends EventEmitter {
 
     async initializeEventSub(broadcasterId) {
         this.logger.debug('initializeEventSub called', 'twitch', {
-            eventsub_enabled: this.config.eventsub_enabled,
+            eventsubEnabled: this.config.eventsubEnabled,
             authReady: this.twitchAuth?.isReady?.(),
             hasTwitchAuth: !!this.twitchAuth,
             broadcasterId
         });
 
-        if (!this.config.eventsub_enabled) {
+        if (!this.config.eventsubEnabled) {
             this.logger.debug('EventSub is disabled in config', 'twitch');
             return;
         }

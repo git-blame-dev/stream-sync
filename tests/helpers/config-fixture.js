@@ -49,7 +49,7 @@ const RAW_TEST_CONFIG = {
         heavyCommandWindow: '360',
         maxEntries: '1000'
     },
-    commands: { enabled: 'false' },
+    commands: {},
     tiktok: { enabled: 'false' },
     twitch: { enabled: 'false' },
     youtube: { enabled: 'false' },

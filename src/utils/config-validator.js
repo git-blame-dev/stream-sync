@@ -337,8 +337,12 @@ class ConfigValidator {
         };
     }
 
-    static _normalizeLoggingSection() {
-        return {};
+    static _normalizeLoggingSection(raw) {
+        return {
+            consoleLevel: ConfigValidator.parseString(raw.consoleLevel, null),
+            fileLevel: ConfigValidator.parseString(raw.fileLevel, null),
+            fileLoggingEnabled: ConfigValidator.parseBoolean(raw.fileLoggingEnabled, null)
+        };
     }
 
     static _normalizeFarewellSection(raw) {

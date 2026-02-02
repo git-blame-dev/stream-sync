@@ -31,7 +31,7 @@ const createPlatform = (configOverrides = {}, depsOverrides = {}) => {
         username: 'teststreamer',
         channel: 'teststreamer',
         clientId: 'test-client-id',
-        eventsub_enabled: true,
+        eventsubEnabled: true,
         dataLoggingEnabled: false,
         ...configOverrides
     };

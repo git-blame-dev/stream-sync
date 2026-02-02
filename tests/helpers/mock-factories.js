@@ -459,7 +459,7 @@ const createMockTwitchServices = (configOverrides = {}) => {
         clientId: 'test-client-id',
         accessToken: 'test-access-token',
         refreshToken: 'test-refresh-token',
-        eventsub_enabled: true,
+        eventsubEnabled: true,
         ...configOverrides
     };
 
