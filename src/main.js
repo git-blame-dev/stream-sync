@@ -210,6 +210,7 @@ const { clearExpiredGlobalCooldowns } = require('./utils/command-parser');
 
 // Notification system
 const NotificationManager = require('./notifications/NotificationManager');
+const { createSpamDetectionConfig, createDonationSpamDetection } = require('./utils/spam-detection');
 const { PlatformEvents } = require('./interfaces/PlatformEvents');
 
 // Event-driven architecture services
@@ -1511,6 +1512,15 @@ async function main(overrides = {}) {
             textProcessing,
             obsGoals
         });
+        
+        logger.debug('Creating spam detection service...', 'Main');
+        const spamConfig = createSpamDetectionConfig(config.spam, { logger });
+        const donationSpamDetector = createDonationSpamDetection(spamConfig, {
+            logger,
+            onAggregatedDonation: (data) => notificationManager.handleAggregatedDonation(data)
+        });
+        notificationManager.donationSpamDetector = donationSpamDetector;
+        logger.debug('Spam detection service created and wired', 'Main');
         
         if (config.twitch.enabled) {
             if (!authValid) {
