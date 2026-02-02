@@ -350,16 +350,8 @@ class ConfigValidator {
         };
     }
 
-    static _normalizeLoggingSection(raw) {
-        return {
-            level: ConfigValidator.parseString(raw.level, DEFAULTS.logging.level),
-            enableDebug: ConfigValidator.parseBoolean(raw.enableDebug, DEFAULTS.logging.enableDebug),
-            enableConsole: ConfigValidator.parseBoolean(raw.enableConsole, DEFAULTS.logging.enableConsole),
-            enableFile: ConfigValidator.parseBoolean(raw.enableFile, DEFAULTS.logging.enableFile),
-            maxFileSize: ConfigValidator.parseNumber(raw.maxFileSize, { defaultValue: DEFAULTS.logging.maxFileSize }),
-            platformDataLoggingEnabled: ConfigValidator.parseBoolean(raw.platformDataLoggingEnabled, DEFAULTS.logging.platformDataLoggingEnabled),
-            streamelementsDataLoggingEnabled: ConfigValidator.parseBoolean(raw.streamelementsDataLoggingEnabled, DEFAULTS.logging.streamelementsDataLoggingEnabled)
-        };
+    static _normalizeLoggingSection() {
+        return {};
     }
 
     static _normalizeFarewellSection(raw) {

@@ -464,22 +464,10 @@ describe('Config field presence - all normalizers return expected fields', () =>
     });
 
     describe('_normalizeLoggingSection', () => {
-        const EXPECTED_FIELDS = [
-            'level',
-            'enableDebug',
-            'enableConsole',
-            'enableFile',
-            'maxFileSize',
-            'platformDataLoggingEnabled',
-            'streamelementsDataLoggingEnabled'
-        ];
-
-        it('returns all expected fields', () => {
+        it('returns empty object (logging handled separately in config.js)', () => {
             const result = ConfigValidator._normalizeLoggingSection({});
 
-            EXPECTED_FIELDS.forEach(field => {
-                expect(result).toHaveProperty(field);
-            });
+            expect(result).toEqual({});
         });
     });
 
