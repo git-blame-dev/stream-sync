@@ -74,7 +74,6 @@ const DEFAULTS = {
         enabled: false,
         viewerCountEnabled: true,
         viewerCountSource: 'websocket',
-        greetingsEnabled: true,
         giftAggregationEnabled: true,
         dataLoggingEnabled: false
     },

@@ -114,10 +114,6 @@ function buildHttpConfig(normalized) {
 
 function buildPlatformConfig(platformName, normalized, generalConfig) {
     const platform = normalized[platformName] || {};
-    const notificationFlags = [
-        'messagesEnabled', 'commandsEnabled', 'greetingsEnabled', 'farewellsEnabled',
-        'followsEnabled', 'giftsEnabled', 'raidsEnabled', 'paypiggiesEnabled', 'redemptionsEnabled', 'sharesEnabled', 'ignoreSelfMessages'
-    ];
     
     const result = {
         ...platform,
@@ -125,15 +121,11 @@ function buildPlatformConfig(platformName, normalized, generalConfig) {
         dataLoggingPath: DEFAULTS.LOG_DIRECTORY
     };
     
-    if (result.greetNewCommentors === null) {
-        result.greetNewCommentors = generalConfig.greetNewCommentors;
-    }
-    
-    notificationFlags.forEach(flag => {
-        if (result[flag] === null) {
-            result[flag] = generalConfig[flag];
+    for (const [key, value] of Object.entries(result)) {
+        if (value === null && generalConfig[key] !== undefined) {
+            result[key] = generalConfig[key];
         }
-    });
+    }
     
     return result;
 }
