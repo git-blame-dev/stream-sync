@@ -266,13 +266,7 @@ class ConfigValidator {
             fadeDuration: ConfigValidator.parseNumber(raw.fadeDuration, { defaultValue: DEFAULTS.timing.fadeDuration }),
             notificationClearDelay: ConfigValidator.parseNumber(raw.notificationClearDelay, { defaultValue: DEFAULTS.timing.notificationClearDelay }),
             transitionDelay: ConfigValidator.parseNumber(raw.transitionDelay, { defaultValue: DEFAULTS.timing.transitionDelay }),
-            chatMessageDuration: ConfigValidator.parseNumber(raw.chatMessageDuration, { defaultValue: DEFAULTS.timing.chatMessageDuration }),
-            defaultNotificationDuration: ConfigValidator.parseNumber(raw.defaultNotificationDuration, { defaultValue: DEFAULTS.timing.defaultNotificationDuration }),
-            greetingDuration: ConfigValidator.parseNumber(raw.greetingDuration, { defaultValue: DEFAULTS.timing.greetingDuration }),
-            followDuration: ConfigValidator.parseNumber(raw.followDuration, { defaultValue: DEFAULTS.timing.followDuration }),
-            giftDuration: ConfigValidator.parseNumber(raw.giftDuration, { defaultValue: DEFAULTS.timing.giftDuration }),
-            memberDuration: ConfigValidator.parseNumber(raw.memberDuration, { defaultValue: DEFAULTS.timing.memberDuration }),
-            raidDuration: ConfigValidator.parseNumber(raw.raidDuration, { defaultValue: DEFAULTS.timing.raidDuration })
+            chatMessageDuration: ConfigValidator.parseNumber(raw.chatMessageDuration, { defaultValue: DEFAULTS.timing.chatMessageDuration })
         };
     }
 

@@ -307,13 +307,7 @@ describe('Config field presence - all normalizers return expected fields', () =>
             'fadeDuration',
             'notificationClearDelay',
             'transitionDelay',
-            'chatMessageDuration',
-            'defaultNotificationDuration',
-            'greetingDuration',
-            'followDuration',
-            'giftDuration',
-            'memberDuration',
-            'raidDuration'
+            'chatMessageDuration'
         ];
 
         it('returns all expected fields', () => {

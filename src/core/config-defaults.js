@@ -133,13 +133,7 @@ const DEFAULTS = {
         fadeDuration: 750,
         notificationClearDelay: 500,
         transitionDelay: 200,
-        chatMessageDuration: 4500,
-        defaultNotificationDuration: 3000,
-        greetingDuration: 3000,
-        followDuration: 3000,
-        giftDuration: 3000,
-        memberDuration: 3000,
-        raidDuration: 3000
+        chatMessageDuration: 4500
     },
 
     handcam: {

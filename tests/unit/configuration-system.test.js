@@ -707,7 +707,6 @@ maxMessageLength = 500
 
 [timing]
 chatMessageDuration = 5000
-defaultNotificationDuration = 3500
 fadeDuration = 750
 transitionDelay = 200
 notificationClearDelay = 500
