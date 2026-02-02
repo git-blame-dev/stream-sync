@@ -260,7 +260,6 @@ describe('ConfigValidator._normalizeTtsSection()', () => {
     it('applies TTS defaults', () => {
         const result = ConfigValidator._normalizeTtsSection({});
 
-        expect(result.deduplicationEnabled).toBe(true);
         expect(result.voice).toBe('default');
         expect(result.rate).toBe(1.0);
     });

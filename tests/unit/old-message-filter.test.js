@@ -43,7 +43,6 @@ describe('Old Message Filter', () => {
         router.processCommand = createMockFn();
         router.isFirstMessage = createMockFn().mockReturnValue(false);
         router.isGreetingEnabled = createMockFn().mockReturnValue(false);
-        router.detectMonetization = createMockFn().mockReturnValue({ detected: false });
 
         return { router, runtime };
     };

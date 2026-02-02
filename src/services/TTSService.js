@@ -157,8 +157,6 @@ class TTSService {
         const ttsConfig = this.config.tts || {};
         return {
             enabled: !!this.config.general?.ttsEnabled,
-            deduplicationEnabled: ttsConfig.deduplicationEnabled,
-            debugDeduplication: ttsConfig.debugDeduplication,
             onlyForGifts: ttsConfig.onlyForGifts,
             voice: ttsConfig.voice || 'default',
             rate: ttsConfig.rate || 1.0,

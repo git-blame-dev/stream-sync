@@ -23,8 +23,6 @@ describe('TTSService', () => {
             general: { ttsEnabled: true },
             tts: {
                 enabled: true,
-                deduplicationEnabled: true,
-                debugDeduplication: false,
                 onlyForGifts: false,
                 voice: 'default',
                 rate: 1.0,
@@ -230,8 +228,6 @@ describe('TTSService', () => {
 
             expect(config).toEqual({
                 enabled: true,
-                deduplicationEnabled: true,
-                debugDeduplication: false,
                 onlyForGifts: false,
                 voice: 'default',
                 rate: 1.0,

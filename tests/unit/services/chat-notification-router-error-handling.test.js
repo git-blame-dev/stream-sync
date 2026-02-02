@@ -25,7 +25,6 @@ describe('ChatNotificationRouter error handling', () => {
     const createRuntime = (displayQueueBehavior) => ({
         config: {
             general: { messagesEnabled: true, greetingsEnabled: true },
-            tts: { deduplicationEnabled: false },
             twitch: {}
         },
         platformLifecycleService: {

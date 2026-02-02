@@ -28,8 +28,7 @@ describe('ChatNotificationRouter platform chat behavior', () => {
                 general: { greetingsEnabled: true, messagesEnabled: true },
                 tiktok: { messagesEnabled: true },
                 twitch: { messagesEnabled: true },
-                youtube: { messagesEnabled: true },
-                tts: { deduplicationEnabled: false }
+                youtube: { messagesEnabled: true }
             },
             platformLifecycleService: {
                 getPlatformConnectionTime: createMockFn().mockReturnValue(null)
@@ -77,7 +76,6 @@ describe('ChatNotificationRouter platform chat behavior', () => {
             runtime: {
                 config: {
                     general: { messagesEnabled: true },
-                    tts: { deduplicationEnabled: false },
                     twitch: { messagesEnabled: false }
                 }
             }
@@ -115,7 +113,6 @@ describe('ChatNotificationRouter platform chat behavior', () => {
             runtime: {
                 config: {
                     general: { messagesEnabled: true },
-                    tts: { deduplicationEnabled: false },
                     youtube: { messagesEnabled: false }
                 }
             }
@@ -131,7 +128,6 @@ describe('ChatNotificationRouter platform chat behavior', () => {
             runtime: {
                 config: {
                     general: { messagesEnabled: false },
-                    tts: { deduplicationEnabled: false },
                     tiktok: {},
                     twitch: {},
                     youtube: {}
@@ -158,7 +154,6 @@ describe('ChatNotificationRouter platform chat behavior', () => {
             runtime: {
                 config: {
                     general: { messagesEnabled: true, filterOldMessages: true },
-                    tts: { deduplicationEnabled: false },
                     tiktok: { messagesEnabled: true }
                 },
                 platformLifecycleService: {

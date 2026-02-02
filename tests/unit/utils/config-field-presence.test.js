@@ -349,16 +349,10 @@ describe('Config field presence - all normalizers return expected fields', () =>
 
     describe('_normalizeTtsSection', () => {
         const EXPECTED_FIELDS = [
-            'deduplicationEnabled',
-            'debugDeduplication',
             'onlyForGifts',
             'voice',
             'rate',
-            'volume',
-            'twitchDeduplicationEnabled',
-            'youtubeDeduplicationEnabled',
-            'tiktokDeduplicationEnabled',
-            'performanceWarningThreshold'
+            'volume'
         ];
 
         it('returns all expected fields', () => {

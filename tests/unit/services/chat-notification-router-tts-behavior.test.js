@@ -25,7 +25,6 @@ describe('ChatNotificationRouter TTS behavior', () => {
         const baseRuntime = {
             config: {
                 general: { greetingsEnabled: true, messagesEnabled: true },
-                tts: { deduplicationEnabled: false },
                 twitch: {}
             },
             displayQueue: {
@@ -70,41 +69,7 @@ describe('ChatNotificationRouter TTS behavior', () => {
         expect(queuedChat.data.message).toBe('test great stream');
     });
 
-    it('queues chat regardless of TTS deduplication config', async () => {
-        const { router, runtime } = createRouter({
-            runtime: {
-                config: {
-                    general: { greetingsEnabled: true, messagesEnabled: true },
-                    tts: { deduplicationEnabled: true },
-                    twitch: {}
-                }
-            }
-        });
-
-        await router.handleChatMessage('twitch', { ...baseMessage, message: 'test hello there' });
-
-        const queuedChat = runtime.displayQueue.addItem.mock.calls.map(c => c[0]).find(i => i.type === 'chat');
-        expect(queuedChat).toBeDefined();
-    });
-
-    it('queues chat when TTS deduplication is disabled', async () => {
-        const { router, runtime } = createRouter({
-            runtime: {
-                config: {
-                    general: { greetingsEnabled: true, messagesEnabled: true },
-                    tts: { deduplicationEnabled: false },
-                    twitch: {}
-                }
-            }
-        });
-
-        await router.handleChatMessage('twitch', { ...baseMessage, message: 'test bits 100' });
-
-        const queuedChat = runtime.displayQueue.addItem.mock.calls.map(c => c[0]).find(i => i.type === 'chat');
-        expect(queuedChat).toBeDefined();
-    });
-
-    it('always enqueues valid chat messages', async () => {
+    it('enqueues valid chat messages', async () => {
         const { router, runtime } = createRouter();
 
         await router.handleChatMessage('tiktok', { ...baseMessage, message: 'test cheer100' });
