@@ -32,7 +32,7 @@ describe('ChatNotificationRouter', () => {
                     heavyCommandCooldownMs: 300000,
                     globalCmdCooldownMs: 45000
                 },
-                twitch: { greetingsEnabled: true }
+                twitch: { greetingsEnabled: true, messagesEnabled: true }
             },
             platformLifecycleService: {
                 getPlatformConnectionTime: createMockFn().mockReturnValue(null)
@@ -118,7 +118,7 @@ describe('ChatNotificationRouter', () => {
             runtime: {
                 config: {
                     general: { greetingsEnabled: true, messagesEnabled: true },
-                    twitch: { greetingsEnabled: false }
+                    twitch: { greetingsEnabled: false, messagesEnabled: true }
                 },
                 isFirstMessage: createMockFn().mockReturnValue(true)
             }

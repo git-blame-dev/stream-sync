@@ -25,7 +25,8 @@ describe('ChatNotificationRouter TTS behavior', () => {
         const baseRuntime = {
             config: {
                 general: { greetingsEnabled: true, messagesEnabled: true },
-                twitch: {}
+                twitch: { greetingsEnabled: true, messagesEnabled: true },
+                tiktok: { greetingsEnabled: true, messagesEnabled: true }
             },
             displayQueue: {
                 addItem: createMockFn()

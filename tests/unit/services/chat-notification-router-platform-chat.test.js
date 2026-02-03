@@ -26,9 +26,9 @@ describe('ChatNotificationRouter platform chat behavior', () => {
         const baseRuntime = {
             config: {
                 general: { greetingsEnabled: true, messagesEnabled: true },
-                tiktok: { messagesEnabled: true },
-                twitch: { messagesEnabled: true },
-                youtube: { messagesEnabled: true }
+                tiktok: { greetingsEnabled: true, messagesEnabled: true },
+                twitch: { greetingsEnabled: true, messagesEnabled: true },
+                youtube: { greetingsEnabled: true, messagesEnabled: true }
             },
             platformLifecycleService: {
                 getPlatformConnectionTime: createMockFn().mockReturnValue(null)
@@ -75,8 +75,8 @@ describe('ChatNotificationRouter platform chat behavior', () => {
         const { router, runtime } = createRouter({
             runtime: {
                 config: {
-                    general: { messagesEnabled: true },
-                    twitch: { messagesEnabled: false }
+                    general: { greetingsEnabled: true, messagesEnabled: true },
+                    twitch: { greetingsEnabled: true, messagesEnabled: false }
                 }
             }
         });
@@ -112,8 +112,8 @@ describe('ChatNotificationRouter platform chat behavior', () => {
         const { router, runtime } = createRouter({
             runtime: {
                 config: {
-                    general: { messagesEnabled: true },
-                    youtube: { messagesEnabled: false }
+                    general: { greetingsEnabled: true, messagesEnabled: true },
+                    youtube: { greetingsEnabled: true, messagesEnabled: false }
                 }
             }
         });
@@ -127,10 +127,10 @@ describe('ChatNotificationRouter platform chat behavior', () => {
         const { router, runtime } = createRouter({
             runtime: {
                 config: {
-                    general: { messagesEnabled: false },
-                    tiktok: {},
-                    twitch: {},
-                    youtube: {}
+                    general: { greetingsEnabled: true, messagesEnabled: false },
+                    tiktok: { greetingsEnabled: true, messagesEnabled: false },
+                    twitch: { greetingsEnabled: true, messagesEnabled: false },
+                    youtube: { greetingsEnabled: true, messagesEnabled: false }
                 }
             }
         });
@@ -153,8 +153,8 @@ describe('ChatNotificationRouter platform chat behavior', () => {
         const { router, runtime } = createRouter({
             runtime: {
                 config: {
-                    general: { messagesEnabled: true, filterOldMessages: true },
-                    tiktok: { messagesEnabled: true }
+                    general: { greetingsEnabled: true, messagesEnabled: true, filterOldMessages: true },
+                    tiktok: { greetingsEnabled: true, messagesEnabled: true }
                 },
                 platformLifecycleService: {
                     getPlatformConnectionTime: createMockFn().mockReturnValue(connectionTime)

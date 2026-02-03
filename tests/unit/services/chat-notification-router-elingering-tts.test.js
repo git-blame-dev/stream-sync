@@ -25,7 +25,7 @@ describe('ChatNotificationRouter lingering/priority/TTS', () => {
         const baseRuntime = {
             config: {
                 general: { greetingsEnabled: true, messagesEnabled: true },
-                twitch: { greetingsEnabled: true }
+                twitch: { greetingsEnabled: true, messagesEnabled: true }
             },
             displayQueue: {
                 addItem: createMockFn()
@@ -82,7 +82,7 @@ describe('ChatNotificationRouter lingering/priority/TTS', () => {
             runtime: {
                 config: {
                     general: { greetingsEnabled: true, messagesEnabled: true },
-                    twitch: { greetingsEnabled: false }
+                    twitch: { greetingsEnabled: false, messagesEnabled: true }
                 },
                 isFirstMessage: createMockFn().mockReturnValue(true)
             }

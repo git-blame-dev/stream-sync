@@ -630,10 +630,6 @@ class NotificationManager extends EventEmitter {
         }
     }
 
-    // ================================================================================================
-    // PHASE 3.1-3.5: EVENT-DRIVEN ARCHITECTURE PRIVATE METHODS
-    // ================================================================================================
-
     _loadSuppressionConfig() {
         const generalConfig = this.config.general;
         if (!generalConfig || typeof generalConfig !== 'object') {
@@ -665,29 +661,11 @@ class NotificationManager extends EventEmitter {
     }
 
     _areNotificationsEnabled(settingKey, platform) {
-        try {
-            if (platform) {
-                const platformConfig = this.config[platform];
-                if (platformConfig && platformConfig[settingKey] !== undefined) {
-                    return !!platformConfig[settingKey];
-                }
-            }
-            
-            const generalEnabled = this.config.general?.[settingKey];
-            if (generalEnabled !== undefined) {
-                return !!generalEnabled;
-            }
-            
-            throw new Error(`Missing notification config: ${platform ? `${platform}.` : ''}${settingKey}`);
-        } catch (error) {
-            this._handleNotificationError(
-                `[NotificationManager] Error checking notifications enabled: ${error.message}`,
-                error,
-                { settingKey, platform },
-                { eventType: 'notifications-enabled' }
-            );
-            return false;
+        const value = this.config[platform]?.[settingKey];
+        if (value === undefined) {
+            throw new Error(`Config missing ${platform}.${settingKey}`);
         }
+        return !!value;
     }
 
     _isDebugEnabled() {

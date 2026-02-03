@@ -1,5 +1,4 @@
 
-const { logger: defaultLogger } = require('../core/logging');
 const { createPlatformErrorHandler } = require('../utils/platform-error-handler');
 const { NOTIFICATION_CONFIGS } = require('../core/constants');
 const { PlatformEvents } = require('../interfaces/PlatformEvents');
@@ -155,25 +154,15 @@ class PlatformEventRouter {
     }
 
     _isNotificationEnabled(type, platform) {
-        const notifConfig = NOTIFICATION_CONFIGS[type];
-        const settingKey = notifConfig?.settingKey;
-        if (!settingKey || !this.config) {
-            throw new Error('Config required for notification gating');
+        const settingKey = NOTIFICATION_CONFIGS[type]?.settingKey;
+        if (!settingKey) {
+            throw new Error(`Unknown notification type: ${type}`);
         }
-
-        if (platform) {
-            const platformConfig = this.config[platform];
-            if (platformConfig && platformConfig[settingKey] !== undefined) {
-                return !!platformConfig[settingKey];
-            }
+        const value = this.config[platform]?.[settingKey];
+        if (value === undefined) {
+            throw new Error(`Config missing ${platform}.${settingKey}`);
         }
-        
-        const generalEnabled = this.config.general?.[settingKey];
-        if (generalEnabled !== undefined) {
-            return !!generalEnabled;
-        }
-        
-        throw new Error(`Missing notification config: ${platform ? `${platform}.` : ''}${settingKey}`);
+        return !!value;
     }
 
     async forwardToNotificationManager(type, platform, data) {

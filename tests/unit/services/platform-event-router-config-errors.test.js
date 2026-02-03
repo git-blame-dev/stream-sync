@@ -40,7 +40,7 @@ describe('PlatformEventRouter config gating error handling', () => {
                 timestamp: new Date().toISOString(),
                 metadata: {}
             }
-        })).rejects.toThrow('Missing notification config');
+        })).rejects.toThrow('Config missing twitch.followsEnabled');
         expect(runtime.handleFollowNotification).not.toHaveBeenCalled();
     });
 
