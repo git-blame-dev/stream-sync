@@ -120,29 +120,6 @@ class OBSEffectsManager {
     }
 }
 
-
-    async playGiftVideoAndAudio(giftVideoSource, giftAudioSource, giftScene) {
-    try {
-            this.logger.debug(`[Gift] Playing initial gift video and audio from scene: ${giftScene}`, 'effects');
-        
-        // Start both video and audio sources simultaneously
-        const promises = [
-                this.triggerMediaAction(giftVideoSource, "OBS_WEBSOCKET_MEDIA_INPUT_ACTION_RESTART"),
-                this.triggerMediaAction(giftAudioSource, "OBS_WEBSOCKET_MEDIA_INPUT_ACTION_RESTART")
-        ];
-        
-        // Execute both simultaneously
-        await Promise.all(promises);
-        
-            this.logger.debug(`[Gift] Gift video (${giftVideoSource}) and audio (${giftAudioSource}) started successfully`, 'effects');
-        
-        // No delay - continue immediately with the rest of the gift notification sequence
-    } catch (err) {
-            this._handleEffectsError('[Gift] Failed to play gift video/audio', err, { giftVideoSource, giftAudioSource, giftScene });
-        // Don't throw - continue with the rest of the gift notification
-    }
-}
-
     _handleEffectsError(message, error, payload = null) {
         if (!this.errorHandler && this.logger) {
             this.errorHandler = createPlatformErrorHandler(this.logger, 'obs-effects');
