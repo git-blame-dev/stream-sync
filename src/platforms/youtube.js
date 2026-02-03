@@ -9,8 +9,6 @@ const { safeSetInterval, validateTimeout } = require('../utils/timeout-validator
 const { withTimeout } = require('../utils/timeout-wrapper');
 const innertubeInstanceManager = require('../services/innertube-instance-manager');
 const { ViewerCountProviderFactory } = require('../utils/viewer-count-providers');
-
-const { normalizeYouTubeConfig } = require('../utils/config-normalizer');
 const { YouTubeConnectionManager } = require('../utils/youtube-connection-manager');
 const { createPlatformErrorHandler } = require('../utils/platform-error-handler');
 const { getSystemTimestampISO } = require('../utils/timestamp');
@@ -76,17 +74,7 @@ class YouTubePlatform extends EventEmitter {
         this.errorHandler = createPlatformErrorHandler(this.logger, 'youtube');
         this.platformLogger = this.logger;
         
-        // Rate limiting removed - unified processing handles message flow control
-
-        // Normalize configuration with canonical camelCase keys.
-        let normalizedConfig;
-        try {
-            normalizedConfig = normalizeYouTubeConfig(config);
-        } catch (error) {
-            throw new Error(`YouTube config normalization failed: ${error.message}`);
-        }
-        
-        this.config = { ...normalizedConfig };
+        this.config = { ...config };
         this.platformName = 'youtube';
         this.eventFactory = createYouTubeEventFactory();
         try {

@@ -18,13 +18,15 @@ describe('Cross-Platform Goal Calculation', () => {
 
         configFixture = {
             autoProcess: false,
+            maxQueueSize: 100,
             goals: {
                 enabled: true,
                 targetAmount: 1000
             },
             timing: {
-                notificationDuration: 5000,
-                lingerChatDuration: 10000
+                transitionDelay: 200,
+                notificationClearDelay: 500,
+                chatMessageDuration: 4500
             },
             notification: {
                 sourceName: 'NotificationText',
@@ -45,7 +47,14 @@ describe('Cross-Platform Goal Calculation', () => {
                     youtube: 'YoutubeLogo',
                     tiktok: 'TiktokLogo'
                 }
-            }
+            },
+            handcam: { enabled: false },
+            gifts: { giftVideoSource: 'gift-video', giftAudioSource: 'gift-audio' },
+            obs: { ttsTxt: 'tts-text' },
+            youtube: {},
+            twitch: {},
+            tiktok: {},
+            ttsEnabled: false
         };
         
         mockConstants = {

@@ -1416,6 +1416,9 @@ async function main(overrides = {}) {
         const ttsEnabledConfig = ttsEnabled;
         
         const displayQueueConfig = {
+            autoProcess: config.displayQueue.autoProcess,
+            maxQueueSize: config.displayQueue.maxQueueSize,
+            chatOptimization: config.displayQueue.chatOptimization,
             chat: {
                 sourceName: chatSourceName,
                 sceneName: chatSceneName,
@@ -1431,6 +1434,10 @@ async function main(overrides = {}) {
             obs: config.obs,
             handcam: handcamConfig,
             gifts: giftsConfig,
+            timing: config.timing,
+            youtube: config.youtube,
+            twitch: config.twitch,
+            tiktok: config.tiktok,
             ttsEnabled: ttsEnabledConfig
         };
         

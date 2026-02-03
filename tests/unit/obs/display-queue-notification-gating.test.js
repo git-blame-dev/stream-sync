@@ -41,8 +41,16 @@ describe('DisplayQueue platform notification gating', () => {
         const config = {
             autoProcess: false,
             ttsEnabled: false,
+            maxQueueSize: 100,
             chat: { sourceName: 'chat', sceneName: 'scene', groupName: 'group', platformLogos: {} },
             notification: { sourceName: 'notification', sceneName: 'scene', groupName: 'group', platformLogos: {} },
+            timing: { transitionDelay: 200, notificationClearDelay: 500, chatMessageDuration: 4500 },
+            handcam: { enabled: false },
+            gifts: { giftVideoSource: 'gift-video', giftAudioSource: 'gift-audio' },
+            obs: { ttsTxt: 'tts-text' },
+            youtube: {},
+            twitch: {},
+            tiktok: {},
             ...platformConfig
         };
 

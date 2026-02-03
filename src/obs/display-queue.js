@@ -1,7 +1,6 @@
 
 const crypto = require('crypto');
 const { logger } = require('../core/logging');
-const { normalizeDisplayQueueConfig } = require('./display-queue-config');
 const { validateDisplayConfig } = require('../utils/configuration-validator');
 const { getDefaultSourcesManager } = require('./sources');
 const { triggerHandcamGlow } = require('./handcam-glow');
@@ -54,11 +53,7 @@ class DisplayQueue {
         this.eventBus = eventBus;
         this.delay = dependencies.delay || defaultDelay;
 
-        this.config = normalizeDisplayQueueConfig(config);
-        
-        
-        // Processing begins when items are added (constructor does not auto-start)
-        // Processing starts automatically when items are added to the queue via addItem()
+        this.config = config;
         
         } catch (error) {
             handleDisplayQueueError('[DisplayQueue] Error during construction', error);

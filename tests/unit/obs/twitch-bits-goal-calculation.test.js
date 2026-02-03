@@ -21,8 +21,10 @@ describe('DisplayQueue - Twitch Bits Goal Calculation', () => {
         };
 
         configFixture = {
+            autoProcess: true,
+            maxQueueSize: 100,
             goals: { enabled: true, targetAmount: 1000 },
-            timing: { notificationDuration: 5000, lingerChatDuration: 10000 },
+            timing: { transitionDelay: 200, notificationClearDelay: 500, chatMessageDuration: 4500 },
             notification: {
                 sourceName: 'TestNotificationText',
                 sceneName: 'TestMainScene',
@@ -34,7 +36,14 @@ describe('DisplayQueue - Twitch Bits Goal Calculation', () => {
                 sceneName: 'TestMainScene',
                 groupName: 'TestChatGroup',
                 platformLogos: { twitch: 'TestTwitchLogo' }
-            }
+            },
+            handcam: { enabled: false },
+            gifts: { giftVideoSource: 'gift-video', giftAudioSource: 'gift-audio' },
+            obs: { ttsTxt: 'tts-text' },
+            youtube: {},
+            twitch: {},
+            tiktok: {},
+            ttsEnabled: false
         };
 
         const mockSourcesManager = {

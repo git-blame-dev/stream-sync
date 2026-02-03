@@ -29,9 +29,16 @@ describe('DisplayQueue monetization VFX context', () => {
 
         const baseConfig = {
             autoProcess: false,
-            chat: {},
-            notification: {},
+            maxQueueSize: 100,
+            chat: { sourceName: 'chat', sceneName: 'scene', groupName: 'group', platformLogos: {} },
+            notification: { sourceName: 'notification', sceneName: 'scene', groupName: 'group', platformLogos: {} },
+            timing: { transitionDelay: 200, notificationClearDelay: 500, chatMessageDuration: 4500 },
+            handcam: { enabled: false },
+            gifts: { giftVideoSource: 'gift-video', giftAudioSource: 'gift-audio' },
             obs: { ttsTxt: 'testTts' },
+            youtube: {},
+            twitch: {},
+            tiktok: {},
             ttsEnabled: false
         };
 
