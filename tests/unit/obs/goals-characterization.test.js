@@ -71,7 +71,7 @@ describe('OBS Goals Module Characterization Tests', () => {
             }),
             getAllGoalStates: createMockFn().mockReturnValue({
                 tiktok: { current: 500, target: 1000, formatted: '500/1000 coins' },
-                youtube: { current: 0.50, target: 1.00, formatted: '$0.50/$1.00 USD' },
+                youtube: { current: 0.50, target: 1.00, formatted: '$0.50/$1.00' },
                 twitch: { current: 50, target: 100, formatted: '050/100 bits' }
             }),
             formatGoalDisplay: createMockFn().mockReturnValue('500/1000 coins')
@@ -151,7 +151,7 @@ describe('OBS Goals Module Characterization Tests', () => {
 
             expect(mockGoalTracker.getAllGoalStates).toHaveBeenCalled();
             expect(updateTextSource).toHaveBeenCalledWith('tiktok goal txt', '500/1000 coins');
-            expect(updateTextSource).toHaveBeenCalledWith('youtube goal txt', '$0.50/$1.00 USD');
+            expect(updateTextSource).toHaveBeenCalledWith('youtube goal txt', '$0.50/$1.00');
             expect(updateTextSource).toHaveBeenCalledWith('twitch goal txt', '050/100 bits');
         }, TEST_TIMEOUTS.FAST);
 
@@ -341,7 +341,7 @@ describe('OBS Goals Module Characterization Tests', () => {
             expect(mockGoalTracker.getAllGoalStates).toHaveBeenCalled();
             expect(statuses).toEqual({
                 tiktok: { current: 500, target: 1000, formatted: '500/1000 coins' },
-                youtube: { current: 0.50, target: 1.00, formatted: '$0.50/$1.00 USD' },
+                youtube: { current: 0.50, target: 1.00, formatted: '$0.50/$1.00' },
                 twitch: { current: 50, target: 100, formatted: '050/100 bits' }
             });
         }, TEST_TIMEOUTS.FAST);
