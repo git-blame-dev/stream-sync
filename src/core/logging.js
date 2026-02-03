@@ -14,11 +14,8 @@ function safeObjectStringify(obj, maxDepth = 3) {
     if (typeof obj === 'number' || typeof obj === 'boolean') return String(obj);
     
     try {
-        // Use JSON.stringify with replacer to handle circular references and depth
         return JSON.stringify(obj, (key, value) => {
-            // Handle circular references
             if (typeof value === 'object' && value !== null) {
-                // Simple depth tracking using stack inspection
                 const stack = new Error().stack;
                 const depth = (stack.match(/safeObjectStringify/g) || []).length;
                 if (depth > maxDepth) {
@@ -28,11 +25,9 @@ function safeObjectStringify(obj, maxDepth = 3) {
             return value;
         });
     } catch (err) {
-        // Fallback for circular references or other JSON.stringify errors
         if (err && err.message && err.message.includes('circular')) {
             return '[Object: circular reference detected]';
         }
-        // For any other errors, return a safe representation
         const constructorName = obj && obj.constructor && obj.constructor.name
             ? obj.constructor.name
             : 'Unknown';
@@ -57,7 +52,6 @@ function getValidateLoggingConfig() {
     return validateLoggingConfig;
 }
 
-// Global logging configuration
 let globalLoggingConfig = null;
 
 function initializeLoggingConfig(appConfig) {
@@ -98,7 +92,6 @@ function setDebugMode(enabled) {
     loggingConfig.debugMode = !!enabled;
 }
 
-// Store original console functions at module level for console override pattern
 const originalConsoleLog = console.log;
 const originalConsoleError = console.error;
 
@@ -118,7 +111,9 @@ function ensureLogDirectory(dirPath) {
         return true;
     } catch (err) {
         try {
-            originalConsoleError(`[Logging System] Error creating log directory: ${err && err.message ? err.message : 'Unknown error'}`);
+            if (process.env.NODE_ENV !== 'test') {
+                originalConsoleError(`[Logging System] Error creating log directory: ${err && err.message ? err.message : 'Unknown error'}`);
+            }
         } catch { }
         return false;
     }
@@ -163,7 +158,6 @@ function logProgram(message) {
         return;
     }
 
-    // Initialize program log directory if not already done
     if (!programLogInitialized) {
         if (!ensureLogDirectory(logDir)) {
             return;
@@ -171,68 +165,54 @@ function logProgram(message) {
         programLogInitialized = true;
     }
     
-    // Check if message already contains a timestamp (to avoid double timestamps)
-    // This regex matches both ISO timestamps and the format used by UnifiedLogger
     const hasTimestamp = /^\[\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z\]|^\[\d{2}\/\d{2}\/\d{2}\s+\d{2}:\d{2}:\d{2}\]/.test(message);
-    
-    let logEntry;
-    if (hasTimestamp) {
-        // Message already has timestamp, just add newline
-        logEntry = `${message}\n`;
-    } else {
-        // Add timestamp to message
-        const timestamp = formatTimestamp();
-        logEntry = `[${timestamp}] ${message}\n`;
-    }
+    const logEntry = hasTimestamp ? `${message}\n` : `[${formatTimestamp()}] ${message}\n`;
     
     try {
         fs.appendFileSync(path.join(logDir, 'program-log.txt'), logEntry);
     } catch (err) {
         try {
-            originalConsoleError(`[Logging System] Error writing to program log: ${err && err.message ? err.message : 'Unknown error'}`);
+            if (process.env.NODE_ENV !== 'test') {
+                originalConsoleError(`[Logging System] Error writing to program log: ${err && err.message ? err.message : 'Unknown error'}`);
+            }
         } catch { }
     }
 }
 
 function initializeConsoleOverride() {
     if (consoleOverrideEnabled) {
-        return; // Already initialized
+        return;
     }
     
-    // Override console.log to include file logging
     console.log = function(...args) {
-        // Call original console.log first
-        originalConsoleLog.apply(console, args);
-        
-        // Then log to file
+        if (process.env.NODE_ENV !== 'test') {
+            originalConsoleLog.apply(console, args);
+        }
         logProgram(args.join(' '));
     };
     
-    // Override console.error to include file logging
     console.error = function(...args) {
-        // Call original console.error first
-        originalConsoleError.apply(console, args);
-        
-        // Then log to file with ERROR prefix
+        if (process.env.NODE_ENV !== 'test') {
+            originalConsoleError.apply(console, args);
+        }
         logProgram(`ERROR: ${args.join(' ')}`);
     };
     
     consoleOverrideEnabled = true;
-    
-    // Log initialization (using original console to avoid recursion during startup)
 }
 
 function restoreConsole() {
     if (!consoleOverrideEnabled) {
-        return; // Already restored
+        return;
     }
     
     console.log = originalConsoleLog;
     console.error = originalConsoleError;
     consoleOverrideEnabled = false;
     
-    // Log restoration using original console
-    originalConsoleLog('[Logging System] Console override restored to original functions');
+    if (process.env.NODE_ENV !== 'test') {
+        originalConsoleLog('[Logging System] Console override restored to original functions');
+    }
 }
 
 function isConsoleOverrideEnabled() {
@@ -265,11 +245,7 @@ class UnifiedLogger {
     
     log(level, message, source = 'system', data = null) {
         const timestamp = formatTimestamp();
-        
-        // Ensure message is always a string
         const safeMessage = typeof message === 'string' ? message : safeObjectStringify(message);
-        
-        // Ensure source is always a string
         const safeSource = typeof source === 'string' ? source : safeObjectStringify(source);
         
         const logEntry = {
@@ -281,7 +257,6 @@ class UnifiedLogger {
             debugMode: getDebugMode()
         };
         
-        // Output to configured destinations
         if (this.outputs.console && this.shouldOutput(level, 'console')) {
             this.outputs.console.write(logEntry);
         }
@@ -289,7 +264,6 @@ class UnifiedLogger {
         if (this.outputs.file && this.shouldOutput(level, 'file')) {
             this.outputs.file.write(logEntry);
         }
-        
     }
     
     shouldOutput(level, destination) {
@@ -315,7 +289,6 @@ class UnifiedLogger {
         return messageLevel >= configLevel;
     }
     
-    // Standard logging methods with consistent parameter order
     info(message, source = 'system', data = null) {
         this.log('info', message, source, data);
     }
@@ -358,14 +331,11 @@ class ConsoleOutputter {
         if (data && level !== 'console' && level !== 'emergency') {
             output += ` | Data: ${safeObjectStringify(data)}`;
         }
-        // Write directly to process.stdout/stderr to bypass console override and avoid double timestamps
         if (level === 'error' || level === 'emergency') {
             process.stderr.write(output + '\n');
         } else {
             process.stdout.write(output + '\n');
         }
-        
-
     }
 }
 
@@ -400,9 +370,6 @@ class FileOutputter {
     }
 }
 
-
-
-// Global logger instance
 let globalLogger = null;
 
 function initializeUnifiedLogger(config, dependencies = {}) {
@@ -427,12 +394,11 @@ function getLogger() {
 function sanitizeUsername(username) {
     if (!username) return '';
     
-    // Remove invalid Windows filename characters and control characters
     return username
-        .replace(/[<>:"|?*\\/]/g, '') // Remove invalid Windows characters
-        .replace(/[\x00-\x1f\x7f]/g, '') // Remove control characters
-        .replace(/\s+/g, '_') // Replace spaces with underscores
-        .substring(0, 50); // Limit length to prevent extremely long filenames
+        .replace(/[<>:"|?*\\/]/g, '')
+        .replace(/[\x00-\x1f\x7f]/g, '')
+        .replace(/\s+/g, '_')
+        .substring(0, 50);
 }
 
 function formatPlatformName(platform) {
@@ -469,7 +435,6 @@ function logChatMessage(platform, username, message, timestamp = null, options =
     const platformName = formatPlatformName(platform);
     const msgTimestamp = timestamp || new Date().toISOString();
     
-    // Log to main log file
     logger.info(
         `Chat: ${username}: ${message}`,
         platformName,
@@ -482,7 +447,6 @@ function logChatMessage(platform, username, message, timestamp = null, options =
         }
     );
     
-    // Always log to platform-specific chat file
     logChatMessageToFile(platform, username, message, msgTimestamp);
 }
 
@@ -496,25 +460,21 @@ function logChatMessageToFile(platform, username, message, timestamp) {
             return;
         }
         
-        // Sanitize username for filename
         const sanitizedUsername = sanitizeUsername(username);
         if (!sanitizedUsername) {
             return;
         }
         
-        // Create platform-specific filename
         const filename = `${platform}-chat-${sanitizedUsername}.txt`;
         const filepath = path.join(logDir, filename);
-        
-        // Format log entry
         const logEntry = `[${timestamp}] ${username}: ${message}\n`;
         
-        // Write to platform-specific file
         fs.appendFileSync(filepath, logEntry);
         
     } catch (err) {
-        // Use original console.error to avoid recursive calls
-        originalConsoleError(`[Logging System] Error writing chat message to file: ${err && err.message ? err.message : 'Unknown error'}`);
+        if (process.env.NODE_ENV !== 'test') {
+            originalConsoleError(`[Logging System] Error writing chat message to file: ${err && err.message ? err.message : 'Unknown error'}`);
+        }
     }
 }
 
@@ -522,37 +482,23 @@ function formatTimestamp(date = new Date()) {
     return formatTimestampCompact(date);
 }
 
-// Export unified logging interface
 module.exports = {
-    // Main logger instance (lazy-loaded)
     get logger() { return getUnifiedLogger(); },
-    
-    // Factory functions
     getLogger,
     getUnifiedLogger,
     initializeUnifiedLogger,
-    
-    // Configuration
     initializeLoggingConfig,
     getLoggingConfig,
     setConfigValidator,
-    
-    // Debug mode
     getDebugMode,
     setDebugMode,
-    
-    // Console override
     initializeConsoleOverride,
     restoreConsole,
     isConsoleOverrideEnabled,
     ensureLogDirectory,
     logProgram,
-    
-    // Chat logging
     logChatMessage,
     logChatMessagePlatform,
-    
-    // Utility functions
     formatPlatformName,
     formatTimestamp,
     sanitizeUsername,
