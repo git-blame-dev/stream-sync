@@ -164,7 +164,7 @@ function buildObsConfig(normalized) {
 function buildHandcamConfig(normalized) {
     const h = normalized.handcam;
     return {
-        enabled: h.glowEnabled,
+        enabled: h.enabled,
         sourceName: h.sourceName,
         glowFilterName: h.glowFilterName,
         maxSize: h.maxSize,
@@ -181,15 +181,14 @@ function buildGoalsConfig(normalized) {
 }
 
 function buildVfxConfig(normalized) {
-    return { filePath: normalized.vfx.vfxFilePath };
+    return { filePath: normalized.vfx.filePath };
 }
 
 function buildGiftConfig(normalized) {
     const g = normalized.gifts;
     return {
         giftVideoSource: g.giftVideoSource,
-        giftAudioSource: g.giftAudioSource,
-        scene: g.giftScene
+        giftAudioSource: g.giftAudioSource
     };
 }
 

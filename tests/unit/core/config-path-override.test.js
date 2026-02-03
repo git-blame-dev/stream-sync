@@ -61,7 +61,7 @@ function buildMinimalConfig(overrides = {}) {
             streamDetectionMethod: 'api'
         },
         handcam: {
-            glowEnabled: 'false',
+            enabled: 'false',
             sourceName: 'smoke handcam',
             glowFilterName: 'smoke glow',
             maxSize: '50',

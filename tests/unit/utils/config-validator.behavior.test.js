@@ -1,5 +1,6 @@
 const { describe, expect, it } = require('bun:test');
 const { ConfigValidator } = require('../../../src/utils/config-validator');
+const { CONFIG_SCHEMA } = require('../../../src/core/config-schema');
 
 describe('config-validator (utility) behavior', () => {
     it('parses booleans, strings, and numbers with defaults and bounds', () => {
@@ -205,7 +206,7 @@ describe('ConfigValidator._normalizeHandcamSection()', () => {
     it('applies handcam defaults', () => {
         const result = ConfigValidator._normalizeHandcamSection({});
 
-        expect(result.glowEnabled).toBe(false);
+        expect(result.enabled).toBe(false);
         expect(result.maxSize).toBe(50);
         expect(result.rampUpDuration).toBe(0.5);
     });
@@ -366,8 +367,8 @@ describe('ConfigValidator simple command sections', () => {
     });
 
     it('normalizes vfx section', () => {
-        const result = ConfigValidator._normalizeVfxSection({ vfxFilePath: '/path/to/vfx.json' });
-        expect(result.vfxFilePath).toBe('/path/to/vfx.json');
+        const result = ConfigValidator._normalizeVfxSection({ filePath: '/path/to/vfx.json' });
+        expect(result.filePath).toBe('/path/to/vfx.json');
     });
 
     it('normalizes farewell section', () => {
@@ -643,5 +644,62 @@ describe('ConfigValidator.validate() warnings', () => {
         const result = ConfigValidator.validate(config);
 
         expect(result.warnings).toEqual([]);
+    });
+});
+
+describe('ConfigValidator.normalizeFromSchema()', () => {
+    it('parses boolean type from schema', () => {
+        const result = ConfigValidator.normalizeFromSchema('general', { debugEnabled: 'true' });
+        expect(result.debugEnabled).toBe(true);
+    });
+
+    it('applies default from schema when value missing', () => {
+        const result = ConfigValidator.normalizeFromSchema('general', {});
+        expect(result.debugEnabled).toBe(false);
+        expect(result.cmdCoolDown).toBe(60);
+    });
+
+    it('parses number type with min/max constraints', () => {
+        const result = ConfigValidator.normalizeFromSchema('retry', { maxRetries: '5' });
+        expect(result.maxRetries).toBe(5);
+    });
+
+    it('returns null for userDefined fields when not provided', () => {
+        const result = ConfigValidator.normalizeFromSchema('vfx', {});
+        expect(result.filePath).toBeNull();
+    });
+
+    it('preserves userDefined field value when provided', () => {
+        const result = ConfigValidator.normalizeFromSchema('vfx', { filePath: '/path/to/vfx' });
+        expect(result.filePath).toBe('/path/to/vfx');
+    });
+
+    it('validates enum values and falls back to default', () => {
+        const validResult = ConfigValidator.normalizeFromSchema('youtube', { streamDetectionMethod: 'api' });
+        expect(validResult.streamDetectionMethod).toBe('api');
+
+        const invalidResult = ConfigValidator.normalizeFromSchema('youtube', { streamDetectionMethod: 'invalid' });
+        expect(invalidResult.streamDetectionMethod).toBe('youtubei');
+    });
+
+    it('returns null for inheritFrom fields', () => {
+        const result = ConfigValidator.normalizeFromSchema('youtube', {});
+        expect(result.messagesEnabled).toBeNull();
+        expect(result.greetingsEnabled).toBeNull();
+    });
+
+    it('uses CONFIG_SCHEMA for section definitions', () => {
+        expect(CONFIG_SCHEMA.general).toBeDefined();
+        expect(CONFIG_SCHEMA.general.debugEnabled.type).toBe('boolean');
+    });
+
+    it('returns empty object for dynamic sections', () => {
+        const result = ConfigValidator.normalizeFromSchema('commands', { someCommand: '!test' });
+        expect(result).toEqual({});
+    });
+
+    it('returns empty object for unknown sections', () => {
+        const result = ConfigValidator.normalizeFromSchema('nonexistent', { foo: 'bar' });
+        expect(result).toEqual({});
     });
 });

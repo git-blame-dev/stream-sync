@@ -71,7 +71,7 @@ enabled = false
 username =
 
 [handcam]
-glowEnabled = true
+enabled = true
 sourceName = handcam
 glowFilterName = Glow
 maxSize = 50
@@ -343,7 +343,7 @@ enabled = false
 username =
 
 [handcam]
-glowEnabled = true
+enabled = true
 sourceName = handcam
 glowFilterName = Glow
 maxSize = 50

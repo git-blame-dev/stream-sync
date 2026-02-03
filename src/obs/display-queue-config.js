@@ -3,7 +3,7 @@ const { DEFAULTS } = require('../core/config-defaults');
 
 function normalizeHandcamConfig(input = {}) {
     return {
-        enabled: ConfigValidator.parseBoolean(input.enabled, DEFAULTS.handcam.glowEnabled),
+        enabled: ConfigValidator.parseBoolean(input.enabled, DEFAULTS.handcam.enabled),
         sourceName: ConfigValidator.parseString(input.sourceName, DEFAULTS.handcam.sourceName),
         glowFilterName: ConfigValidator.parseString(input.glowFilterName, DEFAULTS.handcam.glowFilterName),
         maxSize: ConfigValidator.parseNumber(input.maxSize, { defaultValue: DEFAULTS.handcam.maxSize, min: 0 }),
@@ -18,8 +18,7 @@ function normalizeHandcamConfig(input = {}) {
 function normalizeGiftsConfig(input = {}) {
     return {
         giftVideoSource: ConfigValidator.parseString(input.giftVideoSource, DEFAULTS.gifts.giftVideoSource),
-        giftAudioSource: ConfigValidator.parseString(input.giftAudioSource, DEFAULTS.gifts.giftAudioSource),
-        scene: ConfigValidator.parseString(input.scene, DEFAULTS.gifts.giftScene)
+        giftAudioSource: ConfigValidator.parseString(input.giftAudioSource, DEFAULTS.gifts.giftAudioSource)
     };
 }
 

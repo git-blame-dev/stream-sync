@@ -289,7 +289,7 @@ describe('Config field presence - all normalizers return expected fields', () =>
 
     describe('_normalizeHandcamSection', () => {
         const EXPECTED_FIELDS = [
-            'glowEnabled',
+            'enabled',
             'sourceName',
             'glowFilterName',
             'maxSize',
@@ -342,8 +342,7 @@ describe('Config field presence - all normalizers return expected fields', () =>
         const EXPECTED_FIELDS = [
             'command',
             'giftVideoSource',
-            'giftAudioSource',
-            'giftScene'
+            'giftAudioSource'
         ];
 
         it('returns all expected fields', () => {
@@ -542,7 +541,7 @@ describe('Config field presence - all normalizers return expected fields', () =>
 
     describe('_normalizeVfxSection', () => {
         const EXPECTED_FIELDS = [
-            'vfxFilePath'
+            'filePath'
         ];
 
         it('returns all expected fields', () => {
