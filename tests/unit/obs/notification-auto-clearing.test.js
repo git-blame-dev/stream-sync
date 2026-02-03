@@ -67,6 +67,7 @@ describe('Notification Auto-Clearing Behavior', () => {
 
         const configFixture = {
             autoProcess: false,
+            maxQueueSize: 100,
             chat: {
                 sourceName: 'chat_text',
                 sceneName: 'main_scene',
@@ -87,9 +88,16 @@ describe('Notification Auto-Clearing Behavior', () => {
                     youtube: 'youtube_logo'
                 }
             },
+            timing: { transitionDelay: 200, notificationClearDelay: 200, chatMessageDuration: 5000 },
+            handcam: { enabled: false },
+            gifts: { giftVideoSource: 'gift-video', giftAudioSource: 'gift-audio' },
             obs: {
                 ttsTxt: 'tts_text'
-            }
+            },
+            youtube: {},
+            twitch: {},
+            tiktok: {},
+            ttsEnabled: false
         };
 
         // Create REAL sourcesManager with mocked OBS (mock at external boundary only)

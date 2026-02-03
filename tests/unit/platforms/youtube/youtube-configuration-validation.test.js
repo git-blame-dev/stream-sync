@@ -71,21 +71,6 @@ describe('YouTube Platform Configuration Validation', () => {
         });
     });
 
-    describe('Configuration Normalization', () => {
-        test('should honor INI-like numeric strings for retryAttempts and streamPollingInterval', () => {
-            const platform = new YouTubePlatform(
-                createYouTubeConfigFixture({
-                    retryAttempts: '4',
-                    streamPollingInterval: '30'
-                }),
-                mockDependencies
-            );
-
-            expect(platform.config.retryAttempts).toBe(4);
-            expect(platform.config.streamPollingInterval).toBe(30);
-        });
-    });
-
     describe('Platform initialization', () => {
         test('initializes disabled platform without errors', async () => {
             const platform = new YouTubePlatform(

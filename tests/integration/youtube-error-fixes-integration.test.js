@@ -21,7 +21,7 @@ describe('YouTube Error Fixes Integration', () => {
         const config = {
             enabled: true,
             username: 'test-channel',
-            enableAPI: 'false'
+            enableAPI: false
         };
 
         const platformMocks = createMockPlatformDependencies('youtube');

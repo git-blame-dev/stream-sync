@@ -25,12 +25,20 @@ describe('TTS Configuration Boolean Parsing', () => {
         const createDisplayQueueWithTTS = (ttsValue) => {
             const baseConstants = { PRIORITY_LEVELS: { CHAT: 1 } };
             const config = {
+                autoProcess: false,
+                maxQueueSize: 100,
                 ttsEnabled: ttsValue,
                 obs: {
                     ttsTxt: 'tts txt'
                 },
-                chat: {},
-                notification: {}
+                chat: { sourceName: 'chat', sceneName: 'scene', groupName: 'group', platformLogos: {} },
+                notification: { sourceName: 'notification', sceneName: 'scene', groupName: 'group', platformLogos: {} },
+                timing: { transitionDelay: 200, notificationClearDelay: 500, chatMessageDuration: 4500 },
+                handcam: { enabled: false },
+                gifts: { giftVideoSource: 'gift-video', giftAudioSource: 'gift-audio' },
+                youtube: {},
+                twitch: {},
+                tiktok: {}
             };
 
             const mockOBS = {
@@ -73,9 +81,9 @@ describe('TTS Configuration Boolean Parsing', () => {
         });
         
         describe('when ttsEnabled is string "true"', () => {
-            it('should enable TTS', () => {
+            it('should not enable TTS (config must be pre-normalized at startup)', () => {
                 const queue = createDisplayQueueWithTTS('true');
-                expect(queue.isTTSEnabled()).toBe(true);
+                expect(queue.isTTSEnabled()).toBe(false);
             });
         });
         
