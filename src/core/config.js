@@ -255,6 +255,7 @@ function buildConfig(normalized) {
         goals: buildGoalsConfig(normalized),
         vfx: buildVfxConfig(normalized),
         gifts: buildGiftConfig(normalized),
+        displayQueue: { ...normalized.displayQueue },
         spam: buildSpamConfig(normalized),
         timing: buildTimingConfig(normalized),
         cooldowns: buildCooldownsConfig(normalized),
