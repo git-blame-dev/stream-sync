@@ -334,4 +334,42 @@ describe('ConfigValidator normalize + validate integration', () => {
         expect(normalizedWithCommand.shares.command).toBe('!share');
         expect(normalizedEmpty.shares.command).toBe('');
     });
+
+    it('validateRequiredFields catches missing required fields from schema', () => {
+        const { getRawTestConfig } = require('../helpers/config-fixture');
+        const baseRaw = getRawTestConfig();
+        const rawConfig = {
+            ...baseRaw,
+            tiktok: { ...baseRaw.tiktok, enabled: 'true', username: '' },
+            twitch: { ...baseRaw.twitch, enabled: 'true', username: 'test-user', clientId: '', channel: '' },
+            youtube: { ...baseRaw.youtube, enabled: 'true', username: '' }
+        };
+
+        const normalized = ConfigValidator.normalize(rawConfig);
+        const errors = [];
+        ConfigValidator.validateRequiredFields(normalized, errors);
+
+        expect(errors.length).toBe(4);
+        expect(errors).toContain('Missing required configuration: tiktok.username (required when tiktok is enabled)');
+        expect(errors).toContain('Missing required configuration: twitch.clientId (required when twitch is enabled)');
+        expect(errors).toContain('Missing required configuration: twitch.channel (required when twitch is enabled)');
+        expect(errors).toContain('Missing required configuration: youtube.username (required when youtube is enabled)');
+    });
+
+    it('schema-driven validation passes when all required fields provided', () => {
+        const { getRawTestConfig } = require('../helpers/config-fixture');
+        const baseRaw = getRawTestConfig();
+        const rawConfig = {
+            ...baseRaw,
+            tiktok: { ...baseRaw.tiktok, enabled: 'true', username: 'test-tiktok-user' },
+            twitch: { ...baseRaw.twitch, enabled: 'true', username: 'test-twitch-user', clientId: 'test-client-id', channel: 'test-channel' },
+            youtube: { ...baseRaw.youtube, enabled: 'true', username: 'test-youtube-user' }
+        };
+
+        const normalized = ConfigValidator.normalize(rawConfig);
+        const errors = [];
+        ConfigValidator.validateRequiredFields(normalized, errors);
+
+        expect(errors).toEqual([]);
+    });
 });

@@ -647,6 +647,141 @@ describe('ConfigValidator.validate() warnings', () => {
     });
 });
 
+describe('getFieldsRequiredWhenEnabled()', () => {
+    const { getFieldsRequiredWhenEnabled } = require('../../../src/core/config-schema');
+
+    it('returns username for youtube section', () => {
+        const fields = getFieldsRequiredWhenEnabled('youtube');
+        expect(fields).toContain('username');
+    });
+
+    it('returns username, clientId, channel for twitch section', () => {
+        const fields = getFieldsRequiredWhenEnabled('twitch');
+        expect(fields).toContain('username');
+        expect(fields).toContain('clientId');
+        expect(fields).toContain('channel');
+    });
+
+    it('returns username for tiktok section', () => {
+        const fields = getFieldsRequiredWhenEnabled('tiktok');
+        expect(fields).toContain('username');
+    });
+
+    it('returns empty array for sections without requiredWhenEnabled fields', () => {
+        const fields = getFieldsRequiredWhenEnabled('general');
+        expect(fields).toEqual([]);
+    });
+
+    it('returns empty array for unknown sections', () => {
+        const fields = getFieldsRequiredWhenEnabled('nonexistent');
+        expect(fields).toEqual([]);
+    });
+});
+
+describe('ConfigValidator.validateRequiredFields()', () => {
+    const {
+        createTikTokConfigFixture,
+        createTwitchConfigFixture,
+        createYouTubeConfigFixture
+    } = require('../../../tests/helpers/config-fixture');
+
+    const createValidationTestConfig = (overrides = {}) => ({
+        general: { debugEnabled: false },
+        tiktok: createTikTokConfigFixture({ enabled: false, ...overrides.tiktok }),
+        twitch: createTwitchConfigFixture({ enabled: false, ...overrides.twitch }),
+        youtube: createYouTubeConfigFixture({ enabled: false, ...overrides.youtube })
+    });
+
+    it('adds error when enabled TikTok missing username', () => {
+        const config = createValidationTestConfig({
+            tiktok: { enabled: true, username: '' }
+        });
+
+        const errors = [];
+        ConfigValidator.validateRequiredFields(config, errors);
+
+        expect(errors).toContain('Missing required configuration: tiktok.username (required when tiktok is enabled)');
+    });
+
+    it('adds error when enabled YouTube missing username', () => {
+        const config = createValidationTestConfig({
+            youtube: { enabled: true, username: '' }
+        });
+
+        const errors = [];
+        ConfigValidator.validateRequiredFields(config, errors);
+
+        expect(errors).toContain('Missing required configuration: youtube.username (required when youtube is enabled)');
+    });
+
+    it('adds errors when enabled Twitch missing clientId and channel', () => {
+        const config = createValidationTestConfig({
+            twitch: { enabled: true, username: 'test-user', clientId: '', channel: '' }
+        });
+
+        const errors = [];
+        ConfigValidator.validateRequiredFields(config, errors);
+
+        expect(errors).toContain('Missing required configuration: twitch.clientId (required when twitch is enabled)');
+        expect(errors).toContain('Missing required configuration: twitch.channel (required when twitch is enabled)');
+    });
+
+    it('adds no errors when all required fields present', () => {
+        const config = createValidationTestConfig({
+            tiktok: { enabled: true },
+            twitch: { enabled: true },
+            youtube: { enabled: true }
+        });
+
+        const errors = [];
+        ConfigValidator.validateRequiredFields(config, errors);
+
+        expect(errors).toEqual([]);
+    });
+
+    it('ignores disabled platforms', () => {
+        const config = createValidationTestConfig({
+            tiktok: { enabled: false, username: '' },
+            twitch: { enabled: false, username: '' },
+            youtube: { enabled: false, username: '' }
+        });
+
+        const errors = [];
+        ConfigValidator.validateRequiredFields(config, errors);
+
+        expect(errors).toEqual([]);
+    });
+
+    it('validates multiple platforms independently', () => {
+        const config = createValidationTestConfig({
+            tiktok: { enabled: true, username: '' },
+            twitch: { enabled: true, username: '', clientId: '', channel: '' },
+            youtube: { enabled: true, username: '' }
+        });
+
+        const errors = [];
+        ConfigValidator.validateRequiredFields(config, errors);
+
+        expect(errors.length).toBe(5);
+        expect(errors).toContain('Missing required configuration: tiktok.username (required when tiktok is enabled)');
+        expect(errors).toContain('Missing required configuration: twitch.username (required when twitch is enabled)');
+        expect(errors).toContain('Missing required configuration: twitch.clientId (required when twitch is enabled)');
+        expect(errors).toContain('Missing required configuration: twitch.channel (required when twitch is enabled)');
+        expect(errors).toContain('Missing required configuration: youtube.username (required when youtube is enabled)');
+    });
+
+    it('rejects whitespace-only values as empty', () => {
+        const config = createValidationTestConfig({
+            tiktok: { enabled: true, username: '   ' }
+        });
+
+        const errors = [];
+        ConfigValidator.validateRequiredFields(config, errors);
+
+        expect(errors).toContain('Missing required configuration: tiktok.username (required when tiktok is enabled)');
+    });
+});
+
 describe('ConfigValidator.normalizeFromSchema()', () => {
     it('parses boolean type from schema', () => {
         const result = ConfigValidator.normalizeFromSchema('general', { debugEnabled: 'true' });
