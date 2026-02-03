@@ -292,7 +292,28 @@ function getFieldsRequiredWhenEnabled(sectionName) {
         .map(([fieldName]) => fieldName);
 }
 
+function buildDefaultsFromSchema() {
+    const defaults = {};
+    for (const [sectionName, sectionSpec] of Object.entries(CONFIG_SCHEMA)) {
+        if (sectionSpec._dynamic) continue;
+        defaults[sectionName] = {};
+        for (const [fieldName, fieldSpec] of Object.entries(sectionSpec)) {
+            if (fieldSpec.default !== undefined) {
+                defaults[sectionName][fieldName] = fieldSpec.default;
+            }
+        }
+    }
+    return defaults;
+}
+
+const DEFAULTS = {
+    LOG_DIRECTORY: './logs',
+    ...buildDefaultsFromSchema()
+};
+
 module.exports = {
     CONFIG_SCHEMA,
-    getFieldsRequiredWhenEnabled
+    getFieldsRequiredWhenEnabled,
+    buildDefaultsFromSchema,
+    DEFAULTS
 };
