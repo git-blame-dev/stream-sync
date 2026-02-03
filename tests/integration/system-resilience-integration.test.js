@@ -24,13 +24,14 @@ describe('System Resilience and Error Recovery Integration', () => {
         };
 
         obsManager = createMockOBSManager();
+        const testConfig = createConfigFixture();
         viewerCountSystem = new ViewerCountSystem({
             platforms,
-            config: createConfigFixture(),
+            config: testConfig,
             logger: createSilentLogger()
         });
 
-        const obsObserver = new OBSViewerCountObserver(obsManager, createSilentLogger());
+        const obsObserver = new OBSViewerCountObserver(obsManager, createSilentLogger(), { config: testConfig });
         viewerCountSystem.addObserver(obsObserver);
 
         await viewerCountSystem.initialize();

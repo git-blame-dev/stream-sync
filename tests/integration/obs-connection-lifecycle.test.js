@@ -33,7 +33,7 @@ describe('OBS Connection Lifecycle Integration', () => {
         };
 
         viewerCountSystem = new ViewerCountSystem({ platforms: mockPlatforms, config: testConfig, logger: noOpLogger });
-        obsObserver = new OBSViewerCountObserver(obsManager, noOpLogger);
+        obsObserver = new OBSViewerCountObserver(obsManager, noOpLogger, { config: testConfig });
 
         await viewerCountSystem.initialize();
     });

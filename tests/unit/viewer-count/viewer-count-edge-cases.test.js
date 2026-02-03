@@ -701,7 +701,7 @@ describe('Viewer Count & OBS Observer Edge Case Tests', () => {
                 call: createMockFn().mockRejectedValue(new Error('Source "youtube viewer count" not found'))
             });
 
-            const obsObserver = new OBSViewerCountObserver(obsManager, noOpLogger);
+            const obsObserver = new OBSViewerCountObserver(obsManager, noOpLogger, { config: createConfigFixture() });
 
             await obsObserver.onViewerCountUpdate({
                 platform: 'youtube',
@@ -716,7 +716,7 @@ describe('Viewer Count & OBS Observer Edge Case Tests', () => {
                 call: createMockFn().mockRejectedValue(new Error('Source is not a text source'))
             });
 
-            const obsObserver = new OBSViewerCountObserver(obsManager, noOpLogger);
+            const obsObserver = new OBSViewerCountObserver(obsManager, noOpLogger, { config: createConfigFixture() });
 
             await obsObserver.onViewerCountUpdate({
                 platform: 'twitch',
@@ -731,7 +731,7 @@ describe('Viewer Count & OBS Observer Edge Case Tests', () => {
                 call: createMockFn().mockRejectedValue(new Error('WebSocket protocol error'))
             });
 
-            const obsObserver = new OBSViewerCountObserver(obsManager, noOpLogger);
+            const obsObserver = new OBSViewerCountObserver(obsManager, noOpLogger, { config: createConfigFixture() });
 
             await obsObserver.onViewerCountUpdate({
                 platform: 'tiktok',
@@ -748,7 +748,7 @@ describe('Viewer Count & OBS Observer Edge Case Tests', () => {
                 )
             });
             
-            const obsObserver = new OBSViewerCountObserver(obsManager, noOpLogger);
+            const obsObserver = new OBSViewerCountObserver(obsManager, noOpLogger, { config: createConfigFixture() });
             
             const startTime = testClock.now();
             
@@ -778,7 +778,7 @@ describe('Viewer Count & OBS Observer Edge Case Tests', () => {
                 return Promise.resolve({ status: 'success' });
             });
 
-            const obsObserver = new OBSViewerCountObserver(obsManager, noOpLogger);
+            const obsObserver = new OBSViewerCountObserver(obsManager, noOpLogger, { config: createConfigFixture() });
 
             await obsObserver.onViewerCountUpdate({
                 platform: 'twitch',

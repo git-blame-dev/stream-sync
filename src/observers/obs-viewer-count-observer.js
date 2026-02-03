@@ -1,5 +1,4 @@
 const { ViewerCountObserver } = require('./viewer-count-observer');
-const { config: defaultConfig } = require('../core/config');
 const { createTextProcessingManager } = require('../utils/text-processing');
 const { VIEWER_COUNT_CONSTANTS } = require('../core/constants');
 const { createPlatformErrorHandler } = require('../utils/platform-error-handler');
@@ -10,9 +9,12 @@ class OBSViewerCountObserver extends ViewerCountObserver {
         if (!logger || typeof logger.error !== 'function') {
             throw new Error('OBSViewerCountObserver requires a logger');
         }
+        if (!deps.config) {
+            throw new Error('OBSViewerCountObserver requires config');
+        }
         this.obsManager = obsManager;
         this.logger = logger;
-        this.config = deps.config || defaultConfig;
+        this.config = deps.config;
         this.textProcessing = createTextProcessingManager({ logger: this.logger });
         this.errorHandler = createPlatformErrorHandler(logger, VIEWER_COUNT_CONSTANTS.LOG_CONTEXT.OBS_OBSERVER);
     }

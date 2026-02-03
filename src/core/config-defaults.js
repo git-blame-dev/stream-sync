@@ -72,7 +72,6 @@ const DEFAULTS = {
     tiktok: {
         enabled: false,
         viewerCountEnabled: true,
-        viewerCountSource: 'websocket',
         giftAggregationEnabled: true,
         dataLoggingEnabled: false
     },

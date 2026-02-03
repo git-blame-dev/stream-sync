@@ -8,8 +8,8 @@ function normalizeTikTokPlatformConfig(rawConfig = {}) {
         enabled: ConfigValidator.parseBoolean(safeConfig.enabled, DEFAULTS.tiktok.enabled),
         username: ConfigValidator.parseString(safeConfig.username, ''),
         viewerCountEnabled: ConfigValidator.parseBoolean(safeConfig.viewerCountEnabled, DEFAULTS.tiktok.viewerCountEnabled),
-        viewerCountSource: ConfigValidator.parseString(safeConfig.viewerCountSource, DEFAULTS.tiktok.viewerCountSource),
-        greetingsEnabled: ConfigValidator.parseBoolean(safeConfig.greetingsEnabled, DEFAULTS.tiktok.greetingsEnabled),
+        viewerCountSource: ConfigValidator.parseString(safeConfig.viewerCountSource, null),
+        greetingsEnabled: ConfigValidator.parseBoolean(safeConfig.greetingsEnabled, DEFAULTS.general.greetingsEnabled),
         giftAggregationEnabled: ConfigValidator.parseBoolean(safeConfig.giftAggregationEnabled, DEFAULTS.tiktok.giftAggregationEnabled),
         dataLoggingEnabled: ConfigValidator.parseBoolean(safeConfig.dataLoggingEnabled, DEFAULTS.tiktok.dataLoggingEnabled),
         dataLoggingPath: DEFAULTS.LOG_DIRECTORY
