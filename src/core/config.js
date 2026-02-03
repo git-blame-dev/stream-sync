@@ -2,7 +2,7 @@
 const fs = require('fs');
 const ini = require('ini');
 const { handleUserFacingError } = require('../utils/user-friendly-errors');
-const { DEFAULTS } = require('./config-defaults');
+const { DEFAULTS } = require('./config-schema');
 const { ConfigValidator } = require('../utils/config-validator');
 
 let loadedConfig = null;

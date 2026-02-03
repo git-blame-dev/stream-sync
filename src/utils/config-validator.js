@@ -1,5 +1,4 @@
-const { DEFAULTS } = require('../core/config-defaults');
-const { CONFIG_SCHEMA, getFieldsRequiredWhenEnabled } = require('../core/config-schema');
+const { CONFIG_SCHEMA, getFieldsRequiredWhenEnabled, DEFAULTS } = require('../core/config-schema');
 
 class ConfigValidator {
     static parseBoolean(value, defaultValue) {
