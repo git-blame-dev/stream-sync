@@ -145,21 +145,21 @@ describe('Twitch Platform', () => {
             };
 
             const testPlatform = new TwitchPlatform(validConfig, { twitchAuth: mockTwitchAuth });
-            const validation = testPlatform.validateConfig();
+            testPlatform.eventSub = { isConnected: () => true };
+            const status = testPlatform.getStatus();
 
-            expect(validation.isValid).toBe(true);
-            expect(validation.errors).toEqual([]);
+            expect(status.isReady).toBe(true);
+            expect(status.issues).toEqual([]);
         });
 
-        it('should prevent connection when critical configuration is missing', () => {
-            const invalidConfig = {};
+        it('should report runtime issues when enabled but not connected', () => {
+            const invalidPlatform = new TwitchPlatform(config, { twitchAuth: mockTwitchAuth });
+            invalidPlatform.eventSub = null;
+            const status = invalidPlatform.getStatus();
 
-            const invalidPlatform = new TwitchPlatform(invalidConfig, { twitchAuth: mockTwitchAuth });
-            const validation = invalidPlatform.validateConfig();
-
-            expect(validation.isValid).toBe(false);
-            expect(validation.errors).toContain('username: Username is required for Twitch authentication');
-            expectNoTechnicalArtifacts(validation.errors.join(' '));
+            expect(status.isReady).toBe(false);
+            expect(status.issues).toContain('Not connected');
+            expectNoTechnicalArtifacts(status.issues.join(' '));
         });
 
         it('should ensure user experience fails gracefully without auth dependencies', () => {

@@ -59,23 +59,24 @@ describe('TwitchPlatform core behavior', () => {
         }
     });
 
-    it('requires clientId when Twitch is enabled', () => {
-        platform = createPlatform({ clientId: undefined, accessToken: undefined }, { twitchAuth: createReadyTwitchAuth() });
+    it('returns isReady=false with issue when enabled but not connected', () => {
+        platform = createPlatform({}, { twitchAuth: createReadyTwitchAuth() });
+        platform.eventSub = null;
 
-        const validation = platform.validateConfig();
+        const status = platform.getStatus();
 
-        expect(validation.isValid).toBe(false);
-        expect(validation.errors).toContain('clientId: Client ID is required for Twitch authentication');
+        expect(status.isReady).toBe(false);
+        expect(status.issues).toContain('Not connected');
     });
 
-    it('marks non-ready auth state as a warning instead of an invalid config', () => {
-        platform = createPlatform({}, { twitchAuth: { isReady: () => false } });
+    it('returns isReady=true when enabled and connected', () => {
+        platform = createPlatform({}, { twitchAuth: createReadyTwitchAuth() });
+        platform.eventSub = { isConnected: () => true };
 
-        const validation = platform.validateConfig();
+        const status = platform.getStatus();
 
-        expect(validation.isValid).toBe(true);
-        expect(validation.errors).toEqual([]);
-        expect(validation.warnings.some((msg) => msg.toLowerCase().includes('twitchauth') && msg.toLowerCase().includes('ready'))).toBe(true);
+        expect(status.isReady).toBe(true);
+        expect(status.issues).toEqual([]);
     });
 
     it('skips EventSub initialization when auth is not ready', async () => {
@@ -313,13 +314,13 @@ describe('TwitchPlatform core behavior', () => {
         expect(stats.eventsub).toBe(true);
     });
 
-    it('validates configuration and returns warnings for pending auth', () => {
+    it('returns status with issues when not connected', () => {
         platform = createPlatform({}, { twitchAuth: { isReady: () => false } });
 
-        const validation = platform.validateConfig();
+        const status = platform.getStatus();
 
-        expect(validation.isValid).toBe(true);
-        expect(validation.warnings.length).toBeGreaterThan(0);
+        expect(status.isReady).toBe(false);
+        expect(status.issues).toContain('Not connected');
     });
 
     it('returns configured status based on validation result', () => {

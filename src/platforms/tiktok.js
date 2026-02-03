@@ -16,7 +16,6 @@ const { createRetrySystem } = require('../utils/retry-system');
 const { extractTikTokUserData, formatCoinAmount } = require('../utils/tiktok-data-extraction');
 const { validateNotificationManagerInterface } = require('../utils/dependency-validator');
 const { normalizeTikTokChatEvent, normalizeTikTokGiftEvent } = require('./tiktok/events/event-normalizer');
-const { normalizeTikTokPlatformConfig, validateTikTokPlatformConfig } = require('./tiktok/config/tiktok-config');
 const { createTikTokConnectionOrchestrator } = require('./tiktok/connections/tiktok-connection-orchestrator');
 const { cleanupTikTokEventListeners, setupTikTokEventListeners } = require('./tiktok/events/event-router');
 const { createTikTokGiftAggregator } = require('./tiktok/monetization/gift-aggregator');
@@ -50,7 +49,7 @@ class TikTokPlatform extends EventEmitter {
             ttlMs: dependencies.deduplicationTtlMs ?? 2 * 60 * 1000
         };
 
-        this.config = normalizeTikTokPlatformConfig(config);
+        this.config = config;
 
         this.TikTokWebSocketClient = dependencies.TikTokWebSocketClient;
         this.WebcastEvent = dependencies.WebcastEvent;
@@ -209,7 +208,7 @@ class TikTokPlatform extends EventEmitter {
     }
 
     validateConfig() {
-        return validateTikTokPlatformConfig(this.config);
+        return this.getStatus();
     }
     
     async initialize(handlers) {
@@ -643,14 +642,16 @@ class TikTokPlatform extends EventEmitter {
     }
     
     getStatus() {
+        const issues = [];
+        const isConnected = !!(this.connection && this.connection.isConnected);
+
+        if (this.config.enabled && !isConnected) {
+            issues.push('Not connected');
+        }
+
         return {
-            platform: 'TikTok',
-            enabled: this.config.enabled,
-            username: this.config.username,
-            isConnecting: this.connection ? this.connection.isConnecting : false,
-            isConnected: !!(this.connection && this.connection.isConnected),
-            hasConnection: !!this.connection,
-            connectionId: this.connection?.connectionId || 'N/A'
+            isReady: this.config.enabled && isConnected,
+            issues
         };
     }
 
