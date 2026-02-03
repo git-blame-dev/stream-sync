@@ -10,10 +10,6 @@ const { validateNormalizedMessage } = require('../utils/message-normalization');
 const { createMonetizationErrorPayload } = require('../utils/monetization-error-utils');
 const { resolveTwitchTimestampISO } = require('../utils/platform-timestamp');
 const { getSystemTimestampISO } = require('../utils/timestamp');
-const {
-    normalizeTwitchPlatformConfig,
-    validateTwitchPlatformConfig
-} = require('./twitch/config/twitch-config');
 const { createTwitchEventFactory } = require('./twitch/events/event-factory');
 const { createTwitchEventSubWiring } = require('./twitch/connections/wiring');
 
@@ -35,7 +31,7 @@ class TwitchPlatform extends EventEmitter {
         this.isPlannedDisconnection = false;
 
         // Store configuration and app reference
-        this.config = normalizeTwitchPlatformConfig(config);
+        this.config = config;
         
         // Require TwitchAuth via dependency injection
         this.twitchAuth = dependencies.twitchAuth;
@@ -626,15 +622,25 @@ class TwitchPlatform extends EventEmitter {
     }
     
     isConfigured() {
-        const validation = this.validateConfig();
-        return validation.isValid;
+        return !!(this.config.enabled && this.config.username && this.config.clientId);
     }
-    
+
+    getStatus() {
+        const issues = [];
+        const isConnected = this.eventSub?.isConnected?.() || false;
+
+        if (this.config.enabled && !isConnected) {
+            issues.push('Not connected');
+        }
+
+        return {
+            isReady: this.config.enabled && isConnected,
+            issues
+        };
+    }
+
     validateConfig() {
-        return validateTwitchPlatformConfig({
-            config: this.config,
-            twitchAuth: this.twitchAuth
-        });
+        return this.getStatus();
     }
 
     initializeViewerCountProvider() {

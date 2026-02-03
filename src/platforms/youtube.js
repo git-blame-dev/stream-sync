@@ -866,22 +866,22 @@ class YouTubePlatform extends EventEmitter {
         return !!(this.config.enabled && this.config.username);
     }
 
-    validateConfig() {
+    getStatus() {
         const issues = [];
+        const connectionCount = this.connectionManager?.getConnectionCount() ?? 0;
 
-        if (!this.config.enabled) {
-            issues.push('Platform is disabled');
+        if (this.config.enabled && connectionCount === 0) {
+            issues.push('Not connected');
         }
-        
-        if (!this.config.username) {
-            issues.push('No username configured');
-        }
-        
 
         return {
-            isValid: issues.length === 0,
-            issues: issues
+            isReady: this.config.enabled && connectionCount > 0,
+            issues
         };
+    }
+
+    validateConfig() {
+        return this.getStatus();
     }
 
 

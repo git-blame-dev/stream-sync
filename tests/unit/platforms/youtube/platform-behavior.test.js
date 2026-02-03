@@ -712,24 +712,25 @@ describe('YouTubePlatform modern architecture', () => {
         expect(result).toBe(false);
     });
 
-    it('validateConfig returns issues when disabled', () => {
+    it('getStatus returns isReady=false with no issues when disabled (by design)', () => {
         const { platform } = createPlatform();
         platform.config.enabled = false;
 
-        const result = platform.validateConfig();
+        const result = platform.getStatus();
 
-        expect(result.isValid).toBe(false);
-        expect(result.issues).toContain('Platform is disabled');
+        expect(result.isReady).toBe(false);
+        expect(result.issues).toEqual([]);
     });
 
-    it('validateConfig returns issues when no username', () => {
+    it('getStatus returns issue when enabled but not connected', () => {
         const { platform } = createPlatform();
-        platform.config.username = null;
+        platform.config.enabled = true;
+        platform.connectionManager = { getConnectionCount: () => 0 };
 
-        const result = platform.validateConfig();
+        const result = platform.getStatus();
 
-        expect(result.isValid).toBe(false);
-        expect(result.issues).toContain('No username configured');
+        expect(result.isReady).toBe(false);
+        expect(result.issues).toContain('Not connected');
     });
 
     it('getNextUserAgent delegates to userAgentManager', () => {

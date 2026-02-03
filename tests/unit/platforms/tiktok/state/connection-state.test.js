@@ -216,7 +216,7 @@ describe('TikTokPlatform connection state', () => {
     });
 
     describe('getStatus', () => {
-        it('returns platform, enabled, username, connection states', () => {
+        it('returns isReady=true when enabled and connected', () => {
             const platform = createPlatform({
                 enabled: true,
                 username: 'testStreamer'
@@ -229,25 +229,18 @@ describe('TikTokPlatform connection state', () => {
 
             const status = platform.getStatus();
 
-            expect(status.platform).toBe('TikTok');
-            expect(status.enabled).toBe(true);
-            expect(status.username).toBe('testStreamer');
-            expect(status.isConnecting).toBe(false);
-            expect(status.isConnected).toBe(true);
-            expect(status.hasConnection).toBe(true);
-            expect(status.connectionId).toBe('conn-456');
+            expect(status.isReady).toBe(true);
+            expect(status.issues).toEqual([]);
         });
 
-        it('returns connectionId="N/A" when connection is null', () => {
-            const platform = createPlatform();
+        it('returns isReady=false with issues when not connected', () => {
+            const platform = createPlatform({ enabled: true, username: 'testUser' });
             platform.connection = null;
 
             const status = platform.getStatus();
 
-            expect(status.connectionId).toBe('N/A');
-            expect(status.hasConnection).toBe(false);
-            expect(status.isConnected).toBe(false);
-            expect(status.isConnecting).toBe(false);
+            expect(status.isReady).toBe(false);
+            expect(status.issues).toContain('Not connected');
         });
     });
 
@@ -272,23 +265,24 @@ describe('TikTokPlatform connection state', () => {
     });
 
     describe('validateConfig', () => {
-        it('delegates to validateTikTokPlatformConfig', () => {
+        it('delegates to getStatus for standardized interface', () => {
             const platform = createPlatform({ enabled: true, username: 'testUser' });
+            platform.connection = { isConnected: true };
 
             const result = platform.validateConfig();
 
-            expect(result).toMatchObject({
-                valid: true
-            });
+            expect(result.isReady).toBe(true);
+            expect(result.issues).toEqual([]);
         });
 
-        it('returns validation errors for invalid config', () => {
-            const platform = createPlatform({ enabled: true, username: '' });
+        it('returns issues for runtime state problems', () => {
+            const platform = createPlatform({ enabled: true, username: 'testUser' });
+            platform.connection = null;
 
             const result = platform.validateConfig();
 
-            expect(result.valid).toBe(false);
-            expect(result.errors.length).toBeGreaterThan(0);
+            expect(result.isReady).toBe(false);
+            expect(result.issues).toContain('Not connected');
         });
     });
 });
