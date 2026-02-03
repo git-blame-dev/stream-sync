@@ -44,7 +44,6 @@ function normalizeYouTubeConfig(config) {
         giftsEnabled: ConfigValidator.parseBoolean(config.giftsEnabled),
         raidsEnabled: ConfigValidator.parseBoolean(config.raidsEnabled),
         paypiggiesEnabled: ConfigValidator.parseBoolean(config.paypiggiesEnabled),
-        greetNewCommentors: ConfigValidator.parseBoolean(config.greetNewCommentors),
         ignoreSelfMessages: ConfigValidator.parseBoolean(config.ignoreSelfMessages),
         pollInterval: ConfigValidator.parseNumber(config.pollInterval, { min: 1 }),
         dataLoggingEnabled: dataLoggingEnabled ?? DEFAULTS.youtube.dataLoggingEnabled,

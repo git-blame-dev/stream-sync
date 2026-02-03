@@ -153,18 +153,8 @@ class ChatNotificationRouter {
     }
 
     isGreetingEnabled(platform) {
-        const platformSettings = this.runtime.config?.[platform] || {};
-        const generalSettings = this.runtime.config?.general || {};
-
-        const greetNewCommentors = platformSettings.greetNewCommentors ?? generalSettings.greetNewCommentors ?? false;
-        if (!greetNewCommentors) {
-            return false;
-        }
-
-        if (typeof platformSettings.greetingsEnabled === 'boolean') {
-            return platformSettings.greetingsEnabled;
-        }
-        return generalSettings.greetingsEnabled ?? true;
+        const platformConfig = this.runtime.config?.[platform];
+        return !!platformConfig?.greetingsEnabled;
     }
 
     isChatEnabled(platform) {
