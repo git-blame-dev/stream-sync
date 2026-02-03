@@ -900,7 +900,7 @@ class AppRuntime {
 
             // Register OBS observer for viewer count updates
             const obsManager = this._getObsConnectionManager();
-            const obsObserver = new OBSViewerCountObserver(obsManager, logger);
+            const obsObserver = new OBSViewerCountObserver(obsManager, logger, { config: this.config });
             this.viewerCountSystem.addObserver(obsObserver);
             
             // Initialize viewer count system (will set all counts to 0 in OBS)

@@ -30,7 +30,7 @@ describe('TikTok config helpers', () => {
         expect(normalized.enabled).toBe(true);
         expect(normalized.username).toBe('123');
         expect(normalized.viewerCountEnabled).toBe(false);
-        expect(normalized.viewerCountSource).toBe('websocket');
+        expect(normalized.viewerCountSource).toBeNull();
         expect(normalized.greetingsEnabled).toBe(false);
         expect(normalized.giftAggregationEnabled).toBe(true);
         expect(normalized.dataLoggingEnabled).toBe(true);

@@ -50,9 +50,9 @@ const RAW_TEST_CONFIG = {
         maxEntries: '1000'
     },
     commands: {},
-    tiktok: { enabled: 'false' },
-    twitch: { enabled: 'false' },
-    youtube: { enabled: 'false' },
+    tiktok: { enabled: 'false', viewerCountSource: 'test-tiktok-viewer-count' },
+    twitch: { enabled: 'false', viewerCountSource: 'test-twitch-viewer-count' },
+    youtube: { enabled: 'false', viewerCountSource: 'test-youtube-viewer-count' },
     http: {},
     spam: {
         enabled: 'true',

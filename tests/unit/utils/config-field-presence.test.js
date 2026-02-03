@@ -662,13 +662,13 @@ describe('Platform config viewerCountSource consistency', () => {
         expect(youtubeResult.viewerCountSource).toBe(testSource);
     });
 
-    it('all platform normalizers return empty string as default for viewerCountSource', () => {
+    it('all platform normalizers return null for viewerCountSource when not provided', () => {
         const tiktokResult = ConfigValidator._normalizeTiktokSection({});
         const twitchResult = ConfigValidator._normalizeTwitchSection({});
         const youtubeResult = ConfigValidator._normalizeYoutubeSection({});
 
-        expect(typeof tiktokResult.viewerCountSource).toBe('string');
-        expect(typeof twitchResult.viewerCountSource).toBe('string');
-        expect(typeof youtubeResult.viewerCountSource).toBe('string');
+        expect(tiktokResult.viewerCountSource).toBeNull();
+        expect(twitchResult.viewerCountSource).toBeNull();
+        expect(youtubeResult.viewerCountSource).toBeNull();
     });
 });

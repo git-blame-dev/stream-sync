@@ -44,7 +44,7 @@ describe('YouTube Viewer Count System - End-to-End Integration', () => {
             config: testConfig,
             timeProvider
         });
-        const obsObserver = new OBSViewerCountObserver(obsManager, logger);
+        const obsObserver = new OBSViewerCountObserver(obsManager, logger, { config: testConfig });
         viewerCountSystem.addObserver(obsObserver);
         await viewerCountSystem.initialize();
     });
