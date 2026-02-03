@@ -1,6 +1,7 @@
 const { describe, it, expect, beforeEach, afterEach } = require('bun:test');
 const { createMockFn, restoreAllMocks } = require('../../../../helpers/bun-mock-utils');
 const { noOpLogger } = require('../../../../helpers/mock-factories');
+const { createConfigFixture } = require('../../../../helpers/config-fixture');
 
 const PlatformEventRouter = require('../../../../../src/services/PlatformEventRouter');
 const { PlatformEvents } = require('../../../../../src/interfaces/PlatformEvents');
@@ -51,7 +52,7 @@ describe('TikTokPlatform unified event contract (expected behavior)', () => {
             eventBus: mockEventBus,
             runtime,
             notificationManager: { handleNotification: createMockFn() },
-            config: { general: { followsEnabled: true, giftsEnabled: true, messagesEnabled: true } },
+            config: createConfigFixture({ general: { followsEnabled: true, giftsEnabled: true, messagesEnabled: true } }),
             logger: noOpLogger
         });
 

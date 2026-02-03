@@ -153,20 +153,19 @@ class ChatNotificationRouter {
     }
 
     isGreetingEnabled(platform) {
-        const platformConfig = this.runtime.config?.[platform];
-        return !!platformConfig?.greetingsEnabled;
+        const value = this.runtime.config?.[platform]?.greetingsEnabled;
+        if (value === undefined) {
+            throw new Error(`Config missing ${platform}.greetingsEnabled`);
+        }
+        return !!value;
     }
 
     isChatEnabled(platform) {
-        const platformSettings = this.runtime.config?.[platform] || {};
-        if (typeof platformSettings.messagesEnabled === 'boolean') {
-            return platformSettings.messagesEnabled;
+        const value = this.runtime.config?.[platform]?.messagesEnabled;
+        if (value === undefined) {
+            throw new Error(`Config missing ${platform}.messagesEnabled`);
         }
-        const generalSettings = this.runtime.config?.general || {};
-        if (typeof generalSettings.messagesEnabled === 'boolean') {
-            return generalSettings.messagesEnabled;
-        }
-        return true;
+        return !!value;
     }
 
     enqueueChatMessage(platform, normalizedData, sanitizedMessage) {

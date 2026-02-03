@@ -24,7 +24,8 @@ describe('Old Message Filter', () => {
                 general: {
                     filterOldMessages: true,
                     ...overrides.general
-                }
+                },
+                twitch: { messagesEnabled: true, greetingsEnabled: true }
             },
             platformLifecycleService: {
                 getPlatformConnectionTime: createMockFn().mockReturnValue(overrides.connectionTime || null)
