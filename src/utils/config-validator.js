@@ -1,5 +1,5 @@
 const { DEFAULTS } = require('../core/config-defaults');
-const { CONFIG_SCHEMA } = require('../core/config-schema');
+const { CONFIG_SCHEMA, getFieldsRequiredWhenEnabled } = require('../core/config-schema');
 
 class ConfigValidator {
     static parseBoolean(value, defaultValue) {
@@ -448,6 +448,7 @@ class ConfigValidator {
         const warnings = [];
 
         ConfigValidator._validateRequiredSections(config, errors);
+        ConfigValidator.validateRequiredFields(config, errors);
         ConfigValidator._validatePlatformUsernames(config, errors);
         ConfigValidator._validateTwitchClientId(config, errors);
         ConfigValidator._validateStreamElements(config, errors);
@@ -460,6 +461,23 @@ class ConfigValidator {
             errors,
             warnings
         };
+    }
+
+    static validateRequiredFields(config, errors) {
+        const platformSections = ['youtube', 'twitch', 'tiktok'];
+
+        for (const sectionName of platformSections) {
+            const sectionConfig = config[sectionName];
+            if (!sectionConfig || !sectionConfig.enabled) continue;
+
+            const requiredFields = getFieldsRequiredWhenEnabled(sectionName);
+            for (const fieldName of requiredFields) {
+                const value = sectionConfig[fieldName];
+                if (!value || (typeof value === 'string' && value.trim() === '')) {
+                    errors.push(`Missing required configuration: ${sectionName}.${fieldName} (required when ${sectionName} is enabled)`);
+                }
+            }
+        }
     }
 
     static _validateRequiredSections(config, errors) {

@@ -600,6 +600,7 @@ userAgents = test-agent-1|test-agent-2
 enabled = true
 username = José_Streamer
 clientId = test-client-id
+channel = test-channel
 cheermoteDefaultGiftCount = 1
 cheermoteGenericCheerName = Cheer
 cheermoteGenericBitsName = Bits

@@ -283,6 +283,16 @@ const CONFIG_SCHEMA = {
     }
 };
 
+function getFieldsRequiredWhenEnabled(sectionName) {
+    const sectionSchema = CONFIG_SCHEMA[sectionName];
+    if (!sectionSchema) return [];
+
+    return Object.entries(sectionSchema)
+        .filter(([, spec]) => spec.requiredWhenEnabled === true)
+        .map(([fieldName]) => fieldName);
+}
+
 module.exports = {
-    CONFIG_SCHEMA
+    CONFIG_SCHEMA,
+    getFieldsRequiredWhenEnabled
 };
