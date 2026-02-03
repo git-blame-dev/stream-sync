@@ -199,7 +199,7 @@ class GoalTracker {
             return `${padNumber(currentAmount, targetAmount)}/${targetAmount} ${currency}`;
             
         case 'youtube':
-            return `$${currentAmount.toFixed(2)}/$${targetAmount.toFixed(2)} USD`;
+            return `$${currentAmount.toFixed(2)}/$${targetAmount.toFixed(2)}`;
             
         case 'twitch':
             return `${padNumber(currentAmount, targetAmount)}/${targetAmount} ${currency}`;

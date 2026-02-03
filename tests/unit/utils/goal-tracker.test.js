@@ -86,7 +86,7 @@ describe('Goal Tracker - Core Functionality', () => {
             expect(result.target).toBe(1.00);
             expect(result.percentage).toBe(50);
             expect(result.goalCompleted).toBe(false);
-            expect(result.formatted).toBe('$0.50/$1.00 USD');
+            expect(result.formatted).toBe('$0.50/$1.00');
         }, TEST_TIMEOUTS.FAST);
 
         test('should process Twitch donation correctly', async () => {
@@ -192,7 +192,7 @@ describe('Goal Tracker - Core Functionality', () => {
 
         test('should format YouTube dollars correctly', () => {
             const formatted = goalTracker.formatGoalDisplay('youtube', 1.5, 10.00);
-            expect(formatted).toBe('$1.50/$10.00 USD');
+            expect(formatted).toBe('$1.50/$10.00');
         }, TEST_TIMEOUTS.FAST);
 
         test('should format Twitch bits correctly', () => {
@@ -202,7 +202,7 @@ describe('Goal Tracker - Core Functionality', () => {
 
         test('should handle edge case formatting', () => {
             const formatted = goalTracker.formatGoalDisplay('youtube', 0.1, 1.0);
-            expect(formatted).toBe('$0.10/$1.00 USD');
+            expect(formatted).toBe('$0.10/$1.00');
         }, TEST_TIMEOUTS.FAST);
     });
 
@@ -213,7 +213,7 @@ describe('Goal Tracker - Core Functionality', () => {
             const youtubeResult = await goalTracker.addDonationToGoal('youtube', 0.50);
             expect(youtubeResult.success).toBe(true);
             expect(youtubeResult.newTotal).toBe(0.50);
-            expect(youtubeResult.formatted).toBe('$0.50/$1.00 USD');
+            expect(youtubeResult.formatted).toBe('$0.50/$1.00');
             expect(youtubeResult.percentage).toBe(50);
 
             const twitchResult = await goalTracker.addDonationToGoal('twitch', 50);
@@ -278,7 +278,7 @@ describe('Goal Tracker - Core Functionality', () => {
 
         test('formatGoalDisplay handles string targets without throwing', () => {
             const formatted = goalTracker.formatGoalDisplay('youtube', '1.5', '10.00');
-            expect(formatted).toBe('$1.50/$10.00 USD');
+            expect(formatted).toBe('$1.50/$10.00');
         }, TEST_TIMEOUTS.FAST);
 
         test('percentage is 0 when target is zero', async () => {
