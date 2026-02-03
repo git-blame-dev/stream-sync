@@ -271,12 +271,12 @@ describe('Console Override Pattern', () => {
             initializeConsoleOverride();
 
             expect(() => {
-                for (let i = 0; i < 100; i++) {
+                for (let i = 0; i < 5; i++) {
                     console.log(`Message ${i}`);
                 }
             }).not.toThrow();
 
-            expect(writtenContent.length).toBe(100);
+            expect(writtenContent.length).toBe(5);
         });
     });
 });

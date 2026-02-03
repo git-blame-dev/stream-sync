@@ -55,7 +55,7 @@ function loadConfig() {
         loadedConfig = normalized;
 
         const debugEnabled = normalized.general.debugEnabled;
-        if (debugEnabled) {
+        if (debugEnabled && process.env.NODE_ENV !== 'test') {
             process.stdout.write(`[INFO] [Config] Successfully loaded configuration from ${configPath}\n`);
         }
 
@@ -282,7 +282,7 @@ function getConfig() {
 }
 
 const DEFAULT_LOGGING_CONFIG = {
-    console: { enabled: true, level: 'console' }, // Only user-facing messages (chat, notifications, errors)
+    console: { enabled: true, level: 'console' },
     file: { enabled: true, level: 'debug', directory: DEFAULTS.LOG_DIRECTORY },
     debug: { enabled: false },
     platforms: {
@@ -296,33 +296,22 @@ const DEFAULT_LOGGING_CONFIG = {
 function validateLoggingConfig(userConfig = {}) {
     const config = { ...DEFAULT_LOGGING_CONFIG };
     
-    // Merge user config with defaults
     if (userConfig.logging) {
         Object.assign(config, userConfig.logging);
     }
     
-    // Backward compatibility mapping
     if (userConfig.general && userConfig.general.debugEnabled !== undefined) {
-        // Only apply config file debug setting if not already set by command line
         const { getDebugMode } = require('./logging');
         const debugAlreadySetByCommandLine = getDebugMode();
         
         if (!debugAlreadySetByCommandLine) {
             config.debug.enabled = userConfig.general.debugEnabled;
-            // When debug mode is enabled, set console level to 'debug' to show debug messages
-            if (userConfig.general.debugEnabled) {
-                config.console.level = 'debug';
-            } else {
-                // When debug mode is disabled, ensure console level is 'console' for user-facing messages only
-                config.console.level = 'console';
-            }
+            config.console.level = userConfig.general.debugEnabled ? 'debug' : 'console';
         } else {
-            // Command line debug flag was used, ensure console level is debug
             config.console.level = 'debug';
         }
     }
     
-    // Validate log levels
     const validLevels = ['error', 'warn', 'console', 'info', 'debug'];
     if (!validLevels.includes(config.console.level)) {
         config.console.level = 'console';
@@ -331,7 +320,6 @@ function validateLoggingConfig(userConfig = {}) {
         config.file.level = 'debug';
     }
     
-    // Handle new logging section configuration
     if (userConfig.logging) {
         if (userConfig.logging.consoleLevel && validLevels.includes(userConfig.logging.consoleLevel)) {
             config.console.level = userConfig.logging.consoleLevel;
