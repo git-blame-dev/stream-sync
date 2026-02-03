@@ -16,7 +16,6 @@ const DEFAULTS = {
         sharesEnabled: true,
         paypiggiesEnabled: true,
         redemptionsEnabled: true,
-        greetNewCommentors: false,
         filterOldMessages: true,
         logChatMessages: true,
         keywordParsingEnabled: true,

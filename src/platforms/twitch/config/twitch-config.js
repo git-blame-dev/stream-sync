@@ -38,7 +38,6 @@ function normalizeTwitchPlatformConfig(rawConfig = {}) {
         giftsEnabled: ConfigValidator.parseBoolean(rawConfig.giftsEnabled),
         raidsEnabled: ConfigValidator.parseBoolean(rawConfig.raidsEnabled),
         paypiggiesEnabled: ConfigValidator.parseBoolean(rawConfig.paypiggiesEnabled),
-        greetNewCommentors: ConfigValidator.parseBoolean(rawConfig.greetNewCommentors),
         ignoreSelfMessages: ConfigValidator.parseBoolean(rawConfig.ignoreSelfMessages),
         pollInterval: ConfigValidator.parseNumber(rawConfig.pollInterval, { min: 1 })
     };

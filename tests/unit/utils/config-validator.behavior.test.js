@@ -160,8 +160,8 @@ describe('ConfigValidator._normalizeTiktokSection()', () => {
     it('allows null for platform-overrideable flags', () => {
         const result = ConfigValidator._normalizeTiktokSection({});
 
-        expect(result.greetNewCommentors).toBeNull();
         expect(result.messagesEnabled).toBeNull();
+        expect(result.greetingsEnabled).toBeNull();
     });
 });
 

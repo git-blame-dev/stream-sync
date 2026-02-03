@@ -91,7 +91,6 @@ class ConfigValidator {
             sharesEnabled: ConfigValidator.parseBoolean(raw.sharesEnabled, DEFAULTS.general.sharesEnabled),
             paypiggiesEnabled: ConfigValidator.parseBoolean(raw.paypiggiesEnabled, DEFAULTS.general.paypiggiesEnabled),
             redemptionsEnabled: ConfigValidator.parseBoolean(raw.redemptionsEnabled, DEFAULTS.general.redemptionsEnabled),
-            greetNewCommentors: ConfigValidator.parseBoolean(raw.greetNewCommentors, DEFAULTS.general.greetNewCommentors),
             filterOldMessages: ConfigValidator.parseBoolean(raw.filterOldMessages, DEFAULTS.general.filterOldMessages),
             logChatMessages: ConfigValidator.parseBoolean(raw.logChatMessages, DEFAULTS.general.logChatMessages),
             keywordParsingEnabled: ConfigValidator.parseBoolean(raw.keywordParsingEnabled, DEFAULTS.general.keywordParsingEnabled),
@@ -160,7 +159,6 @@ class ConfigValidator {
             viewerCountSource: ConfigValidator.parseString(raw.viewerCountSource, DEFAULTS.tiktok.viewerCountSource),
             giftAggregationEnabled: ConfigValidator.parseBoolean(raw.giftAggregationEnabled, DEFAULTS.tiktok.giftAggregationEnabled),
             dataLoggingEnabled: ConfigValidator.parseBoolean(raw.dataLoggingEnabled, DEFAULTS.tiktok.dataLoggingEnabled),
-            greetNewCommentors: ConfigValidator.parseBoolean(raw.greetNewCommentors, null),
             ...ConfigValidator._parseInheritableFlags(raw),
             pollInterval: ConfigValidator.parseNumber(raw.pollInterval, { defaultValue: null })
         };
@@ -177,7 +175,6 @@ class ConfigValidator {
             eventsubEnabled: ConfigValidator.parseBoolean(raw.eventsubEnabled, DEFAULTS.twitch.eventsubEnabled),
             dataLoggingEnabled: ConfigValidator.parseBoolean(raw.dataLoggingEnabled, DEFAULTS.twitch.dataLoggingEnabled),
             tokenStorePath: ConfigValidator.parseString(raw.tokenStorePath, DEFAULTS.twitch.tokenStorePath),
-            greetNewCommentors: ConfigValidator.parseBoolean(raw.greetNewCommentors, null),
             ...ConfigValidator._parseInheritableFlags(raw),
             pollInterval: ConfigValidator.parseNumber(raw.pollInterval, { defaultValue: null })
         };
@@ -200,7 +197,6 @@ class ConfigValidator {
             enableAPI: ConfigValidator.parseBoolean(raw.enableAPI, DEFAULTS.youtube.enableAPI),
             streamDetectionMethod: ['youtubei', 'api'].includes(method) ? method : DEFAULTS.youtube.streamDetectionMethod,
             viewerCountMethod: ['youtubei', 'api'].includes(viewerMethod) ? viewerMethod : DEFAULTS.youtube.viewerCountMethod,
-            greetNewCommentors: ConfigValidator.parseBoolean(raw.greetNewCommentors, null),
             ...ConfigValidator._parseInheritableFlags(raw),
             pollInterval: ConfigValidator.parseNumber(raw.pollInterval, { defaultValue: null })
         };
