@@ -32,7 +32,7 @@ const RAW_TEST_CONFIG = {
         notificationClearDelay: '500'
     },
     handcam: {
-        glowEnabled: 'false',
+        enabled: 'false',
         sourceName: 'test-handcam',
         glowFilterName: 'Glow',
         maxSize: '50',

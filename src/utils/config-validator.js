@@ -1,4 +1,5 @@
 const { DEFAULTS } = require('../core/config-defaults');
+const { CONFIG_SCHEMA } = require('../core/config-schema');
 
 class ConfigValidator {
     static parseBoolean(value, defaultValue) {
@@ -27,6 +28,48 @@ class ConfigValidator {
         if (typeof min === 'number' && parsed < min) return defaultValue;
         if (typeof max === 'number' && parsed > max) return defaultValue;
         return parsed;
+    }
+
+    static normalizeFromSchema(sectionName, rawData) {
+        const sectionSchema = CONFIG_SCHEMA[sectionName];
+        if (!sectionSchema || sectionSchema._dynamic) return {};
+
+        const result = {};
+        for (const [fieldName, spec] of Object.entries(sectionSchema)) {
+            result[fieldName] = ConfigValidator._normalizeFieldFromSpec(rawData[fieldName], spec);
+        }
+        return result;
+    }
+
+    static _normalizeFieldFromSpec(value, spec) {
+        if (spec.userDefined) {
+            return value === undefined || value === null ? null : ConfigValidator.parseString(value, null);
+        }
+
+        if (spec.inheritFrom) {
+            return value === undefined || value === null ? null : ConfigValidator.parseBoolean(value, null);
+        }
+
+        const defaultValue = spec.default ?? null;
+
+        switch (spec.type) {
+            case 'boolean':
+                return ConfigValidator.parseBoolean(value, defaultValue);
+            case 'number':
+                return ConfigValidator.parseNumber(value, {
+                    defaultValue,
+                    min: spec.min,
+                    max: spec.max
+                });
+            case 'string':
+                if (spec.enum) {
+                    const parsed = ConfigValidator.parseString(value, defaultValue)?.toLowerCase();
+                    return spec.enum.includes(parsed) ? parsed : defaultValue;
+                }
+                return ConfigValidator.parseString(value, defaultValue);
+            default:
+                return defaultValue;
+        }
     }
 
     static _parseInheritableFlags(raw) {
@@ -204,7 +247,7 @@ class ConfigValidator {
 
     static _normalizeHandcamSection(raw) {
         return {
-            glowEnabled: ConfigValidator.parseBoolean(raw.glowEnabled, DEFAULTS.handcam.glowEnabled),
+            enabled: ConfigValidator.parseBoolean(raw.enabled, DEFAULTS.handcam.enabled),
             sourceName: ConfigValidator.parseString(raw.sourceName, DEFAULTS.handcam.sourceName),
             glowFilterName: ConfigValidator.parseString(raw.glowFilterName, DEFAULTS.handcam.glowFilterName),
             maxSize: ConfigValidator.parseNumber(raw.maxSize, { defaultValue: DEFAULTS.handcam.maxSize }),
@@ -241,8 +284,7 @@ class ConfigValidator {
         return {
             command: ConfigValidator.parseString(raw.command, ''),
             giftVideoSource: ConfigValidator.parseString(raw.giftVideoSource, DEFAULTS.gifts.giftVideoSource),
-            giftAudioSource: ConfigValidator.parseString(raw.giftAudioSource, DEFAULTS.gifts.giftAudioSource),
-            giftScene: ConfigValidator.parseString(raw.giftScene, DEFAULTS.gifts.giftScene)
+            giftAudioSource: ConfigValidator.parseString(raw.giftAudioSource, DEFAULTS.gifts.giftAudioSource)
         };
     }
 
@@ -358,7 +400,7 @@ class ConfigValidator {
 
     static _normalizeVfxSection(raw) {
         return {
-            vfxFilePath: ConfigValidator.parseString(raw.vfxFilePath, '')
+            filePath: ConfigValidator.parseString(raw.filePath, '')
         };
     }
 

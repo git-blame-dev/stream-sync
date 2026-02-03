@@ -134,7 +134,7 @@ const DEFAULTS = {
     },
 
     handcam: {
-        glowEnabled: false,
+        enabled: false,
         sourceName: 'handcam-source',
         glowFilterName: 'Glow',
         maxSize: 50,
@@ -181,8 +181,7 @@ const DEFAULTS = {
 
     gifts: {
         giftVideoSource: 'gift-video',
-        giftAudioSource: 'gift-audio',
-        giftScene: 'gift-scene'
+        giftAudioSource: 'gift-audio'
     },
 
     tts: {

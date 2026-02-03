@@ -63,7 +63,6 @@ describe('Spam Configuration Integration', () => {
 
             expect(giftConfig.giftVideoSource).toBeDefined();
             expect(giftConfig.giftAudioSource).toBeDefined();
-            expect(giftConfig.scene).toBeDefined();
         });
 
         it('should not include spam fields in gift config', () => {

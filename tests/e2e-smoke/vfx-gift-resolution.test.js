@@ -19,7 +19,7 @@ describe('VFX chat command resolution smoke E2E', () => {
         },
         gifts: {},
         vfx: {
-            vfxFilePath: '/test/vfx/path'
+            filePath: '/test/vfx/path'
         },
         farewell: {
             command: ''
@@ -43,7 +43,7 @@ describe('VFX chat command resolution smoke E2E', () => {
 
         const commandParser = new CommandParser({
             commands: normalized.commands,
-            vfx: { filePath: normalized.vfx.vfxFilePath },
+            vfx: { filePath: normalized.vfx.filePath },
             general: normalized.general
         });
 
@@ -63,7 +63,7 @@ describe('VFX chat command resolution smoke E2E', () => {
 
         const commandParser = new CommandParser({
             commands: normalized.commands,
-            vfx: { filePath: normalized.vfx.vfxFilePath },
+            vfx: { filePath: normalized.vfx.filePath },
             general: normalized.general
         });
 
@@ -82,7 +82,7 @@ describe('VFX chat command resolution smoke E2E', () => {
 
         const commandParser = new CommandParser({
             commands: normalized.commands,
-            vfx: { filePath: normalized.vfx.vfxFilePath },
+            vfx: { filePath: normalized.vfx.filePath },
             general: normalized.general
         });
 
@@ -101,7 +101,7 @@ describe('VFX chat command resolution smoke E2E', () => {
 
         const commandParser = new CommandParser({
             commands: normalized.commands,
-            vfx: { filePath: normalized.vfx.vfxFilePath },
+            vfx: { filePath: normalized.vfx.filePath },
             general: normalized.general
         });
 
@@ -124,7 +124,7 @@ describe('VFX chat command resolution smoke E2E', () => {
 
         const commandParser = new CommandParser({
             commands: normalized.commands,
-            vfx: { filePath: normalized.vfx.vfxFilePath },
+            vfx: { filePath: normalized.vfx.filePath },
             general: normalized.general
         });
 
@@ -169,7 +169,7 @@ describe('VFX notification resolution smoke E2E', () => {
             command: ''
         },
         vfx: {
-            vfxFilePath: '/test/vfx/path'
+            filePath: '/test/vfx/path'
         },
         farewell: {
             command: ''

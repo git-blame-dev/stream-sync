@@ -246,7 +246,7 @@ class CommandParser {
     updateConfig(newConfig) {
         this.commands = newConfig.commands || this.commands;
         this.farewellCommands = newConfig.farewell || this.farewellCommands;
-        this.vfxFilePath = newConfig.vfx?.vfxFilePath || newConfig.vfx?.filePath || this.vfxFilePath;
+        this.vfxFilePath = newConfig.vfx?.filePath ?? this.vfxFilePath;
         
         // Re-parse configurations
         this.parsedCommands = this.parseCommandConfigurations();

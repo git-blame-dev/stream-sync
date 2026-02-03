@@ -47,7 +47,7 @@ notificationClearDelay = 500
 ${youtubeSection}
 
 [handcam]
-glowEnabled = true
+enabled = true
 sourceName = handcam
 glowFilterName = Glow
 maxSize = 50
@@ -188,7 +188,7 @@ enabled = false
 username =
 
 [handcam]
-glowEnabled = true
+enabled = true
 sourceName = handcam
 glowFilterName = Glow
 maxSize = 50
@@ -241,7 +241,7 @@ innertubeMinTtlMs = 60000
 userAgents = agent-one|agent-two
 
 [handcam]
-glowEnabled = true
+enabled = true
 sourceName = handcam
 glowFilterName = Glow
 maxSize = 50
