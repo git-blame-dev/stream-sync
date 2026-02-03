@@ -262,7 +262,6 @@ const TECHNICAL_ERROR_PATTERNS = [
     },
     {
         patterns: [
-            /Missing required configuration: Twitch username/i,
             /Missing.*Twitch.*username/i,
             /expectedUsername is required for Twitch authentication/i
         ],
@@ -270,14 +269,12 @@ const TECHNICAL_ERROR_PATTERNS = [
     },
     {
         patterns: [
-            /Missing required configuration: YouTube username/i,
             /Missing.*YouTube.*username/i
         ],
         errorKey: 'missing_youtube_username'
     },
     {
         patterns: [
-            /Missing required configuration: TikTok username/i,
             /Missing.*TikTok.*username/i
         ],
         errorKey: 'missing_tiktok_username'

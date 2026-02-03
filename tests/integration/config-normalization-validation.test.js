@@ -44,7 +44,7 @@ describe('ConfigValidator normalize + validate integration', () => {
         const validation = ConfigValidator.validate(normalized);
 
         expect(validation.isValid).toBe(false);
-        expect(validation.errors).toContain('Missing required configuration: TikTok username');
+        expect(validation.errors).toContain('Missing required configuration: tiktok.username (required when tiktok is enabled)');
     });
 
     it('enabled platform with username passes validation', () => {
@@ -142,9 +142,9 @@ describe('ConfigValidator normalize + validate integration', () => {
         const validation = ConfigValidator.validate(normalized);
 
         expect(validation.isValid).toBe(false);
-        expect(validation.errors).toContain('Missing required configuration: TikTok username');
-        expect(validation.errors).toContain('Missing required configuration: Twitch username');
-        expect(validation.errors).toContain('Missing required configuration: YouTube username');
+        expect(validation.errors).toContain('Missing required configuration: tiktok.username (required when tiktok is enabled)');
+        expect(validation.errors).toContain('Missing required configuration: twitch.username (required when twitch is enabled)');
+        expect(validation.errors).toContain('Missing required configuration: youtube.username (required when youtube is enabled)');
     });
 
     it('StreamElements validation requires channel ID when enabled', () => {

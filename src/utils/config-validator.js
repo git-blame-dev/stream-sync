@@ -449,8 +449,6 @@ class ConfigValidator {
 
         ConfigValidator._validateRequiredSections(config, errors);
         ConfigValidator.validateRequiredFields(config, errors);
-        ConfigValidator._validatePlatformUsernames(config, errors);
-        ConfigValidator._validateTwitchClientId(config, errors);
         ConfigValidator._validateStreamElements(config, errors);
         ConfigValidator._validateCooldownRanges(config, warnings);
         ConfigValidator._validateHandcamRanges(config, warnings);
@@ -483,38 +481,6 @@ class ConfigValidator {
     static _validateRequiredSections(config, errors) {
         if (!config.general || typeof config.general !== 'object') {
             errors.push('Missing required configuration section: general');
-        }
-    }
-
-    static _validatePlatformUsernames(config, errors) {
-        const platforms = ['youtube', 'tiktok', 'twitch'];
-        const platformDisplayNames = {
-            youtube: 'YouTube',
-            tiktok: 'TikTok',
-            twitch: 'Twitch'
-        };
-
-        platforms.forEach(platform => {
-            const platformConfig = config[platform];
-            if (platformConfig && platformConfig.enabled && !platformConfig.username) {
-                const displayName = platformDisplayNames[platform];
-                errors.push(`Missing required configuration: ${displayName} username`);
-            }
-        });
-    }
-
-    static _validateTwitchClientId(config, errors) {
-        const twitchConfig = config.twitch;
-        if (!twitchConfig || !twitchConfig.enabled) {
-            return;
-        }
-
-        const clientId = typeof twitchConfig.clientId === 'string'
-            ? twitchConfig.clientId.trim()
-            : '';
-
-        if (!clientId) {
-            errors.push('Missing required configuration: Twitch clientId');
         }
     }
 

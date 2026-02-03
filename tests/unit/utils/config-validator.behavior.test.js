@@ -466,7 +466,7 @@ describe('ConfigValidator.validate()', () => {
         const result = ConfigValidator.validate(config);
 
         expect(result.isValid).toBe(false);
-        expect(result.errors).toContain('Missing required configuration: TikTok username');
+        expect(result.errors).toContain('Missing required configuration: tiktok.username (required when tiktok is enabled)');
     });
 
     it('returns error when Twitch enabled without username', () => {
@@ -476,17 +476,17 @@ describe('ConfigValidator.validate()', () => {
         const result = ConfigValidator.validate(config);
 
         expect(result.isValid).toBe(false);
-        expect(result.errors).toContain('Missing required configuration: Twitch username');
+        expect(result.errors).toContain('Missing required configuration: twitch.username (required when twitch is enabled)');
     });
 
     it('returns error when Twitch enabled without clientId', () => {
         const config = createMinimalValidConfig();
-        config.twitch = { enabled: true, username: 'test-user', clientId: '' };
+        config.twitch = { enabled: true, username: 'test-user', clientId: '', channel: 'test-channel' };
 
         const result = ConfigValidator.validate(config);
 
         expect(result.isValid).toBe(false);
-        expect(result.errors).toContain('Missing required configuration: Twitch clientId');
+        expect(result.errors).toContain('Missing required configuration: twitch.clientId (required when twitch is enabled)');
     });
 
     it('returns error when YouTube enabled without username', () => {
@@ -496,7 +496,7 @@ describe('ConfigValidator.validate()', () => {
         const result = ConfigValidator.validate(config);
 
         expect(result.isValid).toBe(false);
-        expect(result.errors).toContain('Missing required configuration: YouTube username');
+        expect(result.errors).toContain('Missing required configuration: youtube.username (required when youtube is enabled)');
     });
 
     it('passes when enabled platform has username', () => {
