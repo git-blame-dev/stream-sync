@@ -24,10 +24,6 @@ class DependencyFactory {
             ...config
         };
 
-        if (!normalizedConfig.username) {
-            throw new Error('YouTube username is required');
-        }
-
         try {
             const normalizedOptions = { ...options };
             const injectedStreamDetectionService = normalizedOptions.streamDetectionService || null;
@@ -82,14 +78,8 @@ class DependencyFactory {
     }
 
     createTiktokDependencies(config, options = {}) {
-        // Validate inputs
         this._validateConfiguration(config, 'TikTok');
         this._validateOptions(options);
-
-        // Validate TikTok-specific configuration
-        if (!config.username || typeof config.username !== 'string' || config.username.trim() === '') {
-            throw new Error('TikTok username is required and must be a non-empty string');
-        }
 
         try {
             const logger = options.logger || this.createValidatedLogger('tiktok');

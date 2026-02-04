@@ -45,13 +45,6 @@ describe('DependencyFactory behavior', () => {
         });
     });
 
-    describe('TikTok dependency validation', () => {
-        it('requires TikTok username', () => {
-            expect(() => factory.createTiktokDependencies({}, { logger: noOpLogger, config: configFixture }))
-                .toThrow(/TikTok username is required/);
-        });
-    });
-
     describe('Twitch dependency validation', () => {
         it('requires Twitch channel', () => {
             const twitchAuth = { isReady: () => true };

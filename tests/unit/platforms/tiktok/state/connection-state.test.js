@@ -67,15 +67,6 @@ describe('TikTokPlatform connection state', () => {
             expect(result.reason).toBe('Platform disabled in configuration');
         });
 
-        it('returns canConnect=false when username missing', () => {
-            const platform = createPlatform({ enabled: true, username: '' });
-
-            const result = platform.checkConnectionPrerequisites();
-
-            expect(result.canConnect).toBe(false);
-            expect(result.reasons).toContain('Username is required');
-        });
-
         it('returns canConnect=false when connection.isConnecting is true', () => {
             const platform = createPlatform();
             platform.connection = { isConnecting: true, isConnected: false };

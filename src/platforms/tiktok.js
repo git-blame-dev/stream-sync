@@ -152,10 +152,6 @@ class TikTokPlatform extends EventEmitter {
             reasons.push('Platform disabled in configuration');
         }
         
-        if (!this.config.username) {
-            reasons.push('Username is required');
-        }
-        
         if (this.connection && this.connection.isConnecting) {
             reasons.push('Already connecting');
         }
@@ -167,7 +163,7 @@ class TikTokPlatform extends EventEmitter {
         return {
             canConnect: reasons.length === 0,
             reasons: reasons,
-            reason: reasons[0] // Backward compatibility
+            reason: reasons[0]
         };
     }
     
