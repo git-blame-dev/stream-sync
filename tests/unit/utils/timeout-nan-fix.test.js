@@ -1,6 +1,5 @@
 const { describe, test, expect, beforeEach, afterEach } = require('bun:test');
 const { createMockFn, restoreAllMocks } = require('../../helpers/bun-mock-utils');
-const { noOpLogger } = require('../../helpers/mock-factories');
 
 describe('Timeout NaN Warning Fix', () => {
     let originalConsoleWarn;
@@ -89,20 +88,10 @@ describe('Timeout NaN Warning Fix', () => {
 
     describe('General Timeout Validation', () => {
         test('should validate all setTimeout calls have numeric delays', () => {
-            const { StreamDetector } = require('../../../src/utils/stream-detector');
             const { RetrySystem } = require('../../../src/utils/retry-system');
 
-            const config = {
-                streamDetectionEnabled: true,
-                streamRetryInterval: 1,
-                streamMaxRetries: 1,
-                continuousMonitoringInterval: 60
-            };
-
-            const streamDetector = new StreamDetector(config, noOpLogger);
             const retrySystem = new RetrySystem();
 
-            streamDetector._detectStreamWithRetry('youtube', {}, () => {}, () => {});
             retrySystem.handleConnectionError('TikTok', new Error('test'), () => {});
 
             timeoutCalls.forEach((call, index) => {

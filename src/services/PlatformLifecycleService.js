@@ -10,7 +10,6 @@ class PlatformLifecycleService {
     constructor(options = {}) {
         this.config = options.config || {};
         this.eventBus = options.eventBus || null;
-        this.streamDetector = options.streamDetector;
         this.dependencyFactory = options.dependencyFactory;
         this.logger = options.logger || logger;
         this.errorHandler = createPlatformErrorHandler(this.logger, 'PlatformLifecycleService');
@@ -23,7 +22,6 @@ class PlatformLifecycleService {
         this.backgroundPlatformInits = [];
         this.platformHealth = {};
         this.platformErrors = [];
-        this.streamStatuses = {};
 
         this.logger.debug('PlatformLifecycleService initialized', 'PlatformLifecycleService');
     }
@@ -76,8 +74,7 @@ class PlatformLifecycleService {
 
                 this.logger.info(`Initializing platform ${platformName}...`, 'PlatformLifecycleService');
 
-                // Initialize platform with stream detection
-                await this.initializePlatformWithStreamDetection(
+                await this.initializePlatformConnection(
                     platformName,
                     platformInstance,
                     handlers,
@@ -227,8 +224,7 @@ class PlatformLifecycleService {
         return instance;
     }
 
-    async initializePlatformWithStreamDetection(platformName, platformInstance, handlers, platformConfig) {
-        // Create stream-aware wrapper for the connect callback
+    async initializePlatformConnection(platformName, platformInstance, handlers, platformConfig) {
         const connectCallback = async () => {
             this.logger.info(`Connecting to ${platformName}...`, 'PlatformLifecycleService');
 
@@ -239,28 +235,7 @@ class PlatformLifecycleService {
             return platformInstance;
         };
 
-        // Create status callback for stream detection updates
-        const statusCallback = (status, message) => {
-            const timestamp = getSystemTimestampISO();
-            const normalizedStatus = typeof status === 'string' ? status.toLowerCase() : status;
-            const isLive = normalizedStatus === 'live';
-            this.logger.info(`${platformName} stream status: ${status} - ${message}`, 'PlatformLifecycleService');
-            this.streamStatuses[platformName] = {
-                status: normalizedStatus || status,
-                message,
-                timestamp,
-                isLive
-            };
-
-            this.emitPlatformEvent(platformName, PlatformEvents.STREAM_STATUS, {
-                status: normalizedStatus || status,
-                message,
-                isLive,
-                timestamp
-            });
-        };
-
-        // Use stream detection for connection management
+        // Manage platform connection behavior
         try {
             const shouldRunInBackground = this.shouldRunPlatformInBackground(platformName, platformConfig);
 
@@ -269,9 +244,7 @@ class PlatformLifecycleService {
 
                 const backgroundInit = this.initializePlatformAsync(
                     platformName,
-                    platformConfig,
-                    connectCallback,
-                    statusCallback
+                    connectCallback
                 );
 
                 this.backgroundPlatformInits.push({
@@ -292,19 +265,15 @@ class PlatformLifecycleService {
                 await connectCallback();
                 return;
             }
-
-            if (!this.streamDetector) {
-                throw new Error(`Stream detection unavailable for ${platformName}. Configure a stream detector or disable the platform.`);
+            if (platformName === 'twitch') {
+                this.logger.info('Using Twitch chat direct connection (no stream detection)', 'PlatformLifecycleService');
+                await connectCallback();
+                return;
             }
 
-            await this.streamDetector.startStreamDetection(
-                platformName,
-                platformConfig,
-                connectCallback,
-                statusCallback
-            );
+            await connectCallback();
         } catch (error) {
-            this._handleLifecycleError(`Failed to start stream detection for ${platformName}: ${error.message}`, error, 'stream-detection');
+            this._handleLifecycleError(`Failed to initialize connection for ${platformName}: ${error.message}`, error, 'initialize');
             throw error;
         }
     }
@@ -319,22 +288,15 @@ class PlatformLifecycleService {
         return false;
     }
 
-    async initializePlatformAsync(platformName, platformConfig, connectCallback, statusCallback) {
+    async initializePlatformAsync(platformName, connectCallback) {
         try {
             this.logger.info(`[${platformName}] Background initialization started`, 'PlatformLifecycleService');
 
             if (platformName === 'tiktok') {
                 // TikTok uses its own built-in stream detection
                 await connectCallback();
-            } else if (this.streamDetector) {
-                await this.streamDetector.startStreamDetection(
-                    platformName,
-                    platformConfig,
-                    connectCallback,
-                    statusCallback
-                );
             } else {
-                throw new Error(`Stream detection unavailable for ${platformName}. Configure a stream detector or disable the platform.`);
+                await connectCallback();
             }
 
             this.logger.info(`[${platformName}] Background initialization completed successfully`, 'PlatformLifecycleService');
@@ -402,7 +364,6 @@ class PlatformLifecycleService {
             disabledPlatforms: disabled,
             platformHealth: { ...this.platformHealth },
             connectionTimes: { ...this.platformConnectionTimes },
-            streamStatuses: { ...this.streamStatuses },
             backgroundInitializations: this.backgroundPlatformInits.length,
             recentErrors: this.platformErrors.slice(-10)
         };
@@ -512,7 +473,6 @@ class PlatformLifecycleService {
         this.backgroundPlatformInits = [];
         this.platformHealth = {};
         this.platformErrors = [];
-        this.streamStatuses = {};
 
         this.logger.debug('PlatformLifecycleService disposed', 'PlatformLifecycleService');
     }
