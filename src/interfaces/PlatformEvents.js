@@ -63,17 +63,7 @@ const PlatformEvents = {
     OBS_SCENE_CHANGED: 'obs:scene-changed',
     OBS_SOURCE_UPDATED: 'obs:source-updated',
     OBS_EFFECT_TRIGGERED: 'obs:effect-triggered',
-    OBS_HEALTH_CHECK: 'obs:health-check',
-    
-    // TTS Events (8 types)
-    TTS_SPEECH_REQUESTED: 'tts:speech-requested',
-    TTS_SPEECH_QUEUED: 'tts:speech-queued',
-    TTS_SPEECH_STARTED: 'tts:speech-started',
-    TTS_SPEECH_COMPLETED: 'tts:speech-completed',
-    TTS_SPEECH_FAILED: 'tts:speech-failed',
-    TTS_VOICE_CHANGED: 'tts:voice-changed',
-    TTS_QUEUE_CLEARED: 'tts:queue-cleared',
-    TTS_HEALTH_CHECK: 'tts:health-check'
+    OBS_HEALTH_CHECK: 'obs:health-check'
 };
 
 const VALID_PLATFORMS = ['twitch', 'youtube', 'tiktok'];

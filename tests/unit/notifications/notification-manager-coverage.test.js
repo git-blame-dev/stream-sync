@@ -140,69 +140,6 @@ describe('NotificationManager coverage', () => {
         });
     });
 
-    describe('processTTSForNotification', () => {
-        it('emits TTS event when TTS enabled and message present', async () => {
-            const emitCalls = [];
-            const deps = createDeps({
-                eventBus: {
-                    on: createMockFn(),
-                    emit: (event, data) => emitCalls.push({ event, data }),
-                    subscribe: createMockFn()
-                }
-            });
-            const manager = new NotificationManager(deps);
-
-            await manager.processTTSForNotification({
-                type: 'platform:gift',
-                platform: 'tiktok',
-                username: 'testUser',
-                ttsMessage: 'Test TTS message'
-            });
-
-            expect(emitCalls.length).toBeGreaterThan(0);
-            expect(emitCalls.some(c => c.event === 'tts:speech-requested')).toBe(true);
-        });
-
-        it('skips when TTS disabled', async () => {
-            const emitCalls = [];
-            const deps = createDeps({
-                eventBus: {
-                    on: createMockFn(),
-                    emit: (event, data) => emitCalls.push({ event, data }),
-                    subscribe: createMockFn()
-                },
-                config: createConfigFixture({ tts: { enabled: false } })
-            });
-            const manager = new NotificationManager(deps);
-
-            await manager.processTTSForNotification({
-                type: 'platform:gift',
-                ttsMessage: 'Test message'
-            });
-
-            expect(emitCalls.filter(c => c.event === 'tts:speech-requested').length).toBe(0);
-        });
-
-        it('skips when ttsMessage is empty', async () => {
-            const emitCalls = [];
-            const deps = createDeps({
-                eventBus: {
-                    on: createMockFn(),
-                    emit: (event, data) => emitCalls.push({ event, data }),
-                    subscribe: createMockFn()
-                }
-            });
-            const manager = new NotificationManager(deps);
-
-            await manager.processTTSForNotification({
-                type: 'platform:gift',
-                ttsMessage: null
-            });
-
-            expect(emitCalls.filter(c => c.event === 'tts:speech-requested').length).toBe(0);
-        });
-    });
-
     describe('processVFXForNotification', () => {
         it('executes VFX command when service available', async () => {
             const executedCommands = [];
@@ -389,34 +326,6 @@ describe('NotificationManager coverage', () => {
             });
 
             expect(result.success).toBe(false);
-        });
-    });
-
-    describe('processTTSForNotification with ttsService fallback', () => {
-        it('uses ttsService when eventBus not available', async () => {
-            const speakCalls = [];
-            const deps = createDeps({
-                eventBus: null,
-                ttsService: {
-                    speak: (text, ctx) => speakCalls.push({ text, ctx })
-                }
-            });
-            const manualDeps = {
-                ...deps,
-                eventBus: { on: createMockFn(), emit: createMockFn(), subscribe: createMockFn() }
-            };
-            const manager = new NotificationManager(manualDeps);
-            manager.eventBus = null;
-            manager.ttsService = { speak: (text, ctx) => speakCalls.push({ text, ctx }) };
-
-            await manager.processTTSForNotification({
-                type: 'platform:gift',
-                platform: 'tiktok',
-                username: 'testUser',
-                ttsMessage: 'Test TTS'
-            });
-
-            expect(speakCalls.length).toBe(1);
         });
     });
 

@@ -215,7 +215,6 @@ const { PlatformEvents } = require('./interfaces/PlatformEvents');
 
 // Event-driven architecture services
 const { createEventBus } = require('./core/EventBus');
-const { createTTSService } = require('./services/TTSService');
 const { createVFXCommandService } = require('./services/VFXCommandService');
 const { createUserTrackingService } = require('./services/UserTrackingService');
 const CommandCooldownService = require('./services/CommandCooldownService');
@@ -1470,10 +1469,6 @@ async function main(overrides = {}) {
         const displayQueue = initializeDisplayQueue(obsManager, displayQueueConfig, displayQueueConstants, eventBus);
         logger.debug('Display queue initialized', 'Main');
         
-        logger.debug('Creating TTSService...', 'Main');
-        const ttsService = createTTSService(config, eventBus, { logger });
-        logger.debug('TTSService created', 'Main');
-        
         logger.debug('Creating VFXCommandService...', 'Main');
         const vfxCommandService = createVFXCommandService(config, eventBus);
         logger.debug('VFXCommandService created', 'Main');
@@ -1511,7 +1506,6 @@ async function main(overrides = {}) {
             displayQueue: displayQueue,
             eventBus: eventBus,
             config: config,
-            ttsService: ttsService,
             vfxCommandService: vfxCommandService,
             userTrackingService: userTrackingService,
             logger,
@@ -1544,7 +1538,6 @@ async function main(overrides = {}) {
         
         // Add event-driven services to dependencies
         dependencies.eventBus = eventBus;
-        dependencies.ttsService = ttsService;
         dependencies.vfxCommandService = vfxCommandService;
         dependencies.userTrackingService = userTrackingService;
         dependencies.obsEventService = obsEventService;
