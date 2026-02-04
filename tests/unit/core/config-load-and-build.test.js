@@ -34,6 +34,7 @@ describe('config load and build behavior', () => {
         rawConfig.tiktok.username = 'test-tiktok-user';
         rawConfig.displayQueue = { autoProcess: 'true', maxQueueSize: '100', chatOptimization: 'true' };
         rawConfig.gifts = { giftVideoSource: 'test-gift-video', giftAudioSource: 'test-gift-audio' };
+        rawConfig.envelopes = { command: '!testenvelope' };
         rawConfig.vfx = { filePath: '/test/vfx/path' };
         rawConfig.follows = { command: '!testfollow' };
         rawConfig.raids = { command: '!testraid' };
@@ -71,6 +72,7 @@ describe('config load and build behavior', () => {
         expect(built.general.viewerCountPollingIntervalMs).toBe(60000);
         expect(built.obs.chatPlatformLogos.twitch).toBe('test-twitch-img');
         expect(built.gifts.giftVideoSource).toBe('test-gift-video');
+        expect(built.envelopes.command).toBe('!testenvelope');
         expect(built.logging).toBeDefined();
     });
 

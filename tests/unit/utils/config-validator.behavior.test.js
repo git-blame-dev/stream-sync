@@ -21,7 +21,7 @@ describe('config-validator (utility) behavior', () => {
 describe('ConfigValidator.normalize()', () => {
     const ALL_SECTIONS = [
         'general', 'http', 'obs', 'tiktok', 'twitch', 'youtube',
-        'handcam', 'goals', 'gifts', 'timing', 'cooldowns',
+        'handcam', 'goals', 'gifts', 'envelopes', 'timing', 'cooldowns',
         'spam', 'displayQueue', 'retry', 'intervals', 'connectionLimits',
         'api', 'logging', 'farewell', 'commands', 'vfx', 'streamelements',
         'follows', 'raids', 'paypiggies', 'greetings', 'shares'
@@ -340,6 +340,11 @@ describe('ConfigValidator simple command sections', () => {
     it('normalizes paypiggies section', () => {
         const result = ConfigValidator._normalizePaypiggiesSection({ command: 'paypig-cmd' });
         expect(result.command).toBe('paypig-cmd');
+    });
+
+    it('normalizes envelopes section', () => {
+        const result = ConfigValidator._normalizeEnvelopesSection({ command: 'envelope-cmd' });
+        expect(result.command).toBe('envelope-cmd');
     });
 
     it('normalizes greetings section', () => {

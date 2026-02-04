@@ -354,6 +354,18 @@ describe('Config field presence - all normalizers return expected fields', () =>
         });
     });
 
+    describe('_normalizeEnvelopesSection', () => {
+        const EXPECTED_FIELDS = ['command'];
+
+        it('returns all expected fields', () => {
+            const result = ConfigValidator._normalizeEnvelopesSection({});
+
+            EXPECTED_FIELDS.forEach(field => {
+                expect(result).toHaveProperty(field);
+            });
+        });
+    });
+
     describe('_normalizeTimingSection', () => {
         const EXPECTED_FIELDS = [
             'fadeDuration',

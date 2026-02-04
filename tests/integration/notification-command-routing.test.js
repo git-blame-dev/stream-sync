@@ -6,7 +6,7 @@ describe('notification command routing integration', () => {
     const EXPECTED_COMMAND_KEYS = {
         'platform:follow': 'follows',
         'platform:gift': 'gifts',
-        'platform:envelope': 'gifts',
+        'platform:envelope': 'envelopes',
         'platform:paypiggy': 'paypiggies',
         'platform:giftpaypiggy': 'gifts',
         'platform:raid': 'raids',
@@ -90,6 +90,7 @@ describe('notification command routing integration', () => {
         const commandBasedTypes = {
             'platform:follow': 'follows',
             'platform:gift': 'gifts',
+            'platform:envelope': 'envelopes',
             'platform:raid': 'raids',
             'platform:paypiggy': 'paypiggies',
             greeting: 'greetings',
@@ -102,6 +103,7 @@ describe('notification command routing integration', () => {
             commands: {},
             follows: { command: '!test-follow' },
             gifts: {},
+            envelopes: { command: '!test-envelope' },
             raids: { command: '!test-raid' },
             paypiggies: { command: '!test-paypiggy' },
             greetings: { command: '!test-greeting' },

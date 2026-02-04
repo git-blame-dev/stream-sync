@@ -187,8 +187,16 @@ function buildVfxConfig(normalized) {
 function buildGiftConfig(normalized) {
     const g = normalized.gifts;
     return {
+        command: g.command,
         giftVideoSource: g.giftVideoSource,
         giftAudioSource: g.giftAudioSource
+    };
+}
+
+function buildEnvelopeConfig(normalized) {
+    const e = normalized.envelopes;
+    return {
+        command: e.command
     };
 }
 
@@ -251,6 +259,7 @@ function buildConfig(normalized) {
         goals: buildGoalsConfig(normalized),
         vfx: buildVfxConfig(normalized),
         gifts: buildGiftConfig(normalized),
+        envelopes: buildEnvelopeConfig(normalized),
         displayQueue: { ...normalized.displayQueue },
         spam: buildSpamConfig(normalized),
         timing: buildTimingConfig(normalized),

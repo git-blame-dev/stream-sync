@@ -243,6 +243,10 @@ const CONFIG_SCHEMA = {
         giftAudioSource: { type: 'string', default: 'gift-audio' }
     },
 
+    envelopes: {
+        command: { type: 'string', userDefined: true }
+    },
+
     farewell: {
         command: { type: 'string', userDefined: true }
     },

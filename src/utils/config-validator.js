@@ -98,6 +98,7 @@ class ConfigValidator {
             handcam: ConfigValidator._normalizeHandcamSection(rawConfig.handcam || {}),
             goals: ConfigValidator._normalizeGoalsSection(rawConfig.goals || {}),
             gifts: ConfigValidator._normalizeGiftsSection(rawConfig.gifts || {}),
+            envelopes: ConfigValidator._normalizeEnvelopesSection(rawConfig.envelopes || {}),
             timing: ConfigValidator._normalizeTimingSection(rawConfig.timing || {}),
             cooldowns: ConfigValidator._normalizeCooldownsSection(rawConfig.cooldowns || {}),
             spam: ConfigValidator._normalizeSpamSection(rawConfig.spam || {}),
@@ -283,6 +284,12 @@ class ConfigValidator {
             command: ConfigValidator.parseString(raw.command, ''),
             giftVideoSource: ConfigValidator.parseString(raw.giftVideoSource, DEFAULTS.gifts.giftVideoSource),
             giftAudioSource: ConfigValidator.parseString(raw.giftAudioSource, DEFAULTS.gifts.giftAudioSource)
+        };
+    }
+
+    static _normalizeEnvelopesSection(raw) {
+        return {
+            command: ConfigValidator.parseString(raw.command, '')
         };
     }
 
