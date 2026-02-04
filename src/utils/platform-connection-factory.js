@@ -120,14 +120,6 @@ class PlatformConnectionFactory {
     }
     
     createTikTokConnection(config, dependencies) {
-        if (!config.username) {
-            throw new Error('TikTok username is required for connection');
-        }
-
-        if (typeof config.username !== 'string' || config.username.trim() === '') {
-            throw new Error(`TikTok username must be a non-empty string, got: ${config.username}`);
-        }
-
         const cleanUsername = config.username.replace(/^@/, '').trim();
         if (cleanUsername !== config.username) {
             this.logger.debug(`TikTok username cleaned from '${config.username}' to '${cleanUsername}'`, 'tiktok');
@@ -193,14 +185,6 @@ class PlatformConnectionFactory {
     }
     
     createYouTubeConnection(config, dependencies) {
-        // Validate YouTube-specific requirements
-        if (!config.username) {
-            throw new Error('YouTube username is required');
-        }
-        
-        // Note: API key and Google APIs only required when enableAPI=true
-        // This is validated in dependency-factory.js based on actual usage
-        
         try {
             // Create a basic YouTube connection object for state management
             const connection = {

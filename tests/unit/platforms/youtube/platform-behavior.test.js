@@ -761,13 +761,6 @@ describe('YouTubePlatform modern architecture', () => {
         expect(result).toBe(true);
     });
 
-    it('getLiveVideoIds throws when no username configured', async () => {
-        const { platform } = createPlatform();
-        platform.config.username = null;
-
-        await expect(platform.getLiveVideoIds()).rejects.toThrow('No channel username provided');
-    });
-
     it('getLiveVideoIdsByYoutubei throws when stream detection service unavailable', async () => {
         const { platform } = createPlatform();
         platform.streamDetectionService = null;

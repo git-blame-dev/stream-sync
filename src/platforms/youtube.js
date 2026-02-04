@@ -337,12 +337,6 @@ class YouTubePlatform extends EventEmitter {
 
     async getLiveVideoIds() {
         this.logger.debug('Using youtubei method for stream detection', 'youtube');
-        
-        // Check configuration for youtubei availability
-        if (!this.config.username) {
-            throw new Error('YouTube stream detection youtubei failed: No channel username provided. Please configure your YouTube channel username.');
-        }
-        
         return this.getLiveVideoIdsByYoutubei();
     }
 
@@ -352,11 +346,6 @@ class YouTubePlatform extends EventEmitter {
         this.logger.debug('[YouTube] getLiveVideoIdsByYoutubei() called', 'youtube');
         
         const channelHandle = this.config.username;
-        if (!channelHandle) {
-            const error = new Error('YouTube stream detection youtubei failed: No channel username provided. Please configure your YouTube channel username.');
-            this._handleProcessingError(error.message, error, 'stream-detection');
-            throw error;
-        }
 
         if (!this.streamDetectionService || typeof this.streamDetectionService.detectLiveStreams !== 'function') {
             const error = new Error('YouTube stream detection youtubei failed: Service unavailable');

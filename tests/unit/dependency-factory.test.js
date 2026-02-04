@@ -70,14 +70,6 @@ describe('DependencyFactory', () => {
             }).toThrow('createYoutubeDependencies requires config object in options');
         });
 
-        it('should validate YouTube configuration before creating dependencies', () => {
-            const invalidConfig = { enabled: true };
-
-            expect(() => {
-                factory.createYoutubeDependencies(invalidConfig, { config: configFixture });
-            }).toThrow('YouTube username is required');
-        });
-
         it('should create YouTube dependencies with proper validation', () => {
             const result = factory.createYoutubeDependencies(configFixture.youtube, { config: configFixture });
 
@@ -157,14 +149,6 @@ describe('DependencyFactory', () => {
             expect(() => {
                 factory.createTiktokDependencies(configFixture.tiktok, {});
             }).toThrow('createTikTokDependencies requires config object in options');
-        });
-
-        it('should validate TikTok configuration before creating dependencies', () => {
-            const invalidConfig = { enabled: true };
-
-            expect(() => {
-                factory.createTiktokDependencies(invalidConfig, { config: configFixture });
-            }).toThrow('TikTok username is required');
         });
 
         it('should create TikTok dependencies with proper validation', () => {
@@ -409,14 +393,6 @@ describe('DependencyFactory', () => {
             const invalidConfig = {};
 
             expect(() => {
-                factory.createYoutubeDependencies(invalidConfig, { config: configFixture });
-            }).toThrow();
-
-            expect(() => {
-                factory.createTiktokDependencies(invalidConfig, { config: configFixture });
-            }).toThrow();
-
-            expect(() => {
                 factory.createTwitchDependencies(invalidConfig, { config: configFixture });
             }).toThrow();
         });
@@ -483,35 +459,13 @@ describe('DependencyFactory', () => {
     });
 
     describe('Configuration Validation', () => {
-        it('should validate all required YouTube configuration fields', () => {
+        it('should require YouTube API key when enableAPI is true', () => {
             _resetForTesting();
             secrets.youtube.apiKey = null;
-            const configs = [
-                { enabled: true },
-                { enableAPI: true, username: 'test-channel' },
-                { streamDetectionMethod: 'api', username: 'test-channel' },
-                { viewerCountMethod: 'api', username: 'test-channel' }
-            ];
 
-            configs.forEach(config => {
-                expect(() => {
-                    factory.createYoutubeDependencies(config, { config: configFixture });
-                }).toThrow();
-            });
-        });
-
-        it('should validate all required TikTok configuration fields', () => {
-            const configs = [
-                { enabled: true },
-                { username: '' },
-                { username: null }
-            ];
-
-            configs.forEach(config => {
-                expect(() => {
-                    factory.createTiktokDependencies(config, { config: configFixture });
-                }).toThrow();
-            });
+            expect(() => {
+                factory.createYoutubeDependencies({ enableAPI: true, username: 'test-channel' }, { config: configFixture });
+            }).toThrow(/YouTube API key is required/);
         });
 
         it('should validate all required Twitch configuration fields', () => {
