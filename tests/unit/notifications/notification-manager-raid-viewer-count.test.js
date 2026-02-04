@@ -34,7 +34,6 @@ describe('NotificationManager raid viewer count fallback', () => {
             textProcessing: { formatChatMessage: createMockFn() },
             obsGoals: { processDonationGoal: createMockFn() },
             vfxCommandService: { executeCommand: createMockFn().mockResolvedValue({ success: true }) },
-            ttsService: { speak: createMockFn().mockResolvedValue({ success: true }) },
             userTrackingService: { isFirstMessage: createMockFn().mockResolvedValue(false) }
         });
     };

@@ -24,7 +24,6 @@ describe('NotificationManager YouTube monetisation behavior', () => {
         obsGoals: { processDonationGoal: createMockFn() },
         config,
         vfxCommandService: { getVFXConfig: createMockFn().mockResolvedValue(null) },
-        ttsService: { speak: createMockFn() },
         userTrackingService: { isFirstMessage: createMockFn().mockResolvedValue(false) }
     });
 
@@ -126,7 +125,6 @@ describe('NotificationManager YouTube monetisation behavior', () => {
             obsGoals: { processDonationGoal: createMockFn() },
             config: disabledConfig,
             vfxCommandService: { getVFXConfig: createMockFn().mockResolvedValue(null) },
-            ttsService: { speak: createMockFn() },
             userTrackingService: { isFirstMessage: createMockFn().mockResolvedValue(false) }
         });
 

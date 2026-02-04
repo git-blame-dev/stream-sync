@@ -30,7 +30,6 @@ describe('main.js event handler wiring', () => {
         },
         config: overrides.config || {},
         vfxCommandService: overrides.vfxCommandService || { executeCommandForKey: createMockFn().mockResolvedValue({ success: true }) },
-        ttsService: overrides.ttsService || { speak: createMockFn().mockResolvedValue({ success: true }) },
         userTrackingService: overrides.userTrackingService || { isFirstMessage: createMockFn().mockResolvedValue(false) },
         commandCooldownService: overrides.commandCooldownService || { updateCooldown: createMockFn() },
         platformLifecycleService: overrides.platformLifecycleService || { getAllPlatforms: createMockFn(() => ({})) },
@@ -54,4 +53,5 @@ describe('main.js event handler wiring', () => {
         expect(() => new AppRuntime(baseConfig, createDeps({ eventBus: null })))
             .toThrow('AppRuntime missing required dependencies');
     });
+
 });
