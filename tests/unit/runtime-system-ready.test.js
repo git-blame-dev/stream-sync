@@ -78,7 +78,6 @@ describe('AppRuntime shutdown lifecycle', () => {
         runtime.obsEventService = { disconnect: createMockFn().mockResolvedValue() };
         runtime.platformEventRouter = { dispose: createMockFn() };
         runtime.viewerCountSystem = { stopPolling: createMockFn() };
-        runtime.streamDetector = { cleanup: createMockFn() };
         runtime.notificationManager = { stopSuppressionCleanup: createMockFn() };
         runtime.viewerCountStatusCleanup = createMockFn();
         runtime.emitSystemShutdown = createMockFn();

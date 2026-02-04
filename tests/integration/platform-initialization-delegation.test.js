@@ -23,11 +23,7 @@ describe('Platform Initialization Delegation', () => {
             general: {
                 debugEnabled: false,
                 commandPrefix: '!',
-                ttsEnabled: false,
-                streamDetectionEnabled: false,
-                streamRetryInterval: 15,
-                streamMaxRetries: 3,
-                continuousMonitoringInterval: 60000
+                ttsEnabled: false
             },
             twitch: {
                 enabled: true,
@@ -43,7 +39,6 @@ describe('Platform Initialization Delegation', () => {
         const platformLifecycleService = new PlatformLifecycleService({
             config: configFixture,
             eventBus: null,
-            streamDetector: null,
             dependencyFactory: null,
             logger: noOpLogger
         });
@@ -89,11 +84,11 @@ describe('Platform Initialization Delegation', () => {
             expect(runtime.platforms).toEqual(runtime.platformLifecycleService.getAllPlatforms());
         });
 
-        it('should wire StreamDetector into PlatformLifecycleService', () => {
+        it('does not require StreamDetector wiring for PlatformLifecycleService', () => {
             runtime = new AppRuntime(configFixture, mockDependencies);
 
-            expect(runtime.platformLifecycleService.streamDetector).toBeDefined();
-            expect(runtime.platformLifecycleService.streamDetector).toBe(runtime.streamDetector);
+            expect(runtime.streamDetector).toBeUndefined();
+            expect(runtime.platformLifecycleService.streamDetector).toBeUndefined();
         });
 
         it('should delegate platform access through service methods', async () => {
@@ -167,7 +162,6 @@ describe('Platform Initialization Delegation', () => {
             const platformLifecycleService = new PlatformLifecycleService({
                 config: configFixture,
                 eventBus: null,
-                streamDetector: null,
                 dependencyFactory: null,
                 logger: mockDependencies.logging
             });

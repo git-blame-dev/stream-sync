@@ -68,11 +68,7 @@ describe('TikTok gift platform flow (smoke)', () => {
                 maxNotificationsPerUser: 5,
                 suppressionWindowMs: 60000,
                 suppressionDurationMs: 300000,
-                suppressionCleanupIntervalMs: 300000,
-                streamDetectionEnabled: false,
-                streamRetryInterval: 15,
-                streamMaxRetries: 3,
-                continuousMonitoringInterval: 60
+                suppressionCleanupIntervalMs: 300000
             },
             tiktok: { enabled: true, notificationsEnabled: true },
             obs: { enabled: false },
@@ -92,14 +88,10 @@ describe('TikTok gift platform flow (smoke)', () => {
             userTrackingService: { isFirstMessage: createMockFn().mockResolvedValue(false) }
         });
 
-        const streamDetector = {
-            startStreamDetection: createMockFn(async (_platformName, _config, connectCallback) => connectCallback())
-        };
         const platformLifecycleService = new PlatformLifecycleService({
             config: { tiktok: { enabled: true } },
             eventBus,
-            logger,
-            streamDetector
+            logger
         });
 
         const { runtime } = createTestAppRuntime(configOverrides, {

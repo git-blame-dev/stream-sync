@@ -17,7 +17,6 @@ describe('PlatformLifecycleService', () => {
     let service;
     let mockEventBus;
     let configFixture;
-    let mockStreamDetector;
 
     beforeEach(() => {
         mockEventBus = {
@@ -34,22 +33,15 @@ describe('PlatformLifecycleService', () => {
             tiktok: { enabled: false }
         };
 
-        mockStreamDetector = {
-            startStreamDetection: createMockFn().mockImplementation(async (_platform, _config, connect) => {
-                await connect();
-            })
-        };
-
         service = new PlatformLifecycleService({
             config: configFixture,
             eventBus: mockEventBus,
-            logger: noOpLogger,
-            streamDetector: mockStreamDetector
+            logger: noOpLogger
         });
     });
 
     describe('Service Status Reporting', () => {
-        it('reports ready platforms and stream statuses', async () => {
+        it('reports ready platforms and connection times', async () => {
             configFixture.twitch = {
                 enabled: true,
                 channel: 'test-channel',
@@ -66,30 +58,12 @@ describe('PlatformLifecycleService', () => {
                 on: createMockFn()
             }));
 
-            const streamDetector = {
-                startStreamDetection: createMockFn().mockImplementation(async (_platform, _config, connect, statusCb) => {
-                    statusCb('online', 'Stream detected');
-                    await connect();
-                })
-            };
-
-            service.dispose();
-            service = new PlatformLifecycleService({
-                config: configFixture,
-                eventBus: mockEventBus,
-                logger: noOpLogger,
-                streamDetector
-            });
-
             await service.initializeAllPlatforms({ twitch: mockPlatformClass });
 
             const status = service.getStatus();
             expect(status.initializedPlatforms).toContain('twitch');
-            expect(status.streamStatuses.twitch).toMatchObject({
-                status: 'online',
-                message: 'Stream detected'
-            });
             expect(status.connectionTimes.twitch).toEqual(expect.any(Number));
+            expect(status.streamStatuses).toBeUndefined();
         });
 
         it('reports failed platforms with error context', async () => {
@@ -164,8 +138,7 @@ describe('PlatformLifecycleService', () => {
         it('should handle missing config safely', async () => {
             const localService = new PlatformLifecycleService({
                 eventBus: mockEventBus,
-                logger: noOpLogger,
-                streamDetector: mockStreamDetector
+                logger: noOpLogger
             });
 
             const platformModules = {
@@ -399,8 +372,8 @@ describe('PlatformLifecycleService', () => {
         });
     });
 
-    describe('Stream Detection Coordination', () => {
-        it('should connect YouTube directly without invoking StreamDetector (platform-managed detection)', async () => {
+    describe('Platform Connection Coordination', () => {
+        it('should connect YouTube directly (platform-managed detection)', async () => {
             configFixture.youtube = { enabled: true, username: 'test-channel' };
 
             const platformInitSpy = createMockFn().mockResolvedValue(true);
@@ -410,23 +383,32 @@ describe('PlatformLifecycleService', () => {
                 on: createMockFn()
             }));
 
-            const streamDetector = {
-                startStreamDetection: createMockFn()
-            };
-
-            service.dispose();
-            service = new PlatformLifecycleService({
-                config: configFixture,
-                eventBus: mockEventBus,
-                logger: noOpLogger,
-                streamDetector
-            });
-
             await service.initializeAllPlatforms({ youtube: mockPlatformClass });
 
-            expect(streamDetector.startStreamDetection).not.toHaveBeenCalled();
-            expect(platformInitSpy).toHaveBeenCalled();
-            expect(service.isPlatformAvailable('youtube')).toBe(true);
+            const status = service.getStatus();
+            expect(status.initializedPlatforms).toContain('youtube');
+            expect(status.platformHealth.youtube.state).toBe('ready');
+        });
+
+        it('should connect Twitch directly (chat always available)', async () => {
+            configFixture.twitch = {
+                enabled: true,
+                channel: 'test-channel',
+                clientId: 'test-client-id'
+            };
+
+            const platformInitSpy = createMockFn().mockResolvedValue(true);
+            const mockPlatformClass = createMockFn().mockImplementation(() => ({
+                initialize: platformInitSpy,
+                cleanup: createMockFn().mockResolvedValue(),
+                on: createMockFn()
+            }));
+
+            await service.initializeAllPlatforms({ twitch: mockPlatformClass });
+
+            const status = service.getStatus();
+            expect(status.initializedPlatforms).toContain('twitch');
+            expect(status.platformHealth.twitch.state).toBe('ready');
         });
     });
 
@@ -450,73 +432,6 @@ describe('PlatformLifecycleService', () => {
             const waitPromise = service.waitForBackgroundInits(100);
             deferred.resolve();
             await waitPromise;
-        });
-    });
-
-    describe('Error Handling and Recovery', () => {
-        it('marks platform failed when stream detection throws', async () => {
-            configFixture.custom = { enabled: true };
-
-            const platformInitSpy = createMockFn().mockResolvedValue(true);
-            const mockPlatformClass = createMockFn().mockImplementation(() => ({
-                initialize: platformInitSpy,
-                cleanup: createMockFn().mockResolvedValue(),
-                on: createMockFn()
-            }));
-
-            const streamDetector = {
-                startStreamDetection: createMockFn().mockRejectedValue(new Error('detector failed'))
-            };
-
-            service.dispose();
-            service = new PlatformLifecycleService({
-                config: configFixture,
-                eventBus: mockEventBus,
-                logger: noOpLogger,
-                streamDetector
-            });
-
-            await service.initializeAllPlatforms({ custom: mockPlatformClass });
-
-            expect(service.getStatus().failedPlatforms).toEqual(
-                expect.arrayContaining([
-                    expect.objectContaining({
-                        name: 'custom',
-                        lastError: expect.stringContaining('detector failed')
-                    })
-                ])
-            );
-        });
-
-        it('marks platform failed when stream detection is unavailable', async () => {
-            configFixture.custom = { enabled: true };
-
-            const platformInitSpy = createMockFn().mockResolvedValue(true);
-            const mockPlatformClass = createMockFn().mockImplementation(() => ({
-                initialize: platformInitSpy,
-                cleanup: createMockFn().mockResolvedValue(),
-                on: createMockFn()
-            }));
-
-            service.dispose();
-            service = new PlatformLifecycleService({
-                config: configFixture,
-                eventBus: mockEventBus,
-                logger: noOpLogger,
-                streamDetector: null
-            });
-
-            await service.initializeAllPlatforms({ custom: mockPlatformClass });
-
-            expect(platformInitSpy).not.toHaveBeenCalled();
-            expect(service.getStatus().failedPlatforms).toEqual(
-                expect.arrayContaining([
-                    expect.objectContaining({
-                        name: 'custom',
-                        lastError: expect.stringContaining('Stream detection unavailable')
-                    })
-                ])
-            );
         });
     });
 

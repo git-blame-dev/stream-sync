@@ -87,8 +87,4 @@ class HttpClient {
     }
 }
 
-function createHttpClient(config) {
-    return new HttpClient(config);
-}
-
-module.exports = { HttpClient, createHttpClient };
+module.exports = { HttpClient };

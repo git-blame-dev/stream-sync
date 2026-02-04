@@ -79,11 +79,7 @@ describe('Paypiggy platform flows (smoke)', () => {
                 maxNotificationsPerUser: 5,
                 suppressionWindowMs: 60000,
                 suppressionDurationMs: 300000,
-                suppressionCleanupIntervalMs: 300000,
-                streamDetectionEnabled: false,
-                streamRetryInterval: 15,
-                streamMaxRetries: 3,
-                continuousMonitoringInterval: 60
+                suppressionCleanupIntervalMs: 300000
             },
             [platformKey]: platformConfigOverride,
             obs: { enabled: false },
@@ -103,9 +99,6 @@ describe('Paypiggy platform flows (smoke)', () => {
             userTrackingService: { isFirstMessage: createMockFn().mockResolvedValue(false) }
         });
 
-        const streamDetector = {
-            startStreamDetection: createMockFn(async (_platformName, _config, connectCallback) => connectCallback())
-        };
         const lifecyclePlatformConfig = { enabled: true };
         if (platformKey === 'youtube') {
             lifecyclePlatformConfig.username = 'test-channel';
@@ -114,8 +107,7 @@ describe('Paypiggy platform flows (smoke)', () => {
         const platformLifecycleService = new PlatformLifecycleService({
             config: { [platformKey]: lifecyclePlatformConfig },
             eventBus,
-            logger,
-            streamDetector
+            logger
         });
 
         const { runtime } = createTestAppRuntime(configOverrides, {

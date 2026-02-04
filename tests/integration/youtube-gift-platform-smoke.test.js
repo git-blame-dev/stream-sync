@@ -63,11 +63,7 @@ describe('YouTube gift platform flow (smoke)', () => {
             maxNotificationsPerUser: 5,
             suppressionWindowMs: 60000,
             suppressionDurationMs: 300000,
-            suppressionCleanupIntervalMs: 300000,
-            streamDetectionEnabled: false,
-            streamRetryInterval: 15,
-            streamMaxRetries: 3,
-            continuousMonitoringInterval: 60
+            suppressionCleanupIntervalMs: 300000
         },
         youtube: { enabled: true, notificationsEnabled: true, username: 'test-channel' },
         obs: { enabled: false },
@@ -93,14 +89,10 @@ describe('YouTube gift platform flow (smoke)', () => {
             userTrackingService: { isFirstMessage: createMockFn().mockResolvedValue(false) }
         });
 
-        const streamDetector = {
-            startStreamDetection: createMockFn().mockImplementation(async (_platformName, _config, connectCallback) => connectCallback())
-        };
         const platformLifecycleService = new PlatformLifecycleService({
             config: { youtube: { enabled: true, username: 'test-channel' } },
             eventBus,
-            logger,
-            streamDetector
+            logger
         });
 
         const runtimeBundle = createTestAppRuntime(configOverrides, {

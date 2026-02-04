@@ -105,8 +105,6 @@ const { createRetrySystem } = require('./utils/retry-system');
 const { getSystemTimestampISO } = require('./utils/timestamp');
 
 // Import authentication
-// Import stream detection system
-const { StreamDetector } = require('./utils/stream-detector');
 const { InnertubeFactory } = require('./factories/innertube-factory');
 
 // --- STEP 2: CORE SYSTEM IMPORTS ---
@@ -359,38 +357,6 @@ class AppRuntime {
 
     // Chat message handling is delegated to ChatNotificationRouter (see handleChatMessage)
 
-    _createYoutubeDetectionService() {
-        const youtubeConfig = this.config?.youtube;
-        if (!youtubeConfig || !youtubeConfig.enabled || youtubeConfig.streamDetectionMethod !== 'youtubei') {
-            return null;
-        }
-
-        const dependencyFactory = this.dependencies?.dependencyFactory;
-        if (!dependencyFactory || typeof dependencyFactory.createYoutubeDependencies !== 'function') {
-            throw new Error('dependencyFactory.createYoutubeDependencies required for YouTube detection');
-        }
-
-        try {
-            const LazyInnertube = this.lazyInnertube;
-            const dependencies = dependencyFactory.createYoutubeDependencies(youtubeConfig, {
-                Innertube: LazyInnertube,
-                logger: this.logger,
-                config: this.config
-            });
-
-            if (!dependencies || !dependencies.streamDetectionService) {
-                throw new Error('YouTube streamDetectionService unavailable');
-            }
-            if (this.logger && typeof this.logger.debug === 'function') {
-                this.logger.debug('Pre-created YouTube stream detection service for StreamDetector', 'AppRuntime');
-            }
-
-            return dependencies.streamDetectionService;
-        } catch (error) {
-            throw error;
-        }
-    }
-
     constructor(config, dependencies) {
         if (!dependencies) {
             throw new Error('AppRuntime requires dependencies');
@@ -429,25 +395,9 @@ class AppRuntime {
         });
         this.viewerCountSystemStarted = false; // Track early initialization
         
-        // Initialize stream detection system
-        const youtubeDetectionService = this._createYoutubeDetectionService();
-        this.youtubeDetectionService = youtubeDetectionService;
         if (!this.config || !this.config.general) {
-            throw new Error('AppRuntime requires general config for StreamDetector');
+            throw new Error('AppRuntime requires general config');
         }
-        const { streamDetectionEnabled, streamRetryInterval, streamMaxRetries, continuousMonitoringInterval } = this.config.general;
-        if (streamDetectionEnabled === undefined || streamRetryInterval === undefined || streamMaxRetries === undefined || continuousMonitoringInterval === undefined) {
-            throw new Error('StreamDetector requires streamDetectionEnabled, streamRetryInterval, streamMaxRetries, and continuousMonitoringInterval');
-        }
-        this.streamDetector = new StreamDetector({
-            streamDetectionEnabled,
-            streamRetryInterval,
-            streamMaxRetries,
-            continuousMonitoringInterval
-        }, {
-            youtubeDetectionService,
-            config: this.config
-        });
 
         this.gracefulExitTargetCount = cliArgs.chat;
         
@@ -464,9 +414,6 @@ class AppRuntime {
         // Initialize orchestration services
         this.commandCooldownService = this.dependencies.commandCooldownService;
         this.platformLifecycleService = this.dependencies.platformLifecycleService;
-        if (this.platformLifecycleService && !this.platformLifecycleService.streamDetector) {
-            this.platformLifecycleService.streamDetector = this.streamDetector;
-        }
         if (!this.commandCooldownService || !this.platformLifecycleService) {
             throw new Error('AppRuntime requires commandCooldownService and platformLifecycleService');
         }
@@ -767,21 +714,6 @@ class AppRuntime {
         } catch (error) {
             this._handleAppRuntimeError(
                 `Error cleaning up viewer count status listeners: ${error.message}`,
-                error,
-                null,
-                { eventType: 'shutdown', logContext: 'system' }
-            );
-        }
-        
-        // Stop stream detection monitoring
-        try {
-            if (this.streamDetector) {
-                this.streamDetector.cleanup();
-                this.logger.debug('Stopped stream detection monitoring', 'system');
-            }
-        } catch (error) {
-            this._handleAppRuntimeError(
-                `Error stopping stream detection: ${error.message}`,
                 error,
                 null,
                 { eventType: 'shutdown', logContext: 'system' }
@@ -1549,7 +1481,6 @@ async function main(overrides = {}) {
         const platformLifecycleService = new PlatformLifecycleService({
             config,
             eventBus,
-            streamDetector: null,
             dependencyFactory: dependencies.dependencyFactory,
             logger,
             sharedDependencies: sharedPlatformDependencies

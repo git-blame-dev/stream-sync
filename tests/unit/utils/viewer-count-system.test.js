@@ -764,9 +764,9 @@ describe('ViewerCountSystem - Comprehensive Behavior Tests', () => {
             expect(() => system.startPolling()).not.toThrow();
         });
 
-        test('should coordinate with StreamDetector system through status updates', async () => {
+        test('should coordinate stream status updates', async () => {
             const { system } = createViewerCountTestEnvironment();
-            const observer = createMockViewerCountObserver('stream-detector');
+            const observer = createMockViewerCountObserver('stream-status-observer');
             system.addObserver(observer);
             await system.updateStreamStatus('youtube', true);
             expect(observer.statusChanges).toHaveLength(1);
