@@ -1,4 +1,5 @@
 const { describe, it, expect } = require('bun:test');
+const { captureStdout, captureStderr } = require('../../helpers/output-capture');
 
 describe('test output suppression', () => {
     it('suppresses stdout and stderr by default with opt-in local capture', () => {
@@ -8,26 +9,16 @@ describe('test output suppression', () => {
         expect(process.stdout.write).toBe(suppressedStdout);
         expect(process.stderr.write).toBe(suppressedStderr);
 
-        const stdoutCapture = [];
-        const originalStdout = process.stdout.write;
-        process.stdout.write = (chunk) => {
-            stdoutCapture.push(String(chunk));
-            return true;
-        };
+        const stdoutCapture = captureStdout();
         process.stdout.write('test-stdout');
-        expect(stdoutCapture).toEqual(['test-stdout']);
-        process.stdout.write = originalStdout;
+        expect(stdoutCapture.output).toEqual(['test-stdout']);
+        stdoutCapture.restore();
         expect(process.stdout.write).toBe(suppressedStdout);
 
-        const stderrCapture = [];
-        const originalStderr = process.stderr.write;
-        process.stderr.write = (chunk) => {
-            stderrCapture.push(String(chunk));
-            return true;
-        };
+        const stderrCapture = captureStderr();
         process.stderr.write('test-stderr');
-        expect(stderrCapture).toEqual(['test-stderr']);
-        process.stderr.write = originalStderr;
+        expect(stderrCapture.output).toEqual(['test-stderr']);
+        stderrCapture.restore();
         expect(process.stderr.write).toBe(suppressedStderr);
     });
 });

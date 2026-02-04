@@ -1,5 +1,6 @@
 const { describe, it, expect, beforeEach, afterEach } = require('bun:test');
 const { createMockFn, restoreAllMocks } = require('../../helpers/bun-mock-utils');
+const { captureStderr } = require('../../helpers/output-capture');
 
 const fs = require('fs');
 const CONFIG_MODULE_PATH = require.resolve('../../../src/core/config');
@@ -109,33 +110,25 @@ describe('Config loading behavior', () => {
 
     it('throws user-friendly error when config file is missing in non-test environment', () => {
         const originalNodeEnv = process.env.NODE_ENV;
-        const originalStderrWrite = process.stderr.write;
-        const stderrOutput = [];
-        process.stderr.write = (msg) => stderrOutput.push(msg);
+        const stderrCapture = captureStderr();
         process.env.NODE_ENV = 'production';
         try {
             fs.existsSync = createMockFn(() => false);
             process.env.CHAT_BOT_CONFIG_PATH = '/tmp/non-existent-config.ini';
 
             expect(() => loadFreshConfig()).toThrow(/Configuration file not found/);
-            expect(stderrOutput.join('')).toContain('SETTINGS FILE MISSING');
+            expect(stderrCapture.output.join('')).toContain('SETTINGS FILE MISSING');
         } finally {
             process.env.NODE_ENV = originalNodeEnv;
-            process.stderr.write = originalStderrWrite;
+            stderrCapture.restore();
         }
     });
 
     it('throws error when general section is missing', () => {
-        const originalStderrWrite = process.stderr.write;
-        process.stderr.write = () => {};
-        try {
-            setupConfigMocks('[obs]\nenabled = false\n');
-            process.env.CHAT_BOT_CONFIG_PATH = testConfigPath;
+        setupConfigMocks('[obs]\nenabled = false\n');
+        process.env.CHAT_BOT_CONFIG_PATH = testConfigPath;
 
-            expect(() => loadFreshConfig()).toThrow('Missing required configuration section: general');
-        } finally {
-            process.stderr.write = originalStderrWrite;
-        }
+        expect(() => loadFreshConfig()).toThrow('Missing required configuration section: general');
     });
 
     it('uses safe defaults when values are invalid', () => {
@@ -277,39 +270,27 @@ enabled = true
     });
 
     it('throws error when StreamElements enabled without channel IDs', () => {
-        const originalStderrWrite = process.stderr.write;
-        process.stderr.write = () => {};
-        try {
-            const content = buildConfig({
-                streamelementsSection: `enabled = true`
-            });
-            setupConfigMocks(content);
-            process.env.CHAT_BOT_CONFIG_PATH = testConfigPath;
+        const content = buildConfig({
+            streamelementsSection: `enabled = true`
+        });
+        setupConfigMocks(content);
+        process.env.CHAT_BOT_CONFIG_PATH = testConfigPath;
 
-            expect(() => loadFreshConfig()).toThrow(/StreamElements channel ID/);
-        } finally {
-            process.stderr.write = originalStderrWrite;
-        }
+        expect(() => loadFreshConfig()).toThrow(/StreamElements channel ID/);
     });
 
     it('does not throw when YouTube API usage is enabled without apiKey', () => {
-        const originalStderrWrite = process.stderr.write;
-        process.stderr.write = () => {};
-        try {
-            const content = buildConfig({
-                youtubeSection: `enabled = true
+        const content = buildConfig({
+            youtubeSection: `enabled = true
  username = TestChannel
  enableAPI = true
  streamDetectionMethod = youtubei
  viewerCountMethod = youtubei`
-            });
-            setupConfigMocks(content);
-            process.env.CHAT_BOT_CONFIG_PATH = testConfigPath;
+        });
+        setupConfigMocks(content);
+        process.env.CHAT_BOT_CONFIG_PATH = testConfigPath;
 
-            expect(() => loadFreshConfig()).not.toThrow();
-        } finally {
-            process.stderr.write = originalStderrWrite;
-        }
+        expect(() => loadFreshConfig()).not.toThrow();
     });
 
     it('resolves anonymousUsername defaults and overrides', () => {
