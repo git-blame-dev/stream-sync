@@ -64,8 +64,7 @@ const createNotificationManagerHarness = () => {
             suppressionDurationMs: 300000,
             suppressionCleanupIntervalMs: 300000
         },
-        youtube: { enabled: true },
-        tts: { enabled: false }
+        youtube: { enabled: true }
     });
 
     const notificationManager = new NotificationManager({

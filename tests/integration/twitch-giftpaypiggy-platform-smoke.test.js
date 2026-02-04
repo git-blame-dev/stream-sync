@@ -77,8 +77,7 @@ describe('Twitch giftpaypiggy platform flow (smoke)', () => {
                 suppressionCleanupIntervalMs: 300000
             },
             twitch: { enabled: true, notificationsEnabled: true },
-            obs: { enabled: false },
-            tts: { enabled: false }
+            obs: { enabled: false }
         };
         const config = createConfigFixture(configOverrides);
         const notificationManager = new NotificationManager({

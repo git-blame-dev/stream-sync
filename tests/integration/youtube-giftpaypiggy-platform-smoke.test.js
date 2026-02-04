@@ -77,8 +77,7 @@ describe('YouTube giftpaypiggy platform flow (smoke)', () => {
                 suppressionCleanupIntervalMs: 300000
             },
             youtube: { enabled: true, notificationsEnabled: true, username: 'test-channel' },
-            obs: { enabled: false },
-            tts: { enabled: false }
+            obs: { enabled: false }
         };
         const config = createConfigFixture(configOverrides);
         const notificationManager = new NotificationManager({

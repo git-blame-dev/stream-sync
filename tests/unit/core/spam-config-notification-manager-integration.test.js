@@ -56,8 +56,7 @@ describe('Spam Detection Service Integration Tests - Modernized', () => {
                 suppressionWindowMs: 60000,
                 suppressionDurationMs: 300000,
                 suppressionCleanupIntervalMs: 300000
-            },
-            tts: { enabled: false }
+            }
         });
     });
 

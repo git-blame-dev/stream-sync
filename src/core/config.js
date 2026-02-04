@@ -223,10 +223,6 @@ function buildSpamConfig(normalized) {
     };
 }
 
-function buildTtsConfig(normalized) {
-    return { ...normalized.tts };
-}
-
 function buildCooldownsConfig(normalized) {
     const c = normalized.cooldowns;
     return {
@@ -259,7 +255,6 @@ function buildConfig(normalized) {
         spam: buildSpamConfig(normalized),
         timing: buildTimingConfig(normalized),
         cooldowns: buildCooldownsConfig(normalized),
-        tts: buildTtsConfig(normalized),
         follows: { command: normalized.follows.command },
         raids: { command: normalized.raids.command },
         paypiggies: { command: normalized.paypiggies.command },

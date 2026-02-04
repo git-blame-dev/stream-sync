@@ -82,8 +82,7 @@ describe('Paypiggy platform flows (smoke)', () => {
                 suppressionCleanupIntervalMs: 300000
             },
             [platformKey]: platformConfigOverride,
-            obs: { enabled: false },
-            tts: { enabled: false }
+            obs: { enabled: false }
         };
         const config = createConfigFixture(configOverrides);
         const notificationManager = new NotificationManager({

@@ -22,7 +22,6 @@ describe('Config build pipeline integration', () => {
             expect(built.timing).toBeDefined();
             expect(built.spam).toBeDefined();
             expect(built.cooldowns).toBeDefined();
-            expect(built.tts).toBeDefined();
             expect(built.vfx).toBeDefined();
             expect(built.goals).toBeDefined();
             expect(built.streamelements).toBeDefined();

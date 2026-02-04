@@ -71,8 +71,7 @@ describe('TikTok envelope platform flow (smoke)', () => {
                 suppressionCleanupIntervalMs: 300000
             },
             tiktok: { enabled: true, notificationsEnabled: true },
-            obs: { enabled: false },
-            tts: { enabled: false }
+            obs: { enabled: false }
         };
         const config = createConfigFixture(configOverrides);
         const notificationManager = new NotificationManager({

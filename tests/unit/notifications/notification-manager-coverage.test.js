@@ -31,7 +31,7 @@ describe('NotificationManager coverage', () => {
             emit: createMockFn(),
             subscribe: createMockFn()
         },
-        config: createConfigFixture({ general: { ttsEnabled: true }, tts: { enabled: true } }),
+        config: createConfigFixture({ general: { ttsEnabled: true } }),
         constants: {
             PRIORITY_LEVELS: {
                 DEFAULT: 0, FOLLOW: 1, GIFT: 2, ENVELOPE: 3, MEMBER: 4,
