@@ -36,6 +36,14 @@ describe('Console Override Pattern', () => {
         initializeLoggingConfig({});
     };
 
+    const createDefaultLoggingConfig = () => ({
+        console: { enabled: false },
+        file: { enabled: false, directory: './logs' },
+        debug: { enabled: false },
+        platforms: {},
+        chat: { enabled: false }
+    });
+
     beforeAll(() => {
         const logging = require('../../src/core/logging');
         initializeConsoleOverride = logging.initializeConsoleOverride;
@@ -79,18 +87,15 @@ describe('Console Override Pattern', () => {
         fs.appendFileSync = mockAppendFileSync;
         fs.mkdirSync = mockMkdirSync;
         fs.existsSync = mockExistsSync;
+
+        setConfigValidator(() => createDefaultLoggingConfig());
+        initializeLoggingConfig({});
     });
 
     afterEach(() => {
         restoreAllMocks();
         restoreConsole();
-        setConfigValidator(() => ({
-            console: { enabled: false },
-            file: { enabled: false, directory: './logs' },
-            debug: { enabled: false },
-            platforms: {},
-            chat: { enabled: false }
-        }));
+        setConfigValidator(() => createDefaultLoggingConfig());
     });
 
     describe('ensureLogDirectory', () => {
