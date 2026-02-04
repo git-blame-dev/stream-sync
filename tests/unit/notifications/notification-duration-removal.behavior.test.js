@@ -31,7 +31,7 @@ describe('Display items avoid hardcoded durations', () => {
                 constants: require('../../../src/core/constants'),
                 textProcessing: { formatChatMessage: createMockFn() },
                 obsGoals: { processDonationGoal: createMockFn() },
-                config: createConfigFixture({ tts: { enabled: true } }),
+                config: createConfigFixture(),
                 vfxCommandService: {
                     executeCommand: createMockFn().mockResolvedValue({ success: true }),
                     getVFXConfig: createMockFn().mockResolvedValue(null)

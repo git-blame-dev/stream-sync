@@ -35,8 +35,7 @@ describe('Twitch gift subscriptions', () => {
                 suppressionWindowMs: 60000,
                 suppressionDurationMs: 300000,
                 suppressionCleanupIntervalMs: 300000
-            },
-            tts: { enabled: false }
+            }
         });
         const constants = require('../../src/core/constants');
         const textProcessing = createTextProcessingManager({ logger: mockLogger });
