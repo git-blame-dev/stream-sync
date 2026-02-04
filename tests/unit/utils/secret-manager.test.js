@@ -268,6 +268,62 @@ describe('secret-manager', () => {
         });
     });
 
+    it('prompts for required secrets when interactive and TTY is available', async () => {
+        const promptCalls = [];
+        const promptFor = async (secretId) => {
+            promptCalls.push(secretId);
+            return 'test-tiktok-api-key';
+        };
+
+        const originalIsTTY = process.stdin.isTTY;
+        const originalCI = process.env.CI;
+        const originalNodeEnv = process.env.NODE_ENV;
+        const originalApiKey = process.env.TIKTOK_API_KEY;
+
+        process.stdin.isTTY = true;
+        delete process.env.CI;
+        process.env.NODE_ENV = 'test';
+
+        try {
+            const result = await ensureSecrets({
+                config: {
+                    tiktok: { enabled: true },
+                    twitch: { enabled: false },
+                    obs: { enabled: false },
+                    streamelements: { enabled: false },
+                    youtube: { enabled: false }
+                },
+                logger,
+                interactive: true,
+                envFileReadEnabled: false,
+                envFileWriteEnabled: false,
+                promptFor
+            });
+
+            expect(promptCalls).toEqual(['TIKTOK_API_KEY']);
+            expect(result.missingRequired).toEqual([]);
+            expect(result.applied.TIKTOK_API_KEY.source).toBe('prompt');
+            expect(process.env.TIKTOK_API_KEY).toBe('test-tiktok-api-key');
+        } finally {
+            process.stdin.isTTY = originalIsTTY;
+            if (originalCI === undefined) {
+                delete process.env.CI;
+            } else {
+                process.env.CI = originalCI;
+            }
+            if (originalNodeEnv === undefined) {
+                delete process.env.NODE_ENV;
+            } else {
+                process.env.NODE_ENV = originalNodeEnv;
+            }
+            if (originalApiKey === undefined) {
+                delete process.env.TIKTOK_API_KEY;
+            } else {
+                process.env.TIKTOK_API_KEY = originalApiKey;
+            }
+        }
+    });
+
     it('fails fast in non-interactive mode when required secrets are missing', async () => {
         process.env.TIKTOK_API_KEY = 'env_tiktok_key';
         process.env.OBS_PASSWORD = 'env_obs_password';

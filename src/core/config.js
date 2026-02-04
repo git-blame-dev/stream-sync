@@ -55,7 +55,7 @@ function loadConfig() {
         loadedConfig = normalized;
 
         const debugEnabled = normalized.general.debugEnabled;
-        if (debugEnabled && process.env.NODE_ENV !== 'test') {
+        if (debugEnabled) {
             process.stdout.write(`[INFO] [Config] Successfully loaded configuration from ${configPath}\n`);
         }
 

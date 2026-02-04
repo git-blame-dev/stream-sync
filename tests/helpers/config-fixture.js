@@ -63,7 +63,7 @@ const RAW_TEST_CONFIG = {
 };
 
 function getRawTestConfig() {
-    return RAW_TEST_CONFIG;
+    return JSON.parse(JSON.stringify(RAW_TEST_CONFIG));
 }
 
 function createSourcesConfigFixture(overrides = {}) {
@@ -149,7 +149,7 @@ function applyInheritableOverrides(generalOverrides, platformConfig, platformOve
 }
 
 function createConfigFixture(overrides = {}) {
-    const normalized = ConfigValidator.normalize(RAW_TEST_CONFIG);
+    const normalized = ConfigValidator.normalize(getRawTestConfig());
     const base = _buildConfig(normalized);
     
     const {
