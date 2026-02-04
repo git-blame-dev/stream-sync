@@ -43,7 +43,7 @@ const NOTIFICATION_CONFIGS = {
     'platform:envelope': {
         timing: 'sequential',
         settingKey: 'giftsEnabled',
-        commandKey: 'gifts',
+        commandKey: 'envelopes',
         hasSpecialProcessing: false
     },
     'platform:paypiggy': {

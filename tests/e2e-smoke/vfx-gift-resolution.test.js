@@ -147,11 +147,15 @@ describe('VFX notification resolution smoke E2E', () => {
         obs: { enabled: 'false' },
         commands: {
             'test-gift-vfx': '!testgift, vfx top',
+            'test-envelope-vfx': '!testenvelope, vfx center green',
             'test-follow-vfx': '!testfollow, vfx bottom green',
             'test-raid-vfx': '!testraid, vfx center green'
         },
         gifts: {
             command: '!testgift'
+        },
+        envelopes: {
+            command: '!testenvelope'
         },
         follows: {
             command: '!testfollow'
@@ -183,6 +187,13 @@ describe('VFX notification resolution smoke E2E', () => {
         expect(normalized.gifts.command).toBe('!testgift');
     });
 
+    it('envelopes.command survives config normalization', () => {
+        const rawConfig = createRawConfig();
+        const normalized = ConfigValidator.normalize(rawConfig);
+
+        expect(normalized.envelopes.command).toBe('!testenvelope');
+    });
+
     it('follows.command survives config normalization', () => {
         const rawConfig = createRawConfig();
         const normalized = ConfigValidator.normalize(rawConfig);
@@ -207,6 +218,18 @@ describe('VFX notification resolution smoke E2E', () => {
         expect(vfxConfig).not.toBeNull();
         expect(vfxConfig.filename).toBe('test-gift-vfx');
         expect(vfxConfig.mediaSource).toBe('vfx top');
+    });
+
+    it('VFXCommandService.getVFXConfig returns valid config for envelopes', async () => {
+        const rawConfig = createRawConfig();
+        const normalized = ConfigValidator.normalize(rawConfig);
+        const vfxService = new VFXCommandService(normalized, null);
+
+        const vfxConfig = await vfxService.getVFXConfig('envelopes', null);
+
+        expect(vfxConfig).not.toBeNull();
+        expect(vfxConfig.filename).toBe('test-envelope-vfx');
+        expect(vfxConfig.mediaSource).toBe('vfx center green');
     });
 
     it('VFXCommandService.getVFXConfig returns valid config for follows', async () => {

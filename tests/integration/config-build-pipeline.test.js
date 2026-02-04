@@ -18,6 +18,7 @@ describe('Config build pipeline integration', () => {
             expect(built.tiktok).toBeDefined();
             expect(built.handcam).toBeDefined();
             expect(built.gifts).toBeDefined();
+            expect(built.envelopes).toBeDefined();
             expect(built.displayQueue).toBeDefined();
             expect(built.timing).toBeDefined();
             expect(built.spam).toBeDefined();
@@ -93,6 +94,25 @@ describe('Config build pipeline integration', () => {
             expect(built.general.envFilePath).toBeDefined();
             expect(built.general.envFileReadEnabled).toBeDefined();
             expect(built.general.envFileWriteEnabled).toBeDefined();
+        });
+
+        it('notification command sections preserve command strings', () => {
+            const rawConfig = {
+                ...getRawTestConfig(),
+                gifts: {
+                    command: '!testgift',
+                    giftVideoSource: 'gift-video',
+                    giftAudioSource: 'gift-audio'
+                },
+                envelopes: {
+                    command: '!testenvelope'
+                }
+            };
+            const normalized = ConfigValidator.normalize(rawConfig);
+            const built = _buildConfig(normalized);
+
+            expect(built.gifts.command).toBe('!testgift');
+            expect(built.envelopes.command).toBe('!testenvelope');
         });
     });
 
