@@ -14,7 +14,6 @@ describe('NotificationManager Service Dependency Injection - Modernized', () => 
     let mockDisplayQueue;
     let mockConfig;
     let mockVFXCommandService;
-    let mockTTSService;
     let mockUserTrackingService;
     let mockEventBus;
     let notificationManager;
@@ -43,10 +42,6 @@ describe('NotificationManager Service Dependency Injection - Modernized', () => 
         mockVFXCommandService = {
             executeCommand: createMockFn().mockResolvedValue({ success: true }),
             getVFXConfig: createMockFn().mockResolvedValue({ filename: 'test.mp4' })
-        };
-
-        mockTTSService = {
-            speak: createMockFn().mockResolvedValue({ success: true })
         };
 
         mockUserTrackingService = {
@@ -102,14 +97,14 @@ describe('NotificationManager Service Dependency Injection - Modernized', () => 
                 obsGoals: { processDonationGoal: createMockFn() },
                 config: mockConfig,
                 vfxCommandService: mockVFXCommandService,
-                ttsService: mockTTSService,
+                
                 userTrackingService: mockUserTrackingService
             });
 
             expect(notificationManager.eventBus).toBe(mockEventBus);
             expect(notificationManager.config).toBe(mockConfig);
             expect(notificationManager.vfxCommandService).toBe(mockVFXCommandService);
-            expect(notificationManager.ttsService).toBe(mockTTSService);
+            
             expect(notificationManager.userTrackingService).toBe(mockUserTrackingService);
         });
 
@@ -220,7 +215,7 @@ describe('NotificationManager Service Dependency Injection - Modernized', () => 
                 obsGoals: { processDonationGoal: createMockFn() },
                 config: mockConfig,
                 vfxCommandService: mockVFXCommandService,
-                ttsService: mockTTSService,
+                
                 userTrackingService: mockUserTrackingService
             });
 
@@ -251,7 +246,7 @@ describe('NotificationManager Service Dependency Injection - Modernized', () => 
                 obsGoals: { processDonationGoal: createMockFn() },
                 config: mockConfig,
                 vfxCommandService: mockVFXCommandService,
-                ttsService: mockTTSService,
+                
                 userTrackingService: mockUserTrackingService
             });
 
@@ -325,7 +320,7 @@ describe('NotificationManager Service Dependency Injection - Modernized', () => 
                 obsGoals: { processDonationGoal: createMockFn() },
                 config: mockConfig,
                 vfxCommandService: mockVFXCommandService,
-                ttsService: mockTTSService,
+                
                 userTrackingService: mockUserTrackingService,
                 donationSpamDetector: mockSpamDetector
             });
@@ -353,7 +348,7 @@ describe('NotificationManager Service Dependency Injection - Modernized', () => 
                 obsGoals: { processDonationGoal: createMockFn() },
                 config: mockConfig,
                 vfxCommandService: mockVFXCommandService,
-                ttsService: mockTTSService,
+                
                 userTrackingService: mockUserTrackingService
             });
 
@@ -382,7 +377,7 @@ describe('NotificationManager Service Dependency Injection - Modernized', () => 
                 obsGoals: { processDonationGoal: createMockFn() },
                 config: mockConfig,
                 vfxCommandService: mockVFXCommandService,
-                ttsService: mockTTSService,
+                
                 userTrackingService: mockUserTrackingService
             });
 
@@ -411,7 +406,7 @@ describe('NotificationManager Service Dependency Injection - Modernized', () => 
                     obsGoals: { processDonationGoal: createMockFn() },
                     config: null,
                     vfxCommandService: null,
-                    ttsService: null,
+                    
                     userTrackingService: null
                 });
             }).toThrow('NotificationManager requires config dependency');

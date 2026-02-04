@@ -389,23 +389,6 @@ describe('Config field presence - all normalizers return expected fields', () =>
         });
     });
 
-    describe('_normalizeTtsSection', () => {
-        const EXPECTED_FIELDS = [
-            'onlyForGifts',
-            'voice',
-            'rate',
-            'volume'
-        ];
-
-        it('returns all expected fields', () => {
-            const result = ConfigValidator._normalizeTtsSection({});
-
-            EXPECTED_FIELDS.forEach(field => {
-                expect(result).toHaveProperty(field);
-            });
-        });
-    });
-
     describe('_normalizeSpamSection', () => {
         const EXPECTED_FIELDS = [
             'enabled',

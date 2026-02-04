@@ -21,7 +21,7 @@ describe('config-validator (utility) behavior', () => {
 describe('ConfigValidator.normalize()', () => {
     const ALL_SECTIONS = [
         'general', 'http', 'obs', 'tiktok', 'twitch', 'youtube',
-        'handcam', 'goals', 'gifts', 'timing', 'cooldowns', 'tts',
+        'handcam', 'goals', 'gifts', 'timing', 'cooldowns',
         'spam', 'displayQueue', 'retry', 'intervals', 'connectionLimits',
         'api', 'logging', 'farewell', 'commands', 'vfx', 'streamelements',
         'follows', 'raids', 'paypiggies', 'greetings', 'shares'
@@ -272,15 +272,6 @@ describe('ConfigValidator._normalizeCooldownsSection()', () => {
 
         expect(result.defaultCooldown).toBe(60);
         expect(result.heavyCommandCooldown).toBe(30);
-    });
-});
-
-describe('ConfigValidator._normalizeTtsSection()', () => {
-    it('applies TTS defaults', () => {
-        const result = ConfigValidator._normalizeTtsSection({});
-
-        expect(result.voice).toBe('default');
-        expect(result.rate).toBe(1.0);
     });
 });
 

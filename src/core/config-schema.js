@@ -243,13 +243,6 @@ const CONFIG_SCHEMA = {
         giftAudioSource: { type: 'string', default: 'gift-audio' }
     },
 
-    tts: {
-        onlyForGifts: { type: 'boolean', default: false },
-        voice: { type: 'string', default: 'default' },
-        rate: { type: 'number', default: 1.0 },
-        volume: { type: 'number', default: 1.0 }
-    },
-
     farewell: {
         command: { type: 'string', userDefined: true }
     },

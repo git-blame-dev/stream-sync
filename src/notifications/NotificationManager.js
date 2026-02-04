@@ -32,7 +32,6 @@ class NotificationManager extends EventEmitter {
         
         this.eventBus = dependencies.eventBus;
         this.config = dependencies.config;
-        this.ttsService = dependencies.ttsService;
         this.vfxCommandService = dependencies.vfxCommandService;
         this.userTrackingService = dependencies.userTrackingService;
         this.displayQueue = dependencies.displayQueue;
@@ -494,9 +493,6 @@ class NotificationManager extends EventEmitter {
             // Visual effects are emitted by DisplayQueue when the item actually plays.
             const config = this.NOTIFICATION_CONFIGS[notificationType];
             
-            // TTS processing - route through TTSService via EventBus
-            await this._processTTS(notificationType, platform, data);
-            
             // Other special processing can go here
         } catch (error) {
             this._handleNotificationError(
@@ -717,60 +713,6 @@ class NotificationManager extends EventEmitter {
         }
     }
 
-    async _processTTS(notificationType, platform, data) {
-        try {
-            // Check if TTS is enabled
-            const ttsEnabled = !!this.config.general?.ttsEnabled;
-            
-            if (!ttsEnabled) {
-                return;
-            }
-            
-            // Get the notification data to extract TTS message
-            const notificationData = this.NotificationBuilder.build({
-                type: notificationType,
-                platform: platform,
-                username: data.username,
-                userId: data.userId,
-                amount: data.amount,
-                currency: data.currency,
-                giftType: data.giftType,
-                giftCount: data.giftCount,
-                tier: data.tier,
-                months: data.months,
-                message: data.message,
-                sticker: data.sticker,
-                stickerName: data.stickerName,
-                stickerEmoji: data.stickerEmoji,
-                ...data
-            });
-            
-            if (!notificationData?.ttsMessage) {
-                return;
-            }
-            
-            this.logger.debug(`[NotificationManager] Processing TTS for ${notificationType}: ${notificationData.ttsMessage}`, 'notification-manager');
-
-            // Emit TTS event for processing via EventBus
-            this.eventBus.emit(PlatformEvents.TTS_SPEECH_REQUESTED, {
-                text: notificationData.ttsMessage,
-                notificationType,
-                platform,
-                source: 'notification-manager',
-                options: {
-                    source: 'notification-manager'
-                }
-            });
-        } catch (error) {
-            this._handleNotificationError(
-                `[NotificationManager] Error processing TTS: ${error.message}`,
-                error,
-                { notificationType, platform, data },
-                { eventType: 'tts-processing' }
-            );
-        }
-    }
-
     async processVFXForNotification(vfxNotification) {
         try {
             this.logger.debug(`[NotificationManager] Processing VFX for ${vfxNotification.type}`, 'notification-manager');
@@ -799,52 +741,6 @@ class NotificationManager extends EventEmitter {
                 error,
                 { vfxNotification },
                 { eventType: 'vfx-processing' }
-            );
-        }
-    }
-
-    async processTTSForNotification(ttsNotification) {
-        try {
-            this.logger.debug(`[NotificationManager] Processing TTS for ${ttsNotification.type}`, 'notification-manager');
-
-            const ttsEnabled = !!this.config.general?.ttsEnabled;
-
-            if (!ttsEnabled) {
-                this.logger.debug('[NotificationManager] TTS disabled, skipping', 'notification-manager');
-                return;
-            }
-
-            if (!ttsNotification.ttsMessage) {
-                return;
-            }
-
-            const context = {
-                platform: ttsNotification.platform,
-                username: ttsNotification.username,
-                userId: ttsNotification.userId,
-                type: ttsNotification.type
-            };
-
-            if (this.eventBus) {
-                this.eventBus.emit(PlatformEvents.TTS_SPEECH_REQUESTED, {
-                    text: ttsNotification.ttsMessage,
-                    notificationType: ttsNotification.type,
-                    platform: ttsNotification.platform,
-                    source: 'notification-manager'
-                });
-                return;
-            }
-
-            if (this.ttsService) {
-                await this.ttsService.speak(ttsNotification.ttsMessage, context);
-            }
-
-        } catch (error) {
-            this._handleNotificationError(
-                `[NotificationManager] Error processing TTS: ${error.message}`,
-                error,
-                { ttsNotification },
-                { eventType: 'tts-notification' }
             );
         }
     }

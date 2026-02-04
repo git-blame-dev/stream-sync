@@ -100,7 +100,6 @@ class ConfigValidator {
             gifts: ConfigValidator._normalizeGiftsSection(rawConfig.gifts || {}),
             timing: ConfigValidator._normalizeTimingSection(rawConfig.timing || {}),
             cooldowns: ConfigValidator._normalizeCooldownsSection(rawConfig.cooldowns || {}),
-            tts: ConfigValidator._normalizeTtsSection(rawConfig.tts || {}),
             spam: ConfigValidator._normalizeSpamSection(rawConfig.spam || {}),
             displayQueue: ConfigValidator._normalizeDisplayQueueSection(rawConfig.displayQueue || {}),
             retry: ConfigValidator._normalizeRetrySection(rawConfig.retry || {}),
@@ -303,15 +302,6 @@ class ConfigValidator {
             heavyCommandThreshold: ConfigValidator.parseNumber(raw.heavyCommandThreshold, { defaultValue: DEFAULTS.cooldowns.heavyCommandThreshold }),
             heavyCommandWindow: ConfigValidator.parseNumber(raw.heavyCommandWindow, { defaultValue: DEFAULTS.cooldowns.heavyCommandWindow }),
             maxEntries: ConfigValidator.parseNumber(raw.maxEntries, { defaultValue: DEFAULTS.cooldowns.maxEntries })
-        };
-    }
-
-    static _normalizeTtsSection(raw) {
-        return {
-            onlyForGifts: ConfigValidator.parseBoolean(raw.onlyForGifts, DEFAULTS.tts.onlyForGifts),
-            voice: ConfigValidator.parseString(raw.voice, DEFAULTS.tts.voice),
-            rate: ConfigValidator.parseNumber(raw.rate, { defaultValue: DEFAULTS.tts.rate }),
-            volume: ConfigValidator.parseNumber(raw.volume, { defaultValue: DEFAULTS.tts.volume })
         };
     }
 

@@ -155,7 +155,6 @@ function createConfigFixture(overrides = {}) {
     const {
         general: generalOverrides,
         cooldowns: cooldownsOverrides,
-        tts: ttsOverrides,
         commands: commandsOverrides,
         obs: obsOverrides,
         timing: timingOverrides,
@@ -172,7 +171,6 @@ function createConfigFixture(overrides = {}) {
         ...base,
         general: { ...base.general, ...generalOverrides },
         cooldowns: { ...base.cooldowns, ...cooldownsOverrides },
-        tts: { ...base.tts, ...ttsOverrides },
         commands: { ...base.commands, ...commandsOverrides },
         obs: { ...base.obs, ...obsOverrides },
         timing: { ...base.timing, ...timingOverrides },
