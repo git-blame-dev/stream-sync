@@ -57,10 +57,6 @@ function createAppRuntimeTestDependencies(options = {}) {
         executeCommandForKey: createMockFn().mockResolvedValue({ success: true }),
         getVFXConfig: createMockFn().mockResolvedValue({})
     };
-    const ttsService = options.ttsService || {
-        speak: createMockFn().mockResolvedValue(true),
-        stop: createMockFn().mockResolvedValue(true)
-    };
     const userTrackingService = options.userTrackingService || {
         isFirstMessage: createMockFn().mockReturnValue(true)
     };
@@ -86,7 +82,6 @@ function createAppRuntimeTestDependencies(options = {}) {
         notificationManager,
         eventBus,
         config,
-        ttsService,
         vfxCommandService,
         userTrackingService,
         commandCooldownService,

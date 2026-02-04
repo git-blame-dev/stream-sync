@@ -36,7 +36,6 @@ describe('Display items avoid hardcoded durations', () => {
                     executeCommand: createMockFn().mockResolvedValue({ success: true }),
                     getVFXConfig: createMockFn().mockResolvedValue(null)
                 },
-                ttsService: { speak: createMockFn().mockResolvedValue({ success: true }) },
                 userTrackingService: { isFirstMessage: createMockFn().mockResolvedValue(true) }
             });
         });

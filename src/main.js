@@ -281,7 +281,6 @@ function createProductionDependencies(overrides = {}) {
         innertubeImporter: resolvedOverrides.innertubeImporter,
 
         eventBus: null,
-        ttsService: null,
         vfxCommandService: null,
         userTrackingService: null
     };
@@ -382,7 +381,6 @@ class AppRuntime {
         
         // Initialize event-driven services from dependencies
         this.eventBus = this.dependencies.eventBus;
-        this.ttsService = this.dependencies.ttsService;
         this.vfxCommandService = this.dependencies.vfxCommandService;
         this.userTrackingService = this.dependencies.userTrackingService;
         this.obsEventService = this.dependencies.obsEventService;
@@ -422,7 +420,6 @@ class AppRuntime {
             'notificationManager',
             'eventBus',
             'vfxCommandService',
-            'ttsService',
             'userTrackingService',
             'obsEventService',
             'sceneManagementService',
@@ -896,7 +893,6 @@ class AppRuntime {
     getReadyServices() {
         const readinessMap = {
             notificationManager: !!this.notificationManager,
-            ttsService: !!this.ttsService,
             vfxCommandService: !!this.vfxCommandService,
             commandCooldownService: !!this.commandCooldownService,
             platformLifecycleService: !!this.platformLifecycleService

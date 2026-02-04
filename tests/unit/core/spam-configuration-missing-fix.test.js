@@ -28,7 +28,6 @@ describe('Spam Detection Service Integration Tests', () => {
     let mockTextProcessing;
     let mockObsGoals;
     let mockVfxCommandService;
-    let mockTtsService;
     let NotificationManager;
 
     beforeEach(() => {
@@ -67,7 +66,6 @@ describe('Spam Detection Service Integration Tests', () => {
         mockTextProcessing = createTextProcessingManager({ logger: mockLogger });
         mockObsGoals = { processDonationGoal: createMockFn() };
         mockVfxCommandService = { getVFXConfig: createMockFn().mockResolvedValue(null) };
-        mockTtsService = { speak: createMockFn() };
 
         NotificationManager = require('../../../src/notifications/NotificationManager');
     });
@@ -108,8 +106,7 @@ describe('Spam Detection Service Integration Tests', () => {
                 config: mockConfig,
                 textProcessing: mockTextProcessing,
                 obsGoals: mockObsGoals,
-                vfxCommandService: mockVfxCommandService,
-                ttsService: mockTtsService
+                vfxCommandService: mockVfxCommandService
             });
 
             const giftData = {
@@ -144,8 +141,7 @@ describe('Spam Detection Service Integration Tests', () => {
                 config: mockConfig,
                 textProcessing: mockTextProcessing,
                 obsGoals: mockObsGoals,
-                vfxCommandService: mockVfxCommandService,
-                ttsService: mockTtsService
+                vfxCommandService: mockVfxCommandService
             });
 
             expect(notificationManager.donationSpamDetector).toBe(mockSpamDetector);
@@ -164,8 +160,7 @@ describe('Spam Detection Service Integration Tests', () => {
                 config: mockConfig,
                 textProcessing: mockTextProcessing,
                 obsGoals: mockObsGoals,
-                vfxCommandService: mockVfxCommandService,
-                ttsService: mockTtsService
+                vfxCommandService: mockVfxCommandService
             });
 
             const giftData = {
@@ -196,8 +191,7 @@ describe('Spam Detection Service Integration Tests', () => {
                 config: mockConfig,
                 textProcessing: mockTextProcessing,
                 obsGoals: mockObsGoals,
-                vfxCommandService: mockVfxCommandService,
-                ttsService: mockTtsService
+                vfxCommandService: mockVfxCommandService
             });
 
             const giftData = {
@@ -226,8 +220,7 @@ describe('Spam Detection Service Integration Tests', () => {
                 config: mockConfig,
                 textProcessing: mockTextProcessing,
                 obsGoals: mockObsGoals,
-                vfxCommandService: mockVfxCommandService,
-                ttsService: mockTtsService
+                vfxCommandService: mockVfxCommandService
             });
 
             expect(notificationManager.donationSpamDetector).toBeUndefined();
@@ -246,8 +239,7 @@ describe('Spam Detection Service Integration Tests', () => {
                 config: mockConfig,
                 textProcessing: mockTextProcessing,
                 obsGoals: mockObsGoals,
-                vfxCommandService: mockVfxCommandService,
-                ttsService: mockTtsService
+                vfxCommandService: mockVfxCommandService
             });
 
             const aggregatedGift = {
@@ -307,8 +299,7 @@ describe('Spam Detection Service Integration Tests', () => {
                 config: mockConfig,
                 textProcessing: mockTextProcessing,
                 obsGoals: mockObsGoals,
-                vfxCommandService: mockVfxCommandService,
-                ttsService: mockTtsService
+                vfxCommandService: mockVfxCommandService
             });
 
             expect(notificationManager.donationSpamDetector).toBe(mockSpamDetector);
@@ -327,8 +318,7 @@ describe('Spam Detection Service Integration Tests', () => {
                 config: mockConfig,
                 textProcessing: mockTextProcessing,
                 obsGoals: mockObsGoals,
-                vfxCommandService: mockVfxCommandService,
-                ttsService: mockTtsService
+                vfxCommandService: mockVfxCommandService
             });
 
             const giftData = {

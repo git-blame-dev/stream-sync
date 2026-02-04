@@ -112,7 +112,6 @@ describe('Monetisation pipeline integration', () => {
             eventBus,
             config,
             vfxCommandService,
-            ttsService: { speak: createMockFn() },
             userTrackingService: { isFirstMessage: createMockFn().mockResolvedValue(false) }
         });
 

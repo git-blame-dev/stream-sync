@@ -43,8 +43,7 @@ describe('Notification type normalization', () => {
             textProcessing: { formatChatMessage: createMockFn() },
             obsGoals: { processDonationGoal: createMockFn() },
             config,
-            vfxCommandService: { getVFXConfig: createMockFn().mockResolvedValue(null) },
-            ttsService: { speak: createMockFn() }
+            vfxCommandService: { getVFXConfig: createMockFn().mockResolvedValue(null) }
         });
     });
 

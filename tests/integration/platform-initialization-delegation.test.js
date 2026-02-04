@@ -49,7 +49,6 @@ describe('Platform Initialization Delegation', () => {
             eventBus: { subscribe: createMockFn(), emit: createMockFn(), unsubscribe: createMockFn() },
             config: createConfigFixture(),
             vfxCommandService: { executeCommandForKey: createMockFn().mockResolvedValue({ success: true }) },
-            ttsService: { speak: createMockFn().mockResolvedValue({ success: true }) },
             userTrackingService: { isFirstMessage: createMockFn().mockResolvedValue(false) },
             obsEventService: {},
             sceneManagementService: {},

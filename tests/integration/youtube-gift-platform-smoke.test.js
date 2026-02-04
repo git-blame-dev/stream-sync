@@ -84,7 +84,6 @@ describe('YouTube gift platform flow (smoke)', () => {
             textProcessing,
             obsGoals: { processDonationGoal: createMockFn() },
             vfxCommandService: { getVFXConfig: createMockFn().mockResolvedValue(null) },
-            ttsService: { speak: createMockFn() },
             userTrackingService: { isFirstMessage: createMockFn().mockResolvedValue(false) }
         });
 
