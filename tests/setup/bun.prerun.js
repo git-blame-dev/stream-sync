@@ -23,14 +23,23 @@ process.exit = noopProcessExit;
 global.__ORIGINAL_PROCESS_EXIT__ = originalProcessExit;
 global.__NOOP_PROCESS_EXIT__ = noopProcessExit;
 
+const originalStdoutWrite = process.stdout.write.bind(process.stdout);
 const originalStderrWrite = process.stderr.write.bind(process.stderr);
-const stderrCapture = [];
 
-process.stderr.write = (chunk, encoding, callback) => {
-    stderrCapture.push(chunk);
+const suppressedStdoutWrite = (chunk, encoding, callback) => {
     if (typeof callback === 'function') callback();
     return true;
 };
 
+const suppressedStderrWrite = (chunk, encoding, callback) => {
+    if (typeof callback === 'function') callback();
+    return true;
+};
+
+process.stdout.write = suppressedStdoutWrite;
+process.stderr.write = suppressedStderrWrite;
+
+global.__ORIGINAL_STDOUT_WRITE__ = originalStdoutWrite;
+global.__SUPPRESSED_STDOUT_WRITE__ = suppressedStdoutWrite;
 global.__ORIGINAL_STDERR_WRITE__ = originalStderrWrite;
-global.__STDERR_CAPTURE__ = stderrCapture;
+global.__SUPPRESSED_STDERR_WRITE__ = suppressedStderrWrite;
