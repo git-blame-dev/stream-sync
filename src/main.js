@@ -359,24 +359,9 @@ class AppRuntime {
 
     // Chat message handling is delegated to ChatNotificationRouter (see handleChatMessage)
 
-    buildPlatformSharedDependencies() {
-        return {
-            twitchAuth: this.twitchAuth,
-            notificationManager: this.notificationManager,
-            logger: logging.getUnifiedLogger(),
-            platformLogger: logger,
-            config: this.config,
-            retrySystem: retrySystem,
-            streamDetectionService: this.youtubeDetectionService,
-            youtubeDetectionService: this.youtubeDetectionService,
-            Innertube: this.lazyInnertube,
-            USER_AGENTS: this.config.http.userAgents
-        };
-    }
-
     _createYoutubeDetectionService() {
         const youtubeConfig = this.config?.youtube;
-        if (!youtubeConfig || youtubeConfig.streamDetectionMethod !== 'youtubei') {
+        if (!youtubeConfig || !youtubeConfig.enabled || youtubeConfig.streamDetectionMethod !== 'youtubei') {
             return null;
         }
 
