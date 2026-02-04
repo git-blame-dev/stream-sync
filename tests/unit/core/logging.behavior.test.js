@@ -1,5 +1,6 @@
 const { describe, it, expect, beforeEach, afterEach } = require('bun:test');
 const { createMockFn, restoreAllMocks, spyOn } = require('../../helpers/bun-mock-utils');
+const { captureStdout, captureStderr } = require('../../helpers/output-capture');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
@@ -48,19 +49,8 @@ describe('core/logging behavior', () => {
 
     it('writes console and file outputs through unified logger', () => {
         const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'test-logs-'));
-        const stdoutWrites = [];
-        const stderrWrites = [];
-        const originalStdoutWrite = process.stdout.write;
-        const originalStderrWrite = process.stderr.write;
-
-        process.stdout.write = (chunk) => {
-            stdoutWrites.push(String(chunk));
-            return true;
-        };
-        process.stderr.write = (chunk) => {
-            stderrWrites.push(String(chunk));
-            return true;
-        };
+        const stdoutCapture = captureStdout();
+        const stderrCapture = captureStderr();
 
         const validatedConfig = {
             console: { enabled: true, level: 'info' },
@@ -84,13 +74,13 @@ describe('core/logging behavior', () => {
             const logPath = path.join(tempDir, 'runtime.log');
             const logContent = fs.readFileSync(logPath, 'utf8');
 
-            expect(stdoutWrites.join('')).toContain('test-info');
-            expect(stderrWrites.join('')).toContain('test-error');
+            expect(stdoutCapture.output.join('')).toContain('test-info');
+            expect(stderrCapture.output.join('')).toContain('test-error');
             expect(logContent).toContain('test-info');
             expect(logContent).toContain('test-error');
         } finally {
-            process.stdout.write = originalStdoutWrite;
-            process.stderr.write = originalStderrWrite;
+            stdoutCapture.restore();
+            stderrCapture.restore();
             fs.rmSync(tempDir, { recursive: true, force: true });
         }
     });

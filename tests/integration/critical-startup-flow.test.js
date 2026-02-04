@@ -37,8 +37,6 @@ describe('Critical Startup Flow', () => {
 
     test('startup fails fast when config file does not exist in production', () => {
         const originalNodeEnv = process.env.NODE_ENV;
-        const originalStderrWrite = process.stderr.write;
-        process.stderr.write = () => {};
         process.env.NODE_ENV = 'production';
         try {
             const nonExistentPath = path.join(tempDir, 'does-not-exist.ini');
@@ -47,28 +45,19 @@ describe('Critical Startup Flow', () => {
             expect(() => loadFreshConfig()).toThrow('Configuration file not found');
         } finally {
             process.env.NODE_ENV = originalNodeEnv;
-            process.stderr.write = originalStderrWrite;
         }
     });
 
     test('startup fails fast when required sections are missing', () => {
-        const originalStderrWrite = process.stderr.write;
-        process.stderr.write = () => {};
-        try {
-            const configPath = path.join(tempDir, 'incomplete.ini');
-            fs.writeFileSync(configPath, '[minimal]\nkey=value\n');
-            process.env.CHAT_BOT_CONFIG_PATH = configPath;
+        const configPath = path.join(tempDir, 'incomplete.ini');
+        fs.writeFileSync(configPath, '[minimal]\nkey=value\n');
+        process.env.CHAT_BOT_CONFIG_PATH = configPath;
 
-            expect(() => loadFreshConfig()).toThrow('Missing required configuration section: general');
-        } finally {
-            process.stderr.write = originalStderrWrite;
-        }
+        expect(() => loadFreshConfig()).toThrow('Missing required configuration section: general');
     });
 
     test('config path override via environment variable takes precedence in production', () => {
         const originalNodeEnv = process.env.NODE_ENV;
-        const originalStderrWrite = process.stderr.write;
-        process.stderr.write = () => {};
         process.env.NODE_ENV = 'production';
         try {
             const overridePath = path.join(tempDir, 'override.ini');
@@ -77,7 +66,6 @@ describe('Critical Startup Flow', () => {
             expect(() => loadFreshConfig()).toThrow(overridePath);
         } finally {
             process.env.NODE_ENV = originalNodeEnv;
-            process.stderr.write = originalStderrWrite;
         }
     });
 

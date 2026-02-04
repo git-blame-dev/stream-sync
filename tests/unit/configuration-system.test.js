@@ -1,6 +1,7 @@
 const { describe, it, expect, beforeEach, afterEach } = require('bun:test');
 const { createMockFn, restoreAllMocks } = require('../helpers/bun-mock-utils');
 const { expectNoTechnicalArtifacts } = require('../helpers/assertion-helpers');
+const { captureStderr } = require('../helpers/output-capture');
 
 const fs = require('fs');
 const CONFIG_MODULE_PATH = require.resolve('../../src/core/config');
@@ -139,11 +140,8 @@ describe('Configuration System Behavior Tests', () => {
             expectNoTechnicalArtifacts(youtubeUsername);
         });
 
-        it('should prevent startup when an enabled platform is missing a username', () => {
-            const originalStderrWrite = process.stderr.write;
-            process.stderr.write = () => {};
-            try {
-                const missingUsernameConfig = `
+    it('should prevent startup when an enabled platform is missing a username', () => {
+        const missingUsernameConfig = `
 ${testConfigContent}
 
 [twitch]
@@ -163,49 +161,41 @@ innertubeInstanceTtlMs = 300000
 innertubeMinTtlMs = 60000
 userAgents = test-agent-1|test-agent-2
 `;
-                expect(() => {
-                    reloadConfig(missingUsernameConfig);
-                }).toThrow(/Twitch.*username/i);
-            } finally {
-                process.stderr.write = originalStderrWrite;
-            }
-        });
+        expect(() => {
+            reloadConfig(missingUsernameConfig);
+        }).toThrow(/Twitch.*username/i);
+    });
 
-        it('should provide helpful error messages for missing config files', () => {
-            const originalNodeEnv = process.env.NODE_ENV;
-            const originalStderrWrite = process.stderr.write;
-            const stderrOutput = [];
-            process.stderr.write = (msg) => stderrOutput.push(msg);
-            process.env.NODE_ENV = 'production';
-            try {
-                fs.existsSync = createMockFn(() => false);
-                process.env.CHAT_BOT_CONFIG_PATH = '/nonexistent/config.ini';
+    it('should provide helpful error messages for missing config files', () => {
+        const originalNodeEnv = process.env.NODE_ENV;
+        const stderrCapture = captureStderr();
+        process.env.NODE_ENV = 'production';
+        try {
+            fs.existsSync = createMockFn(() => false);
+            process.env.CHAT_BOT_CONFIG_PATH = '/nonexistent/config.ini';
 
-                expect(() => {
-                    loadFreshConfig();
-                }).toThrow(/Configuration file not found/);
-                expect(stderrOutput.join('')).toContain('SETTINGS FILE MISSING');
-            } finally {
-                process.env.NODE_ENV = originalNodeEnv;
-                process.stderr.write = originalStderrWrite;
-            }
-        });
+            expect(() => {
+                loadFreshConfig();
+            }).toThrow(/Configuration file not found/);
+            expect(stderrCapture.output.join('')).toContain('SETTINGS FILE MISSING');
+        } finally {
+            process.env.NODE_ENV = originalNodeEnv;
+            stderrCapture.restore();
+        }
+    });
 
-        it('should not fall back when the configured path is missing', () => {
-            const originalNodeEnv = process.env.NODE_ENV;
-            const originalStderrWrite = process.stderr.write;
-            process.stderr.write = () => {};
-            process.env.NODE_ENV = 'production';
-            try {
-                fs.existsSync = createMockFn((path) => path === '/default/config.ini');
-                process.env.CHAT_BOT_CONFIG_PATH = '/nonexistent/config.ini';
+    it('should not fall back when the configured path is missing', () => {
+        const originalNodeEnv = process.env.NODE_ENV;
+        process.env.NODE_ENV = 'production';
+        try {
+            fs.existsSync = createMockFn((path) => path === '/default/config.ini');
+            process.env.CHAT_BOT_CONFIG_PATH = '/nonexistent/config.ini';
 
-                expect(() => loadFreshConfig()).toThrow(/Configuration file not found/);
-            } finally {
-                process.env.NODE_ENV = originalNodeEnv;
-                process.stderr.write = originalStderrWrite;
-            }
-        });
+            expect(() => loadFreshConfig()).toThrow(/Configuration file not found/);
+        } finally {
+            process.env.NODE_ENV = originalNodeEnv;
+        }
+    });
     });
 
     describe('Platform Integration Behavior', () => {
@@ -422,8 +412,6 @@ userAgents = test-agent-1|test-agent-2
     describe('Error Recovery Behavior', () => {
         it('should surface missing config errors without fallback', () => {
             const originalNodeEnv = process.env.NODE_ENV;
-            const originalStderrWrite = process.stderr.write;
-            process.stderr.write = () => {};
             process.env.NODE_ENV = 'production';
             try {
                 const fallbackPath = '/fallback/config.ini';
@@ -439,27 +427,20 @@ userAgents = test-agent-1|test-agent-2
                 expect(() => loadFreshConfig()).toThrow(/Configuration file not found/);
             } finally {
                 process.env.NODE_ENV = originalNodeEnv;
-                process.stderr.write = originalStderrWrite;
             }
         });
 
         it('should provide helpful errors for corrupted config files', () => {
-            const originalStderrWrite = process.stderr.write;
-            process.stderr.write = () => {};
-            try {
-                const corruptedConfig = `
+            const corruptedConfig = `
 [general
 debugEnabled = true
 broken syntax here
 [obs]
 enabled =
 `;
-                expect(() => {
-                    reloadConfig(corruptedConfig);
-                }).toThrow();
-            } finally {
-                process.stderr.write = originalStderrWrite;
-            }
+            expect(() => {
+                reloadConfig(corruptedConfig);
+            }).toThrow();
         });
 
         it('should maintain system stability during config errors', () => {
@@ -664,10 +645,7 @@ maxMessageLength = 500
 
     describe('Configuration Schema Validation Behavior', () => {
         it('should provide guidance for incomplete platform configuration', () => {
-            const originalStderrWrite = process.stderr.write;
-            process.stderr.write = () => {};
-            try {
-                const incompleteConfig = `
+            const incompleteConfig = `
 ${testConfigContent}
 
 [youtube]
@@ -677,12 +655,9 @@ innertubeInstanceTtlMs = 300000
 innertubeMinTtlMs = 60000
 userAgents = test-agent-1|test-agent-2
 `;
-                expect(() => {
-                    reloadConfig(incompleteConfig);
-                }).toThrow(/YouTube.*username/i);
-            } finally {
-                process.stderr.write = originalStderrWrite;
-            }
+            expect(() => {
+                reloadConfig(incompleteConfig);
+            }).toThrow(/YouTube.*username/i);
         });
 
         it('should handle numeric configuration values for timing behavior', () => {
