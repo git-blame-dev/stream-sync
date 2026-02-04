@@ -98,6 +98,15 @@ const originalConsoleError = console.error;
 let consoleOverrideEnabled = false;
 let programLogInitialized = false;
 
+function isConsoleOutputEnabled() {
+    try {
+        const config = getLoggingConfig();
+        return !!(config && config.console && config.console.enabled);
+    } catch {
+        return false;
+    }
+}
+
 function ensureLogDirectory(dirPath) {
     if (!dirPath) {
         return false;
@@ -111,7 +120,7 @@ function ensureLogDirectory(dirPath) {
         return true;
     } catch (err) {
         try {
-            if (process.env.NODE_ENV !== 'test') {
+            if (isConsoleOutputEnabled()) {
                 originalConsoleError(`[Logging System] Error creating log directory: ${err && err.message ? err.message : 'Unknown error'}`);
             }
         } catch { }
@@ -172,7 +181,7 @@ function logProgram(message) {
         fs.appendFileSync(path.join(logDir, 'program-log.txt'), logEntry);
     } catch (err) {
         try {
-            if (process.env.NODE_ENV !== 'test') {
+            if (isConsoleOutputEnabled()) {
                 originalConsoleError(`[Logging System] Error writing to program log: ${err && err.message ? err.message : 'Unknown error'}`);
             }
         } catch { }
@@ -185,14 +194,14 @@ function initializeConsoleOverride() {
     }
     
     console.log = function(...args) {
-        if (process.env.NODE_ENV !== 'test') {
+        if (isConsoleOutputEnabled()) {
             originalConsoleLog.apply(console, args);
         }
         logProgram(args.join(' '));
     };
     
     console.error = function(...args) {
-        if (process.env.NODE_ENV !== 'test') {
+        if (isConsoleOutputEnabled()) {
             originalConsoleError.apply(console, args);
         }
         logProgram(`ERROR: ${args.join(' ')}`);
@@ -210,7 +219,7 @@ function restoreConsole() {
     console.error = originalConsoleError;
     consoleOverrideEnabled = false;
     
-    if (process.env.NODE_ENV !== 'test') {
+    if (isConsoleOutputEnabled()) {
         originalConsoleLog('[Logging System] Console override restored to original functions');
     }
 }
@@ -472,7 +481,7 @@ function logChatMessageToFile(platform, username, message, timestamp) {
         fs.appendFileSync(filepath, logEntry);
         
     } catch (err) {
-        if (process.env.NODE_ENV !== 'test') {
+        if (isConsoleOutputEnabled()) {
             originalConsoleError(`[Logging System] Error writing chat message to file: ${err && err.message ? err.message : 'Unknown error'}`);
         }
     }
