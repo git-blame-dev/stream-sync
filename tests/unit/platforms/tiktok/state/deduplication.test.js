@@ -1,6 +1,12 @@
-const { describe, it, expect, afterEach } = require('bun:test');
+const { describe, it, expect, afterEach, beforeEach } = require('bun:test');
 const { createMockFn, restoreAllMocks } = require('../../../../helpers/bun-mock-utils');
 const { noOpLogger } = require('../../../../helpers/mock-factories');
+const {
+    useFakeTimers,
+    useRealTimers,
+    setSystemTime,
+    advanceTimersByTime
+} = require('../../../../helpers/bun-timers');
 const { TikTokPlatform } = require('../../../../../src/platforms/tiktok');
 
 const createPlatform = (configOverrides = {}, dependencyOverrides = {}) => {
@@ -80,6 +86,47 @@ describe('TikTokPlatform _shouldSkipDuplicatePlatformMessage', () => {
             const result = platform._shouldSkipDuplicatePlatformMessage({ someOtherField: 'value' });
 
             expect(result.isDuplicate).toBe(false);
+        });
+    });
+
+    describe('ttl expiry', () => {
+        beforeEach(() => {
+            useFakeTimers();
+            setSystemTime(new Date('2025-01-15T12:00:00.000Z'));
+        });
+
+        afterEach(() => {
+            useRealTimers();
+        });
+
+        it('emits share again after the TTL elapses', async () => {
+            const platform = createPlatform({}, { deduplicationTtlMs: 1000 });
+            const shareEvents = [];
+            platform.handlers = {
+                ...platform.handlers,
+                onShare: (data) => shareEvents.push(data)
+            };
+
+            const sharePayload = {
+                user: {
+                    userId: 'test-user-id-ttl',
+                    uniqueId: 'test-user-ttl',
+                    nickname: 'test-user-ttl'
+                },
+                displayType: 'share',
+                common: { createTime: Date.parse('2025-01-15T12:00:00.000Z'), msgId: 'test-msg-ttl-1' }
+            };
+
+            await platform.handleTikTokSocial(sharePayload);
+            await platform.handleTikTokSocial(sharePayload);
+
+            expect(shareEvents).toHaveLength(1);
+
+            advanceTimersByTime(1001);
+
+            await platform.handleTikTokSocial(sharePayload);
+
+            expect(shareEvents).toHaveLength(2);
         });
     });
 

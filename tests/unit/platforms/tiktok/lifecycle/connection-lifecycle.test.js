@@ -261,5 +261,34 @@ describe('TikTokPlatform connection lifecycle', () => {
             expect(result.issueType).toBe('stream-not-live');
             expect(result.retryResult).toEqual({ queued: true });
         });
+
+        it('skips retry when platform is disabled', async () => {
+            const retrySystem = {
+                resetRetryCount: createMockFn(),
+                handleConnectionError: createMockFn(),
+                isConnected: createMockFn()
+            };
+            const platform = createPlatform({ enabled: false }, { retrySystem });
+            platform.queueRetry = createMockFn().mockReturnValue({ queued: true });
+
+            const result = await platform.handleConnectionIssue('stream ended');
+
+            expect(result.retryResult).toEqual({ queued: false, reason: 'no-retry-needed' });
+        });
+
+        it('skips retry when disconnection is planned', async () => {
+            const retrySystem = {
+                resetRetryCount: createMockFn(),
+                handleConnectionError: createMockFn(),
+                isConnected: createMockFn()
+            };
+            const platform = createPlatform({}, { retrySystem });
+            platform.queueRetry = createMockFn().mockReturnValue({ queued: true });
+            platform.isPlannedDisconnection = true;
+
+            const result = await platform.handleConnectionIssue('stream ended');
+
+            expect(result.retryResult).toEqual({ queued: false, reason: 'no-retry-needed' });
+        });
     });
 });
