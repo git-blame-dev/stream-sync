@@ -1,6 +1,7 @@
 const { describe, it, expect, afterEach } = require('bun:test');
 const { createMockFn, restoreAllMocks } = require('../../../../helpers/bun-mock-utils');
 const { noOpLogger } = require('../../../../helpers/mock-factories');
+const { useFakeTimers, useRealTimers, setSystemTime } = require('../../../../helpers/bun-timers');
 
 const { TikTokPlatform } = require('../../../../../src/platforms/tiktok');
 const { PlatformEvents } = require('../../../../../src/interfaces/PlatformEvents');
@@ -168,6 +169,37 @@ describe('TikTokPlatform behavior alignment', () => {
                 eventType: 'gift'
             });
             expect(routedGifts[0].timestamp).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/);
+        });
+
+        it('uses system time when gift timestamps are missing', async () => {
+            useFakeTimers();
+            setSystemTime(new Date('2025-01-20T10:00:00.000Z'));
+            try {
+                const platform = createPlatform();
+                const routedGifts = [];
+                platform.handlers = {
+                    ...platform.handlers,
+                    onGift: (data) => routedGifts.push(data)
+                };
+
+                await expect(
+                    platform.handleTikTokGift({
+                        repeatCount: 1,
+                        giftDetails: { giftName: 'Rose', diamondCount: 1, giftType: 0 },
+                        common: { msgId: 'test-gift-missing-timestamp' },
+                        user: {
+                            uniqueId: 'test-alice',
+                            nickname: 'test-alice',
+                            userId: 'test-alice-id'
+                        }
+                    })
+                ).resolves.toBeUndefined();
+
+                expect(routedGifts).toHaveLength(1);
+                expect(routedGifts[0].timestamp).toBe('2025-01-20T10:00:00.000Z');
+            } finally {
+                useRealTimers();
+            }
         });
     });
 

@@ -1,0 +1,146 @@
+const { describe, test, afterEach, expect } = require('bun:test');
+const EventEmitter = require('events');
+
+const NotificationManager = require('../../src/notifications/NotificationManager');
+const PlatformEventRouter = require('../../src/services/PlatformEventRouter');
+const { TikTokPlatform } = require('../../src/platforms/tiktok');
+const { createTextProcessingManager } = require('../../src/utils/text-processing');
+const { createConfigFixture } = require('../helpers/config-fixture');
+const { createMockDisplayQueue, noOpLogger } = require('../helpers/mock-factories');
+const { createMockFn, restoreAllMocks } = require('../helpers/bun-mock-utils');
+const { setupTikTokEventListeners, cleanupTikTokEventListeners } = require('../../src/platforms/tiktok/events/event-router');
+const { expectNoTechnicalArtifacts } = require('../helpers/assertion-helpers');
+
+const createEventBus = () => {
+    const emitter = new EventEmitter();
+    return {
+        emit: (event, payload) => emitter.emit(event, payload),
+        subscribe: (event, handler) => {
+            emitter.on(event, handler);
+            return () => emitter.off(event, handler);
+        }
+    };
+};
+
+const assertNonEmptyString = (value) => {
+    expect(typeof value).toBe('string');
+    expect(value.trim()).not.toBe('');
+};
+
+describe('TikTok event pipeline (smoke E2E)', () => {
+    afterEach(() => {
+        restoreAllMocks();
+    });
+
+    test('routes chat and gift into user-facing notifications', async () => {
+        const eventBus = createEventBus();
+        const logger = noOpLogger;
+        const displayQueue = createMockDisplayQueue();
+        const textProcessing = createTextProcessingManager({ logger });
+        const config = createConfigFixture({
+            general: {
+                notificationsEnabled: true,
+                messagesEnabled: true,
+                giftsEnabled: true
+            },
+            tiktok: {
+                enabled: true,
+                notificationsEnabled: true
+            },
+            obs: { enabled: false }
+        });
+        const notificationManager = new NotificationManager({
+            displayQueue,
+            logger,
+            eventBus,
+            config,
+            constants: require('../../src/core/constants'),
+            textProcessing,
+            obsGoals: { processDonationGoal: createMockFn() },
+            vfxCommandService: { getVFXConfig: createMockFn().mockResolvedValue(null) },
+            userTrackingService: { isFirstMessage: createMockFn().mockResolvedValue(false) }
+        });
+        const runtimeCalls = { chat: [] };
+        const runtime = {
+            handleChatMessage: (platform, message) => runtimeCalls.chat.push({ platform, message }),
+            handleGiftNotification: async (platform, username, payload) =>
+                notificationManager.handleNotification(payload.type, platform, payload)
+        };
+
+        const router = new PlatformEventRouter({
+            eventBus,
+            runtime,
+            notificationManager,
+            config,
+            logger
+        });
+
+        const connection = new EventEmitter();
+        const WebcastEvent = {
+            CHAT: 'chat',
+            GIFT: 'gift'
+        };
+        const ControlEvent = {
+            DISCONNECTED: 'disconnected',
+            ERROR: 'error'
+        };
+
+        const platform = new TikTokPlatform(
+            {
+                enabled: true,
+                username: 'test-user',
+                giftAggregationEnabled: false
+            },
+            {
+                logger,
+                eventBus,
+                TikTokWebSocketClient: createMockFn(),
+                WebcastEvent,
+                ControlEvent,
+                connectionFactory: { createConnection: createMockFn() }
+            }
+        );
+
+        platform.connection = connection;
+        setupTikTokEventListeners(platform);
+
+        const eventTimestamp = Date.parse('2025-01-20T12:00:00.000Z');
+        const chatPayload = {
+            comment: 'hello from tiktok',
+            user: { userId: 'test-user-id-1', uniqueId: 'test-user-1', nickname: 'test-user-one' },
+            common: { createTime: eventTimestamp }
+        };
+        const giftPayload = {
+            user: { userId: 'test-user-id-2', uniqueId: 'test-user-2', nickname: 'test-user-two' },
+            repeatCount: 1,
+            repeatEnd: true,
+            giftDetails: { giftName: 'Rose', diamondCount: 1, giftType: 0 },
+            common: { createTime: eventTimestamp, msgId: 'test-gift-msg-1' }
+        };
+
+        try {
+            connection.emit(WebcastEvent.CHAT, chatPayload);
+            connection.emit(WebcastEvent.GIFT, giftPayload);
+
+            await new Promise(setImmediate);
+
+            expect(runtimeCalls.chat).toHaveLength(1);
+            expect(runtimeCalls.chat[0].message.message).toBe('hello from tiktok');
+            expect(runtimeCalls.chat[0].message.username).toBe('test-user-one');
+
+            expect(displayQueue.addItem).toHaveBeenCalledTimes(1);
+            const queued = displayQueue.addItem.mock.calls[0][0];
+            assertNonEmptyString(queued.data.displayMessage);
+            assertNonEmptyString(queued.data.ttsMessage);
+            assertNonEmptyString(queued.data.logMessage);
+            expectNoTechnicalArtifacts(queued.data.displayMessage);
+            expectNoTechnicalArtifacts(queued.data.ttsMessage);
+            expectNoTechnicalArtifacts(queued.data.logMessage);
+            expect(queued.data.username).toBe('test-user-two');
+            expect(queued.data.giftType).toBe('Rose');
+        } finally {
+            router.dispose();
+            cleanupTikTokEventListeners(platform);
+        }
+    });
+});

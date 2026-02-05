@@ -20,12 +20,14 @@ describe('OBS Sources Module Characterization Tests', () => {
     let mockEnsureConnected;
     let mockObsCall;
     let mockSanitizeDisplayName;
+    let mockDelay;
     let sourcesModule;
 
     beforeEach(() => {
         mockEnsureConnected = createMockFn().mockResolvedValue();
         mockObsCall = createMockFn();
         mockSanitizeDisplayName = createMockFn((name, limit) => name.substring(0, limit));
+        mockDelay = createMockFn().mockResolvedValue();
 
         mockObsManager = {
             ensureConnected: mockEnsureConnected,
@@ -42,7 +44,8 @@ describe('OBS Sources Module Characterization Tests', () => {
             ensureOBSConnected: mockEnsureConnected,
             obsCall: mockObsCall,
             utils: {
-                sanitizeDisplayName: mockSanitizeDisplayName
+                sanitizeDisplayName: mockSanitizeDisplayName,
+                delay: mockDelay
             }
         });
     });
