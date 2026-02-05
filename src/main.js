@@ -30,7 +30,7 @@ for (let i = 0; i < args.length; i++) {
             break;
         case '--chat':
             if (i + 1 < args.length) {
-                const chatCount = parseInt(args[++i]);
+                const chatCount = Number.parseInt(args[++i], 10);
                 if (isNaN(chatCount) || chatCount <= 0) {
                     process.stderr.write('Error: --chat argument requires a positive number\n');
                     process.exit(1);
