@@ -1,9 +1,9 @@
 const { describe, expect, it, afterEach } = require('bun:test');
-const { createMockFn, spyOn, restoreAllMocks } = require('../helpers/bun-mock-utils');
+const { createMockFn, restoreAllMocks } = require('../helpers/bun-mock-utils');
 const { useFakeTimers, useRealTimers, runOnlyPendingTimers } = require('../helpers/bun-timers');
 const { noOpLogger } = require('../helpers/mock-factories');
 
-const { AppRuntime } = require('../../src/main');
+const { AppRuntime } = require('../../src/runtime/AppRuntime');
 
 describe('AppRuntime system readiness payload', () => {
     afterEach(() => {
@@ -15,6 +15,7 @@ describe('AppRuntime system readiness payload', () => {
         const bot = Object.create(AppRuntime.prototype);
         bot.eventBus = null;
         bot.getReadyServices = createMockFn().mockReturnValue(['notificationManager', 'platformLifecycleService']);
+        bot.logger = noOpLogger;
         return bot;
     };
 
@@ -27,13 +28,13 @@ describe('AppRuntime system readiness payload', () => {
             getStatus: createMockFn().mockReturnValue({ activeUsers: 3 })
         };
 
-        const payload = runtime.emitSystemReady({ correlationId: 'startup-1' });
+        const payload = runtime.emitSystemReady({ correlationId: 'test-startup-1' });
 
         expect(payload).toEqual(expect.objectContaining({
             services: ['notificationManager', 'platformLifecycleService'],
             platforms: { initializedPlatforms: ['twitch'] },
             cooldowns: { activeUsers: 3 },
-            correlationId: 'startup-1'
+            correlationId: 'test-startup-1'
         }));
         expect(payload.monitoring).toBeUndefined();
     });
@@ -42,10 +43,10 @@ describe('AppRuntime system readiness payload', () => {
         const runtime = createAppRuntimeDouble();
         runtime.eventBus = null;
 
-        const payload = runtime.emitSystemReady({ correlationId: 'noop' });
+        const payload = runtime.emitSystemReady({ correlationId: 'test-noop' });
         expect(payload).toEqual(expect.objectContaining({
             services: ['notificationManager', 'platformLifecycleService'],
-            correlationId: 'noop'
+            correlationId: 'test-noop'
         }));
     });
 });
@@ -62,29 +63,40 @@ describe('AppRuntime shutdown lifecycle', () => {
 
     it('does not emit telemetry events when restart is requested', () => {
         const runtime = createAppRuntimeDouble();
+        const emitCalls = [];
+        runtime.eventBus.emit = (...args) => emitCalls.push(args);
         useFakeTimers();
-        spyOn(process, 'exit').mockImplementation(() => {});
-        runtime.emitSystemShutdown({ reason: 'test', restartRequested: true });
+        const originalExit = process.exit;
+        process.exit = () => {};
+        try {
+            runtime.emitSystemShutdown({ reason: 'test', restartRequested: true });
 
-        expect(runtime.eventBus.emit).not.toHaveBeenCalled();
-        runOnlyPendingTimers();
-        useRealTimers();
-        process.exit.mockRestore();
+            expect(emitCalls.length).toBe(0);
+            runOnlyPendingTimers();
+        } finally {
+            process.exit = originalExit;
+            useRealTimers();
+        }
     });
 
     it('invokes viewer count status cleanup during shutdown', async () => {
         const runtime = createAppRuntimeDouble();
+        const cleanupCalls = [];
         runtime.platformLifecycleService = { disconnectAll: createMockFn().mockResolvedValue() };
         runtime.obsEventService = { disconnect: createMockFn().mockResolvedValue() };
         runtime.platformEventRouter = { dispose: createMockFn() };
         runtime.viewerCountSystem = { stopPolling: createMockFn() };
         runtime.notificationManager = { stopSuppressionCleanup: createMockFn() };
-        runtime.viewerCountStatusCleanup = createMockFn();
-        runtime.emitSystemShutdown = createMockFn();
-        runtime._handleAppRuntimeError = createMockFn();
+        runtime.viewerCountStatusCleanup = () => cleanupCalls.push('cleanup');
+        const originalExit = process.exit;
+        process.exit = () => {};
 
-        await runtime.shutdown();
+        try {
+            await runtime.shutdown();
 
-        expect(runtime.viewerCountStatusCleanup).toHaveBeenCalledTimes(1);
+            expect(cleanupCalls).toEqual(['cleanup']);
+        } finally {
+            process.exit = originalExit;
+        }
     });
 });
