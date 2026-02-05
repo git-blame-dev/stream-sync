@@ -50,15 +50,22 @@ const buildSmokeConfig = () => createConfigFixture({
 describe('main startup smoke', () => {
     let stdoutCapture;
     let stderrCapture;
+    let originalStartupOnly;
 
     beforeEach(() => {
         stdoutCapture = captureStdout();
         stderrCapture = captureStderr();
         useFakeTimers();
+        originalStartupOnly = process.env.CHAT_BOT_STARTUP_ONLY;
         delete process.env.CHAT_BOT_STARTUP_ONLY;
     });
 
     afterEach(() => {
+        if (originalStartupOnly === undefined) {
+            delete process.env.CHAT_BOT_STARTUP_ONLY;
+        } else {
+            process.env.CHAT_BOT_STARTUP_ONLY = originalStartupOnly;
+        }
         clearAllTimers();
         useRealTimers();
         stdoutCapture.restore();
