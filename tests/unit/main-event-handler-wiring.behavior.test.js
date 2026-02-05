@@ -31,6 +31,7 @@ describe('main.js event handler wiring', () => {
         config: overrides.config || {},
         vfxCommandService: overrides.vfxCommandService || { executeCommandForKey: createMockFn().mockResolvedValue({ success: true }) },
         userTrackingService: overrides.userTrackingService || { isFirstMessage: createMockFn().mockResolvedValue(false) },
+        commandParser: overrides.commandParser !== undefined ? overrides.commandParser : { getVFXConfig: createMockFn() },
         commandCooldownService: overrides.commandCooldownService || { updateCooldown: createMockFn() },
         platformLifecycleService: overrides.platformLifecycleService || { getAllPlatforms: createMockFn(() => ({})) },
         dependencyFactory: overrides.dependencyFactory || { createYoutubeDependencies: createMockFn(() => ({})) },

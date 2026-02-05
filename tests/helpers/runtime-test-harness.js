@@ -64,11 +64,14 @@ function createAppRuntimeTestDependencies(options = {}) {
         loadCooldownConfig: createMockFn(),
         registerConfigListeners: createMockFn(),
         getStatus: createMockFn().mockReturnValue({ commands: {} }),
-        checkCooldown: createMockFn().mockReturnValue({ allowed: true }),
-        recordCommand: createMockFn()
+        checkUserCooldown: createMockFn().mockReturnValue({ allowed: true }),
+        updateUserCooldown: createMockFn()
     };
     const platformLifecycleService = options.platformLifecycleService ||
         createPlatformLifecycleStub();
+    const commandParser = options.commandParser || {
+        getVFXConfig: createMockFn().mockReturnValue(null)
+    };
     const dependencyFactory = options.dependencyFactory || {
         createYoutubeDependencies: createMockFn().mockReturnValue({
             streamDetectionService: { isLive: createMockFn() }
@@ -86,6 +89,7 @@ function createAppRuntimeTestDependencies(options = {}) {
         userTrackingService,
         commandCooldownService,
         platformLifecycleService,
+        commandParser,
         dependencyFactory,
         timestampService: options.timestampService || { now: createMockFn(() => testClock.now()) },
         obsManager: options.obsManager || null,
@@ -111,7 +115,7 @@ function createAppRuntimeTestDependencies(options = {}) {
 module.exports = {
     createAppRuntimeTestDependencies,
     createTestAppRuntime: (configOverrides = {}, options = {}) => {
-        const { AppRuntime } = require('../../src/main');
+        const { AppRuntime } = require('../../src/runtime/AppRuntime');
         const harness = createAppRuntimeTestDependencies({
             configOverrides,
             ...options

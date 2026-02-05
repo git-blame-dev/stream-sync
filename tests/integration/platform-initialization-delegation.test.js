@@ -50,6 +50,7 @@ describe('Platform Initialization Delegation', () => {
             config: createConfigFixture(),
             vfxCommandService: { executeCommandForKey: createMockFn().mockResolvedValue({ success: true }) },
             userTrackingService: { isFirstMessage: createMockFn().mockResolvedValue(false) },
+            commandParser: { getVFXConfig: createMockFn() },
             obsEventService: {},
             sceneManagementService: {},
             commandCooldownService: {
