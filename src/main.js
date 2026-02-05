@@ -1,7 +1,5 @@
-// Parse command line arguments FIRST, before any imports
 const args = process.argv.slice(2);
 
-// Enhanced command line argument parsing
 const cliArgs = {
     noMsg: false,
     debug: false,
@@ -10,7 +8,6 @@ const cliArgs = {
     chat: null
 };
 
-// Parse command line arguments
 for (let i = 0; i < args.length; i++) {
     const arg = args[i];
     
@@ -35,13 +32,11 @@ for (let i = 0; i < args.length; i++) {
             if (i + 1 < args.length) {
                 const chatCount = parseInt(args[++i]);
                 if (isNaN(chatCount) || chatCount <= 0) {
-                    // Use process.stderr.write for CLI errors to avoid logging system interference
                     process.stderr.write('Error: --chat argument requires a positive number\n');
                     process.exit(1);
                 }
                 cliArgs.chat = chatCount;
             } else {
-                // Use process.stderr.write for CLI errors to avoid logging system interference
                 process.stderr.write('Error: --chat argument requires a number\n');
                 process.exit(1);
             }
@@ -49,9 +44,7 @@ for (let i = 0; i < args.length; i++) {
     }
 }
 
-// Handle help flag IMMEDIATELY, before any imports
 if (cliArgs.help) {
-    // Use process.stdout.write for help text to avoid logging system interference
     process.stdout.write(`
 Usage: bun src/main.js [options]
 
@@ -70,8 +63,6 @@ Examples:
     process.exit(0);
 }
 
-// --- STEP 1: EARLY LOGGING SYSTEM INITIALIZATION ---
-// This must happen BEFORE any other imports that might use logging
 const crypto = require('crypto');
 const { validateLoggingConfig } = require('./core/config');
 const { 
@@ -86,16 +77,12 @@ const { createPlatformErrorHandler } = require('./utils/platform-error-handler')
 const { ensureSecrets } = require('./utils/secret-manager');
 const TwitchAuth = require('./auth/TwitchAuth');
 
-// Set up logging system immediately
 setConfigValidator(validateLoggingConfig);
 
-// Set debug mode from command line argument FIRST
 if (cliArgs.debug) {
     setDebugMode(true);
 }
 
-// Apply command line argument overrides for keyword parsing
-// Note: Logger access will be moved after logger initialization
 let keywordParsingDisabledViaCLI = false;
 if (cliArgs.disableKeywordParsing) {
     keywordParsingDisabledViaCLI = true;
@@ -104,19 +91,15 @@ if (cliArgs.disableKeywordParsing) {
 const { createRetrySystem } = require('./utils/retry-system');
 const { getSystemTimestampISO } = require('./utils/timestamp');
 
-// Import authentication
 const { InnertubeFactory } = require('./factories/innertube-factory');
 
-// --- STEP 2: CORE SYSTEM IMPORTS ---
-// Now that logging is initialized, we can safely import other modules
 const { config: configModule, logging } = require('./core');
-const { config } = configModule;
+let config = configModule.config;
 
 const innertubeInstanceManager = require('./services/innertube-instance-manager');
 
 const loggingInitWarnings = [];
 
-// Initialize logging configuration with the loaded config
 try {
     if (typeof initializeLoggingConfig !== 'function') {
         throw new Error('initializeLoggingConfig unavailable');
@@ -126,7 +109,6 @@ try {
     throw error;
 }
 
-// Get the unified logger instance (now properly initialized)
 const logger = getLogger();
 if (!logger || typeof logger.debug !== 'function') {
     throw new Error('Logger missing required methods');
@@ -162,7 +144,6 @@ function logMainError(message, error, payload, options) {
     handler.logOperationalError(message, logContext, payload);
 }
 
-// Log command line argument overrides after logger is initialized
 if (keywordParsingDisabledViaCLI) {
     logger.info('Keyword parsing disabled via command line argument', 'system');
 }
@@ -173,44 +154,28 @@ if (loggingInitWarnings.length) {
     });
 }
 
-// Set debug mode from config if not already set by command line
-if (!cliArgs.debug && config.general.debugEnabled) {
-    setDebugMode(true);
-    logger.info('Debug mode enabled via config.ini', 'system');
-} else if (cliArgs.debug) {
-    logger.info('Debug mode enabled via command line argument', 'system');
-}
-
-// Modern logging approach - use logger.debug directly instead of wrapper function
 const coreConstants = require('./core/constants');
 const {
     PRIORITY_LEVELS,
     NOTIFICATION_CONFIGS
 } = coreConstants;
 
-// OBS integration imports
 const { getOBSConnectionManager, initializeOBSConnection } = require('./obs/connection');
 const { initializeDisplayQueue } = require('./obs/display-queue');
 const { getDefaultGoalsManager } = require('./obs/goals');
 
 
-// Platform imports - will be lazy-loaded after preloader completes
-
-// Utility imports
 const { textProcessing: textProcessingModule } = require('./utils');
 const { createTextProcessingManager } = textProcessingModule;
 const textProcessing = createTextProcessingManager({ logger });
 const { formatChatMessage } = textProcessing;
-// YouTube channel ID resolution now handled internally via search
 const { CommandParser } = require('./chat/commands');
 const { AppRuntime } = require('./runtime/AppRuntime');
 const { clearExpiredGlobalCooldowns } = require('./utils/command-parser');
 
-// Notification system
 const NotificationManager = require('./notifications/NotificationManager');
 const { createSpamDetectionConfig, createDonationSpamDetection } = require('./utils/spam-detection');
 
-// Event-driven architecture services
 const { createEventBus } = require('./core/EventBus');
 const { createVFXCommandService } = require('./services/VFXCommandService');
 const { createUserTrackingService } = require('./services/UserTrackingService');
@@ -218,29 +183,10 @@ const CommandCooldownService = require('./services/CommandCooldownService');
 const PlatformLifecycleService = require('./services/PlatformLifecycleService');
 const { createGracefulExitService } = require('./services/GracefulExitService');
 
-// OBS Event-driven services
 const { createOBSEventService } = require('./obs/obs-event-service');
 const { createSceneManagementService } = require('./obs/scene-management-service');
 
-
-// Viewer count system
-
-
-// Debug: Print the raw twitch config after loading (only in debug mode)
-if (config.general.debugEnabled) {
-    logger.debug('Raw twitch config:', 'system', config.twitch);
-}
-
-// Apply CLI arguments to config
-if (cliArgs.noMsg) {
-    config.general.noMsg = true;
-}
-
-if (cliArgs.logLevel) {
-    config.general.logLevel = cliArgs.logLevel;
-}
-
-let app; // Declare app instance at the module level
+let app;
 
 function createProductionDependencies(overrides = {}) {
     const { validateLoggerInterface } = require('./utils/dependency-validator');
@@ -281,18 +227,19 @@ function createProductionDependencies(overrides = {}) {
     };
 }
 
-function createAppRuntime(config, dependencies) {
+function createAppRuntime(config, dependencies, cliArgsOverride = cliArgs) {
     if (!dependencies) {
         throw new Error('createAppRuntime requires dependencies');
     }
     const deps = dependencies;
+    const effectiveCliArgs = cliArgsOverride || cliArgs;
 
     logger.info('Creating AppRuntime', 'system');
 
     const commandParserConfig = {
         ...config,
         cliArgs: {
-            disableKeywordParsing: cliArgs.disableKeywordParsing
+            disableKeywordParsing: effectiveCliArgs ? effectiveCliArgs.disableKeywordParsing : undefined
         }
     };
     deps.commandParser = deps.commandParser || new CommandParser(commandParserConfig);
@@ -304,6 +251,40 @@ async function main(overrides = {}) {
     if (overrides?.innertubeImporter) {
         innertubeInstanceManager.setInnertubeImporter(overrides.innertubeImporter);
     }
+    const runtimeCliArgs = overrides.cliArgs || cliArgs;
+    const runtimeConfig = overrides.config || config;
+    if (runtimeConfig !== config) {
+        config = runtimeConfig;
+    }
+    if (!runtimeCliArgs.debug && config.general.debugEnabled) {
+        setDebugMode(true);
+        logger.info('Debug mode enabled via config.ini', 'system');
+    } else if (runtimeCliArgs.debug) {
+        logger.info('Debug mode enabled via command line argument', 'system');
+    }
+    if (config.general.debugEnabled) {
+        logger.debug('Raw twitch config:', 'system', config.twitch);
+    }
+    if (runtimeCliArgs.noMsg) {
+        config.general.noMsg = true;
+    }
+    if (runtimeCliArgs.logLevel) {
+        config.general.logLevel = runtimeCliArgs.logLevel;
+    }
+    const ensureSecretsFn = overrides.ensureSecrets || ensureSecrets;
+    const TwitchAuthCtor = overrides.TwitchAuth || TwitchAuth;
+    const createEventBusFn = overrides.createEventBus || createEventBus;
+    const initializeDisplayQueueFn = overrides.initializeDisplayQueue || initializeDisplayQueue;
+    const getOBSConnectionManagerFn = overrides.getOBSConnectionManager || getOBSConnectionManager;
+    const createVFXCommandServiceFn = overrides.createVFXCommandService || createVFXCommandService;
+    const createUserTrackingServiceFn = overrides.createUserTrackingService || createUserTrackingService;
+    const createOBSEventServiceFn = overrides.createOBSEventService || createOBSEventService;
+    const createSceneManagementServiceFn = overrides.createSceneManagementService || createSceneManagementService;
+    const NotificationManagerCtor = overrides.NotificationManager || NotificationManager;
+    const createSpamDetectionConfigFn = overrides.createSpamDetectionConfig || createSpamDetectionConfig;
+    const createDonationSpamDetectionFn = overrides.createDonationSpamDetection || createDonationSpamDetection;
+    const createGracefulExitServiceFn = overrides.createGracefulExitService || createGracefulExitService;
+    const createProductionDependenciesFn = overrides.createProductionDependencies || createProductionDependencies;
     try {
         logger.console('Starting main application...', 'main');
         logger.info('Main application started, beginning initialization...', 'Main');
@@ -311,7 +292,7 @@ async function main(overrides = {}) {
         logger.info('Setting up display queue configuration...', 'Main');
 
         try {
-            await ensureSecrets({
+            await ensureSecretsFn({
                 config,
                 logger,
                 interactive: !!(process.stdin && process.stdin.isTTY),
@@ -330,7 +311,7 @@ async function main(overrides = {}) {
         let twitchAuth = null;
         let authValid = true;
         if (config.twitch.enabled) {
-            twitchAuth = new TwitchAuth({
+            twitchAuth = new TwitchAuthCtor({
                 tokenStorePath: config.twitch.tokenStorePath,
                 clientId: config.twitch.clientId,
                 expectedUsername: config.twitch.username,
@@ -398,7 +379,6 @@ async function main(overrides = {}) {
             ttsEnabled: ttsEnabledConfig
         };
         
-        // Debug: Log the display queue configuration 
         logger.debug(`[Display Queue Config] Notification: ${displayQueueConfig.notification.sourceName}, Chat: ${displayQueueConfig.chat.sourceName}`, 'Main');
         
         const chatTransitionDelay = config.timing.transitionDelay;
@@ -416,31 +396,30 @@ async function main(overrides = {}) {
         };
         
         logger.debug('Creating EventBus...', 'Main');
-        const eventBus = createEventBus({ 
+        const eventBus = createEventBusFn({ 
             debugEnabled: config.general.debugEnabled,
             maxListeners: 100
         });
         logger.debug('EventBus created', 'Main');
 
         logger.debug('About to initialize display queue...', 'Main');
-        const obsManager = getOBSConnectionManager({ config: config.obs });
-        const displayQueue = initializeDisplayQueue(obsManager, displayQueueConfig, displayQueueConstants, eventBus);
+        const obsManager = getOBSConnectionManagerFn({ config: config.obs });
+        const displayQueue = initializeDisplayQueueFn(obsManager, displayQueueConfig, displayQueueConstants, eventBus);
         logger.debug('Display queue initialized', 'Main');
         
         logger.debug('Creating VFXCommandService...', 'Main');
-        const vfxCommandService = createVFXCommandService(config, eventBus);
+        const vfxCommandService = createVFXCommandServiceFn(config, eventBus);
         logger.debug('VFXCommandService created', 'Main');
         
         logger.debug('Creating UserTrackingService...', 'Main');
-        const userTrackingService = createUserTrackingService();
+        const userTrackingService = createUserTrackingServiceFn();
         logger.debug('UserTrackingService created', 'Main');
 
-        // Create OBS event-driven services
         logger.debug('Creating OBS event-driven services...', 'Main');
-        const obsConnectionManager = getOBSConnectionManager({ config: config.obs });
+        const obsConnectionManager = getOBSConnectionManagerFn({ config: config.obs });
         const obsSources = require('./obs/sources').getDefaultSourcesManager();
 
-        const obsEventService = createOBSEventService({
+        const obsEventService = createOBSEventServiceFn({
             eventBus,
             obsConnection: obsConnectionManager,
             obsSources,
@@ -448,7 +427,7 @@ async function main(overrides = {}) {
         });
         logger.debug('OBSEventService created', 'Main');
 
-        const sceneManagementService = createSceneManagementService({
+        const sceneManagementService = createSceneManagementServiceFn({
             eventBus,
             obsConnection: obsConnectionManager,
             logger
@@ -457,10 +436,9 @@ async function main(overrides = {}) {
 
         const obsGoals = getDefaultGoalsManager();
 
-        // After displayQueue and services are created, create NotificationManager
         logger.debug('About to create notification manager...', 'Main');
         logger.info('Creating notification manager...', 'Main');
-        const notificationManager = new NotificationManager({
+        const notificationManager = new NotificationManagerCtor({
             displayQueue: displayQueue,
             eventBus: eventBus,
             config: config,
@@ -473,8 +451,8 @@ async function main(overrides = {}) {
         });
         
         logger.debug('Creating spam detection service...', 'Main');
-        const spamConfig = createSpamDetectionConfig(config.spam, { logger });
-        const donationSpamDetector = createDonationSpamDetection(spamConfig, {
+        const spamConfig = createSpamDetectionConfigFn(config.spam, { logger });
+        const donationSpamDetector = createDonationSpamDetectionFn(spamConfig, {
             logger,
             onAggregatedDonation: (data) => notificationManager.handleAggregatedDonation(data)
         });
@@ -489,12 +467,11 @@ async function main(overrides = {}) {
             }
         }
         
-        const dependencies = createProductionDependencies(overrides);
+        const dependencies = createProductionDependenciesFn(overrides);
         dependencies.displayQueue = displayQueue;
         dependencies.notificationManager = notificationManager;
         dependencies.twitchAuth = twitchAuth;
         
-        // Add event-driven services to dependencies
         dependencies.eventBus = eventBus;
         dependencies.vfxCommandService = vfxCommandService;
         dependencies.userTrackingService = userTrackingService;
@@ -530,17 +507,15 @@ async function main(overrides = {}) {
         dependencies.commandCooldownService = commandCooldownService;
         dependencies.platformLifecycleService = platformLifecycleService;
         
-        app = createAppRuntime(config, dependencies);
+        app = createAppRuntime(config, dependencies, runtimeCliArgs);
 
-        const gracefulExitService = createGracefulExitService(
+        const gracefulExitService = createGracefulExitServiceFn(
             app,
-            cliArgs.chat,
+            runtimeCliArgs.chat,
             config.general?.gracefulExit
         );
         dependencies.gracefulExitService = gracefulExitService;
 
-        // NotificationManager uses event-driven architecture; no manual bridging required
-        
         logger.info('Starting AppRuntime application...', 'Main');
         await app.start();
         logger.info('AppRuntime started successfully', 'Main');
@@ -559,25 +534,19 @@ async function main(overrides = {}) {
         logger.info('Runtime main components are running. Holding process open.', 'system');
         logger.debug('Runtime main components are running. Holding process open.', 'Main');
 
-        // Only keep the application alive if graceful exit is not enabled
-        if (!cliArgs.chat) {
+        if (!runtimeCliArgs.chat) {
             logger.debug('Setting up keep-alive interval (graceful exit not enabled)', 'Main');
-            // Keep the application alive to listen for events
             const keepAliveInterval = safeSetInterval(() => {
-                // This interval keeps the Node.js process alive.
-                // Perform periodic maintenance tasks
                 try {
-                    // Clean up expired global command cooldowns to prevent memory leaks
-                    const cleanedCount = clearExpiredGlobalCooldowns(300000); // 5 minutes
+                    const cleanedCount = clearExpiredGlobalCooldowns(300000);
                     if (cleanedCount > 0) {
                         logger.debug(`Periodic cleanup: removed ${cleanedCount} expired global cooldowns`, 'maintenance');
                     }
                 } catch (error) {
                     logMainError('Error during periodic global cooldown cleanup', error, null, { eventType: 'maintenance', logContext: 'maintenance' });
                 }
-            }, 1000 * 60 * 60); // Run every hour
+            }, 1000 * 60 * 60);
             
-            // Store the interval ID in the app instance for cleanup during shutdown
             if (app) {
                 app.keepAliveInterval = keepAliveInterval;
             }
@@ -585,7 +554,6 @@ async function main(overrides = {}) {
             logger.debug('Graceful exit enabled - no keep-alive interval needed', 'Main');
         }
 
-        // Return startup completion status
         logger.debug('Main function completing successfully', 'Main');
         return {
             success: true,
@@ -596,17 +564,14 @@ async function main(overrides = {}) {
 
     } catch (error) {
         logMainError(`Critical error occurred: ${error.message}`, error, null, { eventType: 'startup', logContext: 'main' });
-        throw error; // Re-throw to ensure the error is visible
+        throw error;
     }
 }
 
-// Suppress Node.js deprecation warnings for cleaner output
 process.noDeprecation = true;
 
 if (require.main === module) {
     main();
 }
-
-// Unhandled promise rejection handler - will be set up after logger is initialized
 
 module.exports = { main, AppRuntime }; 
