@@ -4,6 +4,9 @@ const { logger } = require('../core/logging');
 const { createPlatformErrorHandler } = require('../utils/platform-error-handler');
 const { PlatformEvents } = require('../interfaces/PlatformEvents');
 const { createSyntheticGiftFromAggregated } = require('./aggregated-donation-transformer');
+const { NotificationInputValidator } = require('./notification-input-validator');
+const { NotificationPayloadBuilder } = require('./notification-payload-builder');
+const { NotificationGate } = require('./notification-gate');
 
 class NotificationManager extends EventEmitter {
     constructor(dependencies = {}) {
@@ -55,6 +58,9 @@ class NotificationManager extends EventEmitter {
         this.PRIORITY_LEVELS = PRIORITY_LEVELS;
         this.NOTIFICATION_CONFIGS = NOTIFICATION_CONFIGS;
         this.NotificationBuilder = require('../utils/notification-builder');
+        this.inputValidator = new NotificationInputValidator(this.NOTIFICATION_CONFIGS);
+        this.notificationGate = new NotificationGate(this.config);
+        this.payloadBuilder = new NotificationPayloadBuilder(this.NotificationBuilder);
 
         const { processDonationGoal } = this.obsGoals;
         this.processDonationGoal = processDonationGoal;
@@ -114,104 +120,86 @@ class NotificationManager extends EventEmitter {
     }
 
     async handleNotificationInternal(notificationType, platform, data, skipSpamDetection) {
-        if (typeof platform !== 'string') {
+        const platformValidation = this.inputValidator.validatePlatform(platform);
+        if (!platformValidation.success) {
             this.logger.warn(`[NotificationManager] Invalid platform type: ${typeof platform}`, 'notification-manager', { notificationType, platform });
-            return { success: false, error: 'Invalid platform type', notificationType, platform };
+            return { success: false, error: platformValidation.error, notificationType, platform };
         }
 
-        if (!this._hasConfigAccess()) {
+        if (!this.notificationGate.hasConfigAccess()) {
             this.logger.warn(`[NotificationManager] No configuration access available, cannot process notification`, platform, { notificationType, data });
             return { success: false, error: 'Configuration unavailable', notificationType, platform };
         }
-        if (!data || typeof data !== 'object') {
+
+        const dataValidation = this.inputValidator.validateData(data);
+        if (!dataValidation.success) {
             this.logger.warn(`[NotificationManager] handleNotification called with invalid data`, platform, { notificationType, data });
-            return { success: false, error: 'Invalid notification data', notificationType, platform };
+            return { success: false, error: dataValidation.error, notificationType, platform };
         }
-        const incomingType = data?.type;
-        const originalType = notificationType;
-        let resolvedType = notificationType;
 
-        // Require canonical types from platform adapters; no alias remapping
+        const typeValidation = this.inputValidator.validateType(notificationType, data);
+        if (!typeValidation.success) {
+            if (typeValidation.errorType === 'incoming-type-mismatch') {
+                this._handleNotificationError(
+                    `[NotificationManager] Incoming type mismatch: ${typeValidation.incomingType} vs ${typeValidation.canonicalType}`,
+                    null,
+                    { notificationType, platform },
+                    { eventType: 'unknown-notification-type' }
+                );
+                return { success: false, error: typeValidation.error, notificationType, platform };
+            }
 
-        const disallowedPaidAliases = ['subscription', 'subscribe', 'membership', 'member', 'superfan', 'supporter', 'paid_supporter'];
-        if (disallowedPaidAliases.includes(resolvedType)) {
             this._handleNotificationError(
-                `[NotificationManager] Unsupported paid alias type: ${resolvedType}`,
+                `[NotificationManager] Unknown notification type: ${notificationType}`,
                 null,
-                { notificationType: resolvedType, platform },
-                { eventType: 'unsupported-paid-alias' }
+                { notificationType, platform },
+                { eventType: 'unknown-notification-type' }
             );
-            return { success: false, error: 'Unsupported paid alias', notificationType: resolvedType, platform };
+            return { success: false, error: typeValidation.error, notificationType, platform };
         }
 
-        const canonicalType = resolvedType;
-        const config = this.NOTIFICATION_CONFIGS[canonicalType];
-        if (!config) {
-            this._handleNotificationError(`[NotificationManager] Unknown notification type: ${canonicalType}`, null, { notificationType: canonicalType, platform }, { eventType: 'unknown-notification-type' });
-            return { success: false, error: 'Unknown notification type', notificationType: canonicalType, platform };
-        }
-        if (incomingType && incomingType !== canonicalType) {
-            this._handleNotificationError(`[NotificationManager] Incoming type mismatch: ${incomingType} vs ${canonicalType}`, null, { notificationType: canonicalType, platform }, { eventType: 'unknown-notification-type' });
-            return { success: false, error: 'Unknown notification type', notificationType: canonicalType, platform };
-        }
+        const canonicalType = typeValidation.canonicalType;
+        const config = typeValidation.config;
+        const isMonetizationType = typeValidation.isMonetizationType;
+        const originalType = notificationType;
         notificationType = canonicalType;
-        const monetizationTypes = new Set([
-            'platform:gift',
-            'platform:paypiggy',
-            'platform:giftpaypiggy',
-            'platform:envelope'
-        ]);
-        const isMonetizationType = monetizationTypes.has(notificationType);
 
-        const normalizedData = { ...data };
-        if (normalizedData.type) delete normalizedData.type;
-        if (normalizedData.platform) delete normalizedData.platform;
-        if (normalizedData.user) delete normalizedData.user;
-        if (normalizedData.displayName) delete normalizedData.displayName;
-        if (normalizedData.isSuperfan !== undefined) delete normalizedData.isSuperfan;
-        if (normalizedData.isGift !== undefined) delete normalizedData.isGift;
-        if (normalizedData.isBits !== undefined) delete normalizedData.isBits;
-        if (isMonetizationType && normalizedData.metadata !== undefined) delete normalizedData.metadata;
-        data = normalizedData;
-        const resolvedSourceType = data.sourceType !== undefined
-            ? data.sourceType
-            : (originalType !== canonicalType ? originalType : undefined);
-
+        const normalizedData = this.payloadBuilder.normalizeData(data, isMonetizationType);
         const platformName = platform.toLowerCase();
-        const isErrorPayload = data.isError === true;
+        const isErrorPayload = normalizedData.isError === true;
         
         // Check if notifications are enabled for this type
-        const isEnabled = this._areNotificationsEnabled(config.settingKey, platformName);
+        const isEnabled = this.notificationGate.isEnabled(config.settingKey, platformName);
         
         if (!isEnabled) {
-            this.logger.debug(`[${platformName}] ${notificationType} notifications disabled, skipping for ${data.username}`, 'notification-manager');
+            this.logger.debug(`[${platformName}] ${notificationType} notifications disabled, skipping for ${normalizedData.username}`, 'notification-manager');
             return { success: false, error: 'Notifications disabled', notificationType, platform, disabled: true };
         }
 
         // Filter zero-amount monetary notifications (fiat-based gifts only)
         if (!isErrorPayload && notificationType === 'platform:gift' &&
-            typeof data.amount === 'number' &&
-            data.amount <= 0) {
-            const currency = typeof data.currency === 'string' ? data.currency.trim().toLowerCase() : '';
+            typeof normalizedData.amount === 'number' &&
+            normalizedData.amount <= 0) {
+            const currency = typeof normalizedData.currency === 'string' ? normalizedData.currency.trim().toLowerCase() : '';
             if (currency && currency !== 'coins' && currency !== 'bits') {
-                this.logger.debug(`[${platformName}] ${notificationType} with zero amount filtered out for ${data.username}`, 'notification-manager');
+                this.logger.debug(`[${platformName}] ${notificationType} with zero amount filtered out for ${normalizedData.username}`, 'notification-manager');
                 return { success: false, filtered: true, reason: 'Zero amount not displayed', notificationType, platform };
             }
         }
 
-        if (data.userId !== undefined && data.userId !== null) {
-            data.userId = String(data.userId);
+        if (normalizedData.userId !== undefined && normalizedData.userId !== null) {
+            normalizedData.userId = String(normalizedData.userId);
         }
 
 
         // Handle gift spam before any other processing (unless skipped)
-        if (notificationType === 'platform:gift' && this.donationSpamDetector && !skipSpamDetection && !data.isAggregated && !isErrorPayload) {
+        if (notificationType === 'platform:gift' && this.donationSpamDetector && !skipSpamDetection && !normalizedData.isAggregated && !isErrorPayload) {
             try {
-            if (!data.giftType || data.giftCount === undefined || data.amount === undefined) {
+            if (!normalizedData.giftType || normalizedData.giftCount === undefined || normalizedData.amount === undefined) {
                 throw new Error('Gift spam detection requires giftType, giftCount, and amount');
             }
-            const giftCount = Number(data.giftCount);
-            const amount = Number(data.amount);
+            const giftCount = Number(normalizedData.giftCount);
+            const amount = Number(normalizedData.amount);
             if (!Number.isFinite(giftCount) || giftCount <= 0) {
                 throw new Error('Gift spam detection requires valid giftCount');
             }
@@ -220,16 +208,16 @@ class NotificationManager extends EventEmitter {
             }
             const perGiftAmount = amount / giftCount;
             const spamResult = this.donationSpamDetector.handleDonationSpam(
-                data.userId,
-                data.username,
+                normalizedData.userId,
+                normalizedData.username,
                 perGiftAmount,
-                data.giftType,
+                normalizedData.giftType,
                 giftCount,
                 platform
             );
 
             if (!spamResult.shouldShow) {
-                    this.platformLogger.debug(platform, `Spam gift suppressed from ${data.username}.`);
+                    this.platformLogger.debug(platform, `Spam gift suppressed from ${normalizedData.username}.`);
                     return { suppressed: true, reason: 'spam_detection' }; // Stop processing this notification
                 }
             } catch (error) {
@@ -238,23 +226,23 @@ class NotificationManager extends EventEmitter {
             }
         }
 
-        const username = (typeof data.username === 'string') ? data.username.trim() : '';
+        const username = (typeof normalizedData.username === 'string') ? normalizedData.username.trim() : '';
         if (!username && !isErrorPayload) {
             this._handleNotificationError(
                 `[NotificationManager] ${notificationType} notification missing username`,
                 null,
-                { notificationType, platform, data },
+                { notificationType, platform, data: normalizedData },
                 { eventType: 'notification-missing-username' }
             );
             return { success: false, error: 'Missing username', notificationType, platform };
         }
         if (username) {
-            data.username = username;
+            normalizedData.username = username;
         }
 
         if (this._isDebugEnabled()) {
             try {
-                const logMessage = this.generateLogMessage(notificationType, data);
+                const logMessage = this.generateLogMessage(notificationType, normalizedData);
                 this.platformLogger.info(platform, logMessage);
             } catch (logError) {
                 this.logger.warn(`[NotificationManager] Debug log failed: ${logError.message}`, 'notification-manager');
@@ -264,7 +252,7 @@ class NotificationManager extends EventEmitter {
 
         let vfxConfig = null;
         try {
-            vfxConfig = await this._getVFXConfigFromService(config.commandKey, data.message ?? null);
+            vfxConfig = await this._getVFXConfigFromService(config.commandKey, normalizedData.message ?? null);
         } catch (vfxError) {
             this._handleNotificationError(
                 `[NotificationManager] VFX config failed: ${vfxError.message}`,
@@ -276,51 +264,21 @@ class NotificationManager extends EventEmitter {
 
         let notificationData;
         try {
-            // Use modern NotificationBuilder for consistent notification creation
-            // Pass ALL relevant data fields to ensure complete notifications
-            notificationData = this.NotificationBuilder.build({
-                type: canonicalType,
-                platform: platform,
-                username: data.username,
-                userId: data.userId,
-                // Gift/donation fields
-                amount: data.amount,
-                currency: data.currency,
-                giftType: data.giftType,
-                giftCount: data.giftCount,
-                // Paid supporter fields
-                tier: data.tier,
-                months: data.months,
-                // Message content
-                message: data.message,
-                // Super Sticker specific
-                sticker: data.sticker,
-                stickerName: data.stickerName,
-                stickerEmoji: data.stickerEmoji,
-                // Pass through any additional data
-                ...data,
-                sourceType: resolvedSourceType
+            const payload = this.payloadBuilder.buildPayload({
+                canonicalType,
+                platform,
+                data: normalizedData,
+                originalType,
+                isMonetizationType,
+                normalizedData
             });
+            notificationData = payload.notificationData;
             
             // Validate that notificationData has required structure
             if (!notificationData || typeof notificationData !== 'object') {
                 throw new Error('NotificationBuilder.build() returned invalid data structure');
             }
             
-            // Enforce canonical notification type
-            notificationData.type = canonicalType;
-            
-            // Add sourceType metadata for non-monetization notifications only
-            if (resolvedSourceType !== undefined) {
-                if (isMonetizationType) {
-                    notificationData.sourceType = resolvedSourceType;
-                } else if (notificationData.metadata && typeof notificationData.metadata === 'object') {
-                    notificationData.metadata = { ...notificationData.metadata, sourceType: resolvedSourceType };
-                } else {
-                    notificationData.metadata = { sourceType: resolvedSourceType };
-                }
-            }
-
             if (!notificationData.displayMessage) {
                 throw new Error(`Missing displayMessage in notification data for ${notificationType}`);
             }
@@ -332,7 +290,7 @@ class NotificationManager extends EventEmitter {
             this._handleNotificationError(
                 `Error creating notification data for ${notificationType} from ${platform}: ${error.message}`,
                 error,
-                { notificationType, platform, data },
+                { notificationType, platform, data: normalizedData },
                 { eventType: 'notification-data-build' }
             );
             return { success: false, error: 'Notification build failed', notificationType, platform };
@@ -368,7 +326,7 @@ class NotificationManager extends EventEmitter {
             this._handleNotificationError(
                 `Error in notification processing for ${notificationType} from ${platform}: ${error.message}`,
                 error,
-                { notificationType, platform, item },
+                { notificationType, platform, item, data: normalizedData },
                 { eventType: 'display-queue' }
             );
             return { success: false, error: 'Display queue error', details: error.message }; // Stop processing if display queue fails
@@ -383,7 +341,7 @@ class NotificationManager extends EventEmitter {
             this._handleNotificationError(
                 `Error in special processing for ${notificationType} from ${platform}: ${error.message}`,
                 error,
-                { notificationType, platform, data },
+                { notificationType, platform, data: normalizedData },
                 { eventType: 'special-processing' }
             );
             // Don't return - notification is already in queue, just log the special processing error
@@ -496,18 +454,6 @@ class NotificationManager extends EventEmitter {
         await this.handleNotification('platform:gift', platform, data);
     }
 
-    _hasConfigAccess() {
-        return !!this.config;
-    }
-
-    _areNotificationsEnabled(settingKey, platform) {
-        const value = this.config[platform]?.[settingKey];
-        if (value === undefined) {
-            throw new Error(`Config missing ${platform}.${settingKey}`);
-        }
-        return !!value;
-    }
-
     _isDebugEnabled() {
         return !!this.config.general?.debugEnabled;
     }
@@ -602,7 +548,7 @@ class NotificationManager extends EventEmitter {
             if (!settingKey) {
                 throw new Error(`Unsupported notification type: ${notification.type}`);
             }
-            const isEnabled = this._areNotificationsEnabled(settingKey, platform);
+            const isEnabled = this.notificationGate.isEnabled(settingKey, platform);
             if (!isEnabled) {
                 this.logger.debug(`[NotificationManager] ${notification.type} notifications disabled`, 'notification-manager');
                 return;
