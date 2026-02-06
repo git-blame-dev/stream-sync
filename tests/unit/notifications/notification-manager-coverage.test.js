@@ -230,14 +230,14 @@ describe('NotificationManager coverage', () => {
             expect(result.error).toContain('Invalid');
         });
 
-        it('returns error for unsupported paid alias', async () => {
+        it('returns error for unsupported paid alias as unknown type', async () => {
             const deps = createDeps();
             const manager = new NotificationManager(deps);
 
             const result = await manager.handleNotification('subscription', 'twitch', { userId: 'test' });
 
             expect(result.success).toBe(false);
-            expect(result.error).toContain('alias');
+            expect(result.error).toContain('Unknown');
         });
 
         it('returns error for unknown notification type', async () => {
