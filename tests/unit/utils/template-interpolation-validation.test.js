@@ -4,7 +4,7 @@ const { describe, test, expect } = require('bun:test');
 const { TEST_TIMEOUTS } = require('../../helpers/test-setup');
 
 const { setupAutomatedCleanup } = require('../../helpers/mock-lifecycle');
-const { interpolateTemplate } = require('../../../src/utils/notification-strings');
+const { interpolateTemplate } = require('../../../src/utils/notification-template-interpolator');
 const { createNotificationData } = require('../../helpers/notification-test-utils');
 
 setupAutomatedCleanup({

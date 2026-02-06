@@ -9,9 +9,9 @@ const {
     formatGiftCount,
     formatViewerCount,
     formatMonths,
-    interpolateTemplate,
     NOTIFICATION_TEMPLATES
 } = require('../../src/utils/notification-strings');
+const { interpolateTemplate } = require('../../src/utils/notification-template-interpolator');
 
 const NotificationBuilder = require('../../src/utils/notification-builder');
 

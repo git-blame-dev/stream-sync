@@ -1,7 +1,7 @@
 
 const crypto = require('crypto');
-// Import notification templates for template-based message generation
-const { NOTIFICATION_TEMPLATES, interpolateTemplate } = require('./notification-strings');
+const { NOTIFICATION_TEMPLATES } = require('./notification-strings');
+const { interpolateTemplate } = require('./notification-template-interpolator');
 const { normalizeCurrency } = require('./currency-utils');
 const { getAnonymousUsername } = require('./fallback-username');
 

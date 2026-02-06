@@ -4,12 +4,12 @@ const {
     formatGiftCount,
     formatViewerCount,
     formatMonths,
-    interpolateTemplate,
     formatSuperChatAmount,
     formatCurrencyForTTS,
     getCurrencyWord,
     NOTIFICATION_TEMPLATES
 } = require('../../../src/utils/notification-strings');
+const { interpolateTemplate } = require('../../../src/utils/notification-template-interpolator');
 
 describe('notification-strings formatting functions', () => {
     describe('formatCoins', () => {

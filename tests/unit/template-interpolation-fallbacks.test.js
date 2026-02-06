@@ -13,9 +13,9 @@ describe('Template Interpolation Fallbacks', () => {
     let createNotificationData;
 
     beforeEach(() => {
-        const notificationStrings = require('../../src/utils/notification-strings');
+        const interpolatorModule = require('../../src/utils/notification-template-interpolator');
         const testUtils = require('../helpers/notification-test-utils');
-        interpolateTemplate = notificationStrings.interpolateTemplate;
+        interpolateTemplate = interpolatorModule.interpolateTemplate;
         createNotificationData = testUtils.createNotificationData;
     });
 
