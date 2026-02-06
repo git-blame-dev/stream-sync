@@ -1,6 +1,5 @@
 
 const EventEmitter = require('events');
-const { safeSetInterval } = require('../utils/timeout-validator');
 const { logger } = require('../core/logging');
 const { createPlatformErrorHandler } = require('../utils/platform-error-handler');
 const { PlatformEvents } = require('../interfaces/PlatformEvents');
@@ -47,16 +46,6 @@ class NotificationManager extends EventEmitter {
         
         this.donationSpamDetector = dependencies.donationSpamDetector;
 
-        this.userNotificationSuppression = new Map();
-        this.suppressionConfig = {
-            enabled: dependencies.suppressionEnabled !== false,
-            maxNotificationsPerUser: 5,
-            suppressionWindowMs: 60000,
-            suppressionDurationMs: 300000,
-            cleanupIntervalMs: 300000
-        };
-
-        this._loadSuppressionConfig();
 
         if (!this.eventBus) {
             throw new Error('NotificationManager requires EventBus dependency');
@@ -70,7 +59,6 @@ class NotificationManager extends EventEmitter {
         const { processDonationGoal } = this.obsGoals;
         this.processDonationGoal = processDonationGoal;
 
-        this.startSuppressionCleanup();
         this.errorHandler = null;
     }
 
@@ -91,16 +79,14 @@ class NotificationManager extends EventEmitter {
             'platform:follow': this.PRIORITY_LEVELS.FOLLOW,
             'platform:gift': this.PRIORITY_LEVELS.GIFT,
             'platform:envelope': this.PRIORITY_LEVELS.ENVELOPE,
-            'platform:paypiggy': this.PRIORITY_LEVELS.MEMBER,
+            'platform:paypiggy': this.PRIORITY_LEVELS.PAYPIGGY,
             'platform:raid': this.PRIORITY_LEVELS.RAID,
             'platform:share': this.PRIORITY_LEVELS.SHARE,
-            'redemption': this.PRIORITY_LEVELS.REDEMPTION,
             'platform:giftpaypiggy': this.PRIORITY_LEVELS.GIFTPAYPIGGY,
             'command': this.PRIORITY_LEVELS.COMMAND,
             'greeting': this.PRIORITY_LEVELS.GREETING,
-            'farewell': this.PRIORITY_LEVELS.GREETING,
-            'platform:chat-message': this.PRIORITY_LEVELS.CHAT,
-            'general': this.PRIORITY_LEVELS.DEFAULT
+            'farewell': this.PRIORITY_LEVELS.FAREWELL,
+            'platform:chat-message': this.PRIORITY_LEVELS.CHAT
         };
         
         if (!Object.prototype.hasOwnProperty.call(priorityMap, notificationType)) {
@@ -217,13 +203,6 @@ class NotificationManager extends EventEmitter {
             data.userId = String(data.userId);
         }
 
-        // Check per-user notification suppression
-        if (data.userId && this.isUserSuppressed(data.userId, notificationType)) {
-            if (this._isDebugEnabled()) {
-                this.platformLogger.debug(platformName, `Notification suppressed for ${data.username} (${notificationType})`);
-            }
-            return { suppressed: true, reason: 'user_suppression' };
-        }
 
         // Handle gift spam before any other processing (unless skipped)
         if (notificationType === 'platform:gift' && this.donationSpamDetector && !skipSpamDetection && !data.isAggregated && !isErrorPayload) {
@@ -282,9 +261,6 @@ class NotificationManager extends EventEmitter {
             }
         }
 
-        if (data.userId) {
-            this.trackUserNotification(data.userId, notificationType);
-        }
 
         let vfxConfig = null;
         try {
@@ -518,138 +494,6 @@ class NotificationManager extends EventEmitter {
 
     async handleGiftNotification(platform, data) {
         await this.handleNotification('platform:gift', platform, data);
-    }
-
-    isUserSuppressed(userId, notificationType) {
-        if (!this.suppressionConfig.enabled) {
-            return false;
-        }
-
-        const userData = this.userNotificationSuppression.get(userId);
-        if (!userData) {
-            return false;
-        }
-
-        const now = Date.now();
-        
-        // Check if user is in suppression period
-        if (userData.suppressedUntil && now < userData.suppressedUntil) {
-            this.logger.debug(`[Suppression] User ${userId} is suppressed until ${new Date(userData.suppressedUntil)}`, 'notification-manager');
-            return true;
-        }
-
-        // Check notification count in window
-        const windowStart = now - this.suppressionConfig.suppressionWindowMs;
-        const recentNotifications = userData.notifications.filter(n => n.timestamp > windowStart);
-        
-        if (recentNotifications.length >= this.suppressionConfig.maxNotificationsPerUser) {
-            // Suppress user for the configured duration
-            userData.suppressedUntil = now + this.suppressionConfig.suppressionDurationMs;
-            this.logger.debug(`[Suppression] User ${userId} exceeded limit (${recentNotifications.length}/${this.suppressionConfig.maxNotificationsPerUser}), suppressing until ${new Date(userData.suppressedUntil)}`, 'notification-manager');
-            return true;
-        }
-
-        return false;
-    }
-
-    trackUserNotification(userId, notificationType) {
-        if (!this.suppressionConfig.enabled) {
-            return;
-        }
-
-        const now = Date.now();
-        let userData = this.userNotificationSuppression.get(userId);
-        
-        if (!userData) {
-            userData = {
-                notifications: [],
-                suppressedUntil: null
-            };
-            this.userNotificationSuppression.set(userId, userData);
-        }
-
-        // Add notification to tracking
-        userData.notifications.push({
-            timestamp: now,
-            type: notificationType
-        });
-
-        this.logger.debug(`[Suppression] Tracked notification for user ${userId}: ${notificationType}`, 'notification-manager');
-    }
-
-    startSuppressionCleanup() {
-        if (!this.suppressionConfig.enabled) {
-            return;
-        }
-
-        this.cleanupInterval = safeSetInterval(() => {
-            this.cleanupSuppressionData();
-        }, this.suppressionConfig.cleanupIntervalMs);
-
-        this.logger.debug(`[Suppression] Started cleanup interval (${this.suppressionConfig.cleanupIntervalMs}ms)`, 'notification-manager');
-    }
-    
-    stopSuppressionCleanup() {
-        if (this.cleanupInterval) {
-            clearInterval(this.cleanupInterval);
-            this.cleanupInterval = null;
-            this.logger.debug('[Suppression] Stopped cleanup interval', 'notification-manager');
-        }
-    }
-
-    cleanupSuppressionData() {
-        const now = Date.now();
-        const cutoffTime = now - this.suppressionConfig.suppressionWindowMs;
-        let cleanedCount = 0;
-
-        for (const [userId, userData] of this.userNotificationSuppression.entries()) {
-            // Remove old notifications
-            const originalCount = userData.notifications.length;
-            userData.notifications = userData.notifications.filter(n => n.timestamp > cutoffTime);
-            
-            // Remove suppression if expired
-            if (userData.suppressedUntil && now > userData.suppressedUntil) {
-                userData.suppressedUntil = null;
-            }
-
-            // Remove user data if no recent activity
-            if (userData.notifications.length === 0 && !userData.suppressedUntil) {
-                this.userNotificationSuppression.delete(userId);
-                cleanedCount++;
-            } else if (originalCount !== userData.notifications.length) {
-                cleanedCount++;
-            }
-        }
-
-        if (cleanedCount > 0) {
-            this.logger.debug(`[Suppression] Cleaned up ${cleanedCount} user suppression entries`, 'notification-manager');
-        }
-    }
-
-    _loadSuppressionConfig() {
-        const generalConfig = this.config.general;
-        if (!generalConfig || typeof generalConfig !== 'object') {
-            throw new Error('Invalid suppression config: general config is missing or invalid');
-        }
-        const requiredKeys = [
-            'userSuppressionEnabled',
-            'maxNotificationsPerUser',
-            'suppressionWindowMs',
-            'suppressionDurationMs',
-            'suppressionCleanupIntervalMs'
-        ];
-        const missingKeys = requiredKeys.filter((key) => generalConfig[key] === undefined);
-        if (missingKeys.length > 0) {
-            throw new Error(`Missing suppression config values: ${missingKeys.join(', ')}`);
-        }
-
-        this.suppressionConfig = {
-            enabled: !!generalConfig.userSuppressionEnabled,
-            maxNotificationsPerUser: generalConfig.maxNotificationsPerUser,
-            suppressionWindowMs: generalConfig.suppressionWindowMs,
-            suppressionDurationMs: generalConfig.suppressionDurationMs,
-            cleanupIntervalMs: generalConfig.suppressionCleanupIntervalMs
-        };
     }
 
     _hasConfigAccess() {

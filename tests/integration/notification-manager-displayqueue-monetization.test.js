@@ -88,11 +88,6 @@ describe('Monetisation pipeline integration', () => {
 
         config = createConfigFixture({
             general: {
-                userSuppressionEnabled: true,
-                maxNotificationsPerUser: 5,
-                suppressionWindowMs: 60000,
-                suppressionDurationMs: 300000,
-                suppressionCleanupIntervalMs: 300000,
                 giftsEnabled: true,
                 paypiggiesEnabled: true
             },

@@ -39,7 +39,7 @@ describe('NotificationManager TikTok monetisation behavior', () => {
         notificationManager = new NotificationManager(baseDependencies());
     });
 
-    it('enqueues SUPER_FAN paypiggy with member priority', async () => {
+    it('enqueues SUPER_FAN paypiggy with paypiggy priority', async () => {
         await notificationManager.handleNotification('platform:paypiggy', 'tiktok', {
             username: 'SuperFan',
             userId: 'tk-user-1',
@@ -52,7 +52,7 @@ describe('NotificationManager TikTok monetisation behavior', () => {
         const item = displayQueue.addItem.mock.calls[0][0];
         expect(item.type).toBe('platform:paypiggy');
         expect(item.platform).toBe('tiktok');
-        expect(item.priority).toBe(notificationManager.PRIORITY_LEVELS.MEMBER);
+        expect(item.priority).toBe(notificationManager.PRIORITY_LEVELS.PAYPIGGY);
         expect(item.data.username).toBe('SuperFan');
     });
 

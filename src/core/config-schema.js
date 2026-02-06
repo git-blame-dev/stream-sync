@@ -10,12 +10,10 @@ const CONFIG_SCHEMA = {
         raidsEnabled: { type: 'boolean', default: true },
         sharesEnabled: { type: 'boolean', default: true },
         paypiggiesEnabled: { type: 'boolean', default: true },
-        redemptionsEnabled: { type: 'boolean', default: true },
         filterOldMessages: { type: 'boolean', default: true },
         logChatMessages: { type: 'boolean', default: true },
         keywordParsingEnabled: { type: 'boolean', default: true },
         ignoreSelfMessages: { type: 'boolean', default: false },
-        userSuppressionEnabled: { type: 'boolean', default: true },
         ttsEnabled: { type: 'boolean', default: false },
         streamDetectionEnabled: { type: 'boolean', default: true },
         envFileReadEnabled: { type: 'boolean', default: true },
@@ -23,10 +21,6 @@ const CONFIG_SCHEMA = {
         cmdCoolDown: { type: 'number', default: 60 },
         globalCmdCoolDown: { type: 'number', default: 60 },
         viewerCountPollingInterval: { type: 'number', default: 60 },
-        maxNotificationsPerUser: { type: 'number', default: 5 },
-        suppressionWindow: { type: 'number', default: 60 },
-        suppressionDuration: { type: 'number', default: 300 },
-        suppressionCleanupInterval: { type: 'number', default: 300 },
         streamRetryInterval: { type: 'number', default: 15 },
         streamMaxRetries: { type: 'number', default: -1 },
         continuousMonitoringInterval: { type: 'number', default: 60 },
@@ -52,7 +46,6 @@ const CONFIG_SCHEMA = {
         username: { type: 'string', requiredWhenEnabled: true, default: '' },
         viewerCountEnabled: { type: 'boolean', default: true },
         viewerCountSource: { type: 'string', userDefined: true },
-        retryAttempts: { type: 'number', default: 3 },
         maxStreams: { type: 'number', default: 2 },
         streamPollingInterval: { type: 'number', default: 60 },
         fullCheckInterval: { type: 'number', default: 300000 },
@@ -68,8 +61,6 @@ const CONFIG_SCHEMA = {
         giftsEnabled: { type: 'boolean', inheritFrom: 'general' },
         raidsEnabled: { type: 'boolean', inheritFrom: 'general' },
         paypiggiesEnabled: { type: 'boolean', inheritFrom: 'general' },
-        redemptionsEnabled: { type: 'boolean', inheritFrom: 'general' },
-        sharesEnabled: { type: 'boolean', inheritFrom: 'general' },
         ignoreSelfMessages: { type: 'boolean', inheritFrom: 'general' },
         pollInterval: { type: 'number', userDefined: true }
     },
@@ -92,8 +83,6 @@ const CONFIG_SCHEMA = {
         giftsEnabled: { type: 'boolean', inheritFrom: 'general' },
         raidsEnabled: { type: 'boolean', inheritFrom: 'general' },
         paypiggiesEnabled: { type: 'boolean', inheritFrom: 'general' },
-        redemptionsEnabled: { type: 'boolean', inheritFrom: 'general' },
-        sharesEnabled: { type: 'boolean', inheritFrom: 'general' },
         ignoreSelfMessages: { type: 'boolean', inheritFrom: 'general' },
         pollInterval: { type: 'number', userDefined: true }
     },
@@ -113,7 +102,6 @@ const CONFIG_SCHEMA = {
         giftsEnabled: { type: 'boolean', inheritFrom: 'general' },
         raidsEnabled: { type: 'boolean', inheritFrom: 'general' },
         paypiggiesEnabled: { type: 'boolean', inheritFrom: 'general' },
-        redemptionsEnabled: { type: 'boolean', inheritFrom: 'general' },
         sharesEnabled: { type: 'boolean', inheritFrom: 'general' },
         ignoreSelfMessages: { type: 'boolean', inheritFrom: 'general' },
         pollInterval: { type: 'number', userDefined: true }
@@ -145,29 +133,6 @@ const CONFIG_SCHEMA = {
         maxQueueSize: { type: 'number', default: 100 }
     },
 
-    retry: {
-        maxRetries: { type: 'number', default: 3, min: 0, max: 20 },
-        baseDelay: { type: 'number', default: 1000, min: 100, max: 30000 },
-        maxDelay: { type: 'number', default: 30000, min: 1000, max: 300000 },
-        enableRetry: { type: 'boolean', default: true }
-    },
-
-    intervals: {
-        pollInterval: { type: 'number', default: 5000 },
-        connectionTimeout: { type: 'number', default: 30000 },
-        keepAliveInterval: { type: 'number', default: 30000 },
-        healthCheckInterval: { type: 'number', default: 60000 }
-    },
-
-    connectionLimits: {
-        maxConnections: { type: 'number', default: 3 },
-        maxConcurrentRequests: { type: 'number', default: 5 },
-        maxStreamsPerConnection: { type: 'number', default: 1 }
-    },
-
-    api: {
-        requestTimeout: { type: 'number', default: 5000 }
-    },
 
     logging: {
         consoleLevel: { type: 'string', userDefined: true },

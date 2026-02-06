@@ -22,8 +22,7 @@ describe('ConfigValidator.normalize()', () => {
     const ALL_SECTIONS = [
         'general', 'http', 'obs', 'tiktok', 'twitch', 'youtube',
         'handcam', 'goals', 'gifts', 'envelopes', 'timing', 'cooldowns',
-        'spam', 'displayQueue', 'retry', 'intervals', 'connectionLimits',
-        'api', 'logging', 'farewell', 'commands', 'vfx', 'streamelements',
+        'spam', 'displayQueue', 'logging', 'farewell', 'commands', 'vfx', 'streamelements',
         'follows', 'raids', 'paypiggies', 'greetings', 'shares'
     ];
 
@@ -275,25 +274,6 @@ describe('ConfigValidator._normalizeCooldownsSection()', () => {
     });
 });
 
-describe('ConfigValidator._normalizeRetrySection()', () => {
-    it('applies retry defaults', () => {
-        const result = ConfigValidator._normalizeRetrySection({});
-
-        expect(result.maxRetries).toBe(3);
-        expect(result.baseDelay).toBe(1000);
-        expect(result.enableRetry).toBe(true);
-    });
-});
-
-describe('ConfigValidator._normalizeIntervalsSection()', () => {
-    it('applies interval defaults', () => {
-        const result = ConfigValidator._normalizeIntervalsSection({});
-
-        expect(result.pollInterval).toBe(5000);
-        expect(result.connectionTimeout).toBe(30000);
-    });
-});
-
 describe('ConfigValidator._normalizeLoggingSection()', () => {
     it('normalizes logging settings with null defaults when not specified', () => {
         const result = ConfigValidator._normalizeLoggingSection({});
@@ -415,8 +395,7 @@ describe('ConfigValidator.validate()', () => {
         youtube: { enabled: false },
         streamelements: { enabled: false },
         cooldowns: { defaultCooldown: 60, heavyCommandCooldown: 120, heavyCommandThreshold: 5 },
-        handcam: { maxSize: 50, rampUpDuration: 0.5, holdDuration: 6.0, rampDownDuration: 0.5 },
-        retry: { baseDelay: 1000, maxDelay: 30000, maxRetries: 3 }
+        handcam: { maxSize: 50, rampUpDuration: 0.5, holdDuration: 6.0, rampDownDuration: 0.5 }
     });
 
     it('returns valid for minimal config with all required sections', () => {
@@ -540,8 +519,7 @@ describe('ConfigValidator.validate() warnings', () => {
         obs: { enabled: false },
         commands: {},
         cooldowns: { defaultCooldown: 60, heavyCommandCooldown: 120, heavyCommandThreshold: 5 },
-        handcam: { maxSize: 50, rampUpDuration: 0.5, holdDuration: 6.0, rampDownDuration: 0.5 },
-        retry: { baseDelay: 1000, maxDelay: 30000, maxRetries: 3 }
+        handcam: { maxSize: 50, rampUpDuration: 0.5, holdDuration: 6.0, rampDownDuration: 0.5 }
     });
 
     it('warns when cooldown.defaultCooldown is too low', () => {
@@ -602,36 +580,15 @@ describe('ConfigValidator.validate() warnings', () => {
         expect(resultLarge.warnings.some(w => w.includes('holdDuration'))).toBe(false);
     });
 
-    it('warns when retry.baseDelay is too low', () => {
-        const config = createMinimalValidConfig();
-        config.retry.baseDelay = 50;
-
-        const result = ConfigValidator.validate(config);
-
-        expect(result.isValid).toBe(true);
-        expect(result.warnings).toContain('retry.baseDelay should be between 100 and 30000 milliseconds');
-    });
-
-    it('warns when retry.maxRetries is too high', () => {
-        const config = createMinimalValidConfig();
-        config.retry.maxRetries = 50;
-
-        const result = ConfigValidator.validate(config);
-
-        expect(result.isValid).toBe(true);
-        expect(result.warnings).toContain('retry.maxRetries should be between 0 and 20');
-    });
-
     it('returns multiple warnings for multiple issues', () => {
         const config = createMinimalValidConfig();
         config.cooldowns.defaultCooldown = 5;
         config.handcam.maxSize = 200;
-        config.retry.baseDelay = 50;
 
         const result = ConfigValidator.validate(config);
 
         expect(result.isValid).toBe(true);
-        expect(result.warnings.length).toBe(3);
+        expect(result.warnings.length).toBe(2);
     });
 
     it('returns no warnings for valid ranges', () => {
@@ -788,11 +745,6 @@ describe('ConfigValidator.normalizeFromSchema()', () => {
         const result = ConfigValidator.normalizeFromSchema('general', {});
         expect(result.debugEnabled).toBe(false);
         expect(result.cmdCoolDown).toBe(60);
-    });
-
-    it('parses number type with min/max constraints', () => {
-        const result = ConfigValidator.normalizeFromSchema('retry', { maxRetries: '5' });
-        expect(result.maxRetries).toBe(5);
     });
 
     it('returns null for userDefined fields when not provided', () => {

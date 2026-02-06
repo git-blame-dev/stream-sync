@@ -41,11 +41,7 @@ describe('Monetization error-path platform flows (smoke)', () => {
                 debugEnabled: false,
                 giftsEnabled: true,
                 paypiggiesEnabled: true,
-                userSuppressionEnabled: false,
-                maxNotificationsPerUser: 5,
-                suppressionWindowMs: 60000,
-                suppressionDurationMs: 300000,
-                suppressionCleanupIntervalMs: 300000
+                
             },
             [platformKey]: platformConfigOverride,
             obs: { enabled: false }

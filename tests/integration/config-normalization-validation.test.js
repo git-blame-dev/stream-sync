@@ -72,7 +72,6 @@ describe('ConfigValidator normalize + validate integration', () => {
         expect(normalized.general.messagesEnabled).toBe(true);
         expect(normalized.http.defaultTimeoutMs).toBe(10000);
         expect(normalized.cooldowns.defaultCooldown).toBe(60);
-        expect(normalized.retry.maxRetries).toBe(3);
     });
 
     it('string to boolean conversion works correctly', () => {
@@ -184,8 +183,7 @@ describe('ConfigValidator normalize + validate integration', () => {
             obs: {},
             commands: {},
             cooldowns: { defaultCooldown: '5', heavyCommandCooldown: '120' },
-            handcam: { maxSize: '200' },
-            retry: { baseDelay: '50' }
+            handcam: { maxSize: '200' }
         };
 
         const normalized = ConfigValidator.normalize(rawConfig);
@@ -194,7 +192,6 @@ describe('ConfigValidator normalize + validate integration', () => {
         expect(validation.isValid).toBe(true);
         expect(validation.warnings).toContain('cooldowns.defaultCooldown should be between 10 and 3600 seconds');
         expect(validation.warnings).toContain('handcam.maxSize should be between 1 and 100');
-        expect(validation.warnings).toContain('retry.baseDelay should be between 100 and 30000 milliseconds');
     });
 
     it('YouTube stream detection method validation', () => {

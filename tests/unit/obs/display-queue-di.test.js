@@ -3,6 +3,7 @@ const { restoreAllMocks } = require('../../helpers/bun-mock-utils');
 const { createMockOBSManager } = require('../../helpers/mock-factories');
 const { initializeTestLogging } = require('../../helpers/test-setup');
 const { DisplayQueue, initializeDisplayQueue } = require('../../../src/obs/display-queue');
+const { PRIORITY_LEVELS } = require('../../../src/core/constants');
 
 initializeTestLogging();
 
@@ -27,7 +28,7 @@ describe('DisplayQueue DI requirements', () => {
             chat: { sourceName: 'chat', sceneName: 'scene', groupName: 'group', platformLogos: {} },
             notification: { sourceName: 'notification', sceneName: 'scene', groupName: 'group', platformLogos: {} }
         }, {
-            PRIORITY_LEVELS: { CHAT: 1 },
+            PRIORITY_LEVELS,
             CHAT_MESSAGE_DURATION: 4500
         }, null, {});
 

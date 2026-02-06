@@ -38,7 +38,7 @@ describe('NotificationManager Twitch monetisation behavior', () => {
         notificationManager = new NotificationManager(baseDependencies());
     });
 
-    it('enqueues paypiggy with member priority and sanitized payload', async () => {
+    it('enqueues paypiggy with paypiggy priority and sanitized payload', async () => {
         await notificationManager.handleNotification('platform:paypiggy', 'twitch', {
             username: 'SubHero',
             userId: 'user-1',
@@ -50,7 +50,7 @@ describe('NotificationManager Twitch monetisation behavior', () => {
         const item = displayQueue.addItem.mock.calls[0][0];
         expect(item.type).toBe('platform:paypiggy');
         expect(item.platform).toBe('twitch');
-        expect(item.priority).toBe(notificationManager.PRIORITY_LEVELS.MEMBER);
+        expect(item.priority).toBe(notificationManager.PRIORITY_LEVELS.PAYPIGGY);
         expect(item.data.username).toBe('SubHero');
         expect(item.data.userId).toBe('user-1');
     });

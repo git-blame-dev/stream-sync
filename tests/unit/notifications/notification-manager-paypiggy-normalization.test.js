@@ -43,7 +43,7 @@ describe('NotificationManager paypiggy normalization', () => {
 
         expect(displayQueue.items).toHaveLength(1);
         const queued = displayQueue.items[0];
-        expect(queued.priority).toBe(constants.PRIORITY_LEVELS.MEMBER);
+        expect(queued.priority).toBe(constants.PRIORITY_LEVELS.PAYPIGGY);
         expect(queued.vfxConfig?.commandKey).toBe('paypiggies');
         expect(queued.type).toBe('platform:paypiggy');
         expect(queued.data.type).toBe('platform:paypiggy');

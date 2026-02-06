@@ -38,7 +38,7 @@ describe('NotificationManager YouTube monetisation behavior', () => {
         notificationManager = new NotificationManager(baseDependencies());
     });
 
-    it('enqueues paypiggy with member priority and renewal copy fields', async () => {
+    it('enqueues paypiggy with paypiggy priority and renewal copy fields', async () => {
         await notificationManager.handleNotification('platform:paypiggy', 'youtube', {
             username: 'MemberHero',
             userId: 'yt-user-1',
@@ -52,7 +52,7 @@ describe('NotificationManager YouTube monetisation behavior', () => {
         const item = displayQueue.addItem.mock.calls[0][0];
         expect(item.type).toBe('platform:paypiggy');
         expect(item.platform).toBe('youtube');
-        expect(item.priority).toBe(notificationManager.PRIORITY_LEVELS.MEMBER);
+        expect(item.priority).toBe(notificationManager.PRIORITY_LEVELS.PAYPIGGY);
         expect(item.data.username).toBe('MemberHero');
         expect(item.data.userId).toBe('yt-user-1');
     });

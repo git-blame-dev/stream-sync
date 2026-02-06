@@ -166,17 +166,12 @@ describe('Config path override', () => {
         const general = config.general;
         const requiredBooleans = [
             'ttsEnabled',
-            'streamDetectionEnabled',
-            'userSuppressionEnabled'
+            'streamDetectionEnabled'
         ];
         const requiredNumbers = [
             'streamRetryInterval',
             'streamMaxRetries',
-            'continuousMonitoringInterval',
-            'maxNotificationsPerUser',
-            'suppressionWindowMs',
-            'suppressionDurationMs',
-            'suppressionCleanupIntervalMs'
+            'continuousMonitoringInterval'
         ];
 
         requiredBooleans.forEach((key) => {

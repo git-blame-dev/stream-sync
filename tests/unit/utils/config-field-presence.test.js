@@ -11,8 +11,6 @@ describe('_parseInheritableFlags', () => {
         'giftsEnabled',
         'raidsEnabled',
         'paypiggiesEnabled',
-        'redemptionsEnabled',
-        'sharesEnabled',
         'ignoreSelfMessages'
     ];
 
@@ -56,6 +54,27 @@ describe('_parseInheritableFlags', () => {
     });
 });
 
+describe('_parseShareFlag', () => {
+    it('returns sharesEnabled field', () => {
+        const result = ConfigValidator._parseShareFlag({});
+
+        expect(result).toHaveProperty('sharesEnabled');
+    });
+
+    it('returns null when raw config is empty', () => {
+        const result = ConfigValidator._parseShareFlag({});
+
+        expect(result.sharesEnabled).toBe(null);
+    });
+
+    it('parses boolean values from raw config', () => {
+        const raw = { sharesEnabled: 'true' };
+        const result = ConfigValidator._parseShareFlag(raw);
+
+        expect(result.sharesEnabled).toBe(true);
+    });
+});
+
 describe('Config field presence - all normalizers return expected fields', () => {
     describe('_normalizeGeneralSection', () => {
         const EXPECTED_FIELDS = [
@@ -69,12 +88,10 @@ describe('Config field presence - all normalizers return expected fields', () =>
             'raidsEnabled',
             'sharesEnabled',
             'paypiggiesEnabled',
-            'redemptionsEnabled',
             'filterOldMessages',
             'logChatMessages',
             'keywordParsingEnabled',
             'ignoreSelfMessages',
-            'userSuppressionEnabled',
             'ttsEnabled',
             'streamDetectionEnabled',
             'envFileReadEnabled',
@@ -82,10 +99,6 @@ describe('Config field presence - all normalizers return expected fields', () =>
             'cmdCoolDown',
             'globalCmdCoolDown',
             'viewerCountPollingInterval',
-            'maxNotificationsPerUser',
-            'suppressionWindow',
-            'suppressionDuration',
-            'suppressionCleanupInterval',
             'streamRetryInterval',
             'streamMaxRetries',
             'continuousMonitoringInterval',
@@ -180,7 +193,6 @@ describe('Config field presence - all normalizers return expected fields', () =>
             'giftsEnabled',
             'raidsEnabled',
             'paypiggiesEnabled',
-            'redemptionsEnabled',
             'sharesEnabled',
             'ignoreSelfMessages',
             'pollInterval'
@@ -221,8 +233,6 @@ describe('Config field presence - all normalizers return expected fields', () =>
             'giftsEnabled',
             'raidsEnabled',
             'paypiggiesEnabled',
-            'redemptionsEnabled',
-            'sharesEnabled',
             'ignoreSelfMessages',
             'pollInterval'
         ];
@@ -249,7 +259,6 @@ describe('Config field presence - all normalizers return expected fields', () =>
             'username',
             'viewerCountEnabled',
             'viewerCountSource',
-            'retryAttempts',
             'maxStreams',
             'streamPollingInterval',
             'fullCheckInterval',
@@ -265,8 +274,6 @@ describe('Config field presence - all normalizers return expected fields', () =>
             'giftsEnabled',
             'raidsEnabled',
             'paypiggiesEnabled',
-            'redemptionsEnabled',
-            'sharesEnabled',
             'ignoreSelfMessages',
             'pollInterval'
         ];
@@ -433,70 +440,6 @@ describe('Config field presence - all normalizers return expected fields', () =>
 
         it('returns all expected fields', () => {
             const result = ConfigValidator._normalizeDisplayQueueSection({});
-
-            EXPECTED_FIELDS.forEach(field => {
-                expect(result).toHaveProperty(field);
-            });
-        });
-    });
-
-    describe('_normalizeRetrySection', () => {
-        const EXPECTED_FIELDS = [
-            'maxRetries',
-            'baseDelay',
-            'maxDelay',
-            'enableRetry'
-        ];
-
-        it('returns all expected fields', () => {
-            const result = ConfigValidator._normalizeRetrySection({});
-
-            EXPECTED_FIELDS.forEach(field => {
-                expect(result).toHaveProperty(field);
-            });
-        });
-    });
-
-    describe('_normalizeIntervalsSection', () => {
-        const EXPECTED_FIELDS = [
-            'pollInterval',
-            'connectionTimeout',
-            'keepAliveInterval',
-            'healthCheckInterval'
-        ];
-
-        it('returns all expected fields', () => {
-            const result = ConfigValidator._normalizeIntervalsSection({});
-
-            EXPECTED_FIELDS.forEach(field => {
-                expect(result).toHaveProperty(field);
-            });
-        });
-    });
-
-    describe('_normalizeConnectionLimitsSection', () => {
-        const EXPECTED_FIELDS = [
-            'maxConnections',
-            'maxConcurrentRequests',
-            'maxStreamsPerConnection'
-        ];
-
-        it('returns all expected fields', () => {
-            const result = ConfigValidator._normalizeConnectionLimitsSection({});
-
-            EXPECTED_FIELDS.forEach(field => {
-                expect(result).toHaveProperty(field);
-            });
-        });
-    });
-
-    describe('_normalizeApiSection', () => {
-        const EXPECTED_FIELDS = [
-            'requestTimeout'
-        ];
-
-        it('returns all expected fields', () => {
-            const result = ConfigValidator._normalizeApiSection({});
 
             EXPECTED_FIELDS.forEach(field => {
                 expect(result).toHaveProperty(field);

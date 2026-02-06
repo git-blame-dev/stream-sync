@@ -117,13 +117,6 @@ const NOTIFICATION_TEMPLATES = {
         log: 'Command {command} triggered by {username}'
     },
     
-    // Redemption notifications (Twitch channel points)
-    redemption: {
-        display: '{username} redeemed {rewardTitle}!',
-        displayWithCost: '{username} redeemed {rewardTitle} ({rewardCost} points)!',
-        tts: '{ttsUsername} redeemed {rewardTitle}',
-        log: 'Redemption by {username}: {rewardTitle} ({rewardCost} points)'
-    }
 };
 
 function formatCoins(coins) {

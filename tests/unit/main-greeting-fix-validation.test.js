@@ -55,9 +55,6 @@ describe('Main.js Greeting Username Extraction Fix', () => {
                     case 'gift':
                         msg = `[${platform}] Gift from ${username}: ${data.giftCount || 1}x ${data.giftType || 'gift'} (${data.amount ?? 0} ${data.currency || 'coins'})`;
                         break;
-                    case 'redemption':
-                        msg = `[${platform}] Redemption by ${username}: ${data.rewardTitle || 'Unknown Reward'} (${data.rewardCost || 0} points)`;
-                        break;
                     case 'greeting':
                         msg = `[${platform}] Greeting: ${username}`;
                         break;
@@ -129,7 +126,7 @@ describe('Main.js Greeting Username Extraction Fix', () => {
             username: 'TestFollower'
         });
 
-        const notificationTypes = ['platform:follow', 'platform:paypiggy', 'platform:raid', 'platform:gift', 'redemption', 'farewell'];
+        const notificationTypes = ['platform:follow', 'platform:paypiggy', 'platform:raid', 'platform:gift', 'farewell'];
 
         notificationTypes.forEach(type => {
             mockLogger.console.mockClear();

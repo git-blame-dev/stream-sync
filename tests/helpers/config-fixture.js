@@ -10,8 +10,7 @@ const RAW_TEST_CONFIG = {
         globalCmdCoolDown: '60',
         viewerCountPollingInterval: '60',
         chatMsgGroup: 'test-chat-grp',
-        maxMessageLength: '500',
-        userSuppressionEnabled: 'false'
+        maxMessageLength: '500'
     },
     obs: {
         enabled: 'false',
@@ -143,6 +142,10 @@ function applyInheritableOverrides(generalOverrides, platformConfig, platformOve
         if (generalOverrides[flag] !== undefined) {
             propagated[flag] = generalOverrides[flag];
         }
+    }
+
+    if (Object.prototype.hasOwnProperty.call(platformConfig, 'sharesEnabled') && generalOverrides.sharesEnabled !== undefined) {
+        propagated.sharesEnabled = generalOverrides.sharesEnabled;
     }
     
     return { ...propagated, ...platformOverrides };

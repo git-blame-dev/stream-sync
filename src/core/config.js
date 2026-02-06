@@ -101,10 +101,7 @@ function buildGeneralConfig(normalized) {
         ...g,
         cmdCooldownMs: g.cmdCoolDown * 1000,
         globalCmdCooldownMs: g.globalCmdCoolDown * 1000,
-        viewerCountPollingIntervalMs: g.viewerCountPollingInterval * 1000,
-        suppressionWindowMs: g.suppressionWindow * 1000,
-        suppressionDurationMs: g.suppressionDuration * 1000,
-        suppressionCleanupIntervalMs: g.suppressionCleanupInterval * 1000
+        viewerCountPollingIntervalMs: g.viewerCountPollingInterval * 1000
     };
 }
 

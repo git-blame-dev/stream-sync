@@ -62,7 +62,7 @@ describe('NotificationManager follow/raid/share behavior', () => {
         });
     });
 
-    test('share notifications queue at raid priority and keep share VFX mapping', async () => {
+    test('share notifications queue at share priority and keep share VFX mapping', async () => {
         const result = await manager.handleNotification('platform:share', 'tiktok', {
             username: 'StreamSharer',
             userId: 'share-1'
@@ -140,7 +140,7 @@ describe('NotificationManager follow/raid/share behavior', () => {
     });
 
     test('share notifications reject missing usernames', async () => {
-        const result = await manager.handleNotification('platform:share', 'youtube', {
+        const result = await manager.handleNotification('platform:share', 'tiktok', {
             userId: 'share-3'
         });
 

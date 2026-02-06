@@ -12,7 +12,6 @@ const requiredScopes = [
     'chat:edit',
     'channel:read:subscriptions',
     'bits:read',
-    'channel:read:redemptions',
     'moderator:read:followers'
 ];
 
