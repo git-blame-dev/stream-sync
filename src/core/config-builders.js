@@ -1,0 +1,171 @@
+const { DEFAULTS } = require('./config-schema');
+
+function buildGeneralConfig(normalized) {
+    const g = normalized.general;
+    return {
+        ...g,
+        cmdCooldownMs: g.cmdCoolDown * 1000,
+        globalCmdCooldownMs: g.globalCmdCoolDown * 1000,
+        viewerCountPollingIntervalMs: g.viewerCountPollingInterval * 1000
+    };
+}
+
+function buildPlatformConfig(platformName, normalized, generalConfig) {
+    const platform = normalized[platformName] || {};
+
+    const result = {
+        ...platform,
+        pollIntervalMs: platform.pollInterval ? platform.pollInterval * 1000 : generalConfig.viewerCountPollingIntervalMs,
+        dataLoggingPath: DEFAULTS.LOG_DIRECTORY
+    };
+
+    for (const [key, value] of Object.entries(result)) {
+        if (value === null && generalConfig[key] !== undefined) {
+            result[key] = generalConfig[key];
+        }
+    }
+
+    return result;
+}
+
+function buildYoutubeConfig(normalized, generalConfig) {
+    const base = buildPlatformConfig('youtube', normalized, generalConfig);
+    base.chatMethod = 'scraping';
+    return base;
+}
+
+function buildObsConfig(normalized) {
+    const obs = normalized.obs;
+    return {
+        ...obs,
+        chatPlatformLogos: {
+            twitch: obs.chatPlatformLogoTwitch,
+            youtube: obs.chatPlatformLogoYouTube,
+            tiktok: obs.chatPlatformLogoTikTok
+        },
+        notificationPlatformLogos: {
+            twitch: obs.notificationPlatformLogoTwitch,
+            youtube: obs.notificationPlatformLogoYouTube,
+            tiktok: obs.notificationPlatformLogoTikTok
+        }
+    };
+}
+
+function buildHandcamConfig(normalized) {
+    const h = normalized.handcam;
+    return {
+        enabled: h.enabled,
+        sourceName: h.sourceName,
+        glowFilterName: h.glowFilterName,
+        maxSize: h.maxSize,
+        rampUpDuration: h.rampUpDuration,
+        holdDuration: h.holdDuration,
+        rampDownDuration: h.rampDownDuration,
+        totalSteps: h.totalSteps,
+        easingEnabled: h.easingEnabled
+    };
+}
+
+function buildVfxConfig(normalized) {
+    return { filePath: normalized.vfx.filePath };
+}
+
+function buildGiftConfig(normalized) {
+    const g = normalized.gifts;
+    return {
+        command: g.command,
+        giftVideoSource: g.giftVideoSource,
+        giftAudioSource: g.giftAudioSource
+    };
+}
+
+function buildEnvelopeConfig(normalized) {
+    return { command: normalized.envelopes.command };
+}
+
+function buildStreamElementsConfig(normalized) {
+    const se = normalized.streamelements;
+    return {
+        enabled: se.enabled,
+        youtubeChannelId: se.youtubeChannelId || undefined,
+        twitchChannelId: se.twitchChannelId || undefined,
+        dataLoggingEnabled: se.dataLoggingEnabled,
+        dataLoggingPath: DEFAULTS.LOG_DIRECTORY
+    };
+}
+
+function buildSpamConfig(normalized) {
+    const s = normalized.spam;
+    return {
+        enabled: s.enabled,
+        lowValueThreshold: s.lowValueThreshold,
+        detectionWindow: s.detectionWindow,
+        maxIndividualNotifications: s.maxIndividualNotifications,
+        tiktokEnabled: s.tiktokEnabled,
+        tiktokLowValueThreshold: s.tiktokLowValueThreshold,
+        twitchEnabled: s.twitchEnabled,
+        twitchLowValueThreshold: s.twitchLowValueThreshold,
+        youtubeEnabled: s.youtubeEnabled,
+        youtubeLowValueThreshold: s.youtubeLowValueThreshold
+    };
+}
+
+function buildCooldownsConfig(normalized) {
+    const c = normalized.cooldowns;
+    return {
+        defaultCooldown: c.defaultCooldown,
+        defaultCooldownMs: c.defaultCooldown * 1000,
+        heavyCommandCooldown: c.heavyCommandCooldown,
+        heavyCommandCooldownMs: c.heavyCommandCooldown * 1000,
+        heavyCommandThreshold: c.heavyCommandThreshold,
+        heavyCommandWindow: c.heavyCommandWindow,
+        heavyCommandWindowMs: c.heavyCommandWindow * 1000,
+        maxEntries: c.maxEntries
+    };
+}
+
+function buildConfig(normalized) {
+    const general = buildGeneralConfig(normalized);
+
+    return {
+        general,
+        http: { ...normalized.http },
+        tiktok: buildPlatformConfig('tiktok', normalized, general),
+        twitch: buildPlatformConfig('twitch', normalized, general),
+        youtube: buildYoutubeConfig(normalized, general),
+        obs: buildObsConfig(normalized),
+        handcam: buildHandcamConfig(normalized),
+        goals: { ...normalized.goals },
+        vfx: buildVfxConfig(normalized),
+        gifts: buildGiftConfig(normalized),
+        envelopes: buildEnvelopeConfig(normalized),
+        displayQueue: { ...normalized.displayQueue },
+        spam: buildSpamConfig(normalized),
+        timing: { ...normalized.timing },
+        cooldowns: buildCooldownsConfig(normalized),
+        follows: { command: normalized.follows.command },
+        raids: { command: normalized.raids.command },
+        paypiggies: { command: normalized.paypiggies.command },
+        greetings: { command: normalized.greetings.command },
+        shares: { command: normalized.shares.command },
+        farewell: { ...normalized.farewell },
+        streamelements: buildStreamElementsConfig(normalized),
+        commands: { ...normalized.commands },
+        logging: { ...normalized.logging }
+    };
+}
+
+module.exports = {
+    buildGeneralConfig,
+    buildPlatformConfig,
+    buildYoutubeConfig,
+    buildObsConfig,
+    buildHandcamConfig,
+    buildVfxConfig,
+    buildGiftConfig,
+    buildEnvelopeConfig,
+    buildStreamElementsConfig,
+    buildSpamConfig,
+    buildCooldownsConfig,
+    buildConfig
+};

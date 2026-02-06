@@ -1,6 +1,6 @@
 const { describe, expect, it } = require('bun:test');
 const { ConfigValidator } = require('../../src/utils/config-validator');
-const { _buildConfig } = require('../../src/core/config');
+const { buildConfig: _buildConfig } = require('../../src/core/config-builders');
 const { getRawTestConfig } = require('../helpers/config-fixture');
 
 describe('Config build pipeline integration', () => {
