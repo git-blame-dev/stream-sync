@@ -1,6 +1,5 @@
 const { describe, expect, beforeEach, afterEach, it } = require('bun:test');
 const { createMockFn } = require('../../helpers/bun-mock-utils');
-const { waitForDelay } = require('../../helpers/time-utils');
 const { DisplayQueue } = require('../../../src/obs/display-queue');
 const EventEmitter = require('events');
 
@@ -9,6 +8,7 @@ describe('DisplayQueue - Twitch Bits Goal Calculation', () => {
     let mockOBSManager;
     let configFixture;
     let mockGoalsManager;
+    let recordedGoals;
 
     beforeEach(() => {
         mockOBSManager = new EventEmitter();
@@ -16,12 +16,15 @@ describe('DisplayQueue - Twitch Bits Goal Calculation', () => {
         mockOBSManager.isConnected = createMockFn().mockReturnValue(true);
         mockOBSManager.isReady = createMockFn().mockResolvedValue(true);
 
+        recordedGoals = [];
         mockGoalsManager = {
-            processDonationGoal: createMockFn().mockResolvedValue()
+            processDonationGoal: createMockFn(async (platform, amount) => {
+                recordedGoals.push({ platform, amount });
+            })
         };
 
         configFixture = {
-            autoProcess: true,
+            autoProcess: false,
             maxQueueSize: 100,
             goals: { enabled: true, targetAmount: 1000 },
             timing: { transitionDelay: 200, notificationClearDelay: 500, chatMessageDuration: 4500 },
@@ -54,7 +57,8 @@ describe('DisplayQueue - Twitch Bits Goal Calculation', () => {
             setChatDisplayVisibility: createMockFn().mockResolvedValue(),
             hideAllDisplays: createMockFn().mockResolvedValue(),
             setPlatformLogoVisibility: createMockFn().mockResolvedValue(),
-            setNotificationPlatformLogoVisibility: createMockFn().mockResolvedValue()
+            setNotificationPlatformLogoVisibility: createMockFn().mockResolvedValue(),
+            setGroupSourceVisibility: createMockFn().mockResolvedValue()
         };
 
         displayQueue = new DisplayQueue(
@@ -77,14 +81,15 @@ describe('DisplayQueue - Twitch Bits Goal Calculation', () => {
             const bitsEvent = {
                 type: 'platform:gift',
                 data: {
-                    username: 'testUser',
-                    displayName: 'testUser',
+                    username: 'test-user',
+                    displayName: 'test-user',
                     message: 'Corgo100 Corgo100',
                     bits: 200,
                     giftType: 'bits',
                     giftCount: 1,
                     amount: 200,
                     currency: 'bits',
+                    displayMessage: 'test-user sent 200 bits',
                     platform: 'twitch'
                 },
                 platform: 'twitch',
@@ -92,16 +97,16 @@ describe('DisplayQueue - Twitch Bits Goal Calculation', () => {
             };
 
             displayQueue.addItem(bitsEvent);
-            await waitForDelay(100);
+            await displayQueue.processQueue();
 
-            expect(mockGoalsManager.processDonationGoal).toHaveBeenCalledWith('twitch', 200);
+            expect(recordedGoals).toEqual([{ platform: 'twitch', amount: 200 }]);
         });
 
         it('handles multiple bit cheers without multiplication', async () => {
             const cheers = [
-                { username: 'testUser1', bits: 100 },
-                { username: 'testUser2', bits: 500 },
-                { username: 'testUser3', bits: 50 }
+                { username: 'test-user-1', bits: 100 },
+                { username: 'test-user-2', bits: 500 },
+                { username: 'test-user-3', bits: 50 }
             ];
 
             for (const cheer of cheers) {
@@ -116,6 +121,7 @@ describe('DisplayQueue - Twitch Bits Goal Calculation', () => {
                         giftCount: 1,
                         amount: cheer.bits,
                         currency: 'bits',
+                        displayMessage: `${cheer.username} sent ${cheer.bits} bits`,
                         platform: 'twitch'
                     },
                     platform: 'twitch',
@@ -124,26 +130,28 @@ describe('DisplayQueue - Twitch Bits Goal Calculation', () => {
                 displayQueue.addItem(event);
             }
 
-            await waitForDelay(300);
+            await displayQueue.processQueue();
 
-            expect(mockGoalsManager.processDonationGoal).toHaveBeenCalledTimes(3);
-            expect(mockGoalsManager.processDonationGoal).toHaveBeenNthCalledWith(1, 'twitch', 100);
-            expect(mockGoalsManager.processDonationGoal).toHaveBeenNthCalledWith(2, 'twitch', 500);
-            expect(mockGoalsManager.processDonationGoal).toHaveBeenNthCalledWith(3, 'twitch', 50);
+            expect(recordedGoals).toEqual([
+                { platform: 'twitch', amount: 100 },
+                { platform: 'twitch', amount: 500 },
+                { platform: 'twitch', amount: 50 }
+            ]);
         });
 
         it('handles single bit cheer correctly', async () => {
             const singleBitEvent = {
                 type: 'platform:gift',
                 data: {
-                    username: 'testSmallCheerer',
-                    displayName: 'testSmallCheerer',
+                    username: 'test-small-cheerer',
+                    displayName: 'test-small-cheerer',
                     message: 'Cheer1',
                     bits: 1,
                     giftType: 'bits',
                     giftCount: 1,
                     amount: 1,
                     currency: 'bits',
+                    displayMessage: 'test-small-cheerer sent 1 bits',
                     platform: 'twitch'
                 },
                 platform: 'twitch',
@@ -151,9 +159,9 @@ describe('DisplayQueue - Twitch Bits Goal Calculation', () => {
             };
 
             displayQueue.addItem(singleBitEvent);
-            await waitForDelay(100);
+            await displayQueue.processQueue();
 
-            expect(mockGoalsManager.processDonationGoal).toHaveBeenCalledWith('twitch', 1);
+            expect(recordedGoals).toEqual([{ platform: 'twitch', amount: 1 }]);
         });
     });
 
@@ -162,14 +170,15 @@ describe('DisplayQueue - Twitch Bits Goal Calculation', () => {
             const bitsEvent = {
                 type: 'platform:gift',
                 data: {
-                    username: 'testGenerousViewer',
-                    displayName: 'testGenerousViewer',
+                    username: 'test-generous-viewer',
+                    displayName: 'test-generous-viewer',
                     message: 'Corgo100 Corgo100',
                     bits: 200,
                     giftType: 'bits',
                     giftCount: 1,
                     amount: 200,
                     currency: 'bits',
+                    displayMessage: 'test-generous-viewer sent 200 bits',
                     platform: 'twitch'
                 },
                 platform: 'twitch',
@@ -177,17 +186,17 @@ describe('DisplayQueue - Twitch Bits Goal Calculation', () => {
             };
 
             displayQueue.addItem(bitsEvent);
-            await waitForDelay(100);
+            await displayQueue.processQueue();
 
-            expect(mockGoalsManager.processDonationGoal).toHaveBeenCalledWith('twitch', 200);
+            expect(recordedGoals).toEqual([{ platform: 'twitch', amount: 200 }]);
         });
 
         it('handles multi-cheermote scenarios without goal inflation', async () => {
             const realWorldScenario = {
                 type: 'platform:gift',
                 data: {
-                    username: 'testRealUser',
-                    displayName: 'testRealUser',
+                    username: 'test-real-user',
+                    displayName: 'test-real-user',
                     message: 'Corgo100 Corgo100',
                     bits: 200,
                     giftType: 'bits',
@@ -195,6 +204,7 @@ describe('DisplayQueue - Twitch Bits Goal Calculation', () => {
                     amount: 200,
                     currency: 'bits',
                     cheermoteInfo: { type: 'Corgo', count: 2, cleanPrefix: 'Corgo' },
+                    displayMessage: 'test-real-user sent 200 bits',
                     platform: 'twitch'
                 },
                 platform: 'twitch',
@@ -202,9 +212,9 @@ describe('DisplayQueue - Twitch Bits Goal Calculation', () => {
             };
 
             displayQueue.addItem(realWorldScenario);
-            await waitForDelay(100);
+            await displayQueue.processQueue();
 
-            expect(mockGoalsManager.processDonationGoal).toHaveBeenCalledWith('twitch', 200);
+            expect(recordedGoals).toEqual([{ platform: 'twitch', amount: 200 }]);
         });
     });
 });

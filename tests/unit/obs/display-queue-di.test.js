@@ -35,9 +35,23 @@ describe('DisplayQueue DI requirements', () => {
         expect(() => queue.addItem({
             type: 'chat',
             platform: 'twitch',
-            data: { username: 'TestUser', message: 'Hello' }
+            data: { username: 'test-user', message: 'Hello' }
         })).not.toThrow();
 
         expect(queue.queue.length).toBe(1);
+    });
+
+    it('throws when dependencies throw during construction', () => {
+        const mockObsManager = createMockOBSManager('connected');
+        const dependencies = {};
+        Object.defineProperty(dependencies, 'sourcesManager', {
+            get: () => {
+                throw new Error('test-injected error');
+            }
+        });
+
+        expect(() => {
+            new DisplayQueue(mockObsManager, { autoProcess: true }, { PRIORITY_LEVELS }, null, dependencies);
+        }).toThrow('test-injected error');
     });
 });
