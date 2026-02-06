@@ -1,0 +1,175 @@
+function sanitizeStringValue(value) {
+    if (value === null || value === undefined) {
+        return '';
+    }
+
+    let stringValue = String(value);
+
+    stringValue = stringValue.replace(/\{[^}]*\}/g, '');
+
+    if (stringValue.length > 1000) {
+        stringValue = stringValue.substring(0, 1000);
+    }
+
+    return stringValue;
+}
+
+function convertValueToString(value) {
+    if (value === null || value === undefined) {
+        return '';
+    }
+
+    if (typeof value === 'string') {
+        return value;
+    }
+
+    if (typeof value === 'number') {
+        if (isNaN(value) || !isFinite(value)) {
+            return '';
+        }
+        return String(value);
+    }
+
+    if (typeof value === 'boolean') {
+        return String(value);
+    }
+
+    if (typeof value === 'object') {
+        if (Array.isArray(value)) {
+            if (value.length === 0) return '';
+            if (value.length === 1) return convertValueToString(value[0]);
+            return `${convertValueToString(value[0])} and ${value.length - 1} more`;
+        }
+
+        if (value instanceof Date) {
+            return value.toISOString();
+        }
+
+        if (value.name && typeof value.name === 'string') return value.name;
+        if (value.username && typeof value.username === 'string') return value.username;
+        if (value.value && typeof value.value === 'string') return value.value;
+        if (value.text && typeof value.text === 'string') return value.text;
+        if (value.title && typeof value.title === 'string') return value.title;
+
+        try {
+            const seen = new WeakSet();
+            function extractFromNestedObject(obj, depth = 0) {
+                if (depth > 3 || !obj || typeof obj !== 'object' || Array.isArray(obj)) {
+                    return '';
+                }
+
+                if (seen.has(obj)) {
+                    return '';
+                }
+                seen.add(obj);
+
+                for (const val of Object.values(obj)) {
+                    try {
+                        if (typeof val === 'string' && val.trim()) {
+                            return val;
+                        }
+                        if (typeof val === 'number' && isFinite(val)) {
+                            return String(val);
+                        }
+                        if (typeof val === 'object' && val !== null && !Array.isArray(val)) {
+                            const nestedResult = extractFromNestedObject(val, depth + 1);
+                            if (nestedResult) {
+                                return nestedResult;
+                            }
+                        }
+                    } catch {
+                        continue;
+                    }
+                }
+                return '';
+            }
+
+            const extracted = extractFromNestedObject(value);
+            if (extracted) {
+                return extracted;
+            }
+        } catch { /* noop */ }
+
+        try {
+            const stringValue = value.toString();
+            if (stringValue && stringValue !== '[object Object]') {
+                return stringValue;
+            }
+        } catch { /* noop */ }
+
+        try {
+            const jsonString = JSON.stringify(value);
+            if (jsonString && jsonString !== '{}' && jsonString.length < 100) {
+                return jsonString;
+            }
+        } catch { /* noop */ }
+
+        return '';
+    }
+
+    return '';
+}
+
+function sanitizeDataForInterpolation(data) {
+    if (!data || typeof data !== 'object') {
+        return {};
+    }
+
+    const sanitized = {};
+    const seen = new WeakSet();
+
+    function sanitizeValue(value) {
+        if (value === null || value === undefined) {
+            return value;
+        }
+
+        if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
+            return sanitizeStringValue(value);
+        }
+
+        if (typeof value === 'object') {
+            if (seen.has(value)) {
+                return '';
+            }
+            seen.add(value);
+
+            if (Array.isArray(value)) {
+                if (value.length === 0) return '';
+                const first = value[0];
+                return (typeof first === 'string' || typeof first === 'number' || typeof first === 'boolean')
+                    ? sanitizeStringValue(first)
+                    : '';
+            }
+
+            if (value.toString && typeof value.toString === 'function') {
+                try {
+                    const stringValue = value.toString();
+                    if (stringValue !== '[object Object]') {
+                        return sanitizeStringValue(stringValue);
+                    }
+                } catch { /* noop */ }
+            }
+
+            if (value.name) return sanitizeStringValue(value.name);
+            if (value.username) return sanitizeStringValue(value.username);
+            if (value.value) return sanitizeStringValue(value.value);
+            if (value.text) return sanitizeStringValue(value.text);
+
+            return '';
+        }
+
+        return '';
+    }
+
+    for (const [key, value] of Object.entries(data)) {
+        sanitized[key] = sanitizeValue(value);
+    }
+
+    return sanitized;
+}
+
+module.exports = {
+    sanitizeDataForInterpolation,
+    sanitizeStringValue,
+    convertValueToString
+};

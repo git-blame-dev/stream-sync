@@ -1,8 +1,8 @@
 const {
     formatSuperChatAmount,
-    formatCurrencyForTTS,
-    interpolateTemplate
+    formatCurrencyForTTS
 } = require('../../../src/utils/notification-strings');
+const { interpolateTemplate } = require('../../../src/utils/notification-template-interpolator');
 
 describe('notification-strings behavior', () => {
     it('formats superchat amounts with safe zero when amount is invalid and currency is unknown', () => {
