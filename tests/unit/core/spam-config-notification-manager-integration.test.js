@@ -3,23 +3,17 @@ const { describe, expect, beforeEach, it, afterEach } = require('bun:test');
 const { createMockFn, restoreAllMocks } = require('../../helpers/bun-mock-utils');
 const { noOpLogger } = require('../../helpers/mock-factories');
 const { createConfigFixture } = require('../../helpers/config-fixture');
+const { PRIORITY_LEVELS } = require('../../../src/core/constants');
 
 const { config } = require('../../../src/core/config');
 const NotificationManager = require('../../../src/notifications/NotificationManager');
 const { createTextProcessingManager } = require('../../../src/utils/text-processing');
 
 const mockConstants = {
-    PRIORITY_LEVELS: {
-        CHAT: 1,
-        FOLLOW: 2,
-        MEMBER: 3,
-        GIFT: 4,
-        RAID: 6,
-        ENVELOPE: 8
-    },
+    PRIORITY_LEVELS,
     NOTIFICATION_CONFIGS: {
         'platform:gift': {
-            priority: 4,
+            priority: PRIORITY_LEVELS.GIFT,
             duration: 5000,
             settingKey: 'giftsEnabled',
             commandKey: 'gifts'
@@ -51,11 +45,7 @@ describe('Spam Detection Service Integration Tests - Modernized', () => {
             general: {
                 giftsEnabled: true,
                 greetingsEnabled: true,
-                userSuppressionEnabled: false,
-                maxNotificationsPerUser: 5,
-                suppressionWindowMs: 60000,
-                suppressionDurationMs: 300000,
-                suppressionCleanupIntervalMs: 300000
+                
             }
         });
     });

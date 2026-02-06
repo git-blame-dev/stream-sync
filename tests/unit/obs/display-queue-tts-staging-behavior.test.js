@@ -2,6 +2,7 @@ const { describe, expect, it, beforeEach, afterEach } = require('bun:test');
 const { createMockFn, restoreAllMocks } = require('../../helpers/bun-mock-utils');
 const { safeDelay, safeSetTimeout } = require('../../../src/utils/timeout-validator');
 const { PlatformEvents } = require('../../../src/interfaces/PlatformEvents');
+const { PRIORITY_LEVELS } = require('../../../src/core/constants');
 
 const { DisplayQueue } = require('../../../src/obs/display-queue');
 const { EventEmitter } = require('events');
@@ -66,7 +67,7 @@ describe('DisplayQueue notification TTS staging', () => {
                 handcam: { enabled: false }
             },
             {
-                PRIORITY_LEVELS: { CHAT: 1, GIFT: 5 },
+                PRIORITY_LEVELS,
                 CHAT_MESSAGE_DURATION: 4500,
                 CHAT_TRANSITION_DELAY: 200
             },

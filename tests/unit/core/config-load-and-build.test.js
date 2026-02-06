@@ -87,7 +87,6 @@ describe('config load and build behavior', () => {
         rawConfig.handcam.rampUpDuration = '0.01';
         rawConfig.handcam.holdDuration = '-1';
         rawConfig.handcam.rampDownDuration = '20';
-        rawConfig.retry = { baseDelay: '50', maxDelay: '500', maxRetries: '30' };
 
         const normalized = ConfigValidator.normalize(rawConfig);
         const validation = ConfigValidator.validate(normalized);

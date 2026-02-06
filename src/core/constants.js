@@ -1,19 +1,15 @@
 const PRIORITY_LEVELS = {
     CHAT: 1,
-    GREETING: 2,
-    COMMAND: 4,
-    FOLLOW: 2,
-    GIFT: 4,
-    REDEMPTION: 4,
-    MEMBER: 3,
-    RAID: 6,
+    COMMAND: 2,
+    FAREWELL: 3,
+    GREETING: 4,
+    FOLLOW: 5,
     SHARE: 6,
+    RAID: 7,
     ENVELOPE: 8,
-    GIFTPAYPIGGY: 11,
-    LOW: 0,
-    DEFAULT: 1,
-    HIGH: 15,
-    MANUAL: 16
+    GIFT: 9,
+    PAYPIGGY: 10,
+    GIFTPAYPIGGY: 11
 };
 
 const ERROR_MESSAGES = {
@@ -88,22 +84,10 @@ const NOTIFICATION_CONFIGS = {
         commandKey: 'farewell',
         hasSpecialProcessing: false
     },
-    redemption: {
-        timing: 'sequential',
-        settingKey: 'redemptionsEnabled',
-        commandKey: 'redemptions',
-        hasSpecialProcessing: false
-    },
     'platform:chat-message': {
         timing: 'immediate',
         settingKey: 'messagesEnabled',
         commandKey: 'chat',
-        hasSpecialProcessing: false
-    },
-    general: {
-        timing: 'sequential',
-        settingKey: 'notificationsEnabled',
-        commandKey: 'general',
         hasSpecialProcessing: false
     }
 };

@@ -2,6 +2,7 @@ const { describe, expect, afterEach, it, beforeEach } = require('bun:test');
 const { restoreAllMocks } = require('../../helpers/bun-mock-utils');
 const { DisplayQueue } = require('../../../src/obs/display-queue');
 const { EventEmitter } = require('events');
+const { PRIORITY_LEVELS } = require('../../../src/core/constants');
 
 describe('DisplayQueue TTS-driven durations', () => {
     let originalNodeEnv;
@@ -23,7 +24,7 @@ describe('DisplayQueue TTS-driven durations', () => {
             {
                 CHAT_MESSAGE_DURATION: 4500,
                 CHAT_TRANSITION_DELAY: 0,
-                PRIORITY_LEVELS: { CHAT: 1 }
+                PRIORITY_LEVELS
             },
             new EventEmitter(),
             {}

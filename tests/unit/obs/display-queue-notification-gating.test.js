@@ -3,6 +3,7 @@ const { createMockFn, restoreAllMocks } = require('../../helpers/bun-mock-utils'
 
 const { DisplayQueue } = require('../../../src/obs/display-queue');
 const { EventEmitter } = require('events');
+const { PRIORITY_LEVELS } = require('../../../src/core/constants');
 
 describe('DisplayQueue platform notification gating', () => {
     let originalNodeEnv;
@@ -63,7 +64,7 @@ describe('DisplayQueue platform notification gating', () => {
         const queue = new DisplayQueue(
             obsManager,
             config,
-            { PRIORITY_LEVELS: { CHAT: 1, FOLLOW: 2 } },
+            { PRIORITY_LEVELS },
             new EventEmitter(),
             { sourcesManager: mockSourcesManager, goalsManager: mockGoalsManager }
         );

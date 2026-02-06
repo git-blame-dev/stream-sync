@@ -6,6 +6,7 @@ initializeTestLogging();
 
 const { DisplayQueue } = require('../../../src/obs/display-queue');
 const { createMockOBSManager } = require('../../helpers/mock-factories');
+const { PRIORITY_LEVELS } = require('../../../src/core/constants');
 
 describe('DisplayQueue control', () => {
     afterEach(() => {
@@ -13,7 +14,7 @@ describe('DisplayQueue control', () => {
     });
 
     const constants = {
-        PRIORITY_LEVELS: { CHAT: 1, GIFT: 4, RAID: 6 },
+        PRIORITY_LEVELS,
         CHAT_MESSAGE_DURATION: 4500,
         CHAT_TRANSITION_DELAY: 200,
         NOTIFICATION_CLEAR_DELAY: 100

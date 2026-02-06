@@ -251,15 +251,11 @@ describe('AppRuntime behavior', () => {
         expect(handled.length).toBe(1);
     });
 
-    it('validates raid and redemption inputs', async () => {
+    it('validates raid inputs', async () => {
         const runtime = createRuntime();
 
         await expect(runtime.handleRaidNotification('twitch', 'test-raider', {}))
             .rejects.toThrow('handleRaidNotification requires viewerCount');
-
-        await expect(runtime.handleRedemptionNotification('twitch', 'test-redeemer', {
-            rewardTitle: 'Test'
-        })).rejects.toThrow('handleRedemptionNotification requires rewardTitle and rewardCost');
     });
 
     it('routes envelope notifications with required payload', async () => {
@@ -495,11 +491,9 @@ describe('AppRuntime behavior', () => {
     });
 
     it('shuts down services and calls cleanup hooks', async () => {
-        const calls = { disconnectAll: 0, cleanup: 0, stopSuppression: 0 };
+        const calls = { disconnectAll: 0, cleanup: 0 };
         const runtime = createRuntime({
-            notificationManager: {
-                stopSuppressionCleanup: () => { calls.stopSuppression += 1; }
-            },
+            notificationManager: {},
             platformLifecycleService: {
                 getAllPlatforms: createMockFn().mockReturnValue({}),
                 getStatus: createMockFn().mockReturnValue({ platformHealth: {} }),
@@ -516,7 +510,6 @@ describe('AppRuntime behavior', () => {
             await runtime.shutdown();
 
             expect(calls.disconnectAll).toBe(1);
-            expect(calls.stopSuppression).toBe(1);
             expect(calls.cleanup).toBe(1);
         } finally {
             process.exit = originalExit;

@@ -9,6 +9,7 @@ const { DisplayQueue } = require('../../../src/obs/display-queue');
 const { createMockOBSManager, noOpLogger } = require('../../helpers/mock-factories');
 const { createSourcesConfigFixture } = require('../../helpers/config-fixture');
 const { createOBSSourcesManager } = require('../../../src/obs/sources');
+const { PRIORITY_LEVELS } = require('../../../src/core/constants');
 
 describe('DisplayQueue priority ordering', () => {
     afterEach(() => {
@@ -16,12 +17,7 @@ describe('DisplayQueue priority ordering', () => {
     });
 
     const constants = {
-        PRIORITY_LEVELS: {
-            CHAT: 1,
-            FOLLOW: 2,
-            GIFT: 4,
-            RAID: 6
-        },
+        PRIORITY_LEVELS,
         CHAT_MESSAGE_DURATION: 4500,
         CHAT_TRANSITION_DELAY: 200
     };

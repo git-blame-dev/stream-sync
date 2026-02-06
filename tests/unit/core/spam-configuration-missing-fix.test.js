@@ -7,6 +7,7 @@ const { setupAutomatedCleanup } = require('../../helpers/mock-lifecycle');
 const { expectNoTechnicalArtifacts } = require('../../helpers/assertion-helpers');
 const { createConfigFixture } = require('../../helpers/config-fixture');
 const { createTextProcessingManager } = require('../../../src/utils/text-processing');
+const { PRIORITY_LEVELS } = require('../../../src/core/constants');
 
 initializeTestLogging();
 
@@ -34,17 +35,10 @@ describe('Spam Detection Service Integration Tests', () => {
         mockLogger = noOpLogger;
 
         mockConstants = {
-            PRIORITY_LEVELS: {
-                CHAT: 1,
-                FOLLOW: 2,
-                MEMBER: 3,
-                GIFT: 4,
-                RAID: 6,
-                ENVELOPE: 8
-            },
+            PRIORITY_LEVELS,
             NOTIFICATION_CONFIGS: {
                 'platform:gift': {
-                    priority: 4,
+                    priority: PRIORITY_LEVELS.GIFT,
                     duration: 5000,
                     settingKey: 'giftsEnabled',
                     commandKey: 'gifts'

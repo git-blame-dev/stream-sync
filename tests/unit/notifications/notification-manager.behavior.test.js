@@ -2,6 +2,7 @@ const { describe, expect, it, beforeEach, afterEach } = require('bun:test');
 const { createMockFn, restoreAllMocks } = require('../../helpers/bun-mock-utils');
 const { noOpLogger } = require('../../helpers/mock-factories');
 const { createConfigFixture } = require('../../helpers/config-fixture');
+const { PRIORITY_LEVELS } = require('../../../src/core/constants');
 
 const NotificationManager = require('../../../src/notifications/NotificationManager');
 
@@ -24,7 +25,7 @@ describe('NotificationManager behavior', () => {
         eventBus: { on: createMockFn(), emit: createMockFn(), subscribe: createMockFn() },
         config: createConfigFixture(),
         constants: {
-            PRIORITY_LEVELS: { DEFAULT: 0, FOLLOW: 1, GIFT: 2, ENVELOPE: 3, MEMBER: 4, CHEER: 5, RAID: 6, SHARE: 7, REDEMPTION: 8, GIFTPAYPIGGY: 9, COMMAND: 10, GREETING: 11, CHAT: 12 },
+            PRIORITY_LEVELS,
             NOTIFICATION_CONFIGS: { follow: { settingKey: 'followsEnabled', commandKey: 'follows', hasSpecialProcessing: false } }
         },
         textProcessing: { formatChatMessage: createMockFn() },
@@ -54,12 +55,6 @@ describe('NotificationManager behavior', () => {
     it('throws when eventBus dependency is missing', () => {
         const deps = createDeps({ eventBus: null });
         expect(() => new NotificationManager(deps)).toThrow('EventBus dependency');
-    });
-
-    it('disables suppression cleanup in test environment', () => {
-        const deps = createDeps();
-        const manager = new NotificationManager(deps);
-        expect(manager.suppressionConfig.enabled).toBe(false);
     });
 
     it('initializes with valid dependencies', () => {

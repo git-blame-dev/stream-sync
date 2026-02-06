@@ -413,20 +413,6 @@ class AppRuntime {
             );
         }
 
-        try {
-            if (this.notificationManager) {
-                this.notificationManager.stopSuppressionCleanup();
-                this.logger.debug('Stopped notification manager cleanup intervals', 'system');
-            }
-        } catch (error) {
-            this._handleAppRuntimeError(
-                `Error stopping notification manager: ${error.message}`,
-                error,
-                null,
-                { eventType: 'shutdown', logContext: 'system' }
-            );
-        }
-
         if (this.keepAliveInterval) {
             clearInterval(this.keepAliveInterval);
             this.logger.debug('Cleared keep-alive interval', 'system');
@@ -626,20 +612,6 @@ class AppRuntime {
         }
         return this.handleUnifiedNotification('platform:raid', platform, raiderName, {
             viewerCount: options.viewerCount,
-            ...options
-        });
-    }
-
-    async handleRedemptionNotification(platform, username, options) {
-        if (!options || typeof options !== 'object') {
-            throw new Error('handleRedemptionNotification requires options');
-        }
-        if (!options.rewardTitle || options.rewardCost === undefined) {
-            throw new Error('handleRedemptionNotification requires rewardTitle and rewardCost');
-        }
-        return this.handleUnifiedNotification('redemption', platform, username, {
-            rewardTitle: options.rewardTitle,
-            rewardCost: options.rewardCost,
             ...options
         });
     }

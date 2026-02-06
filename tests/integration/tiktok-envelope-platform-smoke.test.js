@@ -64,11 +64,7 @@ describe('TikTok envelope platform flow (smoke)', () => {
                 debugEnabled: false,
                 giftsEnabled: true,
                 paypiggiesEnabled: true,
-                userSuppressionEnabled: false,
-                maxNotificationsPerUser: 5,
-                suppressionWindowMs: 60000,
-                suppressionDurationMs: 300000,
-                suppressionCleanupIntervalMs: 300000
+                
             },
             tiktok: { enabled: true, notificationsEnabled: true },
             obs: { enabled: false }

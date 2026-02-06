@@ -1,6 +1,7 @@
 
 const { DisplayQueue } = require('../../../src/obs/display-queue');
 const { createMockOBSManager } = require('../../helpers/mock-factories');
+const { PRIORITY_LEVELS } = require('../../../src/core/constants');
 
 describe('DisplayQueue share priority mapping', () => {
     let displayQueue;
@@ -8,20 +9,7 @@ describe('DisplayQueue share priority mapping', () => {
     beforeEach(() => {
         const obsManager = createMockOBSManager();
         const constants = {
-            PRIORITY_LEVELS: {
-                CHAT: 1,
-                FOLLOW: 2,
-                GIFT: 4,
-                MEMBER: 3,
-                RAID: 6,
-                SHARE: 6,
-                ENVELOPE: 8,
-                CHEER: 10,
-                GIFTPAYPIGGY: 11,
-                GREETING: 2,
-                COMMAND: 4,
-                REDEMPTION: 4
-            }
+            PRIORITY_LEVELS
         };
 
         displayQueue = new DisplayQueue(obsManager, { autoProcess: false }, constants, null, constants);
@@ -29,6 +17,6 @@ describe('DisplayQueue share priority mapping', () => {
 
     test('share notifications use SHARE priority level', () => {
         const priority = displayQueue.getTypePriority('platform:share');
-        expect(priority).toBe(6);
+        expect(priority).toBe(PRIORITY_LEVELS.SHARE);
     });
 });

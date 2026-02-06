@@ -58,11 +58,7 @@ const createNotificationManagerHarness = () => {
         general: {
             debugEnabled: false,
             giftsEnabled: true,
-            userSuppressionEnabled: false,
-            maxNotificationsPerUser: 5,
-            suppressionWindowMs: 60000,
-            suppressionDurationMs: 300000,
-            suppressionCleanupIntervalMs: 300000
+            
         },
         youtube: { enabled: true }
     });

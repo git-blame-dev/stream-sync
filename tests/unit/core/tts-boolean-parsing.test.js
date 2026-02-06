@@ -6,6 +6,7 @@ const { setupAutomatedCleanup } = require('../../helpers/mock-lifecycle');
 const { createSourcesConfigFixture } = require('../../helpers/config-fixture');
 const { noOpLogger } = require('../../helpers/mock-factories');
 const { createOBSSourcesManager } = require('../../../src/obs/sources');
+const { PRIORITY_LEVELS } = require('../../../src/core/constants');
 
 setupAutomatedCleanup({
     clearCallsBeforeEach: true,
@@ -23,7 +24,7 @@ describe('TTS Configuration Boolean Parsing', () => {
 
     describe('when ttsEnabled is configured with different values', () => {
         const createDisplayQueueWithTTS = (ttsValue) => {
-            const baseConstants = { PRIORITY_LEVELS: { CHAT: 1 } };
+            const baseConstants = { PRIORITY_LEVELS };
             const config = {
                 autoProcess: false,
                 maxQueueSize: 100,

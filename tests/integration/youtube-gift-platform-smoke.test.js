@@ -59,11 +59,7 @@ describe('YouTube gift platform flow (smoke)', () => {
             debugEnabled: false,
             giftsEnabled: true,
             paypiggiesEnabled: true,
-            userSuppressionEnabled: false,
-            maxNotificationsPerUser: 5,
-            suppressionWindowMs: 60000,
-            suppressionDurationMs: 300000,
-            suppressionCleanupIntervalMs: 300000
+            
         },
         youtube: { enabled: true, notificationsEnabled: true, username: 'test-channel' },
         obs: { enabled: false }

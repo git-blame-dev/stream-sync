@@ -81,9 +81,13 @@ class ConfigValidator {
             giftsEnabled: ConfigValidator.parseBoolean(raw.giftsEnabled, null),
             raidsEnabled: ConfigValidator.parseBoolean(raw.raidsEnabled, null),
             paypiggiesEnabled: ConfigValidator.parseBoolean(raw.paypiggiesEnabled, null),
-            redemptionsEnabled: ConfigValidator.parseBoolean(raw.redemptionsEnabled, null),
-            sharesEnabled: ConfigValidator.parseBoolean(raw.sharesEnabled, null),
             ignoreSelfMessages: ConfigValidator.parseBoolean(raw.ignoreSelfMessages, null)
+        };
+    }
+
+    static _parseShareFlag(raw) {
+        return {
+            sharesEnabled: ConfigValidator.parseBoolean(raw.sharesEnabled, null)
         };
     }
 
@@ -103,10 +107,6 @@ class ConfigValidator {
             cooldowns: ConfigValidator._normalizeCooldownsSection(rawConfig.cooldowns || {}),
             spam: ConfigValidator._normalizeSpamSection(rawConfig.spam || {}),
             displayQueue: ConfigValidator._normalizeDisplayQueueSection(rawConfig.displayQueue || {}),
-            retry: ConfigValidator._normalizeRetrySection(rawConfig.retry || {}),
-            intervals: ConfigValidator._normalizeIntervalsSection(rawConfig.intervals || {}),
-            connectionLimits: ConfigValidator._normalizeConnectionLimitsSection(rawConfig.connectionLimits || {}),
-            api: ConfigValidator._normalizeApiSection(rawConfig.api || {}),
             logging: ConfigValidator._normalizeLoggingSection(rawConfig.logging || {}),
             farewell: ConfigValidator._normalizeFarewellSection(rawConfig.farewell || {}),
             commands: ConfigValidator._normalizeCommandsSection(rawConfig.commands || {}),
@@ -132,12 +132,10 @@ class ConfigValidator {
             raidsEnabled: ConfigValidator.parseBoolean(raw.raidsEnabled, DEFAULTS.general.raidsEnabled),
             sharesEnabled: ConfigValidator.parseBoolean(raw.sharesEnabled, DEFAULTS.general.sharesEnabled),
             paypiggiesEnabled: ConfigValidator.parseBoolean(raw.paypiggiesEnabled, DEFAULTS.general.paypiggiesEnabled),
-            redemptionsEnabled: ConfigValidator.parseBoolean(raw.redemptionsEnabled, DEFAULTS.general.redemptionsEnabled),
             filterOldMessages: ConfigValidator.parseBoolean(raw.filterOldMessages, DEFAULTS.general.filterOldMessages),
             logChatMessages: ConfigValidator.parseBoolean(raw.logChatMessages, DEFAULTS.general.logChatMessages),
             keywordParsingEnabled: ConfigValidator.parseBoolean(raw.keywordParsingEnabled, DEFAULTS.general.keywordParsingEnabled),
             ignoreSelfMessages: ConfigValidator.parseBoolean(raw.ignoreSelfMessages, DEFAULTS.general.ignoreSelfMessages),
-            userSuppressionEnabled: ConfigValidator.parseBoolean(raw.userSuppressionEnabled, DEFAULTS.general.userSuppressionEnabled),
             ttsEnabled: ConfigValidator.parseBoolean(raw.ttsEnabled, DEFAULTS.general.ttsEnabled),
             streamDetectionEnabled: ConfigValidator.parseBoolean(raw.streamDetectionEnabled, DEFAULTS.general.streamDetectionEnabled),
             envFileReadEnabled: ConfigValidator.parseBoolean(raw.envFileReadEnabled, DEFAULTS.general.envFileReadEnabled),
@@ -145,10 +143,6 @@ class ConfigValidator {
             cmdCoolDown: ConfigValidator.parseNumber(raw.cmdCoolDown, { defaultValue: DEFAULTS.general.cmdCoolDown }),
             globalCmdCoolDown: ConfigValidator.parseNumber(raw.globalCmdCoolDown, { defaultValue: DEFAULTS.general.globalCmdCoolDown }),
             viewerCountPollingInterval: ConfigValidator.parseNumber(raw.viewerCountPollingInterval, { defaultValue: DEFAULTS.general.viewerCountPollingInterval }),
-            maxNotificationsPerUser: ConfigValidator.parseNumber(raw.maxNotificationsPerUser, { defaultValue: DEFAULTS.general.maxNotificationsPerUser }),
-            suppressionWindow: ConfigValidator.parseNumber(raw.suppressionWindow, { defaultValue: DEFAULTS.general.suppressionWindow }),
-            suppressionDuration: ConfigValidator.parseNumber(raw.suppressionDuration, { defaultValue: DEFAULTS.general.suppressionDuration }),
-            suppressionCleanupInterval: ConfigValidator.parseNumber(raw.suppressionCleanupInterval, { defaultValue: DEFAULTS.general.suppressionCleanupInterval }),
             streamRetryInterval: ConfigValidator.parseNumber(raw.streamRetryInterval, { defaultValue: DEFAULTS.general.streamRetryInterval }),
             streamMaxRetries: ConfigValidator.parseNumber(raw.streamMaxRetries, { defaultValue: DEFAULTS.general.streamMaxRetries }),
             continuousMonitoringInterval: ConfigValidator.parseNumber(raw.continuousMonitoringInterval, { defaultValue: DEFAULTS.general.continuousMonitoringInterval }),
@@ -202,6 +196,7 @@ class ConfigValidator {
             giftAggregationEnabled: ConfigValidator.parseBoolean(raw.giftAggregationEnabled, DEFAULTS.tiktok.giftAggregationEnabled),
             dataLoggingEnabled: ConfigValidator.parseBoolean(raw.dataLoggingEnabled, DEFAULTS.tiktok.dataLoggingEnabled),
             ...ConfigValidator._parseInheritableFlags(raw),
+            ...ConfigValidator._parseShareFlag(raw),
             pollInterval: ConfigValidator.parseNumber(raw.pollInterval, { defaultValue: null })
         };
     }
@@ -231,7 +226,6 @@ class ConfigValidator {
             username: ConfigValidator.parseString(raw.username, ''),
             viewerCountEnabled: ConfigValidator.parseBoolean(raw.viewerCountEnabled, DEFAULTS.youtube.viewerCountEnabled),
             viewerCountSource: ConfigValidator.parseString(raw.viewerCountSource, null),
-            retryAttempts: ConfigValidator.parseNumber(raw.retryAttempts, { defaultValue: DEFAULTS.youtube.retryAttempts }),
             maxStreams: ConfigValidator.parseNumber(raw.maxStreams, { defaultValue: DEFAULTS.youtube.maxStreams }),
             streamPollingInterval: ConfigValidator.parseNumber(raw.streamPollingInterval, { defaultValue: DEFAULTS.youtube.streamPollingInterval }),
             fullCheckInterval: ConfigValidator.parseNumber(raw.fullCheckInterval, { defaultValue: DEFAULTS.youtube.fullCheckInterval }),
@@ -335,37 +329,6 @@ class ConfigValidator {
         };
     }
 
-    static _normalizeRetrySection(raw) {
-        return {
-            maxRetries: ConfigValidator.parseNumber(raw.maxRetries, { defaultValue: DEFAULTS.retry.maxRetries }),
-            baseDelay: ConfigValidator.parseNumber(raw.baseDelay, { defaultValue: DEFAULTS.retry.baseDelay }),
-            maxDelay: ConfigValidator.parseNumber(raw.maxDelay, { defaultValue: DEFAULTS.retry.maxDelay }),
-            enableRetry: ConfigValidator.parseBoolean(raw.enableRetry, DEFAULTS.retry.enableRetry)
-        };
-    }
-
-    static _normalizeIntervalsSection(raw) {
-        return {
-            pollInterval: ConfigValidator.parseNumber(raw.pollInterval, { defaultValue: DEFAULTS.intervals.pollInterval }),
-            connectionTimeout: ConfigValidator.parseNumber(raw.connectionTimeout, { defaultValue: DEFAULTS.intervals.connectionTimeout }),
-            keepAliveInterval: ConfigValidator.parseNumber(raw.keepAliveInterval, { defaultValue: DEFAULTS.intervals.keepAliveInterval }),
-            healthCheckInterval: ConfigValidator.parseNumber(raw.healthCheckInterval, { defaultValue: DEFAULTS.intervals.healthCheckInterval })
-        };
-    }
-
-    static _normalizeConnectionLimitsSection(raw) {
-        return {
-            maxConnections: ConfigValidator.parseNumber(raw.maxConnections, { defaultValue: DEFAULTS.connectionLimits.maxConnections }),
-            maxConcurrentRequests: ConfigValidator.parseNumber(raw.maxConcurrentRequests, { defaultValue: DEFAULTS.connectionLimits.maxConcurrentRequests }),
-            maxStreamsPerConnection: ConfigValidator.parseNumber(raw.maxStreamsPerConnection, { defaultValue: DEFAULTS.connectionLimits.maxStreamsPerConnection })
-        };
-    }
-
-    static _normalizeApiSection(raw) {
-        return {
-            requestTimeout: ConfigValidator.parseNumber(raw.requestTimeout, { defaultValue: DEFAULTS.api.requestTimeout })
-        };
-    }
 
     static _normalizeLoggingSection(raw) {
         return {
@@ -448,7 +411,6 @@ class ConfigValidator {
         ConfigValidator._validateStreamElements(config, errors);
         ConfigValidator._validateCooldownRanges(config, warnings);
         ConfigValidator._validateHandcamRanges(config, warnings);
-        ConfigValidator._validateRetryRanges(config, warnings);
 
         return {
             isValid: errors.length === 0,
@@ -533,23 +495,6 @@ class ConfigValidator {
         }
     }
 
-    static _validateRetryRanges(config, warnings) {
-        if (!config.retry) return;
-
-        const retry = config.retry;
-
-        if (retry.baseDelay < 100 || retry.baseDelay > 30000) {
-            warnings.push('retry.baseDelay should be between 100 and 30000 milliseconds');
-        }
-
-        if (retry.maxDelay < 1000 || retry.maxDelay > 300000) {
-            warnings.push('retry.maxDelay should be between 1000 and 300000 milliseconds');
-        }
-
-        if (retry.maxRetries < 0 || retry.maxRetries > 20) {
-            warnings.push('retry.maxRetries should be between 0 and 20');
-        }
-    }
 }
 
 module.exports = {

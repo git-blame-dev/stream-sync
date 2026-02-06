@@ -84,14 +84,14 @@ class DisplayQueue {
         }
 
         const typeToPriorityMap = {
-            'platform:paypiggy': this.constants.PRIORITY_LEVELS.MEMBER,
+            'platform:paypiggy': this.constants.PRIORITY_LEVELS.PAYPIGGY,
             'platform:gift': this.constants.PRIORITY_LEVELS.GIFT,
             'platform:follow': this.constants.PRIORITY_LEVELS.FOLLOW,
             'greeting': this.constants.PRIORITY_LEVELS.GREETING,
+            'farewell': this.constants.PRIORITY_LEVELS.FAREWELL,
             'platform:raid': this.constants.PRIORITY_LEVELS.RAID,
             'platform:share': this.constants.PRIORITY_LEVELS.SHARE,
             'platform:envelope': this.constants.PRIORITY_LEVELS.ENVELOPE,
-            'redemption': this.constants.PRIORITY_LEVELS.REDEMPTION,
             'platform:giftpaypiggy': this.constants.PRIORITY_LEVELS.GIFTPAYPIGGY,
             'chat': this.constants.PRIORITY_LEVELS.CHAT,
             'command': this.constants.PRIORITY_LEVELS.COMMAND

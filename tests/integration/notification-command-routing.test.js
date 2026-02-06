@@ -14,9 +14,7 @@ describe('notification command routing integration', () => {
         command: 'commands',
         greeting: 'greetings',
         farewell: 'farewell',
-        redemption: 'redemptions',
-        'platform:chat-message': 'chat',
-        general: 'general'
+        'platform:chat-message': 'chat'
     };
 
     const EXPECTED_SETTING_KEYS = {
@@ -30,9 +28,7 @@ describe('notification command routing integration', () => {
         command: 'commandsEnabled',
         greeting: 'greetingsEnabled',
         farewell: 'farewellsEnabled',
-        redemption: 'redemptionsEnabled',
-        'platform:chat-message': 'messagesEnabled',
-        general: 'notificationsEnabled'
+        'platform:chat-message': 'messagesEnabled'
     };
 
     it('all notification types have valid command keys', () => {

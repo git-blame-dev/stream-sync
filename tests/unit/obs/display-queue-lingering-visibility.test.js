@@ -4,6 +4,7 @@ const { restoreAllMocks } = require('../../helpers/bun-mock-utils');
 
 const { DisplayQueue } = require('../../../src/obs/display-queue');
 const { createMockOBSManager } = require('../../helpers/mock-factories');
+const { PRIORITY_LEVELS } = require('../../../src/core/constants');
 
 describe('DisplayQueue lingering chat visibility', () => {
     afterEach(() => {
@@ -11,11 +12,7 @@ describe('DisplayQueue lingering chat visibility', () => {
     });
 
     const constants = {
-        PRIORITY_LEVELS: {
-            CHAT: 1,
-            FOLLOW: 2,
-            GIFT: 4
-        },
+        PRIORITY_LEVELS,
         CHAT_MESSAGE_DURATION: 4500,
         CHAT_TRANSITION_DELAY: 200
     };

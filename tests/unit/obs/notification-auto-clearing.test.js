@@ -6,6 +6,7 @@ const { createMockOBSManager, noOpLogger } = require('../../helpers/mock-factori
 const { setupAutomatedCleanup } = require('../../helpers/mock-lifecycle');
 const { createSourcesConfigFixture } = require('../../helpers/config-fixture');
 const { createOBSSourcesManager } = require('../../../src/obs/sources');
+const { PRIORITY_LEVELS } = require('../../../src/core/constants');
 
 setupAutomatedCleanup({
     clearCallsBeforeEach: true,
@@ -50,19 +51,7 @@ describe('Notification Auto-Clearing Behavior', () => {
             CHAT_MESSAGE_DURATION: 5000,
             CHAT_TRANSITION_DELAY: 200,
             NOTIFICATION_CLEAR_DELAY: 200,
-            PRIORITY_LEVELS: {
-                CHAT: 1,
-                COMMAND: 2,
-                FOLLOW: 2,
-                GIFT: 4,
-                MEMBER: 3,
-                GREETING: 2,
-                RAID: 6,
-                ENVELOPE: 8,
-                REDEMPTION: 3,
-                CHEER: 4,
-                GIFTPAYPIGGY: 3
-            }
+            PRIORITY_LEVELS
         };
 
         const configFixture = {

@@ -22,11 +22,7 @@ const createTestConfig = () => createConfigFixture({
         chatEnabled: true,
         greetingsEnabled: true,
         giftsEnabled: true,
-        userSuppressionEnabled: false,
-        maxNotificationsPerUser: 5,
-        suppressionWindowMs: 60000,
-        suppressionDurationMs: 300000,
-        suppressionCleanupIntervalMs: 300000
+        
     }
 });
 

@@ -238,7 +238,7 @@ const createNotificationTestSuite = (notificationType, testCases) => {
 };
 
 const validateNotificationTemplates = () => {
-    const requiredTypes = ['platform:gift', 'platform:follow', 'platform:paypiggy', 'platform:raid', 'platform:envelope', 'greeting', 'farewell', 'command', 'redemption'];
+    const requiredTypes = ['platform:gift', 'platform:follow', 'platform:paypiggy', 'platform:raid', 'platform:envelope', 'greeting', 'farewell', 'command'];
 
     requiredTypes.forEach(type => {
         expect(NOTIFICATION_TEMPLATES).toHaveProperty(type);

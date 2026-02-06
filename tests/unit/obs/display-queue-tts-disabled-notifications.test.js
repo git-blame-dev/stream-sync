@@ -2,6 +2,7 @@ const { describe, expect, beforeEach, it } = require('bun:test');
 const { createMockFn } = require('../../helpers/bun-mock-utils');
 const { DisplayQueue } = require('../../../src/obs/display-queue');
 const { EventEmitter } = require('events');
+const { PRIORITY_LEVELS } = require('../../../src/core/constants');
 
 describe('DisplayQueue notification TTS disabled', () => {
     let mockOBSManager;
@@ -42,7 +43,7 @@ describe('DisplayQueue notification TTS disabled', () => {
             CHAT_TRANSITION_DELAY: 0,
             NOTIFICATION_CLEAR_DELAY: 0,
             CHAT_MESSAGE_DURATION: 0,
-            PRIORITY_LEVELS: { CHAT: 1, MEMBER: 10 }
+            PRIORITY_LEVELS
         };
 
         queue = new DisplayQueue(

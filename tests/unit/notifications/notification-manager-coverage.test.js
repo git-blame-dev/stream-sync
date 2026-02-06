@@ -2,7 +2,7 @@ const { describe, expect, it, beforeEach, afterEach } = require('bun:test');
 const { createMockFn, restoreAllMocks } = require('../../helpers/bun-mock-utils');
 const { noOpLogger } = require('../../helpers/mock-factories');
 const { createConfigFixture } = require('../../helpers/config-fixture');
-const { safeSetInterval } = require('../../../src/utils/timeout-validator');
+const { PRIORITY_LEVELS } = require('../../../src/core/constants');
 
 const NotificationManager = require('../../../src/notifications/NotificationManager');
 
@@ -33,11 +33,7 @@ describe('NotificationManager coverage', () => {
         },
         config: createConfigFixture({ general: { ttsEnabled: true } }),
         constants: {
-            PRIORITY_LEVELS: {
-                DEFAULT: 0, FOLLOW: 1, GIFT: 2, ENVELOPE: 3, MEMBER: 4,
-                CHEER: 5, RAID: 6, SHARE: 7, REDEMPTION: 8, GIFTPAYPIGGY: 9,
-                COMMAND: 10, GREETING: 11, CHAT: 12
-            },
+            PRIORITY_LEVELS,
             NOTIFICATION_CONFIGS: {
                 'platform:gift': { settingKey: 'giftsEnabled', commandKey: 'gifts', hasSpecialProcessing: true },
                 'platform:follow': { settingKey: 'followsEnabled', commandKey: 'follows', hasSpecialProcessing: false },
@@ -75,68 +71,6 @@ describe('NotificationManager coverage', () => {
             };
 
             expect(() => manager.handleAggregatedDonation(aggregatedData)).not.toThrow();
-        });
-    });
-
-    describe('cleanupSuppressionData', () => {
-        it('removes entries with no recent activity', () => {
-            const deps = createDeps();
-            const manager = new NotificationManager(deps);
-
-            manager.userNotificationSuppression.set('emptyUser', {
-                notifications: [],
-                suppressedUntil: null
-            });
-
-            manager.cleanupSuppressionData();
-
-            expect(manager.userNotificationSuppression.has('emptyUser')).toBe(false);
-        });
-
-        it('does not throw when suppression map is empty', () => {
-            const deps = createDeps();
-            const manager = new NotificationManager(deps);
-            manager.userNotificationSuppression.clear();
-
-            expect(() => manager.cleanupSuppressionData()).not.toThrow();
-        });
-
-        it('iterates over all suppression entries', () => {
-            const deps = createDeps();
-            const manager = new NotificationManager(deps);
-
-            manager.userNotificationSuppression.set('user1', {
-                notifications: [],
-                suppressedUntil: null
-            });
-            manager.userNotificationSuppression.set('user2', {
-                notifications: [],
-                suppressedUntil: null
-            });
-
-            manager.cleanupSuppressionData();
-
-            expect(manager.userNotificationSuppression.size).toBe(0);
-        });
-    });
-
-    describe('stopSuppressionCleanup', () => {
-        it('clears cleanup interval when running', () => {
-            const deps = createDeps();
-            const manager = new NotificationManager(deps);
-            manager.cleanupInterval = safeSetInterval(() => {}, 10000);
-
-            manager.stopSuppressionCleanup();
-
-            expect(manager.cleanupInterval).toBeNull();
-        });
-
-        it('handles already stopped state gracefully', () => {
-            const deps = createDeps();
-            const manager = new NotificationManager(deps);
-            manager.cleanupInterval = null;
-
-            expect(() => manager.stopSuppressionCleanup()).not.toThrow();
         });
     });
 

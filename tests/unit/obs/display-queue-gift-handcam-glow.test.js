@@ -1,6 +1,7 @@
 const { describe, expect, it, beforeEach, afterEach } = require('bun:test');
 const { createMockFn, restoreAllMocks } = require('../../helpers/bun-mock-utils');
 const { createHandcamConfigFixture } = require('../../helpers/config-fixture');
+const { PRIORITY_LEVELS } = require('../../../src/core/constants');
 
 const { DisplayQueue } = require('../../../src/obs/display-queue');
 const { EventEmitter } = require('events');
@@ -52,7 +53,7 @@ describe('DisplayQueue gift effects handcam glow', () => {
                 obs: { ttsTxt: 'testTtsTxt' },
                 handcam: createHandcamConfigFixture({ enabled: handcamEnabled })
             },
-            { PRIORITY_LEVELS: { CHAT: 1, GIFT: 5 } },
+            { PRIORITY_LEVELS },
             new EventEmitter(),
             { sourcesManager: mockSourcesManager, goalsManager: mockGoalsManager }
         );

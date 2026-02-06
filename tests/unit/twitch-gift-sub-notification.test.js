@@ -30,11 +30,7 @@ describe('Twitch gift subscriptions', () => {
             general: {
                 giftsEnabled: true,
                 debugEnabled: true,
-                userSuppressionEnabled: false,
-                maxNotificationsPerUser: 5,
-                suppressionWindowMs: 60000,
-                suppressionDurationMs: 300000,
-                suppressionCleanupIntervalMs: 300000
+                
             }
         });
         const constants = require('../../src/core/constants');

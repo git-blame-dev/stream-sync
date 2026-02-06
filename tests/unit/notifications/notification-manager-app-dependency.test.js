@@ -26,11 +26,6 @@ describe('NotificationManager Service Dependency Injection - Modernized', () => 
 
         mockConfig = createConfigFixture({
             general: {
-                userSuppressionEnabled: false,
-                maxNotificationsPerUser: 5,
-                suppressionWindowMs: 60000,
-                suppressionDurationMs: 300000,
-                suppressionCleanupIntervalMs: 300000,
                 ttsEnabled: true,
                 debugEnabled: false,
                 followsEnabled: true,
@@ -60,9 +55,6 @@ describe('NotificationManager Service Dependency Injection - Modernized', () => 
         restoreAllMocks();
         // Clean up any notification manager instances to prevent hanging tests
         if (notificationManager) {
-            if (notificationManager.stopSuppressionCleanup) {
-                notificationManager.stopSuppressionCleanup();
-            }
             // Clean up spam detection intervals too
             if (notificationManager.donationSpamDetector && notificationManager.donationSpamDetector.destroy) {
                 notificationManager.donationSpamDetector.destroy();
@@ -264,31 +256,6 @@ describe('NotificationManager Service Dependency Injection - Modernized', () => 
     });
 
     describe('Configuration Loading via plain config', () => {
-        it('should respect user configuration for notification frequency control', () => {
-            const customConfig = createConfigFixture({
-                general: {
-                    userSuppressionEnabled: false,
-                    maxNotificationsPerUser: 10,
-                    suppressionWindowMs: 30000,
-                    suppressionDurationMs: 300000,
-                    suppressionCleanupIntervalMs: 300000
-                }
-            });
-
-            const mockEventBus = { emit: createMockFn(), on: createMockFn(), off: createMockFn() };
-            notificationManager = new NotificationManager({
-                displayQueue: mockDisplayQueue,
-                logger: noOpLogger,
-                eventBus: mockEventBus,
-                constants: require('../../../src/core/constants'),
-                textProcessing: { formatChatMessage: createMockFn() },
-                obsGoals: { processDonationGoal: createMockFn() },
-                config: customConfig
-            });
-
-            expect(notificationManager.suppressionConfig.maxNotificationsPerUser).toBe(10);
-        });
-
         it('should require config instead of relying on defaults', () => {
             const mockEventBus = { emit: createMockFn(), on: createMockFn(), off: createMockFn() };
             expect(() => {

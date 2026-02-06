@@ -15,7 +15,6 @@ streamDetectionEnabled=false
 streamRetryInterval=15
 streamMaxRetries=1
 continuousMonitoringInterval=60
-userSuppressionEnabled=false
 viewerCountPollingInterval=60
 maxMessageLength=500
 
