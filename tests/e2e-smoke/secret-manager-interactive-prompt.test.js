@@ -3,7 +3,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { ConfigValidator } = require('../../src/utils/config-validator');
-const { _buildConfig } = require('../../src/core/config');
+const { buildConfig: _buildConfig } = require('../../src/core/config-builders');
 const { getRawTestConfig } = require('../helpers/config-fixture');
 const { ensureSecrets } = require('../../src/utils/secret-manager');
 

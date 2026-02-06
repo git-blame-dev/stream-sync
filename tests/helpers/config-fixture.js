@@ -1,7 +1,7 @@
 'use strict';
 
 const { ConfigValidator } = require('../../src/utils/config-validator');
-const { _buildConfig } = require('../../src/core/config');
+const { buildConfig } = require('../../src/core/config-builders');
 
 const RAW_TEST_CONFIG = {
     general: {
@@ -153,7 +153,7 @@ function applyInheritableOverrides(generalOverrides, platformConfig, platformOve
 
 function createConfigFixture(overrides = {}) {
     const normalized = ConfigValidator.normalize(getRawTestConfig());
-    const base = _buildConfig(normalized);
+    const base = buildConfig(normalized);
     
     const {
         general: generalOverrides,

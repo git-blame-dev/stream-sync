@@ -1,9 +1,9 @@
-
 const fs = require('fs');
 const ini = require('ini');
 const { handleUserFacingError } = require('../utils/user-friendly-errors');
 const { DEFAULTS } = require('./config-schema');
 const { ConfigValidator } = require('../utils/config-validator');
+const { buildConfig } = require('./config-builders');
 
 let loadedConfig = null;
 let configPath = './config.ini';
@@ -95,184 +95,6 @@ function _getConfigPath() {
     return configPath;
 }
 
-function buildGeneralConfig(normalized) {
-    const g = normalized.general;
-    return {
-        ...g,
-        cmdCooldownMs: g.cmdCoolDown * 1000,
-        globalCmdCooldownMs: g.globalCmdCoolDown * 1000,
-        viewerCountPollingIntervalMs: g.viewerCountPollingInterval * 1000
-    };
-}
-
-function buildHttpConfig(normalized) {
-    return { ...normalized.http };
-}
-
-function buildPlatformConfig(platformName, normalized, generalConfig) {
-    const platform = normalized[platformName] || {};
-    
-    const result = {
-        ...platform,
-        pollIntervalMs: platform.pollInterval ? platform.pollInterval * 1000 : generalConfig.viewerCountPollingIntervalMs,
-        dataLoggingPath: DEFAULTS.LOG_DIRECTORY
-    };
-    
-    for (const [key, value] of Object.entries(result)) {
-        if (value === null && generalConfig[key] !== undefined) {
-            result[key] = generalConfig[key];
-        }
-    }
-    
-    return result;
-}
-
-function buildTiktokConfig(normalized, generalConfig) {
-    return buildPlatformConfig('tiktok', normalized, generalConfig);
-}
-
-function buildTwitchConfig(normalized, generalConfig) {
-    return buildPlatformConfig('twitch', normalized, generalConfig);
-}
-
-function buildYoutubeConfig(normalized, generalConfig) {
-    const base = buildPlatformConfig('youtube', normalized, generalConfig);
-    base.chatMethod = 'scraping';
-    return base;
-}
-
-function buildObsConfig(normalized) {
-    const obs = normalized.obs;
-    return {
-        ...obs,
-        chatPlatformLogos: {
-            twitch: obs.chatPlatformLogoTwitch,
-            youtube: obs.chatPlatformLogoYouTube,
-            tiktok: obs.chatPlatformLogoTikTok
-        },
-        notificationPlatformLogos: {
-            twitch: obs.notificationPlatformLogoTwitch,
-            youtube: obs.notificationPlatformLogoYouTube,
-            tiktok: obs.notificationPlatformLogoTikTok
-        }
-    };
-}
-
-function buildHandcamConfig(normalized) {
-    const h = normalized.handcam;
-    return {
-        enabled: h.enabled,
-        sourceName: h.sourceName,
-        glowFilterName: h.glowFilterName,
-        maxSize: h.maxSize,
-        rampUpDuration: h.rampUpDuration,
-        holdDuration: h.holdDuration,
-        rampDownDuration: h.rampDownDuration,
-        totalSteps: h.totalSteps,
-        easingEnabled: h.easingEnabled
-    };
-}
-
-function buildGoalsConfig(normalized) {
-    return { ...normalized.goals };
-}
-
-function buildVfxConfig(normalized) {
-    return { filePath: normalized.vfx.filePath };
-}
-
-function buildGiftConfig(normalized) {
-    const g = normalized.gifts;
-    return {
-        command: g.command,
-        giftVideoSource: g.giftVideoSource,
-        giftAudioSource: g.giftAudioSource
-    };
-}
-
-function buildEnvelopeConfig(normalized) {
-    const e = normalized.envelopes;
-    return {
-        command: e.command
-    };
-}
-
-function buildStreamElementsConfig(normalized) {
-    const se = normalized.streamelements;
-    return {
-        enabled: se.enabled,
-        youtubeChannelId: se.youtubeChannelId || undefined,
-        twitchChannelId: se.twitchChannelId || undefined,
-        dataLoggingEnabled: se.dataLoggingEnabled,
-        dataLoggingPath: DEFAULTS.LOG_DIRECTORY
-    };
-}
-
-function buildTimingConfig(normalized) {
-    return { ...normalized.timing };
-}
-
-function buildSpamConfig(normalized) {
-    const s = normalized.spam;
-    return {
-        enabled: s.enabled,
-        lowValueThreshold: s.lowValueThreshold,
-        detectionWindow: s.detectionWindow,
-        maxIndividualNotifications: s.maxIndividualNotifications,
-        tiktokEnabled: s.tiktokEnabled,
-        tiktokLowValueThreshold: s.tiktokLowValueThreshold,
-        twitchEnabled: s.twitchEnabled,
-        twitchLowValueThreshold: s.twitchLowValueThreshold,
-        youtubeEnabled: s.youtubeEnabled,
-        youtubeLowValueThreshold: s.youtubeLowValueThreshold
-    };
-}
-
-function buildCooldownsConfig(normalized) {
-    const c = normalized.cooldowns;
-    return {
-        defaultCooldown: c.defaultCooldown,
-        defaultCooldownMs: c.defaultCooldown * 1000,
-        heavyCommandCooldown: c.heavyCommandCooldown,
-        heavyCommandCooldownMs: c.heavyCommandCooldown * 1000,
-        heavyCommandThreshold: c.heavyCommandThreshold,
-        heavyCommandWindow: c.heavyCommandWindow,
-        heavyCommandWindowMs: c.heavyCommandWindow * 1000,
-        maxEntries: c.maxEntries
-    };
-}
-
-function buildConfig(normalized) {
-    const general = buildGeneralConfig(normalized);
-    
-    return {
-        general,
-        http: buildHttpConfig(normalized),
-        tiktok: buildTiktokConfig(normalized, general),
-        twitch: buildTwitchConfig(normalized, general),
-        youtube: buildYoutubeConfig(normalized, general),
-        obs: buildObsConfig(normalized),
-        handcam: buildHandcamConfig(normalized),
-        goals: buildGoalsConfig(normalized),
-        vfx: buildVfxConfig(normalized),
-        gifts: buildGiftConfig(normalized),
-        envelopes: buildEnvelopeConfig(normalized),
-        displayQueue: { ...normalized.displayQueue },
-        spam: buildSpamConfig(normalized),
-        timing: buildTimingConfig(normalized),
-        cooldowns: buildCooldownsConfig(normalized),
-        follows: { command: normalized.follows.command },
-        raids: { command: normalized.raids.command },
-        paypiggies: { command: normalized.paypiggies.command },
-        greetings: { command: normalized.greetings.command },
-        shares: { command: normalized.shares.command },
-        farewell: { ...normalized.farewell },
-        streamelements: buildStreamElementsConfig(normalized),
-        commands: { ...normalized.commands },
-        logging: { ...normalized.logging }
-    };
-}
-
 let _cachedConfig = null;
 function getConfig() {
     if (!_cachedConfig) {
@@ -296,15 +118,15 @@ const DEFAULT_LOGGING_CONFIG = {
 
 function validateLoggingConfig(userConfig = {}) {
     const config = { ...DEFAULT_LOGGING_CONFIG };
-    
+
     if (userConfig.logging) {
         Object.assign(config, userConfig.logging);
     }
-    
+
     if (userConfig.general && userConfig.general.debugEnabled !== undefined) {
         const { getDebugMode } = require('./logging');
         const debugAlreadySetByCommandLine = getDebugMode();
-        
+
         if (!debugAlreadySetByCommandLine) {
             config.debug.enabled = userConfig.general.debugEnabled;
             config.console.level = userConfig.general.debugEnabled ? 'debug' : 'console';
@@ -312,7 +134,7 @@ function validateLoggingConfig(userConfig = {}) {
             config.console.level = 'debug';
         }
     }
-    
+
     const validLevels = ['error', 'warn', 'console', 'info', 'debug'];
     if (!validLevels.includes(config.console.level)) {
         config.console.level = 'console';
@@ -320,7 +142,7 @@ function validateLoggingConfig(userConfig = {}) {
     if (!validLevels.includes(config.file.level)) {
         config.file.level = 'debug';
     }
-    
+
     if (userConfig.logging) {
         if (userConfig.logging.consoleLevel && validLevels.includes(userConfig.logging.consoleLevel)) {
             config.console.level = userConfig.logging.consoleLevel;
@@ -337,7 +159,7 @@ function validateLoggingConfig(userConfig = {}) {
     config.chat.enabled = config.file.enabled;
     config.chat.separateFiles = true;
     config.chat.directory = DEFAULTS.LOG_DIRECTORY;
-    
+
     return config;
 }
 
@@ -346,6 +168,5 @@ module.exports = {
     loadConfig,
     validateLoggingConfig,
     _resetConfigForTesting,
-    _getConfigPath,
-    _buildConfig: buildConfig
-}; 
+    _getConfigPath
+};
