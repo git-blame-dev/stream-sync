@@ -20,8 +20,12 @@ describe('DisplayQueue gift effects handcam glow', () => {
     });
 
     function createQueue(handcamEnabled = true) {
+        const recordedTexts = [];
         const mockSourcesManager = {
-            updateTextSource: createMockFn().mockResolvedValue(),
+            updateTextSource: createMockFn((source, text) => {
+                recordedTexts.push(text);
+                return Promise.resolve();
+            }),
             clearTextSource: createMockFn().mockResolvedValue(),
             setSourceVisibility: createMockFn().mockResolvedValue(),
             setNotificationDisplayVisibility: createMockFn().mockResolvedValue(),
@@ -55,22 +59,22 @@ describe('DisplayQueue gift effects handcam glow', () => {
             },
             { PRIORITY_LEVELS },
             new EventEmitter(),
-            { sourcesManager: mockSourcesManager, goalsManager: mockGoalsManager }
+            { sourcesManager: mockSourcesManager, goalsManager: mockGoalsManager, delay: async () => {} }
         );
 
-        return { queue, mockSourcesManager, mockGoalsManager, obsManager };
+        return { queue, recordedTexts, mockGoalsManager, obsManager };
     }
 
     it('processes gift notification effects without errors when handcam enabled', async () => {
-        const { queue, mockSourcesManager } = createQueue(true);
+        const { queue, recordedTexts } = createQueue(true);
 
         await expect(queue.handleNotificationEffects({
             type: 'platform:gift',
             platform: 'tiktok',
             data: {
-                username: 'testGifter',
+                username: 'test-gifter',
                 displayMessage: 'sent a gift',
-                ttsMessage: 'testGifter sent a gift',
+                ttsMessage: 'test-gifter sent a gift',
                 giftType: 'rose',
                 giftCount: 1,
                 amount: 1,
@@ -78,41 +82,38 @@ describe('DisplayQueue gift effects handcam glow', () => {
             }
         })).resolves.toBeUndefined();
 
-        expect(mockSourcesManager.updateTextSource).toHaveBeenCalled();
+        expect(recordedTexts.length).toBeGreaterThan(0);
     });
 
     it('updates TTS text source for gift notifications', async () => {
-        const { queue, mockSourcesManager } = createQueue(true);
+        const { queue, recordedTexts } = createQueue(true);
 
         await queue.handleNotificationEffects({
             type: 'platform:gift',
             platform: 'tiktok',
             data: {
-                username: 'testGifter',
-                ttsMessage: 'testGifter sent a rose',
+                username: 'test-gifter',
+                ttsMessage: 'test-gifter sent a rose',
                 displayMessage: 'sent a rose'
             }
         });
 
-        expect(mockSourcesManager.updateTextSource).toHaveBeenCalledWith(
-            'testTtsTxt',
-            'testGifter sent a rose'
-        );
+        expect(recordedTexts).toContain('test-gifter sent a rose');
     });
 
     it('processes gift notification without handcam glow when disabled', async () => {
-        const { queue, mockSourcesManager } = createQueue(false);
+        const { queue, recordedTexts } = createQueue(false);
 
         await expect(queue.handleNotificationEffects({
             type: 'platform:gift',
             platform: 'tiktok',
             data: {
-                username: 'testGifter',
-                ttsMessage: 'testGifter sent a gift',
+                username: 'test-gifter',
+                ttsMessage: 'test-gifter sent a gift',
                 displayMessage: 'sent a gift'
             }
         })).resolves.toBeUndefined();
 
-        expect(mockSourcesManager.updateTextSource).toHaveBeenCalled();
+        expect(recordedTexts.length).toBeGreaterThan(0);
     });
 });

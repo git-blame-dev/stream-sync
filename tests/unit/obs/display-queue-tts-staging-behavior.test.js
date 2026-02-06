@@ -1,6 +1,6 @@
 const { describe, expect, it, beforeEach, afterEach } = require('bun:test');
 const { createMockFn, restoreAllMocks } = require('../../helpers/bun-mock-utils');
-const { safeDelay, safeSetTimeout } = require('../../../src/utils/timeout-validator');
+const { safeSetTimeout } = require('../../../src/utils/timeout-validator');
 const { PlatformEvents } = require('../../../src/interfaces/PlatformEvents');
 const { PRIORITY_LEVELS } = require('../../../src/core/constants');
 
@@ -72,10 +72,10 @@ describe('DisplayQueue notification TTS staging', () => {
                 CHAT_TRANSITION_DELAY: 200
             },
             eventBus,
-            { sourcesManager: mockSourcesManager, goalsManager: mockGoalsManager }
+            { sourcesManager: mockSourcesManager, goalsManager: mockGoalsManager, delay: async () => {} }
         );
 
-        queue.playGiftVideoAndAudio = createMockFn().mockResolvedValue();
+        queue.effects.playGiftVideoAndAudio = createMockFn().mockResolvedValue();
 
         return { queue, eventBus, mockSourcesManager, recordedTexts };
     }
@@ -86,7 +86,7 @@ describe('DisplayQueue notification TTS staging', () => {
 
         eventBus.on(PlatformEvents.VFX_COMMAND_RECEIVED, (payload) => capturedVfx.push(payload));
 
-        queue.handleGiftEffects({
+        await queue.effects.handleGiftEffects({
             type: 'platform:gift',
             platform: 'tiktok',
             vfxConfig: {
@@ -98,10 +98,10 @@ describe('DisplayQueue notification TTS staging', () => {
                 duration: 5000
             },
             data: {
-                username: 'testGifter',
-                userId: 'testGifterId',
+                username: 'test-gifter',
+                userId: 'test-gifter-id',
                 displayMessage: 'sent a rose',
-                ttsMessage: 'testGifter sent a rose',
+                ttsMessage: 'test-gifter sent a rose',
                 giftType: 'rose',
                 giftCount: 2,
                 amount: 20,
@@ -109,28 +109,26 @@ describe('DisplayQueue notification TTS staging', () => {
             }
         }, []);
 
-        await safeDelay(2100);
-
         expect(capturedVfx).toHaveLength(1);
         expect(capturedVfx[0]).toEqual(expect.objectContaining({
             commandKey: 'gifts',
-            username: 'testGifter',
+            username: 'test-gifter',
             platform: 'tiktok'
         }));
     });
 
     it('waits for VFX completion before playing TTS for sequential notifications', async () => {
-        const { queue, eventBus, mockSourcesManager } = createQueue();
+        const { queue, eventBus, recordedTexts } = createQueue();
         const capturedVfx = [];
 
         eventBus.on(PlatformEvents.VFX_COMMAND_RECEIVED, (payload) => {
             capturedVfx.push(payload);
             safeSetTimeout(() => {
                 eventBus.emit(PlatformEvents.VFX_EFFECT_COMPLETED, { correlationId: payload.correlationId });
-            }, 10, 50, 'test VFX completion emit');
+            }, 1, 'test VFX completion emit');
         });
 
-        await queue.handleSequentialEffects({
+        await queue.effects.handleSequentialEffects({
             type: 'platform:follow',
             platform: 'twitch',
             vfxConfig: {
@@ -142,44 +140,44 @@ describe('DisplayQueue notification TTS staging', () => {
                 duration: 5000
             },
             data: {
-                username: 'testFollower',
-                userId: 'testFollowerId',
+                username: 'test-follower',
+                userId: 'test-follower-id',
                 displayMessage: 'just followed!',
-                ttsMessage: 'testFollower just followed'
+                ttsMessage: 'test-follower just followed'
             }
-        }, [{ type: 'primary', text: 'testFollower just followed', delay: 0 }]);
+        }, [{ type: 'primary', text: 'test-follower just followed', delay: 0 }]);
 
         expect(capturedVfx).toHaveLength(1);
-        expect(mockSourcesManager.updateTextSource).toHaveBeenCalledWith('testTts', 'testFollower just followed');
+        expect(recordedTexts).toContain('test-follower just followed');
     });
 
     it('skips VFX when no vfxConfig provided', async () => {
-        const { queue, eventBus, mockSourcesManager } = createQueue();
+        const { queue, eventBus, recordedTexts } = createQueue();
         const capturedVfx = [];
 
         eventBus.on(PlatformEvents.VFX_COMMAND_RECEIVED, (payload) => capturedVfx.push(payload));
 
-        await queue.handleSequentialEffects({
+        await queue.effects.handleSequentialEffects({
             type: 'greeting',
             platform: 'twitch',
             data: {
-                username: 'testViewer',
+                username: 'test-viewer',
                 displayMessage: 'Hello',
-                ttsMessage: 'Hello from testViewer'
+                ttsMessage: 'Hello from test-viewer'
             }
-        }, [{ type: 'primary', text: 'Hello from testViewer', delay: 0 }]);
+        }, [{ type: 'primary', text: 'Hello from test-viewer', delay: 0 }]);
 
         expect(capturedVfx).toHaveLength(0);
-        expect(mockSourcesManager.updateTextSource).toHaveBeenCalledWith('testTts', 'Hello from testViewer');
+        expect(recordedTexts).toContain('Hello from test-viewer');
     });
 
     it('processes multiple TTS stages sequentially', async () => {
-        const { queue, eventBus, mockSourcesManager } = createQueue();
+        const { queue, eventBus, recordedTexts } = createQueue();
 
         eventBus.on(PlatformEvents.VFX_COMMAND_RECEIVED, (payload) => {
             safeSetTimeout(() => {
                 eventBus.emit(PlatformEvents.VFX_EFFECT_COMPLETED, { correlationId: payload.correlationId });
-            }, 10, 50, 'test VFX completion emit');
+            }, 1, 'test VFX completion emit');
         });
 
         const ttsStages = [
@@ -187,7 +185,7 @@ describe('DisplayQueue notification TTS staging', () => {
             { type: 'message', text: 'Stage two', delay: 0 }
         ];
 
-        await queue.handleSequentialEffects({
+        await queue.effects.handleSequentialEffects({
             type: 'platform:paypiggy',
             platform: 'youtube',
             vfxConfig: {
@@ -199,33 +197,30 @@ describe('DisplayQueue notification TTS staging', () => {
                 duration: 5000
             },
             data: {
-                username: 'testMember',
-                userId: 'testMemberId',
+                username: 'test-member',
+                userId: 'test-member-id',
                 displayMessage: 'joined membership'
             }
         }, ttsStages);
 
-        expect(mockSourcesManager.updateTextSource).toHaveBeenCalledTimes(2);
-        const calls = mockSourcesManager.updateTextSource.mock.calls;
-        expect(calls[0][1]).toBe('Stage one');
-        expect(calls[1][1]).toBe('Stage two');
+        expect(recordedTexts).toEqual(['Stage one', 'Stage two']);
     });
 
     it('continues TTS when VFX config is partial and buildVfxMatch throws', async () => {
         const { queue, recordedTexts } = createQueue();
 
-        await queue.handleSequentialEffects({
+        await queue.effects.handleSequentialEffects({
             type: 'platform:gift',
             platform: 'tiktok',
             vfxConfig: { commandKey: 'gifts' },
             data: {
-                username: 'testGifter',
-                userId: 'testGifterId',
+                username: 'test-gifter',
+                userId: 'test-gifter-id',
                 displayMessage: 'sent a gift',
-                ttsMessage: 'testGifter sent a gift'
+                ttsMessage: 'test-gifter sent a gift'
             }
-        }, [{ type: 'primary', text: 'testGifter sent a gift', delay: 0 }]);
+        }, [{ type: 'primary', text: 'test-gifter sent a gift', delay: 0 }]);
 
-        expect(recordedTexts).toContain('testGifter sent a gift');
+        expect(recordedTexts).toContain('test-gifter sent a gift');
     });
 });
