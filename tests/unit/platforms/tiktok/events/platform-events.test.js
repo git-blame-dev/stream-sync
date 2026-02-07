@@ -2,6 +2,7 @@ const { describe, expect, it, afterEach } = require('bun:test');
 const { createMockFn, restoreAllMocks } = require('../../../../helpers/bun-mock-utils');
 
 const { TikTokPlatform } = require('../../../../../src/platforms/tiktok');
+const { PlatformEvents } = require('../../../../../src/interfaces/PlatformEvents');
 const { createMockTikTokPlatformDependencies } = require('../../../../helpers/mock-factories');
 
 describe('TikTokPlatform event emissions', () => {
@@ -50,18 +51,22 @@ describe('TikTokPlatform event emissions', () => {
         const follows = [];
         const paypiggies = [];
         const viewerCounts = [];
+        const raids = [];
+        const streamStatuses = [];
         platform.handlers = {
             ...platform.handlers,
             onEnvelope: (data) => envelopes.push(data),
             onShare: (data) => shares.push(data),
             onFollow: (data) => follows.push(data),
             onPaypiggy: (data) => paypiggies.push(data),
-            onViewerCount: (data) => viewerCounts.push(data)
+            onViewerCount: (data) => viewerCounts.push(data),
+            onRaid: (data) => raids.push(data),
+            onStreamStatus: (data) => streamStatuses.push(data)
         };
 
         platform.setupEventListeners();
 
-        return { platform, eventHandlers, envelopes, shares, follows, paypiggies, viewerCounts, webcastEvent };
+        return { platform, eventHandlers, envelopes, shares, follows, paypiggies, viewerCounts, raids, streamStatuses, webcastEvent };
     };
 
     it('emits envelope events with the normalized payload', async () => {
@@ -235,5 +240,38 @@ describe('TikTokPlatform event emissions', () => {
         expect(viewerCounts).toHaveLength(1);
         expect(viewerCounts[0].platform).toBe('tiktok');
         expect(viewerCounts[0].count).toBe(777);
+    });
+
+    it('routes raid events to onRaid handler via _emitPlatformEvent', () => {
+        const { platform, raids } = createPlatformUnderTest();
+        const raidPayload = {
+            platform: 'tiktok',
+            username: 'test-raider',
+            userId: 'test-raider-id',
+            viewerCount: 150,
+            timestamp: new Date(eventTimestamp).toISOString()
+        };
+
+        platform._emitPlatformEvent(PlatformEvents.RAID, raidPayload);
+
+        expect(raids).toHaveLength(1);
+        expect(raids[0].username).toBe('test-raider');
+        expect(raids[0].viewerCount).toBe(150);
+        expect(raids[0].platform).toBe('tiktok');
+    });
+
+    it('routes stream-status events to onStreamStatus handler via _emitPlatformEvent', () => {
+        const { platform, streamStatuses } = createPlatformUnderTest();
+        const streamStatusPayload = {
+            platform: 'tiktok',
+            isLive: false,
+            timestamp: new Date(eventTimestamp).toISOString()
+        };
+
+        platform._emitPlatformEvent(PlatformEvents.STREAM_STATUS, streamStatusPayload);
+
+        expect(streamStatuses).toHaveLength(1);
+        expect(streamStatuses[0].isLive).toBe(false);
+        expect(streamStatuses[0].platform).toBe('tiktok');
     });
 });

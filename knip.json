@@ -8,5 +8,8 @@
     "src/**/*.js",
     "tests/**/*.js"
   ],
-  "eslint": false
-} 
+  "eslint": false,
+  "ignore": [
+    "src/interfaces/PlatformEvents.js"
+  ]
+}
