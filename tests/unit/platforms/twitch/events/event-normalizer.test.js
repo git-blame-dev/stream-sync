@@ -64,7 +64,7 @@ describe('twitch event timestamp normalization', () => {
         expect(result.timestamp).toBeUndefined();
     });
 
-    test('normalizes numeric metadata timestamp values', () => {
+    test('rejects non-rfc3339 metadata timestamp values', () => {
         const secondsResult = applyTimestampFallback({
             message: { text: 'hello' }
         }, {
@@ -77,8 +77,8 @@ describe('twitch event timestamp normalization', () => {
             message_timestamp: '1704067200123456'
         }, 'channel.chat.message');
 
-        expect(secondsResult.timestamp).toBe('2024-01-01T00:00:00.000Z');
-        expect(microsecondsResult.timestamp).toBe('2024-01-01T00:00:00.123Z');
+        expect(secondsResult.timestamp).toBeUndefined();
+        expect(microsecondsResult.timestamp).toBeUndefined();
     });
 
     test('keeps unknown subscription events unchanged', () => {
