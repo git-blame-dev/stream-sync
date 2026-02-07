@@ -6,7 +6,6 @@ const {
     normalizeMonths,
     normalizeUserIdentity
 } = require('./event-normalizer');
-const { getSystemTimestampISO } = require('../../../utils/timestamp');
 
 function createTwitchEventSubEventRouter(options = {}) {
     const {
@@ -38,20 +37,6 @@ function createTwitchEventSubEventRouter(options = {}) {
         });
     };
 
-    const resolveMonetizationTimestamp = (event, eventType) => {
-        if (event?.timestamp) {
-            return event.timestamp;
-        }
-        const fallbackTimestamp = getSystemTimestampISO();
-        errorHandler.handleEventProcessingError(
-            new Error(`Missing ${eventType} timestamp`),
-            eventType,
-            event,
-            `Missing ${eventType} timestamp, using fallback`
-        );
-        return fallbackTimestamp;
-    };
-
     const handleChatMessageEvent = (event, rawEvent = event) => {
         logRawIfEnabled('chat', rawEvent, 'chat-data-log', 'Error logging raw chat data');
 
@@ -74,9 +59,9 @@ function createTwitchEventSubEventRouter(options = {}) {
     const handleFollowEvent = (event, rawEvent = event) => {
         logRawIfEnabled('follow', rawEvent, 'follow-data-log', 'Error logging raw follow data');
 
-        if (!event?.user_name || !event?.user_login || !event?.followed_at) {
+        if (!event?.user_name || !event?.user_login || !event?.followed_at || !event?.timestamp) {
             errorHandler.handleEventProcessingError(
-                new Error('Follow event requires user_name, user_login, and followed_at'),
+                new Error('Follow event requires user_name, user_login, followed_at, and a valid timestamp'),
                 'follow',
                 event
             );
@@ -86,7 +71,7 @@ function createTwitchEventSubEventRouter(options = {}) {
         const identity = normalizeUserIdentity(event.user_name, event.user_login);
         safeEmit('follow', {
             ...identity,
-            timestamp: event.followed_at
+            timestamp: event.timestamp
         });
     };
 
@@ -101,7 +86,7 @@ function createTwitchEventSubEventRouter(options = {}) {
             return;
         }
 
-        if (!event?.user_name || !event?.user_login || !event?.tier || typeof event?.is_gift !== 'boolean') {
+        if (!event?.user_name || !event?.user_login || !event?.tier || typeof event?.is_gift !== 'boolean' || !event?.timestamp) {
             errorHandler.handleEventProcessingError(
                 new Error('Subscription event requires user_name, user_login, tier, timestamp, and is_gift'),
                 'paypiggy',
@@ -112,12 +97,11 @@ function createTwitchEventSubEventRouter(options = {}) {
 
         const months = normalizeMonths(event.cumulative_months);
         const identity = normalizeUserIdentity(event.user_name, event.user_login);
-        const timestamp = resolveMonetizationTimestamp(event, 'paypiggy');
         const payload = {
             type: 'paypiggy',
             ...identity,
             tier: event.tier,
-            timestamp
+            timestamp: event.timestamp
         };
         if (months !== undefined) {
             payload.months = months;
@@ -164,9 +148,9 @@ function createTwitchEventSubEventRouter(options = {}) {
         const hasIdentity = rawUsername && rawUserLogin;
         const hasPartialIdentity = (rawUsername && !rawUserLogin) || (!rawUsername && rawUserLogin);
 
-        if (!eventId || typeof event?.bits !== 'number' || (!isAnonymous && !hasIdentity) || hasPartialIdentity) {
+        if (!eventId || typeof event?.bits !== 'number' || (!isAnonymous && !hasIdentity) || hasPartialIdentity || !event?.timestamp) {
             errorHandler.handleEventProcessingError(
-                new Error('Bits use event requires id/message_id, bits, and identity unless anonymous'),
+                new Error('Bits use event requires id/message_id, bits, timestamp, and identity unless anonymous'),
                 'gift',
                 event
             );
@@ -179,7 +163,6 @@ function createTwitchEventSubEventRouter(options = {}) {
         const giftType = resolveBitsGiftType(messageData.cheermoteInfo || {});
 
         const identity = hasIdentity ? normalizeUserIdentity(event.user_name, event.user_login) : {};
-        const timestamp = resolveMonetizationTimestamp(event, 'gift');
         safeEmit('gift', {
             platform: 'twitch',
             ...identity,
@@ -192,7 +175,7 @@ function createTwitchEventSubEventRouter(options = {}) {
             cheermoteInfo: messageData.cheermoteInfo,
             id: eventId,
             repeatCount: 1,
-            timestamp,
+            timestamp: event.timestamp,
             isAnonymous
         });
     };
@@ -206,9 +189,9 @@ function createTwitchEventSubEventRouter(options = {}) {
         const hasIdentity = rawUsername && rawUserLogin;
         const hasPartialIdentity = (rawUsername && !rawUserLogin) || (!rawUsername && rawUserLogin);
 
-        if (!event?.tier || typeof event?.total !== 'number' || (!isAnonymous && !hasIdentity) || hasPartialIdentity) {
+        if (!event?.tier || typeof event?.total !== 'number' || (!isAnonymous && !hasIdentity) || hasPartialIdentity || !event?.timestamp) {
             errorHandler.handleEventProcessingError(
-                new Error('Subscription gift event requires tier, total, and identity unless anonymous'),
+                new Error('Subscription gift event requires tier, total, timestamp, and identity unless anonymous'),
                 'giftpaypiggy',
                 event
             );
@@ -216,12 +199,11 @@ function createTwitchEventSubEventRouter(options = {}) {
         }
 
         const identity = hasIdentity ? normalizeUserIdentity(event.user_name, event.user_login) : {};
-        const timestamp = resolveMonetizationTimestamp(event, 'paypiggy-gift');
         safeEmit('paypiggyGift', {
             ...identity,
             tier: event.tier,
             giftCount: event.total,
-            timestamp,
+            timestamp: event.timestamp,
             isAnonymous,
             cumulativeTotal: event.cumulative_total
         });
@@ -235,7 +217,7 @@ function createTwitchEventSubEventRouter(options = {}) {
             'twitch'
         );
 
-        if (!event?.user_name || !event?.user_login || !event?.tier) {
+        if (!event?.user_name || !event?.user_login || !event?.tier || !event?.timestamp) {
             errorHandler.handleEventProcessingError(
                 new Error('Subscription message event requires user_name, user_login, tier, and timestamp'),
                 'paypiggy-message',
@@ -246,13 +228,12 @@ function createTwitchEventSubEventRouter(options = {}) {
 
         const months = normalizeMonths(event.cumulative_months);
         const identity = normalizeUserIdentity(event.user_name, event.user_login);
-        const timestamp = resolveMonetizationTimestamp(event, 'paypiggy-message');
         const payload = {
             type: 'paypiggy',
             ...identity,
             tier: event.tier,
             message: typeof event.message?.text === 'string' ? event.message.text : undefined,
-            timestamp
+            timestamp: event.timestamp
         };
         if (months !== undefined) {
             payload.months = months;
@@ -265,9 +246,9 @@ function createTwitchEventSubEventRouter(options = {}) {
         logRawIfEnabled('stream_online', rawEvent, 'stream-online-log', 'Error logging raw stream online data');
 
         safeLogger.info('Stream went online, starting viewer count polling', 'twitch');
-        if (!event?.started_at) {
+        if (!event?.started_at || !event?.timestamp) {
             errorHandler.handleEventProcessingError(
-                new Error('Stream online event requires started_at'),
+                new Error('Stream online event requires started_at and a valid timestamp'),
                 'stream-online',
                 event
             );
@@ -278,7 +259,7 @@ function createTwitchEventSubEventRouter(options = {}) {
             platform: 'twitch',
             streamId: event.id,
             startedAt: event.started_at,
-            timestamp: event.started_at
+            timestamp: event.timestamp
         });
     };
 

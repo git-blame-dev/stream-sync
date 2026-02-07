@@ -54,6 +54,7 @@ describe('TwitchEventSub behavior', () => {
         expect(followEvents.length).toBe(1);
         expect(followEvents[0].userId).toBe('testfollower');
         expect(followEvents[0].username).toBe('testFollower');
+        expect(followEvents[0].timestamp).toBe('2024-01-01T00:00:00.000Z');
     });
 
     it('routes chat message events and includes timestamp', () => {
@@ -68,13 +69,14 @@ describe('TwitchEventSub behavior', () => {
         instance.handleNotificationEvent('channel.chat.message', {
             chatter_user_id: 'chatter123',
             broadcaster_user_id: 'broadcaster456',
-            message: { text: 'Hello stream!' },
-            timestamp: '2024-01-01T12:00:00Z'
+            message: { text: 'Hello stream!' }
+        }, {
+            message_timestamp: '2024-01-01T12:00:00.321654987Z'
         });
 
         expect(messageEvents.length).toBe(1);
         expect(messageEvents[0].message.text).toBe('Hello stream!');
-        expect(messageEvents[0].timestamp).toBe('2024-01-01T12:00:00Z');
+        expect(messageEvents[0].timestamp).toBe('2024-01-01T12:00:00.321Z');
     });
 
     it('ignores duplicate notification message ids', () => {
