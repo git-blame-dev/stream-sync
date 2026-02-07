@@ -406,6 +406,34 @@ describe('Twitch Platform', () => {
             expect(payload.tier).toBe('1000');
         });
 
+        it('should use injected processing timestamp for monetization error envelopes', async () => {
+            const processingTimestamp = '2024-01-11T12:34:56.000Z';
+            const timestampInjectedPlatform = new TwitchPlatform(config, {
+                TwitchEventSub: createMockFn().mockImplementation(() => mockTwitchEventSub),
+                TwitchApiClient: createMockFn().mockImplementation(() => mockApiClient),
+                twitchAuth: mockTwitchAuth,
+                notificationBridge: mockApp,
+                logger: noOpLogger,
+                getErrorEnvelopeTimestampISO: () => processingTimestamp
+            });
+
+            const errorEvents = [];
+            timestampInjectedPlatform.handlers = {
+                ...platformHandlers,
+                onPaypiggy: (payload) => errorEvents.push(payload)
+            };
+
+            await timestampInjectedPlatform.handlePaypiggyEvent({
+                username: 'test-subscriber',
+                userId: 'test-subscriber-id',
+                tier: '1000'
+            });
+
+            expect(errorEvents).toHaveLength(1);
+            expect(errorEvents[0].isError).toBe(true);
+            expect(errorEvents[0].timestamp).toBe(processingTimestamp);
+        });
+
         it('emits error payload when gift subscription is missing giftCount', async () => {
             const giftEvent = {
                 username: 'gifter',
