@@ -52,15 +52,18 @@ describe('TwitchEventSub notification routing', () => {
         eventSub.on('chatMessage', (data) => messageEvents.push(data));
 
         const payload = {
-            metadata: { message_type: 'notification', message_id: 'test-msg-id-1' },
+            metadata: {
+                message_type: 'notification',
+                message_id: 'test-msg-id-1',
+                message_timestamp: '2024-01-01T00:00:00.123456789Z'
+            },
             payload: {
                 subscription: { type: 'channel.chat.message' },
                 event: {
                     message: { text: 'hello from chat' },
                     chatter_user_name: 'TestChatter',
                     chatter_user_id: 'chatter-123',
-                    broadcaster_user_id: 'broadcaster-456',
-                    timestamp: '2024-01-01T00:00:00Z'
+                    broadcaster_user_id: 'broadcaster-456'
                 }
             }
         };
@@ -70,6 +73,7 @@ describe('TwitchEventSub notification routing', () => {
         expect(messageEvents).toHaveLength(1);
         expect(messageEvents[0].chatter_user_name).toBe('TestChatter');
         expect(messageEvents[0].message.text).toBe('hello from chat');
+        expect(messageEvents[0].timestamp).toBe('2024-01-01T00:00:00.123Z');
     });
 
     it('routes follow notifications and emits follow event', async () => {
@@ -93,6 +97,7 @@ describe('TwitchEventSub notification routing', () => {
 
         expect(followEvents).toHaveLength(1);
         expect(followEvents[0].username).toBe('NewFollower');
+        expect(followEvents[0].timestamp).toBe('2024-01-01T00:00:00.000Z');
     });
 
     it('emits subscription events with canonical months for renewal handling', () => {
@@ -150,14 +155,17 @@ describe('TwitchEventSub notification routing', () => {
         eventSub.on('raid', (data) => raidEvents.push(data));
 
         const payload = {
-            metadata: { message_type: 'notification', message_id: 'test-msg-id-3' },
+            metadata: {
+                message_type: 'notification',
+                message_id: 'test-msg-id-3',
+                message_timestamp: '2024-01-01T00:00:00.456789123Z'
+            },
             payload: {
                 subscription: { type: 'channel.raid' },
                 event: {
                     from_broadcaster_user_name: 'RaiderStreamer',
                     from_broadcaster_user_login: 'raiderstreamer',
-                    viewers: 50,
-                    timestamp: '2024-01-01T00:00:00Z'
+                    viewers: 50
                 }
             }
         };
@@ -167,5 +175,6 @@ describe('TwitchEventSub notification routing', () => {
         expect(raidEvents).toHaveLength(1);
         expect(raidEvents[0].username).toBe('RaiderStreamer');
         expect(raidEvents[0].viewerCount).toBe(50);
+        expect(raidEvents[0].timestamp).toBe('2024-01-01T00:00:00.456Z');
     });
 });

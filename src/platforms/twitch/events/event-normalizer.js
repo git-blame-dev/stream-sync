@@ -5,31 +5,96 @@ const normalizeMonths = (value) => {
 
 const normalizeUserIdentity = (username, userId) => ({ username, userId });
 
+const MILLISECOND_THRESHOLD = 1_000_000_000_000;
+const MICROSECOND_THRESHOLD = 1_000_000_000_000_000;
+
+const normalizeTimestampValue = (value) => {
+    if (value === undefined || value === null) {
+        return null;
+    }
+
+    if (typeof value === 'number') {
+        if (!Number.isFinite(value) || value <= 0) {
+            return null;
+        }
+        const millis = value < MILLISECOND_THRESHOLD
+            ? value * 1000
+            : value >= MICROSECOND_THRESHOLD
+                ? Math.round(value / 1000)
+                : value;
+        return new Date(millis).toISOString();
+    }
+
+    if (typeof value !== 'string') {
+        return null;
+    }
+
+    const trimmedValue = value.trim();
+    if (!trimmedValue) {
+        return null;
+    }
+
+    const numericCandidate = Number(trimmedValue);
+    if (Number.isFinite(numericCandidate) && numericCandidate > 0) {
+        return normalizeTimestampValue(numericCandidate);
+    }
+
+    const parsedTimestamp = Date.parse(trimmedValue);
+    if (Number.isNaN(parsedTimestamp) || parsedTimestamp <= 0) {
+        return null;
+    }
+
+    return new Date(parsedTimestamp).toISOString();
+};
+
+const metadataMessageTimestamp = (_event, metadata) => normalizeTimestampValue(metadata?.message_timestamp);
+
+const TIMESTAMP_RESOLVERS = {
+    'stream.online': (event) => normalizeTimestampValue(event?.started_at),
+    'channel.follow': (event) => normalizeTimestampValue(event?.followed_at),
+    'channel.chat.message': metadataMessageTimestamp,
+    'channel.subscribe': metadataMessageTimestamp,
+    'channel.subscription.message': metadataMessageTimestamp,
+    'channel.subscription.gift': metadataMessageTimestamp,
+    'channel.bits.use': metadataMessageTimestamp,
+    'channel.raid': metadataMessageTimestamp,
+    'stream.offline': metadataMessageTimestamp
+};
+
+const STRICT_TIMESTAMP_SUBSCRIPTIONS = new Set(Object.keys(TIMESTAMP_RESOLVERS));
+
 const resolveNotificationTimestamp = (event, metadata, subscriptionType) => {
     if (!event || typeof event !== 'object') {
         return null;
     }
 
-    if (subscriptionType === 'stream.online') {
-        return event.started_at;
-    }
-
-    if (subscriptionType === 'stream.offline') {
-        return event.timestamp;
-    }
-
-    if (subscriptionType === 'channel.follow') {
-        return event.followed_at || event.timestamp;
-    }
-
-    return event.timestamp;
+    const resolver = TIMESTAMP_RESOLVERS[subscriptionType];
+    return resolver ? resolver(event, metadata) : null;
 };
 
 const applyTimestampFallback = (event, metadata, subscriptionType) => {
     const resolvedTimestamp = resolveNotificationTimestamp(event, metadata, subscriptionType);
-    if (!resolvedTimestamp || (event && event.timestamp)) {
+    if (!event || typeof event !== 'object') {
         return event;
     }
+
+    if (!resolvedTimestamp) {
+        if (!STRICT_TIMESTAMP_SUBSCRIPTIONS.has(subscriptionType)) {
+            return event;
+        }
+
+        if (!Object.prototype.hasOwnProperty.call(event, 'timestamp')) {
+            return event;
+        }
+
+        const { timestamp: _timestamp, ...eventWithoutTimestamp } = event;
+        return eventWithoutTimestamp;
+    }
+
+    if (event.timestamp === resolvedTimestamp) {
+        return event;
+    }
+
     return { ...event, timestamp: resolvedTimestamp };
 };
 
