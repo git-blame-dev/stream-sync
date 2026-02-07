@@ -49,6 +49,9 @@ class TwitchPlatform extends EventEmitter {
         this.selfMessageDetectionService = dependencies.selfMessageDetectionService || null;
 
         this.validateNormalizedMessage = dependencies.validateNormalizedMessage || validateNormalizedMessage;
+        this.getErrorEnvelopeTimestampISO = typeof dependencies.getErrorEnvelopeTimestampISO === 'function'
+            ? dependencies.getErrorEnvelopeTimestampISO
+            : getSystemTimestampISO;
 
         this.platformName = 'twitch';
         this.eventSub = null;
@@ -315,6 +318,10 @@ class TwitchPlatform extends EventEmitter {
         return resolveTwitchTimestampISO(data);
     }
 
+    _getErrorEnvelopeTimestamp() {
+        return this.getErrorEnvelopeTimestampISO();
+    }
+
     async _handleStandardEvent(eventType, data, options = {}) {
         const payloadTimestamp = this._getTimestamp(data);
         const errorNotificationType = eventType === 'gift'
@@ -354,14 +361,14 @@ class TwitchPlatform extends EventEmitter {
             }
             return baseOverrides;
         };
-        const emitMonetizationError = (timestamp) => {
+        const emitMonetizationError = (errorEnvelopeTimestamp) => {
             if (!errorNotificationType) {
                 return;
             }
             const errorPayload = createMonetizationErrorPayload({
                 notificationType: errorNotificationType,
                 platform: this.platformName,
-                timestamp,
+                timestamp: errorEnvelopeTimestamp,
                 id: data?.id,
                 ...buildErrorOverrides()
             });
@@ -370,15 +377,15 @@ class TwitchPlatform extends EventEmitter {
 
         if (!payloadTimestamp) {
             if (errorNotificationType) {
-                const fallbackTimestamp = getSystemTimestampISO();
+                const errorEnvelopeTimestamp = this._getErrorEnvelopeTimestamp();
                 const error = new Error(`Missing Twitch timestamp for ${eventType}`);
                 this.errorHandler.handleEventProcessingError(
                     error,
                     eventType,
                     data,
-                    `Missing timestamp for ${eventType}, using fallback`
+                    `Missing timestamp for ${eventType}, emitting degraded monetization error envelope`
                 );
-                emitMonetizationError(fallbackTimestamp);
+                emitMonetizationError(errorEnvelopeTimestamp);
             } else {
                 this.errorHandler.handleEventProcessingError(
                     new Error(`Missing Twitch timestamp for ${eventType}`),

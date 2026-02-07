@@ -114,6 +114,28 @@ describe('TwitchPlatform event behaviors', () => {
         expect(received[0].timestamp).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/);
     });
 
+    it('uses injected processing timestamp for monetization error envelopes', async () => {
+        const processingTimestamp = '2024-01-11T12:34:56.000Z';
+        const platform = new TwitchPlatform(baseConfig, {
+            twitchAuth: createTwitchAuth({ userId: TEST_USER_ID }),
+            logger: noOpLogger,
+            getErrorEnvelopeTimestampISO: () => processingTimestamp
+        });
+
+        const received = [];
+        platform.handlers = { onPaypiggy: (payload) => received.push(payload) };
+
+        await platform.handlePaypiggyEvent({
+            username: 'test-subscriber',
+            userId: 'test-sub-1',
+            tier: '1000'
+        });
+
+        expect(received).toHaveLength(1);
+        expect(received[0].isError).toBe(true);
+        expect(received[0].timestamp).toBe(processingTimestamp);
+    });
+
     it('emits gift error payloads when usernames are missing', async () => {
         const platform = new TwitchPlatform(baseConfig, {
             twitchAuth: createTwitchAuth({ userId: TEST_USER_ID }),
