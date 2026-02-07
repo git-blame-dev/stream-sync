@@ -2,6 +2,7 @@ const { describe, it, expect, beforeEach, afterEach } = require('bun:test');
 const { createMockFn, clearAllMocks } = require('../../helpers/bun-mock-utils');
 const { noOpLogger } = require('../../helpers/mock-factories');
 const PlatformLifecycleService = require('../../../src/services/PlatformLifecycleService');
+const { PlatformEvents } = require('../../../src/interfaces/PlatformEvents');
 const testClock = require('../../helpers/test-clock');
 const { secrets, _resetForTesting, initializeStaticSecrets } = require('../../../src/core/secrets');
 
@@ -230,32 +231,7 @@ describe('PlatformLifecycleService', () => {
             ]));
         });
 
-        it('emits canonical platform events with timestamps', () => {
-            const handlers = service.createDefaultEventHandlers('twitch');
-            const timestamp = '2024-02-02T10:00:00.000Z';
-
-            handlers.onChat({
-                username: 'User',
-                userId: 'user-1',
-                message: { text: 'hello' },
-                timestamp
-            });
-            handlers.onViewerCount({ count: 42, timestamp });
-
-            const chatEvent = mockEventBus.emit.mock.calls.find(([, payload]) => payload?.type === 'platform:chat-message');
-            expect(chatEvent).toBeTruthy();
-            expect(chatEvent[1].data.timestamp).toBe(timestamp);
-
-            const viewerEvent = mockEventBus.emit.mock.calls.find(([, payload]) => payload?.type === 'platform:viewer-count');
-            expect(viewerEvent).toBeTruthy();
-            expect(viewerEvent[1].data.count).toBe(42);
-            expect(viewerEvent[1].data.timestamp).toBe(timestamp);
-
-            expect(handlers.onMembership).toBeUndefined();
-            expect(typeof handlers.onPaypiggy).toBe('function');
-        });
-
-        it('should validate PlatformClass is a constructor', async () => {
+        it('validates PlatformClass is a constructor', async () => {
             configFixture.twitch = { enabled: true };
             const platformModules = { twitch: null };
 
@@ -472,6 +448,126 @@ describe('PlatformLifecycleService', () => {
             expect(cleanupSpy).toHaveBeenCalled();
             expect(disconnectSpy).not.toHaveBeenCalled();
             expect(service.isPlatformAvailable('twitch')).toBe(false);
+        });
+    });
+
+    describe('Default Handler Contract Matrix', () => {
+        const CANONICAL_HANDLER_MATRIX = {
+            onChat: { eventType: PlatformEvents.CHAT_MESSAGE, requiresTimestamp: true, dataKey: 'message' },
+            onViewerCount: { eventType: PlatformEvents.VIEWER_COUNT, requiresTimestamp: true, dataKey: 'count' },
+            onGift: { eventType: PlatformEvents.GIFT, requiresTimestamp: true, dataKey: 'giftType' },
+            onPaypiggy: { eventType: PlatformEvents.PAYPIGGY, requiresTimestamp: true, dataKey: 'tier' },
+            onGiftPaypiggy: { eventType: PlatformEvents.GIFTPAYPIGGY, requiresTimestamp: true, dataKey: 'giftCount' },
+            onFollow: { eventType: PlatformEvents.FOLLOW, requiresTimestamp: true, dataKey: 'username' },
+            onShare: { eventType: PlatformEvents.SHARE, requiresTimestamp: true, dataKey: 'username' },
+            onRaid: { eventType: PlatformEvents.RAID, requiresTimestamp: true, dataKey: 'viewerCount' },
+            onEnvelope: { eventType: PlatformEvents.ENVELOPE, requiresTimestamp: true, dataKey: 'giftType' },
+            onStreamStatus: { eventType: PlatformEvents.STREAM_STATUS, requiresTimestamp: true, dataKey: 'isLive' },
+            onStreamDetected: { eventType: PlatformEvents.STREAM_DETECTED, requiresTimestamp: false, dataKey: 'eventType' }
+        };
+
+        const CANONICAL_HANDLER_NAMES = Object.keys(CANONICAL_HANDLER_MATRIX);
+
+        const createPayloadForHandler = (handlerName, timestamp) => {
+            const base = { username: 'test-user', userId: 'test-user-id', timestamp };
+            switch (handlerName) {
+                case 'onChat':
+                    return { ...base, message: { text: 'test-message' } };
+                case 'onViewerCount':
+                    return { count: 42, timestamp };
+                case 'onGift':
+                    return { ...base, id: 'test-gift-id', giftType: 'test-rose', giftCount: 1, amount: 5, currency: 'coins' };
+                case 'onPaypiggy':
+                    return { ...base, tier: 'test-tier-1', months: 1 };
+                case 'onGiftPaypiggy':
+                    return { ...base, giftCount: 5, tier: 'test-tier-1' };
+                case 'onFollow':
+                    return { ...base };
+                case 'onShare':
+                    return { ...base };
+                case 'onRaid':
+                    return { ...base, viewerCount: 100 };
+                case 'onEnvelope':
+                    return { ...base, id: 'test-envelope-id', giftType: 'test-envelope', giftCount: 1, amount: 10, currency: 'coins' };
+                case 'onStreamStatus':
+                    return { isLive: true, timestamp };
+                case 'onStreamDetected':
+                    return { eventType: 'stream-detected', newStreamIds: ['test-stream-1'], allStreamIds: ['test-stream-1'], detectionTime: 1000, connectionCount: 1 };
+                default:
+                    return base;
+            }
+        };
+
+        for (const [handlerName, { eventType, dataKey }] of Object.entries(CANONICAL_HANDLER_MATRIX)) {
+            it(`${handlerName} emits ${eventType} with payload data on the event bus`, () => {
+                const handlers = service.createDefaultEventHandlers('twitch');
+                const timestamp = '2024-06-15T12:00:00.000Z';
+                const payload = createPayloadForHandler(handlerName, timestamp);
+
+                handlers[handlerName](payload);
+
+                const emitted = mockEventBus.emit.mock.calls.find(
+                    ([, p]) => p?.type === eventType
+                );
+                expect(emitted).toBeTruthy();
+                expect(emitted[1].platform).toBe('twitch');
+                expect(emitted[1].data[dataKey]).toBeDefined();
+            });
+        }
+
+        it('exposes exactly the canonical handler names and no legacy aliases', () => {
+            const handlers = service.createDefaultEventHandlers('twitch');
+            const handlerKeys = Object.keys(handlers).sort();
+
+            expect(handlerKeys).toEqual([...CANONICAL_HANDLER_NAMES].sort());
+            expect(handlers.onMembership).toBeUndefined();
+        });
+
+        for (const [handlerName, { requiresTimestamp, eventType }] of Object.entries(CANONICAL_HANDLER_MATRIX)) {
+            if (!requiresTimestamp) continue;
+
+            it(`${handlerName} suppresses emit when payload lacks timestamp`, () => {
+                const handlers = service.createDefaultEventHandlers('twitch');
+                const payload = createPayloadForHandler(handlerName, '2024-06-15T12:00:00.000Z');
+                delete payload.timestamp;
+
+                mockEventBus.emit.mockClear();
+                handlers[handlerName](payload);
+
+                const emitted = mockEventBus.emit.mock.calls.find(
+                    ([, p]) => p?.type === eventType
+                );
+                expect(emitted).toBeUndefined();
+            });
+        }
+
+        it('onStreamDetected emits without timestamp in payload', () => {
+            const handlers = service.createDefaultEventHandlers('twitch');
+            handlers.onStreamDetected({
+                eventType: 'stream-detected',
+                newStreamIds: ['test-stream-1'],
+                allStreamIds: ['test-stream-1'],
+                detectionTime: 1000,
+                connectionCount: 1
+            });
+
+            const emitted = mockEventBus.emit.mock.calls.find(
+                ([, p]) => p?.type === PlatformEvents.STREAM_DETECTED
+            );
+            expect(emitted).toBeTruthy();
+            expect(emitted[1].platform).toBe('twitch');
+        });
+
+        it('onViewerCount suppresses emit when data is a raw number', () => {
+            const handlers = service.createDefaultEventHandlers('twitch');
+
+            mockEventBus.emit.mockClear();
+            handlers.onViewerCount(42);
+
+            const emitted = mockEventBus.emit.mock.calls.find(
+                ([, p]) => p?.type === PlatformEvents.VIEWER_COUNT
+            );
+            expect(emitted).toBeUndefined();
         });
     });
 });
