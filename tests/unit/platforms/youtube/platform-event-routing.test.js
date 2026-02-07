@@ -1,368 +1,119 @@
-const { describe, test, expect, beforeEach, afterEach } = require('bun:test');
-const { restoreAllMocks } = require('../../../helpers/bun-mock-utils');
-const { noOpLogger } = require('../../../helpers/mock-factories');
+const { describe, test, expect, afterEach } = require('bun:test');
+const { createMockFn, restoreAllMocks } = require('../../../helpers/bun-mock-utils');
 
-const PlatformEvents = require('../../../../src/interfaces/PlatformEvents');
-const EventEmitter = require('events');
-const testClock = require('../../../helpers/test-clock');
+const { YouTubePlatform } = require('../../../../src/platforms/youtube');
+const { PlatformEvents } = require('../../../../src/interfaces/PlatformEvents');
+const { createMockPlatformDependencies } = require('../../../helpers/test-setup');
+const { createYouTubeConfigFixture } = require('../../../helpers/config-fixture');
 
 describe('YouTube Platform Event Routing', () => {
-    let youtubePlatform;
-    let handlerCalls;
-
-    beforeEach(() => {
-        handlerCalls = {
-            onChat: [],
-            onGift: [],
-            onPaypiggy: [],
-            onStreamStatus: [],
-            onViewerCount: []
-        };
-
-        youtubePlatform = Object.create(EventEmitter.prototype);
-        EventEmitter.call(youtubePlatform);
-
-        youtubePlatform.handlers = {
-            onChat: (payload) => handlerCalls.onChat.push(payload),
-            onGift: (payload) => handlerCalls.onGift.push(payload),
-            onPaypiggy: (payload) => handlerCalls.onPaypiggy.push(payload),
-            onStreamStatus: (payload) => handlerCalls.onStreamStatus.push(payload),
-            onViewerCount: (payload) => handlerCalls.onViewerCount.push(payload)
-        };
-        youtubePlatform.logger = noOpLogger;
-
-        youtubePlatform._emitPlatformEvent = function(type, payload) {
-            const platform = payload?.platform || 'youtube';
-
-            this.emit('platform:event', { platform, type, data: payload });
-
-            const handlerMap = {
-                'chat': 'onChat',
-                'gift': 'onGift',
-                'paypiggy': 'onPaypiggy',
-                'stream-status': 'onStreamStatus',
-                'viewer-count': 'onViewerCount'
-            };
-
-            const handlerName = handlerMap[type];
-            const handler = this.handlers?.[handlerName];
-
-            if (typeof handler === 'function') {
-                handler(payload);
-            } else {
-                this.logger.debug(`No handler registered for event type: ${type}`, 'youtube');
-            }
-        };
-    });
-
     afterEach(() => {
         restoreAllMocks();
     });
 
-    describe('_emitPlatformEvent method existence', () => {
-        test('should have _emitPlatformEvent method', () => {
-            expect(typeof youtubePlatform._emitPlatformEvent).toBe('function');
-        });
+    const baseConfig = createYouTubeConfigFixture({ enabled: true, username: 'test-channel' });
 
-        test('should match Twitch and TikTok method signature', () => {
-            expect(youtubePlatform._emitPlatformEvent.length).toBeGreaterThanOrEqual(2);
-        });
+    const YOUTUBE_HANDLER_MAP = {
+        [PlatformEvents.CHAT_MESSAGE]: { handlerName: 'onChat', dataKey: 'message' },
+        [PlatformEvents.GIFT]: { handlerName: 'onGift', dataKey: 'giftType' },
+        [PlatformEvents.GIFTPAYPIGGY]: { handlerName: 'onGiftPaypiggy', dataKey: 'giftCount' },
+        [PlatformEvents.PAYPIGGY]: { handlerName: 'onPaypiggy', dataKey: 'tier' },
+        [PlatformEvents.STREAM_STATUS]: { handlerName: 'onStreamStatus', dataKey: 'isLive' },
+        [PlatformEvents.STREAM_DETECTED]: { handlerName: 'onStreamDetected', dataKey: 'newStreamIds' },
+        [PlatformEvents.VIEWER_COUNT]: { handlerName: 'onViewerCount', dataKey: 'count' }
+    };
+
+    const FIXED_TIMESTAMP = '2024-06-15T12:00:00.000Z';
+
+    const PAYLOAD_BY_TYPE = {
+        [PlatformEvents.CHAT_MESSAGE]: { platform: 'youtube', username: 'test-user', userId: 'test-user-id', message: { text: 'test-message' }, timestamp: FIXED_TIMESTAMP },
+        [PlatformEvents.GIFT]: { platform: 'youtube', username: 'test-user', userId: 'test-user-id', giftType: 'test-super-chat', giftCount: 1, amount: 5, currency: 'USD', timestamp: FIXED_TIMESTAMP },
+        [PlatformEvents.GIFTPAYPIGGY]: { platform: 'youtube', username: 'test-user', userId: 'test-user-id', giftCount: 5, tier: 'test-tier-1', timestamp: FIXED_TIMESTAMP },
+        [PlatformEvents.PAYPIGGY]: { platform: 'youtube', username: 'test-user', userId: 'test-user-id', tier: 'test-member', months: 3, timestamp: FIXED_TIMESTAMP },
+        [PlatformEvents.STREAM_STATUS]: { platform: 'youtube', isLive: true, timestamp: FIXED_TIMESTAMP },
+        [PlatformEvents.STREAM_DETECTED]: { platform: 'youtube', newStreamIds: ['test-stream-1'], allStreamIds: ['test-stream-1'], detectionTime: 1000 },
+        [PlatformEvents.VIEWER_COUNT]: { platform: 'youtube', count: 42, timestamp: FIXED_TIMESTAMP }
+    };
+
+    const createPlatform = () => new YouTubePlatform(baseConfig, {
+        ...createMockPlatformDependencies('youtube'),
+        streamDetectionService: {
+            detectLiveStreams: createMockFn().mockResolvedValue({ success: true, videoIds: [] })
+        }
     });
 
-    describe('Chat message event routing', () => {
-        test('should route chat events to onChat handler', () => {
-            const chatPayload = {
-                type: PlatformEvents.CHAT_MESSAGE,
-                platform: 'youtube',
-                username: 'Test User',
-                userId: 'user123',
-                message: { text: 'Hello world' },
-                timestamp: new Date(testClock.now()).toISOString()
-            };
-
-            youtubePlatform._emitPlatformEvent('chat', chatPayload);
-
-            expect(handlerCalls.onChat).toHaveLength(1);
-            expect(handlerCalls.onChat[0]).toEqual(chatPayload);
-        });
-
-        test('should handle chat event with complex user data', () => {
-            const chatPayload = {
-                type: PlatformEvents.CHAT_MESSAGE,
-                platform: 'youtube',
-                username: 'Test Channel',
-                userId: 'UC_channel_id',
-                message: { text: 'Test message with emoji 😊' },
-                timestamp: new Date(testClock.now()).toISOString(),
-                metadata: {
-                    isMod: false,
-                    isOwner: false,
-                    isVerified: true
-                }
-            };
-
-            youtubePlatform._emitPlatformEvent('chat', chatPayload);
-
-            expect(handlerCalls.onChat[0]).toEqual(chatPayload);
-        });
-    });
-
-    describe('Gift event routing', () => {
-        test('should route gift events to onGift handler', () => {
-            const giftPayload = {
-                type: PlatformEvents.GIFT,
-                platform: 'youtube',
-                username: 'Generous Gifter',
-                userId: 'user456',
-                amount: 5.00,
-                currency: 'USD',
-                giftType: 'Super Chat',
-                giftCount: 1,
-                timestamp: new Date(testClock.now()).toISOString()
-            };
-
-            youtubePlatform._emitPlatformEvent('gift', giftPayload);
-
-            expect(handlerCalls.onGift).toHaveLength(1);
-            expect(handlerCalls.onGift[0]).toEqual(giftPayload);
-        });
-
-        test('should route Super Chat events as gifts to onGift handler', () => {
-            const superChatPayload = {
-                type: PlatformEvents.GIFT,
-                platform: 'youtube',
-                username: 'donor',
-                userId: 'user789',
-                giftType: 'Super Chat',
-                giftCount: 1,
-                amount: 10.00,
-                currency: 'USD'
-            };
-
-            youtubePlatform._emitPlatformEvent('gift', superChatPayload);
-
-            expect(handlerCalls.onGift[0]).toEqual(superChatPayload);
-        });
-
-        test('should route Super Sticker events as gifts to onGift handler', () => {
-            const superStickerPayload = {
-                type: PlatformEvents.GIFT,
-                platform: 'youtube',
-                username: 'sticker_fan',
-                userId: 'user101',
-                giftType: 'Super Sticker',
-                giftCount: 1,
-                amount: 2.00,
-                currency: 'USD',
-                message: 'heart'
-            };
-
-            youtubePlatform._emitPlatformEvent('gift', superStickerPayload);
-
-            expect(handlerCalls.onGift[0]).toEqual(superStickerPayload);
-        });
-    });
-
-    describe('Paypiggy event routing', () => {
-        test('routes paypiggy events to onPaypiggy handler (canonical path)', () => {
-            const membershipPayload = {
-                type: 'platform:paypiggy',
-                platform: 'youtube',
-                username: 'member',
-                userId: 'user303',
-                membershipLevel: 'Member',
-                months: 3
-            };
-
-            youtubePlatform._emitPlatformEvent('paypiggy', membershipPayload);
-
-            expect(handlerCalls.onPaypiggy[0]).toEqual(membershipPayload);
-        });
-
-    });
-
-    describe('Stream status event routing', () => {
-        test('should route stream-status events to onStreamStatus handler', () => {
-            const streamStatusPayload = {
-                type: PlatformEvents.STREAM_STATUS,
-                platform: 'youtube',
-                isLive: true,
-                timestamp: new Date(testClock.now()).toISOString()
-            };
-
-            youtubePlatform._emitPlatformEvent('stream-status', streamStatusPayload);
-
-            expect(handlerCalls.onStreamStatus[0]).toEqual(streamStatusPayload);
-        });
-    });
-
-    describe('Viewer count event routing', () => {
-        test('should route viewer-count events to onViewerCount handler', () => {
-            const viewerCountPayload = {
-                type: PlatformEvents.VIEWER_COUNT,
-                platform: 'youtube',
-                count: 42,
-                timestamp: new Date(testClock.now()).toISOString()
-            };
-
-            youtubePlatform._emitPlatformEvent('viewer-count', viewerCountPayload);
-
-            expect(handlerCalls.onViewerCount[0]).toEqual(viewerCountPayload);
-        });
-    });
-
-    describe('Handler mapping completeness', () => {
-        test('should map all event types to correct handler names', () => {
-            const eventTypeToHandlerMap = [
-                ['chat', 'onChat'],
-                ['gift', 'onGift'],
-                ['paypiggy', 'onPaypiggy'],
-                ['stream-status', 'onStreamStatus'],
-                ['viewer-count', 'onViewerCount']
-            ];
-
-            eventTypeToHandlerMap.forEach(([eventType, handlerName]) => {
-                const testPayload = {
-                    type: `platform:${eventType}`,
-                    platform: 'youtube',
-                    data: 'test'
+    describe('handler map dispatch', () => {
+        for (const [eventType, { handlerName, dataKey }] of Object.entries(YOUTUBE_HANDLER_MAP)) {
+            test(`${eventType} routes to ${handlerName} with payload data`, () => {
+                const platform = createPlatform();
+                const collected = [];
+                platform.handlers = {
+                    ...platform.handlers,
+                    [handlerName]: (data) => collected.push(data)
                 };
 
-                youtubePlatform._emitPlatformEvent(eventType, testPayload);
+                const payload = { ...PAYLOAD_BY_TYPE[eventType] };
+                platform._emitPlatformEvent(eventType, payload);
 
-                expect(handlerCalls[handlerName].length).toBeGreaterThan(0);
-                expect(handlerCalls[handlerName][handlerCalls[handlerName].length - 1]).toEqual(testPayload);
+                expect(collected).toHaveLength(1);
+                expect(collected[0][dataKey]).toBeDefined();
+                expect(collected[0].platform).toBe('youtube');
             });
-        });
+        }
     });
 
-    describe('Missing handler graceful handling', () => {
-        test('should handle missing handler without throwing', () => {
-            youtubePlatform.handlers = {};
+    test('emits platform:event on local EventEmitter for all mapped types', () => {
+        const platform = createPlatform();
+        const emittedEvents = [];
+        platform.on('platform:event', (event) => emittedEvents.push(event));
 
-            const chatPayload = {
-                type: PlatformEvents.CHAT_MESSAGE,
-                platform: 'youtube',
-                username: 'test',
-                userId: '123',
-                message: { text: 'test' },
-                timestamp: new Date(testClock.now()).toISOString()
-            };
+        for (const eventType of Object.keys(YOUTUBE_HANDLER_MAP)) {
+            const payload = { ...PAYLOAD_BY_TYPE[eventType] };
+            platform._emitPlatformEvent(eventType, payload);
+        }
 
-            expect(() => {
-                youtubePlatform._emitPlatformEvent('chat', chatPayload);
-            }).not.toThrow();
-        });
-
-        test('should handle null handlers object', () => {
-            youtubePlatform.handlers = null;
-
-            expect(() => {
-                youtubePlatform._emitPlatformEvent('chat', { message: { text: 'test' } });
-            }).not.toThrow();
-        });
-
-        test('should handle undefined handlers object', () => {
-            youtubePlatform.handlers = undefined;
-
-            expect(() => {
-                youtubePlatform._emitPlatformEvent('chat', { message: { text: 'test' } });
-            }).not.toThrow();
-        });
+        expect(emittedEvents).toHaveLength(Object.keys(YOUTUBE_HANDLER_MAP).length);
+        for (const event of emittedEvents) {
+            expect(event.platform).toBe('youtube');
+            expect(event.data).toBeDefined();
+        }
     });
 
-    describe('Event emitter integration', () => {
-        test('should emit platform:event for local listeners', () => {
-            const emittedEvents = [];
-            youtubePlatform.on('platform:event', (event) => emittedEvents.push(event));
+    test('handles missing handler without throwing', () => {
+        const platform = createPlatform();
+        platform.handlers = {};
 
-            const chatPayload = {
-                type: PlatformEvents.CHAT_MESSAGE,
+        expect(() => {
+            platform._emitPlatformEvent(PlatformEvents.CHAT_MESSAGE, {
                 platform: 'youtube',
-                username: 'test',
-                userId: '123',
-                message: { text: 'test' },
-                timestamp: new Date(testClock.now()).toISOString()
-            };
-
-            youtubePlatform._emitPlatformEvent('chat', chatPayload);
-
-            expect(emittedEvents).toHaveLength(1);
-            expect(emittedEvents[0]).toEqual({
-                platform: 'youtube',
-                type: 'chat',
-                data: chatPayload
+                username: 'test-user',
+                message: { text: 'test-message' }
             });
-        });
+        }).not.toThrow();
     });
 
-    describe('Integration with actual chat processing', () => {
-        test('should route real chat message through complete flow', async () => {
-            const mockChatItem = {
-                videoId: 'test_video_123',
-                author: {
-                    channelId: 'UC_test_channel',
-                    name: 'Test User'
-                },
-                message: [{ text: 'Hello from test' }],
-                timestamp: testClock.now()
-            };
+    test('handles null handlers without throwing', () => {
+        const platform = createPlatform();
+        platform.handlers = null;
 
-            const normalizedData = {
-                userId: mockChatItem.author.channelId,
-                username: mockChatItem.author.name,
-                message: 'Hello from test',
-                timestamp: new Date(mockChatItem.timestamp).toISOString(),
-                videoId: mockChatItem.videoId
-            };
-
-            const eventData = {
-                type: PlatformEvents.CHAT_MESSAGE,
+        expect(() => {
+            platform._emitPlatformEvent(PlatformEvents.CHAT_MESSAGE, {
                 platform: 'youtube',
-                username: normalizedData.username,
-                userId: normalizedData.userId,
-                message: { text: normalizedData.message },
-                timestamp: normalizedData.timestamp,
-                metadata: {
-                    platform: 'youtube',
-                    videoId: normalizedData.videoId,
-                    correlationId: 'test-correlation-id'
-                }
-            };
-
-            youtubePlatform._emitPlatformEvent('chat', eventData);
-
-            expect(handlerCalls.onChat).toHaveLength(1);
-            expect(handlerCalls.onChat[0]).toMatchObject({
-                type: PlatformEvents.CHAT_MESSAGE,
-                platform: 'youtube',
-                username: normalizedData.username,
-                userId: normalizedData.userId
+                message: { text: 'test-message' }
             });
-        });
+        }).not.toThrow();
     });
 
-    describe('Consistency with Twitch and TikTok', () => {
-        test('should have _emitPlatformEvent method matching expected signature', () => {
-            expect(typeof youtubePlatform._emitPlatformEvent).toBe('function');
-            expect(youtubePlatform._emitPlatformEvent.length).toBe(2);
-        });
+    test('unmapped event type does not invoke any handler', () => {
+        const platform = createPlatform();
+        const collected = [];
+        platform.handlers = {
+            onChat: (data) => collected.push(data),
+            onGift: (data) => collected.push(data)
+        };
 
-        test('should route events using same pattern as other platforms', () => {
-            const emittedEvents = [];
-            youtubePlatform.on('platform:event', (event) => emittedEvents.push(event));
-            const testPayload = { type: 'test', platform: 'youtube', data: 'test' };
+        platform._emitPlatformEvent('platform:nonexistent', { platform: 'youtube' });
 
-            youtubePlatform._emitPlatformEvent('chat', testPayload);
-
-            expect(emittedEvents).toHaveLength(1);
-            expect(emittedEvents[0]).toEqual({
-                platform: 'youtube',
-                type: 'chat',
-                data: testPayload
-            });
-
-            expect(handlerCalls.onChat[0]).toEqual(testPayload);
-        });
+        expect(collected).toHaveLength(0);
     });
 });
