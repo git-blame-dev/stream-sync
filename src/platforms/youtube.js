@@ -1075,7 +1075,7 @@ class YouTubePlatform extends EventEmitter {
             [PlatformEvents.CHAT_MESSAGE]: 'onChat',
             [PlatformEvents.GIFT]: 'onGift',
             [PlatformEvents.GIFTPAYPIGGY]: 'onGiftPaypiggy',
-            [PlatformEvents.PAYPIGGY]: 'onMembership',
+            [PlatformEvents.PAYPIGGY]: 'onPaypiggy',
             [PlatformEvents.STREAM_STATUS]: 'onStreamStatus',
             [PlatformEvents.STREAM_DETECTED]: 'onStreamDetected',
             [PlatformEvents.VIEWER_COUNT]: 'onViewerCount'

@@ -14,7 +14,7 @@ describe('YouTube Platform Event Routing', () => {
         handlerCalls = {
             onChat: [],
             onGift: [],
-            onMembership: [],
+            onPaypiggy: [],
             onStreamStatus: [],
             onViewerCount: []
         };
@@ -25,7 +25,7 @@ describe('YouTube Platform Event Routing', () => {
         youtubePlatform.handlers = {
             onChat: (payload) => handlerCalls.onChat.push(payload),
             onGift: (payload) => handlerCalls.onGift.push(payload),
-            onMembership: (payload) => handlerCalls.onMembership.push(payload),
+            onPaypiggy: (payload) => handlerCalls.onPaypiggy.push(payload),
             onStreamStatus: (payload) => handlerCalls.onStreamStatus.push(payload),
             onViewerCount: (payload) => handlerCalls.onViewerCount.push(payload)
         };
@@ -39,7 +39,7 @@ describe('YouTube Platform Event Routing', () => {
             const handlerMap = {
                 'chat': 'onChat',
                 'gift': 'onGift',
-                'paypiggy': 'onMembership',
+                'paypiggy': 'onPaypiggy',
                 'stream-status': 'onStreamStatus',
                 'viewer-count': 'onViewerCount'
             };
@@ -164,7 +164,7 @@ describe('YouTube Platform Event Routing', () => {
     });
 
     describe('Paypiggy event routing', () => {
-        test('routes paypiggy events to onMembership handler (canonical path)', () => {
+        test('routes paypiggy events to onPaypiggy handler (canonical path)', () => {
             const membershipPayload = {
                 type: 'platform:paypiggy',
                 platform: 'youtube',
@@ -176,7 +176,7 @@ describe('YouTube Platform Event Routing', () => {
 
             youtubePlatform._emitPlatformEvent('paypiggy', membershipPayload);
 
-            expect(handlerCalls.onMembership[0]).toEqual(membershipPayload);
+            expect(handlerCalls.onPaypiggy[0]).toEqual(membershipPayload);
         });
 
     });
@@ -216,7 +216,7 @@ describe('YouTube Platform Event Routing', () => {
             const eventTypeToHandlerMap = [
                 ['chat', 'onChat'],
                 ['gift', 'onGift'],
-                ['paypiggy', 'onMembership'],
+                ['paypiggy', 'onPaypiggy'],
                 ['stream-status', 'onStreamStatus'],
                 ['viewer-count', 'onViewerCount']
             ];

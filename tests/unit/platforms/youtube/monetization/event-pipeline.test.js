@@ -62,12 +62,12 @@ describe('YouTube monetized event pipeline', () => {
         expect(giftEvents[0].id).toBeTruthy();
     });
 
-    test('emits membership events for LiveChatMembershipItem payloads', async () => {
+    test('emits paypiggy events for LiveChatMembershipItem payloads', async () => {
         const youtubePlatform = createPlatform();
         const membershipEvents = [];
         youtubePlatform.handlers = {
             ...youtubePlatform.handlers,
-            onMembership: (event) => membershipEvents.push(event)
+            onPaypiggy: (event) => membershipEvents.push(event)
         };
 
         const membershipItem = {
