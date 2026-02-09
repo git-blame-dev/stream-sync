@@ -1,39 +1,6 @@
-
-const fs = require('fs');
-const path = require('path');
 const { formatTimestampCompact } = require('../utils/text-processing');
+const { safeObjectStringify } = require('../utils/logger-utils');
 const { FileLogger } = require('../utils/file-logger');
-
-function safeObjectStringify(obj, maxDepth = 3) {
-    if (obj instanceof Error) {
-        return JSON.stringify({ message: obj.message, stack: obj.stack, name: obj.name }, null, 2);
-    }
-    if (obj === null) return 'null';
-    if (obj === undefined) return 'undefined';
-    if (typeof obj === 'string') return obj;
-    if (typeof obj === 'number' || typeof obj === 'boolean') return String(obj);
-    
-    try {
-        return JSON.stringify(obj, (key, value) => {
-            if (typeof value === 'object' && value !== null) {
-                const stack = new Error().stack;
-                const depth = (stack.match(/safeObjectStringify/g) || []).length;
-                if (depth > maxDepth) {
-                    return '[Object: max depth reached]';
-                }
-            }
-            return value;
-        });
-    } catch (err) {
-        if (err && err.message && err.message.includes('circular')) {
-            return '[Object: circular reference detected]';
-        }
-        const constructorName = obj && obj.constructor && obj.constructor.name
-            ? obj.constructor.name
-            : 'Unknown';
-        return `[Object: ${constructorName} - stringify failed${err && err.message ? `: ${err.message}` : ''}]`;
-    }
-}
 
 let validateLoggingConfig = null;
 
@@ -62,198 +29,32 @@ function initializeLoggingConfig(appConfig) {
 
 function getLoggingConfig() {
     if (!globalLoggingConfig) {
-        const validateFn = getValidateLoggingConfig();
-        if (typeof validateFn !== 'function') {
-            // Use process.stderr.write for critical system messages to avoid circular dependency
-            process.stderr.write(`validateLoggingConfig is not a function: ${typeof validateFn}\n`);
-            // Fallback to default config
-            return {
-                console: { enabled: true, level: 'info' },
-                file: { enabled: true, level: 'debug', directory: './logs' },
-                debug: { enabled: false },
-                platforms: { twitch: { enabled: true }, youtube: { enabled: true }, tiktok: { enabled: true } },
-                chat: { enabled: true, separateFiles: true, directory: './logs' }
-            };
-        }
-        return validateFn();
+        return getValidateLoggingConfig()();
     }
     return globalLoggingConfig;
 }
 
-const loggingConfig = {
-    debugMode: false,
-};
+let debugMode = false;
 
 function getDebugMode() {
-    return loggingConfig.debugMode;
+    return debugMode;
 }
 
 function setDebugMode(enabled) {
-    loggingConfig.debugMode = !!enabled;
+    debugMode = !!enabled;
 }
-
-const originalConsoleLog = console.log;
-const originalConsoleError = console.error;
-
-let consoleOverrideEnabled = false;
-let programLogInitialized = false;
-
-function isConsoleOutputEnabled() {
-    try {
-        const config = getLoggingConfig();
-        return !!(config && config.console && config.console.enabled);
-    } catch {
-        return false;
-    }
-}
-
-function ensureLogDirectory(dirPath) {
-    if (!dirPath) {
-        return false;
-    }
-    const logPath = dirPath;
-
-    try {
-        if (!fs.existsSync(logPath)) {
-            fs.mkdirSync(logPath, { recursive: true });
-        }
-        return true;
-    } catch (err) {
-        try {
-            if (isConsoleOutputEnabled()) {
-                originalConsoleError(`[Logging System] Error creating log directory: ${err && err.message ? err.message : 'Unknown error'}`);
-            }
-        } catch { }
-        return false;
-    }
-}
-
-function getFileLogDirectory() {
-    let config;
-    try {
-        config = getLoggingConfig();
-    } catch {
-        return null;
-    }
-
-    if (!config || !config.file || !config.file.enabled) {
-        return null;
-    }
-
-    return config.file.directory || null;
-}
-
-function getChatLogDirectory() {
-    let config;
-    try {
-        config = getLoggingConfig();
-    } catch {
-        return null;
-    }
-
-    if (!config || !config.file || !config.file.enabled) {
-        return null;
-    }
-    if (!config.chat || !config.chat.enabled || !config.chat.separateFiles) {
-        return null;
-    }
-
-    return config.chat.directory || null;
-}
-
-function logProgram(message) {
-    const logDir = getFileLogDirectory();
-    if (!logDir) {
-        return;
-    }
-
-    if (!programLogInitialized) {
-        if (!ensureLogDirectory(logDir)) {
-            return;
-        }
-        programLogInitialized = true;
-    }
-    
-    const hasTimestamp = /^\[\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z\]|^\[\d{2}\/\d{2}\/\d{2}\s+\d{2}:\d{2}:\d{2}\]/.test(message);
-    const logEntry = hasTimestamp ? `${message}\n` : `[${formatTimestamp()}] ${message}\n`;
-    
-    try {
-        fs.appendFileSync(path.join(logDir, 'program-log.txt'), logEntry);
-    } catch (err) {
-        try {
-            if (isConsoleOutputEnabled()) {
-                originalConsoleError(`[Logging System] Error writing to program log: ${err && err.message ? err.message : 'Unknown error'}`);
-            }
-        } catch { }
-    }
-}
-
-function initializeConsoleOverride() {
-    if (consoleOverrideEnabled) {
-        return;
-    }
-    
-    console.log = function(...args) {
-        if (isConsoleOutputEnabled()) {
-            originalConsoleLog.apply(console, args);
-        }
-        logProgram(args.join(' '));
-    };
-    
-    console.error = function(...args) {
-        if (isConsoleOutputEnabled()) {
-            originalConsoleError.apply(console, args);
-        }
-        logProgram(`ERROR: ${args.join(' ')}`);
-    };
-    
-    consoleOverrideEnabled = true;
-}
-
-function restoreConsole() {
-    if (!consoleOverrideEnabled) {
-        return;
-    }
-    
-    console.log = originalConsoleLog;
-    console.error = originalConsoleError;
-    consoleOverrideEnabled = false;
-    
-    if (isConsoleOutputEnabled()) {
-        originalConsoleLog('[Logging System] Console override restored to original functions');
-    }
-}
-
-function isConsoleOverrideEnabled() {
-    return consoleOverrideEnabled;
-}
-
-
 
 class UnifiedLogger {
-    constructor(config = {}, dependencies = {}) {
+    constructor(config = {}) {
         this.config = config;
         this.outputs = {
             console: new ConsoleOutputter(),
             file: new FileOutputter(config.file)
         };
-        
-    }
-    
-    ensureLogDirectory() {
-        const logPath = this.config && this.config.file
-            ? this.config.file.directory
-            : null;
-        if (!logPath) {
-            return;
-        }
-        if (!fs.existsSync(logPath)) {
-            fs.mkdirSync(logPath, { recursive: true });
-        }
     }
     
     log(level, message, source = 'system', data = null) {
-        const timestamp = formatTimestamp();
+        const timestamp = formatTimestampCompact(new Date());
         const safeMessage = typeof message === 'string' ? message : safeObjectStringify(message);
         const safeSource = typeof source === 'string' ? source : safeObjectStringify(source);
         
@@ -262,8 +63,7 @@ class UnifiedLogger {
             level,
             message: safeMessage,
             source: safeSource,
-            data,
-            debugMode: getDebugMode()
+            data
         };
         
         if (this.outputs.console && this.shouldOutput(level, 'console')) {
@@ -282,12 +82,10 @@ class UnifiedLogger {
             return false;
         }
         
-        // Always show 'console', 'warn', and 'error' on the console
         if (destination === 'console' && (level === 'console' || level === 'warn' || level === 'error')) {
             return true;
         }
         
-        // If debug mode is enabled globally, show all debug logs
         if (level === 'debug' && getDebugMode()) {
             return true;
         }
@@ -321,9 +119,6 @@ class UnifiedLogger {
     console(message, source = 'system', data = null) {
         this.log('console', message, source, data);
     }
-    
-
-    
 }
 
 class ConsoleOutputter {
@@ -381,135 +176,20 @@ class FileOutputter {
 
 let globalLogger = null;
 
-function initializeUnifiedLogger(config, dependencies = {}) {
-    if (!globalLogger) {
-        globalLogger = new UnifiedLogger(config, dependencies);
-    }
-    return globalLogger;
-}
-
 function getUnifiedLogger() {
     if (!globalLogger) {
         const config = getLoggingConfig();
-        globalLogger = new UnifiedLogger(config, {});
+        globalLogger = new UnifiedLogger(config);
     }
     return globalLogger;
-}
-
-function getLogger() {
-    return getUnifiedLogger();
-}
-
-function sanitizeUsername(username) {
-    if (!username) return '';
-    
-    return username
-        .replace(/[<>:"|?*\\/]/g, '')
-        .replace(/[\x00-\x1f\x7f]/g, '')
-        .replace(/\s+/g, '_')
-        .substring(0, 50);
-}
-
-function formatPlatformName(platform) {
-    if (!platform) return 'unknown';
-    
-    const platformMap = {
-        'twitch': 'Twitch',
-        'youtube': 'YouTube',
-        'tiktok': 'TikTok',
-        'streamelements': 'StreamElements'
-    };
-    
-    return platformMap[platform.toLowerCase()] || platform;
-}
-
-function logChatMessagePlatform(timestamp, username, message, platform) {
-    const logger = getUnifiedLogger();
-    const platformName = formatPlatformName(platform);
-    
-    logger.info(
-        `Chat: ${username}: ${message}`,
-        platformName,
-        {
-            username,
-            message,
-            timestamp,
-            platform
-        }
-    );
-}
-
-function logChatMessage(platform, username, message, timestamp = null, options = {}) {
-    const logger = getUnifiedLogger();
-    const platformName = formatPlatformName(platform);
-    const msgTimestamp = timestamp || new Date().toISOString();
-    
-    logger.info(
-        `Chat: ${username}: ${message}`,
-        platformName,
-        {
-            username,
-            message,
-            timestamp: msgTimestamp,
-            platform,
-            ...options
-        }
-    );
-    
-    logChatMessageToFile(platform, username, message, msgTimestamp);
-}
-
-function logChatMessageToFile(platform, username, message, timestamp) {
-    try {
-        const logDir = getChatLogDirectory();
-        if (!logDir) {
-            return;
-        }
-        if (!ensureLogDirectory(logDir)) {
-            return;
-        }
-        
-        const sanitizedUsername = sanitizeUsername(username);
-        if (!sanitizedUsername) {
-            return;
-        }
-        
-        const filename = `${platform}-chat-${sanitizedUsername}.txt`;
-        const filepath = path.join(logDir, filename);
-        const logEntry = `[${timestamp}] ${username}: ${message}\n`;
-        
-        fs.appendFileSync(filepath, logEntry);
-        
-    } catch (err) {
-        if (isConsoleOutputEnabled()) {
-            originalConsoleError(`[Logging System] Error writing chat message to file: ${err && err.message ? err.message : 'Unknown error'}`);
-        }
-    }
-}
-
-function formatTimestamp(date = new Date()) {
-    return formatTimestampCompact(date);
 }
 
 module.exports = {
     get logger() { return getUnifiedLogger(); },
-    getLogger,
     getUnifiedLogger,
-    initializeUnifiedLogger,
     initializeLoggingConfig,
     getLoggingConfig,
     setConfigValidator,
     getDebugMode,
-    setDebugMode,
-    initializeConsoleOverride,
-    restoreConsole,
-    isConsoleOverrideEnabled,
-    ensureLogDirectory,
-    logProgram,
-    logChatMessage,
-    logChatMessagePlatform,
-    formatPlatformName,
-    formatTimestamp,
-    sanitizeUsername,
-    safeObjectStringify
+    setDebugMode
 };

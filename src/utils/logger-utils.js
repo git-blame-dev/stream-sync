@@ -20,17 +20,17 @@ const getLazyUnifiedLogger = () => {
 };
 
 function safeObjectStringify(obj, maxDepth = 3) {
+    if (obj instanceof Error) {
+        return JSON.stringify({ message: obj.message, stack: obj.stack, name: obj.name }, null, 2);
+    }
     if (obj === null) return 'null';
     if (obj === undefined) return 'undefined';
     if (typeof obj === 'string') return obj;
     if (typeof obj === 'number' || typeof obj === 'boolean') return String(obj);
     
     try {
-        // Use JSON.stringify with replacer to handle circular references and depth
         return JSON.stringify(obj, (key, value) => {
-            // Handle circular references
             if (typeof value === 'object' && value !== null) {
-                // Simple depth tracking using stack inspection
                 const stack = new Error().stack;
                 const depth = (stack.match(/safeObjectStringify/g) || []).length;
                 if (depth > maxDepth) {
@@ -39,13 +39,14 @@ function safeObjectStringify(obj, maxDepth = 3) {
             }
             return value;
         });
-    } catch (error) {
-        // Fallback for circular references or other JSON.stringify errors
-        if (error.message.includes('circular')) {
+    } catch (err) {
+        if (err && err.message && err.message.includes('circular')) {
             return '[Object: circular reference detected]';
         }
-        // For any other errors, return a safe representation
-        return `[Object: ${obj.constructor?.name || 'Unknown'} - stringify failed]`;
+        const constructorName = obj && obj.constructor && obj.constructor.name
+            ? obj.constructor.name
+            : 'Unknown';
+        return `[Object: ${constructorName} - stringify failed${err && err.message ? `: ${err.message}` : ''}]`;
     }
 }
 

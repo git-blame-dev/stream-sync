@@ -50,14 +50,12 @@ Examples:
     process.exit(0);
 }
 
-const crypto = require('crypto');
 const { validateLoggingConfig } = require('./core/config');
 const { 
     setConfigValidator, 
     setDebugMode, 
     initializeLoggingConfig,
-    getLogger,
-    initializeConsoleOverride
+    getUnifiedLogger
 } = require('./core/logging');
 const { safeSetTimeout, safeSetInterval } = require('./utils/timeout-validator');
 const { createPlatformErrorHandler } = require('./utils/platform-error-handler');
@@ -71,11 +69,10 @@ if (cliArgs.debug) {
 }
 
 const { createRetrySystem } = require('./utils/retry-system');
-const { getSystemTimestampISO } = require('./utils/timestamp');
 
 const { InnertubeFactory } = require('./factories/innertube-factory');
 
-const { config: configModule, logging } = require('./core');
+const { config: configModule } = require('./core');
 let config = configModule.config;
 
 const innertubeInstanceManager = require('./services/innertube-instance-manager');
@@ -91,7 +88,7 @@ try {
     throw error;
 }
 
-const logger = getLogger();
+const logger = getUnifiedLogger();
 if (!logger || typeof logger.debug !== 'function') {
     throw new Error('Logger missing required methods');
 }
@@ -138,15 +135,13 @@ const {
     NOTIFICATION_CONFIGS
 } = coreConstants;
 
-const { getOBSConnectionManager, initializeOBSConnection } = require('./obs/connection');
+const { getOBSConnectionManager } = require('./obs/connection');
 const { initializeDisplayQueue } = require('./obs/display-queue');
 const { getDefaultGoalsManager } = require('./obs/goals');
-
 
 const { textProcessing: textProcessingModule } = require('./utils');
 const { createTextProcessingManager } = textProcessingModule;
 const textProcessing = createTextProcessingManager({ logger });
-const { formatChatMessage } = textProcessing;
 const { CommandParser } = require('./chat/commands');
 const { AppRuntime } = require('./runtime/AppRuntime');
 const { clearExpiredGlobalCooldowns } = require('./utils/command-parser');

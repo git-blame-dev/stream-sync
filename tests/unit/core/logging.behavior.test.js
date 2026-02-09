@@ -1,5 +1,5 @@
 const { describe, it, expect, beforeEach, afterEach } = require('bun:test');
-const { createMockFn, restoreAllMocks, spyOn } = require('../../helpers/bun-mock-utils');
+const { restoreAllMocks } = require('../../helpers/bun-mock-utils');
 const { captureStdout, captureStderr } = require('../../helpers/output-capture');
 const fs = require('fs');
 const os = require('os');
@@ -9,7 +9,6 @@ const logging = require('../../../src/core/logging');
 
 describe('core/logging behavior', () => {
     beforeEach(() => {
-        // Reset to default test validator
         logging.setConfigValidator(() => ({
             console: { enabled: false },
             file: { enabled: false, directory: './logs' },
@@ -38,9 +37,7 @@ describe('core/logging behavior', () => {
             platforms: {},
             chat: { enabled: true }
         };
-        const validator = createMockFn(() => validatedConfig);
-
-        logging.setConfigValidator(validator);
+        logging.setConfigValidator(() => validatedConfig);
         const result = logging.initializeLoggingConfig({});
 
         expect(result).toEqual(validatedConfig);
@@ -64,7 +61,7 @@ describe('core/logging behavior', () => {
             logging.setConfigValidator(() => validatedConfig);
             logging.initializeLoggingConfig({});
 
-            const logger = logging.initializeUnifiedLogger(validatedConfig);
+            const logger = logging.getUnifiedLogger();
             logger.config = validatedConfig;
             logger.outputs.console = new logger.outputs.console.constructor();
             logger.outputs.file = new logger.outputs.file.constructor(validatedConfig.file);
@@ -83,98 +80,5 @@ describe('core/logging behavior', () => {
             stderrCapture.restore();
             fs.rmSync(tempDir, { recursive: true, force: true });
         }
-    });
-
-    it('writes program logs with timestamp when missing', () => {
-        const writes = [];
-        const validatedConfig = {
-            console: { enabled: true, level: 'info' },
-            file: { enabled: true, level: 'error', directory: '/tmp/logs' },
-            debug: { enabled: false },
-            platforms: {},
-            chat: { enabled: false }
-        };
-
-        logging.setConfigValidator(() => validatedConfig);
-        logging.initializeLoggingConfig({});
-
-        spyOn(require('fs'), 'existsSync').mockReturnValue(true);
-        spyOn(require('fs'), 'appendFileSync').mockImplementation((filePath, data) => {
-            writes.push({ filePath, data: String(data) });
-        });
-
-        logging.logProgram('hello world');
-
-        expect(writes[0].data).toMatch(/^\[\d{2}:\d{2}:\d{2}\] hello world\n$/);
-    });
-
-    it('preserves provided timestamped log entries', () => {
-        const writes = [];
-        const validatedConfig = {
-            console: { enabled: true, level: 'info' },
-            file: { enabled: true, level: 'error', directory: '/tmp/logs' },
-            debug: { enabled: false },
-            platforms: {},
-            chat: { enabled: false }
-        };
-
-        logging.setConfigValidator(() => validatedConfig);
-        logging.initializeLoggingConfig({});
-
-        spyOn(require('fs'), 'existsSync').mockReturnValue(true);
-        spyOn(require('fs'), 'appendFileSync').mockImplementation((filePath, data) => {
-            writes.push({ filePath, data: String(data) });
-        });
-
-        logging.logProgram('[2024-01-01T00:00:00.000Z] already stamped');
-
-        expect(writes[0].data).toBe('[2024-01-01T00:00:00.000Z] already stamped\n');
-    });
-
-    it('logs chat messages to sanitized platform files', () => {
-        const validatedConfig = {
-            console: { enabled: false, level: 'error' },
-            file: { enabled: true, level: 'error' },
-            debug: { enabled: false },
-            platforms: {},
-            chat: { enabled: true, separateFiles: true, directory: '/tmp/chat-logs' }
-        };
-        logging.setConfigValidator(() => validatedConfig);
-        logging.initializeLoggingConfig({});
-
-        const writes = [];
-        spyOn(process, 'cwd').mockReturnValue('/tmp');
-        spyOn(require('fs'), 'existsSync').mockReturnValue(false);
-        spyOn(require('fs'), 'mkdirSync').mockImplementation(() => {});
-        spyOn(require('fs'), 'appendFileSync').mockImplementation((filePath, data) => {
-            writes.push({ filePath, data: String(data) });
-        });
-
-        logging.logChatMessage('twitch', 'bad/ user', 'Hi there', '2024-01-01T00:00:00Z');
-
-        const chatWrite = writes.find((write) => write.filePath.includes('twitch-chat-bad_user.txt'));
-        expect(chatWrite).toBeDefined();
-        expect(chatWrite.filePath).toBe(path.join('/tmp/chat-logs', 'twitch-chat-bad_user.txt'));
-        expect(chatWrite.data.trim()).toContain('Hi there');
-    });
-
-    it('stringifies primitives and handles circular references safely', () => {
-        const circular = {};
-        circular.self = circular;
-
-        expect(logging.safeObjectStringify(null)).toBe('null');
-        expect(logging.safeObjectStringify(undefined)).toBe('undefined');
-        expect(logging.safeObjectStringify('hello')).toBe('hello');
-        expect(logging.safeObjectStringify(42)).toBe('42');
-        expect(logging.safeObjectStringify(true)).toBe('true');
-        expect(logging.safeObjectStringify(circular)).toContain('stringify failed');
-    });
-
-    it('safely stringifies errors and sanitizes usernames', () => {
-        const serialized = logging.safeObjectStringify(new Error('boom'));
-        expect(serialized).toContain('boom');
-
-        expect(logging.sanitizeUsername('bad:name/with*chars')).toBe('badnamewithchars');
-        expect(logging.sanitizeUsername('')).toBe('');
     });
 });

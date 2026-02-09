@@ -37,15 +37,29 @@ describe('logger-utils behavior', () => {
         expect(typeof unifiedLogger.debug).toBe('function');
     });
 
-    test('safely stringifies objects and formats params', () => {
+    test('safely stringifies primitives, objects, and formats params', () => {
+        expect(safeObjectStringify(null)).toBe('null');
+        expect(safeObjectStringify(undefined)).toBe('undefined');
+        expect(safeObjectStringify('hello')).toBe('hello');
+        expect(safeObjectStringify(42)).toBe('42');
+        expect(safeObjectStringify(true)).toBe('true');
+
         const circ = {}; circ.self = circ;
-        const str = safeObjectStringify(circ, 1);
-        expect(str).toContain('stringify failed');
+        expect(safeObjectStringify(circ, 1)).toContain('stringify failed');
 
         const formatted = formatLogParams('a', 1, { b: 2 });
         expect(formatted).toContain('a');
         expect(formatted).toContain('1');
         expect(formatted).toContain('"b":2');
+    });
+
+    test('serializes Error objects with message, stack, and name', () => {
+        const error = new Error('test-boom');
+        const serialized = safeObjectStringify(error);
+        const parsed = JSON.parse(serialized);
+        expect(parsed.message).toBe('test-boom');
+        expect(parsed.name).toBe('Error');
+        expect(parsed.stack).toContain('test-boom');
     });
 
     test('provides a no-op logger fallback', () => {

@@ -75,7 +75,7 @@ describe('Critical Startup Flow', () => {
         expect(typeof logging.setConfigValidator).toBe('function');
         expect(typeof logging.setDebugMode).toBe('function');
         expect(typeof logging.initializeLoggingConfig).toBe('function');
-        expect(typeof logging.getLogger).toBe('function');
+        expect(typeof logging.getUnifiedLogger).toBe('function');
     });
 
     test('config module exports required validation function', () => {
