@@ -1,7 +1,6 @@
 const fs = require('fs');
 const ini = require('ini');
 const { handleUserFacingError } = require('../utils/user-friendly-errors');
-const { DEFAULTS } = require('./config-schema');
 const { ConfigValidator } = require('../utils/config-validator');
 const { buildConfig } = require('./config-builders');
 
@@ -104,69 +103,9 @@ function getConfig() {
     return _cachedConfig;
 }
 
-const DEFAULT_LOGGING_CONFIG = {
-    console: { enabled: true, level: 'console' },
-    file: { enabled: true, level: 'debug', directory: DEFAULTS.LOG_DIRECTORY },
-    debug: { enabled: false },
-    platforms: {
-        twitch: { enabled: true, fileLogging: true },
-        youtube: { enabled: true, fileLogging: true },
-        tiktok: { enabled: true, fileLogging: true }
-    },
-    chat: { enabled: true, separateFiles: true, directory: DEFAULTS.LOG_DIRECTORY }
-};
-
-function validateLoggingConfig(userConfig = {}) {
-    const config = { ...DEFAULT_LOGGING_CONFIG };
-
-    if (userConfig.logging) {
-        Object.assign(config, userConfig.logging);
-    }
-
-    if (userConfig.general && userConfig.general.debugEnabled !== undefined) {
-        const { getDebugMode } = require('./logging');
-        const debugAlreadySetByCommandLine = getDebugMode();
-
-        if (!debugAlreadySetByCommandLine) {
-            config.debug.enabled = userConfig.general.debugEnabled;
-            config.console.level = userConfig.general.debugEnabled ? 'debug' : 'console';
-        } else {
-            config.console.level = 'debug';
-        }
-    }
-
-    const validLevels = ['error', 'warn', 'console', 'info', 'debug'];
-    if (!validLevels.includes(config.console.level)) {
-        config.console.level = 'console';
-    }
-    if (!validLevels.includes(config.file.level)) {
-        config.file.level = 'debug';
-    }
-
-    if (userConfig.logging) {
-        if (userConfig.logging.consoleLevel && validLevels.includes(userConfig.logging.consoleLevel)) {
-            config.console.level = userConfig.logging.consoleLevel;
-        }
-        if (userConfig.logging.fileLevel && validLevels.includes(userConfig.logging.fileLevel)) {
-            config.file.level = userConfig.logging.fileLevel;
-        }
-        if (userConfig.logging.fileLoggingEnabled !== undefined && userConfig.logging.fileLoggingEnabled !== null) {
-            config.file.enabled = userConfig.logging.fileLoggingEnabled;
-        }
-    }
-
-    config.file.directory = DEFAULTS.LOG_DIRECTORY;
-    config.chat.enabled = config.file.enabled;
-    config.chat.separateFiles = true;
-    config.chat.directory = DEFAULTS.LOG_DIRECTORY;
-
-    return config;
-}
-
 module.exports = {
     get config() { return getConfig(); },
     loadConfig,
-    validateLoggingConfig,
     _resetConfigForTesting,
     _getConfigPath
 };

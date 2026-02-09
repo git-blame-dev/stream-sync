@@ -2,34 +2,17 @@ const { formatTimestampCompact } = require('../utils/text-processing');
 const { safeObjectStringify } = require('../utils/logger-utils');
 const { FileLogger } = require('../utils/file-logger');
 
-let validateLoggingConfig = null;
-
-function setConfigValidator(validator) {
-    if (typeof validator === 'function') {
-        validateLoggingConfig = validator;
-    } else {
-        throw new Error('Config validator must be a function');
-    }
-}
-
-function getValidateLoggingConfig() {
-    if (!validateLoggingConfig) {
-        throw new Error('Logging config validator not set. Call setConfigValidator() before using logging system.');
-    }
-    return validateLoggingConfig;
-}
-
 let globalLoggingConfig = null;
 
 function initializeLoggingConfig(appConfig) {
-    const validateFn = getValidateLoggingConfig();
-    globalLoggingConfig = validateFn(appConfig);
+    globalLoggingConfig = appConfig.logging;
     return globalLoggingConfig;
 }
 
 function getLoggingConfig() {
     if (!globalLoggingConfig) {
-        return getValidateLoggingConfig()();
+        const { DEFAULT_LOGGING_CONFIG } = require('./config-builders');
+        return DEFAULT_LOGGING_CONFIG;
     }
     return globalLoggingConfig;
 }
@@ -145,7 +128,7 @@ class ConsoleOutputter {
 
 class FileOutputter {
     constructor(config) {
-        this.config = config || {};
+        this.config = config;
         const logDir = this.config.directory;
         if (!this.config.enabled || !logDir) {
             this.fileLogger = null;
@@ -189,7 +172,6 @@ module.exports = {
     getUnifiedLogger,
     initializeLoggingConfig,
     getLoggingConfig,
-    setConfigValidator,
     getDebugMode,
     setDebugMode
 };

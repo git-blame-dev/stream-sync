@@ -9,13 +9,14 @@ const logging = require('../../../src/core/logging');
 
 describe('core/logging behavior', () => {
     beforeEach(() => {
-        logging.setConfigValidator(() => ({
-            console: { enabled: false },
-            file: { enabled: false, directory: './logs' },
-            debug: { enabled: false },
-            platforms: { tiktok: { enabled: true }, twitch: { enabled: true }, youtube: { enabled: true } },
-            chat: { enabled: false, separateFiles: true, directory: './logs' }
-        }));
+        logging.initializeLoggingConfig({
+            logging: {
+                console: { enabled: false },
+                file: { enabled: false, directory: './logs' },
+                platforms: { tiktok: { enabled: true }, twitch: { enabled: true }, youtube: { enabled: true } },
+                chat: { enabled: false, separateFiles: true, directory: './logs' }
+            }
+        });
     });
 
     afterEach(() => {
@@ -29,19 +30,17 @@ describe('core/logging behavior', () => {
         expect(config.file).toBeDefined();
     });
 
-    it('initializes configuration through injected validator', () => {
-        const validatedConfig = {
+    it('initializes configuration from appConfig.logging', () => {
+        const loggingConfig = {
             console: { enabled: true, level: 'info' },
             file: { enabled: false, level: 'error' },
-            debug: { enabled: false },
             platforms: {},
             chat: { enabled: true }
         };
-        logging.setConfigValidator(() => validatedConfig);
-        const result = logging.initializeLoggingConfig({});
+        const result = logging.initializeLoggingConfig({ logging: loggingConfig });
 
-        expect(result).toEqual(validatedConfig);
-        expect(logging.getLoggingConfig()).toBe(validatedConfig);
+        expect(result).toEqual(loggingConfig);
+        expect(logging.getLoggingConfig()).toBe(loggingConfig);
     });
 
     it('writes console and file outputs through unified logger', () => {
@@ -49,22 +48,20 @@ describe('core/logging behavior', () => {
         const stdoutCapture = captureStdout();
         const stderrCapture = captureStderr();
 
-        const validatedConfig = {
+        const loggingConfig = {
             console: { enabled: true, level: 'info' },
             file: { enabled: true, level: 'info', directory: tempDir },
-            debug: { enabled: false },
             platforms: {},
             chat: { enabled: false }
         };
 
         try {
-            logging.setConfigValidator(() => validatedConfig);
-            logging.initializeLoggingConfig({});
+            logging.initializeLoggingConfig({ logging: loggingConfig });
 
             const logger = logging.getUnifiedLogger();
-            logger.config = validatedConfig;
+            logger.config = loggingConfig;
             logger.outputs.console = new logger.outputs.console.constructor();
-            logger.outputs.file = new logger.outputs.file.constructor(validatedConfig.file);
+            logger.outputs.file = new logger.outputs.file.constructor(loggingConfig.file);
             logger.info('test-info', 'test-source');
             logger.error('test-error', 'test-source');
 

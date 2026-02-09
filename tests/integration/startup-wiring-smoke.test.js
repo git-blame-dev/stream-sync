@@ -2,8 +2,9 @@ const { describe, test, expect, beforeEach, afterEach } = require('bun:test');
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
-const { validateLoggingConfig } = require('../../src/core/config');
-const { setConfigValidator } = require('../../src/core/logging');
+const { initializeLoggingConfig } = require('../../src/core/logging');
+const { buildLoggingConfig } = require('../../src/core/config-builders');
+const { ConfigValidator } = require('../../src/utils/config-validator');
 
 const buildSmokeConfigIni = () => `[general]
 debugEnabled=true
@@ -94,10 +95,12 @@ describe('Startup wiring smoke', () => {
     });
 
     test('core startup modules can be required and initialized', () => {
-        expect(typeof validateLoggingConfig).toBe('function');
-        expect(typeof setConfigValidator).toBe('function');
+        expect(typeof buildLoggingConfig).toBe('function');
+        expect(typeof initializeLoggingConfig).toBe('function');
 
-        setConfigValidator(validateLoggingConfig);
+        const normalized = ConfigValidator.normalize({ general: {} });
+        const loggingConfig = buildLoggingConfig(normalized);
+        initializeLoggingConfig({ logging: loggingConfig });
     });
 
     test('smoke config file exists and is readable', () => {

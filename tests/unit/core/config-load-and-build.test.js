@@ -151,11 +151,9 @@ describe('config load and build behavior', () => {
     });
 
     it('normalizes logging config levels and respects debug overrides', () => {
-        configModule = require('../../../src/core/config');
-        const loggingModule = require('../../../src/core/logging');
+        const { buildLoggingConfig } = require('../../../src/core/config-builders');
 
-        loggingModule.setDebugMode(false);
-        const config = configModule.validateLoggingConfig({
+        const config = buildLoggingConfig({
             logging: {
                 consoleLevel: 'invalid',
                 fileLevel: 'invalid',
@@ -169,11 +167,10 @@ describe('config load and build behavior', () => {
         expect(config.file.enabled).toBe(false);
         expect(config.chat.enabled).toBe(false);
 
-        loggingModule.setDebugMode(true);
-        const debugConfig = configModule.validateLoggingConfig({
-            general: { debugEnabled: false }
-        });
+        const debugConfig = buildLoggingConfig(
+            { general: { debugEnabled: false }, logging: {} },
+            { debugMode: true }
+        );
         expect(debugConfig.console.level).toBe('debug');
-        loggingModule.setDebugMode(false);
     });
 });

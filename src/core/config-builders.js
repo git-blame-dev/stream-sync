@@ -1,5 +1,55 @@
 const { DEFAULTS } = require('./config-schema');
 
+const VALID_LOG_LEVELS = ['error', 'warn', 'console', 'info', 'debug'];
+
+const DEFAULT_LOGGING_CONFIG = {
+    console: { enabled: true, level: 'console' },
+    file: { enabled: true, level: 'debug', directory: DEFAULTS.LOG_DIRECTORY },
+    platforms: {
+        twitch: { enabled: true, fileLogging: true },
+        youtube: { enabled: true, fileLogging: true },
+        tiktok: { enabled: true, fileLogging: true }
+    },
+    chat: { enabled: true, separateFiles: true, directory: DEFAULTS.LOG_DIRECTORY }
+};
+
+function buildLoggingConfig(normalized, options = {}) {
+    const config = JSON.parse(JSON.stringify(DEFAULT_LOGGING_CONFIG));
+    const debugMode = options.debugMode || false;
+    const debugEnabled = normalized.general.debugEnabled;
+    const logging = normalized.logging || {};
+
+    if (debugMode) {
+        config.console.level = 'debug';
+    } else if (debugEnabled) {
+        config.console.level = 'debug';
+    }
+
+    if (!VALID_LOG_LEVELS.includes(config.console.level)) {
+        config.console.level = 'console';
+    }
+    if (!VALID_LOG_LEVELS.includes(config.file.level)) {
+        config.file.level = 'debug';
+    }
+
+    if (logging.consoleLevel && VALID_LOG_LEVELS.includes(logging.consoleLevel)) {
+        config.console.level = logging.consoleLevel;
+    }
+    if (logging.fileLevel && VALID_LOG_LEVELS.includes(logging.fileLevel)) {
+        config.file.level = logging.fileLevel;
+    }
+    if (logging.fileLoggingEnabled !== undefined && logging.fileLoggingEnabled !== null) {
+        config.file.enabled = logging.fileLoggingEnabled;
+    }
+
+    config.file.directory = DEFAULTS.LOG_DIRECTORY;
+    config.chat.enabled = config.file.enabled;
+    config.chat.separateFiles = true;
+    config.chat.directory = DEFAULTS.LOG_DIRECTORY;
+
+    return config;
+}
+
 function buildGeneralConfig(normalized) {
     const g = normalized.general;
     return {
@@ -126,7 +176,7 @@ function buildCooldownsConfig(normalized) {
     };
 }
 
-function buildConfig(normalized) {
+function buildConfig(normalized, options = {}) {
     const general = buildGeneralConfig(normalized);
 
     return {
@@ -153,7 +203,7 @@ function buildConfig(normalized) {
         farewell: { ...normalized.farewell },
         streamelements: buildStreamElementsConfig(normalized),
         commands: { ...normalized.commands },
-        logging: { ...normalized.logging }
+        logging: buildLoggingConfig(normalized, options)
     };
 }
 
@@ -169,5 +219,7 @@ module.exports = {
     buildStreamElementsConfig,
     buildSpamConfig,
     buildCooldownsConfig,
-    buildConfig
+    buildLoggingConfig,
+    buildConfig,
+    DEFAULT_LOGGING_CONFIG
 };

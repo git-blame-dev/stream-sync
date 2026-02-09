@@ -13,7 +13,6 @@ const nextTestId = (prefix) => `${prefix}-${nextSequence().toString(36).padStart
 const createMockLoggingConfig = (platformOverrides = {}) => ({
     console: { enabled: false },
     file: { enabled: false },
-    debug: { enabled: false },
     platforms: { 
         tiktok: { enabled: true }, 
         twitch: { enabled: true }, 
@@ -25,16 +24,10 @@ const createMockLoggingConfig = (platformOverrides = {}) => ({
 
 const initializeTestLogging = (platformOverrides = {}) => {
     try {
-        const { setConfigValidator } = require('../../src/core/logging');
-        if (typeof setConfigValidator === 'function') {
-            setConfigValidator(() => createMockLoggingConfig(platformOverrides));
-        } else {
-            // Logging module is mocked, skip initialization
-            console.log('[Test Setup] Logging module is mocked, skipping initialization');
-        }
-    } catch (error) {
+        const { initializeLoggingConfig } = require('../../src/core/logging');
+        initializeLoggingConfig({ logging: createMockLoggingConfig(platformOverrides) });
+    } catch {
         // Logging module is mocked or not available, skip initialization
-        console.log('[Test Setup] Logging initialization skipped:', error.message);
     }
 };
 

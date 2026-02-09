@@ -72,15 +72,14 @@ describe('Critical Startup Flow', () => {
     test('logging system exports required initialization functions', () => {
         const logging = require('../../src/core/logging');
 
-        expect(typeof logging.setConfigValidator).toBe('function');
         expect(typeof logging.setDebugMode).toBe('function');
         expect(typeof logging.initializeLoggingConfig).toBe('function');
         expect(typeof logging.getUnifiedLogger).toBe('function');
     });
 
-    test('config module exports required validation function', () => {
-        const config = require('../../src/core/config');
+    test('config-builders exports buildLoggingConfig', () => {
+        const { buildLoggingConfig } = require('../../src/core/config-builders');
 
-        expect(typeof config.validateLoggingConfig).toBe('function');
+        expect(typeof buildLoggingConfig).toBe('function');
     });
 });

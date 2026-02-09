@@ -2,7 +2,7 @@ const { describe, expect, it, afterEach } = require('bun:test');
 const { createMockFn, restoreAllMocks } = require('../helpers/bun-mock-utils');
 const { noOpLogger } = require('../helpers/mock-factories');
 const logging = require('../../src/core/logging');
-logging.setConfigValidator(() => ({ logging: {} }));
+logging.initializeLoggingConfig({ logging: { console: { enabled: false }, file: { enabled: false } } });
 
 const { TikTokPlatform } = require('../../src/platforms/tiktok');
 const testClock = require('../helpers/test-clock');
