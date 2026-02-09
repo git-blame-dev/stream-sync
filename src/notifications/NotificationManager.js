@@ -49,7 +49,6 @@ class NotificationManager extends EventEmitter {
         
         this.donationSpamDetector = dependencies.donationSpamDetector;
 
-
         if (!this.eventBus) {
             throw new Error('NotificationManager requires EventBus dependency');
         }
@@ -168,7 +167,6 @@ class NotificationManager extends EventEmitter {
         const platformName = platform.toLowerCase();
         const isErrorPayload = normalizedData.isError === true;
         
-        // Check if notifications are enabled for this type
         const isEnabled = this.notificationGate.isEnabled(config.settingKey, platformName);
         
         if (!isEnabled) {
@@ -191,38 +189,35 @@ class NotificationManager extends EventEmitter {
             normalizedData.userId = String(normalizedData.userId);
         }
 
-
-        // Handle gift spam before any other processing (unless skipped)
         if (notificationType === 'platform:gift' && this.donationSpamDetector && !skipSpamDetection && !normalizedData.isAggregated && !isErrorPayload) {
             try {
-            if (!normalizedData.giftType || normalizedData.giftCount === undefined || normalizedData.amount === undefined) {
-                throw new Error('Gift spam detection requires giftType, giftCount, and amount');
-            }
-            const giftCount = Number(normalizedData.giftCount);
-            const amount = Number(normalizedData.amount);
-            if (!Number.isFinite(giftCount) || giftCount <= 0) {
-                throw new Error('Gift spam detection requires valid giftCount');
-            }
-            if (!Number.isFinite(amount)) {
-                throw new Error('Gift spam detection requires valid amount');
-            }
-            const perGiftAmount = amount / giftCount;
-            const spamResult = this.donationSpamDetector.handleDonationSpam(
-                normalizedData.userId,
-                normalizedData.username,
-                perGiftAmount,
-                normalizedData.giftType,
-                giftCount,
-                platform
-            );
+                if (!normalizedData.giftType || normalizedData.giftCount === undefined || normalizedData.amount === undefined) {
+                    throw new Error('Gift spam detection requires giftType, giftCount, and amount');
+                }
+                const giftCount = Number(normalizedData.giftCount);
+                const amount = Number(normalizedData.amount);
+                if (!Number.isFinite(giftCount) || giftCount <= 0) {
+                    throw new Error('Gift spam detection requires valid giftCount');
+                }
+                if (!Number.isFinite(amount)) {
+                    throw new Error('Gift spam detection requires valid amount');
+                }
+                const perGiftAmount = amount / giftCount;
+                const spamResult = this.donationSpamDetector.handleDonationSpam(
+                    normalizedData.userId,
+                    normalizedData.username,
+                    perGiftAmount,
+                    normalizedData.giftType,
+                    giftCount,
+                    platform
+                );
 
-            if (!spamResult.shouldShow) {
-                    this.platformLogger.debug(platform, `Spam gift suppressed from ${normalizedData.username}.`);
-                    return { suppressed: true, reason: 'spam_detection' }; // Stop processing this notification
+                if (!spamResult.shouldShow) {
+                    this.platformLogger.debug(`Spam gift suppressed from ${normalizedData.username}.`, platform);
+                    return { suppressed: true, reason: 'spam_detection' };
                 }
             } catch (error) {
-                this.platformLogger.warn(platform, `Error in spam detection: ${error.message}`);
-                // Continue processing if spam detection fails
+                this.platformLogger.warn(`Error in spam detection: ${error.message}`, platform);
             }
         }
 
@@ -243,12 +238,11 @@ class NotificationManager extends EventEmitter {
         if (this._isDebugEnabled()) {
             try {
                 const logMessage = this.generateLogMessage(notificationType, normalizedData);
-                this.platformLogger.info(platform, logMessage);
+                this.platformLogger.info(logMessage, platform);
             } catch (logError) {
                 this.logger.warn(`[NotificationManager] Debug log failed: ${logError.message}`, 'notification-manager');
             }
         }
-
 
         let vfxConfig = null;
         try {
@@ -274,7 +268,6 @@ class NotificationManager extends EventEmitter {
             });
             notificationData = payload.notificationData;
             
-            // Validate that notificationData has required structure
             if (!notificationData || typeof notificationData !== 'object') {
                 throw new Error('NotificationBuilder.build() returned invalid data structure');
             }
@@ -299,7 +292,6 @@ class NotificationManager extends EventEmitter {
         const priorityType = canonicalType;
         const displayType = notificationType;
         
-        // Structure the item properly for DisplayQueue
         const item = {
             type: displayType,
             data: notificationData,
@@ -308,7 +300,6 @@ class NotificationManager extends EventEmitter {
             vfxConfig: vfxConfig
         };
         
-        // Validate item structure before adding to queue
         if (!item.data || typeof item.data !== 'object') {
             this._handleNotificationError(
                 `Invalid item data structure for ${notificationType} from ${platform}`,
@@ -319,7 +310,6 @@ class NotificationManager extends EventEmitter {
             return { success: false, error: 'Invalid data structure', details: 'item.data is not a valid object' };
         }
         
-        // Add to display queue with error handling
         try {
             this.displayQueue.addItem(item);
         } catch (error) {
@@ -329,10 +319,9 @@ class NotificationManager extends EventEmitter {
                 { notificationType, platform, item, data: normalizedData },
                 { eventType: 'display-queue' }
             );
-            return { success: false, error: 'Display queue error', details: error.message }; // Stop processing if display queue fails
+            return { success: false, error: 'Display queue error', details: error.message };
         }
 
-        // Handle special processing (gifts, donations, etc.) after adding to queue
         try {
             if (config.hasSpecialProcessing) {
                 await this.handleSpecialProcessing(notificationType, platform, data);
@@ -344,10 +333,8 @@ class NotificationManager extends EventEmitter {
                 { notificationType, platform, data: normalizedData },
                 { eventType: 'special-processing' }
             );
-            // Don't return - notification is already in queue, just log the special processing error
         }
-        
-        // Return success with the notification data
+
         return {
             success: true,
             notificationType,
@@ -440,9 +427,6 @@ class NotificationManager extends EventEmitter {
     }
 
     getStats() {
-        if (!this.displayQueue || typeof this.displayQueue.getQueueLength !== 'function') {
-            throw new Error('NotificationManager requires displayQueue with getQueueLength');
-        }
         return {
             supportedNotificationTypes: Object.keys(this.NOTIFICATION_CONFIGS),
             displayQueueLength: this.displayQueue.getQueueLength(),

@@ -134,7 +134,7 @@ describe('YouTube Platform Configuration Validation', () => {
             const platform = new YouTubePlatform(baseConfig, dependencies);
             const errorCalls = [];
             platform.errorHandler = {
-                handleConfigurationError: (...args) => errorCalls.push(args)
+                handleDataLoggingError: (...args) => errorCalls.push(args)
             };
 
             platform._ensureDataLoggingPath();

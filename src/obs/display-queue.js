@@ -272,6 +272,10 @@ class DisplayQueue {
         return this.renderer.hideCurrentDisplay(item);
     }
     
+    getQueueLength() {
+        return this.queue.length;
+    }
+
     clearQueue() {
         if (this.state) {
             this.state.clear();
