@@ -97,7 +97,7 @@ class ChatNotificationRouter {
         if (!this.runtime.platformLifecycleService) {
             return false;
         }
-        const filterOldMessages = this.runtime.config?.general?.filterOldMessages ?? true;
+        const filterOldMessages = this.runtime.config.general.filterOldMessages;
         if (!filterOldMessages) {
             return false;
         }
@@ -153,7 +153,7 @@ class ChatNotificationRouter {
     }
 
     isGreetingEnabled(platform) {
-        const value = this.runtime.config?.[platform]?.greetingsEnabled;
+        const value = this.runtime.config[platform].greetingsEnabled;
         if (value === undefined) {
             throw new Error(`Config missing ${platform}.greetingsEnabled`);
         }
@@ -161,7 +161,7 @@ class ChatNotificationRouter {
     }
 
     isChatEnabled(platform) {
-        const value = this.runtime.config?.[platform]?.messagesEnabled;
+        const value = this.runtime.config[platform].messagesEnabled;
         if (value === undefined) {
             throw new Error(`Config missing ${platform}.messagesEnabled`);
         }

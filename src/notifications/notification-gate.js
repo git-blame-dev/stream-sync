@@ -8,7 +8,7 @@ class NotificationGate {
     }
 
     isEnabled(settingKey, platform) {
-        const value = this.config?.[platform]?.[settingKey];
+        const value = this.config[platform][settingKey];
         if (value === undefined) {
             throw new Error(`Config missing ${platform}.${settingKey}`);
         }
