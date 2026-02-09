@@ -455,7 +455,7 @@ class NotificationManager extends EventEmitter {
     }
 
     _isDebugEnabled() {
-        return !!this.config.general?.debugEnabled;
+        return this.config.general.debugEnabled;
     }
 
     async _isFirstMessage(userId, context = {}) {
