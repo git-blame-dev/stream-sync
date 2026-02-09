@@ -67,6 +67,9 @@ describe('Command Integration System', () => {
             },
             vfx: {
                 filePath: '/path/to/vfx'
+            },
+            general: {
+                keywordParsingEnabled: true
             }
         };
 
@@ -246,7 +249,6 @@ describe('Command Integration System', () => {
         });
 
         test('should detect farewell commands by keyword', () => {
-            // Create new parser with farewell keywords
             const farewellConfig = {
                 commands: {},
                 farewell: {
@@ -255,6 +257,9 @@ describe('Command Integration System', () => {
                 },
                 vfx: {
                     filePath: '/path/to/vfx'
+                },
+                general: {
+                    keywordParsingEnabled: true
                 }
             };
             
@@ -330,8 +335,12 @@ describe('Command Integration System', () => {
                     'another-test': null,
                     'third-test': 123
                 },
+                farewell: {},
                 vfx: {
                     filePath: '/path/to/vfx'
+                },
+                general: {
+                    keywordParsingEnabled: true
                 }
             };
 
@@ -373,7 +382,7 @@ describe('Command Integration System', () => {
         });
 
         test('should handle large command configuration efficiently', () => {
-            const largeConfig = { commands: {} };
+            const largeConfig = { commands: {}, farewell: {}, general: { keywordParsingEnabled: true } };
             for (let i = 0; i < 100; i++) {
                 largeConfig.commands[`command-${i}`] = `!cmd${i}, vfx top, keyword${i}`;
             }

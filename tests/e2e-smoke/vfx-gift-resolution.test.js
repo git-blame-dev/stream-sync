@@ -43,6 +43,7 @@ describe('VFX chat command resolution smoke E2E', () => {
 
         const commandParser = new CommandParser({
             commands: normalized.commands,
+            farewell: normalized.farewell,
             vfx: { filePath: normalized.vfx.filePath },
             general: normalized.general
         });
@@ -63,6 +64,7 @@ describe('VFX chat command resolution smoke E2E', () => {
 
         const commandParser = new CommandParser({
             commands: normalized.commands,
+            farewell: normalized.farewell,
             vfx: { filePath: normalized.vfx.filePath },
             general: normalized.general
         });
@@ -82,6 +84,7 @@ describe('VFX chat command resolution smoke E2E', () => {
 
         const commandParser = new CommandParser({
             commands: normalized.commands,
+            farewell: normalized.farewell,
             vfx: { filePath: normalized.vfx.filePath },
             general: normalized.general
         });
@@ -101,6 +104,7 @@ describe('VFX chat command resolution smoke E2E', () => {
 
         const commandParser = new CommandParser({
             commands: normalized.commands,
+            farewell: normalized.farewell,
             vfx: { filePath: normalized.vfx.filePath },
             general: normalized.general
         });
@@ -124,6 +128,7 @@ describe('VFX chat command resolution smoke E2E', () => {
 
         const commandParser = new CommandParser({
             commands: normalized.commands,
+            farewell: normalized.farewell,
             vfx: { filePath: normalized.vfx.filePath },
             general: normalized.general
         });

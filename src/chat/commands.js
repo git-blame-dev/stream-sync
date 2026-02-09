@@ -4,38 +4,13 @@ const { getDefaultEffectsManager } = require('../obs/effects');
 
 class CommandParser {
     constructor(config) {
-        this.commands = config.commands || {};
-        this.farewellCommands = config.farewell || {};
-        
-        // Use the configured VFX file path
-        this.vfxFilePath = config.vfx?.filePath || '';
-        
-        // Keyword parsing configuration
-        this.keywordParsingEnabled = this.getKeywordParsingSetting(config);
-        
-        // Only log essential configuration issues, not every configuration detail
-        
-        // Performance optimization: Pre-parse command configurations
+        this.commands = config.commands;
+        this.farewellCommands = config.farewell;
+        this.vfxFilePath = config.vfx.filePath;
+        this.keywordParsingEnabled = config.general.keywordParsingEnabled;
         this.parsedCommands = this.parseCommandConfigurations();
         this.parsedFarewellCommands = this.parseFarewellConfigurations();
-        
-        // Cache for compiled regex patterns
         this.regexCache = new Map();
-    }
-
-    getKeywordParsingSetting(config) {
-        // Check command line argument first (highest priority)
-        if (config.cliArgs && config.cliArgs.disableKeywordParsing) {
-            return false;
-        }
-        
-        // Check config file setting
-        if (config.general && config.general.keywordParsingEnabled !== undefined) {
-            return config.general.keywordParsingEnabled;
-        }
-        
-        // Default to enabled for backward compatibility
-        return true;
     }
 
     parseDuration(parts) {

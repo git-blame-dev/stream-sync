@@ -227,7 +227,7 @@ class DisplayQueueEffects {
 
     async playGiftVideoAndAudio() {
         try {
-            const { giftVideoSource, giftAudioSource } = this.config.gifts || {};
+            const { giftVideoSource, giftAudioSource } = this.config.gifts;
             if (!giftVideoSource || !giftAudioSource) {
                 this.handleDisplayQueueError('[Gift] Gift media sources not configured; skipping gift media');
                 return false;

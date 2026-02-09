@@ -156,8 +156,7 @@ class OBSConnectionManager {
             this.connectionCompleteHandler = completeConnection;
             
             try {
-                // Set timeout for Identified event (5 seconds default)
-                const identifiedTimeoutMs = this.OBS_CONNECTION_TIMEOUT || 5000;
+                const identifiedTimeoutMs = this.OBS_CONNECTION_TIMEOUT;
                 identifiedTimeout = safeSetTimeout(() => {
                     if (!connectionCompleted) {
                         connectionCompleted = true;
