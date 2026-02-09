@@ -86,13 +86,13 @@ describe('YouTube stream status + viewer count event bus (integration)', () => {
         const eventPromise = waitForPlatformEvent(eventBus);
 
         try {
-            platform._emitStreamStatusIfNeeded(0);
+            await platform.disconnectFromYouTubeStream('test-stream-1', 'test-disconnect');
 
             const event = await eventPromise;
 
             expect(event.type).toBe(PlatformEvents.STREAM_STATUS);
             expect(event.platform).toBe('youtube');
-            expect(event.data.isLive).toBe(true);
+            expect(event.data.isLive).toBe(false);
             expect(Number.isNaN(Date.parse(event.data.timestamp))).toBe(false);
         } finally {
             lifecycle.dispose();
