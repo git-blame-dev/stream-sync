@@ -14,8 +14,6 @@ const buildMainConfig = (overrides = {}) => createConfigFixture({
         chatMsgGroup: 'test-chat-group',
         ttsEnabled: false,
         debugEnabled: false,
-        noMsg: false,
-        logLevel: 'info',
         envFilePath: '/tmp/test-env',
         envFileReadEnabled: false,
         envFileWriteEnabled: false,

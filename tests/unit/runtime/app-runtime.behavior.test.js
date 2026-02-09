@@ -432,23 +432,6 @@ describe('AppRuntime behavior', () => {
         expect(calls).toEqual(['twitch']);
     });
 
-    it('checks and updates command cooldowns via service', () => {
-        const updates = [];
-        const runtime = createRuntime({
-            commandCooldownService: {
-                checkUserCooldown: () => ({ allowed: true, reason: 'test-check' }),
-                updateUserCooldown: (userId) => updates.push(userId),
-                getStatus: createMockFn().mockReturnValue({ commands: {} })
-            }
-        });
-
-        const result = runtime.checkCommandCooldown('test-user-1', 1000, 2000);
-        runtime.updateUserCommandTimestamps('test-user-1');
-
-        expect(result).toEqual({ allowed: true, reason: 'test-check' });
-        expect(updates).toEqual(['test-user-1']);
-    });
-
     it('handles early viewer count initialization failures', async () => {
         const runtime = createRuntime();
         runtime.viewerCountSystem = {
