@@ -17,7 +17,7 @@ describe('config fixtures', () => {
         expect(raw.general).toBeDefined();
         expect(raw.obs).toBeDefined();
         expect(raw.cooldowns).toBeDefined();
-        expect(raw.general.chatMsgGroup).toBe('test-chat-grp');
+        expect(raw.obs.chatMsgGroup).toBe('test-chat-grp');
     });
 
     it('merges overrides for source config fixtures', () => {

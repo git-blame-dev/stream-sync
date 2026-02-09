@@ -20,12 +20,10 @@ describe('OBS Startup Display Clearing - Detailed Behavior', () => {
         clearTextSource = createMockFn().mockResolvedValue();
 
         configFixture = {
-            general: {
+            obs: {
                 chatMsgScene: 'stream pkmn switch',
                 chatMsgTxt: 'notification streamlabs',
-                chatMsgGroup: 'test-chat-group'
-            },
-            obs: {
+                chatMsgGroup: 'test-chat-group',
                 notificationScene: 'stream pkmn switch',
                 notificationTxt: 'notification streamlabs',
                 ttsTxt: 'tts txt',
@@ -91,8 +89,7 @@ describe('OBS Startup Display Clearing - Detailed Behavior', () => {
 
         it('should skip clearing when required obs fields are missing', async () => {
             const missingFieldsConfig = {
-                general: { chatMsgScene: 'stream pkmn switch', chatMsgGroup: 'test' },
-                obs: { notificationScene: 'stream pkmn switch', notificationMsgGroup: 'test' },
+                obs: { chatMsgScene: 'stream pkmn switch', chatMsgGroup: 'test', notificationScene: 'stream pkmn switch', notificationMsgGroup: 'test' },
                 timing: { fadeDuration: 750 }
             };
 
@@ -118,11 +115,9 @@ describe('OBS Startup Display Clearing - Detailed Behavior', () => {
 
         it('should use provided config for platform logos', async () => {
             const customConfig = {
-                general: {
-                    chatMsgScene: 'stream pkmn switch',
-                    chatMsgGroup: 'test-group'
-                },
                 obs: {
+                    chatMsgScene: 'stream pkmn switch',
+                    chatMsgGroup: 'test-group',
                     notificationScene: 'stream pkmn switch',
                     notificationTxt: 'notification streamlabs',
                     ttsTxt: 'tts txt',

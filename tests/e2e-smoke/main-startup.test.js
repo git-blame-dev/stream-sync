@@ -9,10 +9,6 @@ const { captureStdout, captureStderr } = require('../helpers/output-capture');
 
 const buildSmokeConfig = () => createConfigFixture({
     general: {
-        chatMsgTxt: 'test-smoke-chat-text',
-        chatMsgScene: 'test-smoke-chat-scene',
-        chatMsgGroup: 'test-smoke-chat-group',
-        ttsEnabled: false,
         debugEnabled: false,
         envFilePath: '/tmp/test-smoke-env',
         envFileReadEnabled: false,
@@ -20,6 +16,10 @@ const buildSmokeConfig = () => createConfigFixture({
         viewerCountPollingIntervalMs: 0
     },
     obs: {
+        chatMsgTxt: 'test-smoke-chat-text',
+        chatMsgScene: 'test-smoke-chat-scene',
+        chatMsgGroup: 'test-smoke-chat-group',
+        ttsEnabled: false,
         notificationTxt: 'test-smoke-notification-text',
         notificationScene: 'test-smoke-notification-scene',
         notificationMsgGroup: 'test-smoke-notification-group',

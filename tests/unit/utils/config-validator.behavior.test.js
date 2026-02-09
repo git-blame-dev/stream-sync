@@ -79,11 +79,11 @@ describe('ConfigValidator._normalizeGeneralSection()', () => {
     });
 
     it('preserves string values', () => {
-        const raw = { chatMsgTxt: 'test-source', fallbackUsername: 'TestUser' };
+        const raw = { fallbackUsername: 'TestUser', anonymousUsername: 'TestAnon' };
         const result = ConfigValidator._normalizeGeneralSection(raw);
 
-        expect(result.chatMsgTxt).toBe('test-source');
         expect(result.fallbackUsername).toBe('TestUser');
+        expect(result.anonymousUsername).toBe('TestAnon');
     });
 
     it('normalizes sharesEnabled flag', () => {

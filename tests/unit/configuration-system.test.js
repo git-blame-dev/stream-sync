@@ -25,8 +25,6 @@ const testConfigContent = `
 [general]
 debugEnabled = true
 messagesEnabled = true
-ttsEnabled = false
-chatMsgGroup = statusbar chat grp
 viewerCountPollingInterval = 60
 maxMessageLength = 500
 
@@ -34,6 +32,8 @@ maxMessageLength = 500
 enabled = true
 address = ws://localhost:4455
 connectionTimeoutMs = 10000
+ttsEnabled = false
+chatMsgGroup = statusbar chat grp
 notificationMsgGroup = statusbar notification grp
 chatPlatformLogoTwitch = twitch-img
 chatPlatformLogoYouTube = youtube-img
@@ -247,9 +247,7 @@ ${testConfigContent}
 [general]
 debugEnabled = true
 messagesEnabled = false
-ttsEnabled = TRUE
 greetingsEnabled = False
-chatMsgGroup = statusbar chat grp
 viewerCountPollingInterval = 60
 maxMessageLength = 500
 
@@ -257,6 +255,8 @@ maxMessageLength = 500
 enabled = yes
 address = ws://localhost:4455
 connectionTimeoutMs = 10000
+ttsEnabled = TRUE
+chatMsgGroup = statusbar chat grp
 notificationMsgGroup = statusbar notification grp
 chatPlatformLogoTwitch = twitch-img
 chatPlatformLogoYouTube = youtube-img
@@ -272,7 +272,7 @@ enabled = 1
 
             expect(currentConfig.general.debugEnabled).toBe(true);
             expect(currentConfig.general.messagesEnabled).toBe(false);
-            expect(currentConfig.general.ttsEnabled).toBe(true);
+            expect(currentConfig.obs.ttsEnabled).toBe(true);
             expect(currentConfig.general.greetingsEnabled).toBe(false);
             expect(currentConfig.obs.enabled).toBe(false);
         });
@@ -287,7 +287,6 @@ enabled = 1
 [general]
 debugEnabled = false
 messagesEnabled = false
-chatMsgGroup = statusbar chat grp
 viewerCountPollingInterval = 60
 maxMessageLength = 500
 
@@ -295,6 +294,7 @@ maxMessageLength = 500
 enabled = false
 address = ws://localhost:4455
 connectionTimeoutMs = 10000
+chatMsgGroup = statusbar chat grp
 notificationMsgGroup = statusbar notification grp
 chatPlatformLogoTwitch = twitch-img
 chatPlatformLogoYouTube = youtube-img
@@ -375,7 +375,6 @@ ${testConfigContent}
 [general]
 debugEnabled = false
 messagesEnabled = true
-chatMsgGroup = statusbar chat grp
 viewerCountPollingInterval = 60
 maxMessageLength = 500
 
@@ -383,6 +382,7 @@ maxMessageLength = 500
 enabled = true
 address = ws://localhost:4455
 connectionTimeoutMs = 10000
+chatMsgGroup = statusbar chat grp
 notificationMsgGroup = statusbar notification grp
 chatPlatformLogoTwitch = twitch-img
 chatPlatformLogoYouTube = youtube-img
@@ -463,8 +463,6 @@ ${testConfigContent}
 [general]
 debugEnabled = maybe
 messagesEnabled = sometimes
-ttsEnabled = invalid
-chatMsgGroup = statusbar chat grp
 viewerCountPollingInterval = 60
 maxMessageLength = 500
 
@@ -472,6 +470,8 @@ maxMessageLength = 500
 enabled = broken
 address = ws://localhost:4455
 connectionTimeoutMs = 10000
+ttsEnabled = invalid
+chatMsgGroup = statusbar chat grp
 notificationMsgGroup = statusbar notification grp
 chatPlatformLogoTwitch = twitch-img
 chatPlatformLogoYouTube = youtube-img
@@ -487,7 +487,7 @@ enabled = notabool
 
             expect(currentConfig.general.debugEnabled).toBe(false);
             expect(currentConfig.general.messagesEnabled).toBe(true);
-            expect(currentConfig.general.ttsEnabled).toBe(false);
+            expect(currentConfig.obs.ttsEnabled).toBe(false);
             expect(currentConfig.obs.enabled).toBe(false);
         });
     });
@@ -524,18 +524,17 @@ followsEnabled = true
 ${testConfigContent}
 
 [general]
-ttsEnabled = true
 messagesEnabled = true
-chatMsgGroup = statusbar chat grp
 viewerCountPollingInterval = 60
 maxMessageLength = 500
+
+[obs]
+ttsEnabled = true
 `;
             reloadConfig(ttsConfig);
 
-            const generalConfig = currentConfig.general;
-
-            expect(generalConfig.ttsEnabled).toBe(true);
-            expect(generalConfig.messagesEnabled).toBe(true);
+            expect(currentConfig.obs.ttsEnabled).toBe(true);
+            expect(currentConfig.general.messagesEnabled).toBe(true);
         });
 
         it('should provide OBS integration settings that affect visual output', () => {
@@ -623,12 +622,10 @@ ${testConfigContent}
 [general]
 debugEnabled = true
 messagesEnabled = true
-ttsEnabled = false
 streamDetectionEnabled = false
 streamRetryInterval = 45
 streamMaxRetries = 7
 continuousMonitoringInterval = 120
-chatMsgGroup = statusbar chat grp
 viewerCountPollingInterval = 60
 maxMessageLength = 500
 `;
@@ -666,7 +663,6 @@ ${testConfigContent}
 
 [general]
 viewerCountPollingInterval = 45
-chatMsgGroup = statusbar chat grp
 maxMessageLength = 500
 
 [timing]

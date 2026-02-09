@@ -7,13 +7,13 @@ const RAW_TEST_CONFIG = {
     general: {
         debugEnabled: 'false',
         viewerCountPollingInterval: '60',
-        chatMsgGroup: 'test-chat-grp',
         maxMessageLength: '500'
     },
     obs: {
         enabled: 'false',
         address: 'ws://localhost:4455',
         connectionTimeoutMs: '5000',
+        chatMsgGroup: 'test-chat-grp',
         notificationMsgGroup: 'test-notification-grp',
         chatPlatformLogoTwitch: 'test-twitch-img',
         chatPlatformLogoYouTube: 'test-youtube-img',

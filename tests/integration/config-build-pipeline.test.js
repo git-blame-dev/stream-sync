@@ -88,10 +88,10 @@ describe('Config build pipeline integration', () => {
             const built = _buildConfig(normalized);
 
             expect(built.general.debugEnabled).toBeDefined();
-            expect(built.general.ttsEnabled).toBeDefined();
-            expect(built.general.chatMsgTxt).toBeDefined();
-            expect(built.general.chatMsgScene).toBeDefined();
             expect(built.general.envFilePath).toBeDefined();
+            expect(built.obs.ttsEnabled).toBeDefined();
+            expect(built.obs.chatMsgTxt).toBeDefined();
+            expect(built.obs.chatMsgScene).toBeDefined();
             expect(built.general.envFileReadEnabled).toBeDefined();
             expect(built.general.envFileWriteEnabled).toBeDefined();
         });
@@ -120,7 +120,8 @@ describe('Config build pipeline integration', () => {
         it('boolean fields remain booleans through pipeline', () => {
             const rawConfig = {
                 ...getRawTestConfig(),
-                general: { debugEnabled: 'true', ttsEnabled: 'false' },
+                general: { debugEnabled: 'true' },
+                obs: { ...getRawTestConfig().obs, ttsEnabled: 'false' },
                 displayQueue: { autoProcess: 'true', chatOptimization: 'false' }
             };
             const normalized = ConfigValidator.normalize(rawConfig);
@@ -128,8 +129,8 @@ describe('Config build pipeline integration', () => {
 
             expect(typeof built.general.debugEnabled).toBe('boolean');
             expect(built.general.debugEnabled).toBe(true);
-            expect(typeof built.general.ttsEnabled).toBe('boolean');
-            expect(built.general.ttsEnabled).toBe(false);
+            expect(typeof built.obs.ttsEnabled).toBe('boolean');
+            expect(built.obs.ttsEnabled).toBe(false);
             expect(typeof built.displayQueue.autoProcess).toBe('boolean');
             expect(built.displayQueue.autoProcess).toBe(true);
             expect(typeof built.displayQueue.chatOptimization).toBe('boolean');

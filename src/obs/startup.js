@@ -22,7 +22,7 @@ async function clearStartupDisplays(config, deps = {}) {
             return;
         }
 
-        const chatSceneName = config.general.chatMsgScene;
+        const chatSceneName = config.obs.chatMsgScene;
         const notificationSceneName = config.obs.notificationScene;
         const chatPlatformLogos = config.obs.chatPlatformLogos;
         const notificationPlatformLogos = config.obs.notificationPlatformLogos;

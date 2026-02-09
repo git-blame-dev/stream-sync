@@ -23,13 +23,13 @@ const testConfigPath = '/test/config.ini';
 
 const buildConfig = ({ youtubeSection = 'enabled = false', streamelementsSection = 'enabled = false' } = {}) => `
 [general]
-chatMsgGroup = statusbar chat grp
 viewerCountPollingInterval = 60
 maxMessageLength = 500
 
 [obs]
 enabled = true
 connectionTimeoutMs = 10000
+chatMsgGroup = statusbar chat grp
 notificationMsgGroup = statusbar notification grp
 chatPlatformLogoTwitch = twitch-img
 chatPlatformLogoYouTube = youtube-img
@@ -137,12 +137,12 @@ describe('Config loading behavior', () => {
 debugEnabled = yes
 viewerCountPollingInterval = 60
 streamRetryInterval = not-a-number
-chatMsgGroup = statusbar chat grp
 maxMessageLength = 500
 
 [obs]
 enabled = true
 connectionTimeoutMs = 10000
+chatMsgGroup = statusbar chat grp
 notificationMsgGroup = statusbar notification grp
 chatPlatformLogoTwitch = twitch-img
 chatPlatformLogoYouTube = youtube-img
@@ -207,13 +207,13 @@ maxEntries = 1000
     it('exposes cooldown configuration on the config facade', () => {
         const cooldownConfig = `
 [general]
-chatMsgGroup = statusbar chat grp
 viewerCountPollingInterval = 60
 maxMessageLength = 500
 
 [obs]
 enabled = true
 connectionTimeoutMs = 10000
+chatMsgGroup = statusbar chat grp
 chatPlatformLogoTwitch = twitch-img
 chatPlatformLogoYouTube = youtube-img
 chatPlatformLogoTikTok = tiktok-img
