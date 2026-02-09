@@ -5,6 +5,7 @@ const { createPlatformErrorHandler } = require('../utils/platform-error-handler'
 const { createRetrySystem } = require('../utils/retry-system');
 const { STREAMELEMENTS } = require('../core/endpoints');
 const { secrets } = require('../core/secrets');
+const { getSystemTimestampISO } = require('../utils/timestamp');
 
 
 class StreamElementsPlatform extends EventEmitter {
@@ -423,18 +424,17 @@ class StreamElementsPlatform extends EventEmitter {
 
     async logRawPlatformData(eventType, data) {
         if (!this.config.dataLoggingEnabled) {
-            return; // Exit early if logging disabled
+            return;
         }
 
         try {
             const fs = require('fs').promises;
             const path = require('path');
 
-            // Ensure logs directory exists
             const logsDir = this.config.dataLoggingPath;
             await fs.mkdir(logsDir, { recursive: true });
 
-            const ingestTimestamp = new Date().toISOString();
+            const ingestTimestamp = getSystemTimestampISO();
             const logEntry = {
                 ingestTimestamp,
                 platform: 'streamelements',

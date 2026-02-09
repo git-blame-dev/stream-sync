@@ -1,4 +1,5 @@
 const { createPlatformErrorHandler } = require('./platform-error-handler');
+const { getSystemTimestampISO } = require('./timestamp');
 
 class YouTubeConnectionManager {
         constructor(logger, options = {}) {
@@ -31,7 +32,6 @@ class YouTubeConnectionManager {
         this.operationLocks.add(lockKey);
         
         try {
-            // Check if already connected/connecting
             if (this.connections.has(videoId)) {
                 const existing = this.connections.get(videoId);
                 this.logger.warn(`Already connected to ${videoId} (state: ${existing.state})`, 'youtube');
@@ -40,28 +40,25 @@ class YouTubeConnectionManager {
             
             this.logger.info(`Starting connection to ${videoId}`, 'youtube');
             
-            // Set connecting state
             const connectingState = {
                 connection: null,
                 state: this.CONNECTION_STATES.CONNECTING,
                 metadata: {
-                    connectedAt: new Date().toISOString(),
+                    connectedAt: getSystemTimestampISO(),
                     reason: options.reason || 'stream detected'
                 }
             };
             this.connections.set(videoId, connectingState);
             
-            // Create connection
             const startTime = Date.now();
             const connection = await connectionFactory(videoId);
             const duration = Date.now() - startTime;
             
-            // Update with actual connection
             const connectedState = {
                 connection: connection,
                 state: this.CONNECTION_STATES.CONNECTED,
                 metadata: {
-                    connectedAt: new Date().toISOString(),
+                    connectedAt: getSystemTimestampISO(),
                     reason: options.reason || 'stream detected',
                     connectionDuration: duration
                 }
@@ -76,7 +73,6 @@ class YouTubeConnectionManager {
             const errorMessage = this._getErrorMessage(error);
             this._handleConnectionError(`Failed to connect to ${videoId}: ${errorMessage}`, error, { videoId });
             
-            // Set error state
             const errorState = {
                 connection: null,
                 state: this.CONNECTION_STATES.ERROR,
@@ -84,7 +80,7 @@ class YouTubeConnectionManager {
                     error: errorMessage,
                     errorName: error.name,
                     errorCode: error.code,
-                    failedAt: new Date().toISOString()
+                    failedAt: getSystemTimestampISO()
                 }
             };
             this.connections.set(videoId, errorState);
@@ -115,15 +111,12 @@ class YouTubeConnectionManager {
             
             this.logger.info(`Disconnecting from ${videoId} (reason: ${reason})`, 'youtube');
             
-            // Set disconnecting state
             connectionData.state = this.CONNECTION_STATES.DISCONNECTING;
             connectionData.metadata.disconnectReason = reason;
-            connectionData.metadata.disconnectedAt = new Date().toISOString();
+            connectionData.metadata.disconnectedAt = getSystemTimestampISO();
             
-            // Disconnect the actual connection
             await this._shutdownConnection(connectionData.connection, videoId);
             
-            // Remove from tracking
             this.connections.delete(videoId);
             
             this.logger.info(`Successfully disconnected from ${videoId}`, 'youtube');

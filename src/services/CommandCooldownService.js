@@ -1,6 +1,7 @@
 
 const { logger } = require('../core/logging');
 const { safeSetInterval } = require('../utils/timeout-validator');
+const { getSystemTimestampISO } = require('../utils/timestamp');
 
 const COOLDOWN_CONFIG_SECTION = 'cooldowns';
 const CONFIG_CHANGE_EVENTS = ['config:changed', 'config:reloaded'];
@@ -33,7 +34,6 @@ class CommandCooldownService {
     }
 
     checkUserCooldown(userId, platformCooldownMs, heavyCooldownMs) {
-        // Input validation
         if (!userId || typeof userId !== 'string') {
             this.logger.warn('Invalid userId provided to checkUserCooldown', 'CommandCooldownService');
             return false;
@@ -46,42 +46,37 @@ class CommandCooldownService {
         const now = Date.now();
         const lastCommandTime = this.userLastCommand.get(userId) || 0;
 
-        // Check heavy command limit first
         if (this.userHeavyLimit.get(userId)) {
             const remainingTime = heavyCooldownMs - (now - lastCommandTime);
             if (remainingTime > 0) {
                 this.logger.debug(`User ${userId} is under heavy command limit (${Math.ceil(remainingTime / 1000)}s remaining)`, 'CommandCooldownService');
 
-                // Emit cooldown-blocked event
                 if (this.eventBus) {
                     this.eventBus.emit('cooldown:blocked', {
                         userId,
                         type: 'heavy',
                         remainingMs: remainingTime,
-                        timestamp: new Date().toISOString()
+                        timestamp: getSystemTimestampISO()
                     });
                 }
 
                 return false;
             }
 
-            // Heavy cooldown has expired, reset
             this.userHeavyLimit.set(userId, false);
             this.logger.debug(`Reset heavy command limit for user ${userId}`, 'CommandCooldownService');
         }
 
-        // Check regular cooldown
         const remainingCooldown = platformCooldownMs - (now - lastCommandTime);
         if (remainingCooldown > 0) {
             this.logger.debug(`User ${userId} is on regular cooldown (${Math.ceil(remainingCooldown / 1000)}s remaining)`, 'CommandCooldownService');
 
-            // Emit cooldown-blocked event
             if (this.eventBus) {
                 this.eventBus.emit('cooldown:blocked', {
                     userId,
                     type: 'regular',
                     remainingMs: remainingCooldown,
-                    timestamp: new Date().toISOString()
+                    timestamp: getSystemTimestampISO()
                 });
             }
 
@@ -99,12 +94,11 @@ class CommandCooldownService {
         if (remainingTime > 0) {
             this.logger.debug(`Command ${commandName} is on global cooldown (${Math.ceil(remainingTime / 1000)}s remaining)`, 'CommandCooldownService');
 
-            // Emit global cooldown event
             if (this.eventBus) {
                 this.eventBus.emit('cooldown:global-blocked', {
                     commandName,
                     remainingMs: remainingTime,
-                    timestamp: new Date().toISOString()
+                    timestamp: getSystemTimestampISO()
                 });
             }
 
@@ -115,7 +109,6 @@ class CommandCooldownService {
     }
 
     updateUserCooldown(userId) {
-        // Input validation
         if (!userId || typeof userId !== 'string') {
             this.logger.warn('Invalid userId provided to updateUserCooldown', 'CommandCooldownService');
             return;
@@ -124,14 +117,12 @@ class CommandCooldownService {
         const now = Date.now();
         this.userLastCommand.set(userId, now);
 
-        // Update command timestamps for heavy command detection
         this.updateCommandTimestamps(userId);
 
-        // Emit cooldown-updated event
         if (this.eventBus) {
             this.eventBus.emit('cooldown:updated', {
                 userId,
-                timestamp: new Date().toISOString(),
+                timestamp: getSystemTimestampISO(),
                 expiresAt: new Date(now + this.cooldownConfig.defaultCooldown).toISOString()
             });
         }
@@ -154,23 +145,20 @@ class CommandCooldownService {
         const timestamps = this.userCommandTimestamps.get(userId);
         timestamps.push(now);
 
-        // Keep only timestamps within the heavy command window
         const windowStart = now - this.cooldownConfig.heavyCommandWindow;
         const filteredTimestamps = timestamps.filter(t => t >= windowStart);
         this.userCommandTimestamps.set(userId, filteredTimestamps);
 
-        // Check if user has exceeded heavy command threshold
         if (filteredTimestamps.length >= this.cooldownConfig.heavyCommandThreshold) {
             this.userHeavyLimit.set(userId, true);
             this.logger.debug(`User ${userId} is now under heavy command limit (${filteredTimestamps.length} commands in ${this.cooldownConfig.heavyCommandWindow}ms)`, 'CommandCooldownService');
 
-            // Emit heavy command detected event
             if (this.eventBus) {
                 this.eventBus.emit('cooldown:heavy-detected', {
                     userId,
                     commandCount: filteredTimestamps.length,
                     windowMs: this.cooldownConfig.heavyCommandWindow,
-                    timestamp: new Date().toISOString()
+                    timestamp: getSystemTimestampISO()
                 });
             }
         }
@@ -229,7 +217,7 @@ class CommandCooldownService {
         if (this.eventBus) {
             this.eventBus.emit('cooldown:reset', {
                 userId,
-                timestamp: new Date().toISOString()
+                timestamp: getSystemTimestampISO()
             });
         }
     }

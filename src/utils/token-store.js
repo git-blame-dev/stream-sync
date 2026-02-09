@@ -1,6 +1,7 @@
 const fs = require('fs');
 const path = require('path');
 const { createPlatformErrorHandler } = require('./platform-error-handler');
+const { getSystemTimestampISO } = require('./timestamp');
 
 const LOG_CONTEXT = 'token-store';
 
@@ -173,7 +174,7 @@ async function saveTokens(
         ...existing,
         twitch: {
             accessToken,
-            updatedAt: new Date().toISOString()
+            updatedAt: getSystemTimestampISO()
         }
     };
 

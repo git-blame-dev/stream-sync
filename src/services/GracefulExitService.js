@@ -2,6 +2,7 @@
 const { logger } = require('../core/logging');
 const { safeSetTimeout } = require('../utils/timeout-validator');
 const { createPlatformErrorHandler } = require('../utils/platform-error-handler');
+const { getSystemTimestampISO } = require('../utils/timestamp');
 
 const gracefulExitErrorHandler = createPlatformErrorHandler(logger, 'graceful-exit');
 const systemErrorHandler = createPlatformErrorHandler(logger, 'system');
@@ -166,7 +167,7 @@ class GracefulExitService {
             processedMessages: this.processedMessageCount,
             targetMessages: this.targetMessageCount,
             exitReason: 'Message count target reached',
-            timestamp: new Date().toISOString(),
+            timestamp: getSystemTimestampISO(),
             platforms: platforms,
             uptime: Date.now() - this.stats.startTime
         };
