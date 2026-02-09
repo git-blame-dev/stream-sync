@@ -23,7 +23,7 @@ describe('Command Cooldown Integration', () => {
   beforeEach(() => {
     testClock.reset();
     createConfigFixture({
-      general: {
+      cooldowns: {
         cmdCooldownMs: 5000,
         globalCmdCooldownMs: 3000
       },

@@ -18,8 +18,6 @@ const CONFIG_SCHEMA = {
         streamDetectionEnabled: { type: 'boolean', default: true },
         envFileReadEnabled: { type: 'boolean', default: true },
         envFileWriteEnabled: { type: 'boolean', default: true },
-        cmdCoolDown: { type: 'number', default: 60 },
-        globalCmdCoolDown: { type: 'number', default: 60 },
         viewerCountPollingInterval: { type: 'number', default: 60 },
         streamRetryInterval: { type: 'number', default: 15 },
         streamMaxRetries: { type: 'number', default: -1 },
@@ -160,8 +158,10 @@ const CONFIG_SCHEMA = {
     },
 
     cooldowns: {
+        cmdCooldown: { type: 'number', default: 60, min: 10, max: 3600 },
+        globalCmdCooldown: { type: 'number', default: 60, min: 10, max: 3600 },
         defaultCooldown: { type: 'number', default: 60, min: 10, max: 3600 },
-        heavyCommandCooldown: { type: 'number', default: 30, min: 60, max: 3600 },
+        heavyCommandCooldown: { type: 'number', default: 60, min: 60, max: 3600 },
         heavyCommandThreshold: { type: 'number', default: 3, min: 2, max: 20 },
         heavyCommandWindow: { type: 'number', default: 60 },
         maxEntries: { type: 'number', default: 1000 }

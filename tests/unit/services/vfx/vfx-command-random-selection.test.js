@@ -14,7 +14,7 @@ describe('VFXCommandService random variant selection', () => {
         gifts: { command: commandValue },
         farewell: {},
         vfx: { filePath: '/tmp' },
-        general: { cmdCoolDown: 60, globalCmdCooldownMs: 60000 }
+        cooldowns: { cmdCooldown: 60, globalCmdCooldownMs: 60000 }
     });
 
     beforeEach(() => {

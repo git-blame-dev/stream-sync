@@ -665,7 +665,6 @@ userAgents = test-agent-1|test-agent-2
 ${testConfigContent}
 
 [general]
-cmdCoolDown = 30
 viewerCountPollingInterval = 45
 chatMsgGroup = statusbar chat grp
 maxMessageLength = 500
@@ -675,10 +674,13 @@ chatMessageDuration = 5000
 fadeDuration = 750
 transitionDelay = 200
 notificationClearDelay = 500
+
+[cooldowns]
+cmdCooldown = 30
 `;
             reloadConfig(timingConfig);
 
-            const cmdCooldown = currentConfig.general.cmdCooldownMs;
+            const cmdCooldown = currentConfig.cooldowns.cmdCooldownMs;
             const pollingInterval = currentConfig.general.viewerCountPollingIntervalMs;
 
             expect(cmdCooldown).toBe(30000);

@@ -41,7 +41,8 @@ describe('ConfigValidator.normalize()', () => {
 
         expect(Object.keys(normalized).length).toBe(ALL_SECTIONS.length);
         expect(normalized.general.debugEnabled).toBe(false);
-        expect(normalized.general.cmdCoolDown).toBe(60);
+        expect(normalized.cooldowns.cmdCooldown).toBe(60);
+        expect(normalized.cooldowns.globalCmdCooldown).toBe(60);
     });
 
     it('handles missing sections gracefully', () => {
@@ -64,10 +65,9 @@ describe('ConfigValidator._normalizeGeneralSection()', () => {
     });
 
     it('converts string numbers to actual numbers', () => {
-        const raw = { cmdCoolDown: '120', maxMessageLength: '1000' };
+        const raw = { maxMessageLength: '1000' };
         const result = ConfigValidator._normalizeGeneralSection(raw);
 
-        expect(result.cmdCoolDown).toBe(120);
         expect(result.maxMessageLength).toBe(1000);
     });
 
@@ -75,7 +75,6 @@ describe('ConfigValidator._normalizeGeneralSection()', () => {
         const result = ConfigValidator._normalizeGeneralSection({});
 
         expect(result.debugEnabled).toBe(false);
-        expect(result.cmdCoolDown).toBe(60);
         expect(result.fallbackUsername).toBe('Unknown User');
     });
 
@@ -270,7 +269,19 @@ describe('ConfigValidator._normalizeCooldownsSection()', () => {
         const result = ConfigValidator._normalizeCooldownsSection({});
 
         expect(result.defaultCooldown).toBe(60);
-        expect(result.heavyCommandCooldown).toBe(30);
+        expect(result.heavyCommandCooldown).toBe(60);
+        expect(result.cmdCooldown).toBe(60);
+        expect(result.globalCmdCooldown).toBe(60);
+    });
+
+    it('parses string values for cmdCooldown and globalCmdCooldown', () => {
+        const result = ConfigValidator._normalizeCooldownsSection({
+            cmdCooldown: '45',
+            globalCmdCooldown: '90'
+        });
+
+        expect(result.cmdCooldown).toBe(45);
+        expect(result.globalCmdCooldown).toBe(90);
     });
 });
 
@@ -744,7 +755,7 @@ describe('ConfigValidator.normalizeFromSchema()', () => {
     it('applies default from schema when value missing', () => {
         const result = ConfigValidator.normalizeFromSchema('general', {});
         expect(result.debugEnabled).toBe(false);
-        expect(result.cmdCoolDown).toBe(60);
+        expect(result.viewerCountPollingInterval).toBe(60);
     });
 
     it('returns null for userDefined fields when not provided', () => {

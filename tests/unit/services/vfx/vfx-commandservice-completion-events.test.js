@@ -25,7 +25,7 @@ describe('VFXCommandService completion events', () => {
             commands: { greetings: '!hello' },
             farewell: {},
             vfx: { filePath: '/tmp' },
-            general: { cmdCoolDown: 60, globalCmdCooldownMs: 60000 }
+            cooldowns: { cmdCooldown: 60, globalCmdCooldownMs: 60000 }
         };
         const service = new VFXCommandService(config, eventBus, {
             effectsManager: mockEffectsManager

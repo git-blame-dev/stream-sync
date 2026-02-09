@@ -4,7 +4,8 @@ const { ConfigValidator } = require('../../src/utils/config-validator');
 describe('ConfigValidator normalize + validate integration', () => {
     it('full config normalization and validation flow', () => {
         const rawConfig = {
-            general: { debugEnabled: 'true', cmdCoolDown: '60' },
+            general: { debugEnabled: 'true' },
+            cooldowns: { cmdCooldown: '60' },
             obs: { enabled: 'false', address: 'ws://localhost:4455' },
             commands: {},
             tiktok: { enabled: 'false' },
@@ -15,7 +16,7 @@ describe('ConfigValidator normalize + validate integration', () => {
         const normalized = ConfigValidator.normalize(rawConfig);
 
         expect(normalized.general.debugEnabled).toBe(true);
-        expect(normalized.general.cmdCoolDown).toBe(60);
+        expect(normalized.cooldowns.cmdCooldown).toBe(60);
         expect(normalized.obs.enabled).toBe(false);
 
         const validation = ConfigValidator.validate(normalized);
@@ -68,7 +69,7 @@ describe('ConfigValidator normalize + validate integration', () => {
         const normalized = ConfigValidator.normalize(rawConfig);
 
         expect(normalized.general.debugEnabled).toBe(false);
-        expect(normalized.general.cmdCoolDown).toBe(60);
+        expect(normalized.cooldowns.cmdCooldown).toBe(60);
         expect(normalized.general.messagesEnabled).toBe(true);
         expect(normalized.http.defaultTimeoutMs).toBe(10000);
         expect(normalized.cooldowns.defaultCooldown).toBe(60);
@@ -96,7 +97,8 @@ describe('ConfigValidator normalize + validate integration', () => {
 
     it('string to number conversion works correctly', () => {
         const rawConfig = {
-            general: { cmdCoolDown: '120', maxMessageLength: '1000' },
+            general: { maxMessageLength: '1000' },
+            cooldowns: { cmdCooldown: '120' },
             obs: { connectionTimeoutMs: '5000' },
             commands: {},
             timing: { fadeDuration: '500', chatMessageDuration: '3000' }
@@ -104,7 +106,7 @@ describe('ConfigValidator normalize + validate integration', () => {
 
         const normalized = ConfigValidator.normalize(rawConfig);
 
-        expect(normalized.general.cmdCoolDown).toBe(120);
+        expect(normalized.cooldowns.cmdCooldown).toBe(120);
         expect(normalized.general.maxMessageLength).toBe(1000);
         expect(normalized.obs.connectionTimeoutMs).toBe(5000);
         expect(normalized.timing.fadeDuration).toBe(500);
@@ -114,8 +116,10 @@ describe('ConfigValidator normalize + validate integration', () => {
     it('invalid string values fall back to defaults', () => {
         const rawConfig = {
             general: { 
-                debugEnabled: 'invalid',
-                cmdCoolDown: 'not-a-number'
+                debugEnabled: 'invalid'
+            },
+            cooldowns: {
+                cmdCooldown: 'not-a-number'
             },
             obs: {},
             commands: {}
@@ -124,7 +128,7 @@ describe('ConfigValidator normalize + validate integration', () => {
         const normalized = ConfigValidator.normalize(rawConfig);
 
         expect(normalized.general.debugEnabled).toBe(false);
-        expect(normalized.general.cmdCoolDown).toBe(60);
+        expect(normalized.cooldowns.cmdCooldown).toBe(60);
     });
 
     it('validates all three platforms correctly', () => {
@@ -234,7 +238,6 @@ describe('ConfigValidator normalize + validate integration', () => {
         const rawConfig = {
             general: {
                 debugEnabled: 'false',
-                cmdCoolDown: '30',
                 messagesEnabled: 'true',
                 fallbackUsername: 'TestBot'
             },
@@ -255,6 +258,7 @@ describe('ConfigValidator normalize + validate integration', () => {
                 chatMessageDuration: '5000'
             },
             cooldowns: {
+                cmdCooldown: '30',
                 defaultCooldown: '60',
                 heavyCommandCooldown: '180'
             }
@@ -268,7 +272,7 @@ describe('ConfigValidator normalize + validate integration', () => {
         expect(validation.warnings).toEqual([]);
 
         expect(typeof normalized.general.debugEnabled).toBe('boolean');
-        expect(typeof normalized.general.cmdCoolDown).toBe('number');
+        expect(typeof normalized.cooldowns.cmdCooldown).toBe('number');
         expect(typeof normalized.general.fallbackUsername).toBe('string');
         expect(typeof normalized.http.defaultTimeoutMs).toBe('number');
         expect(typeof normalized.obs.enabled).toBe('boolean');

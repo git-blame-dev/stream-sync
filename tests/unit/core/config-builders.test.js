@@ -15,27 +15,34 @@ const {
 
 describe('config-builders', () => {
     describe('buildGeneralConfig', () => {
-        it('converts seconds to milliseconds for cooldown and polling fields', () => {
+        it('converts viewerCountPollingInterval seconds to milliseconds', () => {
             const normalized = {
                 general: {
-                    cmdCoolDown: 30,
-                    globalCmdCoolDown: 60,
                     viewerCountPollingInterval: 120,
                     debugEnabled: false
                 }
             };
             const result = buildGeneralConfig(normalized);
 
-            expect(result.cmdCooldownMs).toBe(30000);
-            expect(result.globalCmdCooldownMs).toBe(60000);
             expect(result.viewerCountPollingIntervalMs).toBe(120000);
+        });
+
+        it('does not produce cooldown ms fields (cooldowns now owned by buildCooldownsConfig)', () => {
+            const normalized = {
+                general: {
+                    viewerCountPollingInterval: 10,
+                    debugEnabled: false
+                }
+            };
+            const result = buildGeneralConfig(normalized);
+
+            expect(result.cmdCooldownMs).toBeUndefined();
+            expect(result.globalCmdCooldownMs).toBeUndefined();
         });
 
         it('spreads remaining general fields through', () => {
             const normalized = {
                 general: {
-                    cmdCoolDown: 10,
-                    globalCmdCoolDown: 10,
                     viewerCountPollingInterval: 10,
                     ttsEnabled: true,
                     debugEnabled: false
@@ -188,7 +195,9 @@ describe('config-builders', () => {
                     heavyCommandCooldown: 300,
                     heavyCommandThreshold: 4,
                     heavyCommandWindow: 360,
-                    maxEntries: 1000
+                    maxEntries: 1000,
+                    cmdCooldown: 60,
+                    globalCmdCooldown: 60
                 }
             };
             const result = buildCooldownsConfig(normalized);
@@ -198,6 +207,26 @@ describe('config-builders', () => {
             expect(result.heavyCommandWindow).toBe(360);
             expect(result.heavyCommandThreshold).toBe(4);
             expect(result.maxEntries).toBe(1000);
+            expect(result.cmdCooldown).toBe(60);
+            expect(result.globalCmdCooldown).toBe(60);
+        });
+
+        it('converts cmdCooldown and globalCmdCooldown seconds to milliseconds', () => {
+            const normalized = {
+                cooldowns: {
+                    defaultCooldown: 60,
+                    heavyCommandCooldown: 300,
+                    heavyCommandThreshold: 4,
+                    heavyCommandWindow: 360,
+                    maxEntries: 1000,
+                    cmdCooldown: 45,
+                    globalCmdCooldown: 90
+                }
+            };
+            const result = buildCooldownsConfig(normalized);
+
+            expect(result.cmdCooldownMs).toBe(45000);
+            expect(result.globalCmdCooldownMs).toBe(90000);
         });
     });
 
