@@ -41,7 +41,7 @@ describe('DisplayRenderer', () => {
                 chat: { sourceName: 'chat', sceneName: 'scene', groupName: 'group', platformLogos: {} },
                 notification: { sourceName: 'notification', sceneName: 'scene', groupName: 'group', platformLogos: {} },
                 timing: { transitionDelay: 0, notificationClearDelay: 0 },
-                tiktok: { messagesEnabled: true, notificationsEnabled: true, ...platformConfig },
+                tiktok: { messagesEnabled: true, ...platformConfig },
                 ...(overrides.config || {})
             },
             delay: overrides.delay || (async () => {}),
@@ -75,18 +75,6 @@ describe('DisplayRenderer', () => {
             type: 'chat',
             platform: 'tiktok',
             data: { username: 'test-user', message: 'hello' }
-        });
-
-        expect(actions.length).toBe(0);
-    });
-
-    it('skips notification rendering when notifications are disabled', async () => {
-        const { renderer, actions } = createRenderer({ notificationsEnabled: false });
-
-        await renderer.displayNotificationItem({
-            type: 'platform:follow',
-            platform: 'tiktok',
-            data: { username: 'test-user', displayMessage: 'hello' }
         });
 
         expect(actions.length).toBe(0);

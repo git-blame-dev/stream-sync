@@ -23,11 +23,7 @@ describe('AppRuntime VFXCommandService Lifecycle Management', () => {
 
         config = {
             general: {
-                greetingsEnabled: true,
-                streamDetectionEnabled: false,
-                streamRetryInterval: 15,
-                streamMaxRetries: 3,
-                continuousMonitoringInterval: 60000
+                greetingsEnabled: true
             },
             vfx: {
                 filePath: path.join(__dirname, '../../test-assets/vfx')

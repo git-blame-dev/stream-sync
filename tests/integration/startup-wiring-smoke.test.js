@@ -7,10 +7,6 @@ const { setConfigValidator } = require('../../src/core/logging');
 
 const buildSmokeConfigIni = () => `[general]
 debugEnabled=true
-streamDetectionEnabled=false
-streamRetryInterval=15
-streamMaxRetries=1
-continuousMonitoringInterval=60
 viewerCountPollingInterval=60
 maxMessageLength=500
 

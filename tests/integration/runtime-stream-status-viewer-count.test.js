@@ -5,13 +5,7 @@ const { AppRuntime } = require('../../src/main');
 const { createAppRuntimeTestDependencies } = require('../helpers/runtime-test-harness');
 
 const configOverrides = {
-    general: {
-        streamDetectionEnabled: false,
-        streamRetryInterval: 15,
-        streamMaxRetries: 3,
-        continuousMonitoringInterval: 60000,
-        ttsEnabled: false
-    },
+    general: {},
     youtube: {
         enabled: true,
         viewerCountEnabled: true,

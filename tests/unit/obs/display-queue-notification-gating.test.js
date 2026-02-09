@@ -72,32 +72,8 @@ describe('DisplayQueue platform notification gating', () => {
         return { queue, mockSourcesManager, mockGoalsManager };
     }
 
-    it('skips notification display when platform notifications are disabled', async () => {
-        const { queue, mockSourcesManager } = createQueue({
-            twitch: { notificationsEnabled: false }
-        });
-
-        const notificationItem = {
-            type: 'platform:follow',
-            platform: 'twitch',
-            data: {
-                username: 'testFollower',
-                displayMessage: 'testFollower just followed!'
-            },
-            priority: 2,
-            duration: 5000
-        };
-
-        await queue.displayNotificationItem(notificationItem);
-
-        expect(mockSourcesManager.updateTextSource).not.toHaveBeenCalled();
-        expect(mockSourcesManager.setNotificationDisplayVisibility).not.toHaveBeenCalled();
-    });
-
-    it('displays notification when platform notifications are enabled', async () => {
-        const { queue, mockSourcesManager } = createQueue({
-            twitch: { notificationsEnabled: true }
-        });
+    it('displays notification for configured platform', async () => {
+        const { queue, mockSourcesManager } = createQueue({});
 
         const notificationItem = {
             type: 'platform:follow',

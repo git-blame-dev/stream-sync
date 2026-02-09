@@ -606,38 +606,6 @@ username = 李小明直播
             expectNoTechnicalArtifacts(tiktokUsername);
         });
 
-        it('should expose stream detection settings with defaults when not configured', () => {
-            const general = currentConfig.general;
-
-            expect(general.streamDetectionEnabled).toBe(true);
-            expect(general.streamRetryInterval).toBe(15);
-            expect(general.streamMaxRetries).toBe(-1);
-            expect(general.continuousMonitoringInterval).toBe(60);
-        });
-
-        it('should honor stream detection overrides from configuration file', () => {
-            const detectionConfig = `
-${testConfigContent}
-
-[general]
-debugEnabled = true
-messagesEnabled = true
-streamDetectionEnabled = false
-streamRetryInterval = 45
-streamMaxRetries = 7
-continuousMonitoringInterval = 120
-viewerCountPollingInterval = 60
-maxMessageLength = 500
-`;
-            reloadConfig(detectionConfig);
-
-            const general = currentConfig.general;
-
-            expect(general.streamDetectionEnabled).toBe(false);
-            expect(general.streamRetryInterval).toBe(45);
-            expect(general.streamMaxRetries).toBe(7);
-            expect(general.continuousMonitoringInterval).toBe(120);
-        });
     });
 
     describe('Configuration Schema Validation Behavior', () => {

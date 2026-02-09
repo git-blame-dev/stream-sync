@@ -73,11 +73,6 @@ class DisplayRenderer {
             throw new Error(`DisplayQueue requires configured platform for notification: ${platform || 'unknown'}`);
         }
 
-        if (this.config[platform].notificationsEnabled === false) {
-            logger.debug(`[Display Queue] Notifications for platform '${platform}' is disabled. Skipping notification for '${username}'.`, 'display-queue');
-            return false;
-        }
-
         if (!this.obsManager || !await this.obsManager.isReady()) {
             logger.debug('[DisplayQueue] Skipping notification display - OBS not ready', 'display-queue');
             return false;
