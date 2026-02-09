@@ -278,7 +278,6 @@ class StreamElementsPlatform extends EventEmitter {
             
             this.logger.debug(`[StreamElements] Processing ${platform} follow: ${followData.username}`, 'streamelements');
             
-            // Emit via modern platform:event path and let PlatformEventRouter/NotificationManager handle it
             this.emit('platform:event', {
                 platform,
                 type: 'platform:follow',
@@ -291,7 +290,7 @@ class StreamElementsPlatform extends EventEmitter {
                 }
             });
             
-            this.platformLogger.info(platform, `New follower from StreamElements: ${followData.username}`);
+            this.platformLogger.info(`New follower from StreamElements: ${followData.username}`, platform);
 
         } catch (error) {
             this.errorHandler.handleEventProcessingError(error, 'follow', message?.data);

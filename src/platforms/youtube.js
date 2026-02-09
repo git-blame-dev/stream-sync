@@ -1143,7 +1143,7 @@ class YouTubePlatform extends EventEmitter {
         try {
             fs.mkdirSync(this.config.dataLoggingPath, { recursive: true });
         } catch (error) {
-            this.errorHandler?.handleConfigurationError?.(error, 'youtube:dataLoggingPath');
+            this.errorHandler?.handleDataLoggingError?.(error, 'dataLoggingPath');
             this.logger?.warn?.(
                 `Failed to prepare data logging path '${this.config.dataLoggingPath}': ${error.message}`,
                 'youtube'

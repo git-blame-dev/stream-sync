@@ -45,7 +45,7 @@ async function clearStartupDisplays(config, deps = {}) {
 
         logger.debug('Startup displays cleared successfully', 'OBSStartup');
     } catch (error) {
-        logger.warn('Failed to clear startup displays', error, 'OBSStartup');
+        logger.warn('Failed to clear startup displays', 'OBSStartup', error);
     }
 }
 
