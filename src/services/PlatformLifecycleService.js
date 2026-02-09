@@ -8,7 +8,7 @@ const { PlatformEvents } = require('../interfaces/PlatformEvents');
 
 class PlatformLifecycleService {
     constructor(options = {}) {
-        this.config = options.config || {};
+        this.config = options.config;
         this.eventBus = options.eventBus || null;
         this.dependencyFactory = options.dependencyFactory;
         this.logger = options.logger || logger;
@@ -352,7 +352,7 @@ class PlatformLifecycleService {
 
         return {
             timestamp: getSystemTimestampISO(),
-            totalConfigured: Object.keys(this.config || {}).length,
+            totalConfigured: Object.keys(this.config).length,
             initializedPlatforms: ready,
             initializingPlatforms: initializing,
             failedPlatforms: failed.map((name) => ({

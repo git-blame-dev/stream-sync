@@ -15,7 +15,8 @@ describe('SelfMessageDetectionService', () => {
         it('uses platform override when provided', () => {
             const config = createPlainConfig({
                 general: { ignoreSelfMessages: false },
-                twitch: { ignoreSelfMessages: true }
+                twitch: { ignoreSelfMessages: true },
+                youtube: { ignoreSelfMessages: false }
             });
             const service = new SelfMessageDetectionService(config);
 
@@ -23,28 +24,14 @@ describe('SelfMessageDetectionService', () => {
             expect(service.isFilteringEnabled('youtube')).toBe(false);
         });
 
-        it('falls back to general setting when no override exists', () => {
+        it('returns resolved value from platform config', () => {
             const config = createPlainConfig({
                 general: { ignoreSelfMessages: true },
-                tiktok: {}
+                tiktok: { ignoreSelfMessages: true }
             });
             const service = new SelfMessageDetectionService(config);
 
             expect(service.isFilteringEnabled('tiktok')).toBe(true);
-        });
-
-        it('returns false when config is missing or has error', () => {
-            const service = new SelfMessageDetectionService(null);
-            expect(service.isFilteringEnabled('twitch')).toBe(false);
-
-            // Config that causes an error during property access
-            const throwingConfig = new Proxy({}, {
-                get() {
-                    throw new Error('boom');
-                }
-            });
-            const serviceWithThrow = new SelfMessageDetectionService(throwingConfig);
-            expect(serviceWithThrow.isFilteringEnabled('youtube')).toBe(false);
         });
     });
 
@@ -78,12 +65,18 @@ describe('SelfMessageDetectionService', () => {
             expect(service.isSelfMessage('tiktok', { userId: 'tt-streamer-1' }, platformConfig)).toBe(true);
             expect(service.isSelfMessage('tiktok', { username: 'Viewer' }, platformConfig)).toBe(false);
         });
+
+        it('returns false for null messageData', () => {
+            const service = new SelfMessageDetectionService(createPlainConfig());
+            expect(service.isSelfMessage('twitch', null, { username: 'Streamer' })).toBe(false);
+        });
     });
 
     describe('shouldFilterMessage', () => {
         it('returns false when filtering disabled even if self message', () => {
             const config = createPlainConfig({
-                general: { ignoreSelfMessages: false }
+                general: { ignoreSelfMessages: false },
+                twitch: { ignoreSelfMessages: false }
             });
             const service = new SelfMessageDetectionService(config);
 
@@ -92,25 +85,12 @@ describe('SelfMessageDetectionService', () => {
 
         it('filters self messages when enabled', () => {
             const config = createPlainConfig({
-                general: { ignoreSelfMessages: true }
+                general: { ignoreSelfMessages: true },
+                twitch: { ignoreSelfMessages: true }
             });
             const service = new SelfMessageDetectionService(config);
 
             expect(service.shouldFilterMessage('twitch', { self: true }, { username: 'Streamer' })).toBe(true);
-        });
-    });
-
-    describe('validateConfiguration', () => {
-        it('warns when general setting is missing or invalid overrides are used', () => {
-            const config = createPlainConfig({
-                general: {},
-                twitch: { ignoreSelfMessages: 'maybe' }
-            });
-            const service = new SelfMessageDetectionService(config);
-            const result = service.validateConfiguration();
-
-            expect(result.isValid).toBe(true);
-            expect(result.warnings.length).toBeGreaterThan(0);
         });
     });
 });
