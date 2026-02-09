@@ -1137,7 +1137,7 @@ class YouTubePlatform extends EventEmitter {
     }
 
     _ensureDataLoggingPath() {
-        if (!this.config || !this.config.dataLoggingPath) {
+        if (!this.config.dataLoggingPath) {
             return;
         }
         try {
@@ -1182,7 +1182,7 @@ class YouTubePlatform extends EventEmitter {
 
     isActive() {
         try {
-            return this.isConnected() && this.config?.enabled === true;
+            return this.isConnected() && this.config.enabled === true;
         } catch (error) {
             this._handleProcessingError('Error checking active status', error, 'active-status');
             return false;

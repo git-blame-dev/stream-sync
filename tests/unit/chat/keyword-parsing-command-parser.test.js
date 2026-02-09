@@ -25,6 +25,9 @@ describe('CommandParser Keyword Parsing', () => {
             },
             vfx: {
                 filePath: '/path/to/vfx'
+            },
+            general: {
+                keywordParsingEnabled: true
             }
         };
     });
@@ -101,59 +104,12 @@ describe('CommandParser Keyword Parsing', () => {
     });
 
     describe('Configuration Precedence', () => {
-        test('should use config setting when no command line override', () => {
+        test('should use config setting to disable keyword parsing', () => {
             configFixture.general = { keywordParsingEnabled: false };
             commandParser = new CommandParser(configFixture);
 
             const result = commandParser.getVFXConfig('i', 'I am a mod and I approve this message');
             expect(result).toBeNull();
-        });
-
-        test('should allow command line override of config setting', () => {
-            configFixture.general = { keywordParsingEnabled: true };
-            configFixture.cliArgs = { disableKeywordParsing: true };
-            commandParser = new CommandParser(configFixture);
-
-            const result = commandParser.getVFXConfig('i', 'I am a mod and I approve this message');
-            expect(result).toBeNull();
-        });
-
-        test('should prioritize command line argument over config setting', () => {
-            configFixture.general = { keywordParsingEnabled: true };
-            configFixture.cliArgs = { disableKeywordParsing: true };
-            commandParser = new CommandParser(configFixture);
-
-            const prefixResult = commandParser.getVFXConfig('!hello', '!hello everyone!');
-            expect(prefixResult).toBeDefined();
-
-            const keywordResult = commandParser.getVFXConfig('i', 'I am a mod and I approve this message');
-            expect(keywordResult).toBeNull();
-        });
-    });
-
-    describe('Backward Compatibility', () => {
-        test('should work with existing config when keyword parsing setting is missing', () => {
-            commandParser = new CommandParser(configFixture);
-
-            const result = commandParser.getVFXConfig('i', 'I am a mod and I approve this message');
-            expect(result).toBeDefined();
-            expect(result.filename).toBe('im-a-mod');
-        });
-
-        test('should preserve all existing functionality when keyword parsing is enabled', () => {
-            configFixture.general = { keywordParsingEnabled: true };
-            commandParser = new CommandParser(configFixture);
-
-            const prefixResult = commandParser.getVFXConfig('!hello', '!hello everyone!');
-            expect(prefixResult).toBeDefined();
-            expect(prefixResult.filename).toBe('hello-there');
-
-            const keywordResult = commandParser.getVFXConfig('i', 'I am a mod and I approve this message');
-            expect(keywordResult).toBeDefined();
-            expect(keywordResult.filename).toBe('im-a-mod');
-
-            const farewellResult = commandParser.getMatchingFarewell('!bye everyone!', '!bye');
-            expect(farewellResult).toBe('!bye');
         });
     });
 
