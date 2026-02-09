@@ -1,5 +1,4 @@
 
-const { logChatMessageWithConfig, logChatMessageSkipped } = require('../utils/chat-logger');
 const NotificationBuilder = require('../utils/notification-builder');
 const { validateNormalizedMessage } = require('../utils/message-normalization');
 const { checkGlobalCommandCooldown, updateGlobalCommandCooldown } = require('../utils/command-parser');
@@ -33,17 +32,17 @@ class ChatNotificationRouter {
             const userId = normalizedData.userId;
 
             if (!this.hasMessageContent(normalizedData)) {
-                logChatMessageSkipped(platform, normalizedData, 'empty message');
+                this._logSkipped(platform, normalizedData.username, 'empty message');
                 return;
             }
 
             if (!this.isChatEnabled(platform)) {
-                logChatMessageSkipped(platform, normalizedData, 'messages disabled');
+                this._logSkipped(platform, normalizedData.username, 'messages disabled');
                 return;
             }
 
             if (this.shouldSkipForConnection(platform, normalizedData.timestamp)) {
-                logChatMessageSkipped(platform, normalizedData, 'old message (sent before connection)');
+                this._logSkipped(platform, normalizedData.username, 'old message (sent before connection)');
                 return;
             }
 
@@ -53,17 +52,13 @@ class ChatNotificationRouter {
 
             const sanitizedMessage = this.sanitizeChatContent(normalizedData.message);
             if (!sanitizedMessage.hasContent) {
-                logChatMessageSkipped(platform, normalizedData, 'empty after sanitization');
+                this._logSkipped(platform, normalizedData.username, 'empty after sanitization');
                 return;
             }
 
             const logSafeData = { ...normalizedData, message: sanitizedMessage.message };
-
-            logChatMessageWithConfig(platform, logSafeData, this.runtime.config, {
-                includeUserId: false,
-                truncateMessage: true,
-                maxMessageLength: 200
-            });
+            const level = this.runtime.config.general.logChatMessages ? 'console' : 'debug';
+            this.logger[level](this._formatChatMessage(platform, logSafeData), 'chat-router');
 
             const isFirstMessage = this.isFirstMessage(normalizedData, platform);
             const greetingsEnabled = this.isGreetingEnabled(platform);
@@ -350,6 +345,16 @@ class ChatNotificationRouter {
             hasContent: sanitized.trim().length > 0,
             message: sanitized
         };
+    }
+
+    _formatChatMessage(platform, logSafeData) {
+        const { message } = logSafeData;
+        const truncated = message.length > 200 ? message.substring(0, 197) + '...' : message;
+        return `[${platform}] ${logSafeData.username}: ${truncated}`;
+    }
+
+    _logSkipped(platform, username, reason) {
+        this.logger.debug(`[${platform}] Skipping ${username}: ${reason}`, 'chat-router');
     }
 
     _handleRouterError(message, error, eventType) {
