@@ -19,7 +19,7 @@ class AppRuntime {
         if (!options || typeof options !== 'object') {
             throw new Error('handleUnifiedNotification requires options');
         }
-        if (!this.config || !this.config.general) {
+        if (!this.config) {
             throw new Error(`AppRuntime config unavailable for ${type} notification`);
         }
 
@@ -105,8 +105,8 @@ class AppRuntime {
         });
         this.viewerCountSystemStarted = false;
 
-        if (!this.config || !this.config.general) {
-            throw new Error('AppRuntime requires general config');
+        if (!this.config) {
+            throw new Error('AppRuntime requires config');
         }
 
         this.commandParser = this.dependencies.commandParser;
@@ -273,18 +273,6 @@ class AppRuntime {
             throw new Error('UserTrackingService not available for first message check');
         }
         return this.userTrackingService.isFirstMessage(userId, context);
-    }
-
-    checkCommandCooldown(userId, currentPlatformCmdCoolDownMs, currentPlatformHeavyCmdCoolDownMs) {
-        return this.commandCooldownService.checkUserCooldown(
-            userId,
-            currentPlatformCmdCoolDownMs,
-            currentPlatformHeavyCmdCoolDownMs
-        );
-    }
-
-    updateUserCommandTimestamps(userId) {
-        this.commandCooldownService.updateUserCooldown(userId);
     }
 
     async initializePlatforms() {
@@ -630,7 +618,7 @@ class AppRuntime {
                 throw new Error('handleGiftNotification requires userId');
             }
         }
-        if (!this.config || !this.config.general) {
+        if (!this.config) {
             throw new Error('AppRuntime config unavailable for gift notifications');
         }
 

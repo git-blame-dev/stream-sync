@@ -1,10 +1,8 @@
 const args = process.argv.slice(2);
 
 const cliArgs = {
-    noMsg: false,
     debug: false,
     help: false,
-    logLevel: null,
     chat: null
 };
 
@@ -12,9 +10,6 @@ for (let i = 0; i < args.length; i++) {
     const arg = args[i];
     
     switch (arg) {
-        case '--no-msg':
-            cliArgs.noMsg = true;
-            break;
         case '--debug':
             cliArgs.debug = true;
             break;
@@ -23,11 +18,6 @@ for (let i = 0; i < args.length; i++) {
             cliArgs.help = true;
             break;
 
-        case '--log-level':
-            if (i + 1 < args.length) {
-                cliArgs.logLevel = args[++i];
-            }
-            break;
         case '--chat':
             if (i + 1 < args.length) {
                 const chatCount = Number.parseInt(args[++i], 10);
@@ -49,16 +39,13 @@ if (cliArgs.help) {
 Usage: bun src/main.js [options]
 
 Options:
-  --no-msg             Suppress console output of chat messages
   --debug              Enable debug mode
-  --log-level <level>  Set log level (debug, info, warn, error)
   --chat <number>      Exit after processing N actual messages
   --help, -h           Show this help message
 
 Examples:
-  bun src/main.js --no-msg
-  bun src/main.js --log-level warn
   bun src/main.js --debug
+  bun src/main.js --chat 10
 `);
     process.exit(0);
 }
@@ -81,11 +68,6 @@ setConfigValidator(validateLoggingConfig);
 
 if (cliArgs.debug) {
     setDebugMode(true);
-}
-
-let keywordParsingDisabledViaCLI = false;
-if (cliArgs.disableKeywordParsing) {
-    keywordParsingDisabledViaCLI = true;
 }
 
 const { createRetrySystem } = require('./utils/retry-system');
@@ -142,10 +124,6 @@ function logMainError(message, error, payload, options) {
     }
 
     handler.logOperationalError(message, logContext, payload);
-}
-
-if (keywordParsingDisabledViaCLI) {
-    logger.info('Keyword parsing disabled via command line argument', 'system');
 }
 
 if (loggingInitWarnings.length) {
@@ -227,22 +205,15 @@ function createProductionDependencies(overrides = {}) {
     };
 }
 
-function createAppRuntime(config, dependencies, cliArgsOverride = cliArgs) {
+function createAppRuntime(config, dependencies) {
     if (!dependencies) {
         throw new Error('createAppRuntime requires dependencies');
     }
     const deps = dependencies;
-    const effectiveCliArgs = cliArgsOverride || cliArgs;
 
     logger.info('Creating AppRuntime', 'system');
 
-    const commandParserConfig = {
-        ...config,
-        cliArgs: {
-            disableKeywordParsing: effectiveCliArgs ? effectiveCliArgs.disableKeywordParsing : undefined
-        }
-    };
-    deps.commandParser = deps.commandParser || new CommandParser(commandParserConfig);
+    deps.commandParser = deps.commandParser || new CommandParser(config);
 
     return new AppRuntime(config, deps);
 }
@@ -264,12 +235,6 @@ async function main(overrides = {}) {
     }
     if (config.general.debugEnabled) {
         logger.debug('Raw twitch config:', 'system', config.twitch);
-    }
-    if (runtimeCliArgs.noMsg) {
-        config.general.noMsg = true;
-    }
-    if (runtimeCliArgs.logLevel) {
-        config.general.logLevel = runtimeCliArgs.logLevel;
     }
     const ensureSecretsFn = overrides.ensureSecrets || ensureSecrets;
     const TwitchAuthCtor = overrides.TwitchAuth || TwitchAuth;
@@ -330,9 +295,6 @@ async function main(overrides = {}) {
             }
         }
 
-        if (!config.general || !config.obs) {
-            throw new Error('Display queue requires general and obs config');
-        }
         const { chatMsgTxt, chatMsgScene, chatMsgGroup, ttsEnabled } = config.general;
         if (!chatMsgTxt || !chatMsgScene) {
             throw new Error('Display queue requires chatMsgTxt and chatMsgScene');
@@ -507,12 +469,12 @@ async function main(overrides = {}) {
         dependencies.commandCooldownService = commandCooldownService;
         dependencies.platformLifecycleService = platformLifecycleService;
         
-        app = createAppRuntime(config, dependencies, runtimeCliArgs);
+        app = createAppRuntime(config, dependencies);
 
         const gracefulExitService = createGracefulExitServiceFn(
             app,
             runtimeCliArgs.chat,
-            config.general?.gracefulExit
+            config.general.gracefulExit
         );
         dependencies.gracefulExitService = gracefulExitService;
 

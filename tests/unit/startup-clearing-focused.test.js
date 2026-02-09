@@ -67,18 +67,18 @@ describe('OBS Startup Display Clearing - Detailed Behavior', () => {
             );
         });
 
-        it('should warn and skip when config missing required sections', async () => {
+        it('should warn and skip when config is null', async () => {
             const warnSpy = createMockFn();
             const warnDeps = {
                 ...deps,
                 logger: { ...deps.logger, warn: warnSpy }
             };
 
-            await clearStartupDisplays({}, warnDeps);
+            await clearStartupDisplays(null, warnDeps);
 
             expect(hideAllDisplays).not.toHaveBeenCalled();
             expect(warnSpy).toHaveBeenCalledWith(
-                'clearStartupDisplays requires general, obs, and timing config; skipping display clearing',
+                'clearStartupDisplays requires config; skipping display clearing',
                 'OBSStartup'
             );
         });
@@ -87,14 +87,6 @@ describe('OBS Startup Display Clearing - Detailed Behavior', () => {
             await clearStartupDisplays(configFixture, deps);
 
             expect(clearTextSource).not.toHaveBeenCalled();
-        });
-
-        it('should skip clearing when config sections are missing', async () => {
-            const emptyConfig = {};
-
-            await clearStartupDisplays(emptyConfig, deps);
-
-            expect(hideAllDisplays).not.toHaveBeenCalled();
         });
 
         it('should skip clearing when required obs fields are missing', async () => {

@@ -10,8 +10,8 @@ async function clearStartupDisplays(config, deps = {}) {
     } = deps;
 
     try {
-        if (!config || !config.general || !config.obs || !config.timing) {
-            logger.warn('clearStartupDisplays requires general, obs, and timing config; skipping display clearing', 'OBSStartup');
+        if (!config) {
+            logger.warn('clearStartupDisplays requires config; skipping display clearing', 'OBSStartup');
             return;
         }
 

@@ -19,7 +19,7 @@ describe('Debug Mode Command Line Argument', () => {
     });
 
     test('debug mode remains disabled when no --debug argument is provided', () => {
-        const args = ['--no-msg'];
+        const args = [];
         const hasDebugArg = args.includes('--debug');
 
         if (hasDebugArg) {
@@ -46,7 +46,7 @@ describe('Debug Mode Command Line Argument', () => {
 
     test('uses config.ini setting when no --debug argument is provided', () => {
         const configDebugEnabled = true;
-        const args = ['--no-msg'];
+        const args = [];
         const hasDebugArg = args.includes('--debug');
 
         if (hasDebugArg) {
@@ -59,7 +59,7 @@ describe('Debug Mode Command Line Argument', () => {
     });
 
     test('handles multiple command line arguments correctly', () => {
-        const args = ['--debug', '--no-msg'];
+        const args = ['--debug'];
         const hasDebugArg = args.includes('--debug');
 
         if (hasDebugArg) {
