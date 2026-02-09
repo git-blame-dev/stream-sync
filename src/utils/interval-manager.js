@@ -1,4 +1,5 @@
 const timeoutValidator = require('./timeout-validator');
+const { getSystemTimestampISO } = require('./timestamp');
 
 class IntervalManager {
     constructor(platformName, logger, dependencies = {}) {
@@ -40,12 +41,11 @@ class IntervalManager {
         this.totalIntervalsCreated++;
         this.intervalCount++;
         
-        // Register interval
         const intervalInfo = {
             id: intervalId,
             name,
             type,
-            startTime: new Date().toISOString(),
+            startTime: getSystemTimestampISO(),
             intervalMs,
             callback: callback.name || 'anonymous',
             options
@@ -73,16 +73,14 @@ class IntervalManager {
             return false;
         }
         
-        // Clear the interval
         clearInterval(intervalInfo.id);
         this.totalIntervalsCleaned++;
         this.intervalCount--;
         
-        // Update tracking
         this.activeIntervals.delete(name);
         this.cleanupHistory.push({
             ...intervalInfo,
-            clearedAt: new Date().toISOString(),
+            clearedAt: getSystemTimestampISO(),
             duration: Date.now() - new Date(intervalInfo.startTime).getTime()
         });
         

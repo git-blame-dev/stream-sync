@@ -1,4 +1,5 @@
 const { createPlatformErrorHandler: defaultCreateErrorHandler } = require('./platform-error-handler');
+const { getSystemTimestampISO } = require('./timestamp');
 
 class PlatformInitializationManager {
     constructor(platformName, logger, deps = {}) {
@@ -72,7 +73,7 @@ class PlatformInitializationManager {
         this.initializationCount = Math.max(1, this.initializationCount + 1);
         
         this.initializationState = {
-            timestamp: new Date().toISOString(),
+            timestamp: getSystemTimestampISO(),
             success: true,
             attempt: this.initializationAttempts,
             ...additionalState
@@ -86,7 +87,7 @@ class PlatformInitializationManager {
     
     markInitializationFailure(error, additionalState = {}) {
         this.initializationState = {
-            timestamp: new Date().toISOString(),
+            timestamp: getSystemTimestampISO(),
             success: false,
             attempt: this.initializationAttempts,
             error: error?.message || 'Unknown error',

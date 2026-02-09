@@ -9,6 +9,7 @@ const { createTwitchEventSubEventRouter } = require('./twitch/events/event-route
 const { createTwitchEventSubSubscriptionManager } = require('./twitch/connections/eventsub-subscription-manager');
 const { createTwitchEventSubWsLifecycle } = require('./twitch/connections/ws-lifecycle');
 const { validateLoggerInterface } = require('../utils/dependency-validator');
+const { getSystemTimestampISO } = require('../utils/timestamp');
 
 class TwitchEventSub extends EventEmitter {
     constructor(config, dependencies = {}) {
@@ -166,10 +167,9 @@ class TwitchEventSub extends EventEmitter {
                 twitchAuth: this._validateTwitchAuth(),
                 configuration: this._validateConfigurationFields()
             },
-            validatedAt: new Date().toISOString()
+            validatedAt: getSystemTimestampISO()
         };
         
-        // Collect all issues from component validations
         Object.values(validation.components).forEach(component => {
             if (component.issues) {
                 validation.issues.push(...component.issues);

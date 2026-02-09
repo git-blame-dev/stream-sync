@@ -28,7 +28,14 @@ module.exports = [
       'chatbot/no-logger-error': 'error',
       'no-undef': 'error',
       'no-console': 'error',
-      'no-unused-private-class-members': 'error'
+      'no-unused-private-class-members': 'error',
+      'no-restricted-syntax': [
+        'error',
+        {
+          selector: 'CallExpression[callee.property.name="toISOString"][callee.object.type="NewExpression"][callee.object.callee.name="Date"][callee.object.arguments.length=0]',
+          message: 'Use getSystemTimestampISO() from src/utils/timestamp.js instead of new Date().toISOString().'
+        }
+      ]
     }
   },
   {

@@ -1,6 +1,7 @@
 
 const { withTimeout } = require('../utils/timeout-wrapper');
 const { createPlatformErrorHandler } = require('../utils/platform-error-handler');
+const { getSystemTimestampISO } = require('../utils/timestamp');
 
 class YouTubeStreamDetectionService {
     constructor(innertubeClient, options = {}) {
@@ -266,7 +267,7 @@ class YouTubeStreamDetectionService {
         
         if (includeDebug) {
             response.debug = {
-                requestTime: new Date().toISOString(),
+                requestTime: getSystemTimestampISO(),
                 channelHandle,
                 totalVideosFound: detectionResult.streams ? detectionResult.streams.length : 0,
                 responseTimeMs: responseTime,
@@ -318,7 +319,7 @@ class YouTubeStreamDetectionService {
         
         if (includeDebug) {
             response.debug = {
-                requestTime: new Date().toISOString(),
+                requestTime: getSystemTimestampISO(),
                 errorType: error.constructor.name,
                 errorMessage: error.message,
                 errorStatus: error.status,

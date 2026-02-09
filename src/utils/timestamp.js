@@ -12,6 +12,7 @@ function isIsoTimestamp(value) {
 }
 
 function getSystemTimestampISO() {
+    // eslint-disable-next-line no-restricted-syntax -- canonical implementation
     return new Date().toISOString();
 }
 

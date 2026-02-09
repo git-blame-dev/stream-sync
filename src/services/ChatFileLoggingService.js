@@ -2,6 +2,7 @@
 const fs = require('fs').promises;
 const path = require('path');
 const { createPlatformErrorHandler } = require('../utils/platform-error-handler');
+const { getSystemTimestampISO } = require('../utils/timestamp');
 
 class ChatFileLoggingService {
     constructor(dependencies = {}) {
@@ -12,13 +13,12 @@ class ChatFileLoggingService {
     }
 
     async logRawPlatformData(platform, eventType, data, platformConfig = {}) {
-        // Check if data logging is enabled for this platform
         if (!platformConfig.dataLoggingEnabled) {
             return;
         }
 
         try {
-            const ingestTimestamp = new Date().toISOString();
+            const ingestTimestamp = getSystemTimestampISO();
             const logEntry = {
                 ingestTimestamp,
                 platform,

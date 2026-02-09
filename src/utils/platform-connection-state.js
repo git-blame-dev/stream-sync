@@ -1,10 +1,12 @@
+const { getSystemTimestampISO } = require('./timestamp');
+
 class ConnectionState {
     constructor({ isConnected, platform, channel, username }) {
         this.isConnected = !!isConnected;
         this.platform = platform;
         this.channel = channel;
         this.username = username;
-        this.timestamp = new Date().toISOString();
+        this.timestamp = getSystemTimestampISO();
     }
 
     isApiReady() {
