@@ -6,8 +6,6 @@ const { buildConfig } = require('../../src/core/config-builders');
 const RAW_TEST_CONFIG = {
     general: {
         debugEnabled: 'false',
-        cmdCoolDown: '60',
-        globalCmdCoolDown: '60',
         viewerCountPollingInterval: '60',
         chatMsgGroup: 'test-chat-grp',
         maxMessageLength: '500'
@@ -46,7 +44,9 @@ const RAW_TEST_CONFIG = {
         heavyCommandCooldown: '300',
         heavyCommandThreshold: '4',
         heavyCommandWindow: '360',
-        maxEntries: '1000'
+        maxEntries: '1000',
+        cmdCooldown: '60',
+        globalCmdCooldown: '60'
     },
     commands: {},
     tiktok: { enabled: 'false', viewerCountSource: 'test-tiktok-viewer-count' },

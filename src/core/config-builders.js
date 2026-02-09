@@ -4,8 +4,6 @@ function buildGeneralConfig(normalized) {
     const g = normalized.general;
     return {
         ...g,
-        cmdCooldownMs: g.cmdCoolDown * 1000,
-        globalCmdCooldownMs: g.globalCmdCoolDown * 1000,
         viewerCountPollingIntervalMs: g.viewerCountPollingInterval * 1000
     };
 }
@@ -113,6 +111,10 @@ function buildSpamConfig(normalized) {
 function buildCooldownsConfig(normalized) {
     const c = normalized.cooldowns;
     return {
+        cmdCooldown: c.cmdCooldown,
+        cmdCooldownMs: c.cmdCooldown * 1000,
+        globalCmdCooldown: c.globalCmdCooldown,
+        globalCmdCooldownMs: c.globalCmdCooldown * 1000,
         defaultCooldown: c.defaultCooldown,
         defaultCooldownMs: c.defaultCooldown * 1000,
         heavyCommandCooldown: c.heavyCommandCooldown,

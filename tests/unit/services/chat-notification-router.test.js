@@ -27,8 +27,10 @@ describe('ChatNotificationRouter', () => {
             config: {
                 general: {
                     messagesEnabled: true,
-                    greetingsEnabled: true,
-                    cmdCoolDownMs: 60000,
+                    greetingsEnabled: true
+                },
+                cooldowns: {
+                    cmdCooldownMs: 60000,
                     heavyCommandCooldownMs: 300000,
                     globalCmdCooldownMs: 45000
                 },

@@ -21,7 +21,7 @@ describe('buildDefaultsFromSchema()', () => {
 
         expect(defaults.general.debugEnabled).toBe(false);
         expect(defaults.general.messagesEnabled).toBe(true);
-        expect(defaults.general.cmdCoolDown).toBe(60);
+        expect(defaults.cooldowns.cmdCooldown).toBe(60);
         expect(defaults.general.fallbackUsername).toBe('Unknown User');
     });
 

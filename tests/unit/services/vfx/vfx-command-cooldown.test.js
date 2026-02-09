@@ -12,8 +12,8 @@ describe('VFXCommandService cooldown handling', () => {
         gifts: { command: commandValue },
         farewell: {},
         vfx: { filePath: '/tmp' },
-        general: {
-            cmdCoolDown: overrides.cmdCoolDown ?? 60,
+        cooldowns: {
+            cmdCooldown: overrides.cmdCooldown ?? 60,
             globalCmdCooldownMs: overrides.globalCmdCooldownMs ?? 60000
         }
     });
@@ -109,7 +109,7 @@ describe('VFXCommandService cooldown handling', () => {
 
     test('allows disabling user and global cooldowns via zero config values', async () => {
         const service = new VFXCommandService(createConfig('!one', {
-            cmdCoolDown: 0,
+            cmdCooldown: 0,
             globalCmdCooldownMs: 0
         }), null, {
             effectsManager: mockEffectsManager
@@ -138,7 +138,7 @@ describe('VFXCommandService cooldown handling', () => {
         setSystemTime(new Date(0));
         try {
             const service = new VFXCommandService(createConfig('!spark', {
-                cmdCoolDown: 0,
+                cmdCooldown: 0,
                 globalCmdCooldownMs: 2000
             }), null, {
                 effectsManager: mockEffectsManager
@@ -181,7 +181,7 @@ describe('VFXCommandService cooldown handling', () => {
         setSystemTime(new Date(1000));
         try {
             const service = new VFXCommandService(createConfig('!one', {
-                cmdCoolDown: 1,
+                cmdCooldown: 1,
                 globalCmdCooldownMs: 1
             }), null, {
                 effectsManager: mockEffectsManager

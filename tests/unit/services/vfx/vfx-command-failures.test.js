@@ -9,7 +9,7 @@ describe('VFXCommandService failure paths', () => {
         greetings: { command: commandValue },
         farewell: {},
         vfx: { filePath: '/tmp' },
-        general: { cmdCoolDown: 60, globalCmdCooldownMs: 60000 }
+        cooldowns: { cmdCooldown: 60, globalCmdCooldownMs: 60000 }
     });
 
     beforeEach(() => {

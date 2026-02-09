@@ -140,8 +140,6 @@ class ConfigValidator {
             streamDetectionEnabled: ConfigValidator.parseBoolean(raw.streamDetectionEnabled, DEFAULTS.general.streamDetectionEnabled),
             envFileReadEnabled: ConfigValidator.parseBoolean(raw.envFileReadEnabled, DEFAULTS.general.envFileReadEnabled),
             envFileWriteEnabled: ConfigValidator.parseBoolean(raw.envFileWriteEnabled, DEFAULTS.general.envFileWriteEnabled),
-            cmdCoolDown: ConfigValidator.parseNumber(raw.cmdCoolDown, { defaultValue: DEFAULTS.general.cmdCoolDown }),
-            globalCmdCoolDown: ConfigValidator.parseNumber(raw.globalCmdCoolDown, { defaultValue: DEFAULTS.general.globalCmdCoolDown }),
             viewerCountPollingInterval: ConfigValidator.parseNumber(raw.viewerCountPollingInterval, { defaultValue: DEFAULTS.general.viewerCountPollingInterval }),
             streamRetryInterval: ConfigValidator.parseNumber(raw.streamRetryInterval, { defaultValue: DEFAULTS.general.streamRetryInterval }),
             streamMaxRetries: ConfigValidator.parseNumber(raw.streamMaxRetries, { defaultValue: DEFAULTS.general.streamMaxRetries }),
@@ -298,6 +296,8 @@ class ConfigValidator {
 
     static _normalizeCooldownsSection(raw) {
         return {
+            cmdCooldown: ConfigValidator.parseNumber(raw.cmdCooldown, { defaultValue: DEFAULTS.cooldowns.cmdCooldown }),
+            globalCmdCooldown: ConfigValidator.parseNumber(raw.globalCmdCooldown, { defaultValue: DEFAULTS.cooldowns.globalCmdCooldown }),
             defaultCooldown: ConfigValidator.parseNumber(raw.defaultCooldown, { defaultValue: DEFAULTS.cooldowns.defaultCooldown }),
             heavyCommandCooldown: ConfigValidator.parseNumber(raw.heavyCommandCooldown, { defaultValue: DEFAULTS.cooldowns.heavyCommandCooldown }),
             heavyCommandThreshold: ConfigValidator.parseNumber(raw.heavyCommandThreshold, { defaultValue: DEFAULTS.cooldowns.heavyCommandThreshold }),

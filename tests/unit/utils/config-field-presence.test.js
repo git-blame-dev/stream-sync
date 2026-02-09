@@ -96,8 +96,6 @@ describe('Config field presence - all normalizers return expected fields', () =>
             'streamDetectionEnabled',
             'envFileReadEnabled',
             'envFileWriteEnabled',
-            'cmdCoolDown',
-            'globalCmdCoolDown',
             'viewerCountPollingInterval',
             'streamRetryInterval',
             'streamMaxRetries',
@@ -122,13 +120,11 @@ describe('Config field presence - all normalizers return expected fields', () =>
         it('preserves field values from raw config', () => {
             const raw = {
                 debugEnabled: 'true',
-                cmdCoolDown: '120',
                 fallbackUsername: 'TestUser'
             };
             const result = ConfigValidator._normalizeGeneralSection(raw);
 
             expect(result.debugEnabled).toBe(true);
-            expect(result.cmdCoolDown).toBe(120);
             expect(result.fallbackUsername).toBe('TestUser');
         });
     });

@@ -323,8 +323,8 @@ class VFXCommandService {
     checkCommandCooldown(userId, command) {
         try {
             const now = Date.now();
-            const userCooldownSec = this.config.general.cmdCoolDown;
-            const globalCooldownMs = this.config.general.globalCmdCooldownMs;
+            const userCooldownSec = this.config.cooldowns.cmdCooldown;
+            const globalCooldownMs = this.config.cooldowns.globalCmdCooldownMs;
             if (!Number.isFinite(userCooldownSec) || !Number.isFinite(globalCooldownMs)) {
                 throw new Error('Cooldown config values must be numeric');
             }

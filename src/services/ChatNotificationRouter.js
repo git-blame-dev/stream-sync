@@ -197,7 +197,7 @@ class ChatNotificationRouter {
         }
 
         const { isFirstMessage, greetingsEnabled } = options;
-        const { perUserCooldown, heavyCooldown, globalCooldown } = this.getCooldownSettings(platform);
+        const { perUserCooldown, heavyCooldown, globalCooldown } = this.getCooldownSettings();
 
         const userAllowed = this.runtime.commandCooldownService.checkUserCooldown(
             normalizedData.userId,
@@ -226,13 +226,12 @@ class ChatNotificationRouter {
         await this.queueCommand(platform, normalizedData, commandConfig);
     }
 
-    getCooldownSettings(platform) {
-        const platformConfig = this.runtime.config?.[platform] || {};
-        const generalConfig = this.runtime.config?.general || {};
+    getCooldownSettings() {
+        const cooldownConfig = this.runtime.config?.cooldowns || {};
         return {
-            perUserCooldown: platformConfig.cmdCoolDownMs || generalConfig.cmdCoolDownMs || 60000,
-            heavyCooldown: platformConfig.heavyCommandCooldownMs || generalConfig.heavyCommandCooldownMs || 300000,
-            globalCooldown: platformConfig.globalCmdCooldownMs || generalConfig.globalCmdCooldownMs || 60000
+            perUserCooldown: cooldownConfig.cmdCooldownMs || 60000,
+            heavyCooldown: cooldownConfig.heavyCommandCooldownMs || 300000,
+            globalCooldown: cooldownConfig.globalCmdCooldownMs || 60000
         };
     }
 
