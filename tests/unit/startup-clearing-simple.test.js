@@ -20,12 +20,10 @@ describe('OBS Startup Display Clearing - Regression Tests', () => {
         clearTextSource = createMockFn().mockResolvedValue();
 
         configFixture = {
-            general: {
+            obs: {
                 chatMsgScene: 'stream pkmn switch',
                 chatMsgTxt: 'notification streamlabs',
-                chatMsgGroup: 'test-chat-group'
-            },
-            obs: {
+                chatMsgGroup: 'test-chat-group',
                 notificationScene: 'stream pkmn switch',
                 notificationTxt: 'notification streamlabs',
                 ttsTxt: 'tts txt',
@@ -108,11 +106,9 @@ describe('OBS Startup Display Clearing - Regression Tests', () => {
     describe('Configuration-Driven Behavior', () => {
         it('should use custom source names from config', async () => {
             const customConfig = {
-                general: {
-                    chatMsgScene: 'custom chat scene',
-                    chatMsgGroup: 'custom-chat-group'
-                },
                 obs: {
+                    chatMsgScene: 'custom chat scene',
+                    chatMsgGroup: 'custom-chat-group',
                     notificationScene: 'custom notification scene',
                     ttsTxt: 'custom tts source',
                     notificationTxt: 'custom notification source',

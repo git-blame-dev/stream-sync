@@ -295,40 +295,33 @@ async function main(overrides = {}) {
             }
         }
 
-        const { chatMsgTxt, chatMsgScene, chatMsgGroup, ttsEnabled } = config.general;
+        const { chatMsgTxt, chatMsgScene, chatMsgGroup, ttsEnabled,
+            notificationMsgGroup, notificationTxt, notificationScene } = config.obs;
         if (!chatMsgTxt || !chatMsgScene) {
             throw new Error('Display queue requires chatMsgTxt and chatMsgScene');
         }
-        const chatSourceName = chatMsgTxt;
-        const chatSceneName = chatMsgScene;
-        const chatGroupName = chatMsgGroup;
-        const chatLogos = config.obs.chatPlatformLogos;
-        const notificationLogos = config.obs.notificationPlatformLogos;
-        const { notificationMsgGroup, notificationTxt, notificationScene } = config.obs;
         if (!notificationTxt || !notificationScene) {
             throw new Error('Display queue requires notificationTxt and notificationScene');
         }
-        const notificationGroupName = notificationMsgGroup;
-        const obsNotificationTxt = notificationTxt;
-        const obsNotificationScene = notificationScene;
+        const chatLogos = config.obs.chatPlatformLogos;
+        const notificationLogos = config.obs.notificationPlatformLogos;
         const handcamConfig = config.handcam;
         const giftsConfig = config.gifts;
-        const ttsEnabledConfig = ttsEnabled;
         
         const displayQueueConfig = {
             autoProcess: config.displayQueue.autoProcess,
             maxQueueSize: config.displayQueue.maxQueueSize,
             chatOptimization: config.displayQueue.chatOptimization,
             chat: {
-                sourceName: chatSourceName,
-                sceneName: chatSceneName,
-                groupName: chatGroupName,
+                sourceName: chatMsgTxt,
+                sceneName: chatMsgScene,
+                groupName: chatMsgGroup,
                 platformLogos: chatLogos
             },
             notification: {
-                sourceName: obsNotificationTxt,
-                sceneName: obsNotificationScene,
-                groupName: notificationGroupName,
+                sourceName: notificationTxt,
+                sceneName: notificationScene,
+                groupName: notificationMsgGroup,
                 platformLogos: notificationLogos
             },
             obs: config.obs,
@@ -338,7 +331,7 @@ async function main(overrides = {}) {
             youtube: config.youtube,
             twitch: config.twitch,
             tiktok: config.tiktok,
-            ttsEnabled: ttsEnabledConfig
+            ttsEnabled
         };
         
         logger.debug(`[Display Queue Config] Notification: ${displayQueueConfig.notification.sourceName}, Chat: ${displayQueueConfig.chat.sourceName}`, 'Main');

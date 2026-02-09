@@ -23,19 +23,19 @@ function buildMinimalConfig(overrides = {}) {
     const base = {
         general: {
             debugEnabled: 'false',
-            chatMsgScene: '__smoke_scene__',
-            chatMsgTxt: 'smoke chat txt',
-            ttsEnabled: 'false',
             streamDetectionEnabled: 'false',
             streamRetryInterval: '15',
             streamMaxRetries: '1',
             continuousMonitoringInterval: '60',
             viewerCountPollingInterval: '60',
-            chatMsgGroup: '',
             maxMessageLength: '500'
         },
         obs: {
             enabled: 'false',
+            chatMsgScene: '__smoke_scene__',
+            chatMsgTxt: 'smoke chat txt',
+            chatMsgGroup: '',
+            ttsEnabled: 'false',
             notificationTxt: 'smoke notification txt',
             notificationScene: 'smoke notification scene',
             notificationMsgGroup: 'smoke notification group',
@@ -132,7 +132,7 @@ describe('Config path override', () => {
     it('loads config from CHAT_BOT_CONFIG_PATH when set', () => {
         const uniqueScene = '__smoke_scene_override__';
         const configContent = buildMinimalConfig({
-            general: { chatMsgScene: uniqueScene }
+            obs: { chatMsgScene: uniqueScene }
         });
         const testConfigPath = '/test/override/config.ini';
 
@@ -145,12 +145,12 @@ describe('Config path override', () => {
         process.env.CHAT_BOT_CONFIG_PATH = testConfigPath;
         const { config } = loadFreshConfig();
 
-        expect(config.general.chatMsgScene).toBe(uniqueScene);
+        expect(config.obs.chatMsgScene).toBe(uniqueScene);
     });
 
-    it('provides startup-critical general defaults when values are missing', () => {
+    it('provides startup-critical defaults when values are missing', () => {
         const configContent = buildMinimalConfig({
-            general: { chatMsgScene: '__smoke_scene_defaults__' }
+            obs: { chatMsgScene: '__smoke_scene_defaults__' }
         });
         const testConfigPath = '/test/defaults/config.ini';
 
@@ -163,28 +163,15 @@ describe('Config path override', () => {
         process.env.CHAT_BOT_CONFIG_PATH = testConfigPath;
         const { config } = loadFreshConfig();
 
-        const general = config.general;
-        const requiredBooleans = [
-            'ttsEnabled',
-            'streamDetectionEnabled'
-        ];
-        const requiredNumbers = [
-            'streamRetryInterval',
-            'streamMaxRetries',
-            'continuousMonitoringInterval'
-        ];
+        expect(typeof config.general.streamDetectionEnabled).toBe('boolean');
+        expect(Number.isFinite(config.general.streamRetryInterval)).toBe(true);
+        expect(Number.isFinite(config.general.streamMaxRetries)).toBe(true);
+        expect(Number.isFinite(config.general.continuousMonitoringInterval)).toBe(true);
 
-        requiredBooleans.forEach((key) => {
-            expect(typeof general[key]).toBe('boolean');
-        });
-
-        requiredNumbers.forEach((key) => {
-            expect(Number.isFinite(general[key])).toBe(true);
-        });
-
-        expect(typeof general.chatMsgTxt).toBe('string');
-        expect(general.chatMsgTxt.length).toBeGreaterThan(0);
-        expect(typeof general.chatMsgScene).toBe('string');
-        expect(general.chatMsgScene.length).toBeGreaterThan(0);
+        expect(typeof config.obs.ttsEnabled).toBe('boolean');
+        expect(typeof config.obs.chatMsgTxt).toBe('string');
+        expect(config.obs.chatMsgTxt.length).toBeGreaterThan(0);
+        expect(typeof config.obs.chatMsgScene).toBe('string');
+        expect(config.obs.chatMsgScene.length).toBeGreaterThan(0);
     });
 });

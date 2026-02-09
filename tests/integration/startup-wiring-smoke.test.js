@@ -7,10 +7,6 @@ const { setConfigValidator } = require('../../src/core/logging');
 
 const buildSmokeConfigIni = () => `[general]
 debugEnabled=true
-chatMsgTxt=smoke chat txt
-chatMsgScene=smoke chat scene
-chatMsgGroup=
-ttsEnabled=false
 streamDetectionEnabled=false
 streamRetryInterval=15
 streamMaxRetries=1
@@ -20,6 +16,10 @@ maxMessageLength=500
 
 [obs]
 enabled=false
+chatMsgTxt=smoke chat txt
+chatMsgScene=smoke chat scene
+chatMsgGroup=
+ttsEnabled=false
 notificationTxt=smoke notification txt
 notificationScene=smoke notification scene
 notificationMsgGroup=smoke notification group

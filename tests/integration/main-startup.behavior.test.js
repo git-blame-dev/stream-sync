@@ -9,10 +9,6 @@ const { captureStdout, captureStderr } = require('../helpers/output-capture');
 
 const buildMainConfig = (overrides = {}) => createConfigFixture({
     general: {
-        chatMsgTxt: 'test-chat-text',
-        chatMsgScene: 'test-chat-scene',
-        chatMsgGroup: 'test-chat-group',
-        ttsEnabled: false,
         debugEnabled: false,
         envFilePath: '/tmp/test-env',
         envFileReadEnabled: false,
@@ -21,6 +17,10 @@ const buildMainConfig = (overrides = {}) => createConfigFixture({
         ...overrides.general
     },
     obs: {
+        chatMsgTxt: 'test-chat-text',
+        chatMsgScene: 'test-chat-scene',
+        chatMsgGroup: 'test-chat-group',
+        ttsEnabled: false,
         notificationTxt: 'test-notification-text',
         notificationScene: 'test-notification-scene',
         notificationMsgGroup: 'test-notification-group',

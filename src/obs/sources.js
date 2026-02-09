@@ -529,7 +529,7 @@ function getDefaultSourcesManager() {
         const { config } = require('../core/config');
         const { ensureOBSConnected, obsCall, getOBSConnectionManager } = require('./connection');
 
-        const chatGroupName = config.general.chatMsgGroup;
+        const chatGroupName = config.obs.chatMsgGroup;
         const notificationGroupName = config.obs.notificationMsgGroup;
         const fadeDelay = config.timing.fadeDuration;
 
