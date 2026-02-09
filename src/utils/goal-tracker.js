@@ -4,7 +4,6 @@ const { createPlatformErrorHandler } = require('./platform-error-handler');
 
 class GoalTracker {
     constructor(dependencies = {}) {
-        // Use injected logger if provided, otherwise fall back to global logger
         this.logger = dependencies.logger || require('../core/logging').logger;
         this.config = dependencies.config || require('../core/config').config;
         this.fileSystem = dependencies.fileSystem || fs;
@@ -21,36 +20,29 @@ class GoalTracker {
     try {
             this.logger.debug('Initializing goal tracking system...', 'goal-tracker');
         
-        // Reset state to default
             this.goalState = {
             tiktok: { current: 0, target: 1000, currency: 'coins' },
             youtube: { current: 0.00, target: 1.00, currency: 'dollars' },
             twitch: { current: 0, target: 100, currency: 'bits' }
         };
 
-            if (!this.config || !this.config.goals) {
-                    this.logger.warn('[Goal Tracker] Config not available, using defaults');
-            return;
-        }
-        
-        // Update targets from current configuration
             if (this.config.goals.tiktokGoalEnabled) {
-                this.goalState.tiktok.target = this.config.goals.tiktokGoalTarget || 1000;
-                this.goalState.tiktok.currency = this.config.goals.tiktokGoalCurrency || 'coins';
+                this.goalState.tiktok.target = this.config.goals.tiktokGoalTarget;
+                this.goalState.tiktok.currency = this.config.goals.tiktokGoalCurrency;
         }
         
             if (this.config.goals.youtubeGoalEnabled) {
-                this.goalState.youtube.target = this.config.goals.youtubeGoalTarget || 1.00;
-                this.goalState.youtube.currency = this.config.goals.youtubeGoalCurrency || 'dollars';
+                this.goalState.youtube.target = this.config.goals.youtubeGoalTarget;
+                this.goalState.youtube.currency = this.config.goals.youtubeGoalCurrency;
         }
         
             if (this.config.goals.twitchGoalEnabled) {
-                this.goalState.twitch.target = this.config.goals.twitchGoalTarget || 100;
-                this.goalState.twitch.currency = this.config.goals.twitchGoalCurrency || 'bits';
+                this.goalState.twitch.target = this.config.goals.twitchGoalTarget;
+                this.goalState.twitch.currency = this.config.goals.twitchGoalCurrency;
         }
         
             this.logger.debug('Goal tracking system initialized successfully', 'goal-tracker');
-            this.logger.debug(`Current state: twitch=${this.goalState.twitch?.current}/${this.goalState.twitch?.target} ${this.goalState.twitch?.currency}, youtube=${this.goalState.youtube?.current}/${this.goalState.youtube?.target} ${this.goalState.youtube?.currency}`, 'goal-tracker');
+            this.logger.debug(`Current state: twitch=${this.goalState.twitch.current}/${this.goalState.twitch.target} ${this.goalState.twitch.currency}, youtube=${this.goalState.youtube.current}/${this.goalState.youtube.target} ${this.goalState.youtube.currency}`, 'goal-tracker');
         
     } catch (error) {
             this._handleGoalTrackerError('[Goal Tracker] Error initializing goal tracker', error, {
@@ -132,22 +124,21 @@ class GoalTracker {
         }
 
         const platformKey = platform.toLowerCase();
-        const paypiggyConfig = this.config?.goals || {};
         let paypiggyAmount = 0;
         
         switch (platformKey) {
             case 'tiktok':
-                    paypiggyAmount = paypiggyConfig.tiktokPaypiggyEquivalent ?? 50;
+                    paypiggyAmount = this.config.goals.tiktokPaypiggyEquivalent;
                     this.logger.debug(`Converting TikTok paypiggy to ${paypiggyAmount} coins`, 'goal-tracker');
                 break;
                 
             case 'youtube':
-                    paypiggyAmount = paypiggyConfig.youtubePaypiggyPrice ?? 4.99;
+                    paypiggyAmount = this.config.goals.youtubePaypiggyPrice;
                     this.logger.debug(`Converting YouTube paypiggy to $${paypiggyAmount}`, 'goal-tracker');
                 break;
                 
             case 'twitch':
-                    paypiggyAmount = paypiggyConfig.twitchPaypiggyEquivalent ?? 350;
+                    paypiggyAmount = this.config.goals.twitchPaypiggyEquivalent;
                     this.logger.debug(`Converting Twitch paypiggy to ${paypiggyAmount} bits`, 'goal-tracker');
                 break;
                 
@@ -232,12 +223,10 @@ class GoalTracker {
 }
 }
 
-// Factory function for creating GoalTracker instances with custom dependencies
 function createGoalTracker(dependencies) {
     return new GoalTracker(dependencies);
 }
 
-// Export class and factory for explicit instantiation
 module.exports = {
     GoalTracker,
     createGoalTracker

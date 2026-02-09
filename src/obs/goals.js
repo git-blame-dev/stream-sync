@@ -1,19 +1,6 @@
 
 const { createPlatformErrorHandler } = require('../utils/platform-error-handler');
 
-function safeStringify(obj) {
-    if (obj === null) return 'null';
-    if (obj === undefined) return 'undefined';
-    if (typeof obj === 'string') return obj;
-    if (typeof obj === 'number' || typeof obj === 'boolean') return String(obj);
-
-    try {
-        return JSON.stringify(obj);
-    } catch {
-        return '[Object: stringify failed]';
-    }
-}
-
 function buildGoalsManager(obsManager, dependencies = {}) {
     if (!obsManager) {
         throw new Error('OBSGoalsManager requires OBSConnectionManager instance');
@@ -60,7 +47,7 @@ function buildGoalsManager(obsManager, dependencies = {}) {
 
     async function initializeGoalDisplay() {
         try {
-            if (!config.goals?.enabled) {
+            if (!config.goals.enabled) {
                 logger.debug('[Goals] Goal system disabled in configuration', 'goals');
                 return;
             }
@@ -86,7 +73,6 @@ function buildGoalsManager(obsManager, dependencies = {}) {
     }
 
     async function updateAllGoalDisplays() {
-        logger.debug('[GoalDisplay][DEBUG] Entering updateAllGoalDisplays');
         try {
             if (!isOBSConnected()) {
                 logger.debug('[Goal Display] OBS not connected, skipping goal display updates', 'goals');
@@ -96,18 +82,17 @@ function buildGoalsManager(obsManager, dependencies = {}) {
             logger.debug('[Goal Display] Updating all goal displays...', 'goals');
 
             const allStates = getAllGoalStates();
-            logger.debug('[GoalDisplay][DEBUG] updateAllGoalDisplays allStates=' + safeStringify(allStates));
             const promises = [];
 
-            if ((config.goals?.tiktokGoalEnabled ?? true) && allStates.tiktok) {
+            if (config.goals.tiktokGoalEnabled && allStates.tiktok) {
                 promises.push(updateGoalDisplay('tiktok', allStates.tiktok.formatted));
             }
 
-            if ((config.goals?.youtubeGoalEnabled ?? true) && allStates.youtube) {
+            if (config.goals.youtubeGoalEnabled && allStates.youtube) {
                 promises.push(updateGoalDisplay('youtube', allStates.youtube.formatted));
             }
 
-            if ((config.goals?.twitchGoalEnabled ?? true) && allStates.twitch) {
+            if (config.goals.twitchGoalEnabled && allStates.twitch) {
                 promises.push(updateGoalDisplay('twitch', allStates.twitch.formatted));
             }
 
@@ -125,7 +110,6 @@ function buildGoalsManager(obsManager, dependencies = {}) {
     }
 
     async function updateGoalDisplay(platform, formattedText) {
-        logger.debug('[GoalDisplay][DEBUG] Entering updateGoalDisplay platform=' + platform + ' formattedText=' + formattedText);
         try {
             if (!isOBSConnected()) {
                 logger.debug(`[Goal Display] OBS not connected, skipping ${platform} goal display update`, 'goals');
@@ -144,23 +128,22 @@ function buildGoalsManager(obsManager, dependencies = {}) {
                     platform.charAt(0).toUpperCase() + platform.slice(1);
             const enabledKey = `${platformKey}GoalEnabled`;
 
-            if (!(config.goals?.[enabledKey] ?? true)) {
+            if (!config.goals[enabledKey]) {
                 logger.debug(`[Goal Display] ${platformCapitalized} goal disabled, skipping goal display update`, 'goals');
                 return;
             }
 
-            logger.debug('[DEBUG][GoalDisplay] processDonationGoal called with:', 'GoalDisplay', { platform });
             let sourceName = '';
 
             switch (platformKey) {
                 case 'tiktok':
-                    sourceName = config.goals?.tiktokGoalSource;
+                    sourceName = config.goals.tiktokGoalSource;
                     break;
                 case 'youtube':
-                    sourceName = config.goals?.youtubeGoalSource;
+                    sourceName = config.goals.youtubeGoalSource;
                     break;
                 case 'twitch':
-                    sourceName = config.goals?.twitchGoalSource;
+                    sourceName = config.goals.twitchGoalSource;
                     break;
                 default:
                     throw new Error(`Unknown platform: ${platform}`);
@@ -195,9 +178,8 @@ function buildGoalsManager(obsManager, dependencies = {}) {
                 error: 'Invalid platform passed to processDonationGoal'
             };
         }
-        logger.debug('[GoalDisplay][DEBUG] Entering processDonationGoal platform=' + platform + ' amount=' + amount);
         try {
-            if (!config.goals?.enabled) {
+            if (!config.goals.enabled) {
                 logger.debug('[Goal Display] Goal system disabled, skipping donation processing', 'goals');
                 return {
                     success: false,
@@ -205,16 +187,9 @@ function buildGoalsManager(obsManager, dependencies = {}) {
                 };
             }
 
-            logger.debug('[DEBUG][GoalDisplay] processDonationGoal called with:', 'GoalDisplay', { platform });
             const platformKey = platform.toLowerCase();
 
-            const isEnabled = {
-                tiktok: config.goals?.tiktokGoalEnabled ?? true,
-                youtube: config.goals?.youtubeGoalEnabled ?? true,
-                twitch: config.goals?.twitchGoalEnabled ?? true
-            }[platformKey];
-
-            if (!isEnabled) {
+            if (!config.goals[`${platformKey}GoalEnabled`]) {
                 logger.debug(`[Goal Display] ${platform} goal disabled, skipping donation processing`, 'goals');
                 return {
                     success: false,
@@ -257,7 +232,7 @@ function buildGoalsManager(obsManager, dependencies = {}) {
 
     async function processPaypiggyGoal(platform) {
         try {
-            if (!config.goals?.enabled) {
+            if (!config.goals.enabled) {
                 logger.debug('[Goal Display] Goal system disabled, skipping paypiggy processing', 'goals');
                 return {
                     success: false,
@@ -265,16 +240,9 @@ function buildGoalsManager(obsManager, dependencies = {}) {
                 };
             }
 
-            logger.debug('[DEBUG][GoalDisplay] processDonationGoal called with:', 'GoalDisplay', { platform });
             const platformKey = platform.toLowerCase();
 
-            const isEnabled = {
-                tiktok: config.goals?.tiktokGoalEnabled ?? true,
-                youtube: config.goals?.youtubeGoalEnabled ?? true,
-                twitch: config.goals?.twitchGoalEnabled ?? true
-            }[platformKey];
-
-            if (!isEnabled) {
+            if (!config.goals[`${platformKey}GoalEnabled`]) {
                 logger.debug(`[Goal Display] ${platform} goal disabled, skipping paypiggy processing`, 'goals');
                 return {
                     success: false,
@@ -317,20 +285,13 @@ function buildGoalsManager(obsManager, dependencies = {}) {
 
     function getCurrentGoalStatus(platform) {
         try {
-            if (!config.goals?.enabled) {
+            if (!config.goals.enabled) {
                 return null;
             }
 
-            logger.debug('[DEBUG][GoalDisplay] processDonationGoal called with:', 'GoalDisplay', { platform });
             const platformKey = platform.toLowerCase();
 
-            const isEnabled = {
-                tiktok: config.goals?.tiktokGoalEnabled ?? true,
-                youtube: config.goals?.youtubeGoalEnabled ?? true,
-                twitch: config.goals?.twitchGoalEnabled ?? true
-            }[platformKey];
-
-            if (!isEnabled) {
+            if (!config.goals[`${platformKey}GoalEnabled`]) {
                 return null;
             }
 
@@ -343,23 +304,22 @@ function buildGoalsManager(obsManager, dependencies = {}) {
 
     function getAllCurrentGoalStatuses() {
         try {
-            if (!config.goals?.enabled) {
+            if (!config.goals.enabled) {
                 return {};
             }
 
             const allStates = getAllGoalStates();
-            logger.debug('[GoalDisplay][DEBUG] getAllCurrentGoalStatuses allStates=' + safeStringify(allStates));
             const enabledStates = {};
 
-            if ((config.goals?.tiktokGoalEnabled ?? true) && allStates.tiktok) {
+            if (config.goals.tiktokGoalEnabled && allStates.tiktok) {
                 enabledStates.tiktok = allStates.tiktok;
             }
 
-            if ((config.goals?.youtubeGoalEnabled ?? true) && allStates.youtube) {
+            if (config.goals.youtubeGoalEnabled && allStates.youtube) {
                 enabledStates.youtube = allStates.youtube;
             }
 
-            if ((config.goals?.twitchGoalEnabled ?? true) && allStates.twitch) {
+            if (config.goals.twitchGoalEnabled && allStates.twitch) {
                 enabledStates.twitch = allStates.twitch;
             }
 
