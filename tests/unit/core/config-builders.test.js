@@ -10,7 +10,9 @@ const {
     buildHandcamConfig,
     buildGiftConfig,
     buildEnvelopeConfig,
-    buildVfxConfig
+    buildVfxConfig,
+    buildLoggingConfig,
+    DEFAULT_LOGGING_CONFIG
 } = require('../../../src/core/config-builders');
 
 describe('config-builders', () => {
@@ -382,6 +384,94 @@ describe('config-builders', () => {
 
             expect(result.filePath).toBe('test/vfx.json');
             expect(result.extraField).toBeUndefined();
+        });
+    });
+
+    describe('buildLoggingConfig', () => {
+        const minNormalized = {
+            general: { debugEnabled: false },
+            logging: {}
+        };
+
+        it('returns default nested shape when no overrides', () => {
+            const result = buildLoggingConfig(minNormalized);
+
+            expect(result.console).toEqual({ enabled: true, level: 'console' });
+            expect(result.file.enabled).toBe(true);
+            expect(result.file.level).toBe('debug');
+            expect(result.file.directory).toBe('./logs');
+            expect(result.platforms.twitch.enabled).toBe(true);
+            expect(result.chat.enabled).toBe(true);
+        });
+
+        it('sets console level to debug when debugEnabled is true', () => {
+            const result = buildLoggingConfig({
+                general: { debugEnabled: true },
+                logging: {}
+            });
+
+            expect(result.console.level).toBe('debug');
+        });
+
+        it('keeps console level debug when debugMode option is true even if config debugEnabled is false', () => {
+            const result = buildLoggingConfig(
+                { general: { debugEnabled: false }, logging: {} },
+                { debugMode: true }
+            );
+
+            expect(result.console.level).toBe('debug');
+        });
+
+        it('applies flat consoleLevel override from logging section', () => {
+            const result = buildLoggingConfig({
+                general: { debugEnabled: false },
+                logging: { consoleLevel: 'info' }
+            });
+
+            expect(result.console.level).toBe('info');
+        });
+
+        it('applies flat fileLevel override from logging section', () => {
+            const result = buildLoggingConfig({
+                general: { debugEnabled: false },
+                logging: { fileLevel: 'warn' }
+            });
+
+            expect(result.file.level).toBe('warn');
+        });
+
+        it('applies fileLoggingEnabled override from logging section', () => {
+            const result = buildLoggingConfig({
+                general: { debugEnabled: false },
+                logging: { fileLoggingEnabled: false }
+            });
+
+            expect(result.file.enabled).toBe(false);
+            expect(result.chat.enabled).toBe(false);
+        });
+
+        it('rejects invalid console level and falls back to console', () => {
+            const result = buildLoggingConfig({
+                general: { debugEnabled: false },
+                logging: { consoleLevel: 'invalid-level' }
+            });
+
+            expect(result.console.level).toBe('console');
+        });
+
+        it('rejects invalid file level and falls back to debug', () => {
+            const result = buildLoggingConfig({
+                general: { debugEnabled: false },
+                logging: { fileLevel: 'invalid-level' }
+            });
+
+            expect(result.file.level).toBe('debug');
+        });
+
+        it('exports DEFAULT_LOGGING_CONFIG for use by logging system', () => {
+            expect(DEFAULT_LOGGING_CONFIG).toBeDefined();
+            expect(DEFAULT_LOGGING_CONFIG.console.enabled).toBe(true);
+            expect(DEFAULT_LOGGING_CONFIG.file.enabled).toBe(true);
         });
     });
 });

@@ -1,8 +1,9 @@
-const { validateLoggingConfig } = require('../../../src/core/config');
+const { buildLoggingConfig } = require('../../../src/core/config-builders');
 
 describe('logging config behavior', () => {
     it('forces log directories and chat logging when file logging enabled', () => {
-        const config = validateLoggingConfig({
+        const config = buildLoggingConfig({
+            general: { debugEnabled: false },
             logging: {
                 consoleLevel: 'warn',
                 fileLevel: 'error',
@@ -20,7 +21,8 @@ describe('logging config behavior', () => {
     });
 
     it('disables chat logging when file logging is disabled', () => {
-        const config = validateLoggingConfig({
+        const config = buildLoggingConfig({
+            general: { debugEnabled: false },
             logging: {
                 fileLoggingEnabled: false
             }

@@ -45,34 +45,6 @@ if (!process.__streamSyncUnhandledRejectionHandlerInstalled) {
     });
 }
 
-// Bootstrap file to set logging config validator before any other code runs
-if (isDebugModeEnabled()) {
-    console.log('[DEBUG] [Bootstrap] Importing config validator...');
-}
-// Import config validator first
-const { validateLoggingConfig } = require('./core/config');
-if (isDebugModeEnabled()) {
-    console.log('[DEBUG] [Bootstrap] Config validator imported');
-}
-
-if (isDebugModeEnabled()) {
-    console.log('[DEBUG] [Bootstrap] Importing logging system...'); // BOOTSTRAP: Pre-logger initialization
-}
-// Import logging system and set config validator
-const { setConfigValidator } = require('./core/logging');
-if (isDebugModeEnabled()) {
-    console.log('[DEBUG] [Bootstrap] Logging system imported'); // BOOTSTRAP: Logger imported but not initialized
-}
-
-// Set the config validator BEFORE any logging system usage
-if (isDebugModeEnabled()) {
-    console.log('[DEBUG] [Bootstrap] Setting config validator...'); // BOOTSTRAP: Logger not fully initialized
-}
-setConfigValidator(validateLoggingConfig);
-if (isDebugModeEnabled()) {
-    console.log('[DEBUG] [Bootstrap] Config validator set'); // BOOTSTRAP: Logger not fully initialized
-}
-
 // Now load the main application and start it
 if (isDebugModeEnabled()) {
     console.log('[DEBUG] [Bootstrap] Importing main application...'); // BOOTSTRAP: Logger not fully initialized

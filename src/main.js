@@ -50,19 +50,16 @@ Examples:
     process.exit(0);
 }
 
-const { validateLoggingConfig } = require('./core/config');
 const { 
-    setConfigValidator, 
     setDebugMode, 
     initializeLoggingConfig,
     getUnifiedLogger
 } = require('./core/logging');
+const { buildLoggingConfig } = require('./core/config-builders');
 const { safeSetTimeout, safeSetInterval } = require('./utils/timeout-validator');
 const { createPlatformErrorHandler } = require('./utils/platform-error-handler');
 const { ensureSecrets } = require('./utils/secret-manager');
 const TwitchAuth = require('./auth/TwitchAuth');
-
-setConfigValidator(validateLoggingConfig);
 
 if (cliArgs.debug) {
     setDebugMode(true);
@@ -75,18 +72,14 @@ const { InnertubeFactory } = require('./factories/innertube-factory');
 const { config: configModule } = require('./core');
 let config = configModule.config;
 
+if (cliArgs.debug) {
+    const normalizedConfig = configModule.loadConfig();
+    config.logging = buildLoggingConfig(normalizedConfig, { debugMode: true });
+}
+
 const innertubeInstanceManager = require('./services/innertube-instance-manager');
 
-const loggingInitWarnings = [];
-
-try {
-    if (typeof initializeLoggingConfig !== 'function') {
-        throw new Error('initializeLoggingConfig unavailable');
-    }
-    initializeLoggingConfig(config);
-} catch (error) {
-    throw error;
-}
+initializeLoggingConfig(config);
 
 const logger = getUnifiedLogger();
 if (!logger || typeof logger.debug !== 'function') {
@@ -121,12 +114,6 @@ function logMainError(message, error, payload, options) {
     }
 
     handler.logOperationalError(message, logContext, payload);
-}
-
-if (loggingInitWarnings.length) {
-    loggingInitWarnings.forEach((warning) => {
-        logger.warn(warning, 'logging');
-    });
 }
 
 const coreConstants = require('./core/constants');
