@@ -92,13 +92,9 @@ describe('Config field presence - all normalizers return expected fields', () =>
             'logChatMessages',
             'keywordParsingEnabled',
             'ignoreSelfMessages',
-            'streamDetectionEnabled',
             'envFileReadEnabled',
             'envFileWriteEnabled',
             'viewerCountPollingInterval',
-            'streamRetryInterval',
-            'streamMaxRetries',
-            'continuousMonitoringInterval',
             'maxMessageLength',
 
             'fallbackUsername',

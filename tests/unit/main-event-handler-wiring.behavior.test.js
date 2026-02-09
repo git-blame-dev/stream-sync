@@ -40,14 +40,7 @@ describe('main.js event handler wiring', () => {
         sceneManagementService: overrides.sceneManagementService || {}
     });
 
-    const baseConfig = {
-        general: {
-            streamDetectionEnabled: false,
-            streamRetryInterval: 15,
-            streamMaxRetries: 3,
-            continuousMonitoringInterval: 60000
-        }
-    };
+    const baseConfig = { general: {} };
 
     it('rejects construction when EventBus is unavailable', () => {
         const { AppRuntime } = require('../../src/main.js');

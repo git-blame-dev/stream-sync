@@ -23,10 +23,6 @@ function buildMinimalConfig(overrides = {}) {
     const base = {
         general: {
             debugEnabled: 'false',
-            streamDetectionEnabled: 'false',
-            streamRetryInterval: '15',
-            streamMaxRetries: '1',
-            continuousMonitoringInterval: '60',
             viewerCountPollingInterval: '60',
             maxMessageLength: '500'
         },
@@ -162,11 +158,6 @@ describe('Config path override', () => {
 
         process.env.CHAT_BOT_CONFIG_PATH = testConfigPath;
         const { config } = loadFreshConfig();
-
-        expect(typeof config.general.streamDetectionEnabled).toBe('boolean');
-        expect(Number.isFinite(config.general.streamRetryInterval)).toBe(true);
-        expect(Number.isFinite(config.general.streamMaxRetries)).toBe(true);
-        expect(Number.isFinite(config.general.continuousMonitoringInterval)).toBe(true);
 
         expect(typeof config.obs.ttsEnabled).toBe('boolean');
         expect(typeof config.obs.chatMsgTxt).toBe('string');

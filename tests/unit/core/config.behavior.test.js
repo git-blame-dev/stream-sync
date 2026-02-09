@@ -135,8 +135,7 @@ describe('Config loading behavior', () => {
         const configWithInvalid = `
 [general]
 debugEnabled = yes
-viewerCountPollingInterval = 60
-streamRetryInterval = not-a-number
+viewerCountPollingInterval = not-a-number
 maxMessageLength = 500
 
 [obs]
@@ -201,7 +200,7 @@ maxEntries = 1000
         reloadConfig(configWithInvalid);
 
         expect(currentConfig.general.debugEnabled).toBe(false);
-        expect(currentConfig.general.streamRetryInterval).toBe(15);
+        expect(currentConfig.general.viewerCountPollingInterval).toBe(60);
     });
 
     it('exposes cooldown configuration on the config facade', () => {

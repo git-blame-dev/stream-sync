@@ -78,11 +78,7 @@ describe('ViewerCount System Activation Integration', () => {
         configOverrides = {
             general: {
                 debug: true,
-                viewerCountPollingInterval: 60,
-                streamDetectionEnabled: false,
-                streamRetryInterval: 15,
-                streamMaxRetries: 3,
-                continuousMonitoringInterval: 60000
+                viewerCountPollingInterval: 60
             },
             youtube: {
                 enabled: true,
