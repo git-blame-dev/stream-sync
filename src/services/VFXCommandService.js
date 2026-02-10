@@ -396,15 +396,13 @@ class VFXCommandService {
         }
     }
 
-    // Private methods
-
     _initializeCommandParser() {
         try {
             const parserConfig = {
                 commands: this.config.commands,
                 farewell: this.config.farewell,
                 vfx: {
-                    filePath: this.config.vfx?.filePath
+                    filePath: this.config.vfx.filePath
                 },
                 general: this.config.general
             };
