@@ -49,12 +49,10 @@ describe('TikTok share platform flow (smoke)', () => {
         const textProcessing = createTextProcessingManager({ logger });
         const configOverrides = {
             general: {
-                notificationsEnabled: true,
                 sharesEnabled: true
             },
             tiktok: {
                 enabled: true,
-                notificationsEnabled: true,
                 sharesEnabled: true
             },
             obs: { enabled: false }

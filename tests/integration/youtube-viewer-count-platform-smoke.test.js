@@ -32,12 +32,9 @@ describe('YouTube viewer count platform flow (smoke)', () => {
         const displayQueue = createMockDisplayQueue();
         const textProcessing = createTextProcessingManager({ logger });
         const configOverrides = {
-            general: {
-                notificationsEnabled: true
-            },
+            general: {},
             youtube: {
                 enabled: true,
-                notificationsEnabled: true,
                 viewerCountEnabled: true,
                 username: 'test-channel'
             },

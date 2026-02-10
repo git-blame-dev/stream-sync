@@ -66,7 +66,7 @@ describe('TikTok envelope platform flow (smoke)', () => {
                 paypiggiesEnabled: true,
                 
             },
-            tiktok: { enabled: true, notificationsEnabled: true },
+            tiktok: { enabled: true },
             obs: { enabled: false }
         };
         const config = createConfigFixture(configOverrides);

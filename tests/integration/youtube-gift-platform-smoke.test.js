@@ -61,7 +61,7 @@ describe('YouTube gift platform flow (smoke)', () => {
             paypiggiesEnabled: true,
             
         },
-        youtube: { enabled: true, notificationsEnabled: true, username: 'test-channel' },
+        youtube: { enabled: true, username: 'test-channel' },
         obs: { enabled: false }
     };
 

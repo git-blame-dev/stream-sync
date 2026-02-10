@@ -54,12 +54,10 @@ describe('Twitch raid platform flow (smoke)', () => {
         const textProcessing = createTextProcessingManager({ logger });
         const configOverrides = {
             general: {
-                notificationsEnabled: true,
                 raidsEnabled: true
             },
             twitch: {
                 enabled: true,
-                notificationsEnabled: true,
                 raidsEnabled: true
             },
             obs: { enabled: false }

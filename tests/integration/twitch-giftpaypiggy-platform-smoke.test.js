@@ -72,7 +72,7 @@ describe('Twitch giftpaypiggy platform flow (smoke)', () => {
                 paypiggiesEnabled: true,
                 
             },
-            twitch: { enabled: true, notificationsEnabled: true },
+            twitch: { enabled: true },
             obs: { enabled: false }
         };
         const config = createConfigFixture(configOverrides);

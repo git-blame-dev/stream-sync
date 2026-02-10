@@ -45,9 +45,9 @@ describe('Monetisation pipeline integration', () => {
             notification: { sourceName: 'notif-source', sceneName: 'notif-scene', groupName: 'notif-group', platformLogos: {} },
             obs: { ttsTxt: 'tts-source' },
             vfx: { vfxFilePath: '/test/vfx/path' },
-            twitch: { notificationsEnabled: true },
-            youtube: { notificationsEnabled: true },
-            tiktok: { notificationsEnabled: true }
+            twitch: {},
+            youtube: {},
+            tiktok: {}
         };
 
         const mockObs = createMockOBSConnection();
@@ -91,9 +91,9 @@ describe('Monetisation pipeline integration', () => {
                 giftsEnabled: true,
                 paypiggiesEnabled: true
             },
-            twitch: { notificationsEnabled: true },
-            youtube: { notificationsEnabled: true },
-            tiktok: { notificationsEnabled: true }
+            twitch: {},
+            youtube: {},
+            tiktok: {}
         });
 
         const textProcessing = createTextProcessingManager({ logger: noOpLogger });

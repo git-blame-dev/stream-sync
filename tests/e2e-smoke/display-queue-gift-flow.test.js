@@ -73,7 +73,7 @@ describe('DisplayQueue gift flow (smoke E2E)', () => {
             gifts: { giftVideoSource: 'gift-video', giftAudioSource: 'gift-audio' },
             handcam: { enabled: false },
             ttsEnabled: true,
-            tiktok: { notificationsEnabled: true, messagesEnabled: true }
+            tiktok: { messagesEnabled: true }
         };
 
         const queue = new DisplayQueue(obsManager, config, { PRIORITY_LEVELS }, eventBus, {

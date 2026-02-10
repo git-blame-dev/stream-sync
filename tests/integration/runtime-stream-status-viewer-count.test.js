@@ -8,8 +8,7 @@ const configOverrides = {
     general: {},
     youtube: {
         enabled: true,
-        viewerCountEnabled: true,
-        notificationsEnabled: true
+        viewerCountEnabled: true
     },
     twitch: { enabled: false },
     tiktok: { enabled: false },

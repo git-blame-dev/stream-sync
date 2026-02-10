@@ -53,7 +53,7 @@ describe('DisplayQueue notification TTS disabled', () => {
                 chat: { sourceName: 'chat', sceneName: 'scene', groupName: 'group', platformLogos: {} },
                 notification: { sourceName: 'notif', sceneName: 'scene', groupName: 'group', platformLogos: {} },
                 obs: { ttsTxt: 'tts txt' },
-                youtube: { notificationsEnabled: true }
+                youtube: {}
             },
             testRuntimeConstants,
             new EventEmitter(),
