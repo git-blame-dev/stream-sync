@@ -43,14 +43,12 @@ describe('TikTok event pipeline (integration)', () => {
         const textProcessing = createTextProcessingManager({ logger });
         const config = createConfigFixture({
             general: {
-                notificationsEnabled: true,
                 messagesEnabled: true,
                 giftsEnabled: true,
                 sharesEnabled: true
             },
             tiktok: {
-                enabled: true,
-                notificationsEnabled: true
+                enabled: true
             },
             obs: { enabled: false }
         });

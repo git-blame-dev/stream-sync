@@ -32,7 +32,7 @@ describe('Monetization error-path platform flows (smoke)', () => {
         const logger = noOpLogger;
         const displayQueue = createMockDisplayQueue();
         const textProcessing = createTextProcessingManager({ logger });
-        const platformConfigOverride = { enabled: true, notificationsEnabled: true };
+        const platformConfigOverride = { enabled: true };
         if (platformKey === 'youtube') {
             platformConfigOverride.username = 'test-channel';
         }
