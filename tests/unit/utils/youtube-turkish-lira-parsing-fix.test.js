@@ -3,7 +3,7 @@ const { describe, expect, beforeEach, it, afterEach } = require('bun:test');
 const { createMockFn, restoreAllMocks } = require('../../helpers/bun-mock-utils');
 const { createConfigFixture } = require('../../helpers/config-fixture');
 
-const { YouTubeiCurrencyParser } = require('../../../src/utils/youtubei-currency-parser');
+const { YouTubeiCurrencyParser } = require('../../../src/platforms/youtube/youtubei-currency-parser');
 const NotificationManager = require('../../../src/notifications/NotificationManager');
 const { createTextProcessingManager } = require('../../../src/utils/text-processing');
 const { noOpLogger } = require('../../helpers/mock-factories');

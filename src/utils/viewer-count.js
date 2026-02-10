@@ -715,26 +715,6 @@ class ViewerCountSystem {
     }
 }
 
-function validateViewerCount(count) {
-    // Null and undefined are not valid
-    if (count === null || count === undefined) {
-        return false;
-    }
-    
-    // Convert strings to numbers if possible
-    if (typeof count === 'string') {
-        const parsed = parseInt(count, 10);
-        return !isNaN(parsed) && parsed >= 0;
-    }
-    
-    // Numbers must be non-negative and not NaN
-    if (typeof count === 'number') {
-        return !isNaN(count) && count >= 0;
-    }
-    
-    return false;
-}
-
 function validateObserverInterface(observer) {
     if (!observer || typeof observer !== 'object') {
         return false;
@@ -744,6 +724,5 @@ function validateObserverInterface(observer) {
 }
 
 module.exports = {
-    ViewerCountSystem,
-    validateViewerCount
+    ViewerCountSystem
 };

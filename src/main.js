@@ -126,12 +126,11 @@ const { getOBSConnectionManager } = require('./obs/connection');
 const { initializeDisplayQueue } = require('./obs/display-queue');
 const { getDefaultGoalsManager } = require('./obs/goals');
 
-const { textProcessing: textProcessingModule } = require('./utils');
-const { createTextProcessingManager } = textProcessingModule;
+const { createTextProcessingManager } = require('./utils/text-processing');
 const textProcessing = createTextProcessingManager({ logger });
 const { CommandParser } = require('./chat/commands');
 const { AppRuntime } = require('./runtime/AppRuntime');
-const { clearExpiredGlobalCooldowns } = require('./utils/command-parser');
+const { clearExpiredGlobalCooldowns } = require('./utils/global-command-cooldown');
 
 const NotificationManager = require('./notifications/NotificationManager');
 const { createSpamDetectionConfig, createDonationSpamDetection } = require('./utils/spam-detection');

@@ -1,9 +1,7 @@
 
 const { 
-    normalizeYouTubeUsername, 
-    normalizeYouTubeUserInfo, 
-    isYouTubeUsername 
-} = require('../../../src/utils/youtube-username-normalizer');
+    normalizeYouTubeUsername
+} = require('../../../src/platforms/youtube/youtube-username-normalizer');
 const { INTERNATIONAL_USERNAMES, BOUNDARY_CONDITIONS } = require('../../helpers/platform-test-data');
 const testClock = require('../../helpers/test-clock');
 
@@ -79,90 +77,7 @@ describe('YouTube Username Normalization', () => {
         });
     });
 
-    describe('normalizeYouTubeUserInfo', () => {
-        test('should normalize username with @ prefix', () => {
-            const result = normalizeYouTubeUserInfo('@testuser');
-            expect(result.username).toBe('testuser');
-        });
-
-        test('should handle N/A special case', () => {
-            const result = normalizeYouTubeUserInfo('N/A');
-            expect(result.username).toBeNull();
-        });
-
-        test('should handle invalid username gracefully', () => {
-            const result = normalizeYouTubeUserInfo(null);
-            expect(result.username).toBeNull();
-        });
-    });
-
-    describe('isYouTubeUsername', () => {
-        test('should identify usernames with @ prefix', () => {
-            expect(isYouTubeUsername('@testuser')).toBe(true);
-            expect(isYouTubeUsername('@user123')).toBe(true);
-            expect(isYouTubeUsername('@')).toBe(true);
-        });
-
-        test('should identify usernames without @ prefix', () => {
-            expect(isYouTubeUsername('testuser')).toBe(false);
-            expect(isYouTubeUsername('user123')).toBe(false);
-            expect(isYouTubeUsername('N/A')).toBe(false);
-        });
-
-        test('should handle invalid inputs', () => {
-            expect(isYouTubeUsername(null)).toBe(false);
-            expect(isYouTubeUsername(undefined)).toBe(false);
-            expect(isYouTubeUsername(123)).toBe(false);
-            expect(isYouTubeUsername({})).toBe(false);
-            expect(isYouTubeUsername([])).toBe(false);
-            expect(isYouTubeUsername('')).toBe(false);
-        });
-
-        test('should handle edge cases', () => {
-            expect(isYouTubeUsername('@')).toBe(true);
-            expect(isYouTubeUsername('@@doubleAt')).toBe(true); // Still starts with @
-            expect(isYouTubeUsername(' @spacePrefix')).toBe(false); // Doesn't start with @
-        });
-    });
-
     describe('Integration scenarios', () => {
-        test('should handle typical YouTube chat message author', () => {
-            const author = { name: '@gordontechreviews' };
-            const normalized = normalizeYouTubeUserInfo(author.name);
-            
-            expect(normalized.username).toBe('gordontechreviews');
-        });
-
-        test('should handle YouTube SuperChat author', () => {
-            const author = { name: '@SuperChatUser' };
-            const normalized = normalizeYouTubeUserInfo(author.name);
-            
-            expect(normalized.username).toBe('SuperChatUser');
-        });
-
-        test('should handle anonymous membership gifters', () => {
-            const author = { name: 'N/A' };
-            const normalized = normalizeYouTubeUserInfo(author.name);
-            
-            expect(normalized.username).toBeNull();
-        });
-
-        test('should handle malformed or missing author data', () => {
-            const scenarios = [
-                { name: null },
-                { name: undefined },
-                { name: '' },
-                {},
-                null,
-                undefined
-            ];
-
-            scenarios.forEach(author => {
-                const normalized = normalizeYouTubeUserInfo(author?.name);
-                expect(normalized.username).toBeNull();
-            });
-        });
-
         test('should provide consistent results across multiple calls', () => {
             const testCases = [
                 '@testuser123',
@@ -177,17 +92,6 @@ describe('YouTube Username Normalization', () => {
                 const result2 = normalizeYouTubeUsername(input);
                 expect(result1).toBe(result2);
             });
-        });
-
-        test('should handle comprehensive international edge cases', () => {
-            const mathResult = normalizeYouTubeUserInfo(`@${INTERNATIONAL_USERNAMES.mathematical}`);
-            expect(mathResult.username).toBe(INTERNATIONAL_USERNAMES.mathematical);
-
-            const zalgoResult = normalizeYouTubeUserInfo(`@${INTERNATIONAL_USERNAMES.zalgo}`);
-            expect(zalgoResult.username).toBe(INTERNATIONAL_USERNAMES.zalgo);
-
-            const longResult = normalizeYouTubeUserInfo(`@${BOUNDARY_CONDITIONS.longText}`);
-            expect(longResult.username).toBe(BOUNDARY_CONDITIONS.longText);
         });
     });
 

@@ -1,13 +1,31 @@
-
 const { logger } = require('../core/logging');
-const { validateDisplayConfig } = require('../utils/configuration-validator');
+const { validateDisplayConfig } = require('./display-config-validator');
 const { getDefaultSourcesManager } = require('./sources');
 const { getDefaultGoalsManager } = require('./goals');
 const MessageTTSHandler = require('../utils/message-tts-handler');
-const { isNotificationType, isChatType } = require('../utils/notification-types');
 const { createPlatformErrorHandler } = require('../utils/platform-error-handler');
 const { safeSetTimeout, safeDelay } = require('../utils/timeout-validator');
-const { PRIORITY_LEVELS } = require('../core/constants');
+const { PRIORITY_LEVELS, NOTIFICATION_CONFIGS } = require('../core/constants');
+
+let notificationTypeSet = null;
+const CHAT_TYPE = 'chat';
+
+function isNotificationType(type) {
+    if (typeof type !== 'string') {
+        return false;
+    }
+    
+    if (!notificationTypeSet) {
+        notificationTypeSet = new Set(Object.keys(NOTIFICATION_CONFIGS));
+    }
+    
+    return notificationTypeSet.has(type);
+}
+
+function isChatType(type) {
+    return type === CHAT_TYPE;
+}
+
 const { DisplayQueueState } = require('./display-queue-state');
 const { DisplayQueueEffects } = require('./display-queue-effects');
 const { DisplayRenderer } = require('./display-renderer');
@@ -534,5 +552,7 @@ function initializeDisplayQueue(obsManager, config = {}, constants = {}, eventBu
 
 module.exports = {
     initializeDisplayQueue,
-    DisplayQueue
+    DisplayQueue,
+    isNotificationType,
+    isChatType
 }; 

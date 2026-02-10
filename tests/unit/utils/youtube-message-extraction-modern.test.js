@@ -9,7 +9,7 @@ const realSuperChat = getSyntheticFixture('youtube', 'superchat');
 const realSuperSticker = getSyntheticFixture('youtube', 'supersticker');
 
 describe('YouTube Message Extraction - Modern (Production Data)', () => {
-    const { extractMessageText } = require('../../../src/utils/youtube-message-extractor');
+    const { extractMessageText } = require('../../../src/platforms/youtube/youtube-message-extractor');
 
     describe('Chat Message Text Extraction', () => {
         it('extracts plain text from chat message', () => {

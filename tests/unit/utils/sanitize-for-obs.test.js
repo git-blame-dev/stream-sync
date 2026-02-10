@@ -1,4 +1,4 @@
-const { sanitizeForOBS } = require('../../../src/utils/obs-text-sanitizer');
+const { sanitizeForOBS } = require('../../../src/obs/sources');
 
 describe('OBS Text Sanitizer - Unicode Crash Prevention', () => {
     describe('Unicode Crash Prevention', () => {

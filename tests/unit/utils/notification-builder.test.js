@@ -1,6 +1,6 @@
 const { describe, test, expect } = require('bun:test');
 const NotificationBuilder = require('../../../src/utils/notification-builder');
-const { getAnonymousUsername } = require('../../../src/utils/fallback-username');
+const { getAnonymousUsername } = require('../../../src/utils/validation');
 
 describe('NotificationBuilder', () => {
     test('builds a basic notification object from minimal input', () => {

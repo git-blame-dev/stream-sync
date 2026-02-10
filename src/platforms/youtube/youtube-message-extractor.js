@@ -1,4 +1,3 @@
-
 function extractMessageText(messageObject) {
     if (!messageObject || typeof messageObject !== 'object') {
         return '';

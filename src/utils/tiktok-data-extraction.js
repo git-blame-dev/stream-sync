@@ -77,13 +77,6 @@ function extractTikTokGiftData(data) {
     };
 }
 
-function extractTikTokViewerCount(data) {
-    if (!data || typeof data !== 'object') {
-        return null;
-    }
-    return Number.isFinite(data.viewerCount) ? data.viewerCount : null;
-}
-
 function formatCoinAmount(amount, currency = 'coins') {
     if (!Number.isFinite(Number(amount)) || amount <= 0) {
         return '';
@@ -100,6 +93,5 @@ function formatCoinAmount(amount, currency = 'coins') {
 module.exports = {
     extractTikTokUserData,
     extractTikTokGiftData,
-    extractTikTokViewerCount,
     formatCoinAmount
 };

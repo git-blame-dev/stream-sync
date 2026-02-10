@@ -1,63 +1,9 @@
 const { describe, it, expect } = require('bun:test');
 const {
-    interpolateTemplate,
-    enrichPaypiggyData
+    interpolateTemplate
 } = require('../../../src/utils/notification-template-interpolator');
 
 describe('notification-template-interpolator', () => {
-    describe('enrichPaypiggyData', () => {
-        it('returns data unchanged for non-paypiggy types', () => {
-            const data = { type: 'platform:gift', username: 'test-user' };
-            expect(enrichPaypiggyData(data)).toEqual(data);
-        });
-
-        it('returns empty object for null input', () => {
-            expect(enrichPaypiggyData(null)).toEqual({});
-        });
-
-        it('returns empty object for undefined input', () => {
-            expect(enrichPaypiggyData(undefined)).toEqual({});
-        });
-
-        it('returns empty object for non-object input', () => {
-            expect(enrichPaypiggyData('string')).toEqual({});
-        });
-
-        it('enriches with superfan copy when tier is superfan', () => {
-            const data = { type: 'platform:paypiggy', tier: 'superfan', platform: 'tiktok' };
-            const result = enrichPaypiggyData(data);
-            expect(result.paypiggyVariant).toBe('superfan');
-            expect(result.paypiggyAction).toBe('became a SuperFan');
-        });
-
-        it('enriches with membership copy for youtube platform', () => {
-            const data = { type: 'platform:paypiggy', platform: 'youtube' };
-            const result = enrichPaypiggyData(data);
-            expect(result.paypiggyVariant).toBe('membership');
-            expect(result.paypiggyAction).toBe('just became a member');
-        });
-
-        it('enriches with subscriber copy for default platforms', () => {
-            const data = { type: 'platform:paypiggy', platform: 'twitch' };
-            const result = enrichPaypiggyData(data);
-            expect(result.paypiggyVariant).toBe('subscriber');
-            expect(result.paypiggyAction).toBe('just subscribed');
-        });
-
-        it('enriches with subscriber copy when platform is missing', () => {
-            const data = { type: 'platform:paypiggy' };
-            const result = enrichPaypiggyData(data);
-            expect(result.paypiggyVariant).toBe('subscriber');
-        });
-
-        it('preserves original data properties alongside enrichment', () => {
-            const data = { type: 'platform:paypiggy', username: 'test-user', platform: 'twitch' };
-            const result = enrichPaypiggyData(data);
-            expect(result.username).toBe('test-user');
-            expect(result.paypiggyVariant).toBe('subscriber');
-        });
-    });
-
     describe('interpolateTemplate', () => {
         it('replaces template variables with data values', () => {
             const result = interpolateTemplate('{username} followed', { username: 'test-user' });

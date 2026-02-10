@@ -78,6 +78,5 @@ function assertPlatformInterface(platformName, instance, requiredMethods = DEFAU
 }
 
 module.exports = {
-    assertPlatformInterface,
-    validatePlatformInterface
+    assertPlatformInterface
 };

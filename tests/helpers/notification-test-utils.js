@@ -1,18 +1,7 @@
-
 const { initializeTestLogging } = require('./test-setup');
-
-// Initialize logging for notification tests
 initializeTestLogging();
 
-const {
-    formatCoins,
-    formatGiftCount,
-    formatViewerCount,
-    formatMonths,
-    NOTIFICATION_TEMPLATES
-} = require('../../src/utils/notification-strings');
 const { interpolateTemplate } = require('../../src/utils/notification-template-interpolator');
-
 const NotificationBuilder = require('../../src/utils/notification-builder');
 
 function createNotificationData(type, platform, userData, eventData = {}, vfxConfig = null) {
@@ -109,14 +98,12 @@ function generateNotificationString(data, variant) {
 const testNotificationGeneration = (type, userData, eventData, expectedPatterns) => {
     const notification = createNotificationData(type, 'tiktok', userData, eventData);
     
-    // Standard validation
     expect(notification).toHaveProperty('displayMessage');
     expect(notification).toHaveProperty('ttsMessage');
     expect(notification).toHaveProperty('logMessage');
     expect(notification.type).toBe(type);
     expect(notification.platform).toBe('tiktok');
     
-    // Pattern validation
     if (expectedPatterns.display) {
         expect(notification.displayMessage).toMatch(expectedPatterns.display);
     }
@@ -181,36 +168,6 @@ const testSubscriptionNotification = (userData, subData, expectedType = 'new') =
     return notification;
 };
 
-const testFormattingFunctions = () => {
-    describe('Formatting Functions', () => {
-        test('formatCoins handles singular/plural correctly', () => {
-            expect(formatCoins(0)).toBe('0 coins');
-            expect(formatCoins(1)).toBe('1 coin');
-            expect(formatCoins(5)).toBe('5 coins');
-            expect(formatCoins(100)).toBe('100 coins');
-        });
-
-        test('formatGiftCount handles singular/plural correctly', () => {
-            expect(formatGiftCount(1, 'Rose')).toBe('1 rose');
-            expect(formatGiftCount(5, 'Rose')).toBe('5 roses');
-            expect(formatGiftCount(1, 'Heart')).toBe('1 heart');
-            expect(formatGiftCount(3, 'Heart')).toBe('3 hearts');
-        });
-
-        test('formatViewerCount handles singular/plural correctly', () => {
-            expect(formatViewerCount(0)).toBe('0 viewers');
-            expect(formatViewerCount(1)).toBe('1 viewer');
-            expect(formatViewerCount(42)).toBe('42 viewers');
-        });
-
-        test('formatMonths handles singular/plural correctly', () => {
-            expect(formatMonths(0)).toBe('0 months');
-            expect(formatMonths(1)).toBe('1 month');
-            expect(formatMonths(6)).toBe('6 months');
-        });
-    });
-};
-
 const testTemplateInterpolation = (template, data, expected) => {
     const result = interpolateTemplate(template, data);
     expect(result).toBe(expected);
@@ -228,23 +185,11 @@ const createNotificationTestSuite = (notificationType, testCases) => {
                     testCase.expectedPatterns || {}
                 );
                 
-                // Run any additional assertions
                 if (testCase.additionalAssertions) {
                     testCase.additionalAssertions(result);
                 }
             });
         });
-    });
-};
-
-const validateNotificationTemplates = () => {
-    const requiredTypes = ['platform:gift', 'platform:follow', 'platform:paypiggy', 'platform:raid', 'platform:envelope', 'greeting', 'farewell', 'command'];
-
-    requiredTypes.forEach(type => {
-        expect(NOTIFICATION_TEMPLATES).toHaveProperty(type);
-        expect(NOTIFICATION_TEMPLATES[type]).toHaveProperty('display');
-        expect(NOTIFICATION_TEMPLATES[type]).toHaveProperty('tts');
-        expect(NOTIFICATION_TEMPLATES[type]).toHaveProperty('log');
     });
 };
 
@@ -261,32 +206,16 @@ const testUsernameSanitization = (rawUsername, expectedDisplay, expectedTTS) => 
 };
 
 module.exports = {
-    // Core testing functions
     testNotificationGeneration,
     testGiftNotification,
     testCommandNotification,
     testFollowNotification,
     testSubscriptionNotification,
-    
-    // Formatting tests
-    testFormattingFunctions,
     testTemplateInterpolation,
-    
-    // Test suite generators
     createNotificationTestSuite,
-    
-    // Validation helpers
-    validateNotificationTemplates,
     testUsernameSanitization,
-    
-    // Direct access to utilities
     createNotificationData,
     generateLogMessage,
     generateNotificationString,
-    formatCoins,
-    formatGiftCount,
-    formatViewerCount,
-    formatMonths,
-    interpolateTemplate,
-    NOTIFICATION_TEMPLATES
+    interpolateTemplate
 };

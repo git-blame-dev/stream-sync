@@ -16,7 +16,8 @@ describe('OBSSourcesManager DI requirements', () => {
         expect(exportedKeys).toEqual([
             'OBSSourcesManager',
             'createOBSSourcesManager',
-            'getDefaultSourcesManager'
+            'getDefaultSourcesManager',
+            'sanitizeForOBS'
         ]);
     });
 

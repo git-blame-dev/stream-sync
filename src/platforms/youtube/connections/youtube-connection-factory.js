@@ -1,6 +1,6 @@
 const { YOUTUBE } = require('../../../core/endpoints');
-const { getFallbackUsername } = require('../../../utils/fallback-username');
-const { normalizeYouTubeUsername } = require('../../../utils/youtube-username-normalizer');
+const { getFallbackUsername } = require('../../../utils/validation');
+const { normalizeYouTubeUsername } = require('../youtube-username-normalizer');
 
 function createYouTubeConnectionFactory(options = {}) {
     const {

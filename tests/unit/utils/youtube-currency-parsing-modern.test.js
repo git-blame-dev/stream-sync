@@ -3,7 +3,7 @@ const { describe, expect, it, beforeEach } = require('bun:test');
 const { noOpLogger } = require('../../helpers/mock-factories');
 
 const { getSyntheticFixture } = require('../../helpers/platform-test-data');
-const YouTubeCurrencyParser = require('../../../src/utils/youtubei-currency-parser');
+const YouTubeCurrencyParser = require('../../../src/platforms/youtube/youtubei-currency-parser');
 const testClock = require('../../helpers/test-clock');
 
 const realSuperSticker = getSyntheticFixture('youtube', 'supersticker');

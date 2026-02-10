@@ -2,7 +2,7 @@
 const { describe, expect, it } = require('bun:test');
 
 const { getSyntheticFixture } = require('../../helpers/platform-test-data');
-const YouTubeAuthorExtractor = require('../../../src/utils/youtube-author-extractor');
+const YouTubeAuthorExtractor = require('../../../src/platforms/youtube/youtube-author-extractor');
 
 const realChatMessage = getSyntheticFixture('youtube', 'chat-message');
 const realChatNoAtPrefix = getSyntheticFixture('youtube', 'chat-no-at-prefix');

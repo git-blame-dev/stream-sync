@@ -2,7 +2,6 @@ const { describe, expect, it } = require('bun:test');
 const {
     extractTikTokUserData,
     extractTikTokGiftData,
-    extractTikTokViewerCount,
     formatCoinAmount
 } = require('../../../src/utils/tiktok-data-extraction');
 
@@ -56,13 +55,6 @@ describe('extractTikTokGiftData', () => {
         });
 
         expect(build).toThrow('requires repeatCount');
-    });
-});
-
-describe('extractTikTokViewerCount', () => {
-    it('returns viewer count or null when missing', () => {
-        expect(extractTikTokViewerCount({ viewerCount: 123 })).toBe(123);
-        expect(extractTikTokViewerCount({})).toBeNull();
     });
 });
 

@@ -2,13 +2,10 @@ const { describe, test, expect, beforeEach } = require('bun:test');
 
 const testClock = require('../../helpers/test-clock');
 const {
-    normalizeMessage,
     normalizeYouTubeMessage,
     normalizeTikTokMessage,
     extractTwitchMessageData,
-    extractTwitchMessageText,
     extractYouTubeMessageText,
-    createFallbackMessage,
     validateNormalizedMessage
 } = require('../../../src/utils/message-normalization');
 
@@ -350,18 +347,6 @@ describe('Message Normalization', () => {
     });
 
     describe('when extracting message text', () => {
-        test('returns empty when Twitch message is a string', () => {
-            const messageObj = 'Simple text message';
-            const extracted = extractTwitchMessageText(messageObj);
-            expect(extracted).toBe('');
-        });
-
-        test('returns empty when Twitch message string contains emotes', () => {
-            const messageObj = 'Hello Kappa world!';
-            const extracted = extractTwitchMessageText(messageObj);
-            expect(extracted).toBe('');
-        });
-
         test('extracts YouTube message text correctly', () => {
             const messageObj = 'YouTube message text';
             const extracted = extractYouTubeMessageText(messageObj);
@@ -409,84 +394,8 @@ describe('Message Normalization', () => {
         });
 
         test('handles null/undefined message objects', () => {
-            expect(extractTwitchMessageText(null)).toBe('');
-            expect(extractTwitchMessageText(undefined)).toBe('');
             expect(extractYouTubeMessageText(null)).toBe('');
             expect(extractYouTubeMessageText(undefined)).toBe('');
-        });
-    });
-
-    describe('when creating fallback messages', () => {
-        test('creates valid fallback message on error', () => {
-            const error = new Error('Normalization failed');
-            const fallback = createFallbackMessage({
-                platform: 'twitch',
-                userId: 'user-1',
-                username: 'testuser',
-                message: 'test message',
-                error,
-                timestamp: '2025-01-02T03:04:05.000Z'
-            });
-
-            expect(fallback).toMatchObject({
-                platform: 'twitch',
-                userId: 'user-1',
-                username: 'testuser',
-                message: 'test message',
-                timestamp: '2025-01-02T03:04:05.000Z',
-                isMod: false,
-                isSubscriber: false,
-                isBroadcaster: false
-            });
-            expect(fallback.metadata).toMatchObject({
-                error: 'Normalization failed',
-                fallback: true
-            });
-        });
-
-        test('requires timestamps for fallback messages', () => {
-            const fallback = createFallbackMessage({
-                platform: 'twitch',
-                userId: 'user-2',
-                username: 'iso-user',
-                message: 'timestamp check'
-            });
-
-            expect(fallback).toBeNull();
-        });
-
-        test('returns null when username is whitespace', () => {
-            const fallback = createFallbackMessage({
-                platform: 'twitch',
-                userId: 'user-3',
-                username: '   ',
-                message: 'hello',
-                timestamp: '2025-01-02T03:04:05.000Z'
-            });
-
-            expect(fallback).toBeNull();
-        });
-
-        test('trims message and coerces userId to string', () => {
-            const fallback = createFallbackMessage({
-                platform: 'twitch',
-                userId: 42,
-                username: ' testuser ',
-                message: ' hello ',
-                timestamp: '2025-01-02T03:04:05.000Z'
-            });
-
-            expect(fallback).toMatchObject({
-                userId: '42',
-                username: 'testuser',
-                message: 'hello'
-            });
-        });
-
-        test('handles missing parameters in fallback', () => {
-            const fallback = createFallbackMessage();
-
-            expect(fallback).toBeNull();
         });
     });
 
@@ -606,32 +515,6 @@ describe('Message Normalization', () => {
             const validation = validateNormalizedMessage(invalidMessage);
             expect(validation.isValid).toBe(false);
             expect(validation.errors).toContain('Invalid platform: INVALID_PLATFORM');
-        });
-    });
-
-    describe('when using the main normalize function', () => {
-        test('throws on unknown platform', () => {
-            expect(() => normalizeMessage('unknown_platform', {}, 'test message'))
-                .toThrow('Unsupported');
-        });
-
-        test('normalizes platform names in a case-insensitive way', () => {
-            const timestampMs = testClock.now();
-            const chatItem = {
-                item: {
-                    id: 'yt-case-1',
-                    timestamp: timestampMs,
-                    author: {
-                        id: 'UCabc123',
-                        name: 'CaseUser'
-                    },
-                    message: { text: 'Case check' }
-                }
-            };
-
-            const normalized = normalizeMessage('YouTube', chatItem, 'YouTube');
-
-            expect(normalized.platform).toBe('youtube');
         });
     });
 

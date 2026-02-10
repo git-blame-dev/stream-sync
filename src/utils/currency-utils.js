@@ -21,7 +21,6 @@ const MANUAL_SYMBOL_TO_CODE = {
 };
 
 let _symbolToCodeMap = null;
-let _codeToSymbolMap = null;
 
 function buildSymbolToCodeMap() {
     const map = new Map();
@@ -60,54 +59,11 @@ function buildSymbolToCodeMap() {
     return map;
 }
 
-function buildCodeToSymbolMap() {
-    const map = new Map();
-
-    const codes = typeof Intl.supportedValuesOf === 'function'
-        ? Intl.supportedValuesOf('currency')
-        : [];
-
-    for (const code of codes) {
-        try {
-            const parts = new Intl.NumberFormat('en', {
-                style: 'currency',
-                currency: code,
-                currencyDisplay: 'symbol'
-            }).formatToParts(1);
-            const symbol = parts.find(p => p.type === 'currency')?.value;
-            if (symbol) {
-                map.set(code, symbol);
-            }
-        } catch {
-            // Ignore unsupported currencies in current ICU data
-        }
-    }
-
-    // Seed manual overrides in the other direction
-    for (const [symbol, code] of Object.entries(MANUAL_SYMBOL_TO_CODE)) {
-        if (!map.has(code)) {
-            map.set(code, symbol);
-        }
-    }
-
-    // Ensure base currencies are mapped even if ICU data is minimal
-    if (!map.has('USD')) map.set('USD', '$');
-
-    return map;
-}
-
 function getSymbolToCodeMap() {
     if (!_symbolToCodeMap) {
         _symbolToCodeMap = buildSymbolToCodeMap();
     }
     return _symbolToCodeMap;
-}
-
-function getCodeToSymbolMap() {
-    if (!_codeToSymbolMap) {
-        _codeToSymbolMap = buildCodeToSymbolMap();
-    }
-    return _codeToSymbolMap;
 }
 
 function warnUnknownCurrency(input, logger) {
@@ -138,6 +94,5 @@ function normalizeCurrency(currency, { logger = null, warnUnknown = true } = {})
 }
 
 module.exports = {
-    normalizeCurrency,
-    getCodeToSymbolMap
+    normalizeCurrency
 };

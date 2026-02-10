@@ -4,10 +4,7 @@ const {
     isDebugModeEnabled,
     getLazyLogger,
     getLazyUnifiedLogger,
-    safeObjectStringify,
-    formatLogParams,
-    createNoopLogger,
-    getLoggerOrNoop
+    safeObjectStringify
 } = require('../../../src/utils/logger-utils');
 
 describe('logger-utils behavior', () => {
@@ -37,7 +34,7 @@ describe('logger-utils behavior', () => {
         expect(typeof unifiedLogger.debug).toBe('function');
     });
 
-    test('safely stringifies primitives, objects, and formats params', () => {
+    test('safely stringifies primitives and objects', () => {
         expect(safeObjectStringify(null)).toBe('null');
         expect(safeObjectStringify(undefined)).toBe('undefined');
         expect(safeObjectStringify('hello')).toBe('hello');
@@ -46,11 +43,6 @@ describe('logger-utils behavior', () => {
 
         const circ = {}; circ.self = circ;
         expect(safeObjectStringify(circ, 1)).toContain('stringify failed');
-
-        const formatted = formatLogParams('a', 1, { b: 2 });
-        expect(formatted).toContain('a');
-        expect(formatted).toContain('1');
-        expect(formatted).toContain('"b":2');
     });
 
     test('serializes Error objects with message, stack, and name', () => {
@@ -60,25 +52,5 @@ describe('logger-utils behavior', () => {
         expect(parsed.message).toBe('test-boom');
         expect(parsed.name).toBe('Error');
         expect(parsed.stack).toContain('test-boom');
-    });
-
-    test('provides a no-op logger fallback', () => {
-        const noop = createNoopLogger();
-        expect(typeof noop.debug).toBe('function');
-        expect(typeof noop.info).toBe('function');
-        expect(typeof noop.warn).toBe('function');
-        expect(typeof noop.error).toBe('function');
-        expect(() => noop.debug('hello')).not.toThrow();
-    });
-
-    test('returns the provided logger when available', () => {
-        const logger = { debug: () => {}, info: () => {}, warn: () => {}, error: () => {} };
-        expect(getLoggerOrNoop(logger)).toBe(logger);
-    });
-
-    test('returns a no-op logger when none is provided', () => {
-        const logger = getLoggerOrNoop();
-        expect(typeof logger.debug).toBe('function');
-        expect(() => logger.info('hello')).not.toThrow();
     });
 });

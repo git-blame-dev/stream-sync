@@ -1,9 +1,51 @@
-
 const crypto = require('crypto');
-const { NOTIFICATION_TEMPLATES } = require('./notification-strings');
 const { interpolateTemplate } = require('./notification-template-interpolator');
 const { normalizeCurrency } = require('./currency-utils');
-const { getAnonymousUsername } = require('./fallback-username');
+const { getAnonymousUsername } = require('./validation');
+
+const HARDCODED_TYPES = ['platform:gift', 'platform:giftpaypiggy', 'platform:paypiggy', 'platform:follow', 'platform:share', 'platform:raid', 'platform:envelope'];
+
+const NOTIFICATION_TEMPLATES = {
+    'platform:gift': {
+        display: '{username} sent {formattedGiftCountForDisplay}',
+        displayWithCoins: '{username} sent {formattedCoins} [{formattedGiftCountForDisplay}]',
+        tts: '{ttsUsername} sent {formattedGiftCount}',
+        ttsWithCoins: '{ttsUsername} sent {formattedCoins} with {formattedGiftCount}',
+        log: 'Gift from {username}: {formattedGiftCount}'
+    },
+    'platform:follow': {
+        display: '{username} just followed!',
+        tts: '{ttsUsername} just followed',
+        log: 'New follower: {username}'
+    },
+    'platform:raid': {
+        display: 'Incoming raid from {username} with {viewerCount} viewers!',
+        tts: 'Incoming raid from {ttsUsername} with {formattedViewerCount}',
+        log: 'Incoming raid from {username} with {viewerCount} viewers!'
+    },
+    'platform:envelope': {
+        display: '{username} sent a treasure chest!',
+        displayWithCoins: '{username} sent {formattedCoins} treasure chest!',
+        tts: '{ttsUsername} sent a treasure chest',
+        ttsWithCoins: '{ttsUsername} sent {formattedCoins} treasure chest',
+        log: 'Treasure chest from {username}: {formattedCoins}'
+    },
+    greeting: {
+        display: 'Welcome, {username}! \u{1F44B}',
+        tts: 'Hi {ttsUsername}',
+        log: 'Greeting: {username}'
+    },
+    farewell: {
+        display: 'Goodbye, {username}! \u{1F44B}',
+        tts: 'Goodbye {ttsUsername}',
+        log: 'Farewell: {username}'
+    },
+    command: {
+        display: '{username} used command {command}',
+        tts: '{ttsUsername} used command {commandName}',
+        log: 'Command {command} triggered by {username}'
+    },
+};
 
 class NotificationBuilder {
     static build(input) {
@@ -427,10 +469,7 @@ class NotificationBuilder {
             return `${userName} sent a treasure chest!`;
         }
 
-        // Check if type has a template in NOTIFICATION_TEMPLATES
-        // Only use template for types that don't have hardcoded implementations above
-        const hardcodedTypes = ['platform:gift', 'platform:giftpaypiggy', 'platform:paypiggy', 'platform:follow', 'platform:share', 'platform:raid', 'platform:envelope'];
-        if (!hardcodedTypes.includes(type) && NOTIFICATION_TEMPLATES[type] && NOTIFICATION_TEMPLATES[type].display) {
+        if (!HARDCODED_TYPES.includes(type) && NOTIFICATION_TEMPLATES[type] && NOTIFICATION_TEMPLATES[type].display) {
             const templateData = {
                 username: this.getTruncatedUsername(username),
                 ttsUsername: this.sanitizeUsernameForTts(username),
@@ -521,10 +560,7 @@ class NotificationBuilder {
             return `${shortUsername} sent a treasure chest`;
         }
 
-        // Check if type has a template in NOTIFICATION_TEMPLATES
-        // Only use template for types that don't have hardcoded implementations above
-        const hardcodedTypes = ['platform:gift', 'platform:giftpaypiggy', 'platform:paypiggy', 'platform:follow', 'platform:share', 'platform:raid', 'platform:envelope'];
-        if (!hardcodedTypes.includes(type) && NOTIFICATION_TEMPLATES[type] && NOTIFICATION_TEMPLATES[type].tts) {
+        if (!HARDCODED_TYPES.includes(type) && NOTIFICATION_TEMPLATES[type] && NOTIFICATION_TEMPLATES[type].tts) {
             const templateData = {
                 username: this.getTruncatedUsername(username),
                 ttsUsername: this.sanitizeUsernameForTts(username),
@@ -608,18 +644,14 @@ class NotificationBuilder {
             if (!Number.isFinite(viewerCount)) {
                 throw new Error('Raid notification requires viewerCount');
             }
-            const viewerText = 'viewers'; // Log message uses 'viewers' for both singular and plural per test expectation
-            return `Incoming raid from ${userName} with ${viewerCount} ${viewerText}!`;
+            return `Incoming raid from ${userName} with ${viewerCount} viewers!`;
         }
         
         if (type === 'platform:envelope') {
             return `Treasure chest from ${userName}`;
         }
         
-        // Check if type has a template in NOTIFICATION_TEMPLATES
-        // Only use template for types that don't have hardcoded implementations above
-        const hardcodedTypes = ['platform:gift', 'platform:giftpaypiggy', 'platform:paypiggy', 'platform:follow', 'platform:share', 'platform:raid', 'platform:envelope'];
-        if (!hardcodedTypes.includes(type) && NOTIFICATION_TEMPLATES[type] && NOTIFICATION_TEMPLATES[type].log) {
+        if (!HARDCODED_TYPES.includes(type) && NOTIFICATION_TEMPLATES[type] && NOTIFICATION_TEMPLATES[type].log) {
             const templateData = {
                 username: userName,
                 ttsUsername: this.sanitizeUsernameForTts(username),
@@ -858,4 +890,5 @@ class NotificationBuilder {
 
 }
 
-module.exports = NotificationBuilder; 
+module.exports = NotificationBuilder;
+module.exports.NOTIFICATION_TEMPLATES = NOTIFICATION_TEMPLATES;
