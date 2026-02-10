@@ -1,5 +1,5 @@
 const crypto = require('crypto');
-const { DEFAULT_HTTP_USER_AGENTS } = require('../core/http-config');
+const { DEFAULT_HTTP_USER_AGENTS } = require('../../core/http-config');
 
 class YouTubeUserAgentManager {
         constructor(logger, options = {}) {

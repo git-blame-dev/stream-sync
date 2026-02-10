@@ -50,34 +50,9 @@ function safeObjectStringify(obj, maxDepth = 3) {
     }
 }
 
-function formatLogParams(...params) {
-    return params.map(param => {
-        if (typeof param === 'string') return param;
-        return safeObjectStringify(param);
-    }).join(' ');
-}
-
-const noopLogger = {
-    debug: () => {},
-    info: () => {},
-    warn: () => {},
-    error: () => {}
-};
-
-function createNoopLogger() {
-    return noopLogger;
-}
-
-function getLoggerOrNoop(logger) {
-    return logger || noopLogger;
-}
-
 module.exports = { 
     isDebugModeEnabled,
     getLazyLogger,
     getLazyUnifiedLogger,
-    safeObjectStringify,
-    formatLogParams,
-    createNoopLogger,
-    getLoggerOrNoop
-}; 
+    safeObjectStringify
+};

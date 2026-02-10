@@ -2,7 +2,7 @@ const { describe, expect, beforeEach, afterEach, it } = require('bun:test');
 const { createMockFn, clearAllMocks, restoreAllMocks } = require('../../helpers/bun-mock-utils');
 const { noOpLogger } = require('../../helpers/mock-factories');
 const { waitForDelay } = require('../../helpers/time-utils');
-const { YouTubeConnectionManager } = require('../../../src/utils/youtube-connection-manager');
+const { YouTubeConnectionManager } = require('../../../src/platforms/youtube/youtube-connection-manager');
 
 describe('YouTube Connection Manager - Behavior Excellence', () => {
     let connectionManager;

@@ -1,12 +1,15 @@
-// Import safe operations wrapper
 const { safeOBSOperation } = require('./safe-operations');
 
-// Import OBS text sanitization to prevent Unicode crashes
-const { sanitizeForOBS } = require('../utils/obs-text-sanitizer');
 const { safeDelay } = require('../utils/timeout-validator');
 const { createPlatformErrorHandler } = require('../utils/platform-error-handler');
 
-// Scene detection removed - using direct source access only
+function sanitizeForOBS(text) {
+    if (!text || typeof text !== 'string') {
+        return '';
+    }
+    
+    return text.replace(/[^\x20-\x7E]/g, '');
+}
 
 function createOBSSourcesManager(obsManager, dependencies = {}) {
     if (!obsManager) {
@@ -574,5 +577,6 @@ function getDefaultSourcesManager() {
 module.exports = {
     OBSSourcesManager,
     createOBSSourcesManager,
-    getDefaultSourcesManager
+    getDefaultSourcesManager,
+    sanitizeForOBS
 }; 

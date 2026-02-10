@@ -536,12 +536,7 @@ function handleUserFacingError(error, context = {}, options = {}) {
 }
 
 module.exports = {
-    translateError,
-    formatErrorForConsole,
-    formatErrorForLog,
-    handleUserFacingError,
-    ERROR_MESSAGES,
-    TECHNICAL_ERROR_PATTERNS
+    handleUserFacingError
 };
 
 function logUserFriendlyError(context, friendlyError, logMessage, technicalError) {

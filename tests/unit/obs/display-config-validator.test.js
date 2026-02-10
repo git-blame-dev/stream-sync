@@ -1,7 +1,7 @@
 const { describe, expect, it } = require('bun:test');
-const { validateDisplayConfig } = require('../../../src/utils/configuration-validator');
+const { validateDisplayConfig } = require('../../../src/obs/display-config-validator');
 
-describe('configuration-validator behavior', () => {
+describe('display-config-validator', () => {
     describe('validateDisplayConfig', () => {
         it('accepts valid config with groups enabled', () => {
             const result = validateDisplayConfig({ sourceName: 'text', sceneName: 'main', groupName: 'grp' }, 'chat');

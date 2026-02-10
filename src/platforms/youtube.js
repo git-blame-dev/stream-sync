@@ -9,12 +9,12 @@ const { safeSetInterval, validateTimeout } = require('../utils/timeout-validator
 const { withTimeout } = require('../utils/timeout-wrapper');
 const innertubeInstanceManager = require('../services/innertube-instance-manager');
 const { ViewerCountProviderFactory } = require('../utils/viewer-count-providers');
-const { YouTubeConnectionManager } = require('../utils/youtube-connection-manager');
+const { YouTubeConnectionManager } = require('./youtube/youtube-connection-manager');
 const { createPlatformErrorHandler } = require('../utils/platform-error-handler');
 const { getSystemTimestampISO } = require('../utils/timestamp');
-const { getFallbackUsername } = require('../utils/fallback-username');
-const { normalizeYouTubeUsername } = require('../utils/youtube-username-normalizer');
-const { extractAuthor } = require('../utils/youtube-author-extractor');
+const { getFallbackUsername } = require('../utils/validation');
+const { normalizeYouTubeUsername } = require('./youtube/youtube-username-normalizer');
+const { extractAuthor } = require('./youtube/youtube-author-extractor');
 const { PlatformEvents } = require('../interfaces/PlatformEvents');
 const { YouTubeLiveStreamService } = require('../services/youtube-live-stream-service');
 const { createYouTubeEventRouter } = require('./youtube/events/event-router');
@@ -113,7 +113,7 @@ class YouTubePlatform extends EventEmitter {
         };
 
         // Initialize user agent manager
-        const { YouTubeUserAgentManager } = require('../utils/youtube-user-agent-manager');
+        const { YouTubeUserAgentManager } = require('./youtube/youtube-user-agent-manager');
         this.userAgentManager = new YouTubeUserAgentManager(this.logger, {
             userAgents: this.USER_AGENTS
         });

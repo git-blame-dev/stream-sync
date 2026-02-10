@@ -1,8 +1,7 @@
 const { describe, expect, it, afterEach } = require('bun:test');
-const { createMockFn, restoreAllMocks } = require('../../helpers/bun-mock-utils');
-const { withTimeout, withTimeoutAll, createTimeoutWrapper, createTimeoutPromise, createTimeoutController } = require('../../../src/utils/timeout-wrapper');
+const { restoreAllMocks } = require('../../helpers/bun-mock-utils');
+const { withTimeout } = require('../../../src/utils/timeout-wrapper');
 const { expectNoTechnicalArtifacts } = require('../../helpers/assertion-helpers');
-const { waitForDelay } = require('../../helpers/time-utils');
 
 const fail = (message) => {
     throw new Error(message);
@@ -73,111 +72,6 @@ describe('Timeout Wrapper Utility - User Experience', () => {
         });
     });
 
-    describe('Batch Operation Timeout Protection', () => {
-        it('should handle multiple successful operations with all results preserved', async () => {
-            const operations = [
-                Promise.resolve('Stream 1 data'),
-                Promise.resolve('Stream 2 data'),
-                Promise.resolve('Stream 3 data')
-            ];
-
-            const results = await withTimeoutAll(operations, 500, 'multi-stream detection');
-
-            expect(results).toHaveLength(3);
-            expect(results[0]).toBe('Stream 1 data');
-            expect(results[1]).toBe('Stream 2 data');
-            expect(results[2]).toBe('Stream 3 data');
-
-            results.forEach(result => {
-                expect(typeof result).toBe('string');
-                expect(result.length).toBeGreaterThan(0);
-                expectNoTechnicalArtifacts(result);
-            });
-        });
-
-        it('should provide clear error recovery when any batch operation hangs', async () => {
-            const operations = [
-                Promise.resolve('Quick result'),
-                new Promise(() => {}),
-                Promise.resolve('Another quick result')
-            ];
-
-            try {
-                await withTimeoutAll(operations, 100, 'YouTube batch search');
-                fail('Expected batch timeout');
-            } catch (error) {
-                expect(error.message).toContain('YouTube batch search');
-                expect(error.message).toContain('timeout');
-                expectNoTechnicalArtifacts(error.message);
-                expect(error.message).toMatch(/\[1\]/);
-                expect(error).toBeInstanceOf(Error);
-            }
-        });
-    });
-
-    describe('Service-Specific Timeout Wrappers', () => {
-        it('should create specialized wrappers with appropriate defaults', async () => {
-            const youtubeTimeout = createTimeoutWrapper(2000, 'YouTube API');
-            const quickOperation = Promise.resolve('YouTube data loaded');
-
-            const result = await youtubeTimeout(quickOperation, 'stream search');
-
-            expect(result).toBe('YouTube data loaded');
-        });
-
-        it('should provide service-specific error messages when timing out', async () => {
-            const tiktokTimeout = createTimeoutWrapper(50, 'TikTok Live');
-            const hangingOperation = new Promise(() => {});
-
-            try {
-                await tiktokTimeout(hangingOperation, 'live stream connection');
-                fail('Expected TikTok timeout');
-            } catch (error) {
-                expect(error.message).toContain('TikTok Live live stream connection');
-                expect(error.message).toContain('timeout after 50ms');
-                expectNoTechnicalArtifacts(error.message);
-            }
-        });
-
-        it('should allow custom timeout overrides for specific operations', async () => {
-            const serviceTimeout = createTimeoutWrapper(1000, 'API Service');
-            const hangingOperation = new Promise(() => {});
-
-            try {
-                await serviceTimeout(hangingOperation, 'critical operation', 100);
-                fail('Expected custom timeout');
-            } catch (error) {
-                expect(error.message).toContain('API Service critical operation');
-                expect(error.message).toContain('timeout after 100ms');
-                expectNoTechnicalArtifacts(error.message);
-                expect(error.message).toMatch(/^API Service/);
-                expect(error).toBeInstanceOf(Error);
-            }
-        });
-    });
-
-    describe('Timeout Controller Integration', () => {
-        it('should clear scheduled timeout when protected operations resolve early', async () => {
-            const controller = createTimeoutController(25, { operationName: 'instant operation' });
-            const timeoutSpy = createMockFn();
-            controller.timeoutPromise.catch(timeoutSpy);
-            await expect(controller.wrap(Promise.resolve('ready'))).resolves.toBe('ready');
-            await waitForDelay(50);
-            expect(timeoutSpy).not.toHaveBeenCalled();
-        });
-
-        it('should allow custom timeout messaging via options object', async () => {
-            const hangingOperation = new Promise(() => {});
-            try {
-                await withTimeout(hangingOperation, 25, { errorMessage: 'Custom timeout failure' });
-                fail('Expected timeout');
-            } catch (error) {
-                expect(error.message).toBe('Custom timeout failure');
-                expectNoTechnicalArtifacts(error.message);
-            }
-        });
-    });
-
     describe('User Experience Quality Standards', () => {
         it('should ensure error messages contain no technical implementation details', async () => {
             const testCases = [
@@ -198,27 +92,6 @@ describe('Timeout Wrapper Utility - User Experience', () => {
                     expect(error.message).not.toContain('setTimeout');
                     expect(error.message).toContain(testCase.name);
                     expect(error.message).toContain('timeout');
-                }
-            }
-        });
-
-        it('should maintain consistent timeout behavior across all wrapper types', async () => {
-            const wrappers = [
-                { name: 'basic', wrapper: (op) => withTimeout(op, 50, 'basic operation') },
-                { name: 'service', wrapper: createTimeoutWrapper(50, 'Test Service') },
-                { name: 'custom', wrapper: (op) => Promise.race([op, createTimeoutPromise(50, 'Custom timeout')]) }
-            ];
-
-            for (const wrapperConfig of wrappers) {
-                const hangingOperation = new Promise(() => {});
-
-                try {
-                    await wrapperConfig.wrapper(hangingOperation);
-                    fail(`Expected timeout for ${wrapperConfig.name} wrapper`);
-                } catch (error) {
-                    expect(error.message).toContain('timeout');
-                    expect(error).toBeInstanceOf(Error);
-                    expectNoTechnicalArtifacts(error.message);
                 }
             }
         });

@@ -33,8 +33,8 @@ describe('Command Cooldown Integration', () => {
       }
     });
 
-    delete require.cache[require.resolve('../../src/utils/command-parser')];
-    const commandParserModule = require('../../src/utils/command-parser');
+    delete require.cache[require.resolve('../../src/utils/global-command-cooldown')];
+    const commandParserModule = require('../../src/utils/global-command-cooldown');
 
     checkGlobalCommandCooldown = commandParserModule.checkGlobalCommandCooldown;
     updateGlobalCommandCooldown = commandParserModule.updateGlobalCommandCooldown;

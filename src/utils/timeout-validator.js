@@ -49,27 +49,10 @@ function safeSetInterval(callback, interval, ...args) {
     return activeSetInterval(callback, safeInterval, ...args);
 }
 
-function __setTimerImplementations(options = {}) {
-    if (options.setTimeoutImpl && typeof options.setTimeoutImpl === 'function') {
-        activeSetTimeout = options.setTimeoutImpl;
-    }
-    if (options.setIntervalImpl && typeof options.setIntervalImpl === 'function') {
-        activeSetInterval = options.setIntervalImpl;
-    }
-}
-
-function __resetTimerImplementations() {
-    activeSetTimeout = createCurrentSetTimeout();
-    activeSetInterval = createCurrentSetInterval();
-}
-
 module.exports = {
     validateTimeout,
     validateExponentialBackoff,
-    validateInterval,
     safeSetTimeout,
     safeSetInterval,
-    safeDelay,
-    __setTimerImplementations,
-    __resetTimerImplementations
+    safeDelay
 };

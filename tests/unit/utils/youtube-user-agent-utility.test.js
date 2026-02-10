@@ -5,7 +5,7 @@ const { initializeTestLogging } = require('../../helpers/test-setup');
 
 initializeTestLogging();
 
-const { YouTubeUserAgentManager } = require('../../../src/utils/youtube-user-agent-manager');
+const { YouTubeUserAgentManager } = require('../../../src/platforms/youtube/youtube-user-agent-manager');
 
 describe('YouTube User-Agent Utility', () => {
     afterEach(() => {

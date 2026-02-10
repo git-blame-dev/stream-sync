@@ -1,6 +1,5 @@
-
-const { createPlatformErrorHandler } = require('./platform-error-handler');
-const { resolveLogger } = require('./logger-resolver');
+const { createPlatformErrorHandler } = require('../../utils/platform-error-handler');
+const { resolveLogger } = require('../../utils/logger-resolver');
 
 class YouTubeiCurrencyParser {
     constructor(dependencies = {}) {

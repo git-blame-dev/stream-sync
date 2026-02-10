@@ -1,44 +1,25 @@
 
 const { describe, test, expect, beforeEach, afterEach } = require('bun:test');
-const { createMockFn, restoreAllMocks } = require('../../helpers/bun-mock-utils');
+const { createMockFn, spyOn, restoreAllMocks } = require('../../helpers/bun-mock-utils');
 
 const {
     validateTimeout,
     validateExponentialBackoff,
-    validateInterval,
     safeSetTimeout,
-    safeSetInterval,
-    __setTimerImplementations,
-    __resetTimerImplementations
+    safeSetInterval
 } = require('../../../src/utils/timeout-validator');
 
 describe('Timeout Validator', () => {
-    let originalSetTimeout;
-    let originalSetInterval;
-    let timeoutCalls;
-    let intervalCalls;
+    let timeoutSpy;
+    let intervalSpy;
 
     beforeEach(() => {
-        timeoutCalls = [];
-        intervalCalls = [];
-        originalSetTimeout = global.setTimeout;
-        originalSetInterval = global.setInterval;
-
-        __setTimerImplementations({
-            setTimeoutImpl: (callback, delay, ...args) => {
-                timeoutCalls.push({ callback, delay, args });
-                return originalSetTimeout(callback, delay, ...args);
-            },
-            setIntervalImpl: (callback, delay, ...args) => {
-                intervalCalls.push({ callback, delay, args });
-                return originalSetInterval(callback, delay, ...args);
-            }
-        });
+        timeoutSpy = spyOn(globalThis, 'setTimeout');
+        intervalSpy = spyOn(globalThis, 'setInterval');
     });
 
     afterEach(() => {
         restoreAllMocks();
-        __resetTimerImplementations();
     });
 
     describe('validateTimeout', () => {
@@ -111,42 +92,30 @@ describe('Timeout Validator', () => {
         });
     });
 
-    describe('validateInterval', () => {
-        test('should validate interval values with different default', () => {
-            expect(validateInterval(2000)).toBe(2000);
-            expect(validateInterval(undefined)).toBe(1000); // Default for intervals
-            expect(validateInterval(NaN)).toBe(1000);
-        });
-
-        test('should use custom fallback for intervals', () => {
-            expect(validateInterval(undefined, 3000)).toBe(3000);
-        });
-    });
-
     describe('safeSetTimeout', () => {
         test('should call setTimeout with validated delay', () => {
             const mockCallback = createMockFn();
             
             safeSetTimeout(mockCallback, 2000);
-            expect(timeoutCalls).toHaveLength(1);
-            expect(timeoutCalls[0].delay).toBe(2000);
+            expect(timeoutSpy).toHaveBeenCalled();
+            expect(timeoutSpy.mock.calls[0][1]).toBe(2000);
         });
 
         test('should fix invalid delays', () => {
             const mockCallback = createMockFn();
             
             safeSetTimeout(mockCallback, NaN);
-            expect(timeoutCalls).toHaveLength(1);
-            expect(isNaN(timeoutCalls[0].delay)).toBe(false);
-            expect(timeoutCalls[0].delay).toBeGreaterThan(0);
+            expect(timeoutSpy).toHaveBeenCalled();
+            expect(isNaN(timeoutSpy.mock.calls[0][1])).toBe(false);
+            expect(timeoutSpy.mock.calls[0][1]).toBeGreaterThan(0);
         });
 
         test('should pass through additional arguments', () => {
             const mockCallback = createMockFn();
             
             safeSetTimeout(mockCallback, 1000, 'arg1', 'arg2');
-            expect(timeoutCalls).toHaveLength(1);
-            expect(timeoutCalls[0].args).toEqual(['arg1', 'arg2']);
+            expect(timeoutSpy).toHaveBeenCalled();
+            expect(timeoutSpy.mock.calls[0].slice(2)).toEqual(['arg1', 'arg2']);
         });
     });
 
@@ -155,17 +124,17 @@ describe('Timeout Validator', () => {
             const mockCallback = createMockFn();
             
             safeSetInterval(mockCallback, 1500);
-            expect(intervalCalls).toHaveLength(1);
-            expect(intervalCalls[0].delay).toBe(1500);
+            expect(intervalSpy).toHaveBeenCalled();
+            expect(intervalSpy.mock.calls[0][1]).toBe(1500);
         });
 
         test('should fix invalid intervals', () => {
             const mockCallback = createMockFn();
             
             safeSetInterval(mockCallback, undefined);
-            expect(intervalCalls).toHaveLength(1);
-            expect(isNaN(intervalCalls[0].delay)).toBe(false);
-            expect(intervalCalls[0].delay).toBeGreaterThan(0);
+            expect(intervalSpy).toHaveBeenCalled();
+            expect(isNaN(intervalSpy.mock.calls[0][1])).toBe(false);
+            expect(intervalSpy.mock.calls[0][1]).toBeGreaterThan(0);
         });
     });
 

@@ -1,42 +1,10 @@
 const { describe, it, expect } = require('bun:test');
 const {
     sanitizeDataForInterpolation,
-    sanitizeStringValue,
     convertValueToString
-} = require('../../../src/utils/notification-string-sanitizer');
+} = require('../../../src/utils/notification-template-interpolator');
 
-describe('notification-string-sanitizer', () => {
-    describe('sanitizeStringValue', () => {
-        it('strips template injection attempts', () => {
-            expect(sanitizeStringValue('test{injection}here')).toBe('testhere');
-        });
-
-        it('truncates strings longer than 1000 characters', () => {
-            const long = 'x'.repeat(2000);
-            expect(sanitizeStringValue(long).length).toBe(1000);
-        });
-
-        it('returns empty string for null', () => {
-            expect(sanitizeStringValue(null)).toBe('');
-        });
-
-        it('returns empty string for undefined', () => {
-            expect(sanitizeStringValue(undefined)).toBe('');
-        });
-
-        it('converts numbers to sanitized strings', () => {
-            expect(sanitizeStringValue(42)).toBe('42');
-        });
-
-        it('converts booleans to sanitized strings', () => {
-            expect(sanitizeStringValue(true)).toBe('true');
-        });
-
-        it('passes through normal strings unchanged', () => {
-            expect(sanitizeStringValue('test-user sent a gift')).toBe('test-user sent a gift');
-        });
-    });
-
+describe('notification-template-interpolator sanitization', () => {
     describe('convertValueToString', () => {
         it('returns empty string for null', () => {
             expect(convertValueToString(null)).toBe('');

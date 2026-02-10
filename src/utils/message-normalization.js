@@ -209,10 +209,6 @@ function extractTwitchMessageData(messageObj) {
     return result;
 }
 
-function extractTwitchMessageText(messageObj) {
-    return extractTwitchMessageData(messageObj).textContent;
-}
-
 function extractYouTubeMessageText(messageObj) {
     const { logger } = require('../core/logging');
     let result;
@@ -252,37 +248,6 @@ function extractYouTubeMessageText(messageObj) {
     }
     logger.debug(`[extractYouTubeMessageText] Input type: ${typeof messageObj} | Output: "${result}" (${result.length} chars)`, 'message-normalization');
     return result;
-}
-
-function createFallbackMessage({ platform, userId, username, message, error, timestamp } = {}) {
-    if (!platform || !userId || !username) {
-        return null;
-    }
-
-    const normalizedUsername = typeof username === 'string' ? username.trim() : '';
-    if (!normalizedUsername) {
-        return null;
-    }
-
-    if (!timestamp || typeof timestamp !== 'string') {
-        return null;
-    }
-
-    return {
-        platform: platform.toLowerCase(),
-        userId: String(userId),
-        username: normalizedUsername,
-        message: (message || '').trim(),
-        timestamp,
-        isMod: false,
-        isSubscriber: false,
-        isBroadcaster: false,
-        metadata: {
-            fallback: true,
-            error: error?.message || 'Unknown error'
-        },
-        rawData: null
-    };
 }
 
 function validateNormalizedMessage(normalizedMessage) {
@@ -335,29 +300,10 @@ function validateNormalizedMessage(normalizedMessage) {
     };
 }
 
-function normalizeMessage(platform, ...args) {
-    const platformLower = platform.toLowerCase();
-    
-    switch (platformLower) {
-        case 'youtube':
-            return normalizeYouTubeMessage(...args);
-        case 'tiktok':
-            return normalizeTikTokMessage(...args);
-        default: {
-            const error = new Error(`Unsupported platform: ${platform}`);
-            handleNormalizationError(error.message, error, 'unsupported-platform', { platform });
-            throw error;
-        }
-    }
-}
-
 module.exports = {
-    normalizeMessage,
     normalizeYouTubeMessage,
     normalizeTikTokMessage,
     extractTwitchMessageData,
-    extractTwitchMessageText,
     extractYouTubeMessageText,
-    validateNormalizedMessage,
-    createFallbackMessage
+    validateNormalizedMessage
 };

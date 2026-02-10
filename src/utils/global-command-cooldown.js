@@ -158,8 +158,36 @@ class GlobalCommandCooldownManager {
     }
 }
 
+let globalCooldownManager = null;
+
+function getGlobalCooldownManager() {
+    if (!globalCooldownManager) {
+        const { logger } = require('../core/logging');
+        globalCooldownManager = new GlobalCommandCooldownManager(logger);
+    }
+    return globalCooldownManager;
+}
+
+function checkGlobalCommandCooldown(commandName, globalCooldownMs = 60000) {
+    const manager = getGlobalCooldownManager();
+    return manager.isCommandOnCooldown(commandName, globalCooldownMs);
+}
+
+function updateGlobalCommandCooldown(commandName) {
+    const manager = getGlobalCooldownManager();
+    manager.updateCommandTimestamp(commandName);
+}
+
+function clearExpiredGlobalCooldowns(maxAgeMs = 300000) {
+    const manager = getGlobalCooldownManager();
+    return manager.clearExpiredCooldowns(maxAgeMs);
+}
+
 module.exports = {
-    GlobalCommandCooldownManager
+    GlobalCommandCooldownManager,
+    checkGlobalCommandCooldown,
+    updateGlobalCommandCooldown,
+    clearExpiredGlobalCooldowns
 };
 
 GlobalCommandCooldownManager.prototype._handleCooldownError = function(message, error, contextData = null) {

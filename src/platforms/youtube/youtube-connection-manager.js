@@ -1,5 +1,5 @@
-const { createPlatformErrorHandler } = require('./platform-error-handler');
-const { getSystemTimestampISO } = require('./timestamp');
+const { createPlatformErrorHandler } = require('../../utils/platform-error-handler');
+const { getSystemTimestampISO } = require('../../utils/timestamp');
 
 class YouTubeConnectionManager {
         constructor(logger, options = {}) {

@@ -1,7 +1,6 @@
 const { safeSetTimeout, validateTimeout } = require('./timeout-validator');
 const nativeClearTimeout = globalThis.clearTimeout.bind(globalThis);
 
-
 function normalizeTimeoutOptions(operationNameOrOptions = 'operation') {
     if (typeof operationNameOrOptions === 'string') {
         return { operationName: operationNameOrOptions };
@@ -57,33 +56,6 @@ function withTimeout(promise, timeoutMs = 5000, operationNameOrOptions = 'operat
     return controller.wrap(promise);
 }
 
-function withTimeoutAll(promises, timeoutMs = 5000, operationName = 'batch operation') {
-    const wrappedPromises = promises.map((promise, index) => 
-        withTimeout(promise, timeoutMs, `${operationName}[${index}]`)
-    );
-    return Promise.all(wrappedPromises);
-}
-
-function createTimeoutWrapper(defaultTimeout = 5000, serviceType = 'service') {
-    return function(promise, operationNameOrOptions = 'operation', customTimeout = null) {
-        const timeout = customTimeout || defaultTimeout;
-        const options = normalizeTimeoutOptions(operationNameOrOptions);
-        const prefixedOperation = options.operationName
-            ? `${serviceType} ${options.operationName}`
-            : `${serviceType} operation`;
-        return withTimeout(promise, timeout, { ...options, operationName: prefixedOperation });
-    };
-}
-
-function createTimeoutPromise(timeoutMs, errorMessage = 'Operation timeout') {
-    const { timeoutPromise } = createTimeoutController(timeoutMs, { errorMessage });
-    return timeoutPromise;
-}
-
 module.exports = {
-    withTimeout,
-    withTimeoutAll,
-    createTimeoutWrapper,
-    createTimeoutPromise,
-    createTimeoutController
+    withTimeout
 };

@@ -1,6 +1,6 @@
 const { describe, expect, it } = require('bun:test');
 
-const { YouTubeiCurrencyParser } = require('../../../src/utils/youtubei-currency-parser');
+const { YouTubeiCurrencyParser } = require('../../../src/platforms/youtube/youtubei-currency-parser');
 const { noOpLogger } = require('../../helpers/mock-factories');
 
 describe('YouTubeiCurrencyParser unknown currency handling', () => {

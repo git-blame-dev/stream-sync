@@ -1,7 +1,7 @@
 
 const NotificationBuilder = require('../utils/notification-builder');
 const { validateNormalizedMessage } = require('../utils/message-normalization');
-const { checkGlobalCommandCooldown, updateGlobalCommandCooldown } = require('../utils/command-parser');
+const { checkGlobalCommandCooldown, updateGlobalCommandCooldown } = require('../utils/global-command-cooldown');
 const { createPlatformErrorHandler } = require('../utils/platform-error-handler');
 const { sanitizeForDisplay } = require('../utils/validation');
 

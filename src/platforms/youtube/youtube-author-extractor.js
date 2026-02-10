@@ -1,4 +1,3 @@
-
 function extractAuthor(chatItem) {
     if (!chatItem || typeof chatItem !== 'object') {
         return null;

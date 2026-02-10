@@ -1,5 +1,5 @@
-const { extractMessageText } = require('../../../utils/youtube-message-extractor');
-const { YouTubeiCurrencyParser } = require('../../../utils/youtubei-currency-parser');
+const { extractMessageText } = require('../youtube-message-extractor');
+const { YouTubeiCurrencyParser } = require('../youtubei-currency-parser');
 
 function createYouTubeMonetizationParser(options = {}) {
     const currencyParser = new YouTubeiCurrencyParser({ logger: options.logger });

@@ -1,7 +1,7 @@
 const { describe, it, expect, beforeEach } = require('bun:test');
 const { createMockFn } = require('../../helpers/bun-mock-utils');
 const { noOpLogger } = require('../../helpers/mock-factories');
-const { loadTokens, saveTokens, clearTokens } = require('../../../src/utils/token-store');
+const { loadTokens, saveTokens } = require('../../../src/utils/token-store');
 
 const createMockFs = (fileStore) => {
     const permissions = {};
@@ -133,19 +133,5 @@ describe('token-store', () => {
         fileStore[storePath] = '{invalid-json';
 
         await expect(loadTokens({ tokenStorePath: storePath, fs: mockFs, logger: noOpLogger })).rejects.toThrow(/invalid token store/i);
-    });
-
-    it('clears twitch tokens while preserving other data', async () => {
-        const existing = {
-            otherService: { value: 'keep' },
-            twitch: { accessToken: 'old', refreshToken: 'old-refresh' }
-        };
-        fileStore[storePath] = JSON.stringify(existing, null, 2);
-
-        await clearTokens({ tokenStorePath: storePath, fs: mockFs, logger: noOpLogger });
-
-        const updated = JSON.parse(fileStore[storePath]);
-        expect(updated.otherService).toEqual({ value: 'keep' });
-        expect(updated.twitch).toBeUndefined();
     });
 });

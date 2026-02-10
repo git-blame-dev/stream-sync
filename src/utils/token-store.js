@@ -197,40 +197,7 @@ async function saveTokens(
     }
 }
 
-async function clearTokens({ tokenStorePath, fs: fsImpl, logger }) {
-    requireTokenStorePath(tokenStorePath);
-    const safeLogger = requireLogger(logger);
-
-    let existing = {};
-    try {
-        const raw = await readTokenStoreFile(fsImpl, tokenStorePath);
-        existing = parseTokenStore(raw, tokenStorePath) || {};
-    } catch (error) {
-        if (error && error.code === 'ENOENT') {
-            return false;
-        }
-        logTokenStoreError(safeLogger, 'Failed to clear token store', error, { tokenStorePath });
-        throw error;
-    }
-
-    if (!existing.twitch) {
-        return false;
-    }
-
-    const nextPayload = { ...existing };
-    delete nextPayload.twitch;
-
-    try {
-        await writeTokenStoreFile(fsImpl, tokenStorePath, nextPayload, safeLogger);
-        return true;
-    } catch (error) {
-        logTokenStoreError(safeLogger, 'Failed to write cleared token store', error, { tokenStorePath });
-        throw error;
-    }
-}
-
 module.exports = {
     loadTokens,
-    saveTokens,
-    clearTokens
+    saveTokens
 };
