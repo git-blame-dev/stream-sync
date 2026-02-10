@@ -119,7 +119,6 @@ const CONFIG_SCHEMA = {
 
     displayQueue: {
         autoProcess: { type: 'boolean', default: true },
-        chatOptimization: { type: 'boolean', default: true },
         maxQueueSize: { type: 'number', default: 100 }
     },
 

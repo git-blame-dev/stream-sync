@@ -73,7 +73,7 @@ const applyTimestampFallback = (event, metadata, subscriptionType) => {
             return event;
         }
 
-        const { timestamp: _timestamp, ...eventWithoutTimestamp } = event;
+        const { timestamp: _omitTimestamp, ...eventWithoutTimestamp } = event;
         return eventWithoutTimestamp;
     }
 

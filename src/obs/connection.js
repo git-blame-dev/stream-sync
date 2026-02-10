@@ -181,8 +181,6 @@ class OBSConnectionManager {
                 }
                 this.connectionCompleteHandler = null;
                 
-                const errorCode = error.code || 'N/A';
-                
                 // Clean up the error message for better readability
                 let userFriendlyMessage = 'Failed to connect to OBS';
                 if (error.code === -1 || error.message?.includes('ECONNREFUSED')) {

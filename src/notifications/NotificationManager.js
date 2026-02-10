@@ -1,8 +1,6 @@
 
 const EventEmitter = require('events');
-const { logger } = require('../core/logging');
 const { createPlatformErrorHandler } = require('../utils/platform-error-handler');
-const { PlatformEvents } = require('../interfaces/PlatformEvents');
 const { createSyntheticGiftFromAggregated } = require('./aggregated-donation-transformer');
 const { NotificationInputValidator } = require('./notification-input-validator');
 const { NotificationPayloadBuilder } = require('./notification-payload-builder');
@@ -322,19 +320,6 @@ class NotificationManager extends EventEmitter {
             return { success: false, error: 'Display queue error', details: error.message };
         }
 
-        try {
-            if (config.hasSpecialProcessing) {
-                await this.handleSpecialProcessing(notificationType, platform, data);
-            }
-        } catch (error) {
-            this._handleNotificationError(
-                `Error in special processing for ${notificationType} from ${platform}: ${error.message}`,
-                error,
-                { notificationType, platform, data: normalizedData },
-                { eventType: 'special-processing' }
-            );
-        }
-
         return {
             success: true,
             notificationType,
@@ -403,27 +388,6 @@ class NotificationManager extends EventEmitter {
             }
             return data[key];
         });
-    }
-
-    async handleSpecialProcessing(notificationType, platform, data) {
-        try {
-            // Goal tracking is now handled in display-queue.js when notifications start playing
-            // This ensures goals only increment when notifications are actually displayed
-            
-            // VFX command execution - route through VFXCommandService via EventBus
-            // Visual effects are emitted by DisplayQueue when the item actually plays.
-            const config = this.NOTIFICATION_CONFIGS[notificationType];
-            
-            // Other special processing can go here
-        } catch (error) {
-            this._handleNotificationError(
-                `Error in special processing for ${notificationType}: ${error.message}`,
-                error,
-                { notificationType, platform, data },
-                { eventType: 'special-processing' }
-            );
-            // Don't throw - continue with notification display even if special processing fails
-        }
     }
 
     getStats() {

@@ -47,7 +47,6 @@ class SceneManagementService {
         const { sceneName, transition, retry = true } = data;
 
         let attempt = 0;
-        let lastError = null;
 
         while (attempt <= (retry ? this.config.maxRetries : 0)) {
             try {
@@ -71,10 +70,8 @@ class SceneManagementService {
                     transition
                 });
 
-                // Emit success events
-                return; // Success, exit retry loop
+                return;
             } catch (error) {
-                lastError = error;
                 attempt++;
 
                 if (attempt > (retry ? this.config.maxRetries : 0)) {

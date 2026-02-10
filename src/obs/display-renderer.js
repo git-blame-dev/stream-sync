@@ -67,7 +67,6 @@ class DisplayRenderer {
     }
 
     async displayNotificationItem(item) {
-        const username = this.extractUsername(item.data);
         const platform = item.platform;
         if (!platform || !this.config[platform]) {
             throw new Error(`DisplayQueue requires configured platform for notification: ${platform || 'unknown'}`);

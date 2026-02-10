@@ -2,7 +2,6 @@ const { describe, it, expect } = require('bun:test');
 const {
     buildGeneralConfig,
     buildPlatformConfig,
-    buildYoutubeConfig,
     buildObsConfig,
     buildCooldownsConfig,
     buildStreamElementsConfig,
@@ -104,24 +103,6 @@ describe('config-builders', () => {
             const result = buildPlatformConfig('tiktok', normalized, generalConfig);
 
             expect(result.dataLoggingPath).toBe('./logs');
-        });
-    });
-
-    describe('buildYoutubeConfig', () => {
-        it('forces chatMethod to scraping', () => {
-            const normalized = { youtube: { enabled: true } };
-            const generalConfig = { viewerCountPollingIntervalMs: 60000 };
-            const result = buildYoutubeConfig(normalized, generalConfig);
-
-            expect(result.chatMethod).toBe('scraping');
-        });
-
-        it('overrides any existing chatMethod value', () => {
-            const normalized = { youtube: { enabled: true, chatMethod: 'api' } };
-            const generalConfig = { viewerCountPollingIntervalMs: 60000 };
-            const result = buildYoutubeConfig(normalized, generalConfig);
-
-            expect(result.chatMethod).toBe('scraping');
         });
     });
 
@@ -233,7 +214,7 @@ describe('config-builders', () => {
     });
 
     describe('buildStreamElementsConfig', () => {
-        it('converts falsy channel IDs to undefined', () => {
+        it('passes through empty channel IDs from normalizer', () => {
             const normalized = {
                 streamelements: {
                     enabled: true,
@@ -244,8 +225,8 @@ describe('config-builders', () => {
             };
             const result = buildStreamElementsConfig(normalized);
 
-            expect(result.youtubeChannelId).toBeUndefined();
-            expect(result.twitchChannelId).toBeUndefined();
+            expect(result.youtubeChannelId).toBe('');
+            expect(result.twitchChannelId).toBe('');
         });
 
         it('preserves truthy channel IDs', () => {

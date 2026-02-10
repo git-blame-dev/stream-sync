@@ -28,8 +28,7 @@ const buildSmokeConfig = () => createConfigFixture({
     },
     displayQueue: {
         autoProcess: false,
-        maxQueueSize: 5,
-        chatOptimization: false
+        maxQueueSize: 5
     },
     timing: {
         transitionDelay: 1000,

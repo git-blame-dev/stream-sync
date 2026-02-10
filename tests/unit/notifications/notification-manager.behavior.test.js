@@ -26,7 +26,7 @@ describe('NotificationManager behavior', () => {
         config: createConfigFixture(),
         constants: {
             PRIORITY_LEVELS,
-            NOTIFICATION_CONFIGS: { follow: { settingKey: 'followsEnabled', commandKey: 'follows', hasSpecialProcessing: false } }
+            NOTIFICATION_CONFIGS: { follow: { settingKey: 'followsEnabled', commandKey: 'follows' } }
         },
         textProcessing: { formatChatMessage: createMockFn() },
         obsGoals: { processDonationGoal: createMockFn() },

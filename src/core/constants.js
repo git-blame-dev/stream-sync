@@ -27,68 +27,57 @@ const NOTIFICATION_CONFIGS = {
     'platform:follow': {
         timing: 'simultaneous',
         settingKey: 'followsEnabled',
-        commandKey: 'follows',
-        hasSpecialProcessing: false
+        commandKey: 'follows'
     },
     'platform:gift': {
         timing: 'three_step',
         settingKey: 'giftsEnabled',
-        commandKey: 'gifts',
-        hasSpecialProcessing: true
+        commandKey: 'gifts'
     },
     'platform:envelope': {
         timing: 'sequential',
         settingKey: 'giftsEnabled',
-        commandKey: 'envelopes',
-        hasSpecialProcessing: false
+        commandKey: 'envelopes'
     },
     'platform:paypiggy': {
         timing: 'sequential',
         settingKey: 'paypiggiesEnabled',
-        commandKey: 'paypiggies',
-        hasSpecialProcessing: false
+        commandKey: 'paypiggies'
     },
     'platform:giftpaypiggy': {
         timing: 'sequential',
         settingKey: 'giftsEnabled',
-        commandKey: 'gifts',
-        hasSpecialProcessing: false
+        commandKey: 'gifts'
     },
     'platform:raid': {
         timing: 'sequential',
         settingKey: 'raidsEnabled',
-        commandKey: 'raids',
-        hasSpecialProcessing: false
+        commandKey: 'raids'
     },
     'platform:share': {
         timing: 'sequential',
         settingKey: 'sharesEnabled',
-        commandKey: 'shares',
-        hasSpecialProcessing: false
+        commandKey: 'shares'
     },
     command: {
         timing: 'sequential',
         settingKey: 'commandsEnabled',
-        commandKey: 'commands',
-        hasSpecialProcessing: false
+        commandKey: 'commands'
     },
     greeting: {
         timing: 'sequential',
         settingKey: 'greetingsEnabled',
-        commandKey: 'greetings',
-        hasSpecialProcessing: false
+        commandKey: 'greetings'
     },
     farewell: {
         timing: 'sequential',
         settingKey: 'farewellsEnabled',
-        commandKey: 'farewell',
-        hasSpecialProcessing: false
+        commandKey: 'farewell'
     },
     'platform:chat-message': {
         timing: 'immediate',
         settingKey: 'messagesEnabled',
-        commandKey: 'chat',
-        hasSpecialProcessing: false
+        commandKey: 'chat'
     }
 };
 

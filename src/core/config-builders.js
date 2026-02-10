@@ -77,9 +77,7 @@ function buildPlatformConfig(platformName, normalized, generalConfig) {
 }
 
 function buildYoutubeConfig(normalized, generalConfig) {
-    const base = buildPlatformConfig('youtube', normalized, generalConfig);
-    base.chatMethod = 'scraping';
-    return base;
+    return buildPlatformConfig('youtube', normalized, generalConfig);
 }
 
 function buildObsConfig(normalized) {
@@ -135,8 +133,8 @@ function buildStreamElementsConfig(normalized) {
     const se = normalized.streamelements;
     return {
         enabled: se.enabled,
-        youtubeChannelId: se.youtubeChannelId || undefined,
-        twitchChannelId: se.twitchChannelId || undefined,
+        youtubeChannelId: se.youtubeChannelId,
+        twitchChannelId: se.twitchChannelId,
         dataLoggingEnabled: se.dataLoggingEnabled,
         dataLoggingPath: DEFAULTS.LOG_DIRECTORY
     };

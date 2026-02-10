@@ -37,10 +37,8 @@ describe('Config build pipeline integration', () => {
 
             expect(built.displayQueue.autoProcess).toBeDefined();
             expect(built.displayQueue.maxQueueSize).toBeDefined();
-            expect(built.displayQueue.chatOptimization).toBeDefined();
             expect(typeof built.displayQueue.autoProcess).toBe('boolean');
             expect(typeof built.displayQueue.maxQueueSize).toBe('number');
-            expect(typeof built.displayQueue.chatOptimization).toBe('boolean');
         });
 
         it('platform sections contain fields needed for DisplayQueue gating', () => {
@@ -122,7 +120,7 @@ describe('Config build pipeline integration', () => {
                 ...getRawTestConfig(),
                 general: { debugEnabled: 'true' },
                 obs: { ...getRawTestConfig().obs, ttsEnabled: 'false' },
-                displayQueue: { autoProcess: 'true', chatOptimization: 'false' }
+                displayQueue: { autoProcess: 'true' }
             };
             const normalized = ConfigValidator.normalize(rawConfig);
             const built = _buildConfig(normalized);
@@ -133,8 +131,6 @@ describe('Config build pipeline integration', () => {
             expect(built.obs.ttsEnabled).toBe(false);
             expect(typeof built.displayQueue.autoProcess).toBe('boolean');
             expect(built.displayQueue.autoProcess).toBe(true);
-            expect(typeof built.displayQueue.chatOptimization).toBe('boolean');
-            expect(built.displayQueue.chatOptimization).toBe(false);
         });
 
         it('number fields remain numbers through pipeline', () => {
@@ -164,7 +160,6 @@ describe('Config build pipeline integration', () => {
 
             expect(built.displayQueue.autoProcess).toBe(true);
             expect(built.displayQueue.maxQueueSize).toBe(100);
-            expect(built.displayQueue.chatOptimization).toBe(true);
         });
 
         it('timing defaults applied when section missing', () => {

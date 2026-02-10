@@ -262,7 +262,7 @@ class AppRuntime {
             this.logger.info(`[EventHandler] Triggering YouTube reconnection for ${newStreamIds.length} new stream(s)`, 'AppRuntime');
             try {
                 await this.youtube.initialize({}, true);
-            } catch (reconnectError) {
+            } catch (_reconnectError) {
                 this.logger.warn('[EventHandler] YouTube reconnection attempted but may have already been processed', 'AppRuntime');
             }
         }

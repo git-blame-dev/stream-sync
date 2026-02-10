@@ -27,8 +27,8 @@ describe('NotificationManager input validation', () => {
         constants: {
             PRIORITY_LEVELS,
             NOTIFICATION_CONFIGS: {
-                'platform:follow': { settingKey: 'followsEnabled', commandKey: 'follows', hasSpecialProcessing: false },
-                'platform:gift': { settingKey: 'giftsEnabled', commandKey: 'gifts', hasSpecialProcessing: true }
+                'platform:follow': { settingKey: 'followsEnabled', commandKey: 'follows' },
+                'platform:gift': { settingKey: 'giftsEnabled', commandKey: 'gifts' }
             }
         },
         textProcessing: { formatChatMessage: createMockFn() },
@@ -115,8 +115,7 @@ describe('NotificationManager input validation', () => {
             const deps = createDeps();
             deps.constants.NOTIFICATION_CONFIGS['platform:gift'] = {
                 settingKey: 'giftsEnabled',
-                commandKey: 'gifts',
-                hasSpecialProcessing: true
+                commandKey: 'gifts'
             };
             const manager = new NotificationManager(deps);
 
