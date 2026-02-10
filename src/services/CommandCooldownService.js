@@ -5,6 +5,7 @@ const { getSystemTimestampISO } = require('../utils/timestamp');
 
 const COOLDOWN_CONFIG_SECTION = 'cooldowns';
 const CONFIG_CHANGE_EVENTS = ['config:changed', 'config:reloaded'];
+const GLOBAL_COOLDOWN_EXPIRY_MS = 600000;
 
 class CommandCooldownService {
     constructor(options = {}) {
@@ -17,18 +18,15 @@ class CommandCooldownService {
         this.configSubscriptions = [];
         this.lastConfigRefresh = null;
 
-        // Initialize cooldown tracking maps
-        this.userLastCommand = new Map();      // userId -> timestamp of last command
-        this.userHeavyLimit = new Map();       // userId -> boolean (is under heavy limit)
-        this.userCommandTimestamps = new Map(); // userId -> array of command timestamps
-        this.globalCommandCooldowns = new Map(); // commandName -> timestamp of last execution
+        this.userLastCommand = new Map();
+        this.userHeavyLimit = new Map();
+        this.userCommandTimestamps = new Map();
+        this.globalCommandCooldowns = new Map();
 
-        // Load cooldown configuration
         this.loadCooldownConfig();
         this.registerConfigListeners();
 
-        // Start periodic cleanup to prevent memory leaks
-        this.cleanupInterval = safeSetInterval(() => this.cleanupExpiredCooldowns(), 60000); // Every minute
+        this.cleanupInterval = safeSetInterval(() => this.cleanupExpiredCooldowns(), 60000);
 
         this.logger.debug('CommandCooldownService initialized', 'CommandCooldownService');
     }
@@ -168,7 +166,6 @@ class CommandCooldownService {
         const now = Date.now();
         let cleanedCount = 0;
 
-        // If we have too many entries, remove oldest ones
         if (this.userCommandTimestamps.size > this.cooldownConfig.maxEntries) {
             const entriesToDelete = Array.from(this.userCommandTimestamps.keys())
                 .slice(0, Math.floor(this.cooldownConfig.maxEntries / 2));
@@ -183,10 +180,8 @@ class CommandCooldownService {
             this.logger.debug(`Cleaned up ${cleanedCount} old cooldown entries`, 'CommandCooldownService');
         }
 
-        // Clean up expired global cooldowns
         for (const [commandName, timestamp] of this.globalCommandCooldowns.entries()) {
-            // Remove if older than 10 minutes
-            if (now - timestamp > 600000) {
+            if (now - timestamp > GLOBAL_COOLDOWN_EXPIRY_MS) {
                 this.globalCommandCooldowns.delete(commandName);
             }
         }
@@ -223,13 +218,11 @@ class CommandCooldownService {
     }
 
     dispose() {
-        // Clear cleanup interval
         if (this.cleanupInterval) {
             clearInterval(this.cleanupInterval);
             this.cleanupInterval = null;
         }
 
-        // Remove config subscriptions
         this.configSubscriptions.forEach((unsubscribe) => {
             if (typeof unsubscribe === 'function') {
                 try {
@@ -241,7 +234,6 @@ class CommandCooldownService {
         });
         this.configSubscriptions = [];
 
-        // Clear all cooldown maps
         this.userLastCommand.clear();
         this.userHeavyLimit.clear();
         this.userCommandTimestamps.clear();
@@ -256,6 +248,7 @@ class CommandCooldownService {
             heavyCommandCooldown: this.cooldownsConfig.heavyCommandCooldownMs,
             heavyCommandThreshold: this.cooldownsConfig.heavyCommandThreshold,
             heavyCommandWindow: this.cooldownsConfig.heavyCommandWindowMs,
+            globalCooldown: this.cooldownsConfig.globalCmdCooldownMs,
             maxEntries: this.cooldownsConfig.maxEntries
         };
 
@@ -274,6 +267,9 @@ class CommandCooldownService {
             }
             if (source.heavyCommandWindow !== undefined) {
                 normalizedConfig.heavyCommandWindow = this.normalizeDuration(source.heavyCommandWindow, defaults.heavyCommandWindow);
+            }
+            if (source.globalCooldown !== undefined) {
+                normalizedConfig.globalCooldown = this.normalizeDuration(source.globalCooldown, defaults.globalCooldown);
             }
             if (source.maxEntries !== undefined) {
                 normalizedConfig.maxEntries = this.normalizeNumber(source.maxEntries, defaults.maxEntries);

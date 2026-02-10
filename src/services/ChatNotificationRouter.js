@@ -222,11 +222,11 @@ class ChatNotificationRouter {
     }
 
     getCooldownSettings() {
-        const cooldownConfig = this.runtime.config?.cooldowns || {};
+        const cooldownConfig = this.runtime.config.cooldowns;
         return {
-            perUserCooldown: cooldownConfig.cmdCooldownMs || 60000,
-            heavyCooldown: cooldownConfig.heavyCommandCooldownMs || 300000,
-            globalCooldown: cooldownConfig.globalCmdCooldownMs || 60000
+            perUserCooldown: cooldownConfig.cmdCooldownMs,
+            heavyCooldown: cooldownConfig.heavyCommandCooldownMs,
+            globalCooldown: cooldownConfig.globalCmdCooldownMs
         };
     }
 
