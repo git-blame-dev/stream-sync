@@ -31,7 +31,6 @@ const buildMainConfig = (overrides = {}) => createConfigFixture({
     displayQueue: {
         autoProcess: false,
         maxQueueSize: 5,
-        chatOptimization: false,
         ...overrides.displayQueue
     },
     timing: {

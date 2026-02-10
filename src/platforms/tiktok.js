@@ -665,12 +665,10 @@ class TikTokPlatform extends EventEmitter {
             });
             const {
                 userId,
-                username,
                 giftType,
                 giftCount,
                 amount,
                 currency,
-                unitAmount,
                 comboType,
                 repeatEnd
             } = normalizedGift;
@@ -1187,7 +1185,7 @@ class TikTokPlatform extends EventEmitter {
                     username: identity.username,
                     userId: identity.userId
                 };
-            } catch (extractError) {
+            } catch (_extractError) {
                 errorOverrides = {};
             }
         }

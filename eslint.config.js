@@ -29,6 +29,7 @@ module.exports = [
       'no-undef': 'error',
       'no-console': 'error',
       'no-unused-private-class-members': 'error',
+      'no-unused-vars': ['error', { vars: 'all', args: 'none', varsIgnorePattern: '^_', caughtErrorsIgnorePattern: '^_' }],
       'no-restricted-syntax': [
         'error',
         {
@@ -43,13 +44,6 @@ module.exports = [
     languageOptions,
     rules: {
       'no-console': 'off'
-    }
-  },
-  {
-    files: ['src/utils/**/*.js'],
-    languageOptions,
-    rules: {
-      'no-unused-vars': ['error', { vars: 'all', args: 'none' }]
     }
   },
   {
@@ -79,7 +73,7 @@ module.exports = [
     },
     rules: {
       'no-undef': 'error',
-      'no-unused-vars': ['error', { vars: 'all', args: 'none', varsIgnorePattern: '^_' }],
+      'no-unused-vars': ['error', { vars: 'all', args: 'none', varsIgnorePattern: '^_', caughtErrorsIgnorePattern: '^_' }],
       'no-restricted-properties': [
         'error',
         {

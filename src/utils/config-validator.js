@@ -320,7 +320,6 @@ class ConfigValidator {
     static _normalizeDisplayQueueSection(raw) {
         return {
             autoProcess: ConfigValidator.parseBoolean(raw.autoProcess, DEFAULTS.displayQueue.autoProcess),
-            chatOptimization: ConfigValidator.parseBoolean(raw.chatOptimization, DEFAULTS.displayQueue.chatOptimization),
             maxQueueSize: ConfigValidator.parseNumber(raw.maxQueueSize, { defaultValue: DEFAULTS.displayQueue.maxQueueSize })
         };
     }

@@ -3,7 +3,6 @@ const { safeSetTimeout, safeSetInterval, validateTimeout, safeDelay } = require(
 const { EventEmitter } = require('events');
 const { createPlatformErrorHandler } = require('../utils/platform-error-handler');
 const { secrets } = require('../core/secrets');
-const { extractHttpErrorDetails } = require('../utils/http-error-utils');
 const { createTwitchEventSubSubscriptions } = require('./twitch/connections/eventsub-subscriptions');
 const { createTwitchEventSubEventRouter } = require('./twitch/events/event-router');
 const { createTwitchEventSubSubscriptionManager } = require('./twitch/connections/eventsub-subscription-manager');
@@ -61,7 +60,7 @@ class TwitchEventSub extends EventEmitter {
         
         try {
             this.logger.info('Manual EventSub initialized', 'twitch');
-        } catch (error) {
+        } catch (_error) {
             // Logger initialization error - continue with fallback
         }
         // Initialize shared logging service

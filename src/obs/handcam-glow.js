@@ -163,26 +163,6 @@ async function animateGlowSize(obs, config, baseSettings) {
     }
 }
 
-async function setSourceFilterEnabled(obs, sourceName, filterName, enabled) {
-    const { logger, ensureConnected } = moduleDeps;
-    try {
-        await ensureConnected();
-        logger.debug(`[OBS Filter] Setting ${sourceName}:${filterName} to ${enabled ? 'enabled' : 'disabled'}`, 'handcam-glow');
-
-        await obs.call('SetSourceFilterEnabled', {
-            sourceName: sourceName,
-            filterName: filterName,
-            filterEnabled: enabled
-        });
-
-        logger.debug(`[OBS Filter] Successfully set ${sourceName}:${filterName} to ${enabled ? 'enabled' : 'disabled'}`, 'handcam-glow');
-
-    } catch (error) {
-        logger.debug(`[OBS Filter] Error setting ${sourceName}:${filterName}`, 'handcam-glow', error.message);
-        throw error;
-    }
-}
-
 async function activateHandcamGlow(obs, handcamConfig) {
     const { logger, ensureConnected } = moduleDeps;
     const config = createHandcamGlowConfig(handcamConfig);

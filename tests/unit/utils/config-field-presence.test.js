@@ -427,7 +427,6 @@ describe('Config field presence - all normalizers return expected fields', () =>
     describe('_normalizeDisplayQueueSection', () => {
         const EXPECTED_FIELDS = [
             'autoProcess',
-            'chatOptimization',
             'maxQueueSize'
         ];
 

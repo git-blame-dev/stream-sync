@@ -35,11 +35,11 @@ describe('NotificationManager coverage', () => {
         constants: {
             PRIORITY_LEVELS,
             NOTIFICATION_CONFIGS: {
-                'platform:gift': { settingKey: 'giftsEnabled', commandKey: 'gifts', hasSpecialProcessing: true },
-                'platform:follow': { settingKey: 'followsEnabled', commandKey: 'follows', hasSpecialProcessing: false },
-                'platform:paypiggy': { settingKey: 'paypiggyEnabled', commandKey: 'subscriptions', hasSpecialProcessing: true },
-                'platform:raid': { settingKey: 'raidsEnabled', commandKey: 'raids', hasSpecialProcessing: false },
-                'greeting': { settingKey: 'greetingsEnabled', commandKey: 'greetings', hasSpecialProcessing: false }
+                'platform:gift': { settingKey: 'giftsEnabled', commandKey: 'gifts' },
+                'platform:follow': { settingKey: 'followsEnabled', commandKey: 'follows' },
+                'platform:paypiggy': { settingKey: 'paypiggyEnabled', commandKey: 'subscriptions' },
+                'platform:raid': { settingKey: 'raidsEnabled', commandKey: 'raids' },
+                'greeting': { settingKey: 'greetingsEnabled', commandKey: 'greetings' }
             }
         },
         textProcessing: { formatChatMessage: createMockFn() },

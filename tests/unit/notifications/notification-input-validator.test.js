@@ -4,8 +4,8 @@ const { NotificationInputValidator } = require('../../../src/notifications/notif
 
 describe('NotificationInputValidator', () => {
     const notificationConfigs = {
-        'platform:follow': { settingKey: 'followsEnabled', commandKey: 'follows', hasSpecialProcessing: false },
-        'platform:gift': { settingKey: 'giftsEnabled', commandKey: 'gifts', hasSpecialProcessing: true }
+        'platform:follow': { settingKey: 'followsEnabled', commandKey: 'follows' },
+        'platform:gift': { settingKey: 'giftsEnabled', commandKey: 'gifts' }
     };
 
     it('rejects non-string platform values', () => {

@@ -87,7 +87,7 @@ class EventBus extends EventEmitter {
                             if (typeof arg === 'object' && arg !== null) {
                                 try {
                                     return JSON.stringify(arg).substring(0, 100);
-                                } catch (circularError) {
+                                } catch (_circularError) {
                                     return '[Circular Object]';
                                 }
                             }

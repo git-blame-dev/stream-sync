@@ -1,5 +1,4 @@
 
-const { logger } = require('../core/logging');
 const crypto = require('crypto');
 const { getSystemTimestampISO } = require('../utils/timestamp');
 

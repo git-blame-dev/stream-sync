@@ -56,7 +56,7 @@ const {
     getUnifiedLogger
 } = require('./core/logging');
 const { buildLoggingConfig } = require('./core/config-builders');
-const { safeSetTimeout, safeSetInterval } = require('./utils/timeout-validator');
+const { safeSetInterval } = require('./utils/timeout-validator');
 const { createPlatformErrorHandler } = require('./utils/platform-error-handler');
 const { ensureSecrets } = require('./utils/secret-manager');
 const TwitchAuth = require('./auth/TwitchAuth');
@@ -64,8 +64,6 @@ const TwitchAuth = require('./auth/TwitchAuth');
 if (cliArgs.debug) {
     setDebugMode(true);
 }
-
-const { createRetrySystem } = require('./utils/retry-system');
 
 const { InnertubeFactory } = require('./factories/innertube-factory');
 
@@ -85,8 +83,6 @@ const logger = getUnifiedLogger();
 if (!logger || typeof logger.debug !== 'function') {
     throw new Error('Logger missing required methods');
 }
-
-const retrySystem = createRetrySystem({ logger });
 
 let mainErrorHandler = null;
 
@@ -292,7 +288,6 @@ async function main(overrides = {}) {
         const displayQueueConfig = {
             autoProcess: config.displayQueue.autoProcess,
             maxQueueSize: config.displayQueue.maxQueueSize,
-            chatOptimization: config.displayQueue.chatOptimization,
             chat: {
                 sourceName: chatMsgTxt,
                 sceneName: chatMsgScene,

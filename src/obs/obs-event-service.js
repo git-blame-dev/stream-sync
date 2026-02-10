@@ -160,7 +160,7 @@ class OBSEventService {
                 this.state.reconnecting = false;
                 this.state.reconnectAttempts = 0;
                 return;
-            } catch (error) {
+            } catch (_error) {
                 const delay = Math.min(
                     this.reconnectConfig.baseDelay * Math.pow(2, this.state.reconnectAttempts - 1),
                     this.reconnectConfig.maxDelay
@@ -220,7 +220,7 @@ class OBSEventService {
         if (connected) {
             try {
                 responsive = await this.obsConnection.isReady();
-            } catch (error) {
+            } catch (_error) {
                 responsive = false;
             }
         }
