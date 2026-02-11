@@ -1,8 +1,11 @@
 
+const { createPlatformErrorHandler } = require('../utils/platform-error-handler');
+
 class ViewerCountExtractionService {
     constructor(innertubeService, dependencies = {}) {
         this.innertubeService = innertubeService;
         this.logger = dependencies.logger;
+        this.errorHandler = createPlatformErrorHandler(this.logger, 'viewer-count-extraction');
         
         // Inject or fallback to require (for gradual migration)
         this.YouTubeViewerExtractor = dependencies.YouTubeViewerExtractor || 
@@ -84,7 +87,7 @@ class ViewerCountExtractionService {
             const responseTime = Date.now() - startTime;
             this._updateStats(false, responseTime, error);
             
-            this.logger?.debug(`[ViewerCountExtraction] Error extracting viewer count for ${videoId}: ${error.message}`, 'viewer-extraction');
+            this._handleExtractionError(`Error extracting viewer count for ${videoId}: ${error.message}`, error);
             
             return {
                 success: false,
@@ -213,6 +216,14 @@ class ViewerCountExtractionService {
         // Update average response time
         const totalTime = this.stats.averageResponseTime * (this.stats.totalRequests - 1) + responseTime;
         this.stats.averageResponseTime = Math.round(totalTime / this.stats.totalRequests);
+    }
+
+    _handleExtractionError(message, error) {
+        if (this.errorHandler && error instanceof Error) {
+            this.errorHandler.handleEventProcessingError(error, 'viewer-extraction', null, message);
+        } else {
+            this.errorHandler?.logOperationalError(message, 'viewer-count-extraction');
+        }
     }
 }
 

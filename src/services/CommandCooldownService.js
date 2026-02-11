@@ -1,7 +1,8 @@
 
-const { logger } = require('../core/logging');
+const { logger: defaultLogger } = require('../core/logging');
 const { safeSetInterval } = require('../utils/timeout-validator');
 const { getSystemTimestampISO } = require('../utils/timestamp');
+const { createPlatformErrorHandler } = require('../utils/platform-error-handler');
 
 const COOLDOWN_CONFIG_SECTION = 'cooldowns';
 const CONFIG_CHANGE_EVENTS = ['config:changed', 'config:reloaded'];
@@ -10,7 +11,8 @@ const GLOBAL_COOLDOWN_EXPIRY_MS = 600000;
 class CommandCooldownService {
     constructor(options = {}) {
         this.eventBus = options.eventBus || null;
-        this.logger = options.logger || logger;
+        this.logger = options.logger || defaultLogger;
+        this.errorHandler = createPlatformErrorHandler(this.logger, 'command-cooldown');
         if (!options.config) {
             throw new Error('CommandCooldownService requires config');
         }
@@ -33,11 +35,11 @@ class CommandCooldownService {
 
     checkUserCooldown(userId, platformCooldownMs, heavyCooldownMs) {
         if (!userId || typeof userId !== 'string') {
-            this.logger.warn('Invalid userId provided to checkUserCooldown', 'CommandCooldownService');
+            this._handleCooldownError('Invalid userId provided to checkUserCooldown');
             return false;
         }
         if (platformCooldownMs < 0 || heavyCooldownMs < 0) {
-            this.logger.warn('Negative cooldown values provided', 'CommandCooldownService');
+            this._handleCooldownError('Negative cooldown values provided');
             return false;
         }
 
@@ -108,7 +110,7 @@ class CommandCooldownService {
 
     updateUserCooldown(userId) {
         if (!userId || typeof userId !== 'string') {
-            this.logger.warn('Invalid userId provided to updateUserCooldown', 'CommandCooldownService');
+            this._handleCooldownError('Invalid userId provided to updateUserCooldown');
             return;
         }
 
@@ -228,7 +230,7 @@ class CommandCooldownService {
                 try {
                     unsubscribe();
                 } catch (error) {
-                    this.logger.warn(`Error unsubscribing config listener: ${error.message}`, 'CommandCooldownService');
+                    this.errorHandler.handleCleanupError(error, 'config-listener', `Error unsubscribing config listener: ${error.message}`);
                 }
             }
         });
@@ -321,6 +323,14 @@ class CommandCooldownService {
             globalCommandsTracked: this.globalCommandCooldowns.size,
             lastConfigRefresh: this.lastConfigRefresh
         };
+    }
+
+    _handleCooldownError(message, error = null) {
+        if (this.errorHandler && error instanceof Error) {
+            this.errorHandler.handleEventProcessingError(error, 'cooldown-validation', null, message);
+        } else {
+            this.errorHandler?.logOperationalError(message, 'command-cooldown');
+        }
     }
 }
 

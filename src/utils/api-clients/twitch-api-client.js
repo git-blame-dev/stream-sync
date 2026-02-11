@@ -3,12 +3,14 @@ const { getUnifiedLogger } = require('../../core/logging');
 const { secrets } = require('../../core/secrets');
 const { createEnhancedHttpClient } = require('../enhanced-http-client');
 const { createRetrySystem } = require('../retry-system');
+const { createPlatformErrorHandler } = require('../platform-error-handler');
 
 class TwitchApiClient {
     constructor(twitchAuth, config = {}, logger = null, dependencies = {}) {
         this.twitchAuth = twitchAuth;
         this.config = config;
         this.logger = logger || getUnifiedLogger();
+        this.errorHandler = createPlatformErrorHandler(this.logger, 'twitch-api');
         this.httpClient = dependencies.enhancedHttpClient || createEnhancedHttpClient({
             logger: this.logger,
             retrySystem: dependencies.retrySystem || createRetrySystem({ logger: this.logger })
@@ -91,7 +93,7 @@ class TwitchApiClient {
             };
             
         } catch (error) {
-            this.logger.debug(`Failed to get stream info: ${error.message}`, 'twitch-api');
+            this._handleApiError(`Failed to get stream info: ${error.message}`, error, 'getStreamInfo');
             return {
                 isLive: false,
                 stream: null,
@@ -105,7 +107,7 @@ class TwitchApiClient {
             const data = await this.makeRequest(`/users?login=${username}`);
             return data.data && data.data.length > 0 ? data.data[0] : null;
         } catch (error) {
-            this.logger.debug(`Failed to get user info: ${error.message}`, 'twitch-api');
+            this._handleApiError(`Failed to get user info: ${error.message}`, error, 'getUserInfo');
             return null;
         }
     }
@@ -123,8 +125,16 @@ class TwitchApiClient {
             const data = await this.makeRequest(`/channels?broadcaster_id=${channelId}`);
             return data.data && data.data.length > 0 ? data.data[0] : null;
         } catch (error) {
-            this.logger.debug(`Failed to get channel info: ${error.message}`, 'twitch-api');
+            this._handleApiError(`Failed to get channel info: ${error.message}`, error, 'getChannelInfo');
             return null;
+        }
+    }
+
+    _handleApiError(message, error, context) {
+        if (this.errorHandler && error instanceof Error) {
+            this.errorHandler.handleConnectionError(error, context, message);
+        } else {
+            this.errorHandler?.logOperationalError(message, 'twitch-api', error);
         }
     }
 }
