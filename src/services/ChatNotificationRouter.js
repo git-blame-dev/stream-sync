@@ -5,6 +5,8 @@ const { checkGlobalCommandCooldown, updateGlobalCommandCooldown } = require('../
 const { createPlatformErrorHandler } = require('../utils/platform-error-handler');
 const { sanitizeForDisplay } = require('../utils/validation');
 
+const LOG_TRUNCATION_LENGTH = 200;
+
 class ChatNotificationRouter {
     constructor({ runtime, logger, config }) {
         this.runtime = runtime;
@@ -349,7 +351,7 @@ class ChatNotificationRouter {
 
     _formatChatMessage(platform, logSafeData) {
         const { message } = logSafeData;
-        const truncated = message.length > 200 ? message.substring(0, 197) + '...' : message;
+        const truncated = message.length > LOG_TRUNCATION_LENGTH ? message.substring(0, LOG_TRUNCATION_LENGTH - 3) + '...' : message;
         return `[${platform}] ${logSafeData.username}: ${truncated}`;
     }
 

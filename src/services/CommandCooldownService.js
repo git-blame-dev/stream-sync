@@ -252,32 +252,30 @@ class CommandCooldownService {
             maxEntries: this.cooldownsConfig.maxEntries
         };
 
-        const source = overrides || this.getCooldownOverridesFromConfig();
-
         const normalizedConfig = { ...defaults };
-        if (source) {
-            if (source.defaultCooldown !== undefined) {
-                normalizedConfig.defaultCooldown = this.normalizeDuration(source.defaultCooldown, defaults.defaultCooldown);
+        if (overrides) {
+            if (overrides.defaultCooldown !== undefined) {
+                normalizedConfig.defaultCooldown = this.normalizeDuration(overrides.defaultCooldown, defaults.defaultCooldown);
             }
-            if (source.heavyCommandCooldown !== undefined) {
-                normalizedConfig.heavyCommandCooldown = this.normalizeDuration(source.heavyCommandCooldown, defaults.heavyCommandCooldown);
+            if (overrides.heavyCommandCooldown !== undefined) {
+                normalizedConfig.heavyCommandCooldown = this.normalizeDuration(overrides.heavyCommandCooldown, defaults.heavyCommandCooldown);
             }
-            if (source.heavyCommandThreshold !== undefined) {
-                normalizedConfig.heavyCommandThreshold = this.normalizeNumber(source.heavyCommandThreshold, defaults.heavyCommandThreshold);
+            if (overrides.heavyCommandThreshold !== undefined) {
+                normalizedConfig.heavyCommandThreshold = this.normalizeNumber(overrides.heavyCommandThreshold, defaults.heavyCommandThreshold);
             }
-            if (source.heavyCommandWindow !== undefined) {
-                normalizedConfig.heavyCommandWindow = this.normalizeDuration(source.heavyCommandWindow, defaults.heavyCommandWindow);
+            if (overrides.heavyCommandWindow !== undefined) {
+                normalizedConfig.heavyCommandWindow = this.normalizeDuration(overrides.heavyCommandWindow, defaults.heavyCommandWindow);
             }
-            if (source.globalCooldown !== undefined) {
-                normalizedConfig.globalCooldown = this.normalizeDuration(source.globalCooldown, defaults.globalCooldown);
+            if (overrides.globalCooldown !== undefined) {
+                normalizedConfig.globalCooldown = this.normalizeDuration(overrides.globalCooldown, defaults.globalCooldown);
             }
-            if (source.maxEntries !== undefined) {
-                normalizedConfig.maxEntries = this.normalizeNumber(source.maxEntries, defaults.maxEntries);
+            if (overrides.maxEntries !== undefined) {
+                normalizedConfig.maxEntries = this.normalizeNumber(overrides.maxEntries, defaults.maxEntries);
             }
         }
 
         this.cooldownConfig = normalizedConfig;
-        this.lastConfigRefresh = new Date();
+        this.lastConfigRefresh = getSystemTimestampISO();
         this.logger.debug('Cooldown configuration loaded', 'CommandCooldownService', normalizedConfig);
     }
 
@@ -296,10 +294,6 @@ class CommandCooldownService {
             return fallback;
         }
         return numeric;
-    }
-
-    getCooldownOverridesFromConfig() {
-        return null;
     }
 
     registerConfigListeners() {
@@ -325,7 +319,7 @@ class CommandCooldownService {
             activeUsers: this.userLastCommand.size,
             heavyLimitUsers,
             globalCommandsTracked: this.globalCommandCooldowns.size,
-            lastConfigRefresh: this.lastConfigRefresh ? this.lastConfigRefresh.toISOString() : null
+            lastConfigRefresh: this.lastConfigRefresh
         };
     }
 }
