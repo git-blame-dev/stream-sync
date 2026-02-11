@@ -122,7 +122,6 @@ const CONFIG_SCHEMA = {
         maxQueueSize: { type: 'number', default: 100 }
     },
 
-
     logging: {
         consoleLevel: { type: 'string', userDefined: true },
         fileLevel: { type: 'string', userDefined: true },
