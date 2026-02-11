@@ -14,23 +14,8 @@ const DEFAULT_LOGGING_CONFIG = {
 };
 
 function buildLoggingConfig(normalized, options = {}) {
-    const config = JSON.parse(JSON.stringify(DEFAULT_LOGGING_CONFIG));
-    const debugMode = options.debugMode || false;
-    const debugEnabled = normalized.general.debugEnabled;
-    const logging = normalized.logging || {};
-
-    if (debugMode) {
-        config.console.level = 'debug';
-    } else if (debugEnabled) {
-        config.console.level = 'debug';
-    }
-
-    if (!VALID_LOG_LEVELS.includes(config.console.level)) {
-        config.console.level = 'console';
-    }
-    if (!VALID_LOG_LEVELS.includes(config.file.level)) {
-        config.file.level = 'debug';
-    }
+    const config = structuredClone(DEFAULT_LOGGING_CONFIG);
+    const logging = normalized.logging;
 
     if (logging.consoleLevel && VALID_LOG_LEVELS.includes(logging.consoleLevel)) {
         config.console.level = logging.consoleLevel;
@@ -40,6 +25,10 @@ function buildLoggingConfig(normalized, options = {}) {
     }
     if (logging.fileLoggingEnabled !== undefined && logging.fileLoggingEnabled !== null) {
         config.file.enabled = logging.fileLoggingEnabled;
+    }
+
+    if (options.debugMode || normalized.general.debugEnabled) {
+        config.console.level = 'debug';
     }
 
     config.file.directory = DEFAULTS.LOG_DIRECTORY;

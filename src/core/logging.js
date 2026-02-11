@@ -2,6 +2,8 @@ const { formatTimestampCompact } = require('../utils/text-processing');
 const { safeObjectStringify } = require('../utils/logger-utils');
 const { FileLogger } = require('../utils/file-logger');
 
+const LOG_LEVELS = ['debug', 'info', 'console', 'warn', 'error', 'emergency'];
+
 let globalLoggingConfig = null;
 
 function initializeLoggingConfig(appConfig) {
@@ -49,11 +51,11 @@ class UnifiedLogger {
             data
         };
         
-        if (this.outputs.console && this.shouldOutput(level, 'console')) {
+        if (this.shouldOutput(level, 'console')) {
             this.outputs.console.write(logEntry);
         }
         
-        if (this.outputs.file && this.shouldOutput(level, 'file')) {
+        if (this.shouldOutput(level, 'file')) {
             this.outputs.file.write(logEntry);
         }
     }
@@ -73,9 +75,8 @@ class UnifiedLogger {
             return true;
         }
         
-        const levels = ['debug', 'info', 'console', 'warn', 'error', 'emergency'];
-        const messageLevel = levels.indexOf(level);
-        const configLevel = levels.indexOf(config.level || 'info');
+        const messageLevel = LOG_LEVELS.indexOf(level);
+        const configLevel = LOG_LEVELS.indexOf(config.level || 'info');
         return messageLevel >= configLevel;
     }
     
