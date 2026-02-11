@@ -6,6 +6,7 @@ const {
     normalizeHandleForCache,
     resolveChannelId
 } = require('./youtube-channel-resolver');
+const { createPlatformErrorHandler } = require('../utils/platform-error-handler');
 
 class YouTubeLiveStreamService {
     
@@ -296,6 +297,15 @@ YouTubeLiveStreamService._channelCache = new Map();
 YouTubeLiveStreamService._channelCacheTtl = 10 * 60 * 1000; // 10 minutes
 
 YouTubeLiveStreamService._log = function(logger, level, message, error) {
+    if (level === 'error' || level === 'warn') {
+        const handler = createPlatformErrorHandler(logger, 'youtube-live-stream');
+        if (error instanceof Error) {
+            handler.handleConnectionError(error, 'live-stream', message);
+        } else {
+            handler.handleServiceUnavailableError('youtube-live-stream', error || new Error(message));
+        }
+        return;
+    }
     if (!logger || typeof logger[level] !== 'function') {
         return;
     }

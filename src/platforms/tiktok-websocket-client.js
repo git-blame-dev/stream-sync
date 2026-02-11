@@ -1,12 +1,15 @@
 
 const { EventEmitter } = require('events');
 const { safeSetTimeout, safeSetInterval } = require('../utils/timeout-validator');
+const { createPlatformErrorHandler } = require('../utils/platform-error-handler');
 
 class TikTokWebSocketClient extends EventEmitter {
     constructor(username, options = {}) {
         super();
         this.username = username;
         this.apiKey = options.apiKey || null;
+        this.logger = options.logger || null;
+        this.errorHandler = createPlatformErrorHandler(this.logger, 'tiktok-websocket');
         this.WebSocketCtor = options.WebSocketCtor || require('ws');
 
         this.ws = null;
@@ -88,7 +91,9 @@ class TikTokWebSocketClient extends EventEmitter {
                             });
                         }
                     } catch (error) {
-                        this.emit('error', new Error(`Failed to parse message: ${error.message}`));
+                        const parseError = new Error(`Failed to parse message: ${error.message}`);
+                        this._handleClientError('Failed to parse WebSocket message', parseError, 'message-parse');
+                        this.emit('error', parseError);
                     }
                 });
 
@@ -101,13 +106,17 @@ class TikTokWebSocketClient extends EventEmitter {
                     this.emit('disconnected', { code, reason: reasonStr });
 
                     if (code === 4429) {
-                        this.emit('error', new Error('Connection limit exceeded (10 concurrent connections)'));
+                        const limitError = new Error('Connection limit exceeded (10 concurrent connections)');
+                        this._handleClientError('TikTok connection limit exceeded', limitError, 'connection');
+                        this.emit('error', limitError);
                         this.autoReconnect = false;
                     } else if (code === 4404) {
                         this.emit('streamEnd', { reason: 'User is not live' });
                         this.autoReconnect = false;
                     } else if (code === 4401) {
-                        this.emit('error', new Error('Invalid configuration'));
+                        const configError = new Error('Invalid configuration');
+                        this._handleClientError('TikTok invalid configuration', configError, 'connection');
+                        this.emit('error', configError);
                         this.autoReconnect = false;
                     }
 
@@ -123,6 +132,7 @@ class TikTokWebSocketClient extends EventEmitter {
                 });
 
                 this.ws.on('error', (error) => {
+                    this._handleClientError('TikTok WebSocket error', error, 'connection');
                     this.emit('error', error);
                     if (!connectResolved) {
                         connectResolved = true;
@@ -267,7 +277,9 @@ class TikTokWebSocketClient extends EventEmitter {
 
         safeSetTimeout(() => {
             this.connect().catch((error) => {
-                this.emit('error', new Error(`Reconnect attempt ${this.reconnectAttempts} failed: ${error.message}`));
+                const reconnectError = new Error(`Reconnect attempt ${this.reconnectAttempts} failed: ${error.message}`);
+                this._handleClientError(`TikTok reconnect attempt ${this.reconnectAttempts} failed`, reconnectError, 'connection');
+                this.emit('error', reconnectError);
             });
         }, delay);
     }
@@ -320,6 +332,14 @@ class TikTokWebSocketClient extends EventEmitter {
 
     async fetchIsLive() {
         return this.isConnected;
+    }
+
+    _handleClientError(message, error, context) {
+        if (this.errorHandler && error instanceof Error) {
+            this.errorHandler.handleConnectionError(error, context, message);
+        } else {
+            this.errorHandler?.logOperationalError(message, 'tiktok-websocket', error);
+        }
     }
 }
 

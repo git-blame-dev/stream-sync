@@ -1,10 +1,12 @@
 
-const { logger } = require('../core/logging');
+const { logger: defaultLogger } = require('../core/logging');
+const { createPlatformErrorHandler } = require('../utils/platform-error-handler');
 
 class SelfMessageDetectionService {
-    constructor(config) {
+    constructor(config, dependencies = {}) {
         this.config = config;
-        this.logger = logger;
+        this.logger = dependencies.logger || defaultLogger;
+        this.errorHandler = createPlatformErrorHandler(this.logger, 'self-message-detection');
     }
 
     isFilteringEnabled(platform) {
@@ -24,7 +26,7 @@ class SelfMessageDetectionService {
             case 'tiktok':
                 return this._isTikTokSelfMessage(messageData, platformConfig);
             default:
-                this.logger.warn(`Unknown platform for self-message detection: ${platform}`, 'self-filter');
+                this._handleDetectionError(`Unknown platform for self-message detection: ${platform}`);
                 return false;
         }
     }
@@ -87,6 +89,14 @@ class SelfMessageDetectionService {
         }
 
         return false;
+    }
+
+    _handleDetectionError(message, error = null) {
+        if (this.errorHandler && error instanceof Error) {
+            this.errorHandler.handleEventProcessingError(error, 'self-message-detection', null, message);
+        } else {
+            this.errorHandler?.logOperationalError(message, 'self-message-detection');
+        }
     }
 }
 
