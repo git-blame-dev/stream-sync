@@ -216,6 +216,38 @@ describe('ConfigValidator._normalizeHandcamSection()', () => {
         expect(result.holdDuration).toBe(10.0);
         expect(result.totalSteps).toBe(60);
     });
+
+    it('rejects out-of-range handcam values with defaults', () => {
+        const tooLow = ConfigValidator._normalizeHandcamSection({
+            maxSize: '0',
+            rampUpDuration: '0.05',
+            holdDuration: '-1',
+            rampDownDuration: '0.05'
+        });
+
+        expect(tooLow.maxSize).toBe(50);
+        expect(tooLow.rampUpDuration).toBe(0.5);
+        expect(tooLow.holdDuration).toBe(8.0);
+        expect(tooLow.rampDownDuration).toBe(0.5);
+
+        const tooHigh = ConfigValidator._normalizeHandcamSection({
+            maxSize: '200',
+            rampUpDuration: '15',
+            rampDownDuration: '15'
+        });
+
+        expect(tooHigh.maxSize).toBe(50);
+        expect(tooHigh.rampUpDuration).toBe(0.5);
+        expect(tooHigh.rampDownDuration).toBe(0.5);
+    });
+
+    it('accepts holdDuration of 0', () => {
+        const result = ConfigValidator._normalizeHandcamSection({
+            holdDuration: '0'
+        });
+
+        expect(result.holdDuration).toBe(0);
+    });
 });
 
 describe('ConfigValidator._normalizeGoalsSection()', () => {
@@ -282,6 +314,46 @@ describe('ConfigValidator._normalizeCooldownsSection()', () => {
 
         expect(result.cmdCooldown).toBe(45);
         expect(result.globalCmdCooldown).toBe(90);
+    });
+
+    it('rejects out-of-range cooldown values with defaults', () => {
+        const tooLow = ConfigValidator._normalizeCooldownsSection({
+            defaultCooldown: '5',
+            heavyCommandCooldown: '30',
+            heavyCommandThreshold: '1'
+        });
+
+        expect(tooLow.defaultCooldown).toBe(60);
+        expect(tooLow.heavyCommandCooldown).toBe(60);
+        expect(tooLow.heavyCommandThreshold).toBe(3);
+
+        const tooHigh = ConfigValidator._normalizeCooldownsSection({
+            defaultCooldown: '5000',
+            heavyCommandCooldown: '5000',
+            heavyCommandThreshold: '50'
+        });
+
+        expect(tooHigh.defaultCooldown).toBe(60);
+        expect(tooHigh.heavyCommandCooldown).toBe(60);
+        expect(tooHigh.heavyCommandThreshold).toBe(3);
+    });
+
+    it('rejects out-of-range cmdCooldown and globalCmdCooldown with defaults', () => {
+        const tooLow = ConfigValidator._normalizeCooldownsSection({
+            cmdCooldown: '5',
+            globalCmdCooldown: '5'
+        });
+
+        expect(tooLow.cmdCooldown).toBe(60);
+        expect(tooLow.globalCmdCooldown).toBe(60);
+
+        const tooHigh = ConfigValidator._normalizeCooldownsSection({
+            cmdCooldown: '5000',
+            globalCmdCooldown: '5000'
+        });
+
+        expect(tooHigh.cmdCooldown).toBe(60);
+        expect(tooHigh.globalCmdCooldown).toBe(60);
     });
 });
 
@@ -524,89 +596,12 @@ describe('ConfigValidator.validate()', () => {
     });
 });
 
-describe('ConfigValidator.validate() warnings', () => {
-    const createMinimalValidConfig = () => ({
-        general: { debugEnabled: false },
-        obs: { enabled: false },
-        commands: {},
-        cooldowns: { defaultCooldown: 60, heavyCommandCooldown: 120, heavyCommandThreshold: 5 },
-        handcam: { maxSize: 50, rampUpDuration: 0.5, holdDuration: 6.0, rampDownDuration: 0.5 }
-    });
-
-    it('warns when cooldown.defaultCooldown is too low', () => {
-        const config = createMinimalValidConfig();
-        config.cooldowns.defaultCooldown = 5;
-
-        const result = ConfigValidator.validate(config);
+describe('ConfigValidator.validate() produces no range warnings after normalization', () => {
+    it('returns no warnings for normalized config', () => {
+        const normalized = ConfigValidator.normalize({});
+        const result = ConfigValidator.validate(normalized);
 
         expect(result.isValid).toBe(true);
-        expect(result.warnings).toContain('cooldowns.defaultCooldown should be between 10 and 3600 seconds');
-    });
-
-    it('warns when cooldown.defaultCooldown is too high', () => {
-        const config = createMinimalValidConfig();
-        config.cooldowns.defaultCooldown = 5000;
-
-        const result = ConfigValidator.validate(config);
-
-        expect(result.isValid).toBe(true);
-        expect(result.warnings).toContain('cooldowns.defaultCooldown should be between 10 and 3600 seconds');
-    });
-
-    it('warns when handcam.maxSize is out of range', () => {
-        const config = createMinimalValidConfig();
-        config.handcam.maxSize = 200;
-
-        const result = ConfigValidator.validate(config);
-
-        expect(result.isValid).toBe(true);
-        expect(result.warnings).toContain('handcam.maxSize should be between 1 and 100');
-    });
-
-    it('warns when handcam.holdDuration is negative', () => {
-        const config = createMinimalValidConfig();
-        config.handcam.holdDuration = -1;
-
-        const result = ConfigValidator.validate(config);
-
-        expect(result.isValid).toBe(true);
-        expect(result.warnings).toContain('handcam.holdDuration must be 0 or greater');
-    });
-
-    it('allows handcam.holdDuration of 0 and large values without warning', () => {
-        const configZero = createMinimalValidConfig();
-        configZero.handcam.holdDuration = 0;
-
-        const resultZero = ConfigValidator.validate(configZero);
-
-        expect(resultZero.isValid).toBe(true);
-        expect(resultZero.warnings.some(w => w.includes('holdDuration'))).toBe(false);
-
-        const configLarge = createMinimalValidConfig();
-        configLarge.handcam.holdDuration = 300;
-
-        const resultLarge = ConfigValidator.validate(configLarge);
-
-        expect(resultLarge.isValid).toBe(true);
-        expect(resultLarge.warnings.some(w => w.includes('holdDuration'))).toBe(false);
-    });
-
-    it('returns multiple warnings for multiple issues', () => {
-        const config = createMinimalValidConfig();
-        config.cooldowns.defaultCooldown = 5;
-        config.handcam.maxSize = 200;
-
-        const result = ConfigValidator.validate(config);
-
-        expect(result.isValid).toBe(true);
-        expect(result.warnings.length).toBe(2);
-    });
-
-    it('returns no warnings for valid ranges', () => {
-        const config = createMinimalValidConfig();
-
-        const result = ConfigValidator.validate(config);
-
         expect(result.warnings).toEqual([]);
     });
 });

@@ -76,7 +76,7 @@ describe('config load and build behavior', () => {
         expect(built.logging).toBeDefined();
     });
 
-    it('loads config with warnings and exposes config path', () => {
+    it('normalizes out-of-range values to defaults and exposes config path', () => {
         configModule = require('../../../src/core/config');
         const { ConfigValidator } = require('../../../src/utils/config-validator');
         const rawConfig = getRawTestConfig();
@@ -89,8 +89,13 @@ describe('config load and build behavior', () => {
         rawConfig.handcam.rampDownDuration = '20';
 
         const normalized = ConfigValidator.normalize(rawConfig);
-        const validation = ConfigValidator.validate(normalized);
-        expect(validation.warnings.length).toBeGreaterThan(0);
+        expect(normalized.cooldowns.defaultCooldown).toBe(60);
+        expect(normalized.cooldowns.heavyCommandCooldown).toBe(60);
+        expect(normalized.cooldowns.heavyCommandThreshold).toBe(3);
+        expect(normalized.handcam.maxSize).toBe(50);
+        expect(normalized.handcam.rampUpDuration).toBe(0.5);
+        expect(normalized.handcam.holdDuration).toBe(8.0);
+        expect(normalized.handcam.rampDownDuration).toBe(0.5);
 
         fs.writeFileSync(tempConfigPath, ini.stringify(rawConfig), 'utf8');
         process.env.CHAT_BOT_CONFIG_PATH = tempConfigPath;

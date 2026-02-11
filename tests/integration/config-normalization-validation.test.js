@@ -181,7 +181,7 @@ describe('ConfigValidator normalize + validate integration', () => {
         expect(normalized.streamelements.youtubeChannelId).toBe('UC123456');
     });
 
-    it('warnings generated for out-of-range values', () => {
+    it('out-of-range values replaced with defaults during normalization', () => {
         const rawConfig = {
             general: {},
             obs: {},
@@ -194,8 +194,10 @@ describe('ConfigValidator normalize + validate integration', () => {
         const validation = ConfigValidator.validate(normalized);
 
         expect(validation.isValid).toBe(true);
-        expect(validation.warnings).toContain('cooldowns.defaultCooldown should be between 10 and 3600 seconds');
-        expect(validation.warnings).toContain('handcam.maxSize should be between 1 and 100');
+        expect(validation.warnings).toEqual([]);
+        expect(normalized.cooldowns.defaultCooldown).toBe(60);
+        expect(normalized.cooldowns.heavyCommandCooldown).toBe(120);
+        expect(normalized.handcam.maxSize).toBe(50);
     });
 
     it('YouTube stream detection method validation', () => {
