@@ -194,7 +194,6 @@ describe('ConfigValidator normalize + validate integration', () => {
         const validation = ConfigValidator.validate(normalized);
 
         expect(validation.isValid).toBe(true);
-        expect(validation.warnings).toEqual([]);
         expect(normalized.cooldowns.defaultCooldown).toBe(60);
         expect(normalized.cooldowns.heavyCommandCooldown).toBe(120);
         expect(normalized.handcam.maxSize).toBe(50);
@@ -271,7 +270,6 @@ describe('ConfigValidator normalize + validate integration', () => {
 
         expect(validation.isValid).toBe(true);
         expect(validation.errors).toEqual([]);
-        expect(validation.warnings).toEqual([]);
 
         expect(typeof normalized.general.debugEnabled).toBe('boolean');
         expect(typeof normalized.cooldowns.cmdCooldown).toBe('number');

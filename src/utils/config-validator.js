@@ -409,7 +409,6 @@ class ConfigValidator {
 
     static validate(config) {
         const errors = [];
-        const warnings = [];
 
         ConfigValidator._validateRequiredSections(config, errors);
         ConfigValidator.validateRequiredFields(config, errors);
@@ -417,8 +416,7 @@ class ConfigValidator {
 
         return {
             isValid: errors.length === 0,
-            errors,
-            warnings
+            errors
         };
     }
 

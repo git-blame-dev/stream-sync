@@ -596,16 +596,6 @@ describe('ConfigValidator.validate()', () => {
     });
 });
 
-describe('ConfigValidator.validate() produces no range warnings after normalization', () => {
-    it('returns no warnings for normalized config', () => {
-        const normalized = ConfigValidator.normalize({});
-        const result = ConfigValidator.validate(normalized);
-
-        expect(result.isValid).toBe(true);
-        expect(result.warnings).toEqual([]);
-    });
-});
-
 describe('getFieldsRequiredWhenEnabled()', () => {
     const { getFieldsRequiredWhenEnabled } = require('../../../src/core/config-schema');
 

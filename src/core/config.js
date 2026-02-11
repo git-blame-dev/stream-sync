@@ -45,12 +45,6 @@ function loadConfig() {
             throw error;
         }
 
-        if (validation.warnings.length > 0) {
-            validation.warnings.forEach(warning => {
-                process.stdout.write(`[WARN] [Config] ${warning}\n`);
-            });
-        }
-
         loadedConfig = normalized;
 
         const debugEnabled = normalized.general.debugEnabled;
