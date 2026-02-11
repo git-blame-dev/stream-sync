@@ -29,6 +29,15 @@ class ConfigValidator {
         return parsed;
     }
 
+    static _parseNumberFromSchema(section, field, value) {
+        const spec = CONFIG_SCHEMA[section][field];
+        return ConfigValidator.parseNumber(value, {
+            defaultValue: DEFAULTS[section][field],
+            min: spec.min,
+            max: spec.max
+        });
+    }
+
     static normalizeFromSchema(sectionName, rawData) {
         const sectionSchema = CONFIG_SCHEMA[sectionName];
         if (!sectionSchema || sectionSchema._dynamic) return {};
@@ -233,15 +242,16 @@ class ConfigValidator {
     }
 
     static _normalizeHandcamSection(raw) {
+        const num = (field) => ConfigValidator._parseNumberFromSchema('handcam', field, raw[field]);
         return {
             enabled: ConfigValidator.parseBoolean(raw.enabled, DEFAULTS.handcam.enabled),
             sourceName: ConfigValidator.parseString(raw.sourceName, DEFAULTS.handcam.sourceName),
             glowFilterName: ConfigValidator.parseString(raw.glowFilterName, DEFAULTS.handcam.glowFilterName),
-            maxSize: ConfigValidator.parseNumber(raw.maxSize, { defaultValue: DEFAULTS.handcam.maxSize }),
-            rampUpDuration: ConfigValidator.parseNumber(raw.rampUpDuration, { defaultValue: DEFAULTS.handcam.rampUpDuration }),
-            holdDuration: ConfigValidator.parseNumber(raw.holdDuration, { defaultValue: DEFAULTS.handcam.holdDuration }),
-            rampDownDuration: ConfigValidator.parseNumber(raw.rampDownDuration, { defaultValue: DEFAULTS.handcam.rampDownDuration }),
-            totalSteps: ConfigValidator.parseNumber(raw.totalSteps, { defaultValue: DEFAULTS.handcam.totalSteps }),
+            maxSize: num('maxSize'),
+            rampUpDuration: num('rampUpDuration'),
+            holdDuration: num('holdDuration'),
+            rampDownDuration: num('rampDownDuration'),
+            totalSteps: num('totalSteps'),
             easingEnabled: ConfigValidator.parseBoolean(raw.easingEnabled, DEFAULTS.handcam.easingEnabled)
         };
     }
@@ -291,14 +301,15 @@ class ConfigValidator {
     }
 
     static _normalizeCooldownsSection(raw) {
+        const num = (field) => ConfigValidator._parseNumberFromSchema('cooldowns', field, raw[field]);
         return {
-            cmdCooldown: ConfigValidator.parseNumber(raw.cmdCooldown, { defaultValue: DEFAULTS.cooldowns.cmdCooldown }),
-            globalCmdCooldown: ConfigValidator.parseNumber(raw.globalCmdCooldown, { defaultValue: DEFAULTS.cooldowns.globalCmdCooldown }),
-            defaultCooldown: ConfigValidator.parseNumber(raw.defaultCooldown, { defaultValue: DEFAULTS.cooldowns.defaultCooldown }),
-            heavyCommandCooldown: ConfigValidator.parseNumber(raw.heavyCommandCooldown, { defaultValue: DEFAULTS.cooldowns.heavyCommandCooldown }),
-            heavyCommandThreshold: ConfigValidator.parseNumber(raw.heavyCommandThreshold, { defaultValue: DEFAULTS.cooldowns.heavyCommandThreshold }),
-            heavyCommandWindow: ConfigValidator.parseNumber(raw.heavyCommandWindow, { defaultValue: DEFAULTS.cooldowns.heavyCommandWindow }),
-            maxEntries: ConfigValidator.parseNumber(raw.maxEntries, { defaultValue: DEFAULTS.cooldowns.maxEntries })
+            cmdCooldown: num('cmdCooldown'),
+            globalCmdCooldown: num('globalCmdCooldown'),
+            defaultCooldown: num('defaultCooldown'),
+            heavyCommandCooldown: num('heavyCommandCooldown'),
+            heavyCommandThreshold: num('heavyCommandThreshold'),
+            heavyCommandWindow: num('heavyCommandWindow'),
+            maxEntries: num('maxEntries')
         };
     }
 
@@ -323,7 +334,6 @@ class ConfigValidator {
             maxQueueSize: ConfigValidator.parseNumber(raw.maxQueueSize, { defaultValue: DEFAULTS.displayQueue.maxQueueSize })
         };
     }
-
 
     static _normalizeLoggingSection(raw) {
         return {
@@ -404,8 +414,6 @@ class ConfigValidator {
         ConfigValidator._validateRequiredSections(config, errors);
         ConfigValidator.validateRequiredFields(config, errors);
         ConfigValidator._validateStreamElements(config, errors);
-        ConfigValidator._validateCooldownRanges(config, warnings);
-        ConfigValidator._validateHandcamRanges(config, warnings);
 
         return {
             isValid: errors.length === 0,
@@ -447,46 +455,6 @@ class ConfigValidator {
             if (!hasYoutubeChannel && !hasTwitchChannel) {
                 errors.push('Missing required configuration: StreamElements channel ID (YouTube or Twitch)');
             }
-        }
-    }
-
-    static _validateCooldownRanges(config, warnings) {
-        if (!config.cooldowns) return;
-
-        const cooldown = config.cooldowns;
-
-        if (cooldown.defaultCooldown < 10 || cooldown.defaultCooldown > 3600) {
-            warnings.push('cooldowns.defaultCooldown should be between 10 and 3600 seconds');
-        }
-
-        if (cooldown.heavyCommandCooldown < 60 || cooldown.heavyCommandCooldown > 3600) {
-            warnings.push('cooldowns.heavyCommandCooldown should be between 60 and 3600 seconds');
-        }
-
-        if (cooldown.heavyCommandThreshold < 2 || cooldown.heavyCommandThreshold > 20) {
-            warnings.push('cooldowns.heavyCommandThreshold should be between 2 and 20');
-        }
-    }
-
-    static _validateHandcamRanges(config, warnings) {
-        if (!config.handcam) return;
-
-        const handcam = config.handcam;
-
-        if (handcam.maxSize < 1 || handcam.maxSize > 100) {
-            warnings.push('handcam.maxSize should be between 1 and 100');
-        }
-
-        if (handcam.rampUpDuration < 0.1 || handcam.rampUpDuration > 10.0) {
-            warnings.push('handcam.rampUpDuration should be between 0.1 and 10.0 seconds');
-        }
-
-        if (handcam.holdDuration < 0) {
-            warnings.push('handcam.holdDuration must be 0 or greater');
-        }
-
-        if (handcam.rampDownDuration < 0.1 || handcam.rampDownDuration > 10.0) {
-            warnings.push('handcam.rampDownDuration should be between 0.1 and 10.0 seconds');
         }
     }
 
