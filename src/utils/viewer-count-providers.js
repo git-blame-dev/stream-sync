@@ -1,12 +1,12 @@
 
 const { getUnifiedLogger } = require('../core/logging');
+const { createPlatformErrorHandler } = require('./platform-error-handler');
 
 class ViewerCountProvider {
     constructor(platform, logger = null) {
         this.platform = platform;
         this.logger = logger || getUnifiedLogger();
-        
-        // Standardized error tracking for optimization
+        this.errorHandler = createPlatformErrorHandler(this.logger, `${platform}-viewer-count`);
         this.errorStats = {
             totalErrors: 0,
             lastError: null,
@@ -30,22 +30,17 @@ class ViewerCountProvider {
             : 'Unknown error';
         this.errorStats.lastError = message;
         this.errorStats.consecutiveErrors++;
-        
-        // Track error types for optimization insights
+
         const normalizedError = error instanceof Error ? error : new Error(message);
         const errorType = this._categorizeError(normalizedError);
         const currentCount = this.errorStats.errorTypes.get(errorType) || 0;
         this.errorStats.errorTypes.set(errorType, currentCount + 1);
-        
-        // Use consistent logging format across all providers
-        this.logger.debug(`${this.platform} ${operation} failed: ${message}`, 'viewer-count-provider', {
-            platform: this.platform,
-            operation,
-            errorType,
-            consecutiveErrors: this.errorStats.consecutiveErrors
-        });
-        
-        return 0; // Consistent return value for all provider errors
+
+        this.errorHandler.handleEventProcessingError(
+            normalizedError, operation, null, `${this.platform} ${operation} failed: ${message}`
+        );
+
+        return 0;
     }
 
     _categorizeError(error) {
@@ -83,17 +78,14 @@ class ViewerCountProvider {
 
 class TwitchViewerCountProvider extends ViewerCountProvider {
     constructor(apiClient, connectionStateFactory, config, getCurrentEventSub = null, logger = null) {
-        super('twitch', logger); // Properly pass platform and logger to parent
+        super('twitch', logger);
         this.apiClient = apiClient;
         this.connectionStateFactory = connectionStateFactory;
         this.config = config;
-        this.getCurrentEventSub = getCurrentEventSub; // Function to get current EventSub instance
+        this.getCurrentEventSub = getCurrentEventSub;
     }
 
     isReady() {
-        // Viewer count should be independent of EventSub authentication status
-        // since Twitch stream info is a public API that works for public streams
-        // Only require basic config values: channel name
         return !!(this.config && this.config.channel);
     }
 
@@ -113,7 +105,6 @@ class TwitchViewerCountProvider extends ViewerCountProvider {
                 viewerCount: streamInfo.viewerCount
             });
 
-            // Reset error count on successful operation
             this._resetErrorCount();
             return streamInfo.viewerCount;
             
@@ -127,16 +118,10 @@ class TwitchViewerCountProvider extends ViewerCountProvider {
 class YouTubeViewerCountProvider extends ViewerCountProvider {
     constructor(innertubeManager, config, getActiveVideoIds, Innertube, dependencies = {}) {
         super('youtube', dependencies.logger);
-        
-        // Core dependencies
         this.config = config;
         this.getActiveVideoIds = getActiveVideoIds;
-        
-        // Service layer dependencies (injected via dependencies parameter)
         this.viewerExtractionService = dependencies.viewerExtractionService;
         this.innertubeService = dependencies.innertubeService;
-        
-        // Performance monitoring
         this.stats = {
             totalRequests: 0,
             successfulRequests: 0,
@@ -145,7 +130,6 @@ class YouTubeViewerCountProvider extends ViewerCountProvider {
     }
 
     isReady() {
-        // Provider is ready if we have the extraction service and config
         return !!(this.viewerExtractionService && this.config && this.getActiveVideoIds);
     }
 
@@ -159,7 +143,6 @@ class YouTubeViewerCountProvider extends ViewerCountProvider {
         }
 
         try {
-            // Get all active video IDs
             const activeVideoIds = this.getActiveVideoIds();
             
             if (!activeVideoIds || activeVideoIds.length === 0) {
@@ -169,14 +152,11 @@ class YouTubeViewerCountProvider extends ViewerCountProvider {
             
             this.logger.debug(`Found ${activeVideoIds.length} active streams for aggregation: ${activeVideoIds.join(', ')}`, 'viewer-count-provider');
             
-            // Use service layer for clean, modular viewer count extraction
             const result = await this.viewerExtractionService.getAggregatedViewerCount(activeVideoIds);
             
             if (result.success) {
                 this.stats.successfulRequests++;
                 this.logger.debug(`YouTube aggregation complete: ${result.totalCount} total viewers from ${result.successfulStreams}/${activeVideoIds.length} streams`, 'viewer-count-provider');
-                
-                // Reset error count on successful operation
                 this._resetErrorCount();
                 return result.totalCount;
             } else {
