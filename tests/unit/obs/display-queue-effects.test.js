@@ -85,6 +85,41 @@ describe('DisplayQueueEffects', () => {
         expect(obsCalls.length).toBe(2);
     });
 
+    it('skips VFX and continues TTS when sequential VFX match build fails', async () => {
+        const ttsUpdates = [];
+        const emittedVfx = [];
+        const effects = new DisplayQueueEffects({
+            config: {
+                ttsEnabled: true,
+                obs: { ttsTxt: 'tts' },
+                handcam: { enabled: false }
+            },
+            sourcesManager: {
+                clearTextSource: async () => {},
+                updateTextSource: async (_source, text) => {
+                    ttsUpdates.push(text);
+                }
+            },
+            obsManager: { call: async () => ({}) },
+            goalsManager: { processDonationGoal: async () => {} },
+            eventBus: { emit: (_event, payload) => emittedVfx.push(payload) },
+            delay: async () => {},
+            handleDisplayQueueError: () => {},
+            extractUsername: (data) => data?.username ?? null
+        });
+
+        const result = await effects.handleSequentialEffects({
+            type: 'platform:follow',
+            platform: 'tiktok',
+            vfxConfig: { commandKey: 'test-cmd' },
+            data: { username: 'test-user', userId: 'test-user-id' }
+        }, [{ type: 'primary', text: 'test-tts-text', delay: 0 }]);
+
+        expect(result).toBeNull();
+        expect(emittedVfx).toHaveLength(0);
+        expect(ttsUpdates).toContain('test-tts-text');
+    });
+
     it('continues gift effects when VFX config is partial', async () => {
         const ttsUpdates = [];
         const emittedVfx = [];

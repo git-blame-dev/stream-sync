@@ -51,6 +51,7 @@ function resolveLogger(candidate) {
         if (unified) {
             candidates.push(unified);
         }
+    // eslint-disable-next-line no-empty -- logger module may not be initialized
     } catch { }
 
     const selected = candidates.find(Boolean);
@@ -93,7 +94,9 @@ const parseEnvFile = (envFilePath) => {
             acc[key] = value;
             return acc;
         }, {});
-    } catch {
+    } catch (error) {
+        // eslint-disable-next-line no-console -- bootstrap-time; structured logger not available
+        console.error(`Failed to parse env file ${envFilePath}: ${error.message}`);
         return {};
     }
 };

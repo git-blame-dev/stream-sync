@@ -27,6 +27,7 @@ class TextProcessingManager {
             if (logger) {
                 candidates.push(logger);
             }
+        // eslint-disable-next-line no-empty -- logger module may not be initialized
         } catch { }
 
         const selected = candidates.find(Boolean);

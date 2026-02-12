@@ -31,6 +31,7 @@ function _gatherCandidates(candidate) {
                 candidates.push(logging.logger);
             }
         }
+    // eslint-disable-next-line no-empty -- logger module may not be initialized
     } catch { }
 
     return candidates;
