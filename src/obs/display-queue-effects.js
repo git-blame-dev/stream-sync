@@ -198,7 +198,8 @@ class DisplayQueueEffects {
         if (hasVfx) {
             try {
                 match = this.buildVfxMatch(vfxConfig);
-            } catch {
+            } catch (error) {
+                logger.warn(`[Display Queue] VFX match build failed: ${error.message}`, 'display-queue');
                 match = null;
             }
             if (match) {

@@ -215,6 +215,7 @@ class EnhancedHttpClient {
             if (unified) {
                 candidates.push(unified);
             }
+        // eslint-disable-next-line no-empty -- logger module may not be initialized
         } catch { }
 
         const selected = candidates.find(Boolean);

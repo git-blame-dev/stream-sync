@@ -26,6 +26,7 @@ module.exports = [
     },
     rules: {
       'chatbot/no-logger-error': 'error',
+      'no-empty': ['error', { allowEmptyCatch: false }],
       'no-undef': 'error',
       'no-console': 'error',
       'no-unused-private-class-members': 'error',
@@ -72,6 +73,7 @@ module.exports = [
       }
     },
     rules: {
+      'no-empty': ['error', { allowEmptyCatch: false }],
       'no-undef': 'error',
       'no-unused-vars': ['error', { vars: 'all', args: 'none', varsIgnorePattern: '^_', caughtErrorsIgnorePattern: '^_' }],
       'no-restricted-properties': [
