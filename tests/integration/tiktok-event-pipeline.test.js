@@ -8,6 +8,13 @@ const { createTextProcessingManager } = require('../../src/utils/text-processing
 const { createConfigFixture } = require('../helpers/config-fixture');
 const { createMockDisplayQueue, noOpLogger } = require('../helpers/mock-factories');
 const { createMockFn, restoreAllMocks } = require('../helpers/bun-mock-utils');
+const {
+    useFakeTimers,
+    useRealTimers,
+    setSystemTime,
+    advanceTimersByTime,
+    clearAllTimers
+} = require('../helpers/bun-timers');
 const { setupTikTokEventListeners, cleanupTikTokEventListeners } = require('../../src/platforms/tiktok/events/event-router');
 
 const createEventBus = () => {
@@ -141,6 +148,110 @@ describe('TikTok event pipeline (integration)', () => {
         } finally {
             router.dispose();
             cleanupTikTokEventListeners(platform);
+        }
+    });
+
+    test('aggregates rapid distinct gift message ids when aggregation is enabled', async () => {
+        useFakeTimers();
+        setSystemTime(new Date('2025-01-20T12:00:00.000Z'));
+
+        const eventBus = createEventBus();
+        const logger = noOpLogger;
+        const runtimeCalls = {
+            gift: []
+        };
+        const runtime = {
+            handleGiftNotification: (platform, username, payload) => runtimeCalls.gift.push({ platform, username, payload })
+        };
+        const displayQueue = createMockDisplayQueue();
+        const textProcessing = createTextProcessingManager({ logger });
+        const config = createConfigFixture({
+            general: {
+                giftsEnabled: true
+            },
+            tiktok: {
+                enabled: true,
+                giftAggregationEnabled: true
+            },
+            obs: { enabled: false }
+        });
+        const notificationManager = new NotificationManager({
+            displayQueue,
+            logger,
+            eventBus,
+            config,
+            constants: require('../../src/core/constants'),
+            textProcessing,
+            obsGoals: { processDonationGoal: createMockFn() },
+            vfxCommandService: { getVFXConfig: createMockFn().mockResolvedValue(null) },
+            userTrackingService: { isFirstMessage: createMockFn().mockResolvedValue(false) }
+        });
+
+        const router = new PlatformEventRouter({
+            eventBus,
+            runtime,
+            notificationManager,
+            config,
+            logger
+        });
+
+        const connection = new EventEmitter();
+        const WebcastEvent = {
+            GIFT: 'gift'
+        };
+        const ControlEvent = {
+            DISCONNECTED: 'disconnected',
+            ERROR: 'error'
+        };
+
+        const platform = new TikTokPlatform(
+            {
+                enabled: true,
+                username: 'test-user',
+                giftAggregationEnabled: true
+            },
+            {
+                logger,
+                eventBus,
+                TikTokWebSocketClient: createMockFn(),
+                WebcastEvent,
+                ControlEvent,
+                connectionFactory: { createConnection: createMockFn() }
+            }
+        );
+
+        platform.connection = connection;
+        setupTikTokEventListeners(platform);
+
+        const baseEventTimestamp = Date.parse('2025-01-20T12:00:00.000Z');
+        const buildGiftPayload = (msgId, offsetMs) => ({
+            user: { userId: 'test-user-id-2', uniqueId: 'test-user-2', nickname: 'test-user-two' },
+            repeatCount: 1,
+            repeatEnd: 0,
+            giftDetails: { giftName: 'Hand Heart', diamondCount: 100, giftType: 2 },
+            common: { createTime: baseEventTimestamp + offsetMs, msgId }
+        });
+
+        try {
+            connection.emit(WebcastEvent.GIFT, buildGiftPayload('test-gift-msg-1', 10));
+            connection.emit(WebcastEvent.GIFT, buildGiftPayload('test-gift-msg-2', 20));
+            connection.emit(WebcastEvent.GIFT, buildGiftPayload('test-gift-msg-3', 30));
+            connection.emit(WebcastEvent.GIFT, buildGiftPayload('test-gift-msg-4', 40));
+
+            await new Promise(setImmediate);
+            await advanceTimersByTime(platform.giftAggregationDelay + 500);
+            await new Promise(setImmediate);
+
+            expect(runtimeCalls.gift).toHaveLength(1);
+            expect(runtimeCalls.gift[0].payload.giftType).toBe('Hand Heart');
+            expect(runtimeCalls.gift[0].payload.giftCount).toBe(4);
+            expect(runtimeCalls.gift[0].payload.aggregatedCount).toBe(4);
+            expect(runtimeCalls.gift[0].payload.isAggregated).toBe(true);
+        } finally {
+            router.dispose();
+            cleanupTikTokEventListeners(platform);
+            clearAllTimers();
+            useRealTimers();
         }
     });
 });
