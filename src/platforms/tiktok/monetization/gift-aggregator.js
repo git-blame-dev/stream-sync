@@ -7,7 +7,6 @@ function createTikTokGiftAggregator(options = {}) {
         platform,
         safeSetTimeout = defaultSafeSetTimeout,
         clearTimeoutFn = clearTimeout,
-        now = () => Date.now(),
         formatCoinAmount = defaultFormatCoinAmount,
         safeObjectStringify = defaultSafeObjectStringify
     } = options;
@@ -56,6 +55,17 @@ function createTikTokGiftAggregator(options = {}) {
         const currency = normalizeRequiredString(gift.currency, 'currency');
         const giftId = normalizeRequiredString(gift.id, 'msgId');
         const timestamp = normalizeRequiredString(gift.timestamp, 'timestamp');
+        const comboType = Number(gift.comboType);
+        const repeatEnd = gift.repeatEnd === true;
+        const isComboCompletion = comboType === 1 && repeatEnd === true;
+        let groupId = null;
+        if (isComboCompletion) {
+            try {
+                groupId = normalizeRequiredString(gift.groupId, 'groupId');
+            } catch {
+                throw new Error('TikTok combo completion requires groupId');
+            }
+        }
         const resolvedCurrency = currency.trim();
 
         const key = `${userId}-${giftType}`;
@@ -67,8 +77,6 @@ function createTikTokGiftAggregator(options = {}) {
             );
         }
 
-        const nowMs = now();
-
         if (!platform.giftAggregation[key]) {
             platform.giftAggregation[key] = {
                 platform: gift.platform || 'tiktok',
@@ -78,46 +86,58 @@ function createTikTokGiftAggregator(options = {}) {
                 currency: resolvedCurrency,
                 totalCount: 0,
                 timer: null,
-                lastProcessed: nowMs,
                 unitAmount,
                 lastGift: gift,
                 lastId: giftId,
                 lastTimestamp: timestamp,
-                sourceType: typeof gift.sourceType === 'string' ? gift.sourceType : undefined
+                sourceType: typeof gift.sourceType === 'string' ? gift.sourceType : undefined,
+                messageHighWaterCounts: new Map(),
+                comboGroupHighWaterCounts: new Map()
             };
         }
 
-        const timeSinceLastEvent = nowMs - platform.giftAggregation[key].lastProcessed;
-        const isDuplicate = platform.giftAggregation[key].totalCount === giftCount && timeSinceLastEvent < 1000;
+        const aggregationState = platform.giftAggregation[key];
 
-        if (isDuplicate) {
+        let highWaterMap = aggregationState.messageHighWaterCounts;
+        let identityValue = giftId;
+
+        if (isComboCompletion) {
+            highWaterMap = aggregationState.comboGroupHighWaterCounts;
+            identityValue = groupId;
+        }
+
+        const previousCount = Number(highWaterMap.get(identityValue) || 0);
+        const deltaCount = giftCount > previousCount ? giftCount - previousCount : 0;
+
+        if (deltaCount <= 0) {
             platform.logger.debug(
-                `[TikTok Gift] Ignoring duplicate gift event for ${key}: count=${giftCount}, timeSince=${timeSinceLastEvent}ms`,
+                `[TikTok Gift] Ignoring duplicate gift event for ${key}: identity=${identityValue}, count=${giftCount}, previous=${previousCount}`,
                 'tiktok'
             );
             return;
         }
 
-        platform.giftAggregation[key].totalCount = giftCount;
-        platform.giftAggregation[key].lastProcessed = nowMs;
-        platform.giftAggregation[key].unitAmount = unitAmount;
-        platform.giftAggregation[key].lastGift = gift;
-        platform.giftAggregation[key].lastId = giftId;
-        platform.giftAggregation[key].lastTimestamp = timestamp;
-        platform.giftAggregation[key].sourceType = typeof gift.sourceType === 'string' ? gift.sourceType : undefined;
+        highWaterMap.set(identityValue, giftCount);
+
+        aggregationState.totalCount += deltaCount;
+        aggregationState.unitAmount = unitAmount;
+        aggregationState.lastGift = gift;
+        aggregationState.lastId = giftId;
+        aggregationState.lastTimestamp = timestamp;
+        aggregationState.sourceType = typeof gift.sourceType === 'string' ? gift.sourceType : undefined;
 
         platform.logger.debug(
-            `[TikTok Gift] Updated standard gift aggregation for ${key}: totalCount=${giftCount}, unitAmount=${unitAmount}`,
+            `[TikTok Gift] Updated standard gift aggregation for ${key}: totalCount=${aggregationState.totalCount}, delta=${deltaCount}, unitAmount=${unitAmount}`,
             'tiktok'
         );
 
-        if (platform.giftAggregation[key].timer) {
+        if (aggregationState.timer) {
             platform.logger.debug(`[TikTok Gift] Clearing existing timer for ${key}`, 'tiktok');
-            clearTimeoutFn(platform.giftAggregation[key].timer);
-            platform.giftAggregation[key].timer = null;
+            clearTimeoutFn(aggregationState.timer);
+            aggregationState.timer = null;
         }
 
-        platform.giftAggregation[key].timer = safeSetTimeout(async () => {
+        aggregationState.timer = safeSetTimeout(async () => {
             try {
                 const aggregationData = platform.giftAggregation[key];
                 if (!aggregationData) {

@@ -124,7 +124,7 @@ describe('TikTok gift aggregator', () => {
             expect(handledGifts[0].isAggregated).toBe(true);
         });
 
-        test('updates aggregation when new gift count arrives before timer fires', async () => {
+        test('updates aggregation using high-water delta for same message id', async () => {
             const handledGifts = [];
             const platform = createTestPlatform({
                 _handleGift: async (payload) => handledGifts.push(payload)
@@ -147,7 +147,31 @@ describe('TikTok gift aggregator', () => {
             expect(handledGifts[0].giftCount).toBe(5);
         });
 
-        test('ignores duplicate gift with same count within 1 second', async () => {
+        test('accumulates distinct non-combo message ids with same counts', async () => {
+            const handledGifts = [];
+            const platform = createTestPlatform({
+                _handleGift: async (payload) => handledGifts.push(payload)
+            });
+
+            const giftAggregator = createTikTokGiftAggregator({ platform });
+
+            await giftAggregator.handleStandardGift(buildGift({ id: 'gift-msg-1', giftCount: 1 }));
+
+            setSystemTime(new Date('2025-01-15T12:00:00.300Z'));
+            await advanceTimersByTime(300);
+
+            await giftAggregator.handleStandardGift(buildGift({ id: 'gift-msg-2', giftCount: 1 }));
+            await giftAggregator.handleStandardGift(buildGift({ id: 'gift-msg-3', giftCount: 1 }));
+            await giftAggregator.handleStandardGift(buildGift({ id: 'gift-msg-4', giftCount: 1 }));
+
+            await advanceTimersByTime(platform.giftAggregationDelay);
+
+            expect(handledGifts).toHaveLength(1);
+            expect(handledGifts[0].giftCount).toBe(4);
+            expect(handledGifts[0].aggregatedCount).toBe(4);
+        });
+
+        test('ignores retransmitted duplicate gift with same message id', async () => {
             const handledGifts = [];
             const platform = createTestPlatform({
                 _handleGift: async (payload) => handledGifts.push(payload)
@@ -165,6 +189,99 @@ describe('TikTok gift aggregator', () => {
             await advanceTimersByTime(platform.giftAggregationDelay);
 
             expect(handledGifts).toHaveLength(1);
+            expect(handledGifts[0].giftCount).toBe(2);
+        });
+
+        test('accumulates only delta for progressive updates on same message id', async () => {
+            const handledGifts = [];
+            const platform = createTestPlatform({
+                _handleGift: async (payload) => handledGifts.push(payload)
+            });
+
+            const giftAggregator = createTikTokGiftAggregator({ platform });
+
+            await giftAggregator.handleStandardGift(buildGift({ id: 'gift-msg-9', giftCount: 1 }));
+            await giftAggregator.handleStandardGift(buildGift({ id: 'gift-msg-9', giftCount: 2 }));
+            await giftAggregator.handleStandardGift(buildGift({ id: 'gift-msg-9', giftCount: 3 }));
+
+            await advanceTimersByTime(platform.giftAggregationDelay);
+
+            expect(handledGifts).toHaveLength(1);
+            expect(handledGifts[0].giftCount).toBe(3);
+        });
+
+        test('deduplicates combo completion packets with same group id', async () => {
+            const handledGifts = [];
+            const platform = createTestPlatform({
+                _handleGift: async (payload) => handledGifts.push(payload)
+            });
+
+            const giftAggregator = createTikTokGiftAggregator({ platform });
+
+            const comboGift = {
+                giftType: 'GG',
+                comboType: 1,
+                repeatEnd: true,
+                groupId: 'combo-group-1',
+                giftCount: 1
+            };
+
+            await giftAggregator.handleStandardGift(buildGift({ ...comboGift, id: 'gift-msg-a' }));
+            await giftAggregator.handleStandardGift(buildGift({ ...comboGift, id: 'gift-msg-b' }));
+
+            await advanceTimersByTime(platform.giftAggregationDelay);
+
+            expect(handledGifts).toHaveLength(1);
+            expect(handledGifts[0].giftCount).toBe(1);
+        });
+
+        test('rejects combo completion payload when group id is missing', async () => {
+            const platform = createTestPlatform();
+            const giftAggregator = createTikTokGiftAggregator({ platform });
+
+            await expect(giftAggregator.handleStandardGift(buildGift({
+                giftType: 'GG',
+                comboType: 1,
+                repeatEnd: true,
+                groupId: undefined,
+                giftCount: 1,
+                id: 'gift-msg-fallback'
+            }))).rejects.toThrow('TikTok combo completion requires groupId');
+        });
+
+        test('counts separate combo completion groups even when rapid and same count', async () => {
+            const handledGifts = [];
+            const platform = createTestPlatform({
+                _handleGift: async (payload) => handledGifts.push(payload)
+            });
+
+            const giftAggregator = createTikTokGiftAggregator({ platform });
+
+            await giftAggregator.handleStandardGift(buildGift({
+                id: 'gift-msg-c1',
+                giftType: 'GG',
+                comboType: 1,
+                repeatEnd: true,
+                groupId: 'combo-group-1',
+                giftCount: 1
+            }));
+
+            setSystemTime(new Date('2025-01-15T12:00:00.600Z'));
+            await advanceTimersByTime(600);
+
+            await giftAggregator.handleStandardGift(buildGift({
+                id: 'gift-msg-c2',
+                giftType: 'GG',
+                comboType: 1,
+                repeatEnd: true,
+                groupId: 'combo-group-2',
+                giftCount: 1
+            }));
+
+            await advanceTimersByTime(platform.giftAggregationDelay);
+
+            expect(handledGifts).toHaveLength(1);
+            expect(handledGifts[0].giftCount).toBe(2);
         });
 
         test('includes sourceType in delivered payload when present', async () => {
