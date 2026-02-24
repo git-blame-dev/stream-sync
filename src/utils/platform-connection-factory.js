@@ -2,6 +2,7 @@
 const { createPlatformErrorHandler } = require('./platform-error-handler');
 const { EventEmitter } = require('events');
 const { validateLoggerInterface } = require('./dependency-validator');
+const { normalizeLoggerMethods } = require('./logger-resolver');
 const { secrets } = require('../core/secrets');
 
 function ensureEmitterInterface(connection, logger, platform = 'tiktok') {
@@ -48,23 +49,12 @@ class PlatformConnectionFactory {
         }
 
         try {
-            const normalized = this._normalizeLoggerMethods(logger);
+            const normalized = normalizeLoggerMethods(logger);
             validateLoggerInterface(normalized);
             return normalized;
         } catch (error) {
             throw new Error(`Platform Connection Factory initialization failed: ${error.message}`);
         }
-    }
-
-    _normalizeLoggerMethods(logger) {
-        const required = ['debug', 'info', 'warn', 'error'];
-        const normalized = { ...logger };
-        required.forEach((method) => {
-            if (typeof normalized[method] !== 'function') {
-                normalized[method] = () => {};
-            }
-        });
-        return normalized;
     }
     
     createConnection(platform, config, dependencies) {

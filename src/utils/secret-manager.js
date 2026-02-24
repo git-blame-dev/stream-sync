@@ -1,7 +1,7 @@
 const fs = require('fs');
 const readline = require('readline');
 const { createPlatformErrorHandler } = require('./platform-error-handler');
-const { validateLoggerInterface } = require('./dependency-validator');
+const { resolveLogger } = require('./logger-resolver');
 const { initializeStaticSecrets } = require('../core/secrets');
 
 const normalize = (value) => {
@@ -35,45 +35,6 @@ const applySecureFilePermissions = (filePath, mode, logger, errorHandler) => {
         }
     }
 };
-
-function resolveLogger(candidate) {
-    const candidates = [];
-
-    if (candidate) {
-        candidates.push(candidate);
-    }
-
-    try {
-        const logging = require('../core/logging');
-        const unified = typeof logging.getUnifiedLogger === 'function'
-            ? logging.getUnifiedLogger()
-            : logging.logger;
-        if (unified) {
-            candidates.push(unified);
-        }
-    // eslint-disable-next-line no-empty -- logger module may not be initialized
-    } catch { }
-
-    const selected = candidates.find(Boolean);
-    if (!selected) {
-        throw new Error('Secret manager requires a logger dependency');
-    }
-
-    const normalized = normalizeLoggerMethods(selected);
-    validateLoggerInterface(normalized);
-    return normalized;
-}
-
-function normalizeLoggerMethods(logger) {
-    const required = ['debug', 'info', 'warn', 'error'];
-    const normalized = { ...logger };
-    required.forEach((method) => {
-        if (typeof normalized[method] !== 'function') {
-            normalized[method] = () => {};
-        }
-    });
-    return normalized;
-}
 
 const parseEnvFile = (envFilePath) => {
     if (!envFilePath) return {};
@@ -245,7 +206,7 @@ async function ensureSecrets(options = {}) {
         writeEnvFile = persistToEnv
     } = options;
 
-    const logger = resolveLogger(loggerCandidate);
+    const logger = resolveLogger(loggerCandidate, 'Secret manager');
     const safeLogger = logger;
     const errorHandler = createPlatformErrorHandler(safeLogger, 'secret-manager');
     const allowPrompt = isInteractiveTTY(interactive);

@@ -343,4 +343,44 @@ describe('secret-manager', () => {
             envFileWriteEnabled: false
         })).rejects.toThrow(/missing required secrets/i);
     });
+
+    it('preserves class-based logger prototype methods', async () => {
+        let debugCalls = 0;
+
+        class PrototypeLogger {
+            debug() {
+                debugCalls += 1;
+            }
+
+            info() {}
+
+            warn() {}
+
+            error() {}
+        }
+
+        process.env.TIKTOK_API_KEY = 'env_tiktok_key';
+        process.env.TWITCH_CLIENT_SECRET = 'env_client_secret';
+        process.env.OBS_PASSWORD = 'env_obs_password';
+        process.env.STREAMELEMENTS_JWT_TOKEN = 'env_jwt_token';
+
+        const logger = new PrototypeLogger();
+
+        const result = await ensureSecrets({
+            config: {
+                tiktok: testConfig.tiktok,
+                twitch: testConfig.twitch,
+                obs: testConfig.obs,
+                streamelements: testConfig.streamelements
+            },
+            logger,
+            interactive: false,
+            envFilePath,
+            envFileReadEnabled: false,
+            envFileWriteEnabled: false
+        });
+
+        expect(result.missingRequired).toEqual([]);
+        expect(debugCalls).toBeGreaterThan(0);
+    });
 });

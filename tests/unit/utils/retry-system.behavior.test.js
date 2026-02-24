@@ -373,4 +373,27 @@ describe('RetrySystem', () => {
             Object.assign(ADAPTIVE_RETRY_CONFIG, originalConfig);
         }
     });
+
+    it('preserves class-based logger prototype methods', () => {
+        let debugCalls = 0;
+
+        class PrototypeLogger {
+            debug() {
+                debugCalls += 1;
+            }
+
+            info() {}
+
+            warn() {}
+
+            error() {}
+        }
+
+        const logger = new PrototypeLogger();
+        const retrySystem = new RetrySystem({ logger });
+
+        retrySystem.calculateAdaptiveRetryDelay('TikTok');
+
+        expect(debugCalls).toBeGreaterThan(0);
+    });
 });

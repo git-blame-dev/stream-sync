@@ -1,54 +1,10 @@
 
 const { formatUsername12 } = require('./validation');
-const { validateLoggerInterface } = require('./dependency-validator');
+const { resolveLogger } = require('./logger-resolver');
 
 class TextProcessingManager {
     constructor(dependencies = {}) {
-        this._logger = dependencies.logger || null;
-    }
-
-    get logger() {
-        if (!this._logger) {
-            this._logger = this._resolveLogger();
-        }
-        return this._logger;
-    }
-
-    _resolveLogger() {
-        if (this._logger) {
-            validateLoggerInterface(this._logger);
-            return this._logger;
-        }
-
-        const candidates = [];
-
-        try {
-            const { logger } = require('../core/logging');
-            if (logger) {
-                candidates.push(logger);
-            }
-        // eslint-disable-next-line no-empty -- logger module may not be initialized
-        } catch { }
-
-        const selected = candidates.find(Boolean);
-        if (!selected) {
-            throw new Error('TextProcessingManager requires a logger dependency to operate');
-        }
-
-        const normalized = this._normalizeLoggerMethods(selected);
-        validateLoggerInterface(normalized);
-        return normalized;
-    }
-
-    _normalizeLoggerMethods(logger) {
-        const requiredMethods = ['debug', 'info', 'warn', 'error'];
-        const normalized = { ...logger };
-        requiredMethods.forEach((method) => {
-            if (typeof normalized[method] !== 'function') {
-                normalized[method] = () => {};
-            }
-        });
-        return normalized;
+        this.logger = resolveLogger(dependencies.logger, 'TextProcessingManager');
     }
 
     sanitizeUsername(username) {

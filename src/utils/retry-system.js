@@ -1,7 +1,7 @@
 
 const timeoutValidator = require('./timeout-validator');
 const { createPlatformErrorHandler } = require('./platform-error-handler');
-const { validateLoggerInterface } = require('./dependency-validator');
+const { resolveLogger } = require('./logger-resolver');
 
 const ADAPTIVE_RETRY_CONFIG = {
     BASE_DELAY: 2000,        // Start with 2 seconds (balanced recovery)
@@ -11,7 +11,7 @@ const ADAPTIVE_RETRY_CONFIG = {
 
 class RetrySystem {
     constructor(dependencies = {}) {
-        this.logger = this._resolveLogger(dependencies.logger);
+        this.logger = resolveLogger(dependencies.logger, 'RetrySystem');
         this.constants = dependencies.constants || null;
         this.errorHandler = createPlatformErrorHandler(this.logger, 'retry-system');
         this.retryTimers = {};
@@ -380,34 +380,6 @@ class RetrySystem {
         return true;
     }
 
-    _resolveLogger(logger) {
-        const candidates = [];
-
-        if (logger) {
-            candidates.push(logger);
-        }
-
-        try {
-            const logging = require('../core/logging');
-            const unified = typeof logging.getUnifiedLogger === 'function'
-                ? logging.getUnifiedLogger()
-                : logging.logger;
-            if (unified) {
-                candidates.push(unified);
-            }
-        // eslint-disable-next-line no-empty -- logger module may not be initialized
-        } catch { }
-
-        const selected = candidates.find(Boolean);
-        if (!selected) {
-            throw new Error('RetrySystem requires a logger dependency');
-        }
-
-        const normalized = this._normalizeLoggerMethods(selected);
-        validateLoggerInterface(normalized);
-        return normalized;
-    }
-
     _validateConfigValue(value, fallback, configName) {
         if (typeof value === 'number' && !isNaN(value) && value > 0) {
             return value;
@@ -417,16 +389,6 @@ class RetrySystem {
         return fallback;
     }
 
-    _normalizeLoggerMethods(logger) {
-        const required = ['debug', 'info', 'warn', 'error'];
-        const normalized = { ...logger };
-        required.forEach((method) => {
-            if (typeof normalized[method] !== 'function') {
-                normalized[method] = () => {};
-            }
-        });
-        return normalized;
-    }
 }
 
 RetrySystem.prototype._handleRetryError = function(message, error, eventType, platform) {
