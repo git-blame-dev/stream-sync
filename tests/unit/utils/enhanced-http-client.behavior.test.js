@@ -122,4 +122,28 @@ describe('EnhancedHttpClient behavior', () => {
         expect(bearerHeaders.Authorization).toBe('Bearer testToken123');
         expect(oauthHeaders.Authorization).toBe('OAuth testToken456');
     });
+
+    it('preserves class-based logger prototype methods', async () => {
+        let debugCalls = 0;
+
+        class PrototypeLogger {
+            debug() {
+                debugCalls += 1;
+            }
+
+            info() {}
+
+            warn() {}
+
+            error() {}
+        }
+
+        const axios = { get: createMockFn().mockResolvedValue({ status: 200 }) };
+        const logger = new PrototypeLogger();
+        const client = new EnhancedHttpClient({ axios, logger });
+
+        await client.get('https://example.com');
+
+        expect(debugCalls).toBeGreaterThan(0);
+    });
 });

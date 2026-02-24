@@ -27,6 +27,12 @@ describe('Text Processing', () => {
     });
 
     describe('when extracting message text', () => {
+        it('resolves fallback logger with console method when no logger is injected', () => {
+            const manager = new TextProcessingManager();
+
+            expect(typeof manager.logger.console).toBe('function');
+        });
+
         it('should extract text from YouTube message array', () => {
             const messageParts = [
                 { text: 'Hello' },

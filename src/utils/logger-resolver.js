@@ -1,6 +1,6 @@
 const { validateLoggerInterface } = require('./dependency-validator');
 
-function _normalizeLoggerMethods(logger) {
+function normalizeLoggerMethods(logger) {
     const required = ['debug', 'info', 'warn', 'error', 'console'];
     const normalized = Object.assign(Object.create(Object.getPrototypeOf(logger)), logger);
     required.forEach((method) => {
@@ -44,11 +44,12 @@ function resolveLogger(candidate = null, moduleName = 'logger') {
         throw new Error(`${moduleName} requires a logger dependency`);
     }
 
-    const normalized = _normalizeLoggerMethods(selected);
+    const normalized = normalizeLoggerMethods(selected);
     validateLoggerInterface(normalized);
     return normalized;
 }
 
 module.exports = {
+    normalizeLoggerMethods,
     resolveLogger
 };

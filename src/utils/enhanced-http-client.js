@@ -1,5 +1,5 @@
 
-const { validateLoggerInterface } = require('./dependency-validator');
+const { resolveLogger } = require('./logger-resolver');
 const { createRetrySystem } = require('./retry-system');
 const { config: appConfig } = require('../core/config');
 
@@ -12,7 +12,7 @@ class EnhancedHttpClient {
     constructor(config = {}) {
         this.axios = config.axios || require('axios');
         
-        this.logger = this._resolveLogger(config.logger);
+        this.logger = resolveLogger(config.logger, 'EnhancedHttpClient');
 
         this.defaultTimeout = resolveTimeout(config.timeout, appConfig.http.enhancedTimeoutMs);
         this.reachabilityTimeoutMs = resolveTimeout(
@@ -200,44 +200,6 @@ class EnhancedHttpClient {
         }
     }
 
-    _resolveLogger(logger) {
-        const candidates = [];
-
-        if (logger) {
-            candidates.push(logger);
-        }
-
-        try {
-            const logging = require('../core/logging');
-            const unified = typeof logging.getUnifiedLogger === 'function'
-                ? logging.getUnifiedLogger()
-                : logging.logger;
-            if (unified) {
-                candidates.push(unified);
-            }
-        // eslint-disable-next-line no-empty -- logger module may not be initialized
-        } catch { }
-
-        const selected = candidates.find(Boolean);
-        if (!selected) {
-            throw new Error('EnhancedHttpClient requires a logger dependency');
-        }
-
-        const normalized = this._normalizeLoggerMethods(selected);
-        validateLoggerInterface(normalized);
-        return normalized;
-    }
-
-    _normalizeLoggerMethods(logger) {
-        const required = ['debug', 'info', 'warn', 'error'];
-        const normalized = { ...logger };
-        required.forEach((method) => {
-            if (typeof normalized[method] !== 'function') {
-                normalized[method] = () => {};
-            }
-        });
-        return normalized;
-    }
 }
 
 function createEnhancedHttpClient(config) {
