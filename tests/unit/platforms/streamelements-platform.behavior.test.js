@@ -86,6 +86,35 @@ describe('StreamElementsPlatform behavior', () => {
         expect(platform.isConnected()).toBe(false);
     });
 
+    it('initialize calls connect when platform is enabled', async () => {
+        const { platform } = createPlatform();
+        platform.connect = createMockFn().mockResolvedValue(true);
+
+        const initialized = await platform.initialize({});
+
+        expect(initialized).toBe(true);
+        expect(platform.connect.mock.calls).toHaveLength(1);
+    });
+
+    it('initialize skips connect when already connected', async () => {
+        const { platform } = createPlatform();
+        platform.isConnected = createMockFn(() => true);
+        platform.connect = createMockFn().mockResolvedValue(true);
+
+        const initialized = await platform.initialize({});
+
+        expect(initialized).toBe(true);
+        expect(platform.connect.mock.calls).toHaveLength(0);
+    });
+
+    it('initialize throws when connection cannot be established', async () => {
+        const { platform } = createPlatform();
+        platform.connect = createMockFn().mockResolvedValue(false);
+        platform.isConnected = createMockFn(() => false);
+
+        await expect(platform.initialize({})).rejects.toThrow('unable to establish connection');
+    });
+
     it('skips connect when already connecting', async () => {
         const { platform } = createPlatform();
 
@@ -130,6 +159,29 @@ describe('StreamElementsPlatform behavior', () => {
         await expect(promise).rejects.toThrow('test websocket error');
     });
 
+    it('connect opens websocket when prerequisites pass', async () => {
+        const { platform } = createPlatform();
+        platform.checkConnectionPrerequisites = createMockFn(() => true);
+        platform.connectToWebSocket = createMockFn().mockResolvedValue();
+
+        const connected = await platform.connect();
+
+        expect(connected).toBe(true);
+        expect(platform.connectToWebSocket.mock.calls).toHaveLength(1);
+    });
+
+    it('connect delegates websocket errors to connection error handler', async () => {
+        const { platform } = createPlatform();
+        platform.checkConnectionPrerequisites = createMockFn(() => true);
+        platform.connectToWebSocket = createMockFn().mockRejectedValue(new Error('socket failed'));
+        platform.handleConnectionError = createMockFn();
+
+        const connected = await platform.connect();
+
+        expect(connected).toBe(false);
+        expect(platform.handleConnectionError.mock.calls).toHaveLength(1);
+    });
+
     it('setupEventListeners throws when connection is missing', () => {
         const { platform } = createPlatform();
         const errorHandler = { handleConnectionError: createMockFn() };
@@ -171,6 +223,21 @@ describe('StreamElementsPlatform behavior', () => {
         expect(platform.disconnect.mock.calls).toHaveLength(1);
     });
 
+    it('subscribes to configured follow topics after authentication', () => {
+        const { platform } = createPlatform({
+            youtubeChannelId: 'test-youtube-channel',
+            twitchChannelId: 'test-twitch-channel'
+        });
+        const sentMessages = [];
+        platform.sendMessage = createMockFn((message) => sentMessages.push(message));
+
+        platform.subscribeToFollowEvents();
+
+        expect(sentMessages).toHaveLength(2);
+        expect(sentMessages[0].topic).toBe('channel.follow.test-youtube-channel');
+        expect(sentMessages[1].topic).toBe('channel.follow.test-twitch-channel');
+    });
+
     it('emits follow events for supported platforms', async () => {
         const { platform } = createPlatform();
         platform.logRawPlatformData = createMockFn().mockResolvedValue();
@@ -190,6 +257,49 @@ describe('StreamElementsPlatform behavior', () => {
         expect(emitted[0].type).toBe('platform:follow');
         expect(emitted[0].data.username).toBe('TestFollower');
         expect(emitted[0].data.userId).toBe('test-user-1');
+    });
+
+    it('forwards follow events through injected onFollow handlers', async () => {
+        const { platform } = createPlatform();
+        platform.connect = createMockFn().mockResolvedValue(true);
+        platform.logRawPlatformData = createMockFn().mockResolvedValue();
+        const onFollow = createMockFn();
+
+        await platform.initialize({ onFollow });
+        await platform.handleFollowEvent({
+            data: {
+                platform: 'youtube',
+                displayName: 'TestFollower',
+                userId: 'test-user-1'
+            }
+        });
+
+        expect(onFollow.mock.calls).toHaveLength(1);
+        expect(onFollow.mock.calls[0][0]).toMatchObject({
+            platform: 'youtube',
+            username: 'TestFollower',
+            source: 'streamelements'
+        });
+    });
+
+    it('routes follow events to event bus through default handlers', async () => {
+        const eventBus = { emit: createMockFn() };
+        const { platform } = createPlatform({ dataLoggingEnabled: false }, { eventBus });
+
+        await platform.handleFollowEvent({
+            data: {
+                platform: 'twitch',
+                displayName: 'BusFollower',
+                userId: 'bus-user'
+            }
+        });
+
+        expect(eventBus.emit.mock.calls).toHaveLength(1);
+        const [eventName, payload] = eventBus.emit.mock.calls[0];
+        expect(eventName).toBe('platform:event');
+        expect(payload.platform).toBe('twitch');
+        expect(payload.type).toBe('platform:follow');
+        expect(payload.data.username).toBe('BusFollower');
     });
 
     it('skips follow events with unknown platforms or missing usernames', async () => {

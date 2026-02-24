@@ -279,13 +279,19 @@ class AppRuntime {
         this.logger.info('Initializing platform connections...', 'AppRuntime');
 
         this.logger.debug('Loading platform modules...', 'AppRuntime');
-        const { TikTokPlatform, TwitchPlatform, YouTubePlatform } = require('../platforms');
+        const {
+            TikTokPlatform,
+            TwitchPlatform,
+            YouTubePlatform,
+            StreamElementsPlatform
+        } = require('../platforms');
         this.logger.debug('Platform modules loaded', 'AppRuntime');
 
         const platformModules = {
             twitch: TwitchPlatform,
             youtube: YouTubePlatform,
-            tiktok: TikTokPlatform
+            tiktok: TikTokPlatform,
+            streamelements: StreamElementsPlatform
         };
 
         await this.platformLifecycleService.initializeAllPlatforms(platformModules);

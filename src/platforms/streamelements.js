@@ -6,6 +6,7 @@ const { createRetrySystem } = require('../utils/retry-system');
 const { STREAMELEMENTS } = require('../core/endpoints');
 const { secrets } = require('../core/secrets');
 const { getSystemTimestampISO } = require('../utils/timestamp');
+const { PlatformEvents } = require('../interfaces/PlatformEvents');
 
 
 class StreamElementsPlatform extends EventEmitter {
@@ -22,6 +23,7 @@ class StreamElementsPlatform extends EventEmitter {
         // debugLog function removed - using logger.debug directly
         this.logger = logger;
         this.platformLogger = logger;
+        this.eventBus = dependencies.eventBus || null;
         this.WebSocketCtor = dependencies.WebSocketCtor || require('ws');
         this.incrementRetryCount = retrySystem.incrementRetryCount.bind(retrySystem);
         this.resetRetryCount = retrySystem.resetRetryCount.bind(retrySystem);
@@ -45,9 +47,7 @@ class StreamElementsPlatform extends EventEmitter {
         this.connectionTime = null;
         this.pingInterval = null;
         this.reconnectTimeout = null;
-        
-        // Event handlers for external systems
-        this.eventHandlers = {};
+        this.handlers = this._createDefaultHandlers();
         
         // Emit deprecation warnings
         this.logger.warn('StreamElementsPlatform is deprecated and will be removed in a future version. Use YouTube platform with StreamElements service instead.', 'StreamElements');
@@ -55,13 +55,25 @@ class StreamElementsPlatform extends EventEmitter {
         
     }
     async initialize(handlers = {}) {
-        this.eventHandlers = handlers;
+        this.handlers = {
+            ...this.handlers,
+            ...(handlers || {})
+        };
         
         if (!this.config.enabled) {
             this.logger.debug('[StreamElements] Platform disabled in configuration', 'streamelements');
             return false;
         }
-        
+
+        if (this.isConnected()) {
+            return true;
+        }
+
+        const connected = await this.connect();
+        if (!connected && !this.isConnected()) {
+            throw new Error('StreamElements initialization failed: unable to establish connection');
+        }
+
         return true;
     }
 
@@ -277,17 +289,14 @@ class StreamElementsPlatform extends EventEmitter {
             };
             
             this.logger.debug(`[StreamElements] Processing ${platform} follow: ${followData.username}`, 'streamelements');
-            
-            this.emit('platform:event', {
+
+            this._emitPlatformEvent(PlatformEvents.FOLLOW, {
                 platform,
-                type: 'platform:follow',
-                data: {
-                    username: followData.username,
-                    userId,
-                    timestamp: new Date(followData.timestamp).toISOString(),
-                    source: 'streamelements',
-                    sourceType: 'streamelements:follow'
-                }
+                username: followData.username,
+                userId,
+                timestamp: new Date(followData.timestamp).toISOString(),
+                source: 'streamelements',
+                sourceType: 'streamelements:follow'
             });
             
             this.platformLogger.info(`New follower from StreamElements: ${followData.username}`, platform);
@@ -295,6 +304,40 @@ class StreamElementsPlatform extends EventEmitter {
         } catch (error) {
             this.errorHandler.handleEventProcessingError(error, 'follow', message?.data);
         }
+    }
+
+    _createDefaultHandlers() {
+        const emitToBus = (type, data) => this._emitToEventBus(type, data);
+        return {
+            onFollow: (data) => emitToBus(PlatformEvents.FOLLOW, data)
+        };
+    }
+
+    _emitPlatformEvent(type, payload) {
+        const platform = payload?.platform || 'streamelements';
+        this.emit('platform:event', { platform, type, data: payload });
+
+        const handlerMap = {
+            [PlatformEvents.FOLLOW]: 'onFollow'
+        };
+
+        const handlerName = handlerMap[type];
+        const handler = this.handlers?.[handlerName];
+        if (typeof handler === 'function') {
+            handler(payload);
+        }
+    }
+
+    _emitToEventBus(type, data) {
+        if (!this.eventBus || typeof this.eventBus.emit !== 'function') {
+            return;
+        }
+
+        this.eventBus.emit('platform:event', {
+            platform: data?.platform || 'streamelements',
+            type,
+            data
+        });
     }
 
     mapStreamElementsPlatform(sePlatform) {

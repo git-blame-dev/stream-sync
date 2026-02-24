@@ -106,6 +106,18 @@ describe('Platform Initialization Delegation', () => {
             expect(runtime.platformLifecycleService.getPlatformConnectionTime).toBeDefined();
             expect(typeof runtime.platformLifecycleService.getPlatformConnectionTime).toBe('function');
         });
+
+        it('delegates StreamElements module to lifecycle initialization', async () => {
+            const initializeAllPlatforms = createMockFn().mockResolvedValue({});
+            mockDependencies.platformLifecycleService.initializeAllPlatforms = initializeAllPlatforms;
+            runtime = new AppRuntime(configFixture, mockDependencies);
+
+            await runtime.initializePlatforms();
+
+            expect(initializeAllPlatforms.mock.calls).toHaveLength(1);
+            const [platformModules] = initializeAllPlatforms.mock.calls[0];
+            expect(platformModules.streamelements).toBeDefined();
+        });
     });
 
     describe('Event Handler Integration', () => {
