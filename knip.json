@@ -1,7 +1,8 @@
 {
   "$schema": "https://unpkg.com/knip@5/schema.json",
   "entry": [
-    "src/main.js"
+    "tests/**/*.test.js",
+    "tests/setup/**/*.js"
   ],
   "project": [
     "src/**/*.js",
@@ -10,5 +11,10 @@
   "eslint": false,
   "ignore": [
     "src/interfaces/PlatformEvents.js"
-  ]
+  ],
+  "ignoreIssues": {
+    "tests/helpers/**/*.js": [
+      "exports"
+    ]
+  }
 }

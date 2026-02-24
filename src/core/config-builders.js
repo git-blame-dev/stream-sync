@@ -197,7 +197,6 @@ function buildConfig(normalized, options = {}) {
 module.exports = {
     buildGeneralConfig,
     buildPlatformConfig,
-    buildYoutubeConfig,
     buildObsConfig,
     buildHandcamConfig,
     buildVfxConfig,
