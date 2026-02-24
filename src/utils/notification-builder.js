@@ -891,4 +891,3 @@ class NotificationBuilder {
 }
 
 module.exports = NotificationBuilder;
-module.exports.NOTIFICATION_TEMPLATES = NOTIFICATION_TEMPLATES;
