@@ -523,6 +523,25 @@ describe('PlatformLifecycleService', () => {
             expect(handlers.onMembership).toBeUndefined();
         });
 
+        it('onFollow emits using payload platform when provided', () => {
+            const handlers = service.createDefaultEventHandlers('streamelements');
+            const timestamp = '2024-06-15T12:00:00.000Z';
+
+            handlers.onFollow({
+                platform: 'youtube',
+                username: 'test-user',
+                userId: 'test-user-id',
+                timestamp
+            });
+
+            const emitted = mockEventBus.emit.mock.calls.find(
+                ([, p]) => p?.type === PlatformEvents.FOLLOW
+            );
+            expect(emitted).toBeTruthy();
+            expect(emitted[1].platform).toBe('youtube');
+            expect(emitted[1].data.platform).toBeUndefined();
+        });
+
         for (const [handlerName, { requiresTimestamp, eventType }] of Object.entries(CANONICAL_HANDLER_MATRIX)) {
             if (!requiresTimestamp) continue;
 

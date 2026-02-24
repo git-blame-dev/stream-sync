@@ -145,7 +145,8 @@ class PlatformLifecycleService {
             return;
         }
 
-        const sanitizedData = this._sanitizePlatformEventData(platformName, type, data);
+        const eventPlatform = this._resolveEventPlatform(platformName, data);
+        const sanitizedData = this._sanitizePlatformEventData(eventPlatform, type, data);
         const requiresTimestamp = new Set([
             PlatformEvents.CHAT_MESSAGE,
             PlatformEvents.FOLLOW,
@@ -162,17 +163,30 @@ class PlatformLifecycleService {
         if (requiresTimestamp.has(type)) {
             if (!sanitizedData || typeof sanitizedData !== 'object' || !sanitizedData.timestamp) {
                 this.logger.warn(`Platform event missing timestamp: ${type}`, 'PlatformLifecycleService', {
-                    platform: platformName
+                    platform: eventPlatform
                 });
                 return;
             }
         }
 
         this.eventBus.emit('platform:event', {
-            platform: platformName,
+            platform: eventPlatform,
             type,
             data: sanitizedData
         });
+    }
+
+    _resolveEventPlatform(defaultPlatform, data) {
+        if (defaultPlatform !== 'streamelements') {
+            return defaultPlatform;
+        }
+
+        if (!data || typeof data !== 'object') {
+            return defaultPlatform;
+        }
+
+        const payloadPlatform = typeof data.platform === 'string' ? data.platform.trim() : '';
+        return payloadPlatform || defaultPlatform;
     }
 
     _sanitizePlatformEventData(platformName, type, data) {
