@@ -2,33 +2,11 @@ const fs = require('fs');
 const ini = require('ini');
 const { handleUserFacingError } = require('../utils/user-friendly-errors');
 const { ConfigValidator } = require('../utils/config-validator');
+const { parseEnvContent } = require('../utils/env-file-parser');
 const { buildConfig } = require('./config-builders');
 
 let loadedConfig = null;
 let configPath = './config.ini';
-
-function parseEnvFile(content) {
-    return content.split(/\r?\n/).reduce((acc, line) => {
-        const trimmed = line.trim();
-        if (!trimmed || trimmed.startsWith('#')) {
-            return acc;
-        }
-
-        const separatorIndex = trimmed.indexOf('=');
-        if (separatorIndex === -1) {
-            return acc;
-        }
-
-        const key = trimmed.slice(0, separatorIndex).trim();
-        if (!key) {
-            return acc;
-        }
-
-        const value = trimmed.slice(separatorIndex + 1).trim().replace(/^['"]|['"]$/g, '');
-        acc[key] = value;
-        return acc;
-    }, {});
-}
 
 function preloadEnvFromConfig(rawConfig) {
     const rawGeneral = rawConfig?.general || {};
@@ -43,7 +21,7 @@ function preloadEnvFromConfig(rawConfig) {
     }
 
     const envContent = fs.readFileSync(envFilePath, 'utf-8');
-    const envVars = parseEnvFile(envContent);
+    const envVars = parseEnvContent(envContent);
 
     const envClientId = envVars.TWITCH_CLIENT_ID;
     if (!envClientId) {

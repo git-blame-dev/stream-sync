@@ -1,6 +1,7 @@
 const fs = require('fs');
 const readline = require('readline');
 const { createPlatformErrorHandler } = require('./platform-error-handler');
+const { parseEnvContent } = require('./env-file-parser');
 const { resolveLogger } = require('./logger-resolver');
 const { initializeStaticSecrets } = require('../core/secrets');
 
@@ -41,20 +42,7 @@ const parseEnvFile = (envFilePath) => {
     try {
         if (!fs.existsSync(envFilePath)) return {};
         const content = fs.readFileSync(envFilePath, 'utf8');
-        return content.split(/\r?\n/).reduce((acc, line) => {
-            const trimmed = line.trim();
-            if (!trimmed || trimmed.startsWith('#')) {
-                return acc;
-            }
-            const separatorIndex = trimmed.indexOf('=');
-            if (separatorIndex === -1) {
-                return acc;
-            }
-            const key = trimmed.slice(0, separatorIndex).trim();
-            const value = trimmed.slice(separatorIndex + 1).trim().replace(/^['"]|['"]$/g, '');
-            acc[key] = value;
-            return acc;
-        }, {});
+        return parseEnvContent(content, { ignoreEmptyKeys: false });
     } catch (error) {
         // eslint-disable-next-line no-console -- bootstrap-time; structured logger not available
         console.error(`Failed to parse env file ${envFilePath}: ${error.message}`);
