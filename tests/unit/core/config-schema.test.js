@@ -80,11 +80,11 @@ describe('getFieldsRequiredWhenEnabled()', () => {
         expect(fields).toContain('username');
     });
 
-    it('returns username, clientId, channel for twitch', () => {
+    it('returns username and channel for twitch', () => {
         const fields = getFieldsRequiredWhenEnabled('twitch');
         expect(fields).toContain('username');
-        expect(fields).toContain('clientId');
         expect(fields).toContain('channel');
+        expect(fields).not.toContain('clientId');
     });
 
     it('returns username for youtube', () => {

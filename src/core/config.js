@@ -7,6 +7,54 @@ const { buildConfig } = require('./config-builders');
 let loadedConfig = null;
 let configPath = './config.ini';
 
+function parseEnvFile(content) {
+    return content.split(/\r?\n/).reduce((acc, line) => {
+        const trimmed = line.trim();
+        if (!trimmed || trimmed.startsWith('#')) {
+            return acc;
+        }
+
+        const separatorIndex = trimmed.indexOf('=');
+        if (separatorIndex === -1) {
+            return acc;
+        }
+
+        const key = trimmed.slice(0, separatorIndex).trim();
+        if (!key) {
+            return acc;
+        }
+
+        const value = trimmed.slice(separatorIndex + 1).trim().replace(/^['"]|['"]$/g, '');
+        acc[key] = value;
+        return acc;
+    }, {});
+}
+
+function preloadEnvFromConfig(rawConfig) {
+    const rawGeneral = rawConfig?.general || {};
+    const envFileReadEnabled = ConfigValidator.parseBoolean(rawGeneral.envFileReadEnabled, true);
+    if (!envFileReadEnabled) {
+        return;
+    }
+
+    const envFilePath = ConfigValidator.parseString(rawGeneral.envFilePath, './.env') || './.env';
+    if (!fs.existsSync(envFilePath)) {
+        return;
+    }
+
+    const envContent = fs.readFileSync(envFilePath, 'utf-8');
+    const envVars = parseEnvFile(envContent);
+
+    const envClientId = envVars.TWITCH_CLIENT_ID;
+    if (!envClientId) {
+        return;
+    }
+
+    if (process.env.TWITCH_CLIENT_ID === undefined || process.env.TWITCH_CLIENT_ID === null || process.env.TWITCH_CLIENT_ID === '') {
+        process.env.TWITCH_CLIENT_ID = envClientId;
+    }
+}
+
 function loadConfig() {
     if (loadedConfig) {
         return loadedConfig;
@@ -28,6 +76,8 @@ function loadConfig() {
         if (!rawConfig.general) {
             throw new Error('Missing required configuration section: general');
         }
+
+        preloadEnvFromConfig(rawConfig);
 
         const normalized = ConfigValidator.normalize(rawConfig);
         const validation = ConfigValidator.validate(normalized);

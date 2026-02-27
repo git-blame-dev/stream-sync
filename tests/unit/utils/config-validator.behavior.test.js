@@ -180,6 +180,23 @@ describe('ConfigValidator._normalizeTwitchSection()', () => {
         expect(result.username).toBe('test-streamer');
         expect(result.channel).toBe('test-channel');
     });
+
+    it('uses TWITCH_CLIENT_ID from environment only', () => {
+        const originalTwitchClientId = process.env.TWITCH_CLIENT_ID;
+        try {
+            process.env.TWITCH_CLIENT_ID = 'test-env-client-id';
+            const raw = { clientId: 'legacy-config-client-id' };
+            const result = ConfigValidator._normalizeTwitchSection(raw);
+
+            expect(result.clientId).toBe('test-env-client-id');
+        } finally {
+            if (originalTwitchClientId === undefined) {
+                delete process.env.TWITCH_CLIENT_ID;
+            } else {
+                process.env.TWITCH_CLIENT_ID = originalTwitchClientId;
+            }
+        }
+    });
 });
 
 describe('ConfigValidator._normalizeYoutubeSection()', () => {
@@ -537,14 +554,24 @@ describe('ConfigValidator.validate()', () => {
         expect(result.errors).toContain('Missing required configuration: twitch.username (required when twitch is enabled)');
     });
 
-    it('returns error when Twitch enabled without clientId', () => {
-        const config = createMinimalValidConfig();
-        config.twitch = { enabled: true, username: 'test-user', clientId: '', channel: 'test-channel' };
+    it('returns error when Twitch enabled without TWITCH_CLIENT_ID env var', () => {
+        const originalTwitchClientId = process.env.TWITCH_CLIENT_ID;
+        try {
+            delete process.env.TWITCH_CLIENT_ID;
+            const config = createMinimalValidConfig();
+            config.twitch = { enabled: true, username: 'test-user', clientId: 'legacy-config-client-id', channel: 'test-channel' };
 
-        const result = ConfigValidator.validate(config);
+            const result = ConfigValidator.validate(config);
 
-        expect(result.isValid).toBe(false);
-        expect(result.errors).toContain('Missing required configuration: twitch.clientId (required when twitch is enabled)');
+            expect(result.isValid).toBe(false);
+            expect(result.errors).toContain('Missing required environment variable: TWITCH_CLIENT_ID (required when twitch is enabled)');
+        } finally {
+            if (originalTwitchClientId === undefined) {
+                delete process.env.TWITCH_CLIENT_ID;
+            } else {
+                process.env.TWITCH_CLIENT_ID = originalTwitchClientId;
+            }
+        }
     });
 
     it('returns error when YouTube enabled without username', () => {
@@ -604,11 +631,11 @@ describe('getFieldsRequiredWhenEnabled()', () => {
         expect(fields).toContain('username');
     });
 
-    it('returns username, clientId, channel for twitch section', () => {
+    it('returns username and channel for twitch section', () => {
         const fields = getFieldsRequiredWhenEnabled('twitch');
         expect(fields).toContain('username');
-        expect(fields).toContain('clientId');
         expect(fields).toContain('channel');
+        expect(fields).not.toContain('clientId');
     });
 
     it('returns username for tiktok section', () => {
@@ -663,29 +690,49 @@ describe('ConfigValidator.validateRequiredFields()', () => {
         expect(errors).toContain('Missing required configuration: youtube.username (required when youtube is enabled)');
     });
 
-    it('adds errors when enabled Twitch missing clientId and channel', () => {
-        const config = createValidationTestConfig({
-            twitch: { enabled: true, username: 'test-user', clientId: '', channel: '' }
-        });
+    it('adds errors when enabled Twitch missing channel and TWITCH_CLIENT_ID', () => {
+        const originalTwitchClientId = process.env.TWITCH_CLIENT_ID;
+        try {
+            delete process.env.TWITCH_CLIENT_ID;
+            const config = createValidationTestConfig({
+                twitch: { enabled: true, username: 'test-user', clientId: 'legacy-config-client-id', channel: '' }
+            });
 
-        const errors = [];
-        ConfigValidator.validateRequiredFields(config, errors);
+            const errors = [];
+            ConfigValidator.validateRequiredFields(config, errors);
 
-        expect(errors).toContain('Missing required configuration: twitch.clientId (required when twitch is enabled)');
-        expect(errors).toContain('Missing required configuration: twitch.channel (required when twitch is enabled)');
+            expect(errors).toContain('Missing required environment variable: TWITCH_CLIENT_ID (required when twitch is enabled)');
+            expect(errors).toContain('Missing required configuration: twitch.channel (required when twitch is enabled)');
+        } finally {
+            if (originalTwitchClientId === undefined) {
+                delete process.env.TWITCH_CLIENT_ID;
+            } else {
+                process.env.TWITCH_CLIENT_ID = originalTwitchClientId;
+            }
+        }
     });
 
     it('adds no errors when all required fields present', () => {
-        const config = createValidationTestConfig({
-            tiktok: { enabled: true },
-            twitch: { enabled: true },
-            youtube: { enabled: true }
-        });
+        const originalTwitchClientId = process.env.TWITCH_CLIENT_ID;
+        try {
+            process.env.TWITCH_CLIENT_ID = 'test-env-client-id';
+            const config = createValidationTestConfig({
+                tiktok: { enabled: true },
+                twitch: { enabled: true },
+                youtube: { enabled: true }
+            });
 
-        const errors = [];
-        ConfigValidator.validateRequiredFields(config, errors);
+            const errors = [];
+            ConfigValidator.validateRequiredFields(config, errors);
 
-        expect(errors).toEqual([]);
+            expect(errors).toEqual([]);
+        } finally {
+            if (originalTwitchClientId === undefined) {
+                delete process.env.TWITCH_CLIENT_ID;
+            } else {
+                process.env.TWITCH_CLIENT_ID = originalTwitchClientId;
+            }
+        }
     });
 
     it('ignores disabled platforms', () => {
@@ -702,21 +749,31 @@ describe('ConfigValidator.validateRequiredFields()', () => {
     });
 
     it('validates multiple platforms independently', () => {
-        const config = createValidationTestConfig({
-            tiktok: { enabled: true, username: '' },
-            twitch: { enabled: true, username: '', clientId: '', channel: '' },
-            youtube: { enabled: true, username: '' }
-        });
+        const originalTwitchClientId = process.env.TWITCH_CLIENT_ID;
+        try {
+            delete process.env.TWITCH_CLIENT_ID;
+            const config = createValidationTestConfig({
+                tiktok: { enabled: true, username: '' },
+                twitch: { enabled: true, username: '', clientId: 'legacy-config-client-id', channel: '' },
+                youtube: { enabled: true, username: '' }
+            });
 
-        const errors = [];
-        ConfigValidator.validateRequiredFields(config, errors);
+            const errors = [];
+            ConfigValidator.validateRequiredFields(config, errors);
 
-        expect(errors.length).toBe(5);
-        expect(errors).toContain('Missing required configuration: tiktok.username (required when tiktok is enabled)');
-        expect(errors).toContain('Missing required configuration: twitch.username (required when twitch is enabled)');
-        expect(errors).toContain('Missing required configuration: twitch.clientId (required when twitch is enabled)');
-        expect(errors).toContain('Missing required configuration: twitch.channel (required when twitch is enabled)');
-        expect(errors).toContain('Missing required configuration: youtube.username (required when youtube is enabled)');
+            expect(errors.length).toBe(5);
+            expect(errors).toContain('Missing required configuration: tiktok.username (required when tiktok is enabled)');
+            expect(errors).toContain('Missing required configuration: twitch.username (required when twitch is enabled)');
+            expect(errors).toContain('Missing required environment variable: TWITCH_CLIENT_ID (required when twitch is enabled)');
+            expect(errors).toContain('Missing required configuration: twitch.channel (required when twitch is enabled)');
+            expect(errors).toContain('Missing required configuration: youtube.username (required when youtube is enabled)');
+        } finally {
+            if (originalTwitchClientId === undefined) {
+                delete process.env.TWITCH_CLIENT_ID;
+            } else {
+                process.env.TWITCH_CLIENT_ID = originalTwitchClientId;
+            }
+        }
     });
 
     it('rejects whitespace-only values as empty', () => {

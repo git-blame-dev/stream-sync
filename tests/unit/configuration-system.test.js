@@ -566,6 +566,7 @@ notificationPlatformLogoTikTok = tiktok-img
         });
 
         it('should handle platform username configuration for user identification', () => {
+            const originalTwitchClientId = process.env.TWITCH_CLIENT_ID;
             const internationalConfig = `
 ${testConfigContent}
 
@@ -591,19 +592,28 @@ cheermoteDefaultType = cheer
 enabled = true
 username = 李小明直播
 `;
-            reloadConfig(internationalConfig);
+            try {
+                process.env.TWITCH_CLIENT_ID = 'test-env-client-id';
+                reloadConfig(internationalConfig);
 
-            const youtubeUsername = currentConfig.youtube.username;
-            const twitchUsername = currentConfig.twitch.username;
-            const tiktokUsername = currentConfig.tiktok.username;
+                const youtubeUsername = currentConfig.youtube.username;
+                const twitchUsername = currentConfig.twitch.username;
+                const tiktokUsername = currentConfig.tiktok.username;
 
-            expect(youtubeUsername).toBe('김철수_Gaming');
-            expect(twitchUsername).toBe('José_Streamer');
-            expect(tiktokUsername).toBe('李小明直播');
+                expect(youtubeUsername).toBe('김철수_Gaming');
+                expect(twitchUsername).toBe('José_Streamer');
+                expect(tiktokUsername).toBe('李小明直播');
 
-            expectNoTechnicalArtifacts(youtubeUsername);
-            expectNoTechnicalArtifacts(twitchUsername);
-            expectNoTechnicalArtifacts(tiktokUsername);
+                expectNoTechnicalArtifacts(youtubeUsername);
+                expectNoTechnicalArtifacts(twitchUsername);
+                expectNoTechnicalArtifacts(tiktokUsername);
+            } finally {
+                if (originalTwitchClientId === undefined) {
+                    delete process.env.TWITCH_CLIENT_ID;
+                } else {
+                    process.env.TWITCH_CLIENT_ID = originalTwitchClientId;
+                }
+            }
         });
 
     });
