@@ -8,17 +8,26 @@ const { getRawTestConfig } = require('../../helpers/config-fixture');
 describe('config load and build behavior', () => {
     let tempDir;
     let tempConfigPath;
+    let tempEnvPath;
     let originalConfigPath;
+    let originalTwitchClientId;
     let configModule;
 
     beforeEach(() => {
         tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'test-config-'));
         tempConfigPath = path.join(tempDir, 'config.ini');
+        tempEnvPath = path.join(tempDir, '.env');
         originalConfigPath = process.env.CHAT_BOT_CONFIG_PATH;
+        originalTwitchClientId = process.env.TWITCH_CLIENT_ID;
     });
 
     afterEach(() => {
         process.env.CHAT_BOT_CONFIG_PATH = originalConfigPath;
+        if (originalTwitchClientId === undefined) {
+            delete process.env.TWITCH_CLIENT_ID;
+        } else {
+            process.env.TWITCH_CLIENT_ID = originalTwitchClientId;
+        }
         if (configModule) {
             configModule._resetConfigForTesting();
         }
@@ -131,6 +140,105 @@ describe('config load and build behavior', () => {
         configModule._resetConfigForTesting();
 
         expect(() => configModule.loadConfig()).toThrow(/Configuration validation failed/);
+    });
+
+    it('uses TWITCH_CLIENT_ID from environment when config twitch clientId is empty', () => {
+        configModule = require('../../../src/core/config');
+        const rawConfig = getRawTestConfig();
+        rawConfig.twitch = {
+            ...rawConfig.twitch,
+            enabled: 'true',
+            username: 'test-user',
+            channel: 'test-channel',
+            clientId: ''
+        };
+        rawConfig.general = {
+            ...rawConfig.general,
+            envFileReadEnabled: 'false'
+        };
+
+        fs.writeFileSync(tempConfigPath, ini.stringify(rawConfig), 'utf8');
+        process.env.CHAT_BOT_CONFIG_PATH = tempConfigPath;
+        process.env.TWITCH_CLIENT_ID = 'test-env-client-id';
+        configModule._resetConfigForTesting();
+
+        const normalized = configModule.loadConfig();
+        expect(normalized.twitch.clientId).toBe('test-env-client-id');
+    });
+
+    it('fails when TWITCH_CLIENT_ID is missing even if config twitch clientId is populated', () => {
+        configModule = require('../../../src/core/config');
+        const rawConfig = getRawTestConfig();
+        rawConfig.twitch = {
+            ...rawConfig.twitch,
+            enabled: 'true',
+            username: 'test-user',
+            channel: 'test-channel',
+            clientId: 'legacy-config-client-id'
+        };
+        rawConfig.general = {
+            ...rawConfig.general,
+            envFileReadEnabled: 'false'
+        };
+
+        fs.writeFileSync(tempConfigPath, ini.stringify(rawConfig), 'utf8');
+        process.env.CHAT_BOT_CONFIG_PATH = tempConfigPath;
+        delete process.env.TWITCH_CLIENT_ID;
+        configModule._resetConfigForTesting();
+
+        expect(() => configModule.loadConfig()).toThrow(/TWITCH_CLIENT_ID/);
+    });
+
+    it('loads TWITCH_CLIENT_ID from env file when env file read is enabled', () => {
+        configModule = require('../../../src/core/config');
+        const rawConfig = getRawTestConfig();
+        rawConfig.twitch = {
+            ...rawConfig.twitch,
+            enabled: 'true',
+            username: 'test-user',
+            channel: 'test-channel',
+            clientId: 'legacy-config-client-id'
+        };
+        rawConfig.general = {
+            ...rawConfig.general,
+            envFileReadEnabled: 'true',
+            envFilePath: tempEnvPath
+        };
+
+        fs.writeFileSync(tempEnvPath, 'TWITCH_CLIENT_ID=test-env-file-client-id\n', 'utf8');
+        fs.writeFileSync(tempConfigPath, ini.stringify(rawConfig), 'utf8');
+        process.env.CHAT_BOT_CONFIG_PATH = tempConfigPath;
+        delete process.env.TWITCH_CLIENT_ID;
+        configModule._resetConfigForTesting();
+
+        const normalized = configModule.loadConfig();
+        expect(normalized.twitch.clientId).toBe('test-env-file-client-id');
+    });
+
+    it('keeps existing TWITCH_CLIENT_ID when env file also defines it', () => {
+        configModule = require('../../../src/core/config');
+        const rawConfig = getRawTestConfig();
+        rawConfig.twitch = {
+            ...rawConfig.twitch,
+            enabled: 'true',
+            username: 'test-user',
+            channel: 'test-channel',
+            clientId: 'legacy-config-client-id'
+        };
+        rawConfig.general = {
+            ...rawConfig.general,
+            envFileReadEnabled: 'true',
+            envFilePath: tempEnvPath
+        };
+
+        fs.writeFileSync(tempEnvPath, 'TWITCH_CLIENT_ID=test-env-file-client-id\n', 'utf8');
+        fs.writeFileSync(tempConfigPath, ini.stringify(rawConfig), 'utf8');
+        process.env.CHAT_BOT_CONFIG_PATH = tempConfigPath;
+        process.env.TWITCH_CLIENT_ID = 'test-shell-client-id';
+        configModule._resetConfigForTesting();
+
+        const normalized = configModule.loadConfig();
+        expect(normalized.twitch.clientId).toBe('test-shell-client-id');
     });
 
     it('handles read errors with ENOENT code', () => {

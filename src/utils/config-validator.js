@@ -1,6 +1,12 @@
 const { CONFIG_SCHEMA, getFieldsRequiredWhenEnabled, DEFAULTS } = require('../core/config-schema');
 
 class ConfigValidator {
+    static _readEnvString(envKey) {
+        const value = process.env[envKey];
+        if (value === undefined || value === null) return '';
+        return String(value).trim();
+    }
+
     static parseBoolean(value, defaultValue) {
         if (value === undefined || value === null) return defaultValue;
         if (typeof value === 'boolean') return value;
@@ -208,7 +214,7 @@ class ConfigValidator {
         return {
             enabled: ConfigValidator.parseBoolean(raw.enabled, DEFAULTS.twitch.enabled),
             username: ConfigValidator.parseString(raw.username, ''),
-            clientId: ConfigValidator.parseString(raw.clientId, ''),
+            clientId: ConfigValidator._readEnvString('TWITCH_CLIENT_ID'),
             channel: ConfigValidator.parseString(raw.channel, ''),
             viewerCountEnabled: ConfigValidator.parseBoolean(raw.viewerCountEnabled, DEFAULTS.twitch.viewerCountEnabled),
             viewerCountSource: ConfigValidator.parseString(raw.viewerCountSource, null),
@@ -433,6 +439,10 @@ class ConfigValidator {
                 if (!value || (typeof value === 'string' && value.trim() === '')) {
                     errors.push(`Missing required configuration: ${sectionName}.${fieldName} (required when ${sectionName} is enabled)`);
                 }
+            }
+
+            if (sectionName === 'twitch' && !ConfigValidator._readEnvString('TWITCH_CLIENT_ID')) {
+                errors.push('Missing required environment variable: TWITCH_CLIENT_ID (required when twitch is enabled)');
             }
         }
     }

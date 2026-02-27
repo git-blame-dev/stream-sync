@@ -132,22 +132,32 @@ describe('ConfigValidator normalize + validate integration', () => {
     });
 
     it('validates all three platforms correctly', () => {
-        const rawConfig = {
-            general: {},
-            obs: {},
-            commands: {},
-            tiktok: { enabled: 'true', username: '' },
-            twitch: { enabled: 'true', username: '' },
-            youtube: { enabled: 'true', username: '' }
-        };
+        const originalTwitchClientId = process.env.TWITCH_CLIENT_ID;
+        try {
+            process.env.TWITCH_CLIENT_ID = 'test-env-client-id';
+            const rawConfig = {
+                general: {},
+                obs: {},
+                commands: {},
+                tiktok: { enabled: 'true', username: '' },
+                twitch: { enabled: 'true', username: '' },
+                youtube: { enabled: 'true', username: '' }
+            };
 
-        const normalized = ConfigValidator.normalize(rawConfig);
-        const validation = ConfigValidator.validate(normalized);
+            const normalized = ConfigValidator.normalize(rawConfig);
+            const validation = ConfigValidator.validate(normalized);
 
-        expect(validation.isValid).toBe(false);
-        expect(validation.errors).toContain('Missing required configuration: tiktok.username (required when tiktok is enabled)');
-        expect(validation.errors).toContain('Missing required configuration: twitch.username (required when twitch is enabled)');
-        expect(validation.errors).toContain('Missing required configuration: youtube.username (required when youtube is enabled)');
+            expect(validation.isValid).toBe(false);
+            expect(validation.errors).toContain('Missing required configuration: tiktok.username (required when tiktok is enabled)');
+            expect(validation.errors).toContain('Missing required configuration: twitch.username (required when twitch is enabled)');
+            expect(validation.errors).toContain('Missing required configuration: youtube.username (required when youtube is enabled)');
+        } finally {
+            if (originalTwitchClientId === undefined) {
+                delete process.env.TWITCH_CLIENT_ID;
+            } else {
+                process.env.TWITCH_CLIENT_ID = originalTwitchClientId;
+            }
+        }
     });
 
     it('StreamElements validation requires channel ID when enabled', () => {
@@ -337,40 +347,60 @@ describe('ConfigValidator normalize + validate integration', () => {
     });
 
     it('validateRequiredFields catches missing required fields from schema', () => {
-        const { getRawTestConfig } = require('../helpers/config-fixture');
-        const baseRaw = getRawTestConfig();
-        const rawConfig = {
-            ...baseRaw,
-            tiktok: { ...baseRaw.tiktok, enabled: 'true', username: '' },
-            twitch: { ...baseRaw.twitch, enabled: 'true', username: 'test-user', clientId: '', channel: '' },
-            youtube: { ...baseRaw.youtube, enabled: 'true', username: '' }
-        };
+        const originalTwitchClientId = process.env.TWITCH_CLIENT_ID;
+        try {
+            delete process.env.TWITCH_CLIENT_ID;
+            const { getRawTestConfig } = require('../helpers/config-fixture');
+            const baseRaw = getRawTestConfig();
+            const rawConfig = {
+                ...baseRaw,
+                tiktok: { ...baseRaw.tiktok, enabled: 'true', username: '' },
+                twitch: { ...baseRaw.twitch, enabled: 'true', username: 'test-user', clientId: '', channel: '' },
+                youtube: { ...baseRaw.youtube, enabled: 'true', username: '' }
+            };
 
-        const normalized = ConfigValidator.normalize(rawConfig);
-        const errors = [];
-        ConfigValidator.validateRequiredFields(normalized, errors);
+            const normalized = ConfigValidator.normalize(rawConfig);
+            const errors = [];
+            ConfigValidator.validateRequiredFields(normalized, errors);
 
-        expect(errors.length).toBe(4);
-        expect(errors).toContain('Missing required configuration: tiktok.username (required when tiktok is enabled)');
-        expect(errors).toContain('Missing required configuration: twitch.clientId (required when twitch is enabled)');
-        expect(errors).toContain('Missing required configuration: twitch.channel (required when twitch is enabled)');
-        expect(errors).toContain('Missing required configuration: youtube.username (required when youtube is enabled)');
+            expect(errors.length).toBe(4);
+            expect(errors).toContain('Missing required configuration: tiktok.username (required when tiktok is enabled)');
+            expect(errors).toContain('Missing required environment variable: TWITCH_CLIENT_ID (required when twitch is enabled)');
+            expect(errors).toContain('Missing required configuration: twitch.channel (required when twitch is enabled)');
+            expect(errors).toContain('Missing required configuration: youtube.username (required when youtube is enabled)');
+        } finally {
+            if (originalTwitchClientId === undefined) {
+                delete process.env.TWITCH_CLIENT_ID;
+            } else {
+                process.env.TWITCH_CLIENT_ID = originalTwitchClientId;
+            }
+        }
     });
 
     it('schema-driven validation passes when all required fields provided', () => {
-        const { getRawTestConfig } = require('../helpers/config-fixture');
-        const baseRaw = getRawTestConfig();
-        const rawConfig = {
-            ...baseRaw,
-            tiktok: { ...baseRaw.tiktok, enabled: 'true', username: 'test-tiktok-user' },
-            twitch: { ...baseRaw.twitch, enabled: 'true', username: 'test-twitch-user', clientId: 'test-client-id', channel: 'test-channel' },
-            youtube: { ...baseRaw.youtube, enabled: 'true', username: 'test-youtube-user' }
-        };
+        const originalTwitchClientId = process.env.TWITCH_CLIENT_ID;
+        try {
+            process.env.TWITCH_CLIENT_ID = 'test-env-client-id';
+            const { getRawTestConfig } = require('../helpers/config-fixture');
+            const baseRaw = getRawTestConfig();
+            const rawConfig = {
+                ...baseRaw,
+                tiktok: { ...baseRaw.tiktok, enabled: 'true', username: 'test-tiktok-user' },
+                twitch: { ...baseRaw.twitch, enabled: 'true', username: 'test-twitch-user', clientId: 'test-client-id', channel: 'test-channel' },
+                youtube: { ...baseRaw.youtube, enabled: 'true', username: 'test-youtube-user' }
+            };
 
-        const normalized = ConfigValidator.normalize(rawConfig);
-        const errors = [];
-        ConfigValidator.validateRequiredFields(normalized, errors);
+            const normalized = ConfigValidator.normalize(rawConfig);
+            const errors = [];
+            ConfigValidator.validateRequiredFields(normalized, errors);
 
-        expect(errors).toEqual([]);
+            expect(errors).toEqual([]);
+        } finally {
+            if (originalTwitchClientId === undefined) {
+                delete process.env.TWITCH_CLIENT_ID;
+            } else {
+                process.env.TWITCH_CLIENT_ID = originalTwitchClientId;
+            }
+        }
     });
 });

@@ -58,7 +58,7 @@ const CONFIG_SCHEMA = {
     twitch: {
         enabled: { type: 'boolean', default: false },
         username: { type: 'string', requiredWhenEnabled: true, default: '' },
-        clientId: { type: 'string', requiredWhenEnabled: true, default: '' },
+        clientId: { type: 'string', default: '' },
         channel: { type: 'string', requiredWhenEnabled: true, default: '' },
         viewerCountEnabled: { type: 'boolean', default: true },
         viewerCountSource: { type: 'string', userDefined: true },
