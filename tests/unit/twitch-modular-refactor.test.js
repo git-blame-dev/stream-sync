@@ -310,8 +310,7 @@ describe('TwitchPlatform Modular Refactor', () => {
             const config = {
                 enabled: true,
                 channel: 'test_channel',
-                username: 'test_user',
-                eventsubEnabled: true
+                username: 'test_user'
             };
 
             twitchPlatform = new TwitchPlatform(config, {

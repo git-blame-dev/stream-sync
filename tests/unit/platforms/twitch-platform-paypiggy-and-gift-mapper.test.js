@@ -33,7 +33,7 @@ describe('TwitchPlatform monetisation mapping', () => {
         const TwitchEventSub = createMockFn(() => mockEventSub);
 
         twitch = new TwitchPlatform(
-            { username: 'tester', eventsubEnabled: true },
+            { username: 'tester' },
             {
                 logger: noOpLogger,
                 twitchAuth: { isReady: createMockFn().mockReturnValue(true), getUserId: () => 'test-user-id' },

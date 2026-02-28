@@ -75,24 +75,13 @@ class TwitchPlatform extends EventEmitter {
 
     async initializeEventSub(broadcasterId) {
         this.logger.debug('initializeEventSub called', 'twitch', {
-            eventsubEnabled: this.config.eventsubEnabled,
             authReady: this.twitchAuth?.isReady?.(),
             hasTwitchAuth: !!this.twitchAuth,
             broadcasterId
         });
 
-        if (!this.config.eventsubEnabled) {
-            this.logger.debug('EventSub is disabled in config', 'twitch');
-            return;
-        }
-
-        // Ensure authentication is ready before creating EventSub
         if (!this.twitchAuth.isReady()) {
-            this.logger.warn('Cannot initialize EventSub - Twitch authentication not ready', 'twitch', {
-                authReady: this.twitchAuth?.isReady?.(),
-                hasTwitchAuth: !!this.twitchAuth
-            });
-            return;
+            throw new Error('Twitch authentication is not ready');
         }
 
         try {
@@ -107,10 +96,18 @@ class TwitchPlatform extends EventEmitter {
             await this.eventSub.initialize();
             this.logger.debug('TwitchEventSub initialize() completed', 'twitch');
         } catch (error) {
+            this.eventSub = null;
             this._logPlatformError('Failed to initialize EventSub', error, 'eventsub-init', {
                 stack: error.stack
             });
+            throw error;
         }
+    }
+
+    _clearEventSubWiringState() {
+        this.eventSubWiring?.unbindAll?.();
+        this.eventSubListeners.length = 0;
+        this.eventSubWiring = null;
     }
     
     async initialize(handlers) {
@@ -122,11 +119,9 @@ class TwitchPlatform extends EventEmitter {
         this.handlers = handlers || {};
         this.isConnecting = true;
 
-        this.eventSubWiring?.unbindAll?.();
-        this.eventSubListeners.length = 0;
+        this._clearEventSubWiringState();
 
         try {
-            // Initialize authentication via injected auth manager
             this.logger.debug('Using centralized Twitch auth...', 'twitch', {
                 authReady: this.twitchAuth?.isReady?.(),
                 hasTwitchAuth: !!this.twitchAuth
@@ -135,20 +130,18 @@ class TwitchPlatform extends EventEmitter {
                 throw new Error('Twitch authentication is not ready');
             }
 
-            // Initialize modular components
             const TwitchApiClientClass = this.dependencies.TwitchApiClient || TwitchApiClient;
             this.apiClient = new TwitchApiClientClass(this.twitchAuth, this.config);
             this.viewerCountProvider = ViewerCountProviderFactory.createTwitchProvider(
                 this.apiClient,
                 ConnectionStateFactory,
                 this.config,
-                () => this.eventSub // Function to get current EventSub instance
+                () => this.eventSub
             );
             this.logger.debug('Modular components initialized', 'twitch');
 
             const broadcasterId = await this.apiClient.getBroadcasterId(this.config.channel);
 
-            // Then initialize EventSub with ready authentication
             this.logger.debug('Initializing EventSub with centralized auth...', 'twitch');
             await this.initializeEventSub(broadcasterId);
             this.logger.debug('EventSub initialization completed', 'twitch', {
@@ -156,35 +149,49 @@ class TwitchPlatform extends EventEmitter {
                 eventSubConnected: this.eventSub?.isConnected?.()
             });
 
-            if (this.eventSub && typeof this.eventSub.on !== 'function') {
-                const error = new Error('Twitch EventSub connection missing event emitter interface (on/off)');
+            if (!this.eventSub) {
+                const error = new Error('Twitch EventSub initialization failed: connection not established');
+                this._logPlatformError('EventSub unavailable after initialization', error, 'platform-init');
+                throw error;
+            }
+
+            if (typeof this.eventSub.on !== 'function') {
+                const error = new Error('Twitch EventSub connection missing event emitter interface (on)');
                 this._logPlatformError('EventSub missing event emitter methods', error, 'platform-init');
                 throw error;
             }
 
-            // Set up EventSub event listeners
-            if (this.eventSub) {
-                this.eventSubWiring = createTwitchEventSubWiring({
-                    eventSub: this.eventSub,
-                    eventSubListeners: this.eventSubListeners,
-                    logger: this.logger
-                });
-                this.eventSubWiring.bindAll({
-                    chatMessage: (data) => this.onMessageHandler(data),
-                    follow: (data) => this.handleFollowEvent(data),
-                    paypiggy: (data) => this.handlePaypiggyEvent(data),
-                    paypiggyMessage: (data) => this.handlePaypiggyMessageEvent(data),
-                    paypiggyGift: (data) => this.handlePaypiggyGiftEvent(data),
-                    raid: (data) => this.handleRaidEvent(data),
-                    gift: (data) => this.handleGiftEvent(data),
-                    streamOnline: (data) => this.handleStreamOnlineEvent(data),
-                    streamOffline: (data) => this.handleStreamOfflineEvent(data),
-                    eventSubConnected: (details = {}) => this._handleEventSubConnectionChange(true, details),
-                    eventSubDisconnected: (details = {}) => this._handleEventSubConnectionChange(false, details)
-                });
+            if (typeof this.eventSub.isConnected !== 'function') {
+                const error = new Error('Twitch EventSub connection missing isConnected()');
+                this._logPlatformError('EventSub missing connectivity method', error, 'platform-init');
+                throw error;
             }
 
-            // Using EventSub WebSocket for all chat and event handling
+            if (!this.eventSub.isConnected()) {
+                const error = new Error('Twitch EventSub initialization failed: connection is not active');
+                this._logPlatformError('EventSub not active after initialization', error, 'platform-init');
+                throw error;
+            }
+
+            this.eventSubWiring = createTwitchEventSubWiring({
+                eventSub: this.eventSub,
+                eventSubListeners: this.eventSubListeners,
+                logger: this.logger
+            });
+            this.eventSubWiring.bindAll({
+                chatMessage: (data) => this.onMessageHandler(data),
+                follow: (data) => this.handleFollowEvent(data),
+                paypiggy: (data) => this.handlePaypiggyEvent(data),
+                paypiggyMessage: (data) => this.handlePaypiggyMessageEvent(data),
+                paypiggyGift: (data) => this.handlePaypiggyGiftEvent(data),
+                raid: (data) => this.handleRaidEvent(data),
+                gift: (data) => this.handleGiftEvent(data),
+                streamOnline: (data) => this.handleStreamOnlineEvent(data),
+                streamOffline: (data) => this.handleStreamOfflineEvent(data),
+                eventSubConnected: (details = {}) => this._handleEventSubConnectionChange(true, details),
+                eventSubDisconnected: (details = {}) => this._handleEventSubConnectionChange(false, details)
+            });
+
             this.logger.debug('Using EventSub for chat messages', 'twitch', { 
                 username: this.config.username, 
                 channel: this.config.channel 
@@ -196,8 +203,11 @@ class TwitchPlatform extends EventEmitter {
 
         } catch (error) {
             this._logPlatformError('Failed to initialize Twitch platform', error, 'platform-init');
+            this._clearEventSubWiringState();
+            this.eventSub = null;
+            this.isConnected = false;
             this.isConnecting = false;
-            throw error; // Re-throw to trigger retry logic
+            throw error;
         }
     }
 
@@ -566,7 +576,7 @@ class TwitchPlatform extends EventEmitter {
         this.isPlannedDisconnection = true;
 
         try {
-            this.eventSubWiring?.unbindAll?.();
+            this._clearEventSubWiringState();
 
             // Disconnect EventSub WebSocket
             if (this.eventSub) {
@@ -581,7 +591,6 @@ class TwitchPlatform extends EventEmitter {
                 }
                 this.eventSub = null;
             }
-            this.eventSubWiring = null;
             if (this.viewerCountProvider && typeof this.viewerCountProvider.stopPolling === 'function') {
                 try {
                     this.viewerCountProvider.stopPolling();
