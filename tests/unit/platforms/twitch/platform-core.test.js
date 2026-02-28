@@ -31,7 +31,6 @@ const createPlatform = (configOverrides = {}, depsOverrides = {}) => {
         username: 'teststreamer',
         channel: 'teststreamer',
         clientId: 'test-client-id',
-        eventsubEnabled: true,
         dataLoggingEnabled: false,
         ...configOverrides
     };
@@ -79,13 +78,83 @@ describe('TwitchPlatform core behavior', () => {
         expect(status.issues).toEqual([]);
     });
 
-    it('skips EventSub initialization when auth is not ready', async () => {
+    it('fails EventSub initialization when auth is not ready', async () => {
         const pendingAuth = { isReady: () => false };
         platform = createPlatform({}, { twitchAuth: pendingAuth, TwitchEventSub: createMockFn() });
 
-        await platform.initializeEventSub();
-
+        await expect(platform.initializeEventSub()).rejects.toThrow('Twitch authentication is not ready');
         expect(platform.eventSub).toBeNull();
+    });
+
+    it('fails platform initialization when EventSub has no event binding interface', async () => {
+        const eventSubWithoutOn = {
+            initialize: createMockFn().mockResolvedValue(),
+            isConnected: () => true
+        };
+        platform = createPlatform({}, {
+            twitchAuth: createReadyTwitchAuth(),
+            TwitchEventSub: createMockFn(() => eventSubWithoutOn)
+        });
+
+        await expect(platform.initialize({})).rejects.toThrow('Twitch EventSub connection missing event emitter interface (on)');
+    });
+
+    it('fails platform initialization when EventSub has no connectivity interface', async () => {
+        const eventSubWithoutConnectivity = {
+            initialize: createMockFn().mockResolvedValue(),
+            on: createMockFn()
+        };
+        platform = createPlatform({}, {
+            twitchAuth: createReadyTwitchAuth(),
+            TwitchEventSub: createMockFn(() => eventSubWithoutConnectivity)
+        });
+
+        await expect(platform.initialize({})).rejects.toThrow('Twitch EventSub connection missing isConnected()');
+    });
+
+    it('fails platform initialization when EventSub is not connected after initialize', async () => {
+        const disconnectedEventSub = {
+            initialize: createMockFn().mockResolvedValue(),
+            on: createMockFn(),
+            isConnected: () => false
+        };
+        platform = createPlatform({}, {
+            twitchAuth: createReadyTwitchAuth(),
+            TwitchEventSub: createMockFn(() => disconnectedEventSub)
+        });
+
+        await expect(platform.initialize({})).rejects.toThrow('Twitch EventSub initialization failed: connection is not active');
+    });
+
+    it('resets connection state when platform initialization fails', async () => {
+        const disconnectedEventSub = {
+            initialize: createMockFn().mockResolvedValue(),
+            on: createMockFn(),
+            isConnected: () => false
+        };
+        platform = createPlatform({}, {
+            twitchAuth: createReadyTwitchAuth(),
+            TwitchEventSub: createMockFn(() => disconnectedEventSub)
+        });
+        platform.isConnected = true;
+
+        await expect(platform.initialize({})).rejects.toThrow('Twitch EventSub initialization failed: connection is not active');
+        expect(platform.isConnected).toBe(false);
+        expect(platform.isConnecting).toBe(false);
+    });
+
+    it('clears stale EventSub references when initialization fails', async () => {
+        platform = createPlatform({}, {
+            twitchAuth: { isReady: () => false }
+        });
+        platform.eventSub = { isConnected: () => true };
+        platform.eventSubListeners = [{ eventName: 'chatMessage', handler: () => {} }];
+        platform.eventSubWiring = { unbindAll: createMockFn() };
+
+        await expect(platform.initialize({})).rejects.toThrow('Twitch authentication is not ready');
+        expect(platform.eventSub).toBeNull();
+        expect(platform.eventSubListeners).toHaveLength(0);
+        expect(platform.eventSubWiring).toBeNull();
     });
 
     it('guards stream-status handlers so consumer errors are captured without throwing', () => {

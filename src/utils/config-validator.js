@@ -218,7 +218,6 @@ class ConfigValidator {
             channel: ConfigValidator.parseString(raw.channel, ''),
             viewerCountEnabled: ConfigValidator.parseBoolean(raw.viewerCountEnabled, DEFAULTS.twitch.viewerCountEnabled),
             viewerCountSource: ConfigValidator.parseString(raw.viewerCountSource, null),
-            eventsubEnabled: ConfigValidator.parseBoolean(raw.eventsubEnabled, DEFAULTS.twitch.eventsubEnabled),
             dataLoggingEnabled: ConfigValidator.parseBoolean(raw.dataLoggingEnabled, DEFAULTS.twitch.dataLoggingEnabled),
             tokenStorePath: ConfigValidator.parseString(raw.tokenStorePath, DEFAULTS.twitch.tokenStorePath),
             ...ConfigValidator._parseInheritableFlags(raw),

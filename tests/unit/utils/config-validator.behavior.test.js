@@ -169,7 +169,6 @@ describe('ConfigValidator._normalizeTwitchSection()', () => {
         const result = ConfigValidator._normalizeTwitchSection({});
 
         expect(result.enabled).toBe(false);
-        expect(result.eventsubEnabled).toBe(true);
         expect(result.tokenStorePath).toBe('./data/twitch-tokens.json');
     });
 

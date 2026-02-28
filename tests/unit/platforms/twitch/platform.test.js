@@ -70,7 +70,6 @@ describe('Twitch Platform', () => {
             username: 'testuser',
             channel: 'testchannel',
             clientId: 'test-client-id',
-            eventsubEnabled: true,
             dataLoggingEnabled: false,
             viewerCountEnabled: true
         };
@@ -140,8 +139,7 @@ describe('Twitch Platform', () => {
                 enabled: true,
                 username: 'testuser',
                 channel: 'testchannel',
-                clientId: 'test-client-id',
-                eventsubEnabled: true
+                clientId: 'test-client-id'
             };
 
             const testPlatform = new TwitchPlatform(validConfig, { twitchAuth: mockTwitchAuth });
@@ -170,30 +168,24 @@ describe('Twitch Platform', () => {
     });
 
     describe('when initializing EventSub for real-time events', () => {
-        it('should enable real-time event notifications when user has EventSub configured', async () => {
-            platform.config.eventsubEnabled = true;
+        it('should enable real-time event notifications when authentication is ready', async () => {
             mockTwitchAuth.isReady.mockReturnValue(true);
 
             await platform.initializeEventSub();
 
-            expect(platform.config.eventsubEnabled).toBe(true);
-            expect(mockTwitchAuth.isReady.mock.calls.length).toBeGreaterThan(0);
+            expect(platform.eventSub).toBeDefined();
         });
 
-        it('should operate without real-time events when user disables EventSub', async () => {
-            platform.config.eventsubEnabled = false;
+        it('should fail fast when EventSub initialization fails', async () => {
+            mockTwitchEventSub.initialize.mockRejectedValue(new Error('EventSub init failed'));
 
-            await platform.initializeEventSub();
-
-            expect(platform.eventsub).toBeUndefined();
+            await expect(platform.initializeEventSub()).rejects.toThrow('EventSub init failed');
         });
 
-        it('should delay EventSub until authentication completes for user security', async () => {
+        it('should fail fast when authentication is not ready', async () => {
             mockTwitchAuth.isReady.mockReturnValue(false);
 
-            await platform.initializeEventSub();
-
-            expect(platform.eventsub).toBeUndefined();
+            await expect(platform.initializeEventSub()).rejects.toThrow('Twitch authentication is not ready');
         });
     });
 
@@ -217,9 +209,9 @@ describe('Twitch Platform', () => {
 
             const handlers = {};
 
-            await platform.initialize(handlers);
+            await expect(platform.initialize(handlers)).rejects.toThrow('Connection failed');
 
-            expect(platform.eventsub).toBeUndefined();
+            expect(platform.eventSub).toBeNull();
         });
 
         it('should prepare to receive all user events after connection', async () => {
@@ -704,9 +696,9 @@ describe('Twitch Platform', () => {
         it('should handle EventSub initialization errors gracefully', async () => {
             mockTwitchEventSub.initialize.mockRejectedValue(new Error('EventSub init failed'));
 
-            await expect(platform.initializeEventSub()).resolves.toBeUndefined();
+            await expect(platform.initializeEventSub()).rejects.toThrow('EventSub init failed');
 
-            expect(platform.eventsub).toBeUndefined();
+            expect(platform.eventSub).toBeNull();
         });
 
         it('should handle message processing errors', async () => {

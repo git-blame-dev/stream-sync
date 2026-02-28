@@ -62,7 +62,6 @@ const CONFIG_SCHEMA = {
         channel: { type: 'string', requiredWhenEnabled: true, default: '' },
         viewerCountEnabled: { type: 'boolean', default: true },
         viewerCountSource: { type: 'string', userDefined: true },
-        eventsubEnabled: { type: 'boolean', default: true },
         dataLoggingEnabled: { type: 'boolean', default: false },
         tokenStorePath: { type: 'string', default: './data/twitch-tokens.json' },
         messagesEnabled: { type: 'boolean', inheritFrom: 'general' },

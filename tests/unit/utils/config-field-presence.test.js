@@ -215,7 +215,6 @@ describe('Config field presence - all normalizers return expected fields', () =>
             'channel',
             'viewerCountEnabled',
             'viewerCountSource',
-            'eventsubEnabled',
             'dataLoggingEnabled',
             'tokenStorePath',
             'messagesEnabled',

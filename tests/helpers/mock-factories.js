@@ -459,7 +459,6 @@ const createMockTwitchServices = (configOverrides = {}) => {
         clientId: 'test-client-id',
         accessToken: 'test-access-token',
         refreshToken: 'test-refresh-token',
-        eventsubEnabled: true,
         ...configOverrides
     };
 
@@ -986,7 +985,6 @@ const createMockYouTubePlatform = (behaviorConfig = {}) => {
 
 const createMockTwitchPlatform = (behaviorConfig = {}) => {
     const defaultBehavior = {
-        eventSubEnabled: true,
         raidHandling: 'standard',
         subscriptionProcessing: 'enabled',
         ...behaviorConfig
