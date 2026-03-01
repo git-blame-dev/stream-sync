@@ -104,8 +104,80 @@ describe('InnertubeFactory behavior', () => {
         expect(resolved).toBe(mockInnertube);
     });
 
+    test('createForTesting uses test-safe Innertube config', async () => {
+        let receivedConfig = null;
+        const mockInnertube = {
+            create: async (config) => {
+                receivedConfig = config;
+                return { id: 'testing-instance' };
+            }
+        };
+
+        InnertubeFactory.configure({
+            importer: async () => ({ Innertube: mockInnertube })
+        });
+
+        const result = await InnertubeFactory.createForTesting();
+
+        expect(result.id).toBe('testing-instance');
+        expect(receivedConfig).toEqual({ debug: false, cache: false });
+    });
+
+    test('createWithTimeout uses configured path when config provided', async () => {
+        let receivedConfig = null;
+        const mockInnertube = {
+            create: async (config) => {
+                receivedConfig = config;
+                return { id: 'timeout-configured' };
+            }
+        };
+
+        InnertubeFactory.configure({
+            importer: async () => ({ Innertube: mockInnertube })
+        });
+
+        const result = await InnertubeFactory.createWithTimeout(5000, { cache: false });
+
+        expect(result.id).toBe('timeout-configured');
+        expect(receivedConfig).toEqual({ cache: false });
+    });
+
+    test('createWithTimeout uses default create path when config omitted', async () => {
+        const mockInnertube = {
+            create: async () => ({ id: 'timeout-default' })
+        };
+
+        InnertubeFactory.configure({
+            importer: async () => ({ Innertube: mockInnertube })
+        });
+
+        const result = await InnertubeFactory.createWithTimeout(5000);
+
+        expect(result.id).toBe('timeout-default');
+    });
+
     test('configure rejects non-function importer', () => {
         expect(() => InnertubeFactory.configure({ importer: 'not-a-function' }))
             .toThrow('InnertubeFactory importer must be a function');
+    });
+
+    test('installs parser log adapter when parser API is available', async () => {
+        let installCalls = 0;
+        const parserApi = {
+            setParserErrorHandler: () => {
+                installCalls += 1;
+            }
+        };
+        const mockInnertube = { create: async () => ({ id: 'instance' }) };
+        const mockImporter = async () => ({
+            Innertube: mockInnertube,
+            Parser: parserApi
+        });
+
+        InnertubeFactory.configure({ importer: mockImporter });
+
+        await InnertubeFactory.createInstance();
+
+        expect(installCalls).toBe(1);
     });
 });
