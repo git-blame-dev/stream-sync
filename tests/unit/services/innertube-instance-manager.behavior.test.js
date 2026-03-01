@@ -88,4 +88,23 @@ describe('InnertubeInstanceManager behavior', () => {
         expect(() => ManagerModule.setInnertubeImporter(customImporter)).not.toThrow();
         ManagerModule.setInnertubeImporter(null);
     });
+
+    it('installs parser log adapter when parser API is provided by importer', async () => {
+        let installCalls = 0;
+        const manager = new InnertubeInstanceManager({ instanceTimeout: 5000 });
+        manager.innertubeImporter = async () => ({
+            Innertube: {
+                create: async () => ({ id: 'instance-with-parser' })
+            },
+            Parser: {
+                setParserErrorHandler: () => {
+                    installCalls += 1;
+                }
+            }
+        });
+
+        await manager.getInstance('parser-test');
+
+        expect(installCalls).toBe(1);
+    });
 });

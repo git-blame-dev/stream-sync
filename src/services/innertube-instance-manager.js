@@ -2,6 +2,7 @@
 const { validateTimeout, safeSetInterval } = require('../utils/timeout-validator');
 const { logger } = require('../core/logging');
 const { createPlatformErrorHandler } = require('../utils/platform-error-handler');
+const { installYouTubeParserLogAdapter } = require('../utils/youtube-parser-log-adapter');
 
 const INNERTUBE_INSTANCE_TTL = 300000;
 const INNERTUBE_MIN_TTL = 60000;
@@ -42,28 +43,26 @@ class InnertubeInstanceManager {
         if (this.disposed) {
             throw new Error('InnertubeInstanceManager has been disposed');
         }
-        
-        // Check if we have a healthy cached instance
+
         const cached = this._getCachedInstance(identifier);
         if (cached && this._isInstanceHealthy(cached)) {
             logger.debug(`[InnertubeManager] Reusing cached instance: ${identifier}`, 'youtube');
             this._updateInstanceAccess(identifier);
             return cached.instance;
         }
-        
-        // Check instance limits
+
         if (this.activeInstances.size >= this.maxInstances) {
             logger.warn(`[InnertubeManager] Maximum instances reached (${this.maxInstances}), cleaning up oldest`, 'youtube');
             await this._cleanupOldestInstance();
         }
-        
-        // Create new instance
+
         try {
             logger.debug(`[InnertubeManager] Creating new Innertube instance: ${identifier}`, 'youtube');
-            
+
             if (!createFunction) {
-                // Default Innertube creation
-                const { Innertube } = await this.innertubeImporter();
+                const youtubeModule = await this.innertubeImporter();
+                installYouTubeParserLogAdapter({ logger, youtubeModule });
+                const { Innertube } = youtubeModule;
                 const instance = await Innertube.create();
                 return this._cacheInstance(identifier, instance);
             } else {
@@ -98,14 +97,12 @@ class InnertubeInstanceManager {
         if (this.disposed) return;
         
         logger.info('[InnertubeManager] Cleaning up all instances', 'youtube');
-        
-        // Stop cleanup monitoring
+
         if (this.cleanupInterval) {
             clearInterval(this.cleanupInterval);
             this.cleanupInterval = null;
         }
-        
-        // Dispose all instances
+
         const disposePromises = Array.from(this.activeInstances.values()).map(cached => 
             this._disposeInstanceSafely(cached.instance)
         );
@@ -129,8 +126,7 @@ class InnertubeInstanceManager {
             }))
         };
     }
-    
-    // Private methods
+
     
     _getCachedInstance(identifier) {
         return this.activeInstances.get(identifier);
@@ -138,8 +134,7 @@ class InnertubeInstanceManager {
     
     _isInstanceHealthy(cached) {
         if (!cached.healthy) return false;
-        
-        // Check if instance is too old
+
         const age = Date.now() - cached.created;
         if (age > this.instanceTimeout) {
             return false;
@@ -200,7 +195,7 @@ class InnertubeInstanceManager {
     }
     
     _startCleanupMonitoring() {
-        const cleanupInterval = validateTimeout(30000, 30000); // 30 second intervals
+        const cleanupInterval = validateTimeout(30000, 30000);
         
         this.cleanupInterval = safeSetInterval(() => {
             this._performPeriodicCleanup();
@@ -227,7 +222,6 @@ class InnertubeInstanceManager {
     }
 }
 
-// Singleton instance
 let instance = null;
 
 module.exports = {
@@ -257,8 +251,7 @@ module.exports = {
             instance = null;
         }
     },
-    
-    // For testing
+
     _resetInstance() {
         instance = null;
     }
