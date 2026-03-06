@@ -3,6 +3,7 @@ const { validateTimeout, safeSetInterval } = require('../utils/timeout-validator
 const { logger } = require('../core/logging');
 const { createPlatformErrorHandler } = require('../utils/platform-error-handler');
 const { installYouTubeParserLogAdapter } = require('../utils/youtube-parser-log-adapter');
+const { installYouTubeTextLogAdapter } = require('../utils/youtube-text-log-adapter');
 
 const INNERTUBE_INSTANCE_TTL = 300000;
 const INNERTUBE_MIN_TTL = 60000;
@@ -61,6 +62,7 @@ class InnertubeInstanceManager {
 
             if (!createFunction) {
                 const youtubeModule = await this.innertubeImporter();
+                installYouTubeTextLogAdapter({ logger });
                 installYouTubeParserLogAdapter({ logger, youtubeModule });
                 const { Innertube } = youtubeModule;
                 const instance = await Innertube.create();
