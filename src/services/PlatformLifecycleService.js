@@ -29,68 +29,68 @@ class PlatformLifecycleService {
     async initializeAllPlatforms(platformModules, eventHandlers = null) {
         this.logger.info('Initializing platform connections...', 'PlatformLifecycleService');
 
-        for (const platformName in platformModules) {
-            this.logger.debug(`Processing platform: ${platformName}`, 'PlatformLifecycleService');
-            const platformConfig = this.config?.[platformName];
+        const initTasks = Object.entries(platformModules || {}).map(([platformName, PlatformClass]) =>
+            this.initializePlatform(platformName, PlatformClass, eventHandlers)
+        );
 
-            this.ensurePlatformHealthEntry(platformName);
-
-            // Skip disabled platforms
-            if (!platformConfig || !platformConfig.enabled) {
-                this.logger.debug(`Skipping platform: ${platformName} (disabled or not configured)`, 'PlatformLifecycleService');
-                this.updatePlatformHealth(platformName, { state: 'disabled' });
-                continue;
-            }
-
-            this.logger.debug(`Platform ${platformName} is enabled, initializing...`, 'PlatformLifecycleService');
-            this.updatePlatformHealth(platformName, { state: 'initializing' });
-
-            try {
-                // Validate platform configuration
-                if (platformName === 'youtube' && !platformConfig.username) {
-                    this._handleLifecycleError('YouTube is enabled but no username is provided in config.ini.', null, 'configuration');
-                    this.updatePlatformHealth(platformName, {
-                        state: 'failed',
-                        lastError: 'Missing username'
-                    });
-                    continue;
-                }
-
-                const PlatformClass = platformModules[platformName];
-                const configCopy = { ...platformConfig };
-
-                // Create platform instance with dependency injection
-                const platformInstance = await this.createPlatformInstance(
-                    platformName,
-                    PlatformClass,
-                    configCopy
-                );
-
-                this.platforms[platformName] = platformInstance;
-                this.logger.debug(`Platform ${platformName} added to platforms object`, 'PlatformLifecycleService');
-
-                // Get platform-specific event handlers
-                const handlers = this.resolveEventHandlers(platformName, eventHandlers);
-
-                this.logger.info(`Initializing platform ${platformName}...`, 'PlatformLifecycleService');
-
-                await this.initializePlatformConnection(
-                    platformName,
-                    platformInstance,
-                    handlers,
-                    configCopy
-                );
-
-                this.logger.info(`Platform ${platformName} initialized`, 'PlatformLifecycleService');
-
-            } catch (error) {
-                this._handleLifecycleError(`Failed to initialize platform ${platformName}: ${error.message}`, error, 'initialize');
-                this.markPlatformFailure(platformName, error);
-            }
-        }
+        await Promise.allSettled(initTasks);
 
         this.logger.debug('Platform initialization loop completed', 'PlatformLifecycleService');
         return this.platforms;
+    }
+
+    async initializePlatform(platformName, PlatformClass, eventHandlers = null) {
+        this.logger.debug(`Processing platform: ${platformName}`, 'PlatformLifecycleService');
+        const platformConfig = this.config?.[platformName];
+
+        this.ensurePlatformHealthEntry(platformName);
+
+        if (!platformConfig || !platformConfig.enabled) {
+            this.logger.debug(`Skipping platform: ${platformName} (disabled or not configured)`, 'PlatformLifecycleService');
+            this.updatePlatformHealth(platformName, { state: 'disabled' });
+            return;
+        }
+
+        this.logger.debug(`Platform ${platformName} is enabled, initializing...`, 'PlatformLifecycleService');
+        this.updatePlatformHealth(platformName, { state: 'initializing' });
+
+        try {
+            if (platformName === 'youtube' && !platformConfig.username) {
+                this._handleLifecycleError('YouTube is enabled but no username is provided in config.ini.', null, 'configuration');
+                this.updatePlatformHealth(platformName, {
+                    state: 'failed',
+                    lastError: 'Missing username'
+                });
+                return;
+            }
+
+            const configCopy = { ...platformConfig };
+
+            const platformInstance = await this.createPlatformInstance(
+                platformName,
+                PlatformClass,
+                configCopy
+            );
+
+            this.platforms[platformName] = platformInstance;
+            this.logger.debug(`Platform ${platformName} added to platforms object`, 'PlatformLifecycleService');
+
+            const handlers = this.resolveEventHandlers(platformName, eventHandlers);
+
+            this.logger.info(`Initializing platform ${platformName}...`, 'PlatformLifecycleService');
+
+            await this.initializePlatformConnection(
+                platformName,
+                platformInstance,
+                handlers,
+                configCopy
+            );
+
+            this.logger.info(`Platform ${platformName} initialized`, 'PlatformLifecycleService');
+        } catch (error) {
+            this._handleLifecycleError(`Failed to initialize platform ${platformName}: ${error.message}`, error, 'initialize');
+            this.markPlatformFailure(platformName, error);
+        }
     }
 
     resolveEventHandlers(platformName, providedHandlers) {
