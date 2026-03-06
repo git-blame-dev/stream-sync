@@ -85,16 +85,22 @@ function createTwitchEventSubWsLifecycle(options = {}) {
                                 clearTimeout(state.welcomeTimer);
                             }
 
-                            state.sessionId = message.payload.session.id;
-                            state._isConnected = true;
-                            state.reconnectUrl = null;
-                            state.logger?.info?.(`EventSub session established: ${state.sessionId}`, 'twitch');
-
-                            if (!state.sessionId || state.sessionId.trim() === '') {
+                            const sessionId = message?.payload?.session?.id;
+                            if (!sessionId || sessionId.trim() === '') {
                                 logError('Invalid session ID received', null, 'invalid-session');
                                 reject(new Error('Invalid session ID'));
                                 return;
                             }
+
+                            state.sessionId = sessionId;
+                            state._isConnected = true;
+                            state.reconnectUrl = null;
+                            state.logger?.info?.(`EventSub session established: ${state.sessionId}`, 'twitch');
+
+                            emit('eventSubConnected', {
+                                sessionId: state.sessionId
+                            });
+                            resolve();
 
                             setImmediateFn(async () => {
                                 try {
@@ -106,7 +112,7 @@ function createTwitchEventSubWsLifecycle(options = {}) {
                                             sessionId: state.sessionId,
                                             reason: 'connection-validation'
                                         });
-                                        reject(new Error('EventSub subscription setup failed'));
+                                        state._scheduleReconnect?.();
                                         return;
                                     }
 
@@ -121,15 +127,11 @@ function createTwitchEventSubWsLifecycle(options = {}) {
                                             sessionId: state.sessionId,
                                             failures
                                         });
-                                        reject(new Error('EventSub subscription setup failed'));
+                                        state._scheduleReconnect?.();
                                         return;
                                     }
 
                                     state.subscriptionsReady = true;
-                                    emit('eventSubConnected', {
-                                        sessionId: state.sessionId
-                                    });
-                                    resolve();
                                 } catch (error) {
                                     state.subscriptionsReady = false;
                                     logError('Error during subscription setup', error, 'subscription-setup');
@@ -137,7 +139,7 @@ function createTwitchEventSubWsLifecycle(options = {}) {
                                         sessionId: state.sessionId,
                                         error: error.message
                                     });
-                                    reject(new Error('EventSub subscription setup failed'));
+                                    state._scheduleReconnect?.();
                                 }
                             });
                         }
