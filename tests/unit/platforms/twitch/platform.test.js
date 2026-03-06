@@ -228,6 +228,21 @@ describe('Twitch Platform', () => {
             expect(platform.handlers.onFollowNotification).toBeDefined();
             expect(platform.handlers.onPaypiggyNotification).toBeDefined();
         });
+
+        it('should initialize when EventSub connection is active before subscriptions settle', async () => {
+            const handlers = {
+                onChatMessage: createMockFn(),
+                onFollowNotification: createMockFn(),
+                onPaypiggyNotification: createMockFn()
+            };
+            mockTwitchEventSub.isConnected.mockReturnValue(true);
+            mockTwitchEventSub.subscriptionsReady = false;
+
+            await expect(platform.initialize(handlers)).resolves.toBeUndefined();
+
+            expect(eventSubCalls.initialize).toHaveLength(1);
+            expect(platform.isConnected).toBe(true);
+        });
     });
 
     describe('when handling chat messages', () => {

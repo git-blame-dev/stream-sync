@@ -88,13 +88,22 @@ describe('Twitch EventSub WS lifecycle', () => {
         return state;
     };
 
-    test('connectWebSocket resolves after subscriptions are ready and emits eventSubConnected', async () => {
+    test('connectWebSocket resolves on session welcome before subscriptions complete', async () => {
         const lifecycle = buildLifecycle();
 
+        let resolveSubscriptions;
+        const setupPromise = new Promise((resolve) => {
+            resolveSubscriptions = resolve;
+        });
+
         const state = createState({
-            _setupEventSubscriptions: createMockFn(async () => ({ failures: [] }))
+            _setupEventSubscriptions: createMockFn(async () => setupPromise)
         });
         const connectPromise = lifecycle.connectWebSocket(state);
+        let connectResolved = false;
+        connectPromise.then(() => {
+            connectResolved = true;
+        });
 
         state.ws.readyState = 1;
         state.ws.emit('open');
@@ -113,12 +122,19 @@ describe('Twitch EventSub WS lifecycle', () => {
             }))
         );
 
+        await Promise.resolve();
+        await Promise.resolve();
+        const resolvedBeforeSubscriptions = connectResolved;
+
+        resolveSubscriptions({ failures: [] });
         await connectPromise;
+        await Promise.resolve();
 
         expect(state.sessionId).toBe('test-session-123');
         expect(state._isConnected).toBe(true);
-        expect(state.subscriptionsReady).toBe(true);
+        expect(resolvedBeforeSubscriptions).toBe(true);
         expect(state.emitCalls.some(({ event, payload }) => event === 'eventSubConnected' && payload.sessionId === 'test-session-123')).toBe(true);
+        expect(state.subscriptionsReady).toBe(true);
     });
 
     test('connectWebSocket does not apply fixed welcome delay before subscription setup', async () => {
@@ -151,6 +167,7 @@ describe('Twitch EventSub WS lifecycle', () => {
         );
 
         await connectPromise;
+        await Promise.resolve();
 
         expect(state.subscriptionsReady).toBe(true);
     });
@@ -166,7 +183,7 @@ describe('Twitch EventSub WS lifecycle', () => {
         await expect(connectPromise).rejects.toThrow('Connection timeout - no welcome message');
     });
 
-    test('connectWebSocket emits failure event when subscription setup fails', async () => {
+    test('connectWebSocket stays resolved when subscription setup reports failures', async () => {
         const lifecycle = buildLifecycle();
 
         const state = createState({
@@ -191,8 +208,10 @@ describe('Twitch EventSub WS lifecycle', () => {
             }))
         );
 
-        await expect(connectPromise).rejects.toThrow('EventSub subscription setup failed');
+        await expect(connectPromise).resolves.toBeUndefined();
+        await Promise.resolve();
         expect(state.subscriptionsReady).toBe(false);
+        expect(state.scheduleReconnectCalls).toHaveLength(1);
         expect(state.emitCalls.some(({ event, payload }) => event === 'eventSubSubscriptionFailed' && payload.sessionId === 'test-session-456')).toBe(true);
     });
 
@@ -298,7 +317,7 @@ describe('Twitch EventSub WS lifecycle', () => {
         await expect(connectPromise).rejects.toThrow('Invalid session ID');
     });
 
-    test('connectWebSocket rejects when connection validation fails', async () => {
+    test('connectWebSocket stays resolved when connection validation fails', async () => {
         const lifecycle = buildLifecycle();
 
         const state = createState({
@@ -313,13 +332,16 @@ describe('Twitch EventSub WS lifecycle', () => {
             payload: { session: { id: 'test-session-789' } }
         })));
 
-        await expect(connectPromise).rejects.toThrow('EventSub subscription setup failed');
+        await expect(connectPromise).resolves.toBeUndefined();
+        await Promise.resolve();
         expect(state.emitCalls.some(({ event, payload }) =>
             event === 'eventSubSubscriptionFailed' && payload.reason === 'connection-validation'
         )).toBe(true);
+        expect(state.subscriptionsReady).toBe(false);
+        expect(state.scheduleReconnectCalls).toHaveLength(1);
     });
 
-    test('connectWebSocket rejects when subscription setup throws', async () => {
+    test('connectWebSocket stays resolved when subscription setup throws', async () => {
         const lifecycle = buildLifecycle();
 
         const state = createState({
@@ -334,8 +356,13 @@ describe('Twitch EventSub WS lifecycle', () => {
             payload: { session: { id: 'test-session-error' } }
         })));
 
-        await expect(connectPromise).rejects.toThrow('EventSub subscription setup failed');
+        await expect(connectPromise).resolves.toBeUndefined();
+        await Promise.resolve();
         expect(state.subscriptionsReady).toBe(false);
+        expect(state.scheduleReconnectCalls).toHaveLength(1);
+        expect(state.emitCalls.some(({ event, payload }) =>
+            event === 'eventSubSubscriptionFailed' && payload.error === 'API error'
+        )).toBe(true);
     });
 
     test('connectWebSocket rejects on message parse error', async () => {
