@@ -409,6 +409,129 @@ describe('PlatformLifecycleService', () => {
             deferred.resolve();
             await waitPromise;
         });
+
+        it('starts enabled non-background platforms in parallel', async () => {
+            configFixture.twitch = {
+                enabled: true,
+                channel: 'test-channel',
+                clientId: 'test-client-id'
+            };
+            configFixture.youtube = { enabled: true, username: 'test-channel' };
+
+            const twitchInitDeferred = createDeferred();
+            const youtubeInitDeferred = createDeferred();
+
+            const twitchInit = createMockFn().mockImplementation(() => twitchInitDeferred.promise);
+            const youtubeInit = createMockFn().mockImplementation(() => youtubeInitDeferred.promise);
+
+            const platformModules = {
+                twitch: createMockFn().mockImplementation(() => ({
+                    initialize: twitchInit,
+                    cleanup: createMockFn().mockResolvedValue(),
+                    on: createMockFn()
+                })),
+                youtube: createMockFn().mockImplementation(() => ({
+                    initialize: youtubeInit,
+                    cleanup: createMockFn().mockResolvedValue(),
+                    on: createMockFn()
+                }))
+            };
+
+            const initPromise = service.initializeAllPlatforms(platformModules);
+
+            await Promise.resolve();
+            expect(twitchInit).toHaveBeenCalled();
+            expect(youtubeInit).toHaveBeenCalled();
+
+            twitchInitDeferred.resolve(true);
+            youtubeInitDeferred.resolve(true);
+            await initPromise;
+        });
+
+        it('keeps successful platform initialization progressing when another platform fails', async () => {
+            configFixture.twitch = {
+                enabled: true,
+                channel: 'test-channel',
+                clientId: 'test-client-id'
+            };
+            configFixture.youtube = { enabled: true, username: 'test-channel' };
+
+            const twitchInitDeferred = createDeferred();
+            const twitchError = new Error('twitch connect failed');
+            const twitchInit = createMockFn().mockImplementation(async () => {
+                await twitchInitDeferred.promise;
+                throw twitchError;
+            });
+            const youtubeInit = createMockFn().mockResolvedValue(true);
+
+            const platformModules = {
+                twitch: createMockFn().mockImplementation(() => ({
+                    initialize: twitchInit,
+                    cleanup: createMockFn().mockResolvedValue(),
+                    on: createMockFn()
+                })),
+                youtube: createMockFn().mockImplementation(() => ({
+                    initialize: youtubeInit,
+                    cleanup: createMockFn().mockResolvedValue(),
+                    on: createMockFn()
+                }))
+            };
+
+            const initPromise = service.initializeAllPlatforms(platformModules);
+
+            await Promise.resolve();
+            expect(youtubeInit).toHaveBeenCalled();
+
+            twitchInitDeferred.resolve();
+            await initPromise;
+
+            const status = service.getStatus();
+            expect(status.initializedPlatforms).toContain('youtube');
+            expect(status.failedPlatforms).toEqual(expect.arrayContaining([
+                expect.objectContaining({
+                    name: 'twitch',
+                    lastError: 'twitch connect failed'
+                })
+            ]));
+        });
+
+        it('preserves TikTok background initialization semantics with parallel startup', async () => {
+            configFixture.twitch = {
+                enabled: true,
+                channel: 'test-channel',
+                clientId: 'test-client-id'
+            };
+            configFixture.tiktok = { enabled: true, username: 'streamer' };
+
+            const twitchInitDeferred = createDeferred();
+            const tiktokInitDeferred = createDeferred();
+            const twitchInit = createMockFn().mockImplementation(() => twitchInitDeferred.promise);
+            const tiktokInit = createMockFn().mockImplementation(() => tiktokInitDeferred.promise);
+
+            const platformModules = {
+                twitch: createMockFn().mockImplementation(() => ({
+                    initialize: twitchInit,
+                    cleanup: createMockFn().mockResolvedValue(),
+                    on: createMockFn()
+                })),
+                tiktok: createMockFn().mockImplementation(() => ({
+                    initialize: tiktokInit,
+                    cleanup: createMockFn().mockResolvedValue(),
+                    on: createMockFn()
+                }))
+            };
+
+            const initPromise = service.initializeAllPlatforms(platformModules);
+
+            await Promise.resolve();
+            expect(twitchInit).toHaveBeenCalled();
+            expect(tiktokInit).toHaveBeenCalled();
+            expect(service.backgroundPlatformInits).toHaveLength(1);
+
+            twitchInitDeferred.resolve(true);
+            tiktokInitDeferred.resolve(true);
+            await initPromise;
+        });
     });
 
     describe('Platform Shutdown', () => {
