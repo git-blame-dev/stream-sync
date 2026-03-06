@@ -2,6 +2,7 @@
 const { withTimeout } = require('../utils/timeout-wrapper');
 const { getUnifiedLogger } = require('../core/logging');
 const { installYouTubeParserLogAdapter } = require('../utils/youtube-parser-log-adapter');
+const { installYouTubeTextLogAdapter } = require('../utils/youtube-text-log-adapter');
 
 class InnertubeFactory {
     static _innertubeClassCache = null;
@@ -28,8 +29,10 @@ class InnertubeFactory {
         }
         
         const youtubei = await this._importPromise;
+        const logger = getUnifiedLogger();
+        installYouTubeTextLogAdapter({ logger });
         installYouTubeParserLogAdapter({
-            logger: getUnifiedLogger(),
+            logger,
             youtubeModule: youtubei
         });
         this._innertubeClassCache = youtubei.Innertube;
