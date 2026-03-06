@@ -56,6 +56,12 @@ describe('TwitchEventSub lifecycle', () => {
     });
 
     describe('periodic cleanup', () => {
+        it('uses zero default subscription delay for startup pacing', () => {
+            eventSub = createEventSub();
+
+            expect(eventSub.subscriptionDelay).toBe(0);
+        });
+
         it('updates lastCleanup timestamp when cleanup runs', () => {
             eventSub = createEventSub();
             eventSub.memoryUsage.lastCleanup = 0;
