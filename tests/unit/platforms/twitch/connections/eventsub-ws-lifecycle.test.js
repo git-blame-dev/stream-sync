@@ -121,6 +121,40 @@ describe('Twitch EventSub WS lifecycle', () => {
         expect(state.emitCalls.some(({ event, payload }) => event === 'eventSubConnected' && payload.sessionId === 'test-session-123')).toBe(true);
     });
 
+    test('connectWebSocket does not apply fixed welcome delay before subscription setup', async () => {
+        const lifecycle = buildLifecycle({
+            safeDelay: async () => {
+                throw new Error('safeDelay should not run during welcome handling');
+            }
+        });
+
+        const state = createState({
+            _setupEventSubscriptions: createMockFn(async () => ({ failures: [] }))
+        });
+        const connectPromise = lifecycle.connectWebSocket(state);
+
+        state.ws.readyState = 1;
+        state.ws.emit('open');
+        state.ws.emit(
+            'message',
+            Buffer.from(JSON.stringify({
+                metadata: { message_type: 'session_welcome' },
+                payload: {
+                    session: {
+                        id: 'test-session-no-welcome-wait',
+                        keepalive_timeout_seconds: 30,
+                        status: 'connected',
+                        connected_at: '2024-01-01T00:00:00Z'
+                    }
+                }
+            }))
+        );
+
+        await connectPromise;
+
+        expect(state.subscriptionsReady).toBe(true);
+    });
+
     test('connectWebSocket rejects on connection timeout when no welcome message arrives', async () => {
         const lifecycle = buildLifecycle();
 

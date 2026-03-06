@@ -98,12 +98,6 @@ function createTwitchEventSubWsLifecycle(options = {}) {
 
                             setImmediateFn(async () => {
                                 try {
-                                    await safeDelay(
-                                        validateTimeout(2000, 2000),
-                                        2000,
-                                        'twitchEventSub:welcome-wait'
-                                    );
-
                                     const isConnectionValid = state._validateConnectionForSubscriptions?.();
                                     if (!isConnectionValid) {
                                         logError('Connection validation failed before subscription setup', null, 'connection-validation');

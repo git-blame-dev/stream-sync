@@ -37,12 +37,11 @@ class TwitchEventSub extends EventEmitter {
         this.connectionStartTime = null;
         
         // Configuration
-        this.maxRetryAttempts = 10; // Increased from 3 to handle network instability
+        this.maxRetryAttempts = 10;
         this.retryDelay = 5000;
-        this.subscriptionDelay = 5000; // Delay between subscriptions to avoid rate limiting (increased to 5s for connection stability)
+        this.subscriptionDelay = 0;
         
         // Required EventSub subscriptions
-        // Optimized with consistent pattern structure and standardized configuration
         this.requiredSubscriptions = createTwitchEventSubSubscriptions();
         
         // Memory usage tracking for periodic cleanup

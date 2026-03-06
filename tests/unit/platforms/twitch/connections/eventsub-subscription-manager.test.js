@@ -108,6 +108,38 @@ describe('Twitch EventSub subscription manager', () => {
         expect(postCalls[0].payload.type).toBe('channel.chat.message');
     });
 
+    test('processes multiple subscriptions successfully when subscriptionDelay is zero', async () => {
+        const post = async (_url, payload) => {
+            return { data: { data: [{ id: `sub-${payload.type}`, status: 'enabled' }] } };
+        };
+        const manager = createManager({ axios: { post } });
+
+        const result = await manager.setupEventSubscriptions({
+            requiredSubscriptions: [
+                {
+                    name: 'Chat',
+                    type: 'channel.chat.message',
+                    version: '1',
+                    getCondition: () => ({ broadcaster_user_id: 'test-broadcaster-1', user_id: 'test-user-1' })
+                },
+                {
+                    name: 'Follows',
+                    type: 'channel.follow',
+                    version: '2',
+                    getCondition: () => ({ broadcaster_user_id: 'test-broadcaster-1', moderator_user_id: 'test-user-1' })
+                }
+            ],
+            userId: 'test-user-1',
+            broadcasterId: 'test-broadcaster-1',
+            sessionId: 'test-session-1',
+            subscriptionDelay: 0,
+            isConnected: true
+        });
+
+        expect(result.successful).toBe(2);
+        expect(result.failures).toHaveLength(0);
+    });
+
     test('uses config clientId and secrets token for cleanup', async () => {
         const getCalls = [];
         const deleteCalls = [];
