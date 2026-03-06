@@ -440,8 +440,9 @@ describe('PlatformLifecycleService', () => {
             const initPromise = service.initializeAllPlatforms(platformModules);
 
             await Promise.resolve();
-            expect(twitchInit).toHaveBeenCalled();
-            expect(youtubeInit).toHaveBeenCalled();
+
+            const statusDuringInit = service.getStatus();
+            expect(statusDuringInit.initializingPlatforms).toEqual(expect.arrayContaining(['twitch', 'youtube']));
 
             twitchInitDeferred.resolve(true);
             youtubeInitDeferred.resolve(true);
@@ -480,7 +481,10 @@ describe('PlatformLifecycleService', () => {
             const initPromise = service.initializeAllPlatforms(platformModules);
 
             await Promise.resolve();
-            expect(youtubeInit).toHaveBeenCalled();
+            await Promise.resolve();
+
+            const statusWhileTwitchPending = service.getStatus();
+            expect(statusWhileTwitchPending.initializedPlatforms).toContain('youtube');
 
             twitchInitDeferred.resolve();
             await initPromise;
@@ -524,8 +528,9 @@ describe('PlatformLifecycleService', () => {
             const initPromise = service.initializeAllPlatforms(platformModules);
 
             await Promise.resolve();
-            expect(twitchInit).toHaveBeenCalled();
-            expect(tiktokInit).toHaveBeenCalled();
+
+            const statusDuringInit = service.getStatus();
+            expect(statusDuringInit.initializingPlatforms).toContain('tiktok');
             expect(service.backgroundPlatformInits).toHaveLength(1);
 
             twitchInitDeferred.resolve(true);

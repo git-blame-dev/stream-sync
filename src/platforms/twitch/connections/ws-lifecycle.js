@@ -112,7 +112,9 @@ function createTwitchEventSubWsLifecycle(options = {}) {
                                             sessionId: state.sessionId,
                                             reason: 'connection-validation'
                                         });
-                                        state._scheduleReconnect?.();
+                                        if (state._isConnected) {
+                                            state._scheduleReconnect?.();
+                                        }
                                         return;
                                     }
 
@@ -127,7 +129,9 @@ function createTwitchEventSubWsLifecycle(options = {}) {
                                             sessionId: state.sessionId,
                                             failures
                                         });
-                                        state._scheduleReconnect?.();
+                                        if (state._isConnected) {
+                                            state._scheduleReconnect?.();
+                                        }
                                         return;
                                     }
 
@@ -139,7 +143,9 @@ function createTwitchEventSubWsLifecycle(options = {}) {
                                         sessionId: state.sessionId,
                                         error: error.message
                                     });
-                                    state._scheduleReconnect?.();
+                                    if (state._isConnected) {
+                                        state._scheduleReconnect?.();
+                                    }
                                 }
                             });
                         }
