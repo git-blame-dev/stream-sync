@@ -3,6 +3,9 @@ const { extractHttpErrorDetails } = require('../../../utils/http-error-utils');
 const { validateLoggerInterface } = require('../../../utils/dependency-validator');
 const { secrets } = require('../../../core/secrets');
 
+const STARTUP_CLEANUP_DELETE_CONCURRENCY = 3;
+const STARTUP_STALE_WEBSOCKET_STATUS = 'websocket_disconnected';
+
 function createTwitchEventSubSubscriptionManager(options = {}) {
     const {
         logger,
@@ -313,8 +316,15 @@ function createTwitchEventSubSubscriptionManager(options = {}) {
             });
 
             const allSubscriptions = response.data.data;
-            const webSocketSubscriptions = allSubscriptions.filter((sub) => sub.transport?.method === 'websocket')
-                .filter((sub) => !sessionId || sub.transport?.session_id === sessionId);
+            const webSocketSubscriptions = allSubscriptions
+                .filter((sub) => sub.transport?.method === 'websocket')
+                .filter((sub) => {
+                    if (sessionId) {
+                        return sub.transport?.session_id === sessionId;
+                    }
+
+                    return sub.status === STARTUP_STALE_WEBSOCKET_STATUS;
+                });
 
             safeLogger.info(`Found ${webSocketSubscriptions.length} existing WebSocket subscriptions to clean up`, 'twitch');
 
@@ -330,30 +340,31 @@ function createTwitchEventSubSubscriptionManager(options = {}) {
 
             safeLogger.info('Deleting all WebSocket subscriptions...', 'twitch');
             let deleted = 0;
+            let nextIndex = 0;
+            const workerCount = Math.min(STARTUP_CLEANUP_DELETE_CONCURRENCY, webSocketSubscriptions.length);
 
-            for (const subscription of webSocketSubscriptions) {
-                try {
-                    await requestWithAuthRetry(async () => {
-                        return await axios.delete(`https://api.twitch.tv/helix/eventsub/subscriptions?id=${subscription.id}`, {
-                            headers: await getAuthHeaders()
+            const runDeleteWorker = async () => {
+                while (nextIndex < webSocketSubscriptions.length) {
+                    const subscription = webSocketSubscriptions[nextIndex++];
+                    try {
+                        await requestWithAuthRetry(async () => {
+                            return await axios.delete(`https://api.twitch.tv/helix/eventsub/subscriptions?id=${subscription.id}`, {
+                                headers: await getAuthHeaders()
+                            });
                         });
-                    });
 
-                    safeLogger.debug(`   Deleted: ${subscription.type} (${subscription.id})`, 'twitch');
-                    deleted++;
-
-                    await safeDelay(
-                        validateTimeout(100, 100),
-                        100,
-                        'twitchEventSub:heartbeat-delay'
-                    );
-                } catch (error) {
-                    safeLogError(`   Failed to delete ${subscription.type}`, error, 'subscription-delete', {
-                        id: subscription.id,
-                        error: extractHttpErrorDetails(error)
-                    });
+                        safeLogger.debug(`   Deleted: ${subscription.type} (${subscription.id})`, 'twitch');
+                        deleted++;
+                    } catch (error) {
+                        safeLogError(`   Failed to delete ${subscription.type}`, error, 'subscription-delete', {
+                            id: subscription.id,
+                            error: extractHttpErrorDetails(error)
+                        });
+                    }
                 }
-            }
+            };
+
+            await Promise.all(Array.from({ length: workerCount }, () => runDeleteWorker()));
 
             safeLogger.info(`WebSocket cleanup complete! Deleted ${deleted}/${webSocketSubscriptions.length} subscriptions`, 'twitch');
         } catch (error) {
