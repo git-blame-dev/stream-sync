@@ -147,7 +147,7 @@ describe('Twitch EventSub subscription manager', () => {
             getCalls.push({ url, headers: options?.headers });
             return {
                 data: {
-                    data: [{ id: 'sub-1', transport: { method: 'websocket', session_id: 'session-1' } }]
+                    data: [{ id: 'sub-1', status: 'websocket_disconnected', transport: { method: 'websocket', session_id: 'session-1' } }]
                 }
             };
         };
@@ -165,5 +165,76 @@ describe('Twitch EventSub subscription manager', () => {
         expect(getCalls[0].headers['Authorization']).toBe('Bearer authToken');
         expect(deleteCalls).toHaveLength(1);
         expect(deleteCalls[0].url).toContain('sub-1');
+    });
+
+    test('cleanup deletes websocket subscriptions with bounded parallelism', async () => {
+        let inFlightDeletes = 0;
+        let maxInFlightDeletes = 0;
+        let releaseDeletes;
+        const deleteBarrier = new Promise((resolve) => {
+            releaseDeletes = resolve;
+        });
+
+        const get = async () => {
+            return {
+                data: {
+                    data: [
+                        { id: 'sub-1', status: 'websocket_disconnected', transport: { method: 'websocket', session_id: 'session-a' } },
+                        { id: 'sub-2', status: 'websocket_disconnected', transport: { method: 'websocket', session_id: 'session-b' } },
+                        { id: 'sub-3', status: 'websocket_disconnected', transport: { method: 'websocket', session_id: 'session-c' } },
+                        { id: 'sub-4', status: 'websocket_disconnected', transport: { method: 'websocket', session_id: 'session-d' } }
+                    ]
+                }
+            };
+        };
+
+        const deleteCall = async () => {
+            inFlightDeletes += 1;
+            if (inFlightDeletes > maxInFlightDeletes) {
+                maxInFlightDeletes = inFlightDeletes;
+            }
+
+            await deleteBarrier;
+            inFlightDeletes -= 1;
+            return {};
+        };
+
+        const manager = createManager({ axios: { get, delete: deleteCall } });
+
+        const cleanupPromise = manager.cleanupAllWebSocketSubscriptions();
+
+        for (let i = 0; i < 20 && maxInFlightDeletes <= 1; i++) {
+            await Promise.resolve();
+        }
+
+        expect(maxInFlightDeletes).toBeGreaterThan(1);
+        expect(maxInFlightDeletes).toBeLessThanOrEqual(3);
+
+        releaseDeletes();
+
+        await cleanupPromise;
+    });
+
+    test('cleanup skips websocket_connected subscriptions when no sessionId is provided', async () => {
+        const deleteCalls = [];
+        const get = async () => ({
+            data: {
+                data: [
+                    { id: 'enabled-sub', status: 'enabled', transport: { method: 'websocket', session_id: 'session-other' } },
+                    { id: 'connected-sub', status: 'websocket_connected', transport: { method: 'websocket', session_id: 'session-live' } },
+                    { id: 'disconnected-sub', status: 'websocket_disconnected', transport: { method: 'websocket', session_id: 'session-stale' } }
+                ]
+            }
+        });
+        const deleteCall = async (url) => {
+            deleteCalls.push(url);
+            return {};
+        };
+
+        const manager = createManager({ axios: { get, delete: deleteCall } });
+        await manager.cleanupAllWebSocketSubscriptions();
+
+        expect(deleteCalls).toHaveLength(1);
+        expect(deleteCalls[0]).toContain('disconnected-sub');
     });
 });
