@@ -67,6 +67,14 @@ class ChatNotificationRouter {
 
             this.enqueueChatMessage(platform, normalizedData, sanitizedMessage.message);
 
+            const farewellTrigger = this.detectFarewell(normalizedData);
+            if (farewellTrigger) {
+                const handledFarewell = await this.processFarewell(platform, normalizedData, farewellTrigger);
+                if (handledFarewell) {
+                    return;
+                }
+            }
+
             const commandConfig = await this.detectCommand(normalizedData);
             if (commandConfig) {
                 await this.processCommand(platform, normalizedData, commandConfig, {
@@ -132,6 +140,26 @@ class ChatNotificationRouter {
         return null;
     }
 
+    detectFarewell(normalizedData) {
+        if (typeof this.runtime.commandParser?.getMatchingFarewell !== 'function') {
+            return null;
+        }
+
+        const message = typeof normalizedData?.message === 'string' ? normalizedData.message : '';
+        const trimmedMessage = message.trim();
+        if (!trimmedMessage) {
+            return null;
+        }
+
+        const commandTrigger = trimmedMessage.split(/\s+/)[0];
+        const farewellMatch = this.runtime.commandParser.getMatchingFarewell(message, commandTrigger);
+        if (typeof farewellMatch !== 'string' || farewellMatch.trim().length === 0) {
+            return null;
+        }
+
+        return farewellMatch;
+    }
+
     isFirstMessage(normalizedData, platform) {
         const context = {
             username: normalizedData.username,
@@ -161,6 +189,14 @@ class ChatNotificationRouter {
         const value = this.runtime.config[platform].messagesEnabled;
         if (value === undefined) {
             throw new Error(`Config missing ${platform}.messagesEnabled`);
+        }
+        return !!value;
+    }
+
+    isFarewellEnabled(platform) {
+        const value = this.runtime.config[platform].farewellsEnabled;
+        if (value === undefined) {
+            throw new Error(`Config missing ${platform}.farewellsEnabled`);
         }
         return !!value;
     }
@@ -221,6 +257,26 @@ class ChatNotificationRouter {
         }
 
         await this.queueCommand(platform, normalizedData, commandConfig);
+    }
+
+    async processFarewell(platform, normalizedData, farewellTrigger) {
+        if (!this.isFarewellEnabled(platform)) {
+            this._logSkipped(platform, normalizedData.username, 'farewells disabled');
+            return false;
+        }
+
+        if (typeof this.runtime.handleFarewellNotification !== 'function') {
+            throw new Error('Runtime missing handleFarewellNotification');
+        }
+
+        await this.runtime.handleFarewellNotification(platform, normalizedData.username, {
+            command: farewellTrigger,
+            trigger: farewellTrigger,
+            userId: normalizedData.userId,
+            timestamp: normalizedData.timestamp
+        });
+
+        return true;
     }
 
     getCooldownSettings() {
