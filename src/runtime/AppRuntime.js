@@ -9,10 +9,31 @@ const PlatformEventRouter = require('../services/PlatformEventRouter');
 const ChatNotificationRouter = require('../services/ChatNotificationRouter');
 const wireStreamStatusHandlers = require('../viewer-count/stream-status-handler');
 const { PlatformEvents } = require('../interfaces/PlatformEvents');
+const { DEFAULT_AVATAR_URL } = require('../constants/avatar');
 const { getOBSConnectionManager, initializeOBSConnection } = require('../obs/connection');
 const { getDefaultGoalsManager } = require('../obs/goals');
 
 const createAppRuntimeErrorHandler = (logger) => createPlatformErrorHandler(logger, 'AppRuntime');
+
+const AVATAR_REQUIRED_NOTIFICATION_TYPES = new Set([
+    PlatformEvents.CHAT_MESSAGE,
+    PlatformEvents.FOLLOW,
+    PlatformEvents.SHARE,
+    PlatformEvents.RAID,
+    PlatformEvents.GIFT,
+    PlatformEvents.PAYPIGGY,
+    PlatformEvents.GIFTPAYPIGGY,
+    PlatformEvents.ENVELOPE
+]);
+
+function resolveNotificationAvatarUrl(type, options = {}) {
+    if (!AVATAR_REQUIRED_NOTIFICATION_TYPES.has(type)) {
+        return undefined;
+    }
+
+    const avatarUrl = typeof options.avatarUrl === 'string' ? options.avatarUrl.trim() : '';
+    return avatarUrl || DEFAULT_AVATAR_URL;
+}
 
 class AppRuntime {
     async handleUnifiedNotification(type, platform, username, options) {
@@ -53,6 +74,11 @@ class AppRuntime {
             notificationData.platform = platform;
             if (options.timestamp !== undefined) {
                 notificationData.timestamp = options.timestamp;
+            }
+
+            const avatarUrl = resolveNotificationAvatarUrl(type, options);
+            if (avatarUrl !== undefined) {
+                notificationData.avatarUrl = avatarUrl;
             }
 
             if (this.notificationManager) {
@@ -705,7 +731,7 @@ class AppRuntime {
             ...(giftCount !== undefined ? { giftCount } : {}),
             ...(amount !== undefined ? { amount } : {}),
             ...(currency ? { currency } : {}),
-            repeatCount,
+            ...(repeatCount !== undefined ? { repeatCount } : {}),
             vfxConfig: giftVFXConfig,
             ...(giftId ? { id: giftId } : {})
         };
@@ -818,10 +844,11 @@ class AppRuntime {
                 giftCount,
                 amount,
                 currency,
-                repeatCount,
+                ...(repeatCount !== undefined ? { repeatCount } : {}),
                 type: 'platform:envelope',
                 isError,
                 userId: data.userId,
+                avatarUrl: data.avatarUrl,
                 timestamp: data.timestamp,
                 ...(data.id ? { id: data.id } : {}),
                 originalEnvelopeData: data

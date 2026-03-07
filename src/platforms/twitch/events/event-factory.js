@@ -1,5 +1,6 @@
 const { PlatformEvents } = require('../../../interfaces/PlatformEvents');
 const { isIsoTimestamp } = require('../../../utils/timestamp');
+const { DEFAULT_AVATAR_URL } = require('../../../constants/avatar');
 
 function normalizeIdentity(data) {
     if (!data || typeof data !== 'object') {
@@ -55,6 +56,11 @@ function normalizeNonNegativeNumber(value) {
     return undefined;
 }
 
+function resolveAvatarUrl(data) {
+    const avatarUrl = typeof data?.avatarUrl === 'string' ? data.avatarUrl.trim() : '';
+    return avatarUrl || DEFAULT_AVATAR_URL;
+}
+
 function createTwitchEventFactory(options = {}) {
     const platformName = options.platformName || 'twitch';
     const generateCorrelationId = options.generateCorrelationId || (() => PlatformEvents._generateCorrelationId());
@@ -77,18 +83,21 @@ function createTwitchEventFactory(options = {}) {
     return {
         createFollowEvent: (data) => {
             const identity = normalizeIdentity(data);
+            const avatarUrl = resolveAvatarUrl(data);
             return {
-            type: PlatformEvents.FOLLOW,
-            platform: platformName,
-            username: identity.username,
-            userId: identity.userId,
-            timestamp: getTimestamp(data),
-            metadata: buildEventMetadata()
-        };
+                type: PlatformEvents.FOLLOW,
+                platform: platformName,
+                username: identity.username,
+                userId: identity.userId,
+                avatarUrl,
+                timestamp: getTimestamp(data),
+                metadata: buildEventMetadata()
+            };
         },
 
         createPaypiggyEvent: (data) => {
             const identity = normalizeIdentity(data);
+            const avatarUrl = resolveAvatarUrl(data);
             const months = normalizePositiveInteger(data.months);
             const isRenewal = data.isRenewal === true ||
                 (months !== undefined && months > 1);
@@ -98,6 +107,7 @@ function createTwitchEventFactory(options = {}) {
                 platform: platformName,
                 username: identity.username,
                 userId: identity.userId,
+                avatarUrl,
                 tier: data.tier,
                 isRenewal,
                 timestamp: getTimestamp(data)
@@ -113,6 +123,7 @@ function createTwitchEventFactory(options = {}) {
 
         createPaypiggyMessageEvent: (data) => {
             const identity = normalizeIdentity(data);
+            const avatarUrl = resolveAvatarUrl(data);
             const months = normalizePositiveInteger(data.months);
             const isRenewal = data.isRenewal === true ||
                 (months !== undefined && months > 1);
@@ -122,6 +133,7 @@ function createTwitchEventFactory(options = {}) {
                 platform: platformName,
                 username: identity.username,
                 userId: identity.userId,
+                avatarUrl,
                 tier: data.tier,
                 isRenewal,
                 timestamp: getTimestamp(data)
@@ -137,6 +149,7 @@ function createTwitchEventFactory(options = {}) {
 
         createGiftPaypiggyEvent: (data) => {
             const identity = normalizeOptionalIdentity(data);
+            const avatarUrl = resolveAvatarUrl(data);
             const giftCount = normalizePositiveInteger(data.giftCount);
             if (giftCount === undefined) {
                 throw new Error('Twitch giftpaypiggy payload requires giftCount');
@@ -148,6 +161,7 @@ function createTwitchEventFactory(options = {}) {
                 platform: platformName,
                 giftCount,
                 tier: data.tier,
+                avatarUrl,
                 timestamp: getTimestamp(data)
             };
             if (identity) {
@@ -165,6 +179,7 @@ function createTwitchEventFactory(options = {}) {
 
         createRaidEvent: (data) => {
             const identity = normalizeIdentity(data);
+            const avatarUrl = resolveAvatarUrl(data);
             if (typeof data.viewerCount !== 'number' || !Number.isFinite(data.viewerCount)) {
                 throw new Error('Twitch raid payload requires numeric viewerCount');
             }
@@ -173,6 +188,7 @@ function createTwitchEventFactory(options = {}) {
                 platform: platformName,
                 username: identity.username,
                 userId: identity.userId,
+                avatarUrl,
                 viewerCount: data.viewerCount,
                 timestamp: getTimestamp(data),
                 metadata: buildEventMetadata()
@@ -181,6 +197,7 @@ function createTwitchEventFactory(options = {}) {
 
         createGiftEvent: (data) => {
             const identity = normalizeOptionalIdentity(data);
+            const avatarUrl = resolveAvatarUrl(data);
             const isError = data.isError === true;
             const giftType = typeof data.giftType === 'string' ? data.giftType.trim() : '';
             const giftCount = isError
@@ -214,6 +231,7 @@ function createTwitchEventFactory(options = {}) {
                 giftCount,
                 amount,
                 currency,
+                avatarUrl,
                 timestamp: getTimestamp(data)
             };
             if (identity) {

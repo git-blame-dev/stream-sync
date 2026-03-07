@@ -1,5 +1,6 @@
 const { PlatformEvents } = require('../../../interfaces/PlatformEvents');
 const { isIsoTimestamp } = require('../../../utils/timestamp');
+const { DEFAULT_AVATAR_URL } = require('../../../constants/avatar');
 
 function createYouTubeEventFactory(options = {}) {
     const platformName = options.platformName || 'youtube';
@@ -42,6 +43,13 @@ function createYouTubeEventFactory(options = {}) {
     const normalizeText = (value) => (typeof value === 'string' ? value.trim() : '');
 
     const getTimestamp = (data, errorMessage) => ensureIsoTimestamp(data.timestamp, errorMessage);
+    const resolveAvatarUrl = (data) => {
+        const avatarUrl = normalizeText(data.avatarUrl);
+        if (avatarUrl) {
+            return avatarUrl;
+        }
+        return DEFAULT_AVATAR_URL;
+    };
 
     const buildEventMetadata = (additionalMetadata = {}) => ({
         platform: platformName,
@@ -63,11 +71,14 @@ function createYouTubeEventFactory(options = {}) {
 
         createChatMessageEvent: (data = {}) => {
             const timestamp = getTimestamp(data, 'YouTube chat message event requires timestamp');
+            const identity = normalizeIdentity(data);
+            const avatarUrl = resolveAvatarUrl(data);
             return {
                 type: PlatformEvents.CHAT_MESSAGE,
                 platform: platformName,
-                username: data.username,
-                userId: data.userId,
+                username: identity.username,
+                userId: identity.userId,
+                avatarUrl,
                 message: {
                     text: data.message
                 },
@@ -104,6 +115,7 @@ function createYouTubeEventFactory(options = {}) {
         createGiftEvent: (data = {}) => {
             const isError = data.isError === true;
             const identity = normalizeIdentity(data, { allowMissing: isError });
+            const avatarUrl = resolveAvatarUrl(data);
             const giftType = normalizeText(data.giftType);
             const giftCount = isError
                 ? normalizeNonNegativeNumber(data.giftCount)
@@ -137,6 +149,7 @@ function createYouTubeEventFactory(options = {}) {
                 platform: platformName,
                 ...(identity.username ? { username: identity.username } : {}),
                 ...(identity.userId ? { userId: identity.userId } : {}),
+                ...(avatarUrl ? { avatarUrl } : {}),
                 ...(data.id ? { id: data.id } : {}),
                 ...(giftType ? { giftType } : {}),
                 ...(giftCount !== undefined ? { giftCount } : {}),
@@ -157,6 +170,7 @@ function createYouTubeEventFactory(options = {}) {
         createGiftPaypiggyEvent: (data = {}) => {
             const isError = data.isError === true;
             const identity = normalizeIdentity(data, { allowMissing: isError });
+            const avatarUrl = resolveAvatarUrl(data);
             const giftCount = isError
                 ? normalizeNonNegativeNumber(data.giftCount)
                 : normalizePositiveNumber(data.giftCount);
@@ -171,6 +185,7 @@ function createYouTubeEventFactory(options = {}) {
                 platform: platformName,
                 ...(identity.username ? { username: identity.username } : {}),
                 ...(identity.userId ? { userId: identity.userId } : {}),
+                ...(avatarUrl ? { avatarUrl } : {}),
                 ...(giftCount !== undefined ? { giftCount } : {}),
                 ...(id ? { id } : {}),
                 timestamp: getTimestamp(data, 'YouTube giftpaypiggy payload requires timestamp')
@@ -194,6 +209,7 @@ function createYouTubeEventFactory(options = {}) {
         createPaypiggyEvent: (data = {}) => {
             const isError = data.isError === true;
             const identity = normalizeIdentity(data, { allowMissing: isError });
+            const avatarUrl = resolveAvatarUrl(data);
             const months = normalizePositiveNumber(data.months);
             const message = typeof data.message === 'string' ? data.message : undefined;
             const membershipLevel = normalizeText(data.membershipLevel);
@@ -204,6 +220,7 @@ function createYouTubeEventFactory(options = {}) {
                 platform: platformName,
                 ...(identity.username ? { username: identity.username } : {}),
                 ...(identity.userId ? { userId: identity.userId } : {}),
+                ...(avatarUrl ? { avatarUrl } : {}),
                 ...(id ? { id } : {}),
                 timestamp: getTimestamp(data, 'YouTube paypiggy payload requires timestamp')
             };

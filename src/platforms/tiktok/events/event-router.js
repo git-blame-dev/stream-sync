@@ -129,7 +129,7 @@ function setupTikTokEventListeners(platform) {
 
             if (!validation.isValid) {
                 platform.logger.warn('Message normalization validation failed', 'tiktok', {
-                    issues: validation.issues,
+                    issues: validation.errors,
                     originalData: data
                 });
             }
@@ -269,9 +269,18 @@ function setupTikTokEventListeners(platform) {
     const disconnectedEvent = platform.ControlEvent?.DISCONNECTED || 'disconnected';
     const errorEvent = platform.ControlEvent?.ERROR || 'error';
 
-    platform.connection.on(disconnectedEvent, (reason) => {
-        platform._logIncomingEvent('disconnected', reason);
-        platform.handleConnectionIssue(reason, false);
+    platform.connection.on(disconnectedEvent, async (reason) => {
+        await platform._logIncomingEvent('disconnected', reason);
+        try {
+            await platform.handleConnectionIssue(reason, false);
+        } catch (error) {
+            platform.errorHandler.handleEventProcessingError(
+                error,
+                'disconnected',
+                reason,
+                'Error handling disconnected control event'
+            );
+        }
     });
 
     platform.connection.on(errorEvent, (err) => {

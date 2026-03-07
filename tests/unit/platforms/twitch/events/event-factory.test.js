@@ -1,6 +1,7 @@
 const { describe, test, expect } = require('bun:test');
 const { createTwitchEventFactory } = require('../../../../../src/platforms/twitch/events/event-factory');
 const { PlatformEvents } = require('../../../../../src/interfaces/PlatformEvents');
+const { DEFAULT_AVATAR_URL } = require('../../../../../src/constants/avatar');
 
 describe('Twitch event factory', () => {
     const fixedNow = '2025-01-01T00:00:00.000Z';
@@ -16,6 +17,7 @@ describe('Twitch event factory', () => {
         const event = factory.createFollowEvent({
             userId: 'u1',
             username: 'TestUser',
+            avatarUrl: 'https://example.invalid/twitch-follow-avatar.jpg',
             timestamp: fixedNow
         });
 
@@ -24,6 +26,7 @@ describe('Twitch event factory', () => {
             platform: 'twitch',
             username: 'TestUser',
             userId: 'u1',
+            avatarUrl: 'https://example.invalid/twitch-follow-avatar.jpg',
             timestamp: fixedNow,
             metadata: {
                 platform: 'twitch',
@@ -123,6 +126,7 @@ describe('Twitch event factory', () => {
         }));
         expect(event.username).toBeUndefined();
         expect(event.userId).toBeUndefined();
+        expect(event.avatarUrl).toBe(DEFAULT_AVATAR_URL);
     });
 
     test('creates gift event and preserves cheermote info', () => {
@@ -131,6 +135,7 @@ describe('Twitch event factory', () => {
         const event = factory.createGiftEvent({
             userId: 'u5',
             username: 'CheerUser',
+            avatarUrl: 'https://example.invalid/twitch-gift-avatar.jpg',
             giftType: 'bits',
             giftCount: 1,
             amount: 250,
@@ -152,6 +157,7 @@ describe('Twitch event factory', () => {
             message: 'Nice!',
             id: 'cheer-id-1',
             repeatCount: 1,
+            avatarUrl: 'https://example.invalid/twitch-gift-avatar.jpg',
             timestamp: fixedNow,
             cheermoteInfo: { name: 'Cheer250' }
         }));
@@ -184,6 +190,19 @@ describe('Twitch event factory', () => {
         }));
         expect(event.username).toBeUndefined();
         expect(event.userId).toBeUndefined();
+        expect(event.avatarUrl).toBe(DEFAULT_AVATAR_URL);
+    });
+
+    test('emits fallback avatar for follow events when payload avatar is missing', () => {
+        const factory = createFactory();
+
+        const event = factory.createFollowEvent({
+            userId: 'u-fallback',
+            username: 'FallbackUser',
+            timestamp: fixedNow
+        });
+
+        expect(event.avatarUrl).toBe(DEFAULT_AVATAR_URL);
     });
 
     test('creates stream status events with deterministic timestamps', () => {

@@ -142,6 +142,22 @@ describe('TikTokPlatform _shouldSkipDuplicatePlatformMessage', () => {
             expect(result.cleanupPerformed).toBe(true);
         });
 
+        it('evicts oldest entries when cache remains over max after ttl cleanup', () => {
+            const platform = createPlatform({}, {
+                deduplicationMaxCacheSize: 3,
+                deduplicationTtlMs: 60_000
+            });
+
+            platform._shouldSkipDuplicatePlatformMessage({ common: { msgId: 'msg-1' } });
+            platform._shouldSkipDuplicatePlatformMessage({ common: { msgId: 'msg-2' } });
+            platform._shouldSkipDuplicatePlatformMessage({ common: { msgId: 'msg-3' } });
+            platform._shouldSkipDuplicatePlatformMessage({ common: { msgId: 'msg-4' } });
+
+            expect(platform.recentPlatformMessageIds.size).toBe(3);
+            expect(platform.recentPlatformMessageIds.has('msg-1')).toBe(false);
+            expect(platform.recentPlatformMessageIds.has('msg-4')).toBe(true);
+        });
+
         it('does not perform cleanup when cache is within threshold', () => {
             const platform = createPlatform({}, { deduplicationMaxCacheSize: 10 });
 

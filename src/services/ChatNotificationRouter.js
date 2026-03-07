@@ -25,7 +25,7 @@ class ChatNotificationRouter {
             const validation = validateNormalizedMessage(normalizedData) || { isValid: true };
             if (!validation.isValid) {
                 this.logger.warn(`Invalid normalized message from ${platform}`, 'chat-router', {
-                    issues: validation.issues,
+                    issues: validation.errors,
                     data: normalizedData
                 });
             }
@@ -211,6 +211,7 @@ class ChatNotificationRouter {
             platform,
             username: normalizedData.username,
             userId: normalizedData.userId,
+            avatarUrl: normalizedData.avatarUrl,
             message: sanitizedMessage
         };
 

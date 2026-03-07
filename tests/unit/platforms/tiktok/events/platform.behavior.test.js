@@ -134,8 +134,9 @@ describe('TikTokPlatform behavior alignment', () => {
             expect(routedGifts[0]).toMatchObject({
                 platform: 'tiktok',
                 isError: true,
-                type: 'gift',
-                eventType: 'gift'
+                type: PlatformEvents.GIFT,
+                eventType: PlatformEvents.GIFT,
+                avatarUrl: expect.any(String)
             });
             expect(routedGifts[0].timestamp).toEqual(expect.any(String));
         });
@@ -165,8 +166,9 @@ describe('TikTokPlatform behavior alignment', () => {
             expect(routedGifts[0]).toMatchObject({
                 platform: 'tiktok',
                 isError: true,
-                type: 'gift',
-                eventType: 'gift'
+                type: PlatformEvents.GIFT,
+                eventType: PlatformEvents.GIFT,
+                avatarUrl: expect.any(String)
             });
             expect(routedGifts[0].timestamp).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/);
         });

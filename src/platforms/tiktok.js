@@ -13,19 +13,19 @@ const { getSystemTimestampISO } = require('../utils/timestamp');
 const { createPlatformErrorHandler } = require('../utils/platform-error-handler');
 const { createMonetizationErrorPayload } = require('../utils/monetization-error-utils');
 const { createRetrySystem } = require('../utils/retry-system');
-const { extractTikTokUserData, formatCoinAmount } = require('../utils/tiktok-data-extraction');
+const { extractTikTokUserData, extractTikTokAvatarUrl, formatCoinAmount } = require('../utils/tiktok-data-extraction');
 const { validateNotificationManagerInterface } = require('../utils/dependency-validator');
 const { normalizeTikTokChatEvent, normalizeTikTokGiftEvent } = require('./tiktok/events/event-normalizer');
 const { createTikTokConnectionOrchestrator } = require('./tiktok/connections/tiktok-connection-orchestrator');
 const { cleanupTikTokEventListeners, setupTikTokEventListeners } = require('./tiktok/events/event-router');
 const { createTikTokGiftAggregator } = require('./tiktok/monetization/gift-aggregator');
 const { createTikTokEventFactory } = require('./tiktok/events/event-factory');
+const { DEFAULT_AVATAR_URL } = require('../constants/avatar');
 
 class TikTokPlatform extends EventEmitter {
     constructor(config = {}, dependencies = {}) {
         super(); // Call EventEmitter constructor first to ensure proper prototype chain
 
-        this.handlers = this._createDefaultHandlers();
         // Initialize logger with dependency injection support
         if (dependencies.logger) {
             this.logger = dependencies.logger;
@@ -48,6 +48,7 @@ class TikTokPlatform extends EventEmitter {
             maxCacheSize: dependencies.deduplicationMaxCacheSize ?? 2000,
             ttlMs: dependencies.deduplicationTtlMs ?? 2 * 60 * 1000
         };
+        this.fallbackAvatarUrl = DEFAULT_AVATAR_URL;
 
         this.config = config;
 
@@ -1028,6 +1029,20 @@ class TikTokPlatform extends EventEmitter {
         return resolveTikTokTimestampISO(data);
     }
 
+    _resolveAvatarUrl(data = {}) {
+        const payloadAvatarUrl = typeof data.avatarUrl === 'string' ? data.avatarUrl.trim() : '';
+        if (payloadAvatarUrl) {
+            return payloadAvatarUrl;
+        }
+
+        const extractedAvatarUrl = extractTikTokAvatarUrl(data);
+        if (extractedAvatarUrl) {
+            return extractedAvatarUrl;
+        }
+
+        return this.fallbackAvatarUrl;
+    }
+
     _buildGiftErrorOverrides(data) {
         if (!data || typeof data !== 'object') {
             return {};
@@ -1094,13 +1109,18 @@ class TikTokPlatform extends EventEmitter {
             );
             timestamp = getSystemTimestampISO();
         }
-        return createMonetizationErrorPayload({
+        const payloadOptions = {
             notificationType,
             platform: 'tiktok',
             timestamp,
             id: id || undefined,
             ...overrides
+        };
+        payloadOptions.avatarUrl = this._resolveAvatarUrl({
+            ...(data || {}),
+            avatarUrl: payloadOptions.avatarUrl
         });
+        return createMonetizationErrorPayload(payloadOptions);
     }
 
     _getPlatformMessageId(data) {
@@ -1139,6 +1159,14 @@ class TikTokPlatform extends EventEmitter {
                 if (seenAt < cutoff) {
                     this.recentPlatformMessageIds.delete(id);
                 }
+            }
+
+            while (this.recentPlatformMessageIds.size > maxCacheSize) {
+                const oldestKey = this.recentPlatformMessageIds.keys().next().value;
+                if (!oldestKey) {
+                    break;
+                }
+                this.recentPlatformMessageIds.delete(oldestKey);
             }
             cleanupPerformed = true;
         }
@@ -1232,7 +1260,11 @@ class TikTokPlatform extends EventEmitter {
         const emitType = options.emitType || eventType;
         try {
             await this._logRawEvent?.(options.logEventType || emitType, data);
-            const eventData = this.eventFactory[factoryMethod](data, options);
+            const normalizedInput = {
+                ...(data || {}),
+                avatarUrl: this._resolveAvatarUrl(data)
+            };
+            const eventData = this.eventFactory[factoryMethod](normalizedInput, options);
             this._emitPlatformEvent(emitType, eventData);
             return { success: true };
         } catch (error) {
@@ -1278,6 +1310,7 @@ class TikTokPlatform extends EventEmitter {
             const eventData = this.eventFactory.createFollow({
                 username,
                 userId,
+                avatarUrl: this._resolveAvatarUrl(data),
                 timestamp,
                 metadata: {
                     platform: 'tiktok'
@@ -1308,6 +1341,7 @@ class TikTokPlatform extends EventEmitter {
             const eventData = this.eventFactory.createShare({
                 username,
                 userId,
+                avatarUrl: this._resolveAvatarUrl(data),
                 timestamp,
                 metadata: {
                     platform: 'tiktok'

@@ -1,10 +1,108 @@
 
 const { createTestUser } = require('../../helpers/test-setup');
 const { PlatformEvents, PlatformEventValidator } = require('../../../src/interfaces/PlatformEvents');
+const { DEFAULT_AVATAR_URL } = require('../../../src/constants/avatar');
 const testClock = require('../../helpers/test-clock');
 
 describe('Platform Events Interface', () => {
     describe('Event Schema Validation', () => {
+        it('requires avatarUrl across GUI-visible canonical platform events', () => {
+            const validator = new PlatformEventValidator();
+            const timestamp = '2026-03-07T12:00:00.000Z';
+
+            const validEvents = [
+                {
+                    type: 'platform:chat-message',
+                    platform: 'twitch',
+                    username: 'test-user',
+                    userId: 'test-user-id',
+                    message: { text: 'hello' },
+                    avatarUrl: 'https://example.invalid/avatar-chat.png',
+                    timestamp
+                },
+                {
+                    type: 'platform:follow',
+                    platform: 'youtube',
+                    username: 'test-user',
+                    userId: 'test-user-id',
+                    avatarUrl: 'https://example.invalid/avatar-follow.png',
+                    timestamp,
+                    metadata: {}
+                },
+                {
+                    type: 'platform:share',
+                    platform: 'tiktok',
+                    username: 'test-user',
+                    userId: 'test-user-id',
+                    avatarUrl: 'https://example.invalid/avatar-share.png',
+                    timestamp,
+                    metadata: {}
+                },
+                {
+                    type: 'platform:raid',
+                    platform: 'twitch',
+                    username: 'test-user',
+                    userId: 'test-user-id',
+                    viewerCount: 5,
+                    avatarUrl: 'https://example.invalid/avatar-raid.png',
+                    timestamp,
+                    metadata: {}
+                },
+                {
+                    type: 'platform:gift',
+                    platform: 'youtube',
+                    username: 'test-user',
+                    userId: 'test-user-id',
+                    id: 'gift-1',
+                    giftType: 'Super Chat',
+                    giftCount: 1,
+                    amount: 5,
+                    currency: 'USD',
+                    avatarUrl: 'https://example.invalid/avatar-gift.png',
+                    timestamp
+                },
+                {
+                    type: 'platform:paypiggy',
+                    platform: 'youtube',
+                    username: 'test-user',
+                    userId: 'test-user-id',
+                    avatarUrl: 'https://example.invalid/avatar-paypiggy.png',
+                    timestamp
+                },
+                {
+                    type: 'platform:giftpaypiggy',
+                    platform: 'youtube',
+                    username: 'test-user',
+                    userId: 'test-user-id',
+                    giftCount: 2,
+                    avatarUrl: 'https://example.invalid/avatar-giftpaypiggy.png',
+                    timestamp
+                },
+                {
+                    type: 'platform:envelope',
+                    platform: 'tiktok',
+                    username: 'test-user',
+                    userId: 'test-user-id',
+                    id: 'env-1',
+                    giftType: 'Treasure Chest',
+                    giftCount: 1,
+                    amount: 1,
+                    currency: 'coins',
+                    avatarUrl: 'https://example.invalid/avatar-envelope.png',
+                    timestamp
+                }
+            ];
+
+            for (const event of validEvents) {
+                expect(validator.validate(event)).toEqual({ valid: true, errors: [] });
+
+                const { avatarUrl: _avatarUrl, ...withoutAvatar } = event;
+                const missingAvatarResult = validator.validate(withoutAvatar);
+                expect(missingAvatarResult.valid).toBe(false);
+                expect(missingAvatarResult.errors).toContain('Missing required field: avatarUrl');
+            }
+        });
+
         it('should validate chat message events from all platforms', () => {
             const testCases = [
                 {
@@ -43,6 +141,25 @@ describe('Platform Events Interface', () => {
                 expect(event.userId).toBe(testCase.identity.userId);
                 expect(event.message).toEqual({ text: testCase.message });
             });
+        });
+
+        it('accepts canonical chat role flags on platform:chat-message events', () => {
+            const validator = new PlatformEventValidator();
+            const event = {
+                type: 'platform:chat-message',
+                platform: 'youtube',
+                username: 'test-user',
+                userId: 'test-user-id',
+                avatarUrl: 'https://example.invalid/chat-avatar.png',
+                message: { text: 'hello' },
+                timestamp: new Date(testClock.now()).toISOString(),
+                isMod: true,
+                isSubscriber: false,
+                isBroadcaster: false,
+                metadata: {}
+            };
+
+            expect(validator.validate(event)).toEqual({ valid: true, errors: [] });
         });
 
         it('should validate notification events across all platforms', () => {
@@ -117,6 +234,22 @@ describe('Platform Events Interface', () => {
 
             expect(PlatformEvents.validateNotificationEvent(giftEvent)).toBe(true);
             expect(PlatformEvents.validateNotificationEvent(giftPaypiggyEvent)).toBe(true);
+        });
+
+        it('omits notification identity fields when source data has no canonical identity', () => {
+            const validator = new PlatformEventValidator();
+            const event = PlatformEvents.createNotificationEvent('twitch', 'platform:gift', {
+                id: 'gift-anon-2',
+                giftType: 'bits',
+                giftCount: 1,
+                amount: 10,
+                currency: 'bits',
+                isAnonymous: true
+            });
+
+            expect(event.username).toBeUndefined();
+            expect(event.userId).toBeUndefined();
+            expect(validator.validate(event)).toEqual({ valid: true, errors: [] });
         });
 
         it('should validate connection status events', () => {
@@ -339,6 +472,19 @@ describe('Platform Events Interface', () => {
             });
         });
 
+        it('rejects platform:chat-message via validateEvent when avatarUrl is missing', () => {
+            const event = {
+                type: 'platform:chat-message',
+                platform: 'twitch',
+                username: 'test-user',
+                userId: 'test-user-id',
+                message: { text: 'hello' },
+                timestamp: new Date(testClock.now()).toISOString()
+            };
+
+            expect(PlatformEvents.validateEvent(event)).toBe(false);
+        });
+
         it('should validate monetization event types via validateEvent', () => {
             const baseTimestamp = testClock.now();
             const monetizationEvents = [
@@ -347,6 +493,7 @@ describe('Platform Events Interface', () => {
                     platform: 'tiktok',
                     username: 'gifter',
                     userId: 'tt-gift',
+                    avatarUrl: 'https://example.invalid/tt-gift-avatar.png',
                     id: 'gift-1',
                     giftType: 'rose',
                     giftCount: 1,
@@ -359,6 +506,7 @@ describe('Platform Events Interface', () => {
                     platform: 'twitch',
                     username: 'subber',
                     userId: 'tw-sub',
+                    avatarUrl: 'https://example.invalid/tw-sub-avatar.png',
                     tier: '1',
                     months: 1,
                     timestamp: new Date(baseTimestamp + 1000).toISOString()
@@ -368,6 +516,7 @@ describe('Platform Events Interface', () => {
                     platform: 'twitch',
                     username: 'raider',
                     userId: 'tw-raid',
+                    avatarUrl: 'https://example.invalid/tw-raid-avatar.png',
                     viewerCount: 5,
                     timestamp: new Date(baseTimestamp + 2000).toISOString()
                 },
@@ -382,6 +531,7 @@ describe('Platform Events Interface', () => {
                     platform: 'tiktok',
                     username: 'sender',
                     userId: 'tt-envelope',
+                    avatarUrl: 'https://example.invalid/tt-envelope-avatar.png',
                     id: 'env-1',
                     giftType: 'Treasure',
                     giftCount: 1,
@@ -425,6 +575,7 @@ describe('Platform Events Interface', () => {
                 .type('chat-message')
                 .username('FluentUser')
                 .userId('fluent-user')
+                .avatarUrl('https://example.invalid/fluent-avatar.png')
                 .message('Built with fluent API')
                 .metadata({ vip: true })
                 .build();
@@ -433,6 +584,19 @@ describe('Platform Events Interface', () => {
             expect(event.type).toBe('platform:chat-message');
             expect(event.message.text).toBe('Built with fluent API');
             expect(event.metadata.vip).toBe(true);
+        });
+
+        it('defaults missing chat avatarUrl to canonical fallback when creating chat events', () => {
+            const event = PlatformEvents.createChatMessageEvent(
+                'tiktok',
+                {
+                    username: 'test-user',
+                    userId: 'test-user-id'
+                },
+                'hello'
+            );
+
+            expect(event.avatarUrl).toBe(DEFAULT_AVATAR_URL);
         });
 
         it('should validate during build process', () => {

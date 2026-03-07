@@ -1,6 +1,7 @@
 
 const crypto = require('crypto');
 const { getSystemTimestampISO } = require('../utils/timestamp');
+const { DEFAULT_AVATAR_URL } = require('../constants/avatar');
 
 const PlatformEvents = {
     // Platform Events
@@ -67,15 +68,21 @@ const PlatformEvents = {
 
 const VALID_PLATFORMS = ['twitch', 'youtube', 'tiktok'];
 
+function resolveAvatarUrl(avatarUrl) {
+    const normalizedAvatarUrl = typeof avatarUrl === 'string' ? avatarUrl.trim() : '';
+    return normalizedAvatarUrl || DEFAULT_AVATAR_URL;
+}
+
 const EVENT_SCHEMAS = {
     'platform:chat-message': {
-        required: ['type', 'platform', 'username', 'userId', 'message', 'timestamp'],
-        optional: ['metadata'],
+        required: ['type', 'platform', 'username', 'userId', 'message', 'avatarUrl', 'timestamp'],
+        optional: ['isMod', 'isSubscriber', 'isBroadcaster', 'metadata'],
         properties: {
             type: { type: 'string', enum: ['platform:chat-message'] },
             platform: { type: 'string', enum: VALID_PLATFORMS },
             username: { type: 'string' },
             userId: { type: 'string' },
+            avatarUrl: { type: 'string' },
             message: {
                 type: 'object',
                 required: ['text'],
@@ -83,59 +90,70 @@ const EVENT_SCHEMAS = {
                     text: { type: 'string' }
                 }
             },
+            isMod: { type: 'boolean' },
+            isSubscriber: { type: 'boolean' },
+            isBroadcaster: { type: 'boolean' },
             timestamp: { type: 'string' },
             metadata: { type: 'object' }
         }
     },
     'platform:chat-connected': {
         required: ['type', 'platform', 'connectionId', 'timestamp'],
+        optional: ['metadata'],
         properties: {
             type: { type: 'string', enum: ['platform:chat-connected'] },
             platform: { type: 'string', enum: VALID_PLATFORMS },
             connectionId: { type: 'string' },
-            timestamp: { type: 'string' }
+            timestamp: { type: 'string' },
+            metadata: { type: 'object' }
         }
     },
     'platform:chat-disconnected': {
         required: ['type', 'platform', 'reason', 'willReconnect'],
+        optional: ['timestamp', 'metadata'],
         properties: {
             type: { type: 'string', enum: ['platform:chat-disconnected'] },
             platform: { type: 'string', enum: VALID_PLATFORMS },
             reason: { type: 'string' },
-            willReconnect: { type: 'boolean' }
+            willReconnect: { type: 'boolean' },
+            timestamp: { type: 'string' },
+            metadata: { type: 'object' }
         }
     },
     'platform:follow': {
-        required: ['type', 'platform', 'username', 'userId', 'timestamp'],
+        required: ['type', 'platform', 'username', 'userId', 'avatarUrl', 'timestamp'],
         optional: ['metadata'],
         properties: {
             type: { type: 'string', enum: ['platform:follow'] },
             platform: { type: 'string', enum: VALID_PLATFORMS },
             username: { type: 'string' },
             userId: { type: 'string' },
+            avatarUrl: { type: 'string' },
             timestamp: { type: 'string' },
             metadata: { type: 'object' }
         }
     },
     'platform:share': {
-        required: ['type', 'platform', 'username', 'userId', 'timestamp'],
+        required: ['type', 'platform', 'username', 'userId', 'avatarUrl', 'timestamp'],
         optional: ['metadata'],
         properties: {
             type: { type: 'string', enum: ['platform:share'] },
             platform: { type: 'string', enum: VALID_PLATFORMS },
             username: { type: 'string' },
             userId: { type: 'string' },
+            avatarUrl: { type: 'string' },
             timestamp: { type: 'string' },
             metadata: { type: 'object' }
         }
     },
     'platform:paypiggy': {
-        required: ['type', 'platform', 'username', 'userId', 'timestamp'],
+        required: ['type', 'platform', 'username', 'userId', 'avatarUrl', 'timestamp'],
         properties: {
             type: { type: 'string', enum: ['platform:paypiggy'] },
             platform: { type: 'string', enum: VALID_PLATFORMS },
             username: { type: 'string' },
             userId: { type: 'string' },
+            avatarUrl: { type: 'string' },
             tier: { type: 'string' },
             months: { type: 'number' },
             message: { type: 'string' },
@@ -143,12 +161,13 @@ const EVENT_SCHEMAS = {
         }
     },
     'platform:giftpaypiggy': {
-        required: ['type', 'platform', 'username', 'userId', 'giftCount', 'timestamp'],
+        required: ['type', 'platform', 'username', 'userId', 'avatarUrl', 'giftCount', 'timestamp'],
         properties: {
             type: { type: 'string', enum: ['platform:giftpaypiggy'] },
             platform: { type: 'string', enum: VALID_PLATFORMS },
             username: { type: 'string' },
             userId: { type: 'string' },
+            avatarUrl: { type: 'string' },
             giftCount: { type: 'number' },
             tier: { type: 'string' },
             isAnonymous: { type: 'boolean' },
@@ -157,13 +176,14 @@ const EVENT_SCHEMAS = {
         }
     },
     'platform:gift': {
-        required: ['type', 'platform', 'username', 'userId', 'id', 'giftType', 'giftCount', 'amount', 'currency', 'timestamp'],
+        required: ['type', 'platform', 'username', 'userId', 'avatarUrl', 'id', 'giftType', 'giftCount', 'amount', 'currency', 'timestamp'],
         optional: ['repeatCount', 'message', 'cheermoteInfo', 'isError', 'isAnonymous', 'isAggregated', 'aggregatedCount', 'enhancedGiftData', 'sourceType'],
         properties: {
             type: { type: 'string', enum: ['platform:gift'] },
             platform: { type: 'string', enum: VALID_PLATFORMS },
             username: { type: 'string' },
             userId: { type: 'string' },
+            avatarUrl: { type: 'string' },
             id: { type: 'string' },
             giftType: { type: 'string' },
             giftCount: { type: 'number' },
@@ -182,13 +202,14 @@ const EVENT_SCHEMAS = {
         }
     },
     'platform:envelope': {
-        required: ['type', 'platform', 'username', 'userId', 'id', 'giftType', 'giftCount', 'amount', 'currency', 'timestamp'],
+        required: ['type', 'platform', 'username', 'userId', 'avatarUrl', 'id', 'giftType', 'giftCount', 'amount', 'currency', 'timestamp'],
         optional: ['repeatCount', 'message', 'isError', 'sourceType'],
         properties: {
             type: { type: 'string', enum: ['platform:envelope'] },
             platform: { type: 'string', enum: VALID_PLATFORMS },
             username: { type: 'string' },
             userId: { type: 'string' },
+            avatarUrl: { type: 'string' },
             id: { type: 'string' },
             giftType: { type: 'string' },
             giftCount: { type: 'number' },
@@ -202,13 +223,14 @@ const EVENT_SCHEMAS = {
         }
     },
     'platform:raid': {
-        required: ['type', 'platform', 'username', 'userId', 'viewerCount', 'timestamp'],
+        required: ['type', 'platform', 'username', 'userId', 'avatarUrl', 'viewerCount', 'timestamp'],
         optional: ['metadata'],
         properties: {
             type: { type: 'string', enum: ['platform:raid'] },
             platform: { type: 'string', enum: VALID_PLATFORMS },
             username: { type: 'string' },
             userId: { type: 'string' },
+            avatarUrl: { type: 'string' },
             viewerCount: { type: 'number' },
             timestamp: { type: 'string' },
             metadata: { type: 'object' }
@@ -533,6 +555,7 @@ class PlatformEventBuilder {
             platform: params.platform,
             username: params.username,
             userId: params.userId,
+            avatarUrl: resolveAvatarUrl(params.avatarUrl),
             message: {
                 text: params.message
             },
@@ -558,6 +581,7 @@ class PlatformEventBuilder {
             platform: params.platform,
             username: params.username,
             userId: params.userId,
+            avatarUrl: resolveAvatarUrl(params.avatarUrl),
             id: params.id,
             giftType: params.giftType,
             giftCount: params.giftCount,
@@ -585,6 +609,7 @@ class PlatformEventBuilder {
             platform: params.platform,
             username: params.username,
             userId: params.userId,
+            avatarUrl: resolveAvatarUrl(params.avatarUrl),
             timestamp: params.timestamp
         };
         if (params.metadata !== undefined) {
@@ -643,6 +668,7 @@ class PlatformEventBuilder {
             platform,
             username: data.username,
             userId: data.userId,
+            avatarUrl: resolveAvatarUrl(data.avatarUrl),
             message: {
                 text: data.message.text
             },
@@ -698,6 +724,7 @@ class PlatformEventBuilder {
             platform,
             username: data.username,
             userId: data.userId,
+            avatarUrl: resolveAvatarUrl(data.avatarUrl),
             id: data.id,
             giftType: data.giftType,
             giftCount: data.giftCount,
@@ -734,6 +761,7 @@ class PlatformEventBuilder {
             platform,
             username: data.username,
             userId: data.userId,
+            avatarUrl: resolveAvatarUrl(data.avatarUrl),
             timestamp: timestamp.toISOString(),
             metadata: {}
         };
@@ -801,6 +829,7 @@ class EnhancedPlatformEvents {
             timestamp,
             username: normalizedIdentity.username,
             userId: normalizedIdentity.userId,
+            avatarUrl: normalizedIdentity.avatarUrl,
             message: {
                 text: this._sanitizeText(message)
             },
@@ -809,6 +838,12 @@ class EnhancedPlatformEvents {
     }
 
     static createNotificationEvent(platform, notificationType, data) {
+        const username = typeof data?.username === 'string' && data.username.trim()
+            ? data.username
+            : undefined;
+        const userId = typeof data?.userId === 'string' && data.userId.trim()
+            ? data.userId
+            : undefined;
         return {
             id: this._generateId(),
             type: 'platform:notification',
@@ -818,8 +853,8 @@ class EnhancedPlatformEvents {
             timestamp: getSystemTimestampISO(),
             priority: this._calculatePriority(notificationType),
             data: data || {},
-            username: data?.username || null,
-            userId: data?.userId || null
+            ...(username ? { username } : {}),
+            ...(userId ? { userId } : {})
         };
     }
 
@@ -875,7 +910,8 @@ class EnhancedPlatformEvents {
             platform: platformName,
             original: rawIdentity,
             userId,
-            username
+            username,
+            avatarUrl: resolveAvatarUrl(rawIdentity.avatarUrl)
         };
     }
 
@@ -918,7 +954,8 @@ class EnhancedPlatformEvents {
             platform: this._validatePlatform(platform),
             timestamp: timestamp.toISOString(),
             username: normalizedIdentity.username,
-            userId: normalizedIdentity.userId
+            userId: normalizedIdentity.userId,
+            avatarUrl: normalizedIdentity.avatarUrl
         };
 
         if (rawMessage.emotes !== undefined) {
@@ -972,7 +1009,8 @@ class EnhancedPlatformEvents {
             amount: rawGift.amount,
             currency: rawGift.currency,
             username: normalizedIdentity.username,
-            userId: normalizedIdentity.userId
+            userId: normalizedIdentity.userId,
+            avatarUrl: normalizedIdentity.avatarUrl
         };
 
         if (rawGift.message !== undefined) {
@@ -983,13 +1021,12 @@ class EnhancedPlatformEvents {
     }
 
     static validateChatMessageEvent(event) {
-        return !!(event &&
-               event.type === 'platform:chat-message' &&
-               VALID_PLATFORMS.includes(event.platform) &&
-               event.username &&
-               event.userId &&
-               event.message && typeof event.message.text === 'string' &&
-               event.timestamp);
+        if (!event || event.type !== 'platform:chat-message') {
+            return false;
+        }
+
+        const validator = new PlatformEventValidator();
+        return validator.validate(event).valid;
     }
 
     static validateNotificationEvent(event) {
@@ -1175,6 +1212,11 @@ class EventBuilder {
 
     userId(userId) {
         this._event.userId = userId;
+        return this;
+    }
+
+    avatarUrl(avatarUrl) {
+        this._event.avatarUrl = avatarUrl;
         return this;
     }
 

@@ -114,6 +114,14 @@ function createYouTubeMonetizationParser(options = {}) {
         return typeof raw === 'string' ? raw.trim() : '';
     };
 
+    const resolveAuthorAvatarUrl = (chatItem) => {
+        const avatarUrl = chatItem?.item?.author?.thumbnails?.[0]?.url;
+        if (typeof avatarUrl !== 'string') {
+            return '';
+        }
+        return avatarUrl.trim();
+    };
+
     const parseSuperChat = (chatItem) => {
         const { amount, currency } = parsePurchaseAmount(chatItem, 'YouTube Super Chat');
         return {
@@ -123,6 +131,7 @@ function createYouTubeMonetizationParser(options = {}) {
             giftCount: 1,
             amount,
             currency,
+            avatarUrl: resolveAuthorAvatarUrl(chatItem),
             message: extractMessageText(chatItem?.item?.message)
         };
     };
@@ -141,6 +150,7 @@ function createYouTubeMonetizationParser(options = {}) {
             giftCount: 1,
             amount,
             currency,
+            avatarUrl: resolveAuthorAvatarUrl(chatItem),
             message: stickerMessage || ''
         };
     };
@@ -154,6 +164,7 @@ function createYouTubeMonetizationParser(options = {}) {
         const payload = {
             timestamp: resolveTimestamp(chatItem, 'YouTube gift purchase'),
             giftCount,
+            avatarUrl: resolveAuthorAvatarUrl(chatItem),
             message: extractMessageText(chatItem?.item?.message)
         };
         const id = resolveOptionalId(chatItem);
@@ -166,6 +177,7 @@ function createYouTubeMonetizationParser(options = {}) {
     const parseMembership = (chatItem) => {
         const payload = {
             timestamp: resolveTimestamp(chatItem, 'YouTube membership'),
+            avatarUrl: resolveAuthorAvatarUrl(chatItem),
             membershipLevel: extractStructuredText(chatItem?.item?.headerPrimaryText),
             message: extractStructuredText(chatItem?.item?.headerSubtext) || extractMessageText(chatItem?.item?.message),
             months: Number.isFinite(Number(chatItem?.item?.memberMilestoneDurationInMonths))

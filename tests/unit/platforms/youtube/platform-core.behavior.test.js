@@ -2,6 +2,9 @@ const { describe, it, expect, afterEach } = require('bun:test');
 const { createMockFn, restoreAllMocks } = require('../../../helpers/bun-mock-utils');
 const { noOpLogger } = require('../../../helpers/mock-factories');
 const { YouTubePlatform } = require('../../../../src/platforms/youtube');
+const { DEFAULT_AVATAR_URL } = require('../../../../src/constants/avatar');
+
+const FALLBACK_AVATAR_URL = DEFAULT_AVATAR_URL;
 
 const createStreamDetectionService = (overrides = {}) => ({
     detectLiveStreams: createMockFn().mockResolvedValue({
@@ -116,5 +119,104 @@ describe('YouTubePlatform behavior', () => {
         const results = skipTypes.map((type) => platform._shouldSkipEvent({ type }));
 
         expect(results).toEqual([true, true, true]);
+    });
+
+    it('emits monetization events with canonical avatarUrl from author thumbnail', async () => {
+        const platform = createPlatform();
+        const giftEvents = [];
+        platform.handlers.onGift = (payload) => giftEvents.push(payload);
+
+        await platform.handleSuperChat({
+            item: {
+                type: 'LiveChatPaidMessage',
+                id: 'LCC.avatar-test-superchat',
+                timestamp_usec: '1700000000000000',
+                purchase_amount: 5,
+                purchase_currency: 'USD',
+                author: {
+                    id: 'UC_TEST_CHANNEL_AVATAR',
+                    name: 'AvatarViewer',
+                    thumbnails: [{ url: 'https://example.invalid/youtube-monetization-avatar.jpg' }]
+                },
+                message: { text: 'Avatar super chat' }
+            }
+        });
+
+        expect(giftEvents).toHaveLength(1);
+        expect(giftEvents[0].avatarUrl).toBe('https://example.invalid/youtube-monetization-avatar.jpg');
+    });
+
+    it('emits fallback avatarUrl for super chat when author thumbnail is missing', async () => {
+        const platform = createPlatform();
+        const giftEvents = [];
+        platform.handlers.onGift = (payload) => giftEvents.push(payload);
+
+        await platform.handleSuperChat({
+            item: {
+                type: 'LiveChatPaidMessage',
+                id: 'LCC.avatar-fallback-superchat',
+                timestamp_usec: '1700000000000000',
+                purchase_amount: 5,
+                purchase_currency: 'USD',
+                author: {
+                    id: 'UC_TEST_CHANNEL_NO_AVATAR',
+                    name: 'NoAvatarViewer',
+                    thumbnails: []
+                },
+                message: { text: 'Fallback super chat' }
+            }
+        });
+
+        expect(giftEvents).toHaveLength(1);
+        expect(giftEvents[0].avatarUrl).toBe(FALLBACK_AVATAR_URL);
+    });
+
+    it('emits fallback avatarUrl on degraded super chat error payloads', async () => {
+        const platform = createPlatform();
+        const giftEvents = [];
+        platform.handlers.onGift = (payload) => giftEvents.push(payload);
+
+        await platform.handleSuperChat({
+            item: {
+                type: 'LiveChatPaidMessage',
+                id: 'LCC.avatar-fallback-superchat-error',
+                timestamp_usec: '1700000000000000',
+                author: {
+                    id: 'UC_TEST_CHANNEL_NO_AVATAR_ERROR',
+                    name: 'NoAvatarErrorViewer',
+                    thumbnails: []
+                },
+                message: { text: 'Fallback super chat error' }
+            }
+        });
+
+        expect(giftEvents).toHaveLength(1);
+        expect(giftEvents[0].isError).toBe(true);
+        expect(giftEvents[0].avatarUrl).toBe(FALLBACK_AVATAR_URL);
+    });
+
+    it('emits fallback avatarUrl for chat messages when thumbnail is missing', () => {
+        const platform = createPlatform();
+        const chatEvents = [];
+        platform.handlers.onChat = (payload) => chatEvents.push(payload);
+
+        platform.handleChatTextMessage({
+            item: {
+                type: 'LiveChatTextMessage',
+                id: 'LCC.chat-avatar-fallback',
+                timestamp_usec: '1700000000000000',
+                author: {
+                    id: 'UC_TEST_CHAT_NO_AVATAR',
+                    name: 'NoAvatarChatUser',
+                    is_moderator: false,
+                    badges: [],
+                    thumbnails: []
+                },
+                message: { text: 'Chat fallback avatar message' }
+            }
+        });
+
+        expect(chatEvents).toHaveLength(1);
+        expect(chatEvents[0].avatarUrl).toBe(FALLBACK_AVATAR_URL);
     });
 });

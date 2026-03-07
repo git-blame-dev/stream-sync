@@ -77,6 +77,33 @@ function extractTikTokGiftData(data) {
     };
 }
 
+function extractTikTokAvatarUrl(data) {
+    if (!data || typeof data !== 'object') {
+        return '';
+    }
+
+    const userData = (data.user && typeof data.user === 'object') ? data.user : null;
+    if (!userData) {
+        return '';
+    }
+
+    const profilePictureUrl = typeof userData.profilePictureUrl === 'string'
+        ? userData.profilePictureUrl.trim()
+        : '';
+    if (profilePictureUrl) {
+        return profilePictureUrl;
+    }
+
+    const profilePictureArray = Array.isArray(userData.profilePicture?.url)
+        ? userData.profilePicture.url
+        : [];
+    const firstProfilePictureUrl = typeof profilePictureArray[0] === 'string'
+        ? profilePictureArray[0].trim()
+        : '';
+
+    return firstProfilePictureUrl || '';
+}
+
 function formatCoinAmount(amount, currency = 'coins') {
     if (!Number.isFinite(Number(amount)) || amount <= 0) {
         return '';
@@ -92,6 +119,7 @@ function formatCoinAmount(amount, currency = 'coins') {
 
 module.exports = {
     extractTikTokUserData,
+    extractTikTokAvatarUrl,
     extractTikTokGiftData,
     formatCoinAmount
 };

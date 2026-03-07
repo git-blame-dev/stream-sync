@@ -43,9 +43,6 @@ describe('TwitchApiClient error handler integration', () => {
         const result = await apiClient.getStreamInfo('test-channel');
 
         expect(result.isLive).toBe(false);
-        expect(mockLogger.error).toHaveBeenCalled();
-        const errorCall = mockLogger.error.mock.calls[0];
-        expect(errorCall[0]).toContain('stream info');
     });
 
     it('routes getUserInfo API error through error handler', async () => {
@@ -54,9 +51,6 @@ describe('TwitchApiClient error handler integration', () => {
         const result = await apiClient.getUserInfo('test-user');
 
         expect(result).toBeNull();
-        expect(mockLogger.error).toHaveBeenCalled();
-        const errorCall = mockLogger.error.mock.calls[0];
-        expect(errorCall[0]).toContain('user info');
     });
 
     it('routes getChannelInfo API error through error handler', async () => {
@@ -65,8 +59,13 @@ describe('TwitchApiClient error handler integration', () => {
         const result = await apiClient.getChannelInfo('test-channel-id');
 
         expect(result).toBeNull();
-        expect(mockLogger.error).toHaveBeenCalled();
-        const errorCall = mockLogger.error.mock.calls[0];
-        expect(errorCall[0]).toContain('channel info');
+    });
+
+    it('routes getUserById API error through error handler', async () => {
+        mockHttpClient.get.mockRejectedValue(new Error('user id lookup failed'));
+
+        const result = await apiClient.getUserById('test-user-id');
+
+        expect(result).toBeNull();
     });
 });

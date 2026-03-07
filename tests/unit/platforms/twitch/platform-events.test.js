@@ -5,6 +5,7 @@ const { noOpLogger } = require('../../../helpers/mock-factories');
 const { TwitchPlatform } = require('../../../../src/platforms/twitch');
 const TwitchEventSub = require('../../../../src/platforms/twitch-eventsub');
 const { secrets, _resetForTesting, initializeStaticSecrets } = require('../../../../src/core/secrets');
+const { DEFAULT_AVATAR_URL } = require('../../../../src/constants/avatar');
 
 const createTwitchAuth = (overrides = {}) => ({
     isReady: createMockFn().mockReturnValue(overrides.ready ?? true),
@@ -18,6 +19,7 @@ const createMockApiClient = () => ({
 });
 
 const TEST_USER_ID = 'test-user-id';
+const FALLBACK_AVATAR_URL = DEFAULT_AVATAR_URL;
 
 const baseConfig = {
     enabled: true,
@@ -116,6 +118,7 @@ describe('TwitchPlatform event behaviors', () => {
             platform: 'twitch',
             isError: true
         });
+        expect(received[0].avatarUrl).toBe(FALLBACK_AVATAR_URL);
         expect(received[0].timestamp).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/);
     });
 
@@ -165,6 +168,7 @@ describe('TwitchPlatform event behaviors', () => {
             isError: true,
             userId: 'test-gift-1'
         });
+        expect(received[0].avatarUrl).toBe(FALLBACK_AVATAR_URL);
         expect(received[0].timestamp).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/);
     });
 
@@ -191,6 +195,7 @@ describe('TwitchPlatform event behaviors', () => {
             username: 'testGifter',
             userId: 'test-gift-2'
         });
+        expect(received[0].avatarUrl).toBe(FALLBACK_AVATAR_URL);
         expect(received[0].timestamp).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/);
     });
 
@@ -230,7 +235,192 @@ describe('TwitchPlatform event behaviors', () => {
         });
 
         expect(events).toHaveLength(1);
+        expect(events[0].avatarUrl).toBe(FALLBACK_AVATAR_URL);
         expect(events[0].metadata.correlationId).toBeDefined();
+    });
+
+    it('resolves and caches Twitch avatar by user id for repeated events', async () => {
+        const platform = new TwitchPlatform(baseConfig, {
+            twitchAuth: createTwitchAuth({ userId: TEST_USER_ID }),
+            logger: noOpLogger
+        });
+
+        const lookupCalls = [];
+        platform.apiClient = {
+            getUserById: createMockFn().mockImplementation(async (userId) => {
+                lookupCalls.push(userId);
+                return {
+                    id: userId,
+                    profile_image_url: 'https://example.invalid/twitch-user-avatar.jpg'
+                };
+            })
+        };
+
+        const received = [];
+        platform.handlers = { onFollow: (payload) => received.push(payload) };
+
+        await platform.handleFollowEvent({
+            username: 'lookup-user',
+            userId: 'lookup-user-id',
+            timestamp: '2024-01-01T00:00:00Z'
+        });
+
+        await platform.handleFollowEvent({
+            username: 'lookup-user',
+            userId: 'lookup-user-id',
+            timestamp: '2024-01-01T00:00:01Z'
+        });
+
+        expect(received).toHaveLength(2);
+        expect(received[0].avatarUrl).toBe('https://example.invalid/twitch-user-avatar.jpg');
+        expect(received[1].avatarUrl).toBe('https://example.invalid/twitch-user-avatar.jpg');
+        expect(lookupCalls).toEqual(['lookup-user-id']);
+    });
+
+    it('caches fallback avatar for repeated events when Helix lookup returns no avatar', async () => {
+        const platform = new TwitchPlatform(baseConfig, {
+            twitchAuth: createTwitchAuth({ userId: TEST_USER_ID }),
+            logger: noOpLogger
+        });
+
+        const lookupCalls = [];
+        platform.apiClient = {
+            getUserById: createMockFn().mockImplementation(async (userId) => {
+                lookupCalls.push(userId);
+                return null;
+            })
+        };
+
+        const received = [];
+        platform.handlers = { onFollow: (payload) => received.push(payload) };
+
+        await platform.handleFollowEvent({
+            username: 'fallback-user',
+            userId: 'fallback-user-id',
+            timestamp: '2024-01-01T00:00:00Z'
+        });
+        await platform.handleFollowEvent({
+            username: 'fallback-user',
+            userId: 'fallback-user-id',
+            timestamp: '2024-01-01T00:00:01Z'
+        });
+
+        expect(received).toHaveLength(2);
+        expect(received[0].avatarUrl).toBe(FALLBACK_AVATAR_URL);
+        expect(received[1].avatarUrl).toBe(FALLBACK_AVATAR_URL);
+        expect(lookupCalls).toEqual(['fallback-user-id']);
+    });
+
+    it('caches fallback avatar for repeated events when Helix lookup throws', async () => {
+        const platform = new TwitchPlatform(baseConfig, {
+            twitchAuth: createTwitchAuth({ userId: TEST_USER_ID }),
+            logger: noOpLogger
+        });
+
+        const lookupCalls = [];
+        platform.apiClient = {
+            getUserById: createMockFn().mockImplementation(async (userId) => {
+                lookupCalls.push(userId);
+                throw new Error('helix unavailable');
+            })
+        };
+
+        const received = [];
+        platform.handlers = { onFollow: (payload) => received.push(payload) };
+
+        await platform.handleFollowEvent({
+            username: 'error-user',
+            userId: 'error-user-id',
+            timestamp: '2024-01-01T00:00:00Z'
+        });
+        await platform.handleFollowEvent({
+            username: 'error-user',
+            userId: 'error-user-id',
+            timestamp: '2024-01-01T00:00:01Z'
+        });
+
+        expect(received).toHaveLength(2);
+        expect(received[0].avatarUrl).toBe(FALLBACK_AVATAR_URL);
+        expect(received[1].avatarUrl).toBe(FALLBACK_AVATAR_URL);
+        expect(lookupCalls).toEqual(['error-user-id']);
+    });
+
+    it('evicts oldest avatar cache entries when configured cache size is exceeded', async () => {
+        const platform = new TwitchPlatform(baseConfig, {
+            twitchAuth: createTwitchAuth({ userId: TEST_USER_ID }),
+            logger: noOpLogger,
+            avatarCacheMaxSize: 2
+        });
+
+        const received = [];
+        platform.handlers = { onFollow: (payload) => received.push(payload) };
+
+        await platform.handleFollowEvent({
+            username: 'user-one',
+            userId: 'u1',
+            avatarUrl: 'https://example.invalid/u1.png',
+            timestamp: '2024-01-01T00:00:00Z'
+        });
+        await platform.handleFollowEvent({
+            username: 'user-two',
+            userId: 'u2',
+            avatarUrl: 'https://example.invalid/u2.png',
+            timestamp: '2024-01-01T00:00:01Z'
+        });
+        await platform.handleFollowEvent({
+            username: 'user-three',
+            userId: 'u3',
+            avatarUrl: 'https://example.invalid/u3.png',
+            timestamp: '2024-01-01T00:00:02Z'
+        });
+
+        await platform.handleFollowEvent({
+            username: 'user-one',
+            userId: 'u1',
+            timestamp: '2024-01-01T00:00:03Z'
+        });
+        await platform.handleFollowEvent({
+            username: 'user-two',
+            userId: 'u2',
+            timestamp: '2024-01-01T00:00:04Z'
+        });
+
+        expect(received).toHaveLength(5);
+        expect(received[0].avatarUrl).toBe('https://example.invalid/u1.png');
+        expect(received[1].avatarUrl).toBe('https://example.invalid/u2.png');
+        expect(received[2].avatarUrl).toBe('https://example.invalid/u3.png');
+        expect(received[3].avatarUrl).toBe(FALLBACK_AVATAR_URL);
+        expect(received[4].avatarUrl).toBe('https://example.invalid/u2.png');
+    });
+
+    it('clears avatar cache during cleanup', async () => {
+        const platform = new TwitchPlatform(baseConfig, {
+            twitchAuth: createTwitchAuth({ userId: TEST_USER_ID }),
+            logger: noOpLogger
+        });
+
+        const received = [];
+        platform.handlers = { onFollow: (payload) => received.push(payload) };
+
+        await platform.handleFollowEvent({
+            username: 'cleanup-user',
+            userId: 'cleanup-user-id',
+            avatarUrl: 'https://example.invalid/cleanup-user.png',
+            timestamp: '2024-01-01T00:00:00Z'
+        });
+
+        await platform.cleanup();
+        platform.handlers = { onFollow: (payload) => received.push(payload) };
+
+        await platform.handleFollowEvent({
+            username: 'cleanup-user',
+            userId: 'cleanup-user-id',
+            timestamp: '2024-01-01T00:00:01Z'
+        });
+
+        expect(received).toHaveLength(2);
+        expect(received[0].avatarUrl).toBe('https://example.invalid/cleanup-user.png');
+        expect(received[1].avatarUrl).toBe(FALLBACK_AVATAR_URL);
     });
 
     it('returns user-friendly errors when sending without an EventSub connection', async () => {
