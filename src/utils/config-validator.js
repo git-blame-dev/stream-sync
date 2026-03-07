@@ -25,10 +25,11 @@ class ConfigValidator {
     }
 
     static parseNumber(value, options = {}) {
-        const { defaultValue, min, max, allowZero = true } = options;
+        const { defaultValue, min, max, allowZero = true, requireInteger = false } = options;
         if (value === undefined || value === null) return defaultValue;
         const parsed = Number(value);
         if (!Number.isFinite(parsed)) return defaultValue;
+        if (requireInteger && !Number.isInteger(parsed)) return defaultValue;
         if (!allowZero && parsed === 0) return defaultValue;
         if (typeof min === 'number' && parsed < min) return defaultValue;
         if (typeof max === 'number' && parsed > max) return defaultValue;
@@ -40,7 +41,8 @@ class ConfigValidator {
         return ConfigValidator.parseNumber(value, {
             defaultValue: DEFAULTS[section][field],
             min: spec.min,
-            max: spec.max
+            max: spec.max,
+            requireInteger: spec.integer === true
         });
     }
 
@@ -73,7 +75,8 @@ class ConfigValidator {
                 return ConfigValidator.parseNumber(value, {
                     defaultValue,
                     min: spec.min,
-                    max: spec.max
+                    max: spec.max,
+                    requireInteger: spec.integer === true
                 });
             case 'string':
                 if (spec.enum) {
@@ -123,6 +126,7 @@ class ConfigValidator {
             spam: ConfigValidator._normalizeSpamSection(rawConfig.spam || {}),
             displayQueue: ConfigValidator._normalizeDisplayQueueSection(rawConfig.displayQueue || {}),
             logging: ConfigValidator._normalizeLoggingSection(rawConfig.logging || {}),
+            gui: ConfigValidator._normalizeGuiSection(rawConfig.gui || {}),
             farewell: ConfigValidator._normalizeFarewellSection(rawConfig.farewell || {}),
             commands: ConfigValidator._normalizeCommandsSection(rawConfig.commands || {}),
             vfx: ConfigValidator._normalizeVfxSection(rawConfig.vfx || {}),
@@ -346,6 +350,16 @@ class ConfigValidator {
             fileLevel: ConfigValidator.parseString(raw.fileLevel, null),
             fileLoggingEnabled: ConfigValidator.parseBoolean(raw.fileLoggingEnabled, null)
         };
+    }
+
+    static _normalizeGuiSection(raw) {
+        const normalized = ConfigValidator.normalizeFromSchema('gui', raw);
+
+        if (normalized.host === '') {
+            normalized.host = DEFAULTS.gui.host;
+        }
+
+        return normalized;
     }
 
     static _normalizeFarewellSection(raw) {

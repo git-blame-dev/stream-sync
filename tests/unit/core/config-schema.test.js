@@ -52,6 +52,31 @@ describe('buildDefaultsFromSchema()', () => {
         expect(defaults.handcam.enabled).toBe(false);
         expect(defaults.handcam.maxSize).toBe(50);
     });
+
+    it('includes gui defaults for route toggles, limits, and per-type visibility', () => {
+        const defaults = buildDefaultsFromSchema();
+
+        expect(defaults.gui).toEqual({
+            enableDock: false,
+            enableOverlay: false,
+            host: '127.0.0.1',
+            port: 3399,
+            messageCharacterLimit: 0,
+            overlayMaxMessages: 3,
+            overlayMaxLinesPerMessage: 3,
+            showMessages: true,
+            showCommands: true,
+            showGreetings: true,
+            showFarewells: true,
+            showFollows: true,
+            showShares: true,
+            showRaids: true,
+            showGifts: true,
+            showPaypiggies: true,
+            showGiftPaypiggies: true,
+            showEnvelopes: true
+        });
+    });
 });
 
 describe('DEFAULTS constant', () => {

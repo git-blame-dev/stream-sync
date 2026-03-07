@@ -182,6 +182,7 @@ function buildConfig(normalized, options = {}) {
         spam: buildSpamConfig(normalized),
         timing: { ...normalized.timing },
         cooldowns: buildCooldownsConfig(normalized),
+        gui: { ...normalized.gui },
         follows: { command: normalized.follows.command },
         raids: { command: normalized.raids.command },
         paypiggies: { command: normalized.paypiggies.command },

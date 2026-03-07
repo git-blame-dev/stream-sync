@@ -58,6 +58,26 @@ const RAW_TEST_CONFIG = {
         detectionWindow: '60',
         maxIndividualNotifications: '5',
         lowValueThreshold: '10'
+    },
+    gui: {
+        enableDock: 'false',
+        enableOverlay: 'false',
+        host: '127.0.0.1',
+        port: '3399',
+        messageCharacterLimit: '0',
+        overlayMaxMessages: '3',
+        overlayMaxLinesPerMessage: '3',
+        showMessages: 'true',
+        showCommands: 'true',
+        showGreetings: 'true',
+        showFarewells: 'true',
+        showFollows: 'true',
+        showShares: 'true',
+        showRaids: 'true',
+        showGifts: 'true',
+        showPaypiggies: 'true',
+        showGiftPaypiggies: 'true',
+        showEnvelopes: 'true'
     }
 };
 
@@ -163,6 +183,7 @@ function createConfigFixture(overrides = {}) {
         timing: timingOverrides,
         spam: spamOverrides,
         http: httpOverrides,
+        gui: guiOverrides,
         handcam: handcamOverrides,
         tiktok: tiktokOverrides,
         twitch: twitchOverrides,
@@ -179,6 +200,7 @@ function createConfigFixture(overrides = {}) {
         timing: { ...base.timing, ...timingOverrides },
         spam: { ...base.spam, ...spamOverrides },
         http: { ...base.http, ...httpOverrides },
+        gui: { ...base.gui, ...guiOverrides },
         handcam: { ...base.handcam, ...handcamOverrides },
         tiktok: applyInheritableOverrides(generalOverrides, base.tiktok, tiktokOverrides),
         twitch: applyInheritableOverrides(generalOverrides, base.twitch, twitchOverrides),

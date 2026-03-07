@@ -10,9 +10,12 @@ const {
     buildGiftConfig,
     buildEnvelopeConfig,
     buildVfxConfig,
+    buildConfig,
     buildLoggingConfig,
     DEFAULT_LOGGING_CONFIG
 } = require('../../../src/core/config-builders');
+const { ConfigValidator } = require('../../../src/utils/config-validator');
+const { getRawTestConfig } = require('../../helpers/config-fixture');
 
 describe('config-builders', () => {
     describe('buildGeneralConfig', () => {
@@ -453,6 +456,21 @@ describe('config-builders', () => {
             expect(DEFAULT_LOGGING_CONFIG).toBeDefined();
             expect(DEFAULT_LOGGING_CONFIG.console.enabled).toBe(true);
             expect(DEFAULT_LOGGING_CONFIG.file.enabled).toBe(true);
+        });
+    });
+
+    describe('buildConfig', () => {
+        it('includes gui section from normalized config', () => {
+            const normalized = ConfigValidator.normalize(getRawTestConfig());
+            normalized.gui = {
+                ...normalized.gui,
+                enableDock: true,
+                messageCharacterLimit: 120
+            };
+
+            const result = buildConfig(normalized);
+
+            expect(result.gui).toEqual(normalized.gui);
         });
     });
 });

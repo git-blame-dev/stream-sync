@@ -17,6 +17,7 @@ describe('config fixtures', () => {
         expect(raw.general).toBeDefined();
         expect(raw.obs).toBeDefined();
         expect(raw.cooldowns).toBeDefined();
+        expect(raw.gui).toBeDefined();
         expect(raw.obs.chatMsgGroup).toBe('test-chat-grp');
     });
 
@@ -72,5 +73,17 @@ describe('config fixtures', () => {
         expect(config.general.messagesEnabled).toBe(false);
         expect(config.tiktok.messagesEnabled).toBe(false);
         expect(config.general.viewerCountPollingIntervalMs).toBe(60000);
+        expect(config.gui).toBeDefined();
+        expect(config.gui.enableDock).toBe(false);
+    });
+
+    it('merges gui overrides without dropping default gui fields', () => {
+        const config = createConfigFixture({
+            gui: { enableDock: true }
+        });
+
+        expect(config.gui.enableDock).toBe(true);
+        expect(config.gui.enableOverlay).toBe(false);
+        expect(config.gui.port).toBe(3399);
     });
 });

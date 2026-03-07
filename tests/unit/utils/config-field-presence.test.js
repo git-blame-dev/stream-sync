@@ -454,6 +454,37 @@ describe('Config field presence - all normalizers return expected fields', () =>
         });
     });
 
+    describe('_normalizeGuiSection', () => {
+        const EXPECTED_FIELDS = [
+            'enableDock',
+            'enableOverlay',
+            'host',
+            'port',
+            'messageCharacterLimit',
+            'overlayMaxMessages',
+            'overlayMaxLinesPerMessage',
+            'showMessages',
+            'showCommands',
+            'showGreetings',
+            'showFarewells',
+            'showFollows',
+            'showShares',
+            'showRaids',
+            'showGifts',
+            'showPaypiggies',
+            'showGiftPaypiggies',
+            'showEnvelopes'
+        ];
+
+        it('returns all expected fields', () => {
+            const result = ConfigValidator._normalizeGuiSection({});
+
+            EXPECTED_FIELDS.forEach(field => {
+                expect(result).toHaveProperty(field);
+            });
+        });
+    });
+
     describe('_normalizeFarewellSection', () => {
         const EXPECTED_FIELDS = [
             'command'
