@@ -121,6 +121,27 @@ const CONFIG_SCHEMA = {
         maxQueueSize: { type: 'number', default: 100 }
     },
 
+    gui: {
+        enableDock: { type: 'boolean', default: false },
+        enableOverlay: { type: 'boolean', default: false },
+        host: { type: 'string', default: '127.0.0.1' },
+        port: { type: 'number', default: 3399, min: 1, max: 65535, integer: true },
+        messageCharacterLimit: { type: 'number', default: 0, min: 0, integer: true },
+        overlayMaxMessages: { type: 'number', default: 3, min: 1, integer: true },
+        overlayMaxLinesPerMessage: { type: 'number', default: 3, min: 1, integer: true },
+        showMessages: { type: 'boolean', default: true },
+        showCommands: { type: 'boolean', default: true },
+        showGreetings: { type: 'boolean', default: true },
+        showFarewells: { type: 'boolean', default: true },
+        showFollows: { type: 'boolean', default: true },
+        showShares: { type: 'boolean', default: true },
+        showRaids: { type: 'boolean', default: true },
+        showGifts: { type: 'boolean', default: true },
+        showPaypiggies: { type: 'boolean', default: true },
+        showGiftPaypiggies: { type: 'boolean', default: true },
+        showEnvelopes: { type: 'boolean', default: true }
+    },
+
     logging: {
         consoleLevel: { type: 'string', userDefined: true },
         fileLevel: { type: 'string', userDefined: true },

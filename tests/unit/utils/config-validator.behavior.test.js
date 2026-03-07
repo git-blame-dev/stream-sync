@@ -22,7 +22,7 @@ describe('ConfigValidator.normalize()', () => {
     const ALL_SECTIONS = [
         'general', 'http', 'obs', 'tiktok', 'twitch', 'youtube',
         'handcam', 'goals', 'gifts', 'envelopes', 'timing', 'cooldowns',
-        'spam', 'displayQueue', 'logging', 'farewell', 'commands', 'vfx', 'streamelements',
+        'spam', 'displayQueue', 'logging', 'gui', 'farewell', 'commands', 'vfx', 'streamelements',
         'follows', 'raids', 'paypiggies', 'greetings', 'shares'
     ];
 
@@ -392,6 +392,103 @@ describe('ConfigValidator._normalizeLoggingSection()', () => {
         expect(result.consoleLevel).toBe('info');
         expect(result.fileLevel).toBe('debug');
         expect(result.fileLoggingEnabled).toBe(true);
+    });
+});
+
+describe('ConfigValidator._normalizeGuiSection()', () => {
+    it('applies gui defaults when section is empty', () => {
+        const result = ConfigValidator._normalizeGuiSection({});
+
+        expect(result.enableDock).toBe(false);
+        expect(result.enableOverlay).toBe(false);
+        expect(result.host).toBe('127.0.0.1');
+        expect(result.port).toBe(3399);
+        expect(result.messageCharacterLimit).toBe(0);
+        expect(result.overlayMaxMessages).toBe(3);
+        expect(result.overlayMaxLinesPerMessage).toBe(3);
+        expect(result.showMessages).toBe(true);
+        expect(result.showCommands).toBe(true);
+        expect(result.showGreetings).toBe(true);
+        expect(result.showFarewells).toBe(true);
+        expect(result.showFollows).toBe(true);
+        expect(result.showShares).toBe(true);
+        expect(result.showRaids).toBe(true);
+        expect(result.showGifts).toBe(true);
+        expect(result.showPaypiggies).toBe(true);
+        expect(result.showGiftPaypiggies).toBe(true);
+        expect(result.showEnvelopes).toBe(true);
+    });
+
+    it('parses gui section values from raw strings', () => {
+        const result = ConfigValidator._normalizeGuiSection({
+            enableDock: 'true',
+            enableOverlay: 'true',
+            host: '0.0.0.0',
+            port: '3400',
+            messageCharacterLimit: '120',
+            overlayMaxMessages: '5',
+            overlayMaxLinesPerMessage: '4',
+            showMessages: 'false',
+            showCommands: 'false',
+            showGreetings: 'false',
+            showFarewells: 'false',
+            showFollows: 'false',
+            showShares: 'false',
+            showRaids: 'false',
+            showGifts: 'false',
+            showPaypiggies: 'false',
+            showGiftPaypiggies: 'false',
+            showEnvelopes: 'false'
+        });
+
+        expect(result.enableDock).toBe(true);
+        expect(result.enableOverlay).toBe(true);
+        expect(result.host).toBe('0.0.0.0');
+        expect(result.port).toBe(3400);
+        expect(result.messageCharacterLimit).toBe(120);
+        expect(result.overlayMaxMessages).toBe(5);
+        expect(result.overlayMaxLinesPerMessage).toBe(4);
+        expect(result.showMessages).toBe(false);
+        expect(result.showCommands).toBe(false);
+        expect(result.showGreetings).toBe(false);
+        expect(result.showFarewells).toBe(false);
+        expect(result.showFollows).toBe(false);
+        expect(result.showShares).toBe(false);
+        expect(result.showRaids).toBe(false);
+        expect(result.showGifts).toBe(false);
+        expect(result.showPaypiggies).toBe(false);
+        expect(result.showGiftPaypiggies).toBe(false);
+        expect(result.showEnvelopes).toBe(false);
+    });
+
+    it('falls back to defaults for invalid gui values', () => {
+        const result = ConfigValidator._normalizeGuiSection({
+            host: '   ',
+            port: '0',
+            messageCharacterLimit: '-1',
+            overlayMaxMessages: '0',
+            overlayMaxLinesPerMessage: '-4'
+        });
+
+        expect(result.host).toBe('127.0.0.1');
+        expect(result.port).toBe(3399);
+        expect(result.messageCharacterLimit).toBe(0);
+        expect(result.overlayMaxMessages).toBe(3);
+        expect(result.overlayMaxLinesPerMessage).toBe(3);
+    });
+
+    it('falls back to defaults for non-integer gui numeric values', () => {
+        const result = ConfigValidator._normalizeGuiSection({
+            port: '3399.25',
+            messageCharacterLimit: '1.2',
+            overlayMaxMessages: '3.5',
+            overlayMaxLinesPerMessage: '2.1'
+        });
+
+        expect(result.port).toBe(3399);
+        expect(result.messageCharacterLimit).toBe(0);
+        expect(result.overlayMaxMessages).toBe(3);
+        expect(result.overlayMaxLinesPerMessage).toBe(3);
     });
 });
 
@@ -836,5 +933,19 @@ describe('ConfigValidator.normalizeFromSchema()', () => {
     it('returns empty object for unknown sections', () => {
         const result = ConfigValidator.normalizeFromSchema('nonexistent', { foo: 'bar' });
         expect(result).toEqual({});
+    });
+
+    it('enforces integer schema constraints for gui numeric fields', () => {
+        const result = ConfigValidator.normalizeFromSchema('gui', {
+            port: '3399.5',
+            messageCharacterLimit: '2.5',
+            overlayMaxMessages: '3.1',
+            overlayMaxLinesPerMessage: '4.9'
+        });
+
+        expect(result.port).toBe(3399);
+        expect(result.messageCharacterLimit).toBe(0);
+        expect(result.overlayMaxMessages).toBe(3);
+        expect(result.overlayMaxLinesPerMessage).toBe(3);
     });
 });

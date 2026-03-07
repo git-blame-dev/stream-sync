@@ -51,6 +51,12 @@ describe('config load and build behavior', () => {
         rawConfig.paypiggies = { command: '!testpay' };
         rawConfig.greetings = { command: '!testgreet' };
         rawConfig.farewell = { command: '!testfarewell' };
+        rawConfig.gui = {
+            ...rawConfig.gui,
+            enableDock: 'true',
+            messageCharacterLimit: '120',
+            overlayMaxMessages: '4'
+        };
         rawConfig.streamelements = {
             enabled: 'false',
             youtubeChannelId: 'test-yt-channel',
@@ -82,6 +88,8 @@ describe('config load and build behavior', () => {
         expect(built.obs.chatPlatformLogos.twitch).toBe('test-twitch-img');
         expect(built.gifts.giftVideoSource).toBe('test-gift-video');
         expect(built.envelopes.command).toBe('!testenvelope');
+        expect(built.gui.enableDock).toBe(true);
+        expect(built.gui.overlayMaxMessages).toBe(4);
         expect(built.logging).toBeDefined();
     });
 
