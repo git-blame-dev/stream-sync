@@ -122,6 +122,36 @@ describe('TwitchApiClient authentication', () => {
         });
     });
 
+    describe('getUserById', () => {
+        it('returns user payload when id lookup succeeds', async () => {
+            mockHttpClient.get.mockResolvedValue({
+                status: 200,
+                data: {
+                    data: [{ id: 'test-user-id', login: 'testuser', profile_image_url: 'https://example.invalid/avatar.png' }]
+                }
+            });
+
+            const user = await apiClient.getUserById('test-user-id');
+
+            expect(user).toEqual({
+                id: 'test-user-id',
+                login: 'testuser',
+                profile_image_url: 'https://example.invalid/avatar.png'
+            });
+        });
+
+        it('returns null when id lookup has no rows', async () => {
+            mockHttpClient.get.mockResolvedValue({
+                status: 200,
+                data: { data: [] }
+            });
+
+            const user = await apiClient.getUserById('missing-user-id');
+
+            expect(user).toBeNull();
+        });
+    });
+
     describe('401 retry with token refresh', () => {
         it('retries request after refreshing token on 401', async () => {
             mockHttpClient.get

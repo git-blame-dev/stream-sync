@@ -1,5 +1,6 @@
 
 const { PlatformEventValidator, PlatformEventBuilder } = require('../../../src/interfaces/PlatformEvents');
+const { DEFAULT_AVATAR_URL } = require('../../../src/constants/avatar');
 
 describe('Platform Event Interface Design', () => {
     describe('Platform Event Schema Validation', () => {
@@ -16,6 +17,7 @@ describe('Platform Event Interface Design', () => {
                 platform: 'twitch',
                 username: 'testuser',
                 userId: '12345',
+                avatarUrl: 'https://example.invalid/avatar-chat.png',
                 message: { text: 'Hello world!' },
                 metadata: { emotes: [], badges: [] },
                 timestamp: new Date().toISOString()
@@ -82,6 +84,7 @@ describe('Platform Event Interface Design', () => {
                 platform: 'twitch',
                 username: 'newfollower',
                 userId: '67890',
+                avatarUrl: 'https://example.invalid/avatar-follow.png',
                 timestamp: new Date().toISOString(),
                 metadata: { isFirstTime: true }
             };
@@ -95,6 +98,7 @@ describe('Platform Event Interface Design', () => {
                     platform: 'tiktok',
                     username: 'sharer',
                     userId: 'share-1',
+                    avatarUrl: 'https://example.invalid/avatar-share.png',
                     timestamp: new Date().toISOString(),
                     metadata: { interactionType: 'share' }
                 };
@@ -108,6 +112,7 @@ describe('Platform Event Interface Design', () => {
                 platform: 'twitch',
                 username: 'subscriber',
                 userId: '11111',
+                avatarUrl: 'https://example.invalid/avatar-paypiggy.png',
                 tier: '1',
                 months: 1,
                 message: 'Thanks for the content!',
@@ -123,6 +128,7 @@ describe('Platform Event Interface Design', () => {
                     platform: 'twitch',
                     username: 'gifter',
                     userId: '11112',
+                    avatarUrl: 'https://example.invalid/avatar-giftpaypiggy.png',
                     giftCount: 5,
                     tier: '1000',
                     timestamp: new Date().toISOString()
@@ -151,6 +157,7 @@ describe('Platform Event Interface Design', () => {
                 platform: 'tiktok',
                 username: 'gifter',
                 userId: '22222',
+                avatarUrl: 'https://example.invalid/avatar-gift.png',
                 id: 'gift-evt-1',
                 giftType: 'rose',
                 giftCount: 1,
@@ -256,6 +263,7 @@ describe('Platform Event Interface Design', () => {
                 platform: 'twitch',
                 username: 'raider',
                 userId: '33333',
+                avatarUrl: 'https://example.invalid/avatar-raid.png',
                 viewerCount: 150,
                 timestamp: new Date().toISOString()
             };
@@ -269,6 +277,7 @@ describe('Platform Event Interface Design', () => {
                     platform: 'tiktok',
                     username: 'gifter',
                     userId: '44444',
+                    avatarUrl: 'https://example.invalid/avatar-envelope.png',
                     id: 'envelope-event-1',
                     giftType: 'Treasure Chest',
                     giftCount: 1,
@@ -629,6 +638,26 @@ describe('Platform Event Interface Design', () => {
             const event = builder.createChatMessage(params);
             expect(event.timestamp).toBe(customTimestamp);
         });
+
+        it('defaults missing avatarUrl to canonical fallback for builder normalization paths', () => {
+            const builtEvent = builder.createChatMessage({
+                platform: 'twitch',
+                username: 'test-builder-user',
+                userId: 'test-builder-id',
+                message: 'Test message',
+                timestamp: '2024-01-01T00:00:00Z'
+            });
+
+            const normalizedEvent = builder.normalizeMessage('youtube', {
+                username: 'test-normalized-user',
+                userId: 'test-normalized-id',
+                message: { text: 'Normalized message' },
+                timestamp: '2024-01-01T00:00:01Z'
+            });
+
+            expect(builtEvent.avatarUrl).toBe(DEFAULT_AVATAR_URL);
+            expect(normalizedEvent.avatarUrl).toBe(DEFAULT_AVATAR_URL);
+        });
     });
 
     describe('Event Schema Compliance Validation', () => {
@@ -662,6 +691,7 @@ describe('Platform Event Interface Design', () => {
             expect(schema.required).toContain('platform');
             expect(schema.required).toContain('username');
             expect(schema.required).toContain('userId');
+            expect(schema.required).toContain('avatarUrl');
             expect(schema.required).toContain('message');
             expect(schema.required).toContain('timestamp');
         });
@@ -672,6 +702,7 @@ describe('Platform Event Interface Design', () => {
                 platform: 'invalid_platform',
                 username: 'user',
                 userId: '123',
+                avatarUrl: 'https://example.invalid/avatar-invalid-platform.png',
                 message: { text: 'test' },
                 timestamp: new Date().toISOString()
             };
@@ -686,6 +717,7 @@ describe('Platform Event Interface Design', () => {
                 platform: 'twitch',
                 username: 'user',
                 userId: '123',
+                avatarUrl: 'https://example.invalid/avatar-minimal.png',
                 message: { text: 'test' },
                 timestamp: new Date().toISOString()
             };

@@ -111,7 +111,10 @@ describe('TikTok event router connection lifecycle', () => {
 
     describe('rawData listener cleanup', () => {
         test('rawData listener should be removed during cleanup', () => {
-            const removeAllListeners = createMockFn();
+            const cleanedEvents = [];
+            const removeAllListeners = (eventName) => {
+                cleanedEvents.push(eventName);
+            };
             const platform = {
                 connection: { removeAllListeners },
                 listenersConfigured: true,
@@ -137,9 +140,6 @@ describe('TikTok event router connection lifecycle', () => {
             };
 
             cleanupTikTokEventListeners(platform);
-
-            // Collect all event types that were cleaned up
-            const cleanedEvents = removeAllListeners.mock.calls.map((call) => call[0]);
 
             // rawData should be included in cleanup
             expect(cleanedEvents).toContain('rawData');
@@ -182,28 +182,48 @@ describe('TikTok event router connection lifecycle', () => {
             // The mock handleConnectionIssue pushes to disconnectionEvents
             expect(disconnectionEvents.length).toBeGreaterThan(0);
             expect(disconnectionEvents[0].handler).toBe('connectionIssue');
-
-            // Verify handleConnectionIssue was called
-            expect(platform.handleConnectionIssue.mock.calls.length).toBe(1);
         });
     });
 
     describe('routes both DISCONNECTED and STREAM_END events', () => {
         test('event-router routes both events to handlers', async () => {
-            const { platform, listeners } = createPlatformHarness({
+            const { platform, listeners, disconnectionEvents } = createPlatformHarness({
                 connectionActive: true
             });
 
             setupTikTokEventListeners(platform);
 
             // Simulate 4404: websocket emits both disconnected and streamEnd
-            listeners[platform.ControlEvent.DISCONNECTED]({ code: 4404, reason: 'stream not live' });
+            await listeners[platform.ControlEvent.DISCONNECTED]({ code: 4404, reason: 'stream not live' });
             await listeners[platform.WebcastEvent.STREAM_END]({ code: 4404 });
 
             // Event-router routes both events to handlers
             // Deduplication is the platform's responsibility (tested in tiktok-connection-lifecycle.test.js)
-            expect(platform.handleConnectionIssue.mock.calls.length).toBe(1);
-            expect(platform._handleStreamEnd.mock.calls.length).toBe(1);
+            expect(disconnectionEvents).toEqual([
+                { handler: 'connectionIssue' },
+                { handler: 'streamEnd' }
+            ]);
+        });
+
+        test('routes DISCONNECTED handler failures through platform error handler', async () => {
+            const disconnectionError = new Error('disconnect handling failed');
+            const { platform, listeners } = createPlatformHarness({
+                connectionActive: true,
+                handleConnectionIssue: createMockFn().mockRejectedValue(disconnectionError)
+            });
+
+            setupTikTokEventListeners(platform);
+
+            await expect(listeners[platform.ControlEvent.DISCONNECTED]({ code: 4001, reason: 'disconnect' }))
+                .resolves
+                .toBeUndefined();
+
+            expect(platform.errorHandler.handleEventProcessingError).toHaveBeenCalledWith(
+                disconnectionError,
+                'disconnected',
+                { code: 4001, reason: 'disconnect' },
+                'Error handling disconnected control event'
+            );
         });
     });
 });

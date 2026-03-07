@@ -5,6 +5,7 @@ const { createConfigFixture } = require('../../helpers/config-fixture');
 const { noOpLogger, createMockDisplayQueue, createMockNotificationManager } = require('../../helpers/mock-factories');
 const testClock = require('../../helpers/test-clock');
 const { PlatformEvents } = require('../../../src/interfaces/PlatformEvents');
+const { DEFAULT_AVATAR_URL } = require('../../../src/constants/avatar');
 
 const createDeps = (overrides = {}) => ({
     logging: overrides.logging || noOpLogger,
@@ -175,6 +176,7 @@ describe('AppRuntime behavior', () => {
         expect(calls.length).toBe(1);
         expect(calls[0][0]).toBe('platform:gift');
         expect(calls[0][2].vfxConfig).toEqual({ key: 'gifts' });
+        expect(Object.prototype.hasOwnProperty.call(calls[0][2], 'repeatCount')).toBe(false);
     });
 
     it('normalizes gift notification error payloads', async () => {
@@ -278,6 +280,32 @@ describe('AppRuntime behavior', () => {
 
         expect(calls.length).toBe(1);
         expect(calls[0][0]).toBe('platform:envelope');
+        expect(calls[0][2].avatarUrl).toBe(DEFAULT_AVATAR_URL);
+        expect(Object.prototype.hasOwnProperty.call(calls[0][2], 'repeatCount')).toBe(false);
+    });
+
+    it('preserves explicit avatarUrl for envelope notifications', async () => {
+        const calls = [];
+        const notificationManager = {
+            handleNotification: async (...args) => calls.push(args)
+        };
+        const runtime = createRuntime({ notificationManager });
+
+        await runtime.handleEnvelopeNotification('tiktok', {
+            username: 'test-envelope-user',
+            userId: 'test-env-user-id',
+            giftType: 'Coins',
+            giftCount: 1,
+            amount: 5,
+            currency: 'USD',
+            timestamp: '2024-01-01T00:00:00.000Z',
+            id: 'test-env-2',
+            avatarUrl: 'https://example.invalid/runtime-envelope-avatar.png'
+        });
+
+        expect(calls.length).toBe(1);
+        expect(calls[0][0]).toBe('platform:envelope');
+        expect(calls[0][2].avatarUrl).toBe('https://example.invalid/runtime-envelope-avatar.png');
     });
 
     it('routes envelope errors through runtime handler', async () => {

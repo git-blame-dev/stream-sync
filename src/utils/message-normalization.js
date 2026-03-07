@@ -65,11 +65,15 @@ function normalizeYouTubeMessage(chatItem, platformName = 'youtube') {
             badge && typeof badge.tooltip === 'string' &&
             badge.tooltip.toLowerCase().includes('member')
         );
+        const avatarUrl = typeof author?.thumbnails?.[0]?.url === 'string'
+            ? author.thumbnails[0].url.trim()
+            : '';
 
         const normalized = {
             platform: String(platformName || 'youtube').toLowerCase(),
             userId,
             username,
+            avatarUrl,
             message: normalizedMessage,
             timestamp,
             isMod: author.is_moderator === true,
@@ -255,7 +259,7 @@ function validateNormalizedMessage(normalizedMessage) {
     
     if (!normalizedMessage || typeof normalizedMessage !== 'object') {
         issues.push('Message is not an object');
-        return { isValid: false, issues };
+        return { isValid: false, errors: issues };
     }
     
     // Required fields

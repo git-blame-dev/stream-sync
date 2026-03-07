@@ -112,6 +112,16 @@ class TwitchApiClient {
         }
     }
 
+    async getUserById(userId) {
+        try {
+            const data = await this.makeRequest(`/users?id=${encodeURIComponent(userId)}`);
+            return data.data && data.data.length > 0 ? data.data[0] : null;
+        } catch (error) {
+            this._handleApiError(`Failed to get user id: ${error.message}`, error, 'getUserById');
+            return null;
+        }
+    }
+
     async getBroadcasterId(channel) {
         const userInfo = await this.getUserInfo(channel);
         if (!userInfo?.id) {

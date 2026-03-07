@@ -4,6 +4,7 @@ const { createMockFn, restoreAllMocks } = require('../../../../helpers/bun-mock-
 const { TikTokPlatform } = require('../../../../../src/platforms/tiktok');
 const { PlatformEvents } = require('../../../../../src/interfaces/PlatformEvents');
 const { createMockTikTokPlatformDependencies } = require('../../../../helpers/mock-factories');
+const { DEFAULT_AVATAR_URL } = require('../../../../../src/constants/avatar');
 
 describe('TikTokPlatform event emissions', () => {
     afterEach(() => {
@@ -12,6 +13,7 @@ describe('TikTokPlatform event emissions', () => {
 
     const baseConfig = { enabled: true, username: 'event_tester' };
     const eventTimestamp = Date.parse('2024-01-01T00:00:00Z');
+    const fallbackAvatarUrl = DEFAULT_AVATAR_URL;
 
     const createPlatformUnderTest = () => {
         const webcastEvent = {
@@ -49,6 +51,7 @@ describe('TikTokPlatform event emissions', () => {
         const envelopes = [];
         const shares = [];
         const follows = [];
+        const gifts = [];
         const paypiggies = [];
         const viewerCounts = [];
         const raids = [];
@@ -58,6 +61,7 @@ describe('TikTokPlatform event emissions', () => {
             onEnvelope: (data) => envelopes.push(data),
             onShare: (data) => shares.push(data),
             onFollow: (data) => follows.push(data),
+            onGift: (data) => gifts.push(data),
             onPaypiggy: (data) => paypiggies.push(data),
             onViewerCount: (data) => viewerCounts.push(data),
             onRaid: (data) => raids.push(data),
@@ -66,7 +70,7 @@ describe('TikTokPlatform event emissions', () => {
 
         platform.setupEventListeners();
 
-        return { platform, eventHandlers, envelopes, shares, follows, paypiggies, viewerCounts, raids, streamStatuses, webcastEvent };
+        return { platform, eventHandlers, envelopes, shares, follows, gifts, paypiggies, viewerCounts, raids, streamStatuses, webcastEvent };
     };
 
     it('emits envelope events with the normalized payload', async () => {
@@ -88,6 +92,7 @@ describe('TikTokPlatform event emissions', () => {
         expect(envelopes[0].giftCount).toBe(1);
         expect(envelopes[0].amount).toBe(42);
         expect(envelopes[0].currency).toBe('coins');
+        expect(envelopes[0].avatarUrl).toBe(fallbackAvatarUrl);
         expect(envelopes[0].metadata).toBeUndefined();
     });
 
@@ -109,6 +114,7 @@ describe('TikTokPlatform event emissions', () => {
         expect(shares).toHaveLength(1);
         expect(shares[0].metadata.interactionType).toBe('share');
         expect(shares[0].username).toBe('ShareUser');
+        expect(shares[0].avatarUrl).toBe(fallbackAvatarUrl);
         expect(follows).toHaveLength(0);
     });
 
@@ -127,6 +133,7 @@ describe('TikTokPlatform event emissions', () => {
         expect(follows).toHaveLength(1);
         expect(shares).toHaveLength(0);
         expect(follows[0].username).toBe('FollowUser');
+        expect(follows[0].avatarUrl).toBe(fallbackAvatarUrl);
     });
 
     it('treats share-shaped FOLLOW payloads as share events', async () => {
@@ -207,6 +214,7 @@ describe('TikTokPlatform event emissions', () => {
         expect(event.type).toBe('platform:paypiggy');
         expect(event.userId).toBe('sub123');
         expect(event.username).toBe('Subscriber');
+        expect(event.avatarUrl).toBe(fallbackAvatarUrl);
     });
 
     it('emits superfan subscription events with SuperFan tier', async () => {
@@ -273,5 +281,26 @@ describe('TikTokPlatform event emissions', () => {
         expect(streamStatuses).toHaveLength(1);
         expect(streamStatuses[0].isLive).toBe(false);
         expect(streamStatuses[0].platform).toBe('tiktok');
+    });
+
+    it('emits canonical gift error payload with fallback avatar from gift processing path', async () => {
+        const { platform, gifts } = createPlatformUnderTest();
+
+        await platform.handleTikTokGift({
+            common: {
+                createTime: eventTimestamp,
+                msgId: 'gift-error-msg-id'
+            },
+            user: {
+                userId: 'gift-error-user-id',
+                uniqueId: 'giftErrorUser',
+                nickname: 'Gift Error User'
+            },
+            repeatCount: 1
+        });
+
+        expect(gifts).toHaveLength(1);
+        expect(gifts[0].type).toBe('platform:gift');
+        expect(gifts[0].avatarUrl).toBe(fallbackAvatarUrl);
     });
 });

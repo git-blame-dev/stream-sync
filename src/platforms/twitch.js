@@ -12,6 +12,7 @@ const { resolveTwitchTimestampISO } = require('../utils/platform-timestamp');
 const { getSystemTimestampISO } = require('../utils/timestamp');
 const { createTwitchEventFactory } = require('./twitch/events/event-factory');
 const { createTwitchEventSubWiring } = require('./twitch/connections/wiring');
+const { DEFAULT_AVATAR_URL } = require('../constants/avatar');
 
 class TwitchPlatform extends EventEmitter {
     constructor(config, dependencies = {}) {
@@ -62,6 +63,12 @@ class TwitchPlatform extends EventEmitter {
         // Initialize modular components
         this.apiClient = null;
         this.viewerCountProvider = null;
+        this.avatarUrlCache = new Map();
+        this.avatarLookupMissCache = new Set();
+        this.avatarCacheMaxSize = Number.isFinite(Number(dependencies.avatarCacheMaxSize)) && Number(dependencies.avatarCacheMaxSize) > 0
+            ? Number(dependencies.avatarCacheMaxSize)
+            : 2000;
+        this.fallbackAvatarUrl = DEFAULT_AVATAR_URL;
         
         // Initialize connection state tracking
         this.isConnecting = false;
@@ -280,12 +287,13 @@ class TwitchPlatform extends EventEmitter {
                 },
                 rawData: { event }
             };
+            normalizedData.avatarUrl = await this._resolveAvatarUrl(normalizedData);
 
             const validation = this.validateNormalizedMessage(normalizedData);
 
             if (!validation.isValid) {
                 this.logger.warn('Message normalization validation failed', 'twitch', {
-                    issues: validation.issues,
+                    issues: validation.errors,
                     originalEvent: event
                 });
                 // Continue processing with potentially incomplete data
@@ -298,6 +306,7 @@ class TwitchPlatform extends EventEmitter {
                     platform: this.platformName,
                     username: normalizedData.username,
                     userId: normalizedData.userId,
+                    avatarUrl: normalizedData.avatarUrl,
                     message: {
                         text: normalizedData.message
                     },
@@ -328,6 +337,99 @@ class TwitchPlatform extends EventEmitter {
         return resolveTwitchTimestampISO(data);
     }
 
+    _getAvatarCacheKey(userId) {
+        const normalizedUserId = typeof userId === 'string' ? userId.trim() : '';
+        if (!normalizedUserId) {
+            return '';
+        }
+        return `twitch:${normalizedUserId}`;
+    }
+
+    _setCachedAvatarUrl(cacheKey, avatarUrl) {
+        if (!cacheKey || !avatarUrl) {
+            return;
+        }
+
+        this.avatarUrlCache.set(cacheKey, avatarUrl);
+        while (this.avatarUrlCache.size > this.avatarCacheMaxSize) {
+            const oldestKey = this.avatarUrlCache.keys().next().value;
+            if (!oldestKey) {
+                break;
+            }
+            this.avatarUrlCache.delete(oldestKey);
+        }
+    }
+
+    _setAvatarLookupMiss(cacheKey) {
+        if (!cacheKey) {
+            return;
+        }
+
+        this.avatarLookupMissCache.add(cacheKey);
+        while (this.avatarLookupMissCache.size > this.avatarCacheMaxSize) {
+            const oldestKey = this.avatarLookupMissCache.values().next().value;
+            if (!oldestKey) {
+                break;
+            }
+            this.avatarLookupMissCache.delete(oldestKey);
+        }
+    }
+
+    async _resolveAvatarUrl(data = {}) {
+        const payloadAvatarUrl = typeof data?.avatarUrl === 'string' ? data.avatarUrl.trim() : '';
+        const userId = typeof data?.userId === 'string'
+            ? data.userId.trim()
+            : (typeof data?.chatter_user_id === 'string' ? data.chatter_user_id.trim() : '');
+        const cacheKey = this._getAvatarCacheKey(userId);
+
+        if (payloadAvatarUrl) {
+            if (cacheKey) {
+                this._setCachedAvatarUrl(cacheKey, payloadAvatarUrl);
+                this.avatarLookupMissCache.delete(cacheKey);
+            }
+            return payloadAvatarUrl;
+        }
+
+        if (cacheKey && this.avatarUrlCache.has(cacheKey)) {
+            return this.avatarUrlCache.get(cacheKey);
+        }
+
+        if (cacheKey && this.avatarLookupMissCache.has(cacheKey)) {
+            return this.fallbackAvatarUrl;
+        }
+
+        if (userId && this.apiClient && typeof this.apiClient.getUserById === 'function') {
+            try {
+                const user = await this.apiClient.getUserById(userId);
+                const resolvedAvatarUrl = typeof user?.profile_image_url === 'string'
+                    ? user.profile_image_url.trim()
+                    : '';
+                if (resolvedAvatarUrl) {
+                    if (cacheKey) {
+                        this._setCachedAvatarUrl(cacheKey, resolvedAvatarUrl);
+                        this.avatarLookupMissCache.delete(cacheKey);
+                    }
+                    return resolvedAvatarUrl;
+                }
+                if (cacheKey) {
+                    this._setAvatarLookupMiss(cacheKey);
+                }
+            } catch (error) {
+                this.errorHandler.handleEventProcessingError(
+                    error,
+                    'avatar-lookup',
+                    data,
+                    'Failed to resolve Twitch avatar, using fallback'
+                );
+                if (cacheKey) {
+                    this._setAvatarLookupMiss(cacheKey);
+                }
+            }
+        }
+
+        return this.fallbackAvatarUrl;
+    }
+
     _getErrorEnvelopeTimestamp() {
         return this.getErrorEnvelopeTimestampISO();
     }
@@ -337,10 +439,11 @@ class TwitchPlatform extends EventEmitter {
         const errorNotificationType = eventType === 'gift'
             ? 'gift'
             : (eventType === 'paypiggy' || eventType === 'giftpaypiggy' ? eventType : null);
-        const buildErrorOverrides = () => {
+        const buildErrorOverrides = (avatarUrl) => {
             const baseOverrides = {
                 username: data?.username,
-                userId: data?.userId
+                userId: data?.userId,
+                avatarUrl
             };
             if (errorNotificationType === 'gift') {
                 if (typeof data?.giftType === 'string' && data.giftType.trim()) {
@@ -371,16 +474,17 @@ class TwitchPlatform extends EventEmitter {
             }
             return baseOverrides;
         };
-        const emitMonetizationError = (errorEnvelopeTimestamp) => {
+        const emitMonetizationError = async (errorEnvelopeTimestamp) => {
             if (!errorNotificationType) {
                 return;
             }
+            const avatarUrl = await this._resolveAvatarUrl(data);
             const errorPayload = createMonetizationErrorPayload({
                 notificationType: errorNotificationType,
                 platform: this.platformName,
                 timestamp: errorEnvelopeTimestamp,
                 id: data?.id,
-                ...buildErrorOverrides()
+                ...buildErrorOverrides(avatarUrl)
             });
             this._emitPlatformEvent(this._resolvePlatformEventType(eventType), errorPayload);
         };
@@ -395,7 +499,7 @@ class TwitchPlatform extends EventEmitter {
                     data,
                     `Missing timestamp for ${eventType}, emitting degraded monetization error envelope`
                 );
-                emitMonetizationError(errorEnvelopeTimestamp);
+                await emitMonetizationError(errorEnvelopeTimestamp);
             } else {
                 this.errorHandler.handleEventProcessingError(
                     new Error(`Missing Twitch timestamp for ${eventType}`),
@@ -413,7 +517,7 @@ class TwitchPlatform extends EventEmitter {
                 (eventType === 'gift' || eventType === 'giftpaypiggy');
             if (options.validateUser && !data.username && !allowAnonymous) {
                 this.logger.warn(`Incomplete ${eventType} data received`, 'twitch', data);
-                emitMonetizationError(payloadTimestamp);
+                await emitMonetizationError(payloadTimestamp);
                 return;
             }
 
@@ -424,6 +528,7 @@ class TwitchPlatform extends EventEmitter {
             // Build event using factory
             const factoryMethod = options.factoryMethod || `create${this._capitalize(eventType)}Event`;
             const normalizedPayload = { ...(data || {}), timestamp: payloadTimestamp };
+            normalizedPayload.avatarUrl = await this._resolveAvatarUrl(normalizedPayload);
             const eventData = this.eventFactory[factoryMethod](normalizedPayload);
 
             // Emit standardized event (allow override for specific emit type names)
@@ -431,7 +536,7 @@ class TwitchPlatform extends EventEmitter {
             this._emitPlatformEvent(emitEventType, eventData);
         } catch (error) {
             this.errorHandler.handleEventProcessingError(error, eventType, data);
-            emitMonetizationError(payloadTimestamp);
+            await emitMonetizationError(payloadTimestamp);
         }
     }
 
@@ -598,6 +703,8 @@ class TwitchPlatform extends EventEmitter {
                     this.errorHandler.handleCleanupError(error, 'twitch viewer count stop');
                 }
             }
+            this.avatarUrlCache.clear();
+            this.avatarLookupMissCache.clear();
             this.isConnected = false;
             this.handlers = {};
             this.logger.info('Twitch platform cleanup completed', 'twitch');

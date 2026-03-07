@@ -37,6 +37,43 @@ describe('monetization error payload no-fallback behavior', () => {
         expect(payload.isError).toBe(true);
     });
 
+    it('includes avatarUrl when provided', () => {
+        const { createMonetizationErrorPayload } = require('../../../src/utils/monetization-error-utils');
+
+        const payload = createMonetizationErrorPayload({
+            notificationType: 'platform:gift',
+            platform: 'twitch',
+            timestamp: '2024-01-01T00:00:00.000Z',
+            avatarUrl: 'https://example.invalid/avatar-error.png'
+        });
+
+        expect(payload.avatarUrl).toBe('https://example.invalid/avatar-error.png');
+    });
+
+    it('normalizes shorthand notificationType to canonical platform:* type', () => {
+        const { createMonetizationErrorPayload } = require('../../../src/utils/monetization-error-utils');
+
+        const payload = createMonetizationErrorPayload({
+            notificationType: 'gift',
+            platform: 'twitch',
+            timestamp: '2024-01-01T00:00:00.000Z'
+        });
+
+        expect(payload.type).toBe('platform:gift');
+    });
+
+    it('normalizes platform casing to canonical lowercase value', () => {
+        const { createMonetizationErrorPayload } = require('../../../src/utils/monetization-error-utils');
+
+        const payload = createMonetizationErrorPayload({
+            notificationType: 'gift',
+            platform: 'Twitch',
+            timestamp: '2024-01-01T00:00:00.000Z'
+        });
+
+        expect(payload.platform).toBe('twitch');
+    });
+
     it('omits gift fields when not provided', () => {
         const { createMonetizationErrorPayload } = require('../../../src/utils/monetization-error-utils');
 

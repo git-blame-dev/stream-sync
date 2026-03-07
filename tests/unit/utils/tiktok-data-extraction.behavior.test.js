@@ -1,6 +1,7 @@
 const { describe, expect, it } = require('bun:test');
 const {
     extractTikTokUserData,
+    extractTikTokAvatarUrl,
     extractTikTokGiftData,
     formatCoinAmount
 } = require('../../../src/utils/tiktok-data-extraction');
@@ -55,6 +56,34 @@ describe('extractTikTokGiftData', () => {
         });
 
         expect(build).toThrow('requires repeatCount');
+    });
+});
+
+describe('extractTikTokAvatarUrl', () => {
+    it('returns profilePictureUrl when available', () => {
+        const avatarUrl = extractTikTokAvatarUrl({
+            user: {
+                profilePictureUrl: 'https://example.invalid/tiktok-avatar-direct.jpg'
+            }
+        });
+
+        expect(avatarUrl).toBe('https://example.invalid/tiktok-avatar-direct.jpg');
+    });
+
+    it('falls back to first profilePicture.url entry', () => {
+        const avatarUrl = extractTikTokAvatarUrl({
+            user: {
+                profilePicture: {
+                    url: ['https://example.invalid/tiktok-avatar-array.jpg']
+                }
+            }
+        });
+
+        expect(avatarUrl).toBe('https://example.invalid/tiktok-avatar-array.jpg');
+    });
+
+    it('returns empty string when user avatar data is missing', () => {
+        expect(extractTikTokAvatarUrl({ user: { uniqueId: 'test-id' } })).toBe('');
     });
 });
 

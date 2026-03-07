@@ -46,6 +46,7 @@ function createMonetizationErrorPayload(options = {}) {
         timestamp,
         id,
         eventType,
+        avatarUrl,
         username,
         userId,
         giftType,
@@ -56,7 +57,8 @@ function createMonetizationErrorPayload(options = {}) {
         months
     } = options;
 
-    if (!notificationType) {
+    const resolvedNotificationType = resolveNonEmptyString(notificationType);
+    if (!resolvedNotificationType) {
         throw new Error('Monetization error payload requires notificationType');
     }
     const trimmedPlatform = typeof platform === 'string' ? platform.trim() : '';
@@ -69,26 +71,31 @@ function createMonetizationErrorPayload(options = {}) {
         throw new Error('Monetization error payload requires ISO timestamp');
     }
 
-    const normalizedType = notificationType.toLowerCase();
+    const normalizedType = resolvedNotificationType.toLowerCase();
+    const canonicalType = normalizedType.startsWith('platform:')
+        ? normalizedType
+        : `platform:${normalizedType}`;
     const normalizedPlatform = trimmedPlatform.toLowerCase();
 
     const resolvedId = resolveIdValue(id);
+    const resolvedAvatarUrl = resolveNonEmptyString(avatarUrl);
     const resolvedUsername = resolveNonEmptyString(username);
     const resolvedUserId = resolveIdValue(userId);
     const resolvedEventType = resolveNonEmptyString(eventType);
 
     const payload = {
-        type: notificationType,
-        platform: trimmedPlatform,
+        type: canonicalType,
+        platform: normalizedPlatform,
         isError: true,
         timestamp: resolvedTimestamp,
         ...(resolvedId ? { id: resolvedId } : {}),
+        ...(resolvedAvatarUrl ? { avatarUrl: resolvedAvatarUrl } : {}),
         ...(resolvedUsername ? { username: resolvedUsername } : {}),
         ...(resolvedUserId ? { userId: resolvedUserId } : {}),
-        eventType: resolvedEventType || notificationType
+        eventType: resolvedEventType || canonicalType
     };
 
-    switch (normalizedType) {
+    switch (canonicalType) {
         case 'platform:gift': {
             const resolvedGiftType = resolveNonEmptyString(giftType);
             const resolvedGiftCount = resolvePositiveNumber(giftCount);

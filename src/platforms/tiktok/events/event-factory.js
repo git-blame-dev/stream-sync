@@ -2,6 +2,7 @@ const { PlatformEvents } = require('../../../interfaces/PlatformEvents');
 const { normalizeTikTokMessage } = require('../../../utils/message-normalization');
 const { extractTikTokUserData } = require('../../../utils/tiktok-data-extraction');
 const { getSystemTimestampISO } = require('../../../utils/timestamp');
+const { DEFAULT_AVATAR_URL } = require('../../../constants/avatar');
 
 function createTikTokEventFactory(options = {}) {
     const platformName = options.platformName || 'tiktok';
@@ -21,6 +22,24 @@ function createTikTokEventFactory(options = {}) {
         userId: data.userId,
         username: data.username
     });
+    const resolveAvatarUrl = (data = {}, fallbackData = {}) => {
+        const avatarFromData = typeof data.avatarUrl === 'string' ? data.avatarUrl.trim() : '';
+        if (avatarFromData) {
+            return avatarFromData;
+        }
+
+        const avatarFromFallback = typeof fallbackData.avatarUrl === 'string' ? fallbackData.avatarUrl.trim() : '';
+        if (avatarFromFallback) {
+            return avatarFromFallback;
+        }
+
+        const profilePicture = fallbackData?.metadata?.profilePicture;
+        if (typeof profilePicture === 'string' && profilePicture.trim()) {
+            return profilePicture.trim();
+        }
+
+        return DEFAULT_AVATAR_URL;
+    };
 
     return {
         createChatMessage: (data = {}, eventOptions = {}) => {
@@ -29,6 +48,7 @@ function createTikTokEventFactory(options = {}) {
                 userId: normalized?.userId,
                 username: normalized?.username
             });
+            const avatarUrl = resolveAvatarUrl(data, normalized || {});
 
             if (!normalized?.message) {
                 throw new Error('Missing TikTok message text');
@@ -42,6 +62,7 @@ function createTikTokEventFactory(options = {}) {
                 platform: platformName,
                 username: identity.username,
                 userId: identity.userId,
+                avatarUrl,
                 message: {
                     text: normalized.message
                 },
@@ -54,6 +75,7 @@ function createTikTokEventFactory(options = {}) {
         },
         createGift: (data = {}) => {
             const identity = normalizeIdentityFromCanonical(data);
+            const avatarUrl = resolveAvatarUrl(data);
             const hasEnhancedGiftData = data.enhancedGiftData && typeof data.enhancedGiftData === 'object';
 
             if (typeof data.giftType !== 'string' || !data.giftType.trim()) {
@@ -100,6 +122,7 @@ function createTikTokEventFactory(options = {}) {
                 platform: platformName,
                 username: identity.username,
                 userId: identity.userId,
+                avatarUrl,
                 giftType,
                 giftCount,
                 amount: resolvedAmount,
@@ -125,12 +148,14 @@ function createTikTokEventFactory(options = {}) {
                 userId: params.userId,
                 username: params.username
             });
+            const avatarUrl = resolveAvatarUrl(params);
 
             return {
                 type: PlatformEvents.FOLLOW,
                 platform: platformName,
                 username: identity.username,
                 userId: identity.userId,
+                avatarUrl,
                 timestamp: params.timestamp,
                 metadata: buildEventMetadata(params.metadata)
             };
@@ -140,12 +165,14 @@ function createTikTokEventFactory(options = {}) {
                 userId: params.userId,
                 username: params.username
             });
+            const avatarUrl = resolveAvatarUrl(params);
 
             return {
                 type: PlatformEvents.SHARE,
                 platform: platformName,
                 username: identity.username,
                 userId: identity.userId,
+                avatarUrl,
                 timestamp: params.timestamp,
                 metadata: buildEventMetadata({
                     interactionType: 'share',
@@ -155,6 +182,7 @@ function createTikTokEventFactory(options = {}) {
         },
         createEnvelope: (data = {}) => {
             const identity = normalizeIdentityFromPayload(data);
+            const avatarUrl = resolveAvatarUrl(data);
             const messageId = getPlatformMessageId(data);
             if (!messageId) {
                 throw new Error('Missing TikTok envelope message id');
@@ -174,6 +202,7 @@ function createTikTokEventFactory(options = {}) {
                 platform: platformName,
                 username: identity.username,
                 userId: identity.userId,
+                avatarUrl,
                 giftType: 'Treasure Chest',
                 giftCount: 1,
                 repeatCount: 1,
@@ -185,6 +214,7 @@ function createTikTokEventFactory(options = {}) {
         },
         createSubscription: (data = {}) => {
             const identity = normalizeIdentityFromPayload(data);
+            const avatarUrl = resolveAvatarUrl(data);
             const tier = typeof data?.tier === 'string' ? data.tier.trim() : '';
             const message = typeof data?.message === 'string' ? data.message.trim() : '';
             const months = Number(data?.months);
@@ -193,6 +223,7 @@ function createTikTokEventFactory(options = {}) {
                 type: PlatformEvents.PAYPIGGY,
                 platform: platformName,
                 ...identity,
+                avatarUrl,
                 timestamp: getTimestamp(data)
             };
             if (tier) {
@@ -208,6 +239,7 @@ function createTikTokEventFactory(options = {}) {
         },
         createSuperfan: (data = {}) => {
             const identity = normalizeIdentityFromPayload(data);
+            const avatarUrl = resolveAvatarUrl(data);
             const message = typeof data?.message === 'string' ? data.message.trim() : '';
             const months = Number(data?.months);
 
@@ -215,6 +247,7 @@ function createTikTokEventFactory(options = {}) {
                 type: PlatformEvents.PAYPIGGY,
                 platform: platformName,
                 ...identity,
+                avatarUrl,
                 tier: 'superfan',
                 timestamp: getTimestamp(data)
             };

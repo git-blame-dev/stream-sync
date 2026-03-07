@@ -49,6 +49,50 @@ describe('Message Normalization', () => {
             });
         });
 
+        test('maps canonical avatarUrl from author thumbnail', () => {
+            const timestampMs = testClock.now();
+            const chatItem = {
+                item: {
+                    id: 'yt-avatar-123',
+                    timestamp: timestampMs,
+                    author: {
+                        id: 'UCavatar123',
+                        name: 'avataruser',
+                        is_moderator: false,
+                        badges: [],
+                        thumbnails: [{ url: 'https://example.invalid/youtube-chat-avatar.jpg' }]
+                    },
+                    message: { text: 'Hello avatar' }
+                }
+            };
+
+            const normalized = normalizeYouTubeMessage(chatItem, 'youtube');
+
+            expect(normalized.avatarUrl).toBe('https://example.invalid/youtube-chat-avatar.jpg');
+        });
+
+        test('trims YouTube author thumbnail URLs before mapping avatarUrl', () => {
+            const timestampMs = testClock.now();
+            const chatItem = {
+                item: {
+                    id: 'yt-avatar-trim-123',
+                    timestamp: timestampMs,
+                    author: {
+                        id: 'UCtrim123',
+                        name: 'trimuser',
+                        is_moderator: false,
+                        badges: [],
+                        thumbnails: [{ url: '  https://example.invalid/youtube-chat-avatar-trim.jpg  ' }]
+                    },
+                    message: { text: 'Hello avatar trim' }
+                }
+            };
+
+            const normalized = normalizeYouTubeMessage(chatItem, 'youtube');
+
+            expect(normalized.avatarUrl).toBe('https://example.invalid/youtube-chat-avatar-trim.jpg');
+        });
+
         test('normalizes YouTube super chat correctly', () => {
             const timestampMs = testClock.now();
             const superChatItem = {
@@ -431,11 +475,11 @@ describe('Message Normalization', () => {
             expect(validation.errors).toContain('Missing required field: username');
         });
 
-        test('returns issues when message is not an object', () => {
+        test('returns errors when message is not an object', () => {
             const validation = validateNormalizedMessage(null);
 
             expect(validation.isValid).toBe(false);
-            expect(validation.issues).toContain('Message is not an object');
+            expect(validation.errors).toContain('Message is not an object');
         });
 
         test('detects invalid timestamp format', () => {

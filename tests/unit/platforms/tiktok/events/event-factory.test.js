@@ -1,4 +1,5 @@
-const { PlatformEvents } = require('../../../../../src/interfaces/PlatformEvents');
+const { PlatformEvents, PlatformEventValidator } = require('../../../../../src/interfaces/PlatformEvents');
+const { DEFAULT_AVATAR_URL } = require('../../../../../src/constants/avatar');
 
 describe('TikTok event factory behavior', () => {
     it('includes boolean fields in chat message events', () => {
@@ -14,6 +15,7 @@ describe('TikTok event factory behavior', () => {
                 userId: 'test-user-id',
                 username: 'test-username',
                 message: 'test message',
+                avatarUrl: 'https://example.invalid/tiktok-chat-avatar.jpg',
                 timestamp: '2026-01-30T12:00:00.000Z',
                 isMod: true,
                 isSubscriber: false,
@@ -26,6 +28,85 @@ describe('TikTok event factory behavior', () => {
         expect(event.isMod).toBe(true);
         expect(event.isSubscriber).toBe(false);
         expect(event.isBroadcaster).toBe(true);
+        expect(event.avatarUrl).toBe('https://example.invalid/tiktok-chat-avatar.jpg');
+    });
+
+    it('preserves avatarUrl on gift events', () => {
+        const { createTikTokEventFactory } = require('../../../../../src/platforms/tiktok/events/event-factory');
+
+        const eventFactory = createTikTokEventFactory({
+            platformName: 'tiktok',
+            getPlatformMessageId: () => 'test-msg-id-1'
+        });
+
+        const event = eventFactory.createGift({
+            userId: 'test-user-id',
+            username: 'test-username',
+            avatarUrl: 'https://example.invalid/tiktok-gift-avatar.jpg',
+            giftType: 'Rose',
+            giftCount: 1,
+            amount: 1,
+            unitAmount: 1,
+            currency: 'coins',
+            timestamp: '2026-01-30T12:00:00.000Z'
+        });
+
+        expect(event.avatarUrl).toBe('https://example.invalid/tiktok-gift-avatar.jpg');
+    });
+
+    it('preserves avatarUrl on follow events', () => {
+        const { createTikTokEventFactory } = require('../../../../../src/platforms/tiktok/events/event-factory');
+
+        const eventFactory = createTikTokEventFactory({
+            platformName: 'tiktok'
+        });
+
+        const event = eventFactory.createFollow({
+            userId: 'test-user-id',
+            username: 'test-username',
+            avatarUrl: 'https://example.invalid/tiktok-follow-avatar.jpg',
+            timestamp: '2026-01-30T12:00:00.000Z'
+        });
+
+        expect(event.avatarUrl).toBe('https://example.invalid/tiktok-follow-avatar.jpg');
+    });
+
+    it('emits fallback avatarUrl for follow events when payload avatar is missing', () => {
+        const { createTikTokEventFactory } = require('../../../../../src/platforms/tiktok/events/event-factory');
+
+        const eventFactory = createTikTokEventFactory({
+            platformName: 'tiktok'
+        });
+
+        const event = eventFactory.createFollow({
+            userId: 'test-user-id',
+            username: 'test-username',
+            timestamp: '2026-01-30T12:00:00.000Z'
+        });
+
+        expect(event.avatarUrl).toBe(DEFAULT_AVATAR_URL);
+    });
+
+    it('emits fallback avatarUrl for gift events when payload avatar is missing', () => {
+        const { createTikTokEventFactory } = require('../../../../../src/platforms/tiktok/events/event-factory');
+
+        const eventFactory = createTikTokEventFactory({
+            platformName: 'tiktok',
+            getPlatformMessageId: () => 'test-msg-id-fallback'
+        });
+
+        const event = eventFactory.createGift({
+            userId: 'test-user-id',
+            username: 'test-username',
+            giftType: 'Rose',
+            giftCount: 1,
+            amount: 1,
+            unitAmount: 1,
+            currency: 'coins',
+            timestamp: '2026-01-30T12:00:00.000Z'
+        });
+
+        expect(event.avatarUrl).toBe(DEFAULT_AVATAR_URL);
     });
 
     it('defaults boolean fields to false when not provided', () => {
@@ -77,5 +158,21 @@ describe('TikTok event factory behavior', () => {
         expect(event.timestamp).toBeDefined();
         expect(typeof event.timestamp).toBe('string');
         expect(event.metadata.timestamp).toBeUndefined();
+    });
+
+    it('produces connection lifecycle events that satisfy platform schemas', () => {
+        const { createTikTokEventFactory } = require('../../../../../src/platforms/tiktok/events/event-factory');
+
+        const eventFactory = createTikTokEventFactory({
+            platformName: 'tiktok',
+            generateCorrelationId: () => 'corr-connection-123'
+        });
+        const validator = new PlatformEventValidator();
+
+        const connected = eventFactory.createConnection('test-connection-id');
+        const disconnected = eventFactory.createDisconnection('stream ended', true);
+
+        expect(validator.validate(connected)).toEqual({ valid: true, errors: [] });
+        expect(validator.validate(disconnected)).toEqual({ valid: true, errors: [] });
     });
 });
