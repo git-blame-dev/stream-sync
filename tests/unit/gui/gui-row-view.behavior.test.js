@@ -8,6 +8,7 @@ describe('GuiRow rendering behavior', () => {
     it('renders avatar first with circular avatar class', () => {
         const html = renderToStaticMarkup(
             React.createElement(GuiRow, {
+                mode: 'dock',
                 row: {
                     type: 'chat',
                     kind: 'chat',
@@ -31,6 +32,7 @@ describe('GuiRow rendering behavior', () => {
     it('renders notification text with white text class', () => {
         const html = renderToStaticMarkup(
             React.createElement(GuiRow, {
+                mode: 'dock',
                 row: {
                     type: 'platform:follow',
                     kind: 'notification',
