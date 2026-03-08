@@ -1,0 +1,62 @@
+.gui-shell {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: 100%;
+  max-width: 960px;
+  margin: 0 auto;
+  padding: 12px;
+  box-sizing: border-box;
+  color: #f4f6f8;
+  font-family: "IBM Plex Sans", "Segoe UI", sans-serif;
+}
+
+.gui-shell--overlay {
+  background: transparent;
+}
+
+.gui-shell--dock {
+  min-height: 100vh;
+  background: linear-gradient(180deg, #1a1f26 0%, #12161c 100%);
+}
+
+.gui-row {
+  display: grid;
+  grid-template-columns: 42px 1fr;
+  gap: 10px;
+  align-items: start;
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: rgba(18, 22, 28, 0.8);
+}
+
+.gui-row__avatar {
+  width: 42px;
+  height: 42px;
+  object-fit: cover;
+}
+
+.gui-row__avatar--circle {
+  border-radius: 999px;
+}
+
+.gui-row__content {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.gui-row__username {
+  font-weight: 600;
+  font-size: 14px;
+  color: #d9e0e8;
+}
+
+.gui-row__text {
+  font-size: 14px;
+  color: #c7d0d9;
+}
+
+.gui-row__text--notification {
+  color: #ffffff;
+}
