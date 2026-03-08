@@ -185,6 +185,34 @@ describe('DisplayQueue control', () => {
 
             expect(processed).toBe(true);
         });
+
+        it('emits display row event when queue item is added', () => {
+            const emittedRows = [];
+            const eventBus = {
+                emit: (eventName, payload) => {
+                    emittedRows.push({ eventName, payload });
+                }
+            };
+
+            const queue = new DisplayQueue(
+                createMockOBSManager('connected'),
+                createConfig({ autoProcess: false }),
+                constants,
+                eventBus,
+                createMockDependencies()
+            );
+
+            queue.addItem({
+                type: 'chat',
+                platform: 'twitch',
+                data: { username: 'test-user', userId: 'test-user-id', message: 'hello' }
+            });
+
+            expect(emittedRows.length).toBe(1);
+            expect(emittedRows[0].eventName).toBe('display:row');
+            expect(emittedRows[0].payload.type).toBe('chat');
+            expect(emittedRows[0].payload.platform).toBe('twitch');
+        });
     });
 
     describe('processQueue readiness', () => {

@@ -7,6 +7,7 @@ const { OBSViewerCountObserver } = require('../observers/obs-viewer-count-observ
 const { createVFXCommandService } = require('../services/VFXCommandService');
 const PlatformEventRouter = require('../services/PlatformEventRouter');
 const ChatNotificationRouter = require('../services/ChatNotificationRouter');
+const { createGuiTransportService, isGuiActive } = require('../services/gui/gui-transport-service');
 const wireStreamStatusHandlers = require('../viewer-count/stream-status-handler');
 const { PlatformEvents } = require('../interfaces/PlatformEvents');
 const { DEFAULT_AVATAR_URL } = require('../constants/avatar');
@@ -121,6 +122,11 @@ class AppRuntime {
         this.eventBus = this.dependencies.eventBus;
         this.vfxCommandService = this.dependencies.vfxCommandService;
         this.userTrackingService = this.dependencies.userTrackingService;
+        this.guiTransportService = this.dependencies.guiTransportService || createGuiTransportService({
+            config: this.config,
+            eventBus: this.eventBus,
+            logger: this.logger
+        });
         this.obsEventService = this.dependencies.obsEventService;
         this.sceneManagementService = this.dependencies.sceneManagementService;
 
@@ -370,6 +376,17 @@ class AppRuntime {
     async shutdown() {
         this.logger.info('Shutting down application...', 'system');
 
+        try {
+            await this._stopGuiTransport();
+        } catch (error) {
+            this._handleAppRuntimeError(
+                `Error stopping GUI transport: ${error.message}`,
+                error,
+                null,
+                { eventType: 'shutdown', logContext: 'system' }
+            );
+        }
+
         await this.platformLifecycleService.disconnectAll();
 
         if (this.obsEventService) {
@@ -456,6 +473,17 @@ class AppRuntime {
     async start() {
         this.logger.info('AppRuntime.start() method called', 'AppRuntime');
         this.logger.debug('Start method called...', 'AppRuntime');
+
+        try {
+            await this._startGuiTransport();
+        } catch (error) {
+            this._handleAppRuntimeError(
+                `GUI transport initialization failed: ${error.message}`,
+                error,
+                null,
+                { eventType: 'startup', logContext: 'AppRuntime' }
+            );
+        }
 
         this.logger.debug('Initializing platforms...', 'AppRuntime');
         try {
@@ -933,6 +961,26 @@ class AppRuntime {
             return this.dependencies.obs.goalsManager;
         }
         return getDefaultGoalsManager();
+    }
+
+    async _startGuiTransport() {
+        if (!this.guiTransportService || typeof this.guiTransportService.start !== 'function') {
+            return;
+        }
+
+        if (!isGuiActive(this.config)) {
+            return;
+        }
+
+        await this.guiTransportService.start();
+    }
+
+    async _stopGuiTransport() {
+        if (!this.guiTransportService || typeof this.guiTransportService.stop !== 'function') {
+            return;
+        }
+
+        await this.guiTransportService.stop();
     }
 }
 

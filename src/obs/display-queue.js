@@ -151,11 +151,25 @@ class DisplayQueue {
         if (removedChatCount > 0) {
             logger.debug(`[Display Queue] Removing ${removedChatCount} stale chat messages to show latest`, 'display-queue');
         }
+        this.emitDisplayRow(item);
         logger.debug(`[Display Queue] Added ${item.type} (priority ${item.priority}) at position ${insertIndex}. Queue length: ${this.queue.length}`, 'display-queue');
         
         if (!this.isProcessing && !this.isRetryScheduled && this.config.autoProcess) {
             this.processQueue();
         }
+    }
+
+    emitDisplayRow(item) {
+        if (!this.eventBus || typeof this.eventBus.emit !== 'function') {
+            return;
+        }
+
+        this.eventBus.emit('display:row', {
+            type: item?.type,
+            platform: item?.platform,
+            data: item?.data,
+            timestamp: item?.data?.timestamp || null
+        });
     }
     
     async processChatMessage(chatItem) {

@@ -24,6 +24,7 @@ const createDeps = (overrides = {}) => ({
     userTrackingService: overrides.userTrackingService || { isFirstMessage: createMockFn() },
     obsEventService: overrides.obsEventService || { disconnect: createMockFn().mockResolvedValue() },
     sceneManagementService: overrides.sceneManagementService || {},
+    guiTransportService: overrides.guiTransportService,
     commandCooldownService: overrides.commandCooldownService || {
         checkUserCooldown: createMockFn().mockReturnValue({ allowed: true }),
         updateUserCooldown: createMockFn(),
@@ -569,6 +570,78 @@ describe('AppRuntime behavior', () => {
 
         expect(viewerCountCalls).toEqual({ add: 1, init: 1, start: 1 });
         expect(goalsCalls).toEqual(['init']);
+    });
+
+    it('starts gui transport when gui is active', async () => {
+        const guiTransportService = {
+            start: createMockFn().mockResolvedValue(),
+            stop: createMockFn().mockResolvedValue(),
+            isActive: createMockFn().mockReturnValue(true)
+        };
+        const runtime = createRuntime(
+            { guiTransportService },
+            { gui: { enableDock: true, enableOverlay: false } }
+        );
+
+        runtime.dependencies.obs = {
+            goalsManager: { initializeGoalDisplay: async () => {} },
+            connectionManager: { isConnected: () => false }
+        };
+        runtime.viewerCountSystem = {
+            addObserver: async () => {},
+            initialize: async () => {},
+            startPolling: async () => {}
+        };
+
+        await runtime.start();
+
+        expect(guiTransportService.start.mock.calls.length).toBe(1);
+    });
+
+    it('does not start gui transport when gui is inactive', async () => {
+        const guiTransportService = {
+            start: createMockFn().mockResolvedValue(),
+            stop: createMockFn().mockResolvedValue(),
+            isActive: createMockFn().mockReturnValue(false)
+        };
+        const runtime = createRuntime(
+            { guiTransportService },
+            { gui: { enableDock: false, enableOverlay: false } }
+        );
+
+        runtime.dependencies.obs = {
+            goalsManager: { initializeGoalDisplay: async () => {} },
+            connectionManager: { isConnected: () => false }
+        };
+        runtime.viewerCountSystem = {
+            addObserver: async () => {},
+            initialize: async () => {},
+            startPolling: async () => {}
+        };
+
+        await runtime.start();
+
+        expect(guiTransportService.start.mock.calls.length).toBe(0);
+    });
+
+    it('stops gui transport on runtime shutdown', async () => {
+        const guiTransportService = {
+            start: createMockFn().mockResolvedValue(),
+            stop: createMockFn().mockResolvedValue(),
+            isActive: createMockFn().mockReturnValue(true)
+        };
+        const runtime = createRuntime({ guiTransportService });
+        runtime.viewerCountSystem = { stopPolling: createMockFn() };
+        runtime.viewerCountStatusCleanup = createMockFn();
+        const originalExit = process.exit;
+        process.exit = createMockFn();
+
+        try {
+            await runtime.shutdown();
+            expect(guiTransportService.stop.mock.calls.length).toBe(1);
+        } finally {
+            process.exit = originalExit;
+        }
     });
 
     it('requires options when emitting system ready', () => {
