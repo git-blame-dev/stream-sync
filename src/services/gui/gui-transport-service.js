@@ -36,7 +36,11 @@ function createGuiTransportService(options = {}) {
         const bodyStyle = transparent
             ? 'margin:0;background:transparent;color:#ffffff;font-family:Georgia,serif;'
             : 'margin:0;background:#101317;color:#ffffff;font-family:Georgia,serif;';
-        return `<!doctype html><html><head><meta charset="utf-8"><title>${title}</title></head><body style="${bodyStyle}"><div id="app" data-kind="${kind}"></div><script>window.__STREAM_SYNC_GUI_KIND__=${JSON.stringify(kind)};window.__STREAM_SYNC_GUI_EVENTS__='/gui/events';</script></body></html>`;
+        const runtimeGuiConfig = {
+            overlayMaxMessages: guiConfig.overlayMaxMessages,
+            overlayMaxLinesPerMessage: guiConfig.overlayMaxLinesPerMessage
+        };
+        return `<!doctype html><html><head><meta charset="utf-8"><title>${title}</title></head><body style="${bodyStyle}"><div id="app" data-kind="${kind}"></div><script>window.__STREAM_SYNC_GUI_KIND__=${JSON.stringify(kind)};window.__STREAM_SYNC_GUI_EVENTS__='/gui/events';window.__STREAM_SYNC_GUI_CONFIG__=${JSON.stringify(runtimeGuiConfig)};</script></body></html>`;
     };
 
     const sendSse = (payload) => {

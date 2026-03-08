@@ -13,6 +13,8 @@
 
 .gui-shell--overlay {
   background: transparent;
+  min-height: 100vh;
+  justify-content: flex-end;
 }
 
 .gui-shell--dock {
@@ -28,6 +30,22 @@
   padding: 8px 10px;
   border-radius: 10px;
   background: rgba(18, 22, 28, 0.8);
+}
+
+.gui-row--overlay-enter {
+  animation: gui-row-enter 220ms ease-out;
+}
+
+@keyframes gui-row-enter {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 .gui-row__avatar {
@@ -55,6 +73,14 @@
 .gui-row__text {
   font-size: 14px;
   color: #c7d0d9;
+}
+
+.gui-row__text--overlay-clamp {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: var(--overlay-line-clamp, 3);
+  overflow: hidden;
+  word-break: break-word;
 }
 
 .gui-row__text--notification {

@@ -39,8 +39,18 @@ function normalizeRow(input: unknown): GuiRowDto {
   }
 }
 
-export function createGuiFeedStore() {
+export interface GuiFeedStoreOptions {
+  maxRows?: number
+}
+
+function normalizeMaxRows(value: unknown): number {
+  const parsed = Number(value)
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : 0
+}
+
+export function createGuiFeedStore(options: GuiFeedStoreOptions = {}) {
   let rows: GuiRowDto[] = []
+  const maxRows = normalizeMaxRows(options.maxRows)
 
   const pushEvent = (event: unknown): void => {
     const row = normalizeRow(event)
@@ -49,6 +59,10 @@ export function createGuiFeedStore() {
     }
 
     rows = [...rows, row]
+
+    if (maxRows > 0 && rows.length > maxRows) {
+      rows = rows.slice(rows.length - maxRows)
+    }
   }
 
   const getRows = (): GuiRowDto[] => rows

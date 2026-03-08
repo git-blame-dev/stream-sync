@@ -218,6 +218,32 @@ describe('GUI transport routes and SSE integration', () => {
         }
     });
 
+    it('embeds overlay queue and line-clamp config into enabled overlay page', async () => {
+        const port = await getAvailablePort();
+        const eventBus = new TestEventBus();
+        const config = buildConfig({
+            enableDock: false,
+            enableOverlay: true,
+            overlayMaxMessages: 7,
+            overlayMaxLinesPerMessage: 4,
+            port
+        });
+        const service = createGuiTransportService({ config, eventBus, logger: null });
+        await service.start();
+
+        const baseUrl = `http://127.0.0.1:${port}`;
+        try {
+            const response = await fetch(`${baseUrl}/overlay`);
+            const html = await response.text();
+
+            expect(response.status).toBe(200);
+            expect(html).toContain('"overlayMaxMessages":7');
+            expect(html).toContain('"overlayMaxLinesPerMessage":4');
+        } finally {
+            await service.stop();
+        }
+    });
+
     it('activates only when dock or overlay is enabled', async () => {
         const inactiveConfig = buildConfig({ enableDock: false, enableOverlay: false, port: await getAvailablePort() });
         const inactiveService = createGuiTransportService({ config: inactiveConfig, eventBus: new TestEventBus(), logger: null });
