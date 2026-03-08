@@ -177,6 +177,7 @@ describe('GUI transport routes and SSE integration', () => {
             const dockHtml = await dockResponse.text();
             expect(dockResponse.status).toBe(200);
             expect(dockHtml).toContain('Dock disabled');
+            expect(dockHtml).toContain('data-gui-disabled="true"');
             expect(dockHtml).not.toContain('/gui/events');
 
             const overlayResponse = await fetch(`${baseUrl}/overlay`);
@@ -210,6 +211,7 @@ describe('GUI transport routes and SSE integration', () => {
             const overlayHtml = await overlayResponse.text();
             expect(overlayResponse.status).toBe(200);
             expect(overlayHtml).toContain('Overlay disabled');
+            expect(overlayHtml).toContain('data-gui-disabled="true"');
             expect(overlayHtml).not.toContain('/gui/events');
         } finally {
             await service.stop();

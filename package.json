@@ -10,8 +10,13 @@
     "test": "NODE_ENV=test bun test"
   },
   "devDependencies": {
+    "@types/react": "^19.2.14",
+    "@types/react-dom": "^19.2.3",
     "eslint": "^9.39.1",
-    "knip": "^5.61.2"
+    "knip": "^5.61.2",
+    "react-test-renderer": "^19.2.4",
+    "typescript": "^5.9.3",
+    "vite": "^7.3.1"
   },
   "keywords": [],
   "author": "",
@@ -20,6 +25,8 @@
     "axios": "^1.9.0",
     "ini": "^5.0.0",
     "obs-websocket-js": "^5.0.6",
+    "react": "^19.2.4",
+    "react-dom": "^19.2.4",
     "selfsigned": "^3.0.1",
     "ws": "^8.18.0",
     "youtubei.js": "^16.0.1"

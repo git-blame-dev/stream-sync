@@ -29,7 +29,7 @@ function createGuiTransportService(options = {}) {
         const bodyStyle = transparent
             ? 'margin:0;background:transparent;color:#ffffff;font-family:Georgia,serif;'
             : 'margin:0;background:#101317;color:#ffffff;font-family:Georgia,serif;';
-        return `<!doctype html><html><head><meta charset="utf-8"><title>${title}</title></head><body style="${bodyStyle}"><div style="padding:12px;opacity:0.9">${message}</div></body></html>`;
+        return `<!doctype html><html><head><meta charset="utf-8"><title>${title}</title></head><body style="${bodyStyle}"><div data-gui-disabled="true" style="padding:12px;opacity:0.9">${message}</div></body></html>`;
     };
 
     const renderActivePage = (title, kind, transparent = false) => {
