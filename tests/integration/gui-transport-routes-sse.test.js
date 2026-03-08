@@ -1,4 +1,7 @@
 const { describe, it, expect } = require('bun:test');
+const fs = require('fs');
+const os = require('os');
+const path = require('path');
 
 const { createGuiTransportService } = require('../../src/services/gui/gui-transport-service');
 const { safeSetTimeout } = require('../../src/utils/timeout-validator');
@@ -241,6 +244,92 @@ describe('GUI transport routes and SSE integration', () => {
             expect(html).toContain('"overlayMaxLinesPerMessage":4');
         } finally {
             await service.stop();
+        }
+    });
+
+    it('serves enabled dock and overlay pages with built GUI asset entry paths', async () => {
+        const port = await getAvailablePort();
+        const eventBus = new TestEventBus();
+        const config = buildConfig({
+            enableDock: true,
+            enableOverlay: true,
+            overlayMaxMessages: 7,
+            overlayMaxLinesPerMessage: 4,
+            port
+        });
+        const service = createGuiTransportService({ config, eventBus, logger: null });
+        await service.start();
+
+        const baseUrl = `http://127.0.0.1:${port}`;
+        try {
+            const dockResponse = await fetch(`${baseUrl}/dock`);
+            const dockHtml = await dockResponse.text();
+            expect(dockResponse.status).toBe(200);
+            expect(dockHtml).toContain('/gui/assets/dock.js');
+
+            const overlayResponse = await fetch(`${baseUrl}/overlay`);
+            const overlayHtml = await overlayResponse.text();
+            expect(overlayResponse.status).toBe(200);
+            expect(overlayHtml).toContain('/gui/assets/overlay.js');
+        } finally {
+            await service.stop();
+        }
+    });
+
+    it('serves built GUI assets and returns 404 for missing assets', async () => {
+        const assetsRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'gui-assets-'));
+        const assetsDir = path.join(assetsRoot, 'assets');
+        const siblingDir = path.join(assetsRoot, 'assets2');
+        fs.mkdirSync(assetsDir, { recursive: true });
+        fs.mkdirSync(siblingDir, { recursive: true });
+        fs.writeFileSync(path.join(assetsDir, 'dock.js'), 'console.log("dock");');
+        fs.writeFileSync(path.join(siblingDir, 'secret.js'), 'console.log("secret");');
+
+        const port = await getAvailablePort();
+        const eventBus = new TestEventBus();
+        const config = buildConfig({
+            enableDock: true,
+            enableOverlay: false,
+            port
+        });
+        const service = createGuiTransportService({
+            config,
+            eventBus,
+            logger: null,
+            assetsRoot
+        });
+
+        await service.start();
+
+        const baseUrl = `http://127.0.0.1:${port}`;
+        try {
+            const presentResponse = await fetch(`${baseUrl}/gui/assets/dock.js`);
+            const presentBody = await presentResponse.text();
+            expect(presentResponse.status).toBe(200);
+            expect(presentBody).toContain('console.log("dock")');
+
+            const queryResponse = await fetch(`${baseUrl}/gui/assets/dock.js?v=1`);
+            const queryBody = await queryResponse.text();
+            expect(queryResponse.status).toBe(200);
+            expect(queryBody).toContain('console.log("dock")');
+
+            const missingResponse = await fetch(`${baseUrl}/gui/assets/missing.js`);
+            const missingBody = await missingResponse.text();
+            expect(missingResponse.status).toBe(404);
+            expect(missingBody).toContain('Not Found');
+
+            const encodedTraversalResponse = await fetch(`${baseUrl}/gui/assets/%2e%2e/assets2/secret.js`);
+            const encodedTraversalBody = await encodedTraversalResponse.text();
+            expect(encodedTraversalResponse.status).toBe(404);
+            expect(encodedTraversalBody).toContain('Not Found');
+
+            const malformedResponse = await fetch(`${baseUrl}/gui/assets/%E0%A4%A.js`);
+            const malformedBody = await malformedResponse.text();
+            expect(malformedResponse.status).toBe(404);
+            expect(malformedBody).toContain('Not Found');
+        } finally {
+            await service.stop();
+            fs.rmSync(assetsRoot, { recursive: true, force: true });
         }
     });
 

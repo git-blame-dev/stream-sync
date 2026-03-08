@@ -1,4 +1,6 @@
 const http = require('http');
+const fs = require('fs');
+const path = require('path');
 
 const { createPlatformErrorHandler } = require('../../utils/platform-error-handler');
 const { createEventToGuiContractMapper } = require('./event-to-gui-contract-mapper');
@@ -19,11 +21,54 @@ function createGuiTransportService(options = {}) {
     const eventBus = options.eventBus;
     const mapper = options.mapper || createEventToGuiContractMapper({ config });
     const errorHandler = createGuiTransportErrorHandler(logger);
+    const assetsRoot = typeof options.assetsRoot === 'string' && options.assetsRoot.trim()
+        ? options.assetsRoot
+        : path.resolve(__dirname, '../../../gui/dist');
 
     let server = null;
     let active = false;
     let unsubscribeDisplayRows = null;
     const clients = new Set();
+
+    const getAssetContentType = (filePath) => {
+        if (filePath.endsWith('.js')) {
+            return 'application/javascript; charset=utf-8';
+        }
+        if (filePath.endsWith('.css')) {
+            return 'text/css; charset=utf-8';
+        }
+        if (filePath.endsWith('.map')) {
+            return 'application/json; charset=utf-8';
+        }
+        return 'application/octet-stream';
+    };
+
+    const resolveAssetFilePath = (url) => {
+        if (!url.startsWith('/gui/assets/')) {
+            return null;
+        }
+
+        let requestedPath;
+        try {
+            requestedPath = decodeURIComponent(url.replace('/gui/', ''));
+        } catch {
+            return null;
+        }
+
+        const normalizedPath = path.normalize(requestedPath);
+        if (normalizedPath.startsWith('..') || path.isAbsolute(normalizedPath)) {
+            return null;
+        }
+
+        const absolutePath = path.resolve(assetsRoot, normalizedPath);
+        const assetsDirectory = path.resolve(assetsRoot, 'assets');
+        const relativePath = path.relative(assetsDirectory, absolutePath);
+        if (relativePath.startsWith('..') || path.isAbsolute(relativePath)) {
+            return null;
+        }
+
+        return absolutePath;
+    };
 
     const renderDisabledPage = (title, message, transparent = false) => {
         const bodyStyle = transparent
@@ -40,7 +85,7 @@ function createGuiTransportService(options = {}) {
             overlayMaxMessages: guiConfig.overlayMaxMessages,
             overlayMaxLinesPerMessage: guiConfig.overlayMaxLinesPerMessage
         };
-        return `<!doctype html><html><head><meta charset="utf-8"><title>${title}</title></head><body style="${bodyStyle}"><div id="app" data-kind="${kind}"></div><script>window.__STREAM_SYNC_GUI_KIND__=${JSON.stringify(kind)};window.__STREAM_SYNC_GUI_EVENTS__='/gui/events';window.__STREAM_SYNC_GUI_CONFIG__=${JSON.stringify(runtimeGuiConfig)};</script></body></html>`;
+        return `<!doctype html><html><head><meta charset="utf-8"><title>${title}</title></head><body style="${bodyStyle}"><div id="app" data-kind="${kind}"></div><script>window.__STREAM_SYNC_GUI_KIND__=${JSON.stringify(kind)};window.__STREAM_SYNC_GUI_EVENTS__='/gui/events';window.__STREAM_SYNC_GUI_CONFIG__=${JSON.stringify(runtimeGuiConfig)};</script><script type="module" src="/gui/assets/${kind}.js"></script></body></html>`;
     };
 
     const sendSse = (payload) => {
@@ -90,7 +135,13 @@ function createGuiTransportService(options = {}) {
     };
 
     const requestHandler = (req, res) => {
-        const url = req.url || '/';
+        const rawUrl = req.url || '/';
+        let url = rawUrl;
+        try {
+            url = new URL(rawUrl, 'http://localhost').pathname;
+        } catch {
+            url = rawUrl;
+        }
 
         if (url === '/gui/events') {
             res.writeHead(200, {
@@ -105,6 +156,22 @@ function createGuiTransportService(options = {}) {
             req.on('close', () => {
                 clients.delete(res);
             });
+            return;
+        }
+
+        if (url.startsWith('/gui/assets/')) {
+            const assetPath = resolveAssetFilePath(url);
+            if (!assetPath || !fs.existsSync(assetPath) || !fs.statSync(assetPath).isFile()) {
+                res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' });
+                res.end('Not Found');
+                return;
+            }
+
+            res.writeHead(200, {
+                'Content-Type': getAssetContentType(assetPath),
+                'Cache-Control': 'public, max-age=300'
+            });
+            res.end(fs.readFileSync(assetPath));
             return;
         }
 
