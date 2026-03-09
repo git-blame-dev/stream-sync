@@ -111,7 +111,6 @@ function createEventToGuiContractMapper(options = {}) {
         const data = row.data && typeof row.data === 'object' ? row.data : {};
         const platform = normalizeString(row.platform || data.platform).toLowerCase();
         const username = normalizeString(data.username);
-        const userId = normalizeString(data.userId);
         const textSource = resolveText(type, data);
         const messageLimit = Number(guiConfig.messageCharacterLimit) || 0;
         const text = applyMessageLimit(textSource, messageLimit);
@@ -120,10 +119,8 @@ function createEventToGuiContractMapper(options = {}) {
         return {
             type,
             kind: rule.kind,
-            toggleKey: rule.toggleKey,
             platform,
             username,
-            userId,
             text,
             avatarUrl,
             timestamp: data.timestamp || row.timestamp || null
@@ -132,7 +129,6 @@ function createEventToGuiContractMapper(options = {}) {
 
     return {
         mapDisplayRow,
-        mapEventRule: getRule,
         resolveAvatarUrl,
         avatarCacheKey,
         applyMessageLimit

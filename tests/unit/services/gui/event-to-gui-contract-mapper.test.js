@@ -30,21 +30,21 @@ function createMapper(configOverrides = {}, optionsOverrides = {}) {
 }
 
 describe('Event-to-GUI contract mapper behavior', () => {
-    it('maps every supported source row to stable GUI kind/toggle contracts', async () => {
+    it('maps every supported source row to stable GUI kind contracts', async () => {
         const mapper = createMapper();
 
         const cases = [
-            { type: 'chat', expectedKind: 'chat', expectedToggle: 'showMessages', data: { message: 'hi' } },
-            { type: 'command', expectedKind: 'command', expectedToggle: 'showCommands', data: { displayMessage: 'user used command !test' } },
-            { type: 'greeting', expectedKind: 'greeting', expectedToggle: 'showGreetings', data: { displayMessage: 'welcome' } },
-            { type: 'farewell', expectedKind: 'farewell', expectedToggle: 'showFarewells', data: { displayMessage: 'bye' } },
-            { type: 'platform:follow', expectedKind: 'notification', expectedToggle: 'showFollows', data: { displayMessage: 'followed' } },
-            { type: 'platform:share', expectedKind: 'notification', expectedToggle: 'showShares', data: { displayMessage: 'shared' } },
-            { type: 'platform:raid', expectedKind: 'notification', expectedToggle: 'showRaids', data: { displayMessage: 'raided' } },
-            { type: 'platform:gift', expectedKind: 'notification', expectedToggle: 'showGifts', data: { displayMessage: 'gifted' } },
-            { type: 'platform:paypiggy', expectedKind: 'notification', expectedToggle: 'showPaypiggies', data: { displayMessage: 'subscribed' } },
-            { type: 'platform:giftpaypiggy', expectedKind: 'notification', expectedToggle: 'showGiftPaypiggies', data: { displayMessage: 'gifted memberships' } },
-            { type: 'platform:envelope', expectedKind: 'notification', expectedToggle: 'showEnvelopes', data: { displayMessage: 'treasure chest' } }
+            { type: 'chat', expectedKind: 'chat', data: { message: 'hi' } },
+            { type: 'command', expectedKind: 'command', data: { displayMessage: 'user used command !test' } },
+            { type: 'greeting', expectedKind: 'greeting', data: { displayMessage: 'welcome' } },
+            { type: 'farewell', expectedKind: 'farewell', data: { displayMessage: 'bye' } },
+            { type: 'platform:follow', expectedKind: 'notification', data: { displayMessage: 'followed' } },
+            { type: 'platform:share', expectedKind: 'notification', data: { displayMessage: 'shared' } },
+            { type: 'platform:raid', expectedKind: 'notification', data: { displayMessage: 'raided' } },
+            { type: 'platform:gift', expectedKind: 'notification', data: { displayMessage: 'gifted' } },
+            { type: 'platform:paypiggy', expectedKind: 'notification', data: { displayMessage: 'subscribed' } },
+            { type: 'platform:giftpaypiggy', expectedKind: 'notification', data: { displayMessage: 'gifted memberships' } },
+            { type: 'platform:envelope', expectedKind: 'notification', data: { displayMessage: 'treasure chest' } }
         ];
 
         for (const testCase of cases) {
@@ -61,7 +61,6 @@ describe('Event-to-GUI contract mapper behavior', () => {
 
             expect(mapped).toEqual(expect.objectContaining({
                 kind: testCase.expectedKind,
-                toggleKey: testCase.expectedToggle,
                 type: testCase.type
             }));
         }

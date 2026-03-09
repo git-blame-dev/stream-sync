@@ -17,3 +17,4 @@ GEMINI.md
 .env.*.local
 config.ini
 tasks/
+gui/dist/
