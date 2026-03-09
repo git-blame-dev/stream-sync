@@ -128,6 +128,8 @@ describe('GUI transport routes and SSE integration', () => {
             const firstEvent = await firstReader.readEvent();
             expect(firstEvent.type).toBe('chat');
             expect(firstEvent.text).toBe('hello');
+            expect(firstEvent).not.toHaveProperty('toggleKey');
+            expect(firstEvent).not.toHaveProperty('userId');
 
             firstAbort.abort();
 
@@ -155,6 +157,8 @@ describe('GUI transport routes and SSE integration', () => {
                 expect(secondEvent.type).toBe('platform:follow');
                 expect(secondEvent.kind).toBe('notification');
                 expect(secondEvent.username).toBe('test-follower');
+                expect(secondEvent).not.toHaveProperty('toggleKey');
+                expect(secondEvent).not.toHaveProperty('userId');
             } finally {
                 secondAbort.abort();
             }
@@ -362,6 +366,76 @@ describe('GUI transport routes and SSE integration', () => {
             expect(overlayService.getAddress()).not.toBe(null);
         } finally {
             await overlayService.stop();
+        }
+    });
+
+    it('applies each show* toggle independently without suppressing other event types', async () => {
+        const toggleCases = [
+            { toggleKey: 'showMessages', blockedType: 'chat' },
+            { toggleKey: 'showCommands', blockedType: 'command' },
+            { toggleKey: 'showGreetings', blockedType: 'greeting' },
+            { toggleKey: 'showFarewells', blockedType: 'farewell' },
+            { toggleKey: 'showFollows', blockedType: 'platform:follow' },
+            { toggleKey: 'showShares', blockedType: 'platform:share' },
+            { toggleKey: 'showRaids', blockedType: 'platform:raid' },
+            { toggleKey: 'showGifts', blockedType: 'platform:gift' },
+            { toggleKey: 'showPaypiggies', blockedType: 'platform:paypiggy' },
+            { toggleKey: 'showGiftPaypiggies', blockedType: 'platform:giftpaypiggy' },
+            { toggleKey: 'showEnvelopes', blockedType: 'platform:envelope' }
+        ];
+
+        const createRow = (type, suffix) => {
+            const base = {
+                type,
+                platform: 'twitch',
+                data: {
+                    username: `test-user-${suffix}`,
+                    userId: `test-user-id-${suffix}`,
+                    avatarUrl: `https://example.invalid/avatar-${suffix}.png`,
+                    timestamp: `2024-01-01T00:00:${String(suffix).padStart(2, '0')}.000Z`
+                }
+            };
+
+            if (type === 'chat' || type === 'platform:chat-message') {
+                base.data.message = `message-${suffix}`;
+                return base;
+            }
+
+            base.data.displayMessage = `display-${suffix}`;
+            return base;
+        };
+
+        for (let index = 0; index < toggleCases.length; index += 1) {
+            const toggleCase = toggleCases[index];
+            const controlType = toggleCase.blockedType === 'platform:follow' ? 'platform:share' : 'platform:follow';
+            const port = await getAvailablePort();
+            const eventBus = new TestEventBus();
+            const config = buildConfig({
+                enableDock: true,
+                enableOverlay: false,
+                port,
+                [toggleCase.toggleKey]: false
+            });
+            const service = createGuiTransportService({ config, eventBus, logger: null });
+            await service.start();
+
+            const baseUrl = `http://127.0.0.1:${port}`;
+            const abortController = new AbortController();
+            try {
+                const response = await fetch(`${baseUrl}/gui/events`, { signal: abortController.signal });
+                expect(response.status).toBe(200);
+                const reader = createSseReader(response);
+
+                eventBus.emit('display:row', createRow(toggleCase.blockedType, index));
+                eventBus.emit('display:row', createRow(controlType, index + 100));
+
+                const event = await reader.readEvent();
+                expect(event.type).toBe(controlType);
+                expect(event.text).toContain(`display-${index + 100}`);
+            } finally {
+                abortController.abort();
+                await service.stop();
+            }
         }
     });
 });
