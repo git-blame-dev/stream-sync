@@ -81,4 +81,26 @@ describe('PlatformEventRouter chat normalization', () => {
         expect(normalized.timestamp).toBe('2025-11-20T14:00:00.000Z');
         expect(normalized.isMod).toBe(true);
     });
+
+    it('preserves trimmed avatarUrl when provided on chat payload', async () => {
+        const { router, runtime } = createRouter();
+
+        const event = {
+            ...baseEvent,
+            data: {
+                userId: 'test-user-id-avatar',
+                username: 'testAvatarUser',
+                avatarUrl: '  https://example.invalid/chat-avatar.png  ',
+                message: { text: 'test avatar message' },
+                timestamp: '2025-11-20T15:00:00.000Z'
+            }
+        };
+
+        await router.routeEvent(event);
+
+        expect(runtime.handleChatMessage).toHaveBeenCalledTimes(1);
+        const [, normalized] = runtime.handleChatMessage.mock.calls[0];
+        expect(normalized.avatarUrl).toBe('https://example.invalid/chat-avatar.png');
+    });
+
 });

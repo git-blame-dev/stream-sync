@@ -232,6 +232,25 @@ describe('AppRuntime behavior', () => {
         expect(calls[0][0]).toBe('platform:giftpaypiggy');
     });
 
+    it('preserves explicit avatarUrl for giftpaypiggy notifications', async () => {
+        const calls = [];
+        const notificationManager = {
+            handleNotification: async (...args) => calls.push(args)
+        };
+        const runtime = createRuntime({ notificationManager });
+
+        await runtime.handleGiftPaypiggyEvent('youtube', 'test-user', {
+            giftCount: 1,
+            userId: 'test-user-id',
+            timestamp: '2024-01-01T00:00:00.000Z',
+            avatarUrl: 'https://example.invalid/runtime-giftpaypiggy-avatar.png'
+        });
+
+        expect(calls.length).toBe(1);
+        expect(calls[0][0]).toBe('platform:giftpaypiggy');
+        expect(calls[0][2].avatarUrl).toBe('https://example.invalid/runtime-giftpaypiggy-avatar.png');
+    });
+
     it('validates resub events require tier, months, and message', async () => {
         const runtime = createRuntime();
 
