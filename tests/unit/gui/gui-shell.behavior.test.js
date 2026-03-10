@@ -1,6 +1,7 @@
 const { describe, it, expect } = require('bun:test');
 const React = require('react');
 const { renderToStaticMarkup } = require('react-dom/server');
+const TestRenderer = require('react-test-renderer');
 
 const { GuiShell } = require('../../../gui/src/shared/components/GuiShell');
 
@@ -72,6 +73,56 @@ describe('GuiShell behavior', () => {
         );
 
         expect(html).toContain('gui-row--overlay-enter');
+    });
+
+    it('handles overlay row refs across mount and unmount lifecycle', async () => {
+        const previousTimeStamp = console.timeStamp;
+        console.timeStamp = previousTimeStamp || (() => {});
+        let renderer;
+
+        try {
+            await TestRenderer.act(async () => {
+                renderer = TestRenderer.create(
+                    React.createElement(GuiShell, {
+                        mode: 'overlay',
+                        overlayMaxLinesPerMessage: 3,
+                        rows: [
+                            {
+                                type: 'chat',
+                                kind: 'chat',
+                                platform: 'twitch',
+                                username: 'test-user',
+                                text: 'hello',
+                                avatarUrl: 'https://example.invalid/test-avatar.png',
+                                timestamp: '2024-01-01T00:00:00.000Z'
+                            }
+                        ]
+                    }),
+                    {
+                        createNodeMock: () => ({
+                            style: {
+                                transition: '',
+                                transform: ''
+                            },
+                            offsetHeight: 24,
+                            getBoundingClientRect: () => ({ top: 100 })
+                        })
+                    }
+                );
+            });
+
+            expect(renderer.toJSON()).not.toBeNull();
+
+            await TestRenderer.act(async () => {
+                renderer.unmount();
+            });
+        } finally {
+            if (previousTimeStamp) {
+                console.timeStamp = previousTimeStamp;
+            } else {
+                delete console.timeStamp;
+            }
+        }
     });
 
 });

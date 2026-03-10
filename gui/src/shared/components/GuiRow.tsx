@@ -5,9 +5,10 @@ import type { GuiRowDto } from '../types'
 interface GuiRowProps {
   row: GuiRowDto
   mode: 'dock' | 'overlay'
+  rowRef?: (element: HTMLDivElement | null) => void
 }
 
-export function GuiRow({ row, mode }: GuiRowProps) {
+export function GuiRow({ row, mode, rowRef }: GuiRowProps) {
   const textClass = [
     'gui-row__text',
     row.kind === 'notification' ? 'gui-row__text--notification' : '',
@@ -25,7 +26,7 @@ export function GuiRow({ row, mode }: GuiRowProps) {
     .join(' ')
 
   return (
-    <div className={rowClass} data-row-type={row.type}>
+    <div className={rowClass} data-row-type={row.type} ref={rowRef}>
       <img className="gui-row__avatar gui-row__avatar--circle" src={row.avatarUrl} alt="" />
       <div className="gui-row__content">
         <span className="gui-row__username">{row.username}</span>
