@@ -30,6 +30,20 @@ describe('GuiShell behavior', () => {
         expect(html).toContain('hello');
     });
 
+    it('applies dock scroll container style contract', () => {
+        const html = renderToStaticMarkup(
+            React.createElement(GuiShell, {
+                mode: 'dock',
+                overlayMaxLinesPerMessage: 3,
+                rows: []
+            })
+        );
+
+        expect(html).toContain('gui-shell--dock');
+        expect(html).toContain('height:100vh');
+        expect(html).toContain('overflow-y:auto');
+    });
+
     it('applies overlay line-clamp contract when configured', () => {
         const html = renderToStaticMarkup(
             React.createElement(GuiShell, {
@@ -117,6 +131,170 @@ describe('GuiShell behavior', () => {
                 renderer.unmount();
             });
         } finally {
+            if (previousTimeStamp) {
+                console.timeStamp = previousTimeStamp;
+            } else {
+                delete console.timeStamp;
+            }
+        }
+    });
+
+    it('auto-scrolls dock shell to latest rows when messages update', async () => {
+        const previousTimeStamp = console.timeStamp;
+        console.timeStamp = previousTimeStamp || (() => {});
+        let renderer;
+        const dockShell = {
+            scrollTop: 0,
+            scrollHeight: 320
+        };
+
+        try {
+            await TestRenderer.act(async () => {
+                renderer = TestRenderer.create(
+                    React.createElement(GuiShell, {
+                        mode: 'dock',
+                        overlayMaxLinesPerMessage: 3,
+                        rows: [
+                            {
+                                type: 'chat',
+                                kind: 'chat',
+                                platform: 'twitch',
+                                username: 'test-user',
+                                text: 'first message',
+                                avatarUrl: 'https://example.invalid/test-avatar.png',
+                                timestamp: '2024-01-01T00:00:00.000Z'
+                            }
+                        ]
+                    }),
+                    {
+                        createNodeMock: (element) => {
+                            if (element.type === 'main') {
+                                return dockShell;
+                            }
+
+                            return {
+                                style: {
+                                    transition: '',
+                                    transform: ''
+                                },
+                                offsetHeight: 24,
+                                getBoundingClientRect: () => ({ top: 100 })
+                            };
+                        }
+                    }
+                );
+            });
+
+            expect(dockShell.scrollTop).toBe(320);
+
+            dockShell.scrollHeight = 640;
+
+            await TestRenderer.act(async () => {
+                renderer.update(
+                    React.createElement(GuiShell, {
+                        mode: 'dock',
+                        overlayMaxLinesPerMessage: 3,
+                        rows: [
+                            {
+                                type: 'chat',
+                                kind: 'chat',
+                                platform: 'twitch',
+                                username: 'test-user',
+                                text: 'first message',
+                                avatarUrl: 'https://example.invalid/test-avatar.png',
+                                timestamp: '2024-01-01T00:00:00.000Z'
+                            },
+                            {
+                                type: 'chat',
+                                kind: 'chat',
+                                platform: 'twitch',
+                                username: 'test-user-2',
+                                text: 'second message',
+                                avatarUrl: 'https://example.invalid/test-avatar-2.png',
+                                timestamp: '2024-01-01T00:00:01.000Z'
+                            }
+                        ]
+                    })
+                );
+            });
+
+            expect(dockShell.scrollTop).toBe(640);
+        } finally {
+            if (renderer) {
+                await TestRenderer.act(async () => {
+                    renderer.unmount();
+                });
+            }
+
+            if (previousTimeStamp) {
+                console.timeStamp = previousTimeStamp;
+            } else {
+                delete console.timeStamp;
+            }
+        }
+    });
+
+    it('pins dock shell to bottom again on animation frame', async () => {
+        const previousTimeStamp = console.timeStamp;
+        const previousRequestAnimationFrame = global.requestAnimationFrame;
+        console.timeStamp = previousTimeStamp || (() => {});
+
+        const dockShell = {
+            scrollTop: 0,
+            scrollHeight: 200
+        };
+        let rafCalls = 0;
+        let renderer;
+
+        global.requestAnimationFrame = (callback) => {
+            rafCalls += 1;
+            dockShell.scrollHeight = 420;
+            callback();
+            return 1;
+        };
+
+        try {
+            await TestRenderer.act(async () => {
+                renderer = TestRenderer.create(
+                    React.createElement(GuiShell, {
+                        mode: 'dock',
+                        overlayMaxLinesPerMessage: 3,
+                        rows: []
+                    }),
+                    {
+                        createNodeMock: (element) => {
+                            if (element.type === 'main') {
+                                return dockShell;
+                            }
+
+                            return {
+                                style: {
+                                    transition: '',
+                                    transform: ''
+                                },
+                                offsetHeight: 24,
+                                getBoundingClientRect: () => ({ top: 100 })
+                            };
+                        }
+                    }
+                );
+            });
+
+            expect(rafCalls).toBeGreaterThan(0);
+            expect(dockShell.scrollTop).toBe(420);
+        } finally {
+            if (renderer) {
+                await TestRenderer.act(async () => {
+                    renderer.unmount();
+                });
+            }
+
+            if (typeof previousRequestAnimationFrame === 'function') {
+                global.requestAnimationFrame = previousRequestAnimationFrame;
+            } else {
+                delete global.requestAnimationFrame;
+            }
+
             if (previousTimeStamp) {
                 console.timeStamp = previousTimeStamp;
             } else {
