@@ -13,7 +13,13 @@ export default defineConfig({
         overlay: resolve(__dirname, 'src/overlay/main.tsx')
       },
       output: {
-        entryFileNames: 'assets/[name].js'
+        entryFileNames: 'assets/[name].js',
+        assetFileNames: (assetInfo) => {
+          if (typeof assetInfo.name === 'string' && assetInfo.name.endsWith('.css')) {
+            return 'assets/styles.css'
+          }
+          return 'assets/[name]-[hash][extname]'
+        }
       }
     }
   }

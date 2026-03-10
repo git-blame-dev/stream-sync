@@ -43,6 +43,7 @@ describe('gui transport smoke', () => {
                 if (testCase.expectDockEnabled) {
                     expect(dockBody).toContain('/gui/events');
                     expect(dockBody).toContain('/gui/assets/dock.js');
+                    expect(dockBody).toContain('/gui/assets/styles.css');
                 } else {
                     expect(dockBody).toContain('data-gui-disabled="true"');
                     expect(dockBody).not.toContain('/gui/events');
@@ -54,6 +55,7 @@ describe('gui transport smoke', () => {
                 if (testCase.expectOverlayEnabled) {
                     expect(overlayBody).toContain('/gui/events');
                     expect(overlayBody).toContain('/gui/assets/overlay.js');
+                    expect(overlayBody).toContain('/gui/assets/styles.css');
                 } else {
                     expect(overlayBody).toContain('data-gui-disabled="true"');
                     expect(overlayBody).not.toContain('/gui/events');
