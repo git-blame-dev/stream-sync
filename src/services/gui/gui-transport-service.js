@@ -78,6 +78,7 @@ function createGuiTransportService(options = {}) {
     };
 
     const renderActivePage = (title, kind, transparent = false) => {
+        const assetVersion = Date.now().toString(36);
         const bodyStyle = transparent
             ? 'margin:0;background:transparent;color:#ffffff;font-family:Georgia,serif;'
             : 'margin:0;background:#101317;color:#ffffff;font-family:Georgia,serif;';
@@ -85,7 +86,7 @@ function createGuiTransportService(options = {}) {
             overlayMaxMessages: guiConfig.overlayMaxMessages,
             overlayMaxLinesPerMessage: guiConfig.overlayMaxLinesPerMessage
         };
-        return `<!doctype html><html><head><meta charset="utf-8"><title>${title}</title><link rel="stylesheet" href="/gui/assets/styles.css"></head><body style="${bodyStyle}"><div id="app" data-kind="${kind}"></div><script>window.__STREAM_SYNC_GUI_KIND__=${JSON.stringify(kind)};window.__STREAM_SYNC_GUI_EVENTS__='/gui/events';window.__STREAM_SYNC_GUI_CONFIG__=${JSON.stringify(runtimeGuiConfig)};</script><script type="module" src="/gui/assets/${kind}.js"></script></body></html>`;
+        return `<!doctype html><html><head><meta charset="utf-8"><title>${title}</title><link rel="stylesheet" href="/gui/assets/styles.css?v=${assetVersion}"></head><body style="${bodyStyle}"><div id="app" data-kind="${kind}"></div><script>window.__STREAM_SYNC_GUI_KIND__=${JSON.stringify(kind)};window.__STREAM_SYNC_GUI_EVENTS__='/gui/events';window.__STREAM_SYNC_GUI_CONFIG__=${JSON.stringify(runtimeGuiConfig)};</script><script type="module" src="/gui/assets/${kind}.js?v=${assetVersion}"></script></body></html>`;
     };
 
     const sendSse = (payload) => {
@@ -169,14 +170,17 @@ function createGuiTransportService(options = {}) {
 
             res.writeHead(200, {
                 'Content-Type': getAssetContentType(assetPath),
-                'Cache-Control': 'public, max-age=300'
+                'Cache-Control': 'no-cache, no-store, must-revalidate'
             });
             res.end(fs.readFileSync(assetPath));
             return;
         }
 
         if (url === '/dock') {
-            res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+            res.writeHead(200, {
+                'Content-Type': 'text/html; charset=utf-8',
+                'Cache-Control': 'no-cache, no-store, must-revalidate'
+            });
             if (guiConfig.enableDock === true) {
                 res.end(renderActivePage('Stream Sync Dock', 'dock', false));
                 return;
@@ -186,7 +190,10 @@ function createGuiTransportService(options = {}) {
         }
 
         if (url === '/overlay') {
-            res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+            res.writeHead(200, {
+                'Content-Type': 'text/html; charset=utf-8',
+                'Cache-Control': 'no-cache, no-store, must-revalidate'
+            });
             if (guiConfig.enableOverlay === true) {
                 res.end(renderActivePage('Stream Sync Overlay', 'overlay', true));
                 return;
