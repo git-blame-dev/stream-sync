@@ -23,7 +23,10 @@ interface GuiShellProps {
 export function GuiShell({ rows, mode, overlayMaxLinesPerMessage }: GuiShellProps) {
   const shellStyle = mode === 'overlay'
     ? ({ '--overlay-line-clamp': String(overlayMaxLinesPerMessage) } as React.CSSProperties)
-    : undefined
+    : mode === 'dock'
+      ? ({ height: '100vh', overflowY: 'auto', overscrollBehavior: 'contain' } as React.CSSProperties)
+      : undefined
+  const shellRef = useRef<HTMLElement | null>(null)
   const rowElementsByKeyRef = useRef(new Map<string, HTMLDivElement>())
   const previousTopByKeyRef = useRef(new Map<string, number>())
   const rowEntries = useMemo(() => {
@@ -47,10 +50,27 @@ export function GuiShell({ rows, mode, overlayMaxLinesPerMessage }: GuiShellProp
       previousTopByKey: previousTopByKeyRef.current,
       durationMs: ROW_SLIDE_ANIMATION_MS
     })
-  }, [rowEntries])
+
+    if (mode !== 'dock') {
+      return
+    }
+
+    const scrollDockToBottom = () => {
+      if (!shellRef.current) {
+        return
+      }
+      shellRef.current.scrollTop = shellRef.current.scrollHeight
+    }
+
+    scrollDockToBottom()
+
+    if (typeof requestAnimationFrame === 'function') {
+      requestAnimationFrame(scrollDockToBottom)
+    }
+  }, [mode, rowEntries])
 
   return (
-    <main className={`gui-shell gui-shell--${mode}`} style={shellStyle}>
+    <main className={`gui-shell gui-shell--${mode}`} style={shellStyle} ref={shellRef}>
       {rowEntries.map((entry) => {
         return (
           <GuiRow
