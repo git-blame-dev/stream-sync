@@ -804,6 +804,7 @@ class AppRuntime {
             ...(giftCount !== undefined ? { giftCount } : {}),
             userId: options.userId,
             timestamp: options.timestamp,
+            ...(options.avatarUrl !== undefined ? { avatarUrl: options.avatarUrl } : {}),
             ...(isError ? { isError: true } : {})
         };
         if (options.tier !== undefined) {

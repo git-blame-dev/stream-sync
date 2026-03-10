@@ -198,6 +198,7 @@ class PlatformEventRouter {
 
     _normalizeChatEvent(data = {}, platform = 'unknown') {
         const metadata = data.metadata;
+        const avatarUrl = typeof data.avatarUrl === 'string' ? data.avatarUrl.trim() : '';
         if (metadata !== undefined && (typeof metadata !== 'object' || metadata === null)) {
             throw new Error('Chat event metadata must be an object');
         }
@@ -230,6 +231,9 @@ class PlatformEventRouter {
             isSubscriber: data.isSubscriber,
             isBroadcaster: data.isBroadcaster
         };
+        if (avatarUrl) {
+            normalized.avatarUrl = avatarUrl;
+        }
         if (metadata !== undefined) {
             normalized.metadata = metadata;
         }

@@ -16,6 +16,8 @@ describe('PlatformEventRouter validation', () => {
             handleGiftNotification: createMockFn(),
             handlePaypiggyNotification: createMockFn(),
             handleGiftPaypiggyNotification: createMockFn(),
+            handleEnvelopeNotification: createMockFn(),
+            handleStreamDetected: createMockFn(),
             handleRaidNotification: createMockFn(),
             handleShareNotification: createMockFn(),
             handleFollowNotification: createMockFn(),
@@ -76,10 +78,10 @@ describe('PlatformEventRouter validation', () => {
             }
         });
 
-        expect(runtime.handleChatMessage).toHaveBeenCalledWith('twitch', expect.objectContaining({
-            message: 'hello',
-            timestamp
-        }));
+        const [calledPlatform, calledPayload] = runtime.handleChatMessage.mock.calls[0];
+        expect(calledPlatform).toBe('twitch');
+        expect(calledPayload.message).toBe('hello');
+        expect(calledPayload.timestamp).toBe(timestamp);
     });
 
     it('rejects monetization payloads missing required fields when not marked isError', async () => {
@@ -184,6 +186,75 @@ describe('PlatformEventRouter validation', () => {
         const [, , payload] = runtime.handleGiftNotification.mock.calls[0];
         expect(payload.type).toBe('platform:gift');
         expect(payload.timestamp).toBe(timestamp);
+    });
+
+    it('routes stream-detected events to runtime stream handler', async () => {
+        const { router, runtime } = buildRouter();
+
+        await router.routeEvent({
+            platform: 'youtube',
+            type: 'platform:stream-detected',
+            data: {
+                eventType: 'stream-detected',
+                newStreamIds: ['stream-1']
+            }
+        });
+
+        expect(runtime.handleStreamDetected).toHaveBeenCalledTimes(1);
+        const [calledPlatform, calledPayload] = runtime.handleStreamDetected.mock.calls[0];
+        expect(calledPlatform).toBe('youtube');
+        expect(calledPayload.eventType).toBe('stream-detected');
+    });
+
+    it('routes envelope events to runtime envelope handler', async () => {
+        const { router, runtime } = buildRouter();
+        const timestamp = new Date().toISOString();
+
+        await router.routeEvent({
+            platform: 'tiktok',
+            type: 'platform:envelope',
+            data: {
+                id: 'env-1',
+                username: 'test-envelope-user',
+                userId: 'test-envelope-user-id',
+                giftType: 'Coins',
+                giftCount: 1,
+                amount: 10,
+                currency: 'USD',
+                timestamp
+            }
+        });
+
+        expect(runtime.handleEnvelopeNotification).toHaveBeenCalledTimes(1);
+        const [calledPlatform, calledPayload] = runtime.handleEnvelopeNotification.mock.calls[0];
+        expect(calledPlatform).toBe('tiktok');
+        expect(calledPayload.id).toBe('env-1');
+        expect(calledPayload.sourceType).toBe('platform:envelope');
+        expect(calledPayload.type).toBe('platform:envelope');
+    });
+
+    it('forwards configured default notification types to notification manager', async () => {
+        const { router, notificationManager } = buildRouter();
+        const timestamp = new Date().toISOString();
+
+        await router.routeEvent({
+            platform: 'twitch',
+            type: 'farewell',
+            data: {
+                username: 'test-farewell-user',
+                userId: 'test-farewell-user-id',
+                timestamp
+            }
+        });
+
+        expect(notificationManager.handleNotification).toHaveBeenCalledTimes(1);
+        const [notificationType, notificationPlatform, notificationPayload] = notificationManager.handleNotification.mock.calls[0];
+        expect(notificationType).toBe('farewell');
+        expect(notificationPlatform).toBe('twitch');
+        expect(notificationPayload.username).toBe('test-farewell-user');
+        expect(notificationPayload.userId).toBe('test-farewell-user-id');
+        expect(notificationPayload.type).toBe('farewell');
+        expect(notificationPayload.sourceType).toBe('farewell');
     });
 
     it('rejects short notification types at the routing boundary', async () => {
