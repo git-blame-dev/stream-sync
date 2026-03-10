@@ -6,6 +6,7 @@
   "scripts": {
     "build": "vite build --config gui/vite.config.ts",
     "dev": "vite --config gui/vite.config.ts",
+    "gui:preview": "npm run build && node scripts/local/gui-preview.js",
     "start": "node src/bootstrap.js",
     "start:debug": "node src/bootstrap.js --debug",
     "start:debug:build": "npm run build && node src/bootstrap.js --debug",
