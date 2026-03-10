@@ -183,6 +183,7 @@ describe('GUI transport routes and SSE integration', () => {
             const dockResponse = await fetch(`${baseUrl}/dock`);
             const dockHtml = await dockResponse.text();
             expect(dockResponse.status).toBe(200);
+            expect(dockResponse.headers.get('cache-control')).toContain('no-cache');
             expect(dockHtml).toContain('Dock disabled');
             expect(dockHtml).toContain('data-gui-disabled="true"');
             expect(dockHtml).not.toContain('/gui/events');
@@ -190,6 +191,7 @@ describe('GUI transport routes and SSE integration', () => {
             const overlayResponse = await fetch(`${baseUrl}/overlay`);
             const overlayHtml = await overlayResponse.text();
             expect(overlayResponse.status).toBe(200);
+            expect(overlayResponse.headers.get('cache-control')).toContain('no-cache');
             expect(overlayHtml).toContain('/gui/events');
         } finally {
             await service.stop();
@@ -212,11 +214,13 @@ describe('GUI transport routes and SSE integration', () => {
             const dockResponse = await fetch(`${baseUrl}/dock`);
             const dockHtml = await dockResponse.text();
             expect(dockResponse.status).toBe(200);
+            expect(dockResponse.headers.get('cache-control')).toContain('no-cache');
             expect(dockHtml).toContain('/gui/events');
 
             const overlayResponse = await fetch(`${baseUrl}/overlay`);
             const overlayHtml = await overlayResponse.text();
             expect(overlayResponse.status).toBe(200);
+            expect(overlayResponse.headers.get('cache-control')).toContain('no-cache');
             expect(overlayHtml).toContain('Overlay disabled');
             expect(overlayHtml).toContain('data-gui-disabled="true"');
             expect(overlayHtml).not.toContain('/gui/events');
@@ -269,12 +273,14 @@ describe('GUI transport routes and SSE integration', () => {
             const dockResponse = await fetch(`${baseUrl}/dock`);
             const dockHtml = await dockResponse.text();
             expect(dockResponse.status).toBe(200);
+            expect(dockResponse.headers.get('cache-control')).toContain('no-cache');
             expect(dockHtml).toContain('/gui/assets/dock.js');
             expect(dockHtml).toContain('/gui/assets/styles.css');
 
             const overlayResponse = await fetch(`${baseUrl}/overlay`);
             const overlayHtml = await overlayResponse.text();
             expect(overlayResponse.status).toBe(200);
+            expect(overlayResponse.headers.get('cache-control')).toContain('no-cache');
             expect(overlayHtml).toContain('/gui/assets/overlay.js');
             expect(overlayHtml).toContain('/gui/assets/styles.css');
         } finally {
@@ -324,6 +330,7 @@ describe('GUI transport routes and SSE integration', () => {
             const stylesBody = await stylesResponse.text();
             expect(stylesResponse.status).toBe(200);
             expect(stylesResponse.headers.get('content-type')).toContain('text/css');
+            expect(stylesResponse.headers.get('cache-control')).toContain('no-cache');
             expect(stylesBody).toContain('.gui-row__avatar');
 
             const missingResponse = await fetch(`${baseUrl}/gui/assets/missing.js`);
