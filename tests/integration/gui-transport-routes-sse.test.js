@@ -270,11 +270,13 @@ describe('GUI transport routes and SSE integration', () => {
             const dockHtml = await dockResponse.text();
             expect(dockResponse.status).toBe(200);
             expect(dockHtml).toContain('/gui/assets/dock.js');
+            expect(dockHtml).toContain('/gui/assets/styles.css');
 
             const overlayResponse = await fetch(`${baseUrl}/overlay`);
             const overlayHtml = await overlayResponse.text();
             expect(overlayResponse.status).toBe(200);
             expect(overlayHtml).toContain('/gui/assets/overlay.js');
+            expect(overlayHtml).toContain('/gui/assets/styles.css');
         } finally {
             await service.stop();
         }
@@ -287,6 +289,7 @@ describe('GUI transport routes and SSE integration', () => {
         fs.mkdirSync(assetsDir, { recursive: true });
         fs.mkdirSync(siblingDir, { recursive: true });
         fs.writeFileSync(path.join(assetsDir, 'dock.js'), 'console.log("dock");');
+        fs.writeFileSync(path.join(assetsDir, 'styles.css'), '.gui-row__avatar{width:24px;height:24px}');
         fs.writeFileSync(path.join(siblingDir, 'secret.js'), 'console.log("secret");');
 
         const port = await getAvailablePort();
@@ -316,6 +319,12 @@ describe('GUI transport routes and SSE integration', () => {
             const queryBody = await queryResponse.text();
             expect(queryResponse.status).toBe(200);
             expect(queryBody).toContain('console.log("dock")');
+
+            const stylesResponse = await fetch(`${baseUrl}/gui/assets/styles.css`);
+            const stylesBody = await stylesResponse.text();
+            expect(stylesResponse.status).toBe(200);
+            expect(stylesResponse.headers.get('content-type')).toContain('text/css');
+            expect(stylesBody).toContain('.gui-row__avatar');
 
             const missingResponse = await fetch(`${baseUrl}/gui/assets/missing.js`);
             const missingBody = await missingResponse.text();
