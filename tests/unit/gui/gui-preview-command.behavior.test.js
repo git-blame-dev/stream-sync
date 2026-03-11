@@ -22,8 +22,20 @@ describe('GUI local preview command behavior', () => {
             type: 'chat',
             platform: 'twitch'
         }));
+        expect(rows[0].data.username).toBe('test-twitch-account');
         expect(rows[1]).toEqual(expect.objectContaining({
-            type: 'platform:follow'
+            type: 'platform:follow',
+            platform: 'youtube'
+        }));
+        expect(rows[1].data.username).toBe('test-youtube-account');
+        expect(rows[2]).toEqual(expect.objectContaining({
+            type: 'command',
+            platform: 'tiktok'
+        }));
+        expect(rows[2].data.username).toBe('test-tiktok-account');
+        expect(rows[3]).toEqual(expect.objectContaining({
+            type: 'greeting',
+            platform: 'twitch'
         }));
     });
 

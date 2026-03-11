@@ -6,6 +6,23 @@ const { safeSetInterval, safeSetTimeout } = require('../../src/utils/timeout-val
 
 const PREVIEW_DURATION_MS = 30000;
 const PREVIEW_INTERVAL_MS = 2000;
+const PREVIEW_PLATFORM_ACCOUNTS = [
+    {
+        platform: 'twitch',
+        username: 'test-twitch-account',
+        userId: 'test-twitch-account-id'
+    },
+    {
+        platform: 'youtube',
+        username: 'test-youtube-account',
+        userId: 'test-youtube-account-id'
+    },
+    {
+        platform: 'tiktok',
+        username: 'test-tiktok-account',
+        userId: 'test-tiktok-account-id'
+    }
+];
 
 class PreviewEventBus extends EventEmitter {
     subscribe(eventName, handler) {
@@ -46,17 +63,18 @@ function buildPreviewRows(durationMs = PREVIEW_DURATION_MS, intervalMs = PREVIEW
 
     for (let index = 0; index < rowCount; index += 1) {
         const type = eventTypes[index % eventTypes.length];
+        const account = PREVIEW_PLATFORM_ACCOUNTS[index % PREVIEW_PLATFORM_ACCOUNTS.length];
         const timestamp = `2024-01-01T00:00:${String(index).padStart(2, '0')}.000Z`;
         const baseData = {
-            username: `test-user-${index}`,
-            userId: `test-user-id-${index}`,
+            username: account.username,
+            userId: account.userId,
             timestamp
         };
 
         if (type === 'chat') {
             rows.push({
                 type,
-                platform: 'twitch',
+                platform: account.platform,
                 data: {
                     ...baseData,
                     message: `preview message ${index}`
@@ -67,7 +85,7 @@ function buildPreviewRows(durationMs = PREVIEW_DURATION_MS, intervalMs = PREVIEW
 
         rows.push({
             type,
-            platform: 'twitch',
+            platform: account.platform,
             data: {
                 ...baseData,
                 displayMessage: `preview ${type} ${index}`
