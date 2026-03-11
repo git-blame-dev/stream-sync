@@ -59,8 +59,9 @@
 }
 
 .gui-row__platform-icon {
-  width: 25px;
-  height: 25px;
+  width: 30px;
+  height: 30px;
+  transform: translateY(1px);
   object-fit: contain;
   flex-shrink: 0;
 }
