@@ -28,8 +28,9 @@ describe('GUI shared styles behavior', () => {
         expect(overlayEnterBlock).toContain('animation: none;');
         expect(avatarBlock).toContain('width: 45px;');
         expect(avatarBlock).toContain('height: 45px;');
-        expect(platformIconBlock).toContain('width: 25px;');
-        expect(platformIconBlock).toContain('height: 25px;');
+        expect(platformIconBlock).toContain('width: 30px;');
+        expect(platformIconBlock).toContain('height: 30px;');
+        expect(platformIconBlock).toContain('transform: translateY(1px);');
         expect(textBlock).toContain('font-size: 18px;');
     });
 });
