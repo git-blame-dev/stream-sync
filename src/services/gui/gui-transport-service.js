@@ -40,6 +40,9 @@ function createGuiTransportService(options = {}) {
         if (filePath.endsWith('.map')) {
             return 'application/json; charset=utf-8';
         }
+        if (filePath.endsWith('.png')) {
+            return 'image/png';
+        }
         return 'application/octet-stream';
     };
 

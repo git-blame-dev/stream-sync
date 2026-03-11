@@ -29,6 +29,69 @@ describe('GuiRow rendering behavior', () => {
         expect(html).toContain('gui-row__avatar--circle');
     });
 
+    it('renders platform icon before username for known platforms', () => {
+        const html = renderToStaticMarkup(
+            React.createElement(GuiRow, {
+                mode: 'dock',
+                row: {
+                    type: 'chat',
+                    kind: 'chat',
+                    platform: 'youtube',
+                    username: 'test-youtube-user',
+                    text: 'hello',
+                    avatarUrl: 'https://example.invalid/test-avatar.png',
+                    timestamp: '2024-01-01T00:00:00.000Z'
+                }
+            })
+        );
+
+        const platformIconIndex = html.indexOf('class="gui-row__platform-icon"');
+        const usernameIndex = html.indexOf('class="gui-row__username"');
+        expect(platformIconIndex).toBeGreaterThan(-1);
+        expect(usernameIndex).toBeGreaterThan(-1);
+        expect(platformIconIndex).toBeLessThan(usernameIndex);
+        expect(html).toContain('src="/gui/assets/platform-icons/youtube-icon.png"');
+    });
+
+    it('renders platform icon for trimmed mixed-case platform identifiers', () => {
+        const html = renderToStaticMarkup(
+            React.createElement(GuiRow, {
+                mode: 'dock',
+                row: {
+                    type: 'chat',
+                    kind: 'chat',
+                    platform: '  YouTube  ',
+                    username: 'test-youtube-user',
+                    text: 'hello',
+                    avatarUrl: 'https://example.invalid/test-avatar.png',
+                    timestamp: '2024-01-01T00:00:00.000Z'
+                }
+            })
+        );
+
+        expect(html).toContain('class="gui-row__platform-icon"');
+        expect(html).toContain('src="/gui/assets/platform-icons/youtube-icon.png"');
+    });
+
+    it('does not render platform icon for unknown platform ids', () => {
+        const html = renderToStaticMarkup(
+            React.createElement(GuiRow, {
+                mode: 'dock',
+                row: {
+                    type: 'chat',
+                    kind: 'chat',
+                    platform: 'unknown-platform',
+                    username: 'test-user',
+                    text: 'hello',
+                    avatarUrl: 'https://example.invalid/test-avatar.png',
+                    timestamp: '2024-01-01T00:00:00.000Z'
+                }
+            })
+        );
+
+        expect(html).not.toContain('class="gui-row__platform-icon"');
+    });
+
     it('renders notification text with white text class', () => {
         const html = renderToStaticMarkup(
             React.createElement(GuiRow, {

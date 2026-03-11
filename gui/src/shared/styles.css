@@ -52,6 +52,19 @@
   gap: 2px;
 }
 
+.gui-row__header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.gui-row__platform-icon {
+  width: 25px;
+  height: 25px;
+  object-fit: contain;
+  flex-shrink: 0;
+}
+
 .gui-row__username {
   font-weight: 600;
   font-size: 14px;

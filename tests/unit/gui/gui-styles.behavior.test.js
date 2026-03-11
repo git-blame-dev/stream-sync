@@ -20,6 +20,7 @@ describe('GUI shared styles behavior', () => {
         const rowBlock = readCssBlock(cssText, '.gui-row');
         const overlayEnterBlock = readCssBlock(cssText, '.gui-row--overlay-enter');
         const avatarBlock = readCssBlock(cssText, '.gui-row__avatar');
+        const platformIconBlock = readCssBlock(cssText, '.gui-row__platform-icon');
         const textBlock = readCssBlock(cssText, '.gui-row__text');
 
         expect(rowBlock).toContain('grid-template-columns: auto 1fr;');
@@ -27,6 +28,8 @@ describe('GUI shared styles behavior', () => {
         expect(overlayEnterBlock).toContain('animation: none;');
         expect(avatarBlock).toContain('width: 45px;');
         expect(avatarBlock).toContain('height: 45px;');
+        expect(platformIconBlock).toContain('width: 25px;');
+        expect(platformIconBlock).toContain('height: 25px;');
         expect(textBlock).toContain('font-size: 18px;');
     });
 });
