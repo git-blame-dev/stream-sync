@@ -5,6 +5,16 @@ import type { GuiRowDto } from '../types'
 import { applyOverlayRowShiftMotion } from '../overlay-row-motion'
 
 const ROW_SLIDE_ANIMATION_MS = 1000
+const DOCK_PINNED_BOTTOM_THRESHOLD_PX = 8
+
+function isDockNearBottom(
+  scrollTop: number,
+  clientHeight: number,
+  scrollHeight: number
+): boolean {
+  const distanceFromBottom = scrollHeight - (scrollTop + clientHeight)
+  return distanceFromBottom <= DOCK_PINNED_BOTTOM_THRESHOLD_PX
+}
 
 function buildRowKeySignature(row: GuiRowDto): string {
   return [row.type, row.kind, row.platform, row.username, row.avatarUrl, row.timestamp || '', row.text].join(':')
@@ -27,6 +37,7 @@ export function GuiShell({ rows, mode, overlayMaxLinesPerMessage }: GuiShellProp
       ? ({ height: '100vh', overflowY: 'auto', overscrollBehavior: 'contain' } as React.CSSProperties)
       : undefined
   const shellRef = useRef<HTMLElement | null>(null)
+  const previousDockScrollHeightRef = useRef<number | null>(null)
   const rowElementsByKeyRef = useRef(new Map<string, HTMLDivElement>())
   const previousTopByKeyRef = useRef(new Map<string, number>())
   const rowEntries = useMemo(() => {
@@ -52,14 +63,33 @@ export function GuiShell({ rows, mode, overlayMaxLinesPerMessage }: GuiShellProp
     })
 
     if (mode !== 'dock') {
+      previousDockScrollHeightRef.current = null
       return
     }
+
+    if (!shellRef.current) {
+      return
+    }
+
+    const baselineScrollHeight = previousDockScrollHeightRef.current ?? shellRef.current.scrollHeight
+    const shouldPinDockToBottom = previousDockScrollHeightRef.current === null || isDockNearBottom(
+      shellRef.current.scrollTop,
+      shellRef.current.clientHeight,
+      baselineScrollHeight
+    )
 
     const scrollDockToBottom = () => {
       if (!shellRef.current) {
         return
       }
+
       shellRef.current.scrollTop = shellRef.current.scrollHeight
+      previousDockScrollHeightRef.current = shellRef.current.scrollHeight
+    }
+
+    if (!shouldPinDockToBottom) {
+      previousDockScrollHeightRef.current = shellRef.current.scrollHeight
+      return
     }
 
     scrollDockToBottom()
