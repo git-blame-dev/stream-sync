@@ -151,6 +151,103 @@ describe('TikTok event pipeline (integration)', () => {
         }
     });
 
+    test('routes only fresh unique chats during mixed replay bursts', async () => {
+        useFakeTimers();
+        setSystemTime(new Date('2025-01-20T12:05:00.000Z'));
+
+        const eventBus = createEventBus();
+        const logger = noOpLogger;
+        const runtimeCalls = {
+            chat: []
+        };
+        const runtime = {
+            handleChatMessage: (platform, message) => runtimeCalls.chat.push({ platform, message })
+        };
+        const displayQueue = createMockDisplayQueue();
+        const textProcessing = createTextProcessingManager({ logger });
+        const config = createConfigFixture({
+            general: {
+                messagesEnabled: true
+            },
+            tiktok: {
+                enabled: true
+            },
+            obs: { enabled: false }
+        });
+        const notificationManager = new NotificationManager({
+            displayQueue,
+            logger,
+            eventBus,
+            config,
+            constants: require('../../src/core/constants'),
+            textProcessing,
+            obsGoals: { processDonationGoal: createMockFn() },
+            vfxCommandService: { getVFXConfig: createMockFn().mockResolvedValue(null) },
+            userTrackingService: { isFirstMessage: createMockFn().mockResolvedValue(false) }
+        });
+
+        const router = new PlatformEventRouter({
+            eventBus,
+            runtime,
+            notificationManager,
+            config,
+            logger
+        });
+
+        const connection = new EventEmitter();
+        const WebcastEvent = {
+            CHAT: 'chat'
+        };
+        const ControlEvent = {
+            DISCONNECTED: 'disconnected',
+            ERROR: 'error'
+        };
+
+        const platform = new TikTokPlatform(
+            {
+                enabled: true,
+                username: 'test-user',
+                giftAggregationEnabled: false
+            },
+            {
+                logger,
+                eventBus,
+                TikTokWebSocketClient: createMockFn(),
+                WebcastEvent,
+                ControlEvent,
+                connectionFactory: { createConnection: createMockFn() }
+            }
+        );
+
+        platform.connection = connection;
+        setupTikTokEventListeners(platform);
+
+        const eventTimestamp = Date.parse('2025-01-20T12:05:00.000Z');
+        const makeChatPayload = (msgId, comment) => ({
+            comment,
+            user: { userId: 'test-user-id-mixed', uniqueId: 'test-user-mixed', nickname: 'test-user-mixed' },
+            common: { createTime: eventTimestamp, msgId }
+        });
+
+        try {
+            connection.emit(WebcastEvent.CHAT, makeChatPayload('test-chat-msg-a', 'first'));
+            connection.emit(WebcastEvent.CHAT, makeChatPayload('test-chat-msg-b', 'second'));
+            connection.emit(WebcastEvent.CHAT, makeChatPayload('test-chat-msg-a', 'first-duplicate'));
+            connection.emit(WebcastEvent.CHAT, makeChatPayload('test-chat-msg-c', 'third'));
+            connection.emit(WebcastEvent.CHAT, makeChatPayload('test-chat-msg-b', 'second-duplicate'));
+
+            await new Promise(setImmediate);
+
+            expect(runtimeCalls.chat).toHaveLength(3);
+            expect(runtimeCalls.chat.map((entry) => entry.message.message)).toEqual(['first', 'second', 'third']);
+        } finally {
+            router.dispose();
+            cleanupTikTokEventListeners(platform);
+            clearAllTimers();
+            useRealTimers();
+        }
+    });
+
     test('aggregates rapid distinct gift message ids when aggregation is enabled', async () => {
         useFakeTimers();
         setSystemTime(new Date('2025-01-20T12:00:00.000Z'));
