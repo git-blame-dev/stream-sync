@@ -71,6 +71,14 @@ describe('TikTok event router', () => {
             cachedViewerCount: 0,
             connectionTime: 0,
             _getTimestamp: createMockFn(() => '2025-01-02T03:04:05.000Z'),
+            _getPlatformMessageId: createMockFn((data) => {
+                const msgId = data?.common?.msgId;
+                if (msgId === undefined || msgId === null) {
+                    return null;
+                }
+                const normalized = String(msgId).trim();
+                return normalized || null;
+            }),
             _handleChatMessage: async () => handledChatMessages.push(true),
             ...overrides
         };
@@ -204,6 +212,64 @@ describe('TikTok event router', () => {
         });
 
         expect(handledChatMessages).toHaveLength(0);
+    });
+
+    test('skips duplicate chat messages at ingress', async () => {
+        const { platform, listeners, handledChatMessages } = createPlatformHarness();
+
+        setupTikTokEventListeners(platform);
+
+        await listeners[platform.WebcastEvent.CHAT]({
+            comment: 'duplicate replay first',
+            user: { userId: 'test-user-dup', uniqueId: 'dup-user', nickname: 'DupUser' },
+            common: { createTime: '1700000000', msgId: 'test-chat-msg-dup-1' }
+        });
+        await listeners[platform.WebcastEvent.CHAT]({
+            comment: 'duplicate replay second',
+            user: { userId: 'test-user-dup', uniqueId: 'dup-user', nickname: 'DupUser' },
+            common: { createTime: '1700000000', msgId: 'test-chat-msg-dup-1' }
+        });
+
+        expect(handledChatMessages).toHaveLength(1);
+    });
+
+    test('skips stale chat replay messages at ingress', async () => {
+        const { platform, listeners, handledChatMessages } = createPlatformHarness({
+            chatReplayProtectionConfig: { maxAgeMs: 60 * 1000 },
+            constructor: {
+                resolveEventTimestampMs: createMockFn(() => 1)
+            }
+        });
+
+        setupTikTokEventListeners(platform);
+
+        await listeners[platform.WebcastEvent.CHAT]({
+            comment: 'stale replay',
+            user: { userId: 'test-user-stale', uniqueId: 'stale-user', nickname: 'StaleUser' },
+            common: { createTime: '1700000000', msgId: 'test-chat-msg-stale-1' }
+        });
+
+        expect(handledChatMessages).toHaveLength(0);
+    });
+
+    test('routes mixed bursts by dropping only duplicate chat message ids', async () => {
+        const { platform, listeners, handledChatMessages } = createPlatformHarness();
+
+        setupTikTokEventListeners(platform);
+
+        const makePayload = (msgId, comment) => ({
+            comment,
+            user: { userId: 'test-user-mix', uniqueId: 'mix-user', nickname: 'MixUser' },
+            common: { createTime: '1700000000', msgId }
+        });
+
+        await listeners[platform.WebcastEvent.CHAT](makePayload('test-chat-msg-a', 'message-a'));
+        await listeners[platform.WebcastEvent.CHAT](makePayload('test-chat-msg-b', 'message-b'));
+        await listeners[platform.WebcastEvent.CHAT](makePayload('test-chat-msg-a', 'message-a-dup'));
+        await listeners[platform.WebcastEvent.CHAT](makePayload('test-chat-msg-c', 'message-c'));
+        await listeners[platform.WebcastEvent.CHAT](makePayload('test-chat-msg-b', 'message-b-dup'));
+
+        expect(handledChatMessages).toHaveLength(3);
     });
 
     test('filters self messages when detection service blocks', async () => {

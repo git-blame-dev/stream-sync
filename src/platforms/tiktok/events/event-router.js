@@ -2,6 +2,97 @@ const { validateNormalizedMessage } = require('../../../utils/message-normalizat
 const { normalizeTikTokChatEvent } = require('./event-normalizer');
 const { PlatformEvents } = require('../../../interfaces/PlatformEvents');
 
+const DEFAULT_CHAT_DEDUP_TTL_MS = 90 * 60 * 1000;
+const DEFAULT_CHAT_MAX_CACHE_SIZE = 10_000;
+const DEFAULT_CHAT_MAX_AGE_MS = 20 * 60 * 1000;
+
+function getChatReplayConfig(platform) {
+    const provided = platform?.chatReplayProtectionConfig;
+    const ttlMs = Number.isFinite(provided?.ttlMs) && provided.ttlMs > 0
+        ? provided.ttlMs
+        : DEFAULT_CHAT_DEDUP_TTL_MS;
+    const maxCacheSize = Number.isFinite(provided?.maxCacheSize) && provided.maxCacheSize > 0
+        ? provided.maxCacheSize
+        : DEFAULT_CHAT_MAX_CACHE_SIZE;
+    const maxAgeMs = Number.isFinite(provided?.maxAgeMs) && provided.maxAgeMs > 0
+        ? provided.maxAgeMs
+        : DEFAULT_CHAT_MAX_AGE_MS;
+
+    return {
+        ttlMs,
+        maxCacheSize,
+        maxAgeMs
+    };
+}
+
+function getChatReplayState(platform) {
+    if (!platform._chatReplayIngressState || typeof platform._chatReplayIngressState !== 'object') {
+        platform._chatReplayIngressState = {
+            recentMessageIds: new Map()
+        };
+    }
+
+    if (!(platform._chatReplayIngressState.recentMessageIds instanceof Map)) {
+        platform._chatReplayIngressState.recentMessageIds = new Map();
+    }
+
+    return platform._chatReplayIngressState;
+}
+
+function getPlatformMessageId(platform, data) {
+    if (typeof platform?._getPlatformMessageId !== 'function') {
+        return null;
+    }
+
+    return platform._getPlatformMessageId(data);
+}
+
+function checkDuplicateChatMessage(platform, data) {
+    const messageId = getPlatformMessageId(platform, data);
+    if (!messageId) {
+        return { isDuplicate: false, messageId: null };
+    }
+
+    const { ttlMs, maxCacheSize } = getChatReplayConfig(platform);
+    const state = getChatReplayState(platform);
+    const now = Date.now();
+    const lastSeen = state.recentMessageIds.get(messageId);
+
+    if (lastSeen && (now - lastSeen) < ttlMs) {
+        return { isDuplicate: true, messageId };
+    }
+
+    state.recentMessageIds.set(messageId, now);
+
+    if (state.recentMessageIds.size > maxCacheSize) {
+        const cutoff = now - ttlMs;
+        for (const [id, seenAt] of state.recentMessageIds.entries()) {
+            if (seenAt < cutoff) {
+                state.recentMessageIds.delete(id);
+            }
+        }
+
+        while (state.recentMessageIds.size > maxCacheSize) {
+            const oldestKey = state.recentMessageIds.keys().next().value;
+            if (!oldestKey) {
+                break;
+            }
+            state.recentMessageIds.delete(oldestKey);
+        }
+    }
+
+    return { isDuplicate: false, messageId };
+}
+
+function isStaleChatReplay(platform, data, eventTimestampMs) {
+    if (eventTimestampMs === null) {
+        return false;
+    }
+
+    const { maxAgeMs } = getChatReplayConfig(platform);
+    return (Date.now() - eventTimestampMs) > maxAgeMs;
+}
+
 function cleanupTikTokEventListeners(platform) {
     if (!platform?.connection) {
         return;
@@ -117,6 +208,23 @@ function setupTikTokEventListeners(platform) {
                 platform.logger.debug(`Filtering historical message (pre-connection): "${data.comment}"`, 'tiktok', {
                     eventTimestamp: eventTimestampMs,
                     connectionRecordedAt: platform.connectionTime
+                });
+                return;
+            }
+
+            const duplicateCheck = checkDuplicateChatMessage(platform, data);
+            if (duplicateCheck.isDuplicate) {
+                platform.logger.debug('Skipping duplicate TikTok chat message at ingress', 'tiktok', {
+                    messageId: duplicateCheck.messageId
+                });
+                return;
+            }
+
+            const isStaleReplay = isStaleChatReplay(platform, data, eventTimestampMs);
+            if (isStaleReplay) {
+                platform.logger.debug('Skipping stale TikTok chat replay at ingress', 'tiktok', {
+                    messageId: duplicateCheck.messageId,
+                    createTime: data?.common?.createTime ?? null
                 });
                 return;
             }
