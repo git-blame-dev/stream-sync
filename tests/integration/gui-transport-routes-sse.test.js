@@ -291,11 +291,14 @@ describe('GUI transport routes and SSE integration', () => {
     it('serves built GUI assets and returns 404 for missing assets', async () => {
         const assetsRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'gui-assets-'));
         const assetsDir = path.join(assetsRoot, 'assets');
+        const platformIconsDir = path.join(assetsDir, 'platform-icons');
         const siblingDir = path.join(assetsRoot, 'assets2');
         fs.mkdirSync(assetsDir, { recursive: true });
+        fs.mkdirSync(platformIconsDir, { recursive: true });
         fs.mkdirSync(siblingDir, { recursive: true });
         fs.writeFileSync(path.join(assetsDir, 'dock.js'), 'console.log("dock");');
         fs.writeFileSync(path.join(assetsDir, 'styles.css'), '.gui-row__avatar{width:24px;height:24px}');
+        fs.writeFileSync(path.join(platformIconsDir, 'youtube-icon.png'), 'test-youtube-icon');
         fs.writeFileSync(path.join(siblingDir, 'secret.js'), 'console.log("secret");');
 
         const port = await getAvailablePort();
@@ -332,6 +335,12 @@ describe('GUI transport routes and SSE integration', () => {
             expect(stylesResponse.headers.get('content-type')).toContain('text/css');
             expect(stylesResponse.headers.get('cache-control')).toContain('no-cache');
             expect(stylesBody).toContain('.gui-row__avatar');
+
+            const platformIconResponse = await fetch(`${baseUrl}/gui/assets/platform-icons/youtube-icon.png`);
+            const platformIconBody = await platformIconResponse.text();
+            expect(platformIconResponse.status).toBe(200);
+            expect(platformIconResponse.headers.get('content-type')).toContain('image/png');
+            expect(platformIconBody).toContain('test-youtube-icon');
 
             const missingResponse = await fetch(`${baseUrl}/gui/assets/missing.js`);
             const missingBody = await missingResponse.text();
