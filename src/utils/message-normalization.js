@@ -102,6 +102,107 @@ function buildTikTokMessageParts(rawComment, emotes = []) {
     return parts;
 }
 
+const TWITCH_DEFAULT_EMOTE_IMAGE_URL = 'https://static-cdn.jtvnw.net/emoticons/v2/emotesv2_dcd06b30a5c24f6eb871e8f5edbd44f7/animated/dark/3.0';
+
+function resolveTwitchEmoteScale(scaleOptions = []) {
+    if (!Array.isArray(scaleOptions) || scaleOptions.length === 0) {
+        return '3.0';
+    }
+
+    const normalizedScales = scaleOptions
+        .filter((value) => typeof value === 'string')
+        .map((value) => value.trim())
+        .filter((value) => /^\d+(?:\.\d+)?$/.test(value));
+
+    if (normalizedScales.includes('3.0')) {
+        return '3.0';
+    }
+
+    if (normalizedScales.length === 0) {
+        return '3.0';
+    }
+
+    return normalizedScales
+        .sort((left, right) => Number(right) - Number(left))[0];
+}
+
+function resolveTwitchEmoteImageUrl(emoteId, formatOptions = [], scaleOptions = []) {
+    const normalizedEmoteId = typeof emoteId === 'string' ? emoteId.trim() : '';
+    if (!normalizedEmoteId) {
+        return '';
+    }
+
+    if (!Array.isArray(formatOptions) || formatOptions.length === 0) {
+        return '';
+    }
+
+    const normalizedFormats = formatOptions
+        .filter((value) => typeof value === 'string')
+        .map((value) => value.trim().toLowerCase())
+        .filter(Boolean);
+
+    const format = normalizedFormats.includes('animated')
+        ? 'animated'
+        : (normalizedFormats.includes('static') ? 'static' : '');
+    if (!format) {
+        return '';
+    }
+
+    const scale = resolveTwitchEmoteScale(scaleOptions);
+    const resolvedUrl = new URL(TWITCH_DEFAULT_EMOTE_IMAGE_URL);
+    resolvedUrl.pathname = `/emoticons/v2/${normalizedEmoteId}/${format}/dark/${scale}`;
+    return resolvedUrl.toString();
+}
+
+function buildTwitchMessageParts(messageObj) {
+    if (!messageObj || typeof messageObj !== 'object') {
+        return [];
+    }
+
+    if (!Array.isArray(messageObj.fragments) || messageObj.fragments.length === 0) {
+        return [];
+    }
+
+    return messageObj.fragments
+        .map((fragment) => {
+            if (!fragment || typeof fragment !== 'object') {
+                return null;
+            }
+
+            if (fragment.type === 'text') {
+                const text = typeof fragment.text === 'string' ? fragment.text : '';
+                if (!text) {
+                    return null;
+                }
+
+                return {
+                    type: 'text',
+                    text
+                };
+            }
+
+            if (fragment.type !== 'emote') {
+                return null;
+            }
+
+            const emote = fragment.emote;
+            const emoteId = typeof emote?.id === 'string' ? emote.id.trim() : '';
+            const imageUrl = resolveTwitchEmoteImageUrl(emoteId, emote?.format, emote?.scale);
+
+            if (!emoteId || !imageUrl) {
+                return null;
+            }
+
+            return {
+                type: 'emote',
+                platform: 'twitch',
+                emoteId,
+                imageUrl
+            };
+        })
+        .filter((part) => part !== null);
+}
+
 
 function normalizeYouTubeMessage(chatItem, platformName = 'youtube') {
     try {
@@ -397,6 +498,7 @@ function validateNormalizedMessage(normalizedMessage) {
 module.exports = {
     normalizeYouTubeMessage,
     normalizeTikTokMessage,
+    buildTwitchMessageParts,
     extractTwitchMessageData,
     extractYouTubeMessageText,
     validateNormalizedMessage

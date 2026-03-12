@@ -29,6 +29,60 @@ describe('Twitch EventSub event router', () => {
         expect(messageEvent.payload.timestamp).toBe('2024-01-01T00:00:00.123Z');
     });
 
+    test('keeps chat message fragments when applying metadata timestamp fallback', () => {
+        const emitted = [];
+        const router = createTwitchEventSubEventRouter({
+            config: { channel: 'streamer', dataLoggingEnabled: false },
+            logger: noOpLogger,
+            emit: (type, payload) => emitted.push({ type, payload }),
+            logRawPlatformData: async () => {},
+            logError: () => {}
+        });
+
+        router.handleNotificationEvent('channel.chat.message', {
+            chatter_user_id: 'test-chat-user-id',
+            chatter_user_name: 'test-chat-user-name',
+            broadcaster_user_id: 'test-broadcaster-id',
+            message: {
+                text: 'testEmote test message',
+                fragments: [
+                    {
+                        type: 'emote',
+                        text: 'testEmote',
+                        emote: {
+                            id: 'emotesv2_dcd06b30a5c24f6eb871e8f5edbd44f7',
+                            format: ['static', 'animated']
+                        }
+                    },
+                    {
+                        type: 'text',
+                        text: ' test message'
+                    }
+                ]
+            }
+        }, {
+            message_timestamp: '2024-01-01T00:00:00.123456789Z'
+        });
+
+        const messageEvent = emitted.find((evt) => evt.type === 'chatMessage');
+        expect(messageEvent).toBeDefined();
+        expect(messageEvent.payload.timestamp).toBe('2024-01-01T00:00:00.123Z');
+        expect(messageEvent.payload.message.fragments).toEqual([
+            {
+                type: 'emote',
+                text: 'testEmote',
+                emote: {
+                    id: 'emotesv2_dcd06b30a5c24f6eb871e8f5edbd44f7',
+                    format: ['static', 'animated']
+                }
+            },
+            {
+                type: 'text',
+                text: ' test message'
+            }
+        ]);
+    });
+
     test('does not emit chat events when timestamp is missing', () => {
         const emitted = [];
         const router = createTwitchEventSubEventRouter({

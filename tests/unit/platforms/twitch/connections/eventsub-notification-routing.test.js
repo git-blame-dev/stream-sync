@@ -76,6 +76,64 @@ describe('TwitchEventSub notification routing', () => {
         expect(messageEvents[0].timestamp).toBe('2024-01-01T00:00:00.123Z');
     });
 
+    it('preserves EventSub message fragments on routed chat notifications', async () => {
+        eventSub = createEventSub({}, { twitchAuth: createReadyTwitchAuth() });
+        const messageEvents = [];
+        eventSub.on('chatMessage', (data) => messageEvents.push(data));
+
+        const payload = {
+            metadata: {
+                message_type: 'notification',
+                message_id: 'test-msg-id-fragments',
+                message_timestamp: '2024-01-01T00:00:00.555666777Z'
+            },
+            payload: {
+                subscription: { type: 'channel.chat.message' },
+                event: {
+                    message: {
+                        text: 'testEmote test message',
+                        fragments: [
+                            {
+                                type: 'emote',
+                                text: 'testEmote',
+                                emote: {
+                                    id: 'emotesv2_dcd06b30a5c24f6eb871e8f5edbd44f7',
+                                    format: ['static', 'animated']
+                                }
+                            },
+                            {
+                                type: 'text',
+                                text: ' test message'
+                            }
+                        ]
+                    },
+                    chatter_user_name: 'test-chat-user-name',
+                    chatter_user_id: 'test-chat-user-id',
+                    broadcaster_user_id: 'test-broadcaster-id'
+                }
+            }
+        };
+
+        await eventSub.handleWebSocketMessage(payload);
+
+        expect(messageEvents).toHaveLength(1);
+        expect(messageEvents[0].timestamp).toBe('2024-01-01T00:00:00.555Z');
+        expect(messageEvents[0].message.fragments).toEqual([
+            {
+                type: 'emote',
+                text: 'testEmote',
+                emote: {
+                    id: 'emotesv2_dcd06b30a5c24f6eb871e8f5edbd44f7',
+                    format: ['static', 'animated']
+                }
+            },
+            {
+                type: 'text',
+                text: ' test message'
+            }
+        ]);
+    });
+
     it('routes follow notifications and emits follow event', async () => {
         eventSub = createEventSub({}, { twitchAuth: createReadyTwitchAuth() });
         const followEvents = [];

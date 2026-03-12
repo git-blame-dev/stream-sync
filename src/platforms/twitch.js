@@ -6,7 +6,7 @@ const { TwitchApiClient } = require('../utils/api-clients/twitch-api-client');
 const { ViewerCountProviderFactory } = require('../utils/viewer-count-providers');
 const { PlatformEvents } = require('../interfaces/PlatformEvents');
 const { createPlatformErrorHandler } = require('../utils/platform-error-handler');
-const { validateNormalizedMessage } = require('../utils/message-normalization');
+const { validateNormalizedMessage, buildTwitchMessageParts } = require('../utils/message-normalization');
 const { createMonetizationErrorPayload } = require('../utils/monetization-error-utils');
 const { resolveTwitchTimestampISO } = require('../utils/platform-timestamp');
 const { getSystemTimestampISO } = require('../utils/timestamp');
@@ -255,7 +255,8 @@ class TwitchPlatform extends EventEmitter {
             }
 
             const normalizedMessage = typeof event?.message?.text === 'string' ? event.message.text.trim() : '';
-            if (!normalizedMessage) {
+            const messageParts = buildTwitchMessageParts(event?.message);
+            if (!normalizedMessage && messageParts.length === 0) {
                 throw new Error('Missing Twitch message text');
             }
 
@@ -264,9 +265,35 @@ class TwitchPlatform extends EventEmitter {
                 throw new Error('Missing Twitch timestamp');
             }
 
-            const badges = event?.badges && typeof event.badges === 'object' ? event.badges : {};
-            const isMod = badges?.moderator === '1' || badges?.moderator === 1 || badges?.moderator === true;
-            const isSubscriber = badges?.subscriber === '1' || badges?.subscriber === 1 || badges?.subscriber === true;
+            const badges = Array.isArray(event?.badges)
+                ? event.badges.reduce((acc, badge) => {
+                    const setId = typeof badge?.set_id === 'string' ? badge.set_id.trim() : '';
+                    if (!setId) {
+                        return acc;
+                    }
+                    acc[setId] = badge?.id;
+                    return acc;
+                }, {})
+                : (event?.badges && typeof event.badges === 'object' ? event.badges : {});
+            const hasBadge = (badgeName) => {
+                if (!Object.prototype.hasOwnProperty.call(badges, badgeName)) {
+                    return false;
+                }
+
+                const badgeValue = badges[badgeName];
+                if (badgeValue === true || badgeValue === 1 || badgeValue === '1') {
+                    return true;
+                }
+
+                if (typeof badgeValue === 'string') {
+                    const normalizedBadgeValue = badgeValue.trim();
+                    return normalizedBadgeValue.length > 0 && normalizedBadgeValue !== '0';
+                }
+
+                return false;
+            };
+            const isMod = hasBadge('moderator');
+            const isSubscriber = hasBadge('subscriber');
 
             const normalizedData = {
                 platform: this.platformName,
@@ -319,6 +346,9 @@ class TwitchPlatform extends EventEmitter {
                         correlationId: PlatformEvents._generateCorrelationId()
                     }
                 };
+                if (messageParts.length > 0) {
+                    eventData.message.parts = messageParts;
+                }
                 this._emitPlatformEvent(PlatformEvents.CHAT_MESSAGE, eventData);
             } catch (messageError) {
                 this._logPlatformError(`Error emitting chat message event: ${messageError.message}`, messageError, 'chat-message-emission');
