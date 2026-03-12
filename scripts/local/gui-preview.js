@@ -6,7 +6,10 @@ const { safeSetInterval, safeSetTimeout } = require('../../src/utils/timeout-val
 
 const PREVIEW_DURATION_MS = 30000;
 const PREVIEW_INTERVAL_MS = 2000;
-const TIKTOK_PREVIEW_CUSTOM_EMOTE_URL = 'https://onlinetools.com/images/examples-onlinewebptools/random-color-square.webp';
+const TIKTOK_PREVIEW_CUSTOM_EMOTE_URL = 'https://static-cdn.jtvnw.net/emoticons/v2/emotesv2_dcd06b30a5c24f6eb871e8f5edbd44f7/animated/dark/3.0';
+const TWITCH_PREVIEW_CUSTOM_EMOTE_URL = 'https://static-cdn.jtvnw.net/emoticons/v2/emotesv2_dcd06b30a5c24f6eb871e8f5edbd44f7/animated/dark/3.0';
+const PREVIEW_DEFAULT_EMOTE_ID = 'emotesv2_dcd06b30a5c24f6eb871e8f5edbd44f7';
+const PREVIEW_EMOTE_MESSAGE_TEXT = 'test message hello world this is a message to everyone how are we today?';
 const PREVIEW_PLATFORM_ACCOUNTS = [
     {
         platform: 'twitch',
@@ -44,6 +47,44 @@ function buildPreviewConfig(baseConfig) {
     };
 }
 
+function buildPreviewEmoteMessage(platform, emoteId, imageUrl) {
+    return {
+        text: PREVIEW_EMOTE_MESSAGE_TEXT,
+        parts: [
+            {
+                type: 'emote',
+                platform,
+                emoteId,
+                imageUrl
+            },
+            {
+                type: 'text',
+                text: ' test message '
+            },
+            {
+                type: 'emote',
+                platform,
+                emoteId,
+                imageUrl
+            },
+            {
+                type: 'text',
+                text: ' hello world this is a message to everyone '
+            },
+            {
+                type: 'emote',
+                platform,
+                emoteId,
+                imageUrl
+            },
+            {
+                type: 'text',
+                text: ' how are we today?'
+            }
+        ]
+    };
+}
+
 function buildPreviewRows(durationMs = PREVIEW_DURATION_MS, intervalMs = PREVIEW_INTERVAL_MS) {
     const eventTypes = [
         'chat',
@@ -73,47 +114,25 @@ function buildPreviewRows(durationMs = PREVIEW_DURATION_MS, intervalMs = PREVIEW
         };
 
         if (type === 'chat') {
+            if (account.platform === 'twitch' && index === 0) {
+                rows.push({
+                    type,
+                    platform: account.platform,
+                    data: {
+                        ...baseData,
+                        message: buildPreviewEmoteMessage('twitch', PREVIEW_DEFAULT_EMOTE_ID, TWITCH_PREVIEW_CUSTOM_EMOTE_URL)
+                    }
+                });
+                continue;
+            }
+
             if (account.platform === 'tiktok' && index === eventTypes.length) {
                 rows.push({
                     type,
                     platform: account.platform,
                     data: {
                         ...baseData,
-                        message: {
-                            text: 'test message hello world this is a message to everyone how are we today?',
-                            parts: [
-                                {
-                                    type: 'emote',
-                                    platform: 'tiktok',
-                                    emoteId: '1234512345123451234',
-                                    imageUrl: TIKTOK_PREVIEW_CUSTOM_EMOTE_URL
-                                },
-                                {
-                                    type: 'text',
-                                    text: ' test message '
-                                },
-                                {
-                                    type: 'emote',
-                                    platform: 'tiktok',
-                                    emoteId: '1234512345123451234',
-                                    imageUrl: TIKTOK_PREVIEW_CUSTOM_EMOTE_URL
-                                },
-                                {
-                                    type: 'text',
-                                    text: ' hello world this is a message to everyone '
-                                },
-                                {
-                                    type: 'emote',
-                                    platform: 'tiktok',
-                                    emoteId: '1234512345123451234',
-                                    imageUrl: TIKTOK_PREVIEW_CUSTOM_EMOTE_URL
-                                },
-                                {
-                                    type: 'text',
-                                    text: ' how are we today?'
-                                }
-                            ]
-                        }
+                        message: buildPreviewEmoteMessage('tiktok', PREVIEW_DEFAULT_EMOTE_ID, TIKTOK_PREVIEW_CUSTOM_EMOTE_URL)
                     }
                 });
                 continue;
