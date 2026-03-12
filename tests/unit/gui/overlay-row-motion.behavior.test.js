@@ -74,30 +74,55 @@ describe('overlay row motion behavior', () => {
         expect(currentTopByKey.get('row-b')).toBe(150)
     })
 
-    it('applies off-screen entry transition to new rows and returns current top map', () => {
-        const rowA = createFakeElement(90)
-        const rowB = createFakeElement(150)
-        const rowElementsByKey = new Map([
-            ['row-a', rowA],
-            ['row-b', rowB]
-        ])
+    it('uses synchronized initial shift for existing and new rows before transition frame', () => {
+        const previousRaf = global.requestAnimationFrame
+        const queuedCallbacks = []
+        global.requestAnimationFrame = (callback) => {
+            queuedCallbacks.push(callback)
+            return queuedCallbacks.length
+        }
 
-        const currentTopByKey = applyOverlayRowShiftMotion({
-            rowKeys: ['row-a', 'row-b'],
-            rowElementsByKey,
-            previousTopByKey: new Map([
-                ['row-a', 120]
-            ]),
-            durationMs: 1000
-        })
+        try {
+            const rowA = createFakeElement(90)
+            const rowB = createFakeElement(150)
+            const rowElementsByKey = new Map([
+                ['row-a', rowA],
+                ['row-b', rowB]
+            ])
 
-        expect(currentTopByKey.size).toBe(2)
-        expect(currentTopByKey.get('row-a')).toBe(90)
-        expect(currentTopByKey.get('row-b')).toBe(150)
-        expect(rowA.style.transition).toBe('transform 1000ms ease-out')
-        expect(rowA.style.transform).toBe('translateY(0)')
-        expect(rowB.style.transition).toBe('transform 1000ms ease-out')
-        expect(rowB.style.transform).toBe('translateY(0)')
+            const currentTopByKey = applyOverlayRowShiftMotion({
+                rowKeys: ['row-a', 'row-b'],
+                rowElementsByKey,
+                previousTopByKey: new Map([
+                    ['row-a', 120]
+                ]),
+                durationMs: 1000
+            })
+
+            expect(currentTopByKey.size).toBe(2)
+            expect(currentTopByKey.get('row-a')).toBe(90)
+            expect(currentTopByKey.get('row-b')).toBe(150)
+
+            expect(rowA.style.transition).toBe('none')
+            expect(rowB.style.transition).toBe('none')
+            expect(rowA.style.transform).toBe('translateY(30px)')
+            expect(rowB.style.transform).toBe('translateY(30px)')
+
+            for (const callback of queuedCallbacks) {
+                callback()
+            }
+
+            expect(rowA.style.transition).toBe('transform 1000ms ease-out')
+            expect(rowA.style.transform).toBe('translateY(0)')
+            expect(rowB.style.transition).toBe('transform 1000ms ease-out')
+            expect(rowB.style.transform).toBe('translateY(0)')
+        } finally {
+            if (typeof previousRaf === 'function') {
+                global.requestAnimationFrame = previousRaf
+            } else {
+                delete global.requestAnimationFrame
+            }
+        }
     })
 
     it('uses requestAnimationFrame transition scheduling when available', () => {

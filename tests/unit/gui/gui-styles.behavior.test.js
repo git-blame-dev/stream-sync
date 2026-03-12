@@ -17,12 +17,15 @@ function readCssBlock(cssText, selector) {
 describe('GUI shared styles behavior', () => {
     it('uses 90 percent opaque cards, no overlay enter fade, auto layout, and readable text sizing', () => {
         const cssText = readSharedStyles();
+        const pageBlock = readCssBlock(cssText, 'html, body');
         const rowBlock = readCssBlock(cssText, '.gui-row');
         const overlayEnterBlock = readCssBlock(cssText, '.gui-row--overlay-enter');
         const avatarBlock = readCssBlock(cssText, '.gui-row__avatar');
         const platformIconBlock = readCssBlock(cssText, '.gui-row__platform-icon');
         const textBlock = readCssBlock(cssText, '.gui-row__text');
 
+        expect(pageBlock).toContain('margin: 0;');
+        expect(pageBlock).toContain('padding: 0;');
         expect(rowBlock).toContain('grid-template-columns: auto 1fr;');
         expect(rowBlock).toContain('background: rgba(0, 0, 0, 0.9);');
         expect(overlayEnterBlock).toContain('animation: none;');

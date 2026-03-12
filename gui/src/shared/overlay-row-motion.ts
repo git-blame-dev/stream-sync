@@ -35,6 +35,24 @@ interface ApplyOverlayRowShiftMotionOptions {
   durationMs: number
 }
 
+function applyShiftTransition(element: OverlayRowElement, shiftPx: number, durationMs: number): void {
+  element.style.transition = 'none'
+  element.style.transform = `translateY(${shiftPx}px)`
+  void element.offsetHeight
+
+  const applyTransition = () => {
+    element.style.transition = `transform ${durationMs}ms ease-out`
+    element.style.transform = 'translateY(0)'
+  }
+
+  if (typeof requestAnimationFrame === 'function') {
+    requestAnimationFrame(applyTransition)
+    return
+  }
+
+  applyTransition()
+}
+
 export function applyOverlayRowShiftMotion({
   rowKeys,
   rowElementsByKey,
@@ -57,26 +75,23 @@ export function applyOverlayRowShiftMotion({
   }
 
   const deltas = calculateOverlayRowShiftDeltas(previousTopByKey, currentTopByKey)
+  let synchronizedEntryShiftPx = 0
+
   for (const [key, deltaY] of deltas) {
     const element = rowElementsByKey.get(key)
     if (!element) {
       continue
     }
 
-    element.style.transition = 'none'
-    element.style.transform = `translateY(${deltaY}px)`
-    void element.offsetHeight
-    const applyTransition = () => {
-      element.style.transition = `transform ${durationMs}ms ease-out`
-      element.style.transform = 'translateY(0)'
+    if (deltaY > synchronizedEntryShiftPx) {
+      synchronizedEntryShiftPx = deltaY
     }
 
-    if (typeof requestAnimationFrame === 'function') {
-      requestAnimationFrame(applyTransition)
-      continue
-    }
+    applyShiftTransition(element, deltaY, durationMs)
+  }
 
-    applyTransition()
+  if (synchronizedEntryShiftPx <= 0) {
+    return currentTopByKey
   }
 
   for (const key of newRowKeys) {
@@ -85,25 +100,7 @@ export function applyOverlayRowShiftMotion({
       continue
     }
 
-    const rect = element.getBoundingClientRect()
-    const viewportHeight = typeof window !== 'undefined' ? window.innerHeight : rect.top + element.offsetHeight + 120
-    const distanceToBottom = Math.max(0, viewportHeight - rect.top)
-    const entryOffsetPx = Math.max(element.offsetHeight + 24, distanceToBottom + element.offsetHeight + 24)
-
-    element.style.transition = 'none'
-    element.style.transform = `translateY(${entryOffsetPx}px)`
-    void element.offsetHeight
-    const applyTransition = () => {
-      element.style.transition = `transform ${durationMs}ms ease-out`
-      element.style.transform = 'translateY(0)'
-    }
-
-    if (typeof requestAnimationFrame === 'function') {
-      requestAnimationFrame(applyTransition)
-      continue
-    }
-
-    applyTransition()
+    applyShiftTransition(element, synchronizedEntryShiftPx, durationMs)
   }
 
   return currentTopByKey

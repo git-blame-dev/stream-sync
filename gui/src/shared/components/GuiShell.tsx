@@ -37,7 +37,7 @@ export function GuiShell({ rows, mode, overlayMaxLinesPerMessage }: GuiShellProp
       ? ({ height: '100vh', overflowY: 'auto', overscrollBehavior: 'contain' } as React.CSSProperties)
       : undefined
   const shellRef = useRef<HTMLElement | null>(null)
-  const previousDockScrollHeightRef = useRef<number | null>(null)
+  const isDockPinnedToBottomRef = useRef(true)
   const rowElementsByKeyRef = useRef(new Map<string, HTMLDivElement>())
   const previousTopByKeyRef = useRef(new Map<string, number>())
   const rowEntries = useMemo(() => {
@@ -55,6 +55,32 @@ export function GuiShell({ rows, mode, overlayMaxLinesPerMessage }: GuiShellProp
   }, [rows])
 
   useLayoutEffect(() => {
+    if (mode !== 'dock') {
+      isDockPinnedToBottomRef.current = true
+      return
+    }
+
+    if (!shellRef.current) {
+      return
+    }
+
+    const shellElement = shellRef.current
+    const updatePinnedState = () => {
+      isDockPinnedToBottomRef.current = isDockNearBottom(
+        shellElement.scrollTop,
+        shellElement.clientHeight,
+        shellElement.scrollHeight
+      )
+    }
+
+    shellElement.addEventListener('scroll', updatePinnedState)
+
+    return () => {
+      shellElement.removeEventListener('scroll', updatePinnedState)
+    }
+  }, [mode])
+
+  useLayoutEffect(() => {
     previousTopByKeyRef.current = applyOverlayRowShiftMotion({
       rowKeys: rowEntries.map((entry) => entry.key),
       rowElementsByKey: rowElementsByKeyRef.current,
@@ -63,7 +89,6 @@ export function GuiShell({ rows, mode, overlayMaxLinesPerMessage }: GuiShellProp
     })
 
     if (mode !== 'dock') {
-      previousDockScrollHeightRef.current = null
       return
     }
 
@@ -71,12 +96,7 @@ export function GuiShell({ rows, mode, overlayMaxLinesPerMessage }: GuiShellProp
       return
     }
 
-    const baselineScrollHeight = previousDockScrollHeightRef.current ?? shellRef.current.scrollHeight
-    const shouldPinDockToBottom = previousDockScrollHeightRef.current === null || isDockNearBottom(
-      shellRef.current.scrollTop,
-      shellRef.current.clientHeight,
-      baselineScrollHeight
-    )
+    const shouldPinDockToBottom = isDockPinnedToBottomRef.current
 
     const scrollDockToBottom = () => {
       if (!shellRef.current) {
@@ -84,11 +104,10 @@ export function GuiShell({ rows, mode, overlayMaxLinesPerMessage }: GuiShellProp
       }
 
       shellRef.current.scrollTop = shellRef.current.scrollHeight
-      previousDockScrollHeightRef.current = shellRef.current.scrollHeight
+      isDockPinnedToBottomRef.current = true
     }
 
     if (!shouldPinDockToBottom) {
-      previousDockScrollHeightRef.current = shellRef.current.scrollHeight
       return
     }
 
