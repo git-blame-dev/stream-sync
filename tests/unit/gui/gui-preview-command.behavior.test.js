@@ -23,6 +23,41 @@ describe('GUI local preview command behavior', () => {
             platform: 'twitch'
         }));
         expect(rows[0].data.username).toBe('test-twitch-account');
+        expect(rows[0].data.message).toEqual({
+            text: 'test message hello world this is a message to everyone how are we today?',
+            parts: [
+                {
+                    type: 'emote',
+                    platform: 'twitch',
+                    emoteId: 'emotesv2_dcd06b30a5c24f6eb871e8f5edbd44f7',
+                    imageUrl: 'https://static-cdn.jtvnw.net/emoticons/v2/emotesv2_dcd06b30a5c24f6eb871e8f5edbd44f7/animated/dark/3.0'
+                },
+                {
+                    type: 'text',
+                    text: ' test message '
+                },
+                {
+                    type: 'emote',
+                    platform: 'twitch',
+                    emoteId: 'emotesv2_dcd06b30a5c24f6eb871e8f5edbd44f7',
+                    imageUrl: 'https://static-cdn.jtvnw.net/emoticons/v2/emotesv2_dcd06b30a5c24f6eb871e8f5edbd44f7/animated/dark/3.0'
+                },
+                {
+                    type: 'text',
+                    text: ' hello world this is a message to everyone '
+                },
+                {
+                    type: 'emote',
+                    platform: 'twitch',
+                    emoteId: 'emotesv2_dcd06b30a5c24f6eb871e8f5edbd44f7',
+                    imageUrl: 'https://static-cdn.jtvnw.net/emoticons/v2/emotesv2_dcd06b30a5c24f6eb871e8f5edbd44f7/animated/dark/3.0'
+                },
+                {
+                    type: 'text',
+                    text: ' how are we today?'
+                }
+            ]
+        });
         expect(rows[1]).toEqual(expect.objectContaining({
             type: 'platform:follow',
             platform: 'youtube'
@@ -47,8 +82,8 @@ describe('GUI local preview command behavior', () => {
                 {
                     type: 'emote',
                     platform: 'tiktok',
-                    emoteId: '1234512345123451234',
-                    imageUrl: 'https://onlinetools.com/images/examples-onlinewebptools/random-color-square.webp'
+                    emoteId: 'emotesv2_dcd06b30a5c24f6eb871e8f5edbd44f7',
+                    imageUrl: 'https://static-cdn.jtvnw.net/emoticons/v2/emotesv2_dcd06b30a5c24f6eb871e8f5edbd44f7/animated/dark/3.0'
                 },
                 {
                     type: 'text',
@@ -57,8 +92,8 @@ describe('GUI local preview command behavior', () => {
                 {
                     type: 'emote',
                     platform: 'tiktok',
-                    emoteId: '1234512345123451234',
-                    imageUrl: 'https://onlinetools.com/images/examples-onlinewebptools/random-color-square.webp'
+                    emoteId: 'emotesv2_dcd06b30a5c24f6eb871e8f5edbd44f7',
+                    imageUrl: 'https://static-cdn.jtvnw.net/emoticons/v2/emotesv2_dcd06b30a5c24f6eb871e8f5edbd44f7/animated/dark/3.0'
                 },
                 {
                     type: 'text',
@@ -67,8 +102,8 @@ describe('GUI local preview command behavior', () => {
                 {
                     type: 'emote',
                     platform: 'tiktok',
-                    emoteId: '1234512345123451234',
-                    imageUrl: 'https://onlinetools.com/images/examples-onlinewebptools/random-color-square.webp'
+                    emoteId: 'emotesv2_dcd06b30a5c24f6eb871e8f5edbd44f7',
+                    imageUrl: 'https://static-cdn.jtvnw.net/emoticons/v2/emotesv2_dcd06b30a5c24f6eb871e8f5edbd44f7/animated/dark/3.0'
                 },
                 {
                     type: 'text',
