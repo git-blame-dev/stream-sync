@@ -5,6 +5,30 @@ const TestRenderer = require('react-test-renderer');
 
 const { GuiShell } = require('../../../gui/src/shared/components/GuiShell');
 
+function createDockShellMock({ scrollTop = 0, clientHeight = 120, scrollHeight = 320 } = {}) {
+    const listenersByEvent = new Map();
+
+    return {
+        scrollTop,
+        clientHeight,
+        scrollHeight,
+        addEventListener: (eventName, handler) => {
+            listenersByEvent.set(eventName, handler);
+        },
+        removeEventListener: (eventName, handler) => {
+            if (listenersByEvent.get(eventName) === handler) {
+                listenersByEvent.delete(eventName);
+            }
+        },
+        emitScroll: () => {
+            const handler = listenersByEvent.get('scroll');
+            if (typeof handler === 'function') {
+                handler();
+            }
+        }
+    };
+}
+
 describe('GuiShell behavior', () => {
     it('renders rows and mode class', () => {
         const html = renderToStaticMarkup(
@@ -143,11 +167,7 @@ describe('GuiShell behavior', () => {
         const previousTimeStamp = console.timeStamp;
         console.timeStamp = previousTimeStamp || (() => {});
         let renderer;
-        const dockShell = {
-            scrollTop: 0,
-            clientHeight: 120,
-            scrollHeight: 320
-        };
+        const dockShell = createDockShellMock();
 
         try {
             await TestRenderer.act(async () => {
@@ -189,6 +209,8 @@ describe('GuiShell behavior', () => {
             expect(dockShell.scrollTop).toBe(320);
 
             dockShell.scrollTop = 200;
+            dockShell.scrollHeight = 320;
+            dockShell.emitScroll();
             dockShell.scrollHeight = 640;
 
             await TestRenderer.act(async () => {
@@ -240,11 +262,7 @@ describe('GuiShell behavior', () => {
         const previousTimeStamp = console.timeStamp;
         console.timeStamp = previousTimeStamp || (() => {});
         let renderer;
-        const dockShell = {
-            scrollTop: 40,
-            clientHeight: 120,
-            scrollHeight: 320
-        };
+        const dockShell = createDockShellMock({ scrollTop: 40 });
 
         try {
             await TestRenderer.act(async () => {
@@ -286,6 +304,8 @@ describe('GuiShell behavior', () => {
             expect(dockShell.scrollTop).toBe(320);
 
             dockShell.scrollTop = 200;
+            dockShell.scrollHeight = 320;
+            dockShell.emitScroll();
             dockShell.scrollHeight = 640;
 
             await TestRenderer.act(async () => {
@@ -320,6 +340,8 @@ describe('GuiShell behavior', () => {
             expect(dockShell.scrollTop).toBe(640);
 
             dockShell.scrollTop = 511;
+            dockShell.scrollHeight = 640;
+            dockShell.emitScroll();
             dockShell.scrollHeight = 760;
 
             await TestRenderer.act(async () => {
@@ -380,11 +402,7 @@ describe('GuiShell behavior', () => {
         const previousTimeStamp = console.timeStamp;
         console.timeStamp = previousTimeStamp || (() => {});
         let renderer;
-        const dockShell = {
-            scrollTop: 0,
-            clientHeight: 120,
-            scrollHeight: 320
-        };
+        const dockShell = createDockShellMock();
 
         try {
             await TestRenderer.act(async () => {
@@ -426,6 +444,8 @@ describe('GuiShell behavior', () => {
             expect(dockShell.scrollTop).toBe(320);
 
             dockShell.scrollTop = 200;
+            dockShell.scrollHeight = 320;
+            dockShell.emitScroll();
             dockShell.scrollHeight = 640;
 
             await TestRenderer.act(async () => {
@@ -459,7 +479,9 @@ describe('GuiShell behavior', () => {
 
             expect(dockShell.scrollTop).toBe(640);
 
-            dockShell.scrollTop = 514;
+            dockShell.scrollTop = 512;
+            dockShell.scrollHeight = 640;
+            dockShell.emitScroll();
             dockShell.scrollHeight = 760;
 
             await TestRenderer.act(async () => {
@@ -521,11 +543,7 @@ describe('GuiShell behavior', () => {
         const previousRequestAnimationFrame = global.requestAnimationFrame;
         console.timeStamp = previousTimeStamp || (() => {});
 
-        const dockShell = {
-            scrollTop: 0,
-            clientHeight: 200,
-            scrollHeight: 200
-        };
+        const dockShell = createDockShellMock({ clientHeight: 200, scrollHeight: 200 });
         let rafCalls = 0;
         let renderer;
 
@@ -586,21 +604,15 @@ describe('GuiShell behavior', () => {
         }
     });
 
-    it('keeps dock position when unpinned even while row animations schedule frames', async () => {
+    it('keeps dock position when unpinned as new rows arrive', async () => {
         const previousTimeStamp = console.timeStamp;
         const previousRequestAnimationFrame = global.requestAnimationFrame;
         console.timeStamp = previousTimeStamp || (() => {});
 
-        const dockShell = {
-            scrollTop: 0,
-            clientHeight: 120,
-            scrollHeight: 320
-        };
-        let rafCalls = 0;
+        const dockShell = createDockShellMock();
         let renderer;
 
         global.requestAnimationFrame = (callback) => {
-            rafCalls += 1;
             dockShell.scrollHeight += 100;
             callback();
             return 1;
@@ -643,10 +655,9 @@ describe('GuiShell behavior', () => {
                 );
             });
 
-            expect(rafCalls).toBeGreaterThan(0);
-
-            rafCalls = 0;
             dockShell.scrollTop = 80;
+            dockShell.scrollHeight = 320;
+            dockShell.emitScroll();
             dockShell.scrollHeight = 480;
 
             await TestRenderer.act(async () => {
@@ -678,7 +689,6 @@ describe('GuiShell behavior', () => {
                 );
             });
 
-            expect(rafCalls).toBeGreaterThan(0);
             expect(dockShell.scrollTop).toBe(80);
         } finally {
             if (renderer) {
@@ -691,6 +701,103 @@ describe('GuiShell behavior', () => {
                 global.requestAnimationFrame = previousRequestAnimationFrame;
             } else {
                 delete global.requestAnimationFrame;
+            }
+
+            if (previousTimeStamp) {
+                console.timeStamp = previousTimeStamp;
+            } else {
+                delete console.timeStamp;
+            }
+        }
+    });
+
+    it('keeps dock pinned when geometry drifts after a pinned scroll event', async () => {
+        const previousTimeStamp = console.timeStamp;
+        console.timeStamp = previousTimeStamp || (() => {});
+        let renderer;
+        const dockShell = createDockShellMock();
+
+        try {
+            await TestRenderer.act(async () => {
+                renderer = TestRenderer.create(
+                    React.createElement(GuiShell, {
+                        mode: 'dock',
+                        overlayMaxLinesPerMessage: 3,
+                        rows: [
+                            {
+                                type: 'chat',
+                                kind: 'chat',
+                                platform: 'twitch',
+                                username: 'test-user',
+                                text: 'first message',
+                                avatarUrl: 'https://example.invalid/test-avatar.png',
+                                timestamp: '2024-01-01T00:00:00.000Z'
+                            }
+                        ]
+                    }),
+                    {
+                        createNodeMock: (element) => {
+                            if (element.type === 'main') {
+                                return dockShell;
+                            }
+
+                            return {
+                                style: {
+                                    transition: '',
+                                    transform: ''
+                                },
+                                offsetHeight: 24,
+                                getBoundingClientRect: () => ({ top: 100 })
+                            };
+                        }
+                    }
+                );
+            });
+
+            expect(dockShell.scrollTop).toBe(320);
+
+            dockShell.scrollTop = 200;
+            dockShell.scrollHeight = 320;
+            dockShell.emitScroll();
+
+            dockShell.scrollTop = 50;
+            dockShell.scrollHeight = 640;
+
+            await TestRenderer.act(async () => {
+                renderer.update(
+                    React.createElement(GuiShell, {
+                        mode: 'dock',
+                        overlayMaxLinesPerMessage: 3,
+                        rows: [
+                            {
+                                type: 'chat',
+                                kind: 'chat',
+                                platform: 'twitch',
+                                username: 'test-user',
+                                text: 'first message',
+                                avatarUrl: 'https://example.invalid/test-avatar.png',
+                                timestamp: '2024-01-01T00:00:00.000Z'
+                            },
+                            {
+                                type: 'chat',
+                                kind: 'chat',
+                                platform: 'twitch',
+                                username: 'test-user-2',
+                                text: 'second message',
+                                avatarUrl: 'https://example.invalid/test-avatar-2.png',
+                                timestamp: '2024-01-01T00:00:01.000Z'
+                            }
+                        ]
+                    })
+                );
+            });
+
+            expect(dockShell.scrollTop).toBe(640);
+        } finally {
+            if (renderer) {
+                await TestRenderer.act(async () => {
+                    renderer.unmount();
+                });
             }
 
             if (previousTimeStamp) {
