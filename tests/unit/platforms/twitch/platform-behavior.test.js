@@ -1,6 +1,7 @@
 const { describe, it, expect, afterEach } = require('bun:test');
 const { createMockFn } = require('../../../helpers/bun-mock-utils');
 const { noOpLogger } = require('../../../helpers/mock-factories');
+const { createTwitchEventSubChatMessageEvent } = require('../../../helpers/twitch-test-data');
 
 const { TwitchPlatform } = require('../../../../src/platforms/twitch');
 
@@ -72,6 +73,146 @@ describe('TwitchPlatform behavior standards', () => {
         expect(payload.message.text).toBe('hello');
         expect(payload.platform).toBe('twitch');
         expect(payload.timestamp).toEqual(expect.any(String));
+    });
+
+    it('emits canonical Twitch message parts for emote fragment chat payloads', async () => {
+        platform = createPlatform({}, { twitchAuth: createReadyTwitchAuth() });
+        const emitted = [];
+        platform.on('platform:event', (payload) => {
+            if (payload.type === 'platform:chat-message') emitted.push(payload.data);
+        });
+
+        const event = createTwitchEventSubChatMessageEvent({
+            chatter_user_id: 'test-chat-user-id-1',
+            chatter_user_name: 'test-chat-user-name-1',
+            badges: [
+                { set_id: 'moderator', id: '1' },
+                { set_id: 'subscriber', id: '12' }
+            ]
+        });
+
+        await platform.onMessageHandler(event);
+
+        expect(emitted).toHaveLength(1);
+        const payload = emitted[0];
+        expect(payload.message.text).toBe('testEmote test message testEmote hello world this is a message to everyone testEmote how are we today?');
+        expect(payload.message.parts).toEqual([
+            {
+                type: 'emote',
+                platform: 'twitch',
+                emoteId: 'emotesv2_dcd06b30a5c24f6eb871e8f5edbd44f7',
+                imageUrl: 'https://static-cdn.jtvnw.net/emoticons/v2/emotesv2_dcd06b30a5c24f6eb871e8f5edbd44f7/animated/dark/3.0'
+            },
+            { type: 'text', text: ' test message ' },
+            {
+                type: 'emote',
+                platform: 'twitch',
+                emoteId: 'emotesv2_dcd06b30a5c24f6eb871e8f5edbd44f7',
+                imageUrl: 'https://static-cdn.jtvnw.net/emoticons/v2/emotesv2_dcd06b30a5c24f6eb871e8f5edbd44f7/animated/dark/3.0'
+            },
+            { type: 'text', text: ' hello world this is a message to everyone ' },
+            {
+                type: 'emote',
+                platform: 'twitch',
+                emoteId: 'emotesv2_dcd06b30a5c24f6eb871e8f5edbd44f7',
+                imageUrl: 'https://static-cdn.jtvnw.net/emoticons/v2/emotesv2_dcd06b30a5c24f6eb871e8f5edbd44f7/animated/dark/3.0'
+            },
+            { type: 'text', text: ' how are we today?' }
+        ]);
+        expect(payload.metadata.isMod).toBe(true);
+        expect(payload.metadata.isSubscriber).toBe(true);
+    });
+
+    it('accepts emote-only Twitch chat when canonical message parts exist', async () => {
+        platform = createPlatform({}, { twitchAuth: createReadyTwitchAuth() });
+        const emitted = [];
+        platform.on('platform:event', (payload) => {
+            if (payload.type === 'platform:chat-message') emitted.push(payload.data);
+        });
+
+        const event = createTwitchEventSubChatMessageEvent({
+            message: {
+                text: '   ',
+                fragments: [
+                    {
+                        type: 'emote',
+                        text: 'testEmote',
+                        emote: {
+                            id: 'emotesv2_dcd06b30a5c24f6eb871e8f5edbd44f7',
+                            format: ['static', 'animated']
+                        }
+                    }
+                ]
+            }
+        });
+
+        await platform.onMessageHandler(event);
+
+        expect(emitted).toHaveLength(1);
+        expect(emitted[0].message.text).toBe('');
+        expect(emitted[0].message.parts).toEqual([
+            {
+                type: 'emote',
+                platform: 'twitch',
+                emoteId: 'emotesv2_dcd06b30a5c24f6eb871e8f5edbd44f7',
+                imageUrl: 'https://static-cdn.jtvnw.net/emoticons/v2/emotesv2_dcd06b30a5c24f6eb871e8f5edbd44f7/animated/dark/3.0'
+            }
+        ]);
+    });
+
+    it('treats zero-valued badge map entries as absent badges', async () => {
+        platform = createPlatform({}, { twitchAuth: createReadyTwitchAuth() });
+        const emitted = [];
+        platform.on('platform:event', (payload) => {
+            if (payload.type === 'platform:chat-message') emitted.push(payload.data);
+        });
+
+        await platform.onMessageHandler({
+            chatter_user_id: 'test-user-badge-zero',
+            chatter_user_name: 'testviewerbadgezero',
+            broadcaster_user_id: 'test-broadcaster-badge-zero',
+            message: { text: 'hello' },
+            badges: {
+                moderator: '0',
+                subscriber: '0'
+            },
+            timestamp: '2024-01-01T00:00:00.000Z'
+        });
+
+        expect(emitted).toHaveLength(1);
+        expect(emitted[0].metadata.isMod).toBe(false);
+        expect(emitted[0].metadata.isSubscriber).toBe(false);
+    });
+
+    it('skips chat emission when message text and message parts are both empty', async () => {
+        platform = createPlatform({}, { twitchAuth: createReadyTwitchAuth() });
+        const emitted = [];
+        platform.on('platform:event', (payload) => {
+            if (payload.type === 'platform:chat-message') emitted.push(payload.data);
+        });
+
+        await platform.onMessageHandler({
+            chatter_user_id: 'test-user-empty-chat',
+            chatter_user_name: 'testvieweremptychat',
+            broadcaster_user_id: 'test-broadcaster-empty-chat',
+            message: {
+                text: '   ',
+                fragments: [
+                    {
+                        type: 'emote',
+                        text: 'invalid',
+                        emote: {
+                            id: '   ',
+                            format: ['animated']
+                        }
+                    }
+                ]
+            },
+            badges: [],
+            timestamp: '2024-01-01T00:00:00.000Z'
+        });
+
+        expect(emitted).toHaveLength(0);
     });
 
     it('emits connection lifecycle events for EventSub changes', () => {

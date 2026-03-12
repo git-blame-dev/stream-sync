@@ -4,6 +4,7 @@ const testClock = require('../../helpers/test-clock');
 const {
     normalizeYouTubeMessage,
     normalizeTikTokMessage,
+    buildTwitchMessageParts,
     extractTwitchMessageData,
     extractYouTubeMessageText,
     validateNormalizedMessage
@@ -561,6 +562,86 @@ describe('Message Normalization', () => {
     });
 
     describe('when extracting Twitch message data', () => {
+        test('builds canonical Twitch message parts using animated dark 3.0 emote URLs', () => {
+            const parts = buildTwitchMessageParts({
+                fragments: [
+                    {
+                        type: 'emote',
+                        text: 'testEmote',
+                        emote: {
+                            id: 'emotesv2_dcd06b30a5c24f6eb871e8f5edbd44f7',
+                            format: ['static', 'animated']
+                        }
+                    },
+                    {
+                        type: 'text',
+                        text: ' test message '
+                    },
+                    {
+                        type: 'emote',
+                        text: 'testEmote',
+                        emote: {
+                            id: 'emotesv2_dcd06b30a5c24f6eb871e8f5edbd44f7',
+                            format: ['static', 'animated']
+                        }
+                    }
+                ]
+            });
+
+            expect(parts).toEqual([
+                {
+                    type: 'emote',
+                    platform: 'twitch',
+                    emoteId: 'emotesv2_dcd06b30a5c24f6eb871e8f5edbd44f7',
+                    imageUrl: 'https://static-cdn.jtvnw.net/emoticons/v2/emotesv2_dcd06b30a5c24f6eb871e8f5edbd44f7/animated/dark/3.0'
+                },
+                {
+                    type: 'text',
+                    text: ' test message '
+                },
+                {
+                    type: 'emote',
+                    platform: 'twitch',
+                    emoteId: 'emotesv2_dcd06b30a5c24f6eb871e8f5edbd44f7',
+                    imageUrl: 'https://static-cdn.jtvnw.net/emoticons/v2/emotesv2_dcd06b30a5c24f6eb871e8f5edbd44f7/animated/dark/3.0'
+                }
+            ]);
+        });
+
+        test('ignores invalid Twitch emote fragments without throwing', () => {
+            const parts = buildTwitchMessageParts({
+                fragments: [
+                    {
+                        type: 'emote',
+                        text: 'invalid-id',
+                        emote: {
+                            id: '   ',
+                            format: ['animated']
+                        }
+                    },
+                    {
+                        type: 'emote',
+                        text: 'invalid-format',
+                        emote: {
+                            id: 'emotesv2_dcd06b30a5c24f6eb871e8f5edbd44f7',
+                            format: []
+                        }
+                    },
+                    {
+                        type: 'text',
+                        text: ' hello world '
+                    }
+                ]
+            });
+
+            expect(parts).toEqual([
+                {
+                    type: 'text',
+                    text: ' hello world '
+                }
+            ]);
+        });
+
         test('extracts text and cheermote metadata from fragments', () => {
             const messageObj = {
                 text: 'Cheer100 hello',

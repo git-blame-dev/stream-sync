@@ -156,6 +156,71 @@ const createTwitchRaidEvent = (viewers = 100, overrides = {}) => {
     return mergeDeep(raidEvent, overrides);
 };
 
+const createTwitchEventSubChatMessageEvent = (overrides = {}) => {
+    const defaultEvent = {
+        chatter_user_id: 'test-chatter-id',
+        chatter_user_name: 'test-chatter-name',
+        chatter_user_login: 'test-chatter-login',
+        broadcaster_user_id: 'test-broadcaster-id',
+        message_id: 'test-chat-message-id',
+        message: {
+            text: 'testEmote test message testEmote hello world this is a message to everyone testEmote how are we today?',
+            fragments: [
+                {
+                    type: 'emote',
+                    text: 'testEmote',
+                    emote: {
+                        id: 'emotesv2_dcd06b30a5c24f6eb871e8f5edbd44f7',
+                        emote_set_id: '0',
+                        owner_id: '0',
+                        format: ['static', 'animated']
+                    }
+                },
+                {
+                    type: 'text',
+                    text: ' test message '
+                },
+                {
+                    type: 'emote',
+                    text: 'testEmote',
+                    emote: {
+                        id: 'emotesv2_dcd06b30a5c24f6eb871e8f5edbd44f7',
+                        emote_set_id: '0',
+                        owner_id: '0',
+                        format: ['static', 'animated']
+                    }
+                },
+                {
+                    type: 'text',
+                    text: ' hello world this is a message to everyone '
+                },
+                {
+                    type: 'emote',
+                    text: 'testEmote',
+                    emote: {
+                        id: 'emotesv2_dcd06b30a5c24f6eb871e8f5edbd44f7',
+                        emote_set_id: '0',
+                        owner_id: '0',
+                        format: ['static', 'animated']
+                    }
+                },
+                {
+                    type: 'text',
+                    text: ' how are we today?'
+                }
+            ]
+        },
+        badges: [
+            { set_id: 'moderator', id: '1' },
+            { set_id: 'subscriber', id: '12' }
+        ],
+        color: '#33AAEE',
+        timestamp: '2024-01-01T00:00:00.000Z'
+    };
+
+    return mergeDeep(defaultEvent, overrides);
+};
+
 // ================================================================================================
 // UTILITY FUNCTIONS
 // ================================================================================================
@@ -201,6 +266,7 @@ module.exports = {
     // Core event builders
     createTwitchChatEvent,
     createTwitchEventSubEvent,
+    createTwitchEventSubChatMessageEvent,
     createTwitchFollowEvent,
     createTwitchSubscriptionEvent,
     createTwitchRaidEvent,
