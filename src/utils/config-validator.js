@@ -232,6 +232,7 @@ class ConfigValidator {
     static _normalizeYoutubeSection(raw) {
         const method = ConfigValidator.parseString(raw.streamDetectionMethod, DEFAULTS.youtube.streamDetectionMethod).toLowerCase();
         const viewerMethod = ConfigValidator.parseString(raw.viewerCountMethod, DEFAULTS.youtube.viewerCountMethod).toLowerCase();
+        const chatMode = ConfigValidator.parseString(raw.chatMode, DEFAULTS.youtube.chatMode).toLowerCase();
 
         return {
             enabled: ConfigValidator.parseBoolean(raw.enabled, DEFAULTS.youtube.enabled),
@@ -245,6 +246,7 @@ class ConfigValidator {
             enableAPI: ConfigValidator.parseBoolean(raw.enableAPI, DEFAULTS.youtube.enableAPI),
             streamDetectionMethod: ['youtubei', 'api'].includes(method) ? method : DEFAULTS.youtube.streamDetectionMethod,
             viewerCountMethod: ['youtubei', 'api'].includes(viewerMethod) ? viewerMethod : DEFAULTS.youtube.viewerCountMethod,
+            chatMode: ['live', 'top'].includes(chatMode) ? chatMode : DEFAULTS.youtube.chatMode,
             ...ConfigValidator._parseInheritableFlags(raw),
             pollInterval: ConfigValidator.parseNumber(raw.pollInterval, { defaultValue: null })
         };

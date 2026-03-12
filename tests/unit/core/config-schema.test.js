@@ -42,6 +42,7 @@ describe('buildDefaultsFromSchema()', () => {
         expect(defaults.twitch.tokenStorePath).toBe('./data/twitch-tokens.json');
         expect(defaults.youtube.enabled).toBe(false);
         expect(defaults.youtube.streamDetectionMethod).toBe('youtubei');
+        expect(defaults.youtube.chatMode).toBe('live');
     });
 
     it('includes timing and handcam defaults', () => {
