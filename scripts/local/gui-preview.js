@@ -6,6 +6,7 @@ const { safeSetInterval, safeSetTimeout } = require('../../src/utils/timeout-val
 
 const PREVIEW_DURATION_MS = 30000;
 const PREVIEW_INTERVAL_MS = 2000;
+const TIKTOK_PREVIEW_CUSTOM_EMOTE_URL = 'https://onlinetools.com/images/examples-onlinewebptools/random-color-square.webp';
 const PREVIEW_PLATFORM_ACCOUNTS = [
     {
         platform: 'twitch',
@@ -72,6 +73,52 @@ function buildPreviewRows(durationMs = PREVIEW_DURATION_MS, intervalMs = PREVIEW
         };
 
         if (type === 'chat') {
+            if (account.platform === 'tiktok' && index === eventTypes.length) {
+                rows.push({
+                    type,
+                    platform: account.platform,
+                    data: {
+                        ...baseData,
+                        message: {
+                            text: 'test message hello world this is a message to everyone how are we today?',
+                            parts: [
+                                {
+                                    type: 'emote',
+                                    platform: 'tiktok',
+                                    emoteId: '1234512345123451234',
+                                    imageUrl: TIKTOK_PREVIEW_CUSTOM_EMOTE_URL
+                                },
+                                {
+                                    type: 'text',
+                                    text: ' test message '
+                                },
+                                {
+                                    type: 'emote',
+                                    platform: 'tiktok',
+                                    emoteId: '1234512345123451234',
+                                    imageUrl: TIKTOK_PREVIEW_CUSTOM_EMOTE_URL
+                                },
+                                {
+                                    type: 'text',
+                                    text: ' hello world this is a message to everyone '
+                                },
+                                {
+                                    type: 'emote',
+                                    platform: 'tiktok',
+                                    emoteId: '1234512345123451234',
+                                    imageUrl: TIKTOK_PREVIEW_CUSTOM_EMOTE_URL
+                                },
+                                {
+                                    type: 'text',
+                                    text: ' how are we today?'
+                                }
+                            ]
+                        }
+                    }
+                });
+                continue;
+            }
+
             rows.push({
                 type,
                 platform: account.platform,

@@ -14,6 +14,47 @@ function normalizeString(value: unknown): string {
   return typeof value === 'string' ? value.trim() : ''
 }
 
+function normalizeParts(value: unknown): GuiRowDto['parts'] {
+  if (!Array.isArray(value) || value.length === 0) {
+    return undefined
+  }
+
+  const parts = value
+    .filter((part): part is Record<string, unknown> => !!part && typeof part === 'object')
+    .map((part) => {
+      const partType = normalizeString(part.type)
+      if (partType === 'emote') {
+        const emoteId = normalizeString(part.emoteId)
+        const imageUrl = normalizeString(part.imageUrl)
+        if (!emoteId || !imageUrl) {
+          return null
+        }
+        return {
+          type: 'emote' as const,
+          platform: normalizeString(part.platform),
+          emoteId,
+          imageUrl
+        }
+      }
+
+      if (partType === 'text') {
+        const text = typeof part.text === 'string' ? part.text : ''
+        if (!text) {
+          return null
+        }
+        return {
+          type: 'text' as const,
+          text
+        }
+      }
+
+      return null
+    })
+    .filter((part): part is NonNullable<typeof part> => part !== null)
+
+  return parts.length > 0 ? parts : undefined
+}
+
 function normalizeRow(input: unknown): GuiRowDto {
   const row = input && typeof input === 'object' ? (input as Record<string, unknown>) : {}
   const kind = normalizeString(row.kind)
@@ -34,6 +75,7 @@ function normalizeRow(input: unknown): GuiRowDto {
     platform: normalizeString(row.platform),
     username: normalizeString(row.username),
     text: normalizeString(row.text),
+    parts: normalizeParts(row.parts),
     avatarUrl: normalizeString(row.avatarUrl),
     timestamp: row.timestamp === null ? null : normalizeString(row.timestamp)
   }

@@ -348,6 +348,216 @@ describe('Message Normalization', () => {
                 numericId: 'tt-456'
             });
         });
+
+        test('normalizes emote-only TikTok chat into canonical metadata.messageParts', () => {
+            const data = {
+                user: {
+                    userId: 'tt-789',
+                    uniqueId: 'tiktokuser789',
+                    nickname: 'TikTokEmoteUser'
+                },
+                comment: ' ',
+                emotes: [
+                    {
+                        placeInComment: 0,
+                        emote: {
+                            emoteId: '1234512345123451234',
+                            image: {
+                                imageUrl: 'https://example.invalid/tiktok-emote.webp'
+                            }
+                        }
+                    }
+                ],
+                common: { createTime: testClock.now() }
+            };
+
+            const normalized = normalizeTikTokMessage(data, 'tiktok');
+
+            expect(normalized.message).toBe('');
+            expect(normalized.metadata.messageParts).toEqual([
+                {
+                    type: 'emote',
+                    platform: 'tiktok',
+                    emoteId: '1234512345123451234',
+                    imageUrl: 'https://example.invalid/tiktok-emote.webp',
+                    placeInComment: 0
+                }
+            ]);
+        });
+
+        test('normalizes mixed TikTok text and emote content into ordered message parts', () => {
+            const data = {
+                user: {
+                    userId: 'tt-790',
+                    uniqueId: 'tiktokuser790',
+                    nickname: 'TikTokMixedUser'
+                },
+                comment: 'hi all',
+                emotes: [
+                    {
+                        placeInComment: 2,
+                        emote: {
+                            emoteId: '1234512346',
+                            image: {
+                                imageUrl: 'https://example.invalid/tiktok-emote-2.webp'
+                            }
+                        }
+                    }
+                ],
+                common: { createTime: testClock.now() }
+            };
+
+            const normalized = normalizeTikTokMessage(data, 'tiktok');
+
+            expect(normalized.message).toBe('hi all');
+            expect(normalized.metadata.messageParts).toEqual([
+                {
+                    type: 'text',
+                    text: 'hi'
+                },
+                {
+                    type: 'emote',
+                    platform: 'tiktok',
+                    emoteId: '1234512346',
+                    imageUrl: 'https://example.invalid/tiktok-emote-2.webp',
+                    placeInComment: 2
+                },
+                {
+                    type: 'text',
+                    text: ' all'
+                }
+            ]);
+        });
+
+        test('adjusts insertion indexes for sequential emotes placed beyond comment length', () => {
+            const data = {
+                user: {
+                    userId: 'tt-791',
+                    uniqueId: 'tiktokuser791',
+                    nickname: 'TikTokSequentialEmotes'
+                },
+                comment: 'I watched your LIVE for 100 minutes!',
+                emotes: [
+                    {
+                        placeInComment: 36,
+                        emote: {
+                            emoteId: '12345123456',
+                            image: {
+                                imageUrl: 'https://example.invalid/milestone-1.webp'
+                            }
+                        }
+                    },
+                    {
+                        placeInComment: 37,
+                        emote: {
+                            emoteId: '12345123457',
+                            image: {
+                                imageUrl: 'https://example.invalid/milestone-2.webp'
+                            }
+                        }
+                    },
+                    {
+                        placeInComment: 38,
+                        emote: {
+                            emoteId: '12345123458',
+                            image: {
+                                imageUrl: 'https://example.invalid/milestone-3.webp'
+                            }
+                        }
+                    }
+                ],
+                common: { createTime: testClock.now() }
+            };
+
+            const normalized = normalizeTikTokMessage(data, 'tiktok');
+
+            expect(normalized.metadata.messageParts).toEqual([
+                {
+                    type: 'text',
+                    text: 'I watched your LIVE for 100 minutes!'
+                },
+                {
+                    type: 'emote',
+                    platform: 'tiktok',
+                    emoteId: '12345123456',
+                    imageUrl: 'https://example.invalid/milestone-1.webp',
+                    placeInComment: 36
+                },
+                {
+                    type: 'emote',
+                    platform: 'tiktok',
+                    emoteId: '12345123457',
+                    imageUrl: 'https://example.invalid/milestone-2.webp',
+                    placeInComment: 37
+                },
+                {
+                    type: 'emote',
+                    platform: 'tiktok',
+                    emoteId: '12345123458',
+                    imageUrl: 'https://example.invalid/milestone-3.webp',
+                    placeInComment: 38
+                }
+            ]);
+        });
+
+        test('keeps text slicing stable when multiple emotes share the same placement index', () => {
+            const data = {
+                user: {
+                    userId: 'tt-792',
+                    uniqueId: 'tiktokuser792',
+                    nickname: 'TikTokSharedPlacement'
+                },
+                comment: 'abc',
+                emotes: [
+                    {
+                        placeInComment: 1,
+                        emote: {
+                            emoteId: '12345123',
+                            image: {
+                                imageUrl: 'https://example.invalid/shared-1.webp'
+                            }
+                        }
+                    },
+                    {
+                        placeInComment: 1,
+                        emote: {
+                            emoteId: '12345124',
+                            image: {
+                                imageUrl: 'https://example.invalid/shared-2.webp'
+                            }
+                        }
+                    }
+                ],
+                common: { createTime: testClock.now() }
+            };
+
+            const normalized = normalizeTikTokMessage(data, 'tiktok');
+
+            expect(normalized.metadata.messageParts).toEqual([
+                {
+                    type: 'text',
+                    text: 'a'
+                },
+                {
+                    type: 'emote',
+                    platform: 'tiktok',
+                    emoteId: '12345123',
+                    imageUrl: 'https://example.invalid/shared-1.webp',
+                    placeInComment: 1
+                },
+                {
+                    type: 'emote',
+                    platform: 'tiktok',
+                    emoteId: '12345124',
+                    imageUrl: 'https://example.invalid/shared-2.webp',
+                    placeInComment: 1
+                },
+                {
+                    type: 'text',
+                    text: 'bc'
+                }
+            ]);
+        });
     });
 
     describe('when extracting Twitch message data', () => {
@@ -568,7 +778,7 @@ describe('Message Normalization', () => {
                 const originalTime = testClock.now() - (5 * 60 * 1000);
                 const tikTokData = {
                     user: {
-                        userId: 'tt-1',
+                        userId: '1234',
                         uniqueId: 'TestUser',
                         nickname: 'Test User'
                     },

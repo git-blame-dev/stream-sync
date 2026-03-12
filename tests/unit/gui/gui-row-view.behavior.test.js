@@ -110,4 +110,42 @@ describe('GuiRow rendering behavior', () => {
 
         expect(html).toContain('gui-row__text--notification');
     });
+
+    it('renders inline emotes in order with text parts when parts are provided', () => {
+        const html = renderToStaticMarkup(
+            React.createElement(GuiRow, {
+                mode: 'dock',
+                row: {
+                    type: 'chat',
+                    kind: 'chat',
+                    platform: 'tiktok',
+                    username: 'test-user',
+                    text: '',
+                    parts: [
+                        {
+                            type: 'text',
+                            text: 'hello '
+                        },
+                        {
+                            type: 'emote',
+                            platform: 'tiktok',
+                            emoteId: '1234512345',
+                            imageUrl: 'https://example.invalid/tiktok-emote.webp'
+                        },
+                        {
+                            type: 'text',
+                            text: ' world'
+                        }
+                    ],
+                    avatarUrl: 'https://example.invalid/test-avatar.png',
+                    timestamp: '2024-01-01T00:00:00.000Z'
+                }
+            })
+        );
+
+        expect(html).toContain('hello ');
+        expect(html).toContain('world');
+        expect(html).toContain('class="gui-row__emote"');
+        expect(html).toContain('src="https://example.invalid/tiktok-emote.webp"');
+    });
 });

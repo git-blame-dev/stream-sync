@@ -151,6 +151,114 @@ describe('TikTok event pipeline (integration)', () => {
         }
     });
 
+    test('routes emote-only TikTok chat payloads through platform:event chat path', async () => {
+        const eventBus = createEventBus();
+        const logger = noOpLogger;
+        const runtimeCalls = {
+            chat: []
+        };
+        const runtime = {
+            handleChatMessage: (platform, message) => runtimeCalls.chat.push({ platform, message })
+        };
+        const displayQueue = createMockDisplayQueue();
+        const textProcessing = createTextProcessingManager({ logger });
+        const config = createConfigFixture({
+            general: {
+                messagesEnabled: true
+            },
+            tiktok: {
+                enabled: true
+            },
+            obs: { enabled: false }
+        });
+        const notificationManager = new NotificationManager({
+            displayQueue,
+            logger,
+            eventBus,
+            config,
+            constants: require('../../src/core/constants'),
+            textProcessing,
+            obsGoals: { processDonationGoal: createMockFn() },
+            vfxCommandService: { getVFXConfig: createMockFn().mockResolvedValue(null) },
+            userTrackingService: { isFirstMessage: createMockFn().mockResolvedValue(false) }
+        });
+
+        const router = new PlatformEventRouter({
+            eventBus,
+            runtime,
+            notificationManager,
+            config,
+            logger
+        });
+
+        const connection = new EventEmitter();
+        const WebcastEvent = {
+            CHAT: 'chat'
+        };
+        const ControlEvent = {
+            DISCONNECTED: 'disconnected',
+            ERROR: 'error'
+        };
+
+        const platform = new TikTokPlatform(
+            {
+                enabled: true,
+                username: 'test-user',
+                giftAggregationEnabled: false
+            },
+            {
+                logger,
+                eventBus,
+                TikTokWebSocketClient: createMockFn(),
+                WebcastEvent,
+                ControlEvent,
+                connectionFactory: { createConnection: createMockFn() }
+            }
+        );
+
+        platform.connection = connection;
+        setupTikTokEventListeners(platform);
+
+        const eventTimestamp = Date.parse('2025-01-20T12:00:00.000Z');
+        const chatPayload = {
+            comment: ' ',
+            emotes: [
+                {
+                    placeInComment: 0,
+                    emote: {
+                        emoteId: '1234512345123451234',
+                        image: {
+                            imageUrl: 'https://example.invalid/tiktok-emote.webp'
+                        }
+                    }
+                }
+            ],
+            user: { userId: 'test-user-id-emote', uniqueId: 'test-user-emote', nickname: 'test-user-emote' },
+            common: { createTime: eventTimestamp }
+        };
+
+        try {
+            connection.emit(WebcastEvent.CHAT, chatPayload);
+
+            await new Promise(setImmediate);
+
+            expect(runtimeCalls.chat).toHaveLength(1);
+            expect(runtimeCalls.chat[0].message.message).toBe('');
+            expect(runtimeCalls.chat[0].message.metadata.messageParts).toEqual([
+                {
+                    type: 'emote',
+                    platform: 'tiktok',
+                    emoteId: '1234512345123451234',
+                    imageUrl: 'https://example.invalid/tiktok-emote.webp',
+                    placeInComment: 0
+                }
+            ]);
+        } finally {
+            router.dispose();
+            cleanupTikTokEventListeners(platform);
+        }
+    });
+
     test('routes only fresh unique chats during mixed replay bursts', async () => {
         useFakeTimers();
         setSystemTime(new Date('2025-01-20T12:05:00.000Z'));

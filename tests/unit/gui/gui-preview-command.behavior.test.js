@@ -37,6 +37,45 @@ describe('GUI local preview command behavior', () => {
             type: 'greeting',
             platform: 'twitch'
         }));
+        expect(rows[11]).toEqual(expect.objectContaining({
+            type: 'chat',
+            platform: 'tiktok'
+        }));
+        expect(rows[11].data.message).toEqual({
+            text: 'test message hello world this is a message to everyone how are we today?',
+            parts: [
+                {
+                    type: 'emote',
+                    platform: 'tiktok',
+                    emoteId: '1234512345123451234',
+                    imageUrl: 'https://onlinetools.com/images/examples-onlinewebptools/random-color-square.webp'
+                },
+                {
+                    type: 'text',
+                    text: ' test message '
+                },
+                {
+                    type: 'emote',
+                    platform: 'tiktok',
+                    emoteId: '1234512345123451234',
+                    imageUrl: 'https://onlinetools.com/images/examples-onlinewebptools/random-color-square.webp'
+                },
+                {
+                    type: 'text',
+                    text: ' hello world this is a message to everyone '
+                },
+                {
+                    type: 'emote',
+                    platform: 'tiktok',
+                    emoteId: '1234512345123451234',
+                    imageUrl: 'https://onlinetools.com/images/examples-onlinewebptools/random-color-square.webp'
+                },
+                {
+                    type: 'text',
+                    text: ' how are we today?'
+                }
+            ]
+        });
     });
 
     it('forces dock and overlay on for preview config', () => {

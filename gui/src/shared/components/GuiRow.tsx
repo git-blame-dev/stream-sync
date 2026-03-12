@@ -11,6 +11,7 @@ interface GuiRowProps {
 
 export function GuiRow({ row, mode, rowRef }: GuiRowProps) {
   const platformIconUrl = getPlatformIconUrl(row.platform)
+  const hasParts = Array.isArray(row.parts) && row.parts.length > 0
   const textClass = [
     'gui-row__text',
     row.kind === 'notification' ? 'gui-row__text--notification' : '',
@@ -35,7 +36,26 @@ export function GuiRow({ row, mode, rowRef }: GuiRowProps) {
           {platformIconUrl ? <img className="gui-row__platform-icon" src={platformIconUrl} alt="" /> : null}
           <span className="gui-row__username">{row.username}</span>
         </div>
-        <span className={textClass}>{row.text}</span>
+        <span className={textClass}>
+          {hasParts
+            ? row.parts?.map((part, index) => {
+                if (part.type === 'emote') {
+                  return (
+                    <img
+                      key={`emote-${part.emoteId}-${index}`}
+                      className="gui-row__emote"
+                      src={part.imageUrl}
+                      alt={part.emoteId}
+                      loading="lazy"
+                      decoding="async"
+                    />
+                  )
+                }
+
+                return <React.Fragment key={`text-${index}`}>{part.text}</React.Fragment>
+              })
+            : row.text}
+        </span>
       </div>
     </div>
   )

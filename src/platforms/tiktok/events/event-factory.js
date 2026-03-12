@@ -3,6 +3,7 @@ const { normalizeTikTokMessage } = require('../../../utils/message-normalization
 const { extractTikTokUserData } = require('../../../utils/tiktok-data-extraction');
 const { getSystemTimestampISO } = require('../../../utils/timestamp');
 const { DEFAULT_AVATAR_URL } = require('../../../constants/avatar');
+const { getValidMessageParts } = require('../../../utils/message-parts');
 
 function createTikTokEventFactory(options = {}) {
     const platformName = options.platformName || 'tiktok';
@@ -41,6 +42,31 @@ function createTikTokEventFactory(options = {}) {
         return DEFAULT_AVATAR_URL;
     };
 
+    const resolveMessageParts = (normalized = {}) => {
+        return getValidMessageParts(normalized)
+            .map((part) => {
+                if (part.type === 'emote') {
+                    const normalizedPart = {
+                        type: 'emote',
+                        platform: typeof part.platform === 'string' ? part.platform : 'tiktok',
+                        emoteId: typeof part.emoteId === 'string' ? part.emoteId : '',
+                        imageUrl: part.imageUrl.trim()
+                    };
+
+                    if (Number.isInteger(part.placeInComment) && part.placeInComment >= 0) {
+                        normalizedPart.placeInComment = part.placeInComment;
+                    }
+
+                    return normalizedPart;
+                }
+
+                return {
+                    type: 'text',
+                    text: part.text
+                };
+            });
+    };
+
     return {
         createChatMessage: (data = {}, eventOptions = {}) => {
             const normalized = eventOptions.normalizedData || normalizeChatEvent(data);
@@ -49,12 +75,28 @@ function createTikTokEventFactory(options = {}) {
                 username: normalized?.username
             });
             const avatarUrl = resolveAvatarUrl(data, normalized || {});
+            const messageText = typeof normalized?.message === 'string' ? normalized.message.trim() : '';
+            const messageParts = resolveMessageParts(normalized);
 
-            if (!normalized?.message) {
+            if (!messageText && messageParts.length === 0) {
                 throw new Error('Missing TikTok message text');
             }
             if (!normalized?.timestamp) {
                 throw new Error('Missing TikTok message timestamp');
+            }
+
+            const eventMetadata = buildEventMetadata(normalized?.metadata);
+
+            if (messageParts.length > 0) {
+                eventMetadata.messageParts = messageParts;
+            }
+
+            const messagePayload = {
+                text: messageText
+            };
+
+            if (messageParts.length > 0) {
+                messagePayload.parts = messageParts;
             }
 
             return {
@@ -63,14 +105,12 @@ function createTikTokEventFactory(options = {}) {
                 username: identity.username,
                 userId: identity.userId,
                 avatarUrl,
-                message: {
-                    text: normalized.message
-                },
+                message: messagePayload,
                 timestamp: normalized.timestamp,
                 isMod: !!normalized.isMod,
                 isSubscriber: !!normalized.isSubscriber,
                 isBroadcaster: !!normalized.isBroadcaster,
-                metadata: buildEventMetadata(normalized?.metadata)
+                metadata: eventMetadata
             };
         },
         createGift: (data = {}) => {

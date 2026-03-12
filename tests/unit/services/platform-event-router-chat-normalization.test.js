@@ -103,4 +103,87 @@ describe('PlatformEventRouter chat normalization', () => {
         expect(normalized.avatarUrl).toBe('https://example.invalid/chat-avatar.png');
     });
 
+    it('accepts TikTok emote-only chat payloads when message.parts are present', async () => {
+        const { router, runtime } = createRouter();
+
+        const event = {
+            ...baseEvent,
+            platform: 'tiktok',
+            data: {
+                userId: 'test-user-id-emote-only',
+                username: 'testEmoteUser',
+                message: {
+                    text: '   ',
+                    parts: [
+                        {
+                            type: 'emote',
+                            platform: 'tiktok',
+                            emoteId: '1234512345',
+                            imageUrl: 'https://example.invalid/tiktok-emote.webp'
+                        }
+                    ]
+                },
+                timestamp: '2025-11-20T15:30:00.000Z',
+                metadata: {}
+            }
+        };
+
+        await router.routeEvent(event);
+
+        expect(runtime.handleChatMessage).toHaveBeenCalledTimes(1);
+        const [, normalized] = runtime.handleChatMessage.mock.calls[0];
+        expect(normalized.message).toBe('');
+        expect(normalized.metadata).toMatchObject({
+            messageParts: [
+                {
+                    type: 'emote',
+                    platform: 'tiktok',
+                    emoteId: '1234512345',
+                    imageUrl: 'https://example.invalid/tiktok-emote.webp'
+                }
+            ]
+        });
+    });
+
+    it('accepts non-TikTok emote-only chat payloads when message.parts are present', async () => {
+        const { router, runtime } = createRouter();
+
+        const event = {
+            ...baseEvent,
+            platform: 'twitch',
+            data: {
+                userId: 'test-user-id-strict',
+                username: 'testStrictUser',
+                message: {
+                    text: '   ',
+                    parts: [
+                        {
+                            type: 'emote',
+                            platform: 'twitch',
+                            emoteId: '1234512345',
+                            imageUrl: 'https://example.invalid/twitch-emote.webp'
+                        }
+                    ]
+                },
+                timestamp: '2025-11-20T15:45:00.000Z'
+            }
+        };
+
+        await router.routeEvent(event);
+
+        expect(runtime.handleChatMessage).toHaveBeenCalledTimes(1);
+        const [, normalized] = runtime.handleChatMessage.mock.calls[0];
+        expect(normalized.message).toBe('');
+        expect(normalized.metadata).toMatchObject({
+            messageParts: [
+                {
+                    type: 'emote',
+                    platform: 'twitch',
+                    emoteId: '1234512345',
+                    imageUrl: 'https://example.invalid/twitch-emote.webp'
+                }
+            ]
+        });
+    });
+
 });

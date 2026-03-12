@@ -75,6 +75,10 @@
 .gui-row__text {
   font-size: 18px;
   color: #c7d0d9;
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 2px;
 }
 
 .gui-row__text--overlay-clamp {
@@ -87,4 +91,11 @@
 
 .gui-row__text--notification {
   color: #ffffff;
+}
+
+.gui-row__emote {
+  width: 64px;
+  height: 64px;
+  object-fit: contain;
+  vertical-align: middle;
 }

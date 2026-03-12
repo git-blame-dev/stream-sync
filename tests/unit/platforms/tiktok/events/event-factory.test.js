@@ -175,4 +175,85 @@ describe('TikTok event factory behavior', () => {
         expect(validator.validate(connected)).toEqual({ valid: true, errors: [] });
         expect(validator.validate(disconnected)).toEqual({ valid: true, errors: [] });
     });
+
+    it('rejects chat events when text is empty and message parts are missing', () => {
+        const { createTikTokEventFactory } = require('../../../../../src/platforms/tiktok/events/event-factory');
+
+        const eventFactory = createTikTokEventFactory({
+            platformName: 'tiktok',
+            generateCorrelationId: () => 'corr-chat-empty-123'
+        });
+
+        expect(() => eventFactory.createChatMessage({}, {
+            normalizedData: {
+                userId: 'test-user-id',
+                username: 'test-username',
+                message: '   ',
+                timestamp: '2026-01-30T12:00:00.000Z'
+            }
+        })).toThrow('Missing TikTok message text');
+    });
+
+    it('creates subscription paypiggy event with canonical payload fields', () => {
+        const { createTikTokEventFactory } = require('../../../../../src/platforms/tiktok/events/event-factory');
+
+        const eventFactory = createTikTokEventFactory({
+            platformName: 'tiktok'
+        });
+
+        const event = eventFactory.createSubscription({
+            user: {
+                userId: '7000000000000000000',
+                uniqueId: 'test_subscriber',
+                nickname: 'TestSubscriber',
+                profilePicture: {
+                    url: ['https://example.invalid/sub-avatar.webp']
+                }
+            },
+            tier: 'tier-1',
+            months: 3,
+            message: 'happy to support',
+            timestamp: '2026-01-30T12:00:00.000Z'
+        });
+
+        expect(event).toEqual(expect.objectContaining({
+            type: PlatformEvents.PAYPIGGY,
+            platform: 'tiktok',
+            username: 'TestSubscriber',
+            userId: 'test_subscriber',
+            avatarUrl: DEFAULT_AVATAR_URL,
+            tier: 'tier-1',
+            months: 3,
+            message: 'happy to support'
+        }));
+    });
+
+    it('creates superfan paypiggy event with superfan tier', () => {
+        const { createTikTokEventFactory } = require('../../../../../src/platforms/tiktok/events/event-factory');
+
+        const eventFactory = createTikTokEventFactory({
+            platformName: 'tiktok'
+        });
+
+        const event = eventFactory.createSuperfan({
+            user: {
+                userId: '7000000000000000001',
+                uniqueId: 'test_superfan',
+                nickname: 'TestSuperfan'
+            },
+            months: 2,
+            message: 'superfan hype',
+            timestamp: '2026-01-30T12:00:00.000Z'
+        });
+
+        expect(event).toEqual(expect.objectContaining({
+            type: PlatformEvents.PAYPIGGY,
+            platform: 'tiktok',
+            username: 'TestSuperfan',
+            userId: 'test_superfan',
+            tier: 'superfan',
+            months: 2,
+            message: 'superfan hype'
+        }));
+    });
 });
