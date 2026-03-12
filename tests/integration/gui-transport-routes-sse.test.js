@@ -167,6 +167,65 @@ describe('GUI transport routes and SSE integration', () => {
         }
     });
 
+    it('delivers chat parts over SSE when canonical message.parts is provided', async () => {
+        const port = await getAvailablePort();
+        const eventBus = new TestEventBus();
+        const config = buildConfig({
+            enableDock: true,
+            enableOverlay: false,
+            port,
+            messageCharacterLimit: 0
+        });
+        const service = createGuiTransportService({ config, eventBus, logger: null });
+        await service.start();
+
+        const baseUrl = `http://127.0.0.1:${port}`;
+        const abort = new AbortController();
+        try {
+            const response = await fetch(`${baseUrl}/gui/events`, {
+                signal: abort.signal
+            });
+            expect(response.status).toBe(200);
+
+            const reader = createSseReader(response);
+            eventBus.emit('display:row', {
+                type: 'platform:chat-message',
+                platform: 'tiktok',
+                data: {
+                    username: 'test-user',
+                    userId: 'test-user-id',
+                    avatarUrl: 'https://example.invalid/test-avatar.png',
+                    message: {
+                        text: '',
+                        parts: [
+                            {
+                                type: 'emote',
+                                platform: 'tiktok',
+                                emoteId: '1234512345',
+                                imageUrl: 'https://example.invalid/tiktok-emote.webp'
+                            }
+                        ]
+                    },
+                    timestamp: '2024-01-01T00:00:00.000Z'
+                }
+            });
+
+            const event = await reader.readEvent();
+            expect(event.type).toBe('platform:chat-message');
+            expect(event.parts).toEqual([
+                {
+                    type: 'emote',
+                    platform: 'tiktok',
+                    emoteId: '1234512345',
+                    imageUrl: 'https://example.invalid/tiktok-emote.webp'
+                }
+            ]);
+        } finally {
+            abort.abort();
+            await service.stop();
+        }
+    });
+
     it('returns disabled dock shell and enabled overlay shell', async () => {
         const port = await getAvailablePort();
         const eventBus = new TestEventBus();

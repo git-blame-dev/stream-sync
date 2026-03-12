@@ -358,6 +358,55 @@ describe('TikTok event router', () => {
         expect(handledChatMessages).toHaveLength(0);
     });
 
+    test('processes emote-only chat payloads when comment is whitespace and emotes are present', async () => {
+        const { platform, listeners, handledChatMessages } = createPlatformHarness();
+
+        setupTikTokEventListeners(platform);
+
+        await listeners[platform.WebcastEvent.CHAT]({
+            comment: ' ',
+            emotes: [
+                {
+                    placeInComment: 0,
+                    emote: {
+                        emoteId: '1234512345123451234',
+                        image: {
+                            imageUrl: 'https://example.invalid/tiktok-emote.webp'
+                        }
+                    }
+                }
+            ],
+            user: { userId: 'test-user-emote-only', uniqueId: 'emote-only-user', nickname: 'EmoteOnlyUser' },
+            common: { createTime: '1700000000' }
+        });
+
+        expect(handledChatMessages).toHaveLength(1);
+    });
+
+    test('skips chat event when comment is missing even if emotes are present', async () => {
+        const { platform, listeners, handledChatMessages } = createPlatformHarness();
+
+        setupTikTokEventListeners(platform);
+
+        await listeners[platform.WebcastEvent.CHAT]({
+            emotes: [
+                {
+                    placeInComment: 0,
+                    emote: {
+                        emoteId: '1234512345123451234',
+                        image: {
+                            imageUrl: 'https://example.invalid/tiktok-emote.webp'
+                        }
+                    }
+                }
+            ],
+            user: { userId: 'test-user-emote-only', uniqueId: 'emote-only-user', nickname: 'EmoteOnlyUser' },
+            common: { createTime: '1700000000' }
+        });
+
+        expect(handledChatMessages).toHaveLength(0);
+    });
+
     test('registers listeners only for supported events', () => {
         const { platform, listeners } = createPlatformHarness();
 

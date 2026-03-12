@@ -1,4 +1,5 @@
 const { DEFAULT_AVATAR_URL } = require('../../constants/avatar');
+const { getValidMessageParts } = require('../../utils/message-parts');
 
 const EVENT_RULES = {
     chat: { kind: 'chat', toggleKey: 'showMessages' },
@@ -47,6 +48,25 @@ function resolveText(type, data = {}) {
     }
 
     return normalizeString(data.displayMessage || data.message);
+}
+
+function resolveMessageParts(data = {}) {
+    return getValidMessageParts(data, { allowWhitespaceText: true })
+        .map((part) => {
+            if (part.type === 'emote') {
+                return {
+                    type: 'emote',
+                    platform: normalizeString(part.platform),
+                    emoteId: part.emoteId.trim(),
+                    imageUrl: part.imageUrl.trim()
+                };
+            }
+
+            return {
+                type: 'text',
+                text: part.text
+            };
+        });
 }
 
 function createEventToGuiContractMapper(options = {}) {
@@ -114,9 +134,10 @@ function createEventToGuiContractMapper(options = {}) {
         const textSource = resolveText(type, data);
         const messageLimit = Number(guiConfig.messageCharacterLimit) || 0;
         const text = applyMessageLimit(textSource, messageLimit);
+        const parts = resolveMessageParts(data);
         const avatarUrl = await resolveAvatarUrl({ platform, data });
 
-        return {
+        const mapped = {
             type,
             kind: rule.kind,
             platform,
@@ -125,6 +146,12 @@ function createEventToGuiContractMapper(options = {}) {
             avatarUrl,
             timestamp: data.timestamp || row.timestamp || null
         };
+
+        if (parts.length > 0) {
+            mapped.parts = parts;
+        }
+
+        return mapped;
     };
 
     return {

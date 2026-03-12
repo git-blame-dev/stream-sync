@@ -4,6 +4,7 @@ const { validateNormalizedMessage } = require('../utils/message-normalization');
 const { checkGlobalCommandCooldown, updateGlobalCommandCooldown } = require('../utils/global-command-cooldown');
 const { createPlatformErrorHandler } = require('../utils/platform-error-handler');
 const { sanitizeForDisplay } = require('../utils/validation');
+const { getValidMessageParts } = require('../utils/message-parts');
 
 const LOG_TRUNCATION_LENGTH = 200;
 
@@ -53,7 +54,9 @@ class ChatNotificationRouter {
             }
 
             const sanitizedMessage = this.sanitizeChatContent(normalizedData.message);
-            if (!sanitizedMessage.hasContent) {
+            const messageParts = this.getCanonicalMessageParts(normalizedData);
+            const hasRenderableParts = messageParts.length > 0;
+            if (!sanitizedMessage.hasContent && !hasRenderableParts) {
                 this._logSkipped(platform, normalizedData.username, 'empty after sanitization');
                 return;
             }
@@ -65,7 +68,7 @@ class ChatNotificationRouter {
             const isFirstMessage = this.isFirstMessage(normalizedData, platform);
             const greetingsEnabled = this.isGreetingEnabled(platform);
 
-            this.enqueueChatMessage(platform, normalizedData, sanitizedMessage.message);
+            this.enqueueChatMessage(platform, normalizedData, sanitizedMessage.message, messageParts);
 
             const farewellTrigger = this.detectFarewell(normalizedData);
             if (farewellTrigger) {
@@ -95,7 +98,29 @@ class ChatNotificationRouter {
 
     hasMessageContent(normalizedData) {
         const message = normalizedData?.message;
-        return typeof message === 'string' && message.trim().length > 0;
+        if (typeof message === 'string' && message.trim().length > 0) {
+            return true;
+        }
+        return this.getCanonicalMessageParts(normalizedData).length > 0;
+    }
+
+    getCanonicalMessageParts(normalizedData = {}) {
+        return getValidMessageParts(normalizedData)
+            .map((part) => {
+                if (part.type === 'emote') {
+                    return {
+                        type: 'emote',
+                        platform: typeof part.platform === 'string' ? part.platform : undefined,
+                        emoteId: part.emoteId.trim(),
+                        imageUrl: part.imageUrl.trim()
+                    };
+                }
+
+                return {
+                    type: 'text',
+                    text: part.text
+                };
+            });
     }
 
     shouldSkipForConnection(platform, timestamp) {
@@ -201,7 +226,7 @@ class ChatNotificationRouter {
         return !!value;
     }
 
-    enqueueChatMessage(platform, normalizedData, sanitizedMessage) {
+    enqueueChatMessage(platform, normalizedData, sanitizedMessage, messageParts = []) {
         if (!this.runtime.displayQueue) {
             return;
         }
@@ -214,6 +239,9 @@ class ChatNotificationRouter {
             avatarUrl: normalizedData.avatarUrl,
             message: sanitizedMessage
         };
+        if (Array.isArray(messageParts) && messageParts.length > 0) {
+            baseChatData.messageParts = messageParts;
+        }
 
         const chatData = NotificationBuilder.build(baseChatData) || baseChatData;
 

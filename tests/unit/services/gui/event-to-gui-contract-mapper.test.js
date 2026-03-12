@@ -135,6 +135,80 @@ describe('Event-to-GUI contract mapper behavior', () => {
         }));
     });
 
+    it('maps canonical message.parts for chat rows', async () => {
+        const mapper = createMapper({ messageCharacterLimit: 0 });
+
+        const mapped = await mapper.mapDisplayRow({
+            type: 'platform:chat-message',
+            platform: 'tiktok',
+            data: {
+                username: 'test-user',
+                userId: 'test-user-id',
+                avatarUrl: 'https://example.invalid/avatar.png',
+                message: {
+                    text: '',
+                    parts: [
+                        {
+                            type: 'emote',
+                            platform: 'tiktok',
+                            emoteId: '1234512345',
+                            imageUrl: 'https://example.invalid/tiktok-emote.webp'
+                        },
+                        {
+                            type: 'text',
+                            text: ' hi'
+                        }
+                    ]
+                }
+            }
+        });
+
+        expect(mapped.parts).toEqual([
+            {
+                type: 'emote',
+                platform: 'tiktok',
+                emoteId: '1234512345',
+                imageUrl: 'https://example.invalid/tiktok-emote.webp'
+            },
+            {
+                type: 'text',
+                text: ' hi'
+            }
+        ]);
+    });
+
+    it('uses legacy messageParts fallback when canonical message.parts is missing', async () => {
+        const mapper = createMapper({ messageCharacterLimit: 0 });
+
+        const mapped = await mapper.mapDisplayRow({
+            type: 'chat',
+            platform: 'tiktok',
+            data: {
+                username: 'test-user',
+                userId: 'test-user-id',
+                avatarUrl: 'https://example.invalid/avatar.png',
+                message: '',
+                messageParts: [
+                    {
+                        type: 'emote',
+                        platform: 'tiktok',
+                        emoteId: '1234512346',
+                        imageUrl: 'https://example.invalid/tiktok-emote-2.webp'
+                    }
+                ]
+            }
+        });
+
+        expect(mapped.parts).toEqual([
+            {
+                type: 'emote',
+                platform: 'tiktok',
+                emoteId: '1234512346',
+                imageUrl: 'https://example.invalid/tiktok-emote-2.webp'
+            }
+        ]);
+    });
+
     it('resolves avatar by payload then cache then fallback', async () => {
         const mapper = createMapper();
 

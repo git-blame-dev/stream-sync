@@ -18,6 +18,90 @@ function handleNormalizationError(message, error, eventType = 'normalization', e
     });
 }
 
+function isValidTikTokEmoteEntry(entry) {
+    if (!entry || typeof entry !== 'object') {
+        return false;
+    }
+
+    if (!Number.isInteger(entry.placeInComment) || entry.placeInComment < 0) {
+        return false;
+    }
+
+    const emote = entry.emote;
+    if (!emote || typeof emote !== 'object') {
+        return false;
+    }
+
+    const emoteId = typeof emote.emoteId === 'string' ? emote.emoteId.trim() : '';
+    const imageUrl = typeof emote?.image?.imageUrl === 'string' ? emote.image.imageUrl.trim() : '';
+
+    return !!emoteId && !!imageUrl;
+}
+
+function buildTikTokMessageParts(rawComment, emotes = []) {
+    if (typeof rawComment !== 'string') {
+        return [];
+    }
+
+    if (!Array.isArray(emotes) || emotes.length === 0) {
+        return [];
+    }
+
+    const commentCodepoints = Array.from(rawComment);
+    const sortedEmotes = emotes
+        .map((entry, index) => ({ entry, index }))
+        .filter(({ entry }) => isValidTikTokEmoteEntry(entry))
+        .sort((left, right) => {
+            if (left.entry.placeInComment !== right.entry.placeInComment) {
+                return left.entry.placeInComment - right.entry.placeInComment;
+            }
+
+            return left.index - right.index;
+        });
+
+    const parts = [];
+    let cursor = 0;
+    let insertedEmoteCount = 0;
+
+    for (const { entry } of sortedEmotes) {
+        const adjustedIndex = entry.placeInComment - insertedEmoteCount;
+        const boundedIndex = Math.max(0, Math.min(adjustedIndex, commentCodepoints.length));
+
+        if (boundedIndex > cursor) {
+            const textSegment = commentCodepoints.slice(cursor, boundedIndex).join('');
+            if (textSegment.trim().length > 0) {
+                parts.push({
+                    type: 'text',
+                    text: textSegment
+                });
+            }
+        }
+
+        parts.push({
+            type: 'emote',
+            platform: 'tiktok',
+            emoteId: entry.emote.emoteId.trim(),
+            imageUrl: entry.emote.image.imageUrl.trim(),
+            placeInComment: entry.placeInComment
+        });
+
+        cursor = Math.max(cursor, boundedIndex);
+        insertedEmoteCount += 1;
+    }
+
+    if (cursor < commentCodepoints.length) {
+        const trailingText = commentCodepoints.slice(cursor).join('');
+        if (trailingText.trim().length > 0) {
+            parts.push({
+                type: 'text',
+                text: trailingText
+            });
+        }
+    }
+
+    return parts;
+}
+
 
 function normalizeYouTubeMessage(chatItem, platformName = 'youtube') {
     try {
@@ -116,8 +200,11 @@ function normalizeTikTokMessage(data, platformName = 'tiktok') {
         if (!username) {
             throw new Error('Missing TikTok username (nickname)');
         }
-        const message = typeof data.comment === 'string' ? data.comment.trim() : '';
-        if (!message) {
+        const rawComment = typeof data.comment === 'string' ? data.comment : '';
+        const message = rawComment.trim();
+        const messageParts = buildTikTokMessageParts(rawComment, data.emotes);
+        const hasRenderableEmote = messageParts.some((part) => part.type === 'emote');
+        if (!message && !hasRenderableEmote) {
             throw new Error('Missing TikTok message text');
         }
 
@@ -149,6 +236,9 @@ function normalizeTikTokMessage(data, platformName = 'tiktok') {
             },
             rawData: { data }
         };
+        if (messageParts.length > 0) {
+            normalized.metadata.messageParts = messageParts;
+        }
 
         logger.debug(`Normalized TikTok message from ${normalized.username}`, 'message-normalization');
         return normalized;

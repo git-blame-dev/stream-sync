@@ -41,6 +41,39 @@ describe('GUI feed store behavior', () => {
         expect(Object.prototype.hasOwnProperty.call(rows[0], 'ignoredField')).toBe(false);
     });
 
+    it('preserves parts arrays emitted by GUI mapper', () => {
+        const store = createGuiFeedStore();
+
+        store.pushEvent({
+            type: 'chat',
+            kind: 'chat',
+            platform: 'tiktok',
+            username: 'test-user',
+            text: '',
+            parts: [
+                {
+                    type: 'emote',
+                    platform: 'tiktok',
+                    emoteId: '1234512345',
+                    imageUrl: 'https://example.invalid/tiktok-emote.webp'
+                }
+            ],
+            avatarUrl: 'https://example.invalid/test-avatar.png',
+            timestamp: '2024-01-01T00:00:00.000Z'
+        });
+
+        const rows = store.getRows();
+        expect(rows).toHaveLength(1);
+        expect(rows[0].parts).toEqual([
+            {
+                type: 'emote',
+                platform: 'tiktok',
+                emoteId: '1234512345',
+                imageUrl: 'https://example.invalid/tiktok-emote.webp'
+            }
+        ]);
+    });
+
     it('appends multiple rows in arrival order', () => {
         const store = createGuiFeedStore();
 

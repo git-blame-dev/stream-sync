@@ -55,4 +55,63 @@ describe('TikTok eventFactory chat message behavior', () => {
         expect(event.metadata.correlationId).toBeDefined();
         expect(event.timestamp).toBeDefined();
     });
+
+    it('builds emote-only chat events with canonical message.parts', () => {
+        const connectionFactory = {
+            createConnection: () => ({
+                connect: createMockFn(),
+                on: createMockFn(),
+                emit: createMockFn(),
+                removeAllListeners: createMockFn()
+            })
+        };
+        const platform = new TikTokPlatform(
+            { enabled: false },
+            {
+                WebcastEvent: {},
+                ControlEvent: {},
+                logger: noOpLogger,
+                connectionFactory,
+                timestampService: {
+                    extractTimestamp: createMockFn(() => new Date(testClock.now()).toISOString())
+                }
+            }
+        );
+
+        const rawChat = {
+            comment: ' ',
+            emotes: [
+                {
+                    placeInComment: 0,
+                    emote: {
+                        emoteId: '1234512345123451234',
+                        image: {
+                            imageUrl: 'https://example.invalid/tiktok-emote.webp'
+                        }
+                    }
+                }
+            ],
+            user: {
+                userId: 'tt-user-2',
+                uniqueId: 'user234',
+                nickname: 'EmoteFan'
+            },
+            common: { createTime: testClock.now() }
+        };
+
+        const event = platform.eventFactory.createChatMessage(rawChat);
+
+        expect(event.message).toEqual({
+            text: '',
+            parts: [
+                {
+                    type: 'emote',
+                    platform: 'tiktok',
+                    emoteId: '1234512345123451234',
+                    imageUrl: 'https://example.invalid/tiktok-emote.webp',
+                    placeInComment: 0
+                }
+            ]
+        });
+    });
 });

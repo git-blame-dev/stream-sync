@@ -1,10 +1,15 @@
 const { validateNormalizedMessage } = require('../../../utils/message-normalization');
 const { normalizeTikTokChatEvent } = require('./event-normalizer');
 const { PlatformEvents } = require('../../../interfaces/PlatformEvents');
+const { getValidMessageParts } = require('../../../utils/message-parts');
 
 const DEFAULT_CHAT_DEDUP_TTL_MS = 90 * 60 * 1000;
 const DEFAULT_CHAT_MAX_CACHE_SIZE = 10_000;
 const DEFAULT_CHAT_MAX_AGE_MS = 20 * 60 * 1000;
+
+function hasCanonicalMessageParts(normalizedData) {
+    return getValidMessageParts(normalizedData).length > 0;
+}
 
 function getChatReplayConfig(platform) {
     const provided = platform?.chatReplayProtectionConfig;
@@ -190,7 +195,7 @@ function setupTikTokEventListeners(platform) {
                 return;
             }
 
-            if (!data.comment || typeof data.comment !== 'string') {
+            if (typeof data.comment !== 'string') {
                 platform.logger.warn('Received chat data with invalid comment:', 'tiktok', {
                     comment: data.comment,
                     commentType: typeof data.comment,
@@ -255,10 +260,11 @@ function setupTikTokEventListeners(platform) {
                 }
             }
 
-            if (!normalizedData.message || normalizedData.message.trim() === '') {
+            if ((!normalizedData.message || normalizedData.message.trim() === '') && !hasCanonicalMessageParts(normalizedData)) {
                 platform.logger.debug('Skipping empty message after normalization', 'tiktok', {
                     originalComment: data.comment,
-                    normalizedMessage: normalizedData.message
+                    normalizedMessage: normalizedData.message,
+                    messageParts: normalizedData?.metadata?.messageParts || []
                 });
                 return;
             }

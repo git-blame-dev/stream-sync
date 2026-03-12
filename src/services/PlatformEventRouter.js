@@ -3,6 +3,7 @@ const { createPlatformErrorHandler } = require('../utils/platform-error-handler'
 const { NOTIFICATION_CONFIGS } = require('../core/constants');
 const { PlatformEvents } = require('../interfaces/PlatformEvents');
 const { isIsoTimestamp } = require('../utils/timestamp');
+const { getValidMessageParts } = require('../utils/message-parts');
 
 const ALIAS_PAID_TYPES = [
     'subscription',
@@ -14,6 +15,28 @@ const ALIAS_PAID_TYPES = [
     'supporter',
     'paid_supporter'
 ];
+
+function resolveCanonicalMessageParts(data = {}) {
+    return getValidMessageParts(data)
+        .map((part) => {
+            if (part.type === 'emote') {
+                return {
+                    type: 'emote',
+                    platform: typeof part.platform === 'string' ? part.platform : undefined,
+                    emoteId: part.emoteId.trim(),
+                    imageUrl: part.imageUrl.trim(),
+                    ...(Number.isInteger(part.placeInComment) && part.placeInComment >= 0
+                        ? { placeInComment: part.placeInComment }
+                        : {})
+                };
+            }
+
+            return {
+                type: 'text',
+                text: part.text
+            };
+        });
+}
 
 class PlatformEventRouter {
     constructor(options) {
@@ -199,16 +222,18 @@ class PlatformEventRouter {
     _normalizeChatEvent(data = {}, platform = 'unknown') {
         const metadata = data.metadata;
         const avatarUrl = typeof data.avatarUrl === 'string' ? data.avatarUrl.trim() : '';
+        const messageParts = resolveCanonicalMessageParts(data);
         if (metadata !== undefined && (typeof metadata !== 'object' || metadata === null)) {
             throw new Error('Chat event metadata must be an object');
         }
         if (!data.message || typeof data.message !== 'object') {
             throw new Error('Chat event requires message payload');
         }
-        if (!data.message.text || typeof data.message.text !== 'string') {
+        if (typeof data.message.text !== 'string') {
             throw new Error('Chat event requires message text');
         }
-        if (!data.message.text.trim()) {
+        const normalizedText = String(data.message.text).trim();
+        if (!normalizedText && messageParts.length === 0) {
             throw new Error('Chat event requires non-empty message text');
         }
         if (!data.username || typeof data.username !== 'string' || !data.username.trim()) {
@@ -225,7 +250,7 @@ class PlatformEventRouter {
             platform,
             userId: String(data.userId),
             username: String(data.username).trim(),
-            message: String(data.message.text).trim(),
+            message: normalizedText,
             timestamp: String(data.timestamp),
             isMod: data.isMod,
             isSubscriber: data.isSubscriber,
@@ -234,8 +259,13 @@ class PlatformEventRouter {
         if (avatarUrl) {
             normalized.avatarUrl = avatarUrl;
         }
-        if (metadata !== undefined) {
-            normalized.metadata = metadata;
+        if (metadata !== undefined || messageParts.length > 0) {
+            normalized.metadata = {
+                ...(metadata || {})
+            };
+        }
+        if (messageParts.length > 0) {
+            normalized.metadata.messageParts = messageParts;
         }
 
         return normalized;

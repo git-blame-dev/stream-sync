@@ -34,7 +34,8 @@ describe('ChatNotificationRouter', () => {
                     heavyCommandCooldownMs: 300000,
                     globalCmdCooldownMs: 45000
                 },
-                twitch: { greetingsEnabled: true, messagesEnabled: true, farewellsEnabled: true }
+                twitch: { greetingsEnabled: true, messagesEnabled: true, farewellsEnabled: true },
+                tiktok: { greetingsEnabled: true, messagesEnabled: true, farewellsEnabled: true }
             },
             platformLifecycleService: {
                 getPlatformConnectionTime: createMockFn().mockReturnValue(null)
@@ -324,5 +325,71 @@ describe('ChatNotificationRouter', () => {
         expect(farewellCount).toBe(1);
         expect(queuedTypes).not.toContain('command');
         expect(queuedTypes).not.toContain('greeting');
+    });
+
+    it('queues emote-only TikTok chat rows when canonical message parts are present', async () => {
+        const { router, runtime } = createRouter();
+
+        await router.handleChatMessage('tiktok', {
+            ...baseMessage,
+            message: '   ',
+            metadata: {
+                messageParts: [
+                    {
+                        type: 'emote',
+                        platform: 'tiktok',
+                        emoteId: '1234512345',
+                        imageUrl: 'https://example.invalid/tiktok-emote.webp'
+                    }
+                ]
+            }
+        });
+
+        expect(runtime.displayQueue.addItem).toHaveBeenCalled();
+        const queuedItems = runtime.displayQueue.addItem.mock.calls.map((call) => call[0]);
+        const chatItem = queuedItems.find((item) => item.type === 'chat');
+        expect(chatItem).toBeDefined();
+        expect(chatItem?.data?.message).toBe('');
+        expect(chatItem?.data?.messageParts).toEqual([
+            {
+                type: 'emote',
+                platform: 'tiktok',
+                emoteId: '1234512345',
+                imageUrl: 'https://example.invalid/tiktok-emote.webp'
+            }
+        ]);
+    });
+
+    it('queues emote-only non-TikTok chat rows when canonical message parts are present', async () => {
+        const { router, runtime } = createRouter();
+
+        await router.handleChatMessage('twitch', {
+            ...baseMessage,
+            message: '   ',
+            metadata: {
+                messageParts: [
+                    {
+                        type: 'emote',
+                        platform: 'twitch',
+                        emoteId: '1234512345',
+                        imageUrl: 'https://example.invalid/twitch-emote.webp'
+                    }
+                ]
+            }
+        });
+
+        expect(runtime.displayQueue.addItem).toHaveBeenCalled();
+        const queuedItems = runtime.displayQueue.addItem.mock.calls.map((call) => call[0]);
+        const chatItem = queuedItems.find((item) => item.type === 'chat');
+        expect(chatItem).toBeDefined();
+        expect(chatItem?.data?.message).toBe('');
+        expect(chatItem?.data?.messageParts).toEqual([
+            {
+                type: 'emote',
+                platform: 'twitch',
+                emoteId: '1234512345',
+                imageUrl: 'https://example.invalid/twitch-emote.webp'
+            }
+        ]);
     });
 });
