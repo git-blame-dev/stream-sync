@@ -27,6 +27,66 @@ function createYouTubeConnectionFactory(options = {}) {
         throw new Error('YouTube connection factory requires positive innertubeCreationTimeoutMs');
     }
 
+    const applyConfiguredChatMode = (connection, videoId, startData) => {
+        const chatMode = platform.config.chatMode;
+        const isTopChatMode = chatMode === 'top';
+        const filterName = isTopChatMode ? 'TOP_CHAT' : 'LIVE_CHAT';
+
+        platform.logger.debug(`Configured YouTube chat mode for ${videoId}: ${chatMode}`, 'youtube');
+
+        if (typeof connection.applyFilter !== 'function') {
+            platform.logger.warn(
+                `Cannot apply YouTube chat mode for ${videoId}: applyFilter unavailable`,
+                'youtube'
+            );
+            return;
+        }
+
+        const menuItems = startData?.header?.view_selector?.sub_menu_items;
+        if (!Array.isArray(menuItems) || menuItems.length === 0) {
+            platform.logger.warn(
+                `Cannot apply YouTube chat mode for ${videoId}: selector unavailable`,
+                'youtube'
+            );
+            return;
+        }
+
+        const modeIndex = isTopChatMode ? 0 : 1;
+        const targetModeItem = menuItems[modeIndex];
+        if (!targetModeItem) {
+            platform.logger.warn(
+                `Cannot apply YouTube chat mode for ${videoId}: missing ${chatMode} selector item`,
+                'youtube'
+            );
+            return;
+        }
+
+        if (targetModeItem.selected) {
+            platform.logger.debug(`YouTube chat mode already active for ${videoId}: ${chatMode}`, 'youtube');
+            return;
+        }
+
+        if (!targetModeItem.continuation) {
+            platform.logger.warn(
+                `Cannot apply YouTube chat mode for ${videoId}: missing ${chatMode} continuation`,
+                'youtube'
+            );
+            return;
+        }
+
+        try {
+            connection.applyFilter(filterName);
+            platform.logger.info(`Applied YouTube chat mode for ${videoId}: ${chatMode}`, 'youtube');
+        } catch (error) {
+            platform._handleProcessingError(
+                `Failed to apply YouTube chat mode for ${videoId}: ${error.message}`,
+                error,
+                'chat-mode',
+                { videoId, chatMode }
+            );
+        }
+    };
+
     const createConnection = async (videoId) => {
         const manager = innertubeInstanceManager.getInstance({ logger: platform.logger || platform.logger });
 
@@ -88,6 +148,7 @@ function createYouTubeConnectionFactory(options = {}) {
                 'Viewer engagement message: Welcome to live chat! Remember to guard your privacy and abide by our community guidelines.',
                 'youtube'
             );
+            applyConfiguredChatMode(connection, videoId, data);
 
             if (data && typeof data === 'object' && data.actions && Array.isArray(data.actions)) {
                 platform.logger.debug(

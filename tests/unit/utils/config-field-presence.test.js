@@ -258,6 +258,7 @@ describe('Config field presence - all normalizers return expected fields', () =>
             'enableAPI',
             'streamDetectionMethod',
             'viewerCountMethod',
+            'chatMode',
             'messagesEnabled',
             'commandsEnabled',
             'greetingsEnabled',

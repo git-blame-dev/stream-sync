@@ -62,6 +62,7 @@ describe('config fixtures', () => {
         expect(tiktok.username).toBe('test-tiktok-override');
         expect(twitch.channel).toBe('test-twitch-override');
         expect(youtube.username).toBe('test-youtube-override');
+        expect(youtube.chatMode).toBe('live');
     });
 
     it('builds config fixtures with inherited flags and derived timing', () => {

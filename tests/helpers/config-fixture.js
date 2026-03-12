@@ -146,6 +146,7 @@ function createYouTubeConfigFixture(overrides = {}) {
         enabled: true,
         username: 'test-youtube-channel',
         streamDetectionMethod: 'youtubei',
+        chatMode: 'live',
         dataLoggingEnabled: false,
         dataLoggingPath: './logs',
         ...overrides

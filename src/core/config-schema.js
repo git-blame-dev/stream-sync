@@ -43,6 +43,7 @@ const CONFIG_SCHEMA = {
         enableAPI: { type: 'boolean', default: false },
         streamDetectionMethod: { type: 'string', default: 'youtubei', enum: ['youtubei', 'api'] },
         viewerCountMethod: { type: 'string', default: 'youtubei', enum: ['youtubei', 'api'] },
+        chatMode: { type: 'string', default: 'live', enum: ['live', 'top'] },
         messagesEnabled: { type: 'boolean', inheritFrom: 'general' },
         commandsEnabled: { type: 'boolean', inheritFrom: 'general' },
         greetingsEnabled: { type: 'boolean', inheritFrom: 'general' },

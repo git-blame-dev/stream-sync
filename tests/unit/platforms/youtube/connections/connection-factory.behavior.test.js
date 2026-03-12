@@ -248,9 +248,11 @@ describe('YouTube connection factory', () => {
         expect(handleChatMessageCalls).toHaveLength(0);
     });
 
-    test('marks connection ready on start events and logs initial batches', async () => {
+    test('marks connection ready on start events, logs initial batches, and applies live chat mode', async () => {
         const connectionReadyCalls = [];
         const startHandlers = {};
+        let selectedChatFilter = null;
+        let applyFilterCalls = 0;
 
         const { factory } = createFactory({
             validationResult: { shouldConnect: true },
@@ -261,7 +263,7 @@ describe('YouTube connection factory', () => {
                 _extractMessagesFromChatItem: createMockFn().mockReturnValue([]),
                 _shouldSkipMessage: createMockFn().mockReturnValue(false),
                 logRawPlatformData: createMockFn().mockResolvedValue(),
-                config: { dataLoggingEnabled: false }
+                config: { dataLoggingEnabled: false, chatMode: 'live' }
             }
         });
 
@@ -269,16 +271,211 @@ describe('YouTube connection factory', () => {
             on: createMockFn((event, handler) => {
                 startHandlers[event] = handler;
             }),
+            applyFilter: (filter) => {
+                applyFilterCalls += 1;
+                selectedChatFilter = filter;
+            },
             start: createMockFn(),
             removeAllListeners: createMockFn()
         };
 
         await factory.setupConnectionEventListeners(connection, 'video-1');
 
-        startHandlers.start({ actions: [{ type: 'AddChatItemAction' }, { type: 'AddChatItemAction' }] });
+        startHandlers.start({
+            header: {
+                view_selector: {
+                    sub_menu_items: [
+                        { selected: true, continuation: 'top-cont' },
+                        { selected: false, continuation: 'live-cont' }
+                    ]
+                }
+            },
+            actions: [{ type: 'AddChatItemAction' }, { type: 'AddChatItemAction' }]
+        });
 
+        expect(applyFilterCalls).toBe(1);
+        expect(selectedChatFilter).toBe('LIVE_CHAT');
         expect(connectionReadyCalls).toHaveLength(1);
         expect(connectionReadyCalls[0]).toBe('video-1');
+    });
+
+    test('applies top chat mode when configured', async () => {
+        const startHandlers = {};
+        let selectedChatFilter = null;
+        let applyFilterCalls = 0;
+
+        const { factory } = createFactory({
+            validationResult: { shouldConnect: true },
+            platformOverrides: {
+                setYouTubeConnectionReady: createMockFn(),
+                handleChatMessage: createMockFn(),
+                _processRegularChatMessage: createMockFn(),
+                _extractMessagesFromChatItem: createMockFn().mockReturnValue([]),
+                _shouldSkipMessage: createMockFn().mockReturnValue(false),
+                logRawPlatformData: createMockFn().mockResolvedValue(),
+                config: { dataLoggingEnabled: false, chatMode: 'top' }
+            }
+        });
+
+        const connection = {
+            on: createMockFn((event, handler) => {
+                startHandlers[event] = handler;
+            }),
+            applyFilter: (filter) => {
+                applyFilterCalls += 1;
+                selectedChatFilter = filter;
+            },
+            start: createMockFn(),
+            removeAllListeners: createMockFn()
+        };
+
+        await factory.setupConnectionEventListeners(connection, 'video-1');
+
+        startHandlers.start({
+            header: {
+                view_selector: {
+                    sub_menu_items: [
+                        { selected: false, continuation: 'top-cont' },
+                        { selected: true, continuation: 'live-cont' }
+                    ]
+                }
+            },
+            actions: []
+        });
+
+        expect(applyFilterCalls).toBe(1);
+        expect(selectedChatFilter).toBe('TOP_CHAT');
+    });
+
+    test('keeps connection ready when chat mode selector is unavailable', async () => {
+        const startHandlers = {};
+        let selectedChatFilter = null;
+        const connectionReadyCalls = [];
+
+        const { factory } = createFactory({
+            validationResult: { shouldConnect: true },
+            platformOverrides: {
+                setYouTubeConnectionReady: (videoId) => connectionReadyCalls.push(videoId),
+                handleChatMessage: createMockFn(),
+                _processRegularChatMessage: createMockFn(),
+                _extractMessagesFromChatItem: createMockFn().mockReturnValue([]),
+                _shouldSkipMessage: createMockFn().mockReturnValue(false),
+                logRawPlatformData: createMockFn().mockResolvedValue(),
+                config: { dataLoggingEnabled: false, chatMode: 'live' }
+            }
+        });
+
+        const connection = {
+            on: createMockFn((event, handler) => {
+                startHandlers[event] = handler;
+            }),
+            applyFilter: (filter) => {
+                selectedChatFilter = filter;
+            },
+            start: createMockFn(),
+            removeAllListeners: createMockFn()
+        };
+
+        await factory.setupConnectionEventListeners(connection, 'video-1');
+
+        startHandlers.start({ actions: [] });
+
+        expect(selectedChatFilter).toBeNull();
+        expect(connectionReadyCalls).toHaveLength(1);
+        expect(connectionReadyCalls[0]).toBe('video-1');
+    });
+
+    test('does not apply filter when requested chat mode is already selected', async () => {
+        const startHandlers = {};
+        let selectedChatFilter = null;
+
+        const { factory } = createFactory({
+            validationResult: { shouldConnect: true },
+            platformOverrides: {
+                setYouTubeConnectionReady: createMockFn(),
+                handleChatMessage: createMockFn(),
+                _processRegularChatMessage: createMockFn(),
+                _extractMessagesFromChatItem: createMockFn().mockReturnValue([]),
+                _shouldSkipMessage: createMockFn().mockReturnValue(false),
+                logRawPlatformData: createMockFn().mockResolvedValue(),
+                config: { dataLoggingEnabled: false, chatMode: 'live' }
+            }
+        });
+
+        const connection = {
+            on: createMockFn((event, handler) => {
+                startHandlers[event] = handler;
+            }),
+            applyFilter: (filter) => {
+                selectedChatFilter = filter;
+            },
+            start: createMockFn(),
+            removeAllListeners: createMockFn()
+        };
+
+        await factory.setupConnectionEventListeners(connection, 'video-1');
+
+        startHandlers.start({
+            header: {
+                view_selector: {
+                    sub_menu_items: [
+                        { selected: false, continuation: 'top-cont' },
+                        { selected: true, continuation: null }
+                    ]
+                }
+            },
+            actions: []
+        });
+
+        expect(selectedChatFilter).toBeNull();
+    });
+
+    test('reports processing error when applyFilter throws', async () => {
+        const startHandlers = {};
+        const processingErrors = [];
+        const applyFilter = createMockFn(() => {
+            throw new Error('filter failed');
+        });
+
+        const { factory } = createFactory({
+            validationResult: { shouldConnect: true },
+            platformOverrides: {
+                setYouTubeConnectionReady: createMockFn(),
+                _handleProcessingError: (...args) => processingErrors.push(args),
+                handleChatMessage: createMockFn(),
+                _processRegularChatMessage: createMockFn(),
+                _extractMessagesFromChatItem: createMockFn().mockReturnValue([]),
+                _shouldSkipMessage: createMockFn().mockReturnValue(false),
+                logRawPlatformData: createMockFn().mockResolvedValue(),
+                config: { dataLoggingEnabled: false, chatMode: 'live' }
+            }
+        });
+
+        const connection = {
+            on: createMockFn((event, handler) => {
+                startHandlers[event] = handler;
+            }),
+            applyFilter,
+            start: createMockFn(),
+            removeAllListeners: createMockFn()
+        };
+
+        await factory.setupConnectionEventListeners(connection, 'video-1');
+
+        startHandlers.start({
+            header: {
+                view_selector: {
+                    sub_menu_items: [
+                        { selected: true, continuation: 'top-cont' },
+                        { selected: false, continuation: 'live-cont' }
+                    ]
+                }
+            },
+            actions: []
+        });
+
+        expect(processingErrors).toHaveLength(1);
+        expect(processingErrors[0][2]).toBe('chat-mode');
     });
 
     test('handles API errors from live chat with disconnect', async () => {

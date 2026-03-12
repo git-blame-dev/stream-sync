@@ -204,6 +204,7 @@ describe('ConfigValidator._normalizeYoutubeSection()', () => {
 
         expect(result.enabled).toBe(false);
         expect(result.streamDetectionMethod).toBe('youtubei');
+        expect(result.chatMode).toBe('live');
         expect(result.maxStreams).toBe(2);
     });
 
@@ -213,6 +214,14 @@ describe('ConfigValidator._normalizeYoutubeSection()', () => {
 
         expect(ConfigValidator._normalizeYoutubeSection(rawValid).streamDetectionMethod).toBe('api');
         expect(ConfigValidator._normalizeYoutubeSection(rawInvalid).streamDetectionMethod).toBe('youtubei');
+    });
+
+    it('validates chat mode and falls back to live', () => {
+        const rawTop = { chatMode: 'top' };
+        const rawInvalid = { chatMode: 'random' };
+
+        expect(ConfigValidator._normalizeYoutubeSection(rawTop).chatMode).toBe('top');
+        expect(ConfigValidator._normalizeYoutubeSection(rawInvalid).chatMode).toBe('live');
     });
 });
 
