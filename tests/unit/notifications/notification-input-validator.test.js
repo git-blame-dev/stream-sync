@@ -17,6 +17,15 @@ describe('NotificationInputValidator', () => {
         expect(result.error).toBe('Invalid platform type');
     });
 
+    it('rejects unsupported platform values', () => {
+        const validator = new NotificationInputValidator(notificationConfigs);
+
+        const result = validator.validatePlatform('discord');
+
+        expect(result.success).toBe(false);
+        expect(result.error).toBe('Unsupported platform');
+    });
+
     it('rejects non-object data payloads', () => {
         const validator = new NotificationInputValidator(notificationConfigs);
 

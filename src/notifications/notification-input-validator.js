@@ -5,6 +5,8 @@ const MONETIZATION_TYPES = new Set([
     'platform:envelope'
 ]);
 
+const SUPPORTED_PLATFORMS = new Set(['twitch', 'youtube', 'tiktok']);
+
 class NotificationInputValidator {
     constructor(notificationConfigs = {}) {
         this.notificationConfigs = notificationConfigs;
@@ -14,7 +16,16 @@ class NotificationInputValidator {
         if (typeof platform !== 'string') {
             return { success: false, error: 'Invalid platform type', errorType: 'invalid-platform' };
         }
-        return { success: true };
+
+        const canonicalPlatform = platform.trim().toLowerCase();
+        if (!canonicalPlatform || !SUPPORTED_PLATFORMS.has(canonicalPlatform)) {
+            return { success: false, error: 'Unsupported platform', errorType: 'unsupported-platform' };
+        }
+
+        return {
+            success: true,
+            canonicalPlatform
+        };
     }
 
     validateData(data) {
