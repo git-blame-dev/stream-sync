@@ -148,4 +148,104 @@ describe('GuiRow rendering behavior', () => {
         expect(html).toContain('class="gui-row__emote"');
         expect(html).toContain('src="https://example.invalid/tiktok-emote.webp"');
     });
+
+    it('adds paypiggy row class for chat rows with isPaypiggy true', () => {
+        const html = renderToStaticMarkup(
+            React.createElement(GuiRow, {
+                mode: 'dock',
+                row: {
+                    type: 'chat',
+                    kind: 'chat',
+                    platform: 'twitch',
+                    username: 'test-paypiggy-user',
+                    text: 'paypiggy chat',
+                    isPaypiggy: true,
+                    avatarUrl: 'https://example.invalid/test-avatar.png',
+                    timestamp: '2024-01-01T00:00:00.000Z'
+                }
+            })
+        );
+
+        expect(html).toContain('gui-row--paypiggy');
+    });
+
+    it('does not add paypiggy row class for chat rows with isPaypiggy false', () => {
+        const html = renderToStaticMarkup(
+            React.createElement(GuiRow, {
+                mode: 'dock',
+                row: {
+                    type: 'chat',
+                    kind: 'chat',
+                    platform: 'twitch',
+                    username: 'test-non-paypiggy-user',
+                    text: 'non paypiggy chat',
+                    isPaypiggy: false,
+                    avatarUrl: 'https://example.invalid/test-avatar.png',
+                    timestamp: '2024-01-01T00:00:00.000Z'
+                }
+            })
+        );
+
+        expect(html).not.toContain('gui-row--paypiggy');
+    });
+
+    it('does not add paypiggy row class when isPaypiggy is omitted', () => {
+        const html = renderToStaticMarkup(
+            React.createElement(GuiRow, {
+                mode: 'dock',
+                row: {
+                    type: 'chat',
+                    kind: 'chat',
+                    platform: 'twitch',
+                    username: 'test-omitted-paypiggy-user',
+                    text: 'omitted paypiggy chat',
+                    avatarUrl: 'https://example.invalid/test-avatar.png',
+                    timestamp: '2024-01-01T00:00:00.000Z'
+                }
+            })
+        );
+
+        expect(html).not.toContain('gui-row--paypiggy');
+    });
+
+    it('does not add paypiggy row class for notification rows', () => {
+        const html = renderToStaticMarkup(
+            React.createElement(GuiRow, {
+                mode: 'dock',
+                row: {
+                    type: 'platform:paypiggy',
+                    kind: 'notification',
+                    platform: 'twitch',
+                    username: 'test-notification-user',
+                    text: 'notification row',
+                    isPaypiggy: true,
+                    avatarUrl: 'https://example.invalid/test-avatar.png',
+                    timestamp: '2024-01-01T00:00:00.000Z'
+                }
+            })
+        );
+
+        expect(html).not.toContain('gui-row--paypiggy');
+    });
+
+    it('keeps paypiggy class on overlay chat rows', () => {
+        const html = renderToStaticMarkup(
+            React.createElement(GuiRow, {
+                mode: 'overlay',
+                row: {
+                    type: 'chat',
+                    kind: 'chat',
+                    platform: 'twitch',
+                    username: 'test-overlay-paypiggy-user',
+                    text: 'overlay paypiggy chat',
+                    isPaypiggy: true,
+                    avatarUrl: 'https://example.invalid/test-avatar.png',
+                    timestamp: '2024-01-01T00:00:00.000Z'
+                }
+            })
+        );
+
+        expect(html).toContain('gui-row--overlay-enter');
+        expect(html).toContain('gui-row--paypiggy');
+    });
 });

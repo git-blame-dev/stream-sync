@@ -15,6 +15,7 @@ interface GuiRowProps {
 export function GuiRow({ row, mode, rowRef, className, style, onAnimationEnd }: GuiRowProps) {
   const platformIconUrl = getPlatformIconUrl(row.platform)
   const hasParts = Array.isArray(row.parts) && row.parts.length > 0
+  const isPaypiggyChatRow = row.kind === 'chat' && row.isPaypiggy === true
   const textClass = [
     'gui-row__text',
     row.kind === 'notification' ? 'gui-row__text--notification' : '',
@@ -26,6 +27,7 @@ export function GuiRow({ row, mode, rowRef, className, style, onAnimationEnd }: 
   const rowClass = [
     'gui-row',
     `gui-row--${row.kind}`,
+    isPaypiggyChatRow ? 'gui-row--paypiggy' : '',
     mode === 'overlay' ? 'gui-row--overlay-enter' : '',
     className || ''
   ]
