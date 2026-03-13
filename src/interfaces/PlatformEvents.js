@@ -76,7 +76,7 @@ function resolveAvatarUrl(avatarUrl) {
 const EVENT_SCHEMAS = {
     'platform:chat-message': {
         required: ['type', 'platform', 'username', 'userId', 'message', 'avatarUrl', 'timestamp'],
-        optional: ['isMod', 'isSubscriber', 'isBroadcaster', 'metadata'],
+        optional: ['isMod', 'isPaypiggy', 'isBroadcaster', 'metadata'],
         properties: {
             type: { type: 'string', enum: ['platform:chat-message'] },
             platform: { type: 'string', enum: VALID_PLATFORMS },
@@ -91,7 +91,7 @@ const EVENT_SCHEMAS = {
                 }
             },
             isMod: { type: 'boolean' },
-            isSubscriber: { type: 'boolean' },
+            isPaypiggy: { type: 'boolean' },
             isBroadcaster: { type: 'boolean' },
             timestamp: { type: 'string' },
             metadata: { type: 'object' }

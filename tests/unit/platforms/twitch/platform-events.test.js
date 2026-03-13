@@ -236,6 +236,10 @@ describe('TwitchPlatform event behaviors', () => {
 
         expect(events).toHaveLength(1);
         expect(events[0].avatarUrl).toBe(FALLBACK_AVATAR_URL);
+        expect(events[0].isMod).toBe(false);
+        expect(events[0].isBroadcaster).toBe(false);
+        expect(events[0].isPaypiggy).toBe(true);
+        expect(events[0].metadata.isPaypiggy).toBe(true);
         expect(events[0].metadata.correlationId).toBeDefined();
     });
 

@@ -154,7 +154,7 @@ describe('Platform Events Interface', () => {
                 message: { text: 'hello' },
                 timestamp: new Date(testClock.now()).toISOString(),
                 isMod: true,
-                isSubscriber: false,
+                isPaypiggy: false,
                 isBroadcaster: false,
                 metadata: {}
             };

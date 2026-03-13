@@ -76,6 +76,7 @@ function normalizeRow(input: unknown): GuiRowDto {
     username: normalizeString(row.username),
     text: normalizeString(row.text),
     parts: normalizeParts(row.parts),
+    isPaypiggy: typeof row.isPaypiggy === 'boolean' ? row.isPaypiggy : undefined,
     avatarUrl: normalizeString(row.avatarUrl),
     timestamp: row.timestamp === null ? null : normalizeString(row.timestamp)
   }

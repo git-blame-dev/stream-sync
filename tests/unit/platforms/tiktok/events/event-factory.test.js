@@ -18,7 +18,7 @@ describe('TikTok event factory behavior', () => {
                 avatarUrl: 'https://example.invalid/tiktok-chat-avatar.jpg',
                 timestamp: '2026-01-30T12:00:00.000Z',
                 isMod: true,
-                isSubscriber: false,
+                isPaypiggy: false,
                 isBroadcaster: true
             }
         });
@@ -26,7 +26,7 @@ describe('TikTok event factory behavior', () => {
         expect(event.type).toBe(PlatformEvents.CHAT_MESSAGE);
         expect(event.platform).toBe('tiktok');
         expect(event.isMod).toBe(true);
-        expect(event.isSubscriber).toBe(false);
+        expect(event.isPaypiggy).toBe(false);
         expect(event.isBroadcaster).toBe(true);
         expect(event.avatarUrl).toBe('https://example.invalid/tiktok-chat-avatar.jpg');
     });
@@ -127,7 +127,7 @@ describe('TikTok event factory behavior', () => {
         });
 
         expect(event.isMod).toBe(false);
-        expect(event.isSubscriber).toBe(false);
+        expect(event.isPaypiggy).toBe(false);
         expect(event.isBroadcaster).toBe(false);
     });
 

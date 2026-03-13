@@ -56,7 +56,7 @@ describe('YouTube event factory behavior', () => {
         expect(event.message).toEqual({ text: 'Hello world' });
         expect(event.timestamp).toBe('2024-01-01T00:00:00.111Z');
         expect(event.isMod).toBe(false);
-        expect(event.isSubscriber).toBe(false);
+        expect(event.isPaypiggy).toBe(false);
         expect(event.isBroadcaster).toBe(false);
         expect(event.metadata).toEqual({
             platform: 'youtube',

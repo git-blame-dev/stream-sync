@@ -75,7 +75,7 @@ describe('Twitch emote chat parts pipeline (integration)', () => {
                     },
                     timestamp: '2024-01-01T00:00:00.000Z',
                     isMod: false,
-                    isSubscriber: false,
+                    isPaypiggy: false,
                     isBroadcaster: false,
                     metadata: {}
                 }
@@ -88,6 +88,7 @@ describe('Twitch emote chat parts pipeline (integration)', () => {
             expect(queued.type).toBe('chat');
             expect(queued.platform).toBe('twitch');
             expect(queued.data.message).toBe('');
+            expect(queued.data.isPaypiggy).toBe(false);
             expect(queued.data.messageParts).toEqual([
                 {
                     type: 'emote',

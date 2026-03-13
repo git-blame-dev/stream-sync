@@ -73,6 +73,10 @@ describe('TwitchPlatform behavior standards', () => {
         expect(payload.message.text).toBe('hello');
         expect(payload.platform).toBe('twitch');
         expect(payload.timestamp).toEqual(expect.any(String));
+        expect(payload.isMod).toBe(false);
+        expect(payload.isBroadcaster).toBe(false);
+        expect(payload.isPaypiggy).toBe(true);
+        expect(payload.metadata.isPaypiggy).toBe(true);
     });
 
     it('emits canonical Twitch message parts for emote fragment chat payloads', async () => {
@@ -120,7 +124,9 @@ describe('TwitchPlatform behavior standards', () => {
             { type: 'text', text: ' how are we today?' }
         ]);
         expect(payload.metadata.isMod).toBe(true);
-        expect(payload.metadata.isSubscriber).toBe(true);
+        expect(payload.metadata.isPaypiggy).toBe(true);
+        expect(payload.isMod).toBe(true);
+        expect(payload.isBroadcaster).toBe(false);
     });
 
     it('accepts emote-only Twitch chat when canonical message parts exist', async () => {
@@ -160,7 +166,7 @@ describe('TwitchPlatform behavior standards', () => {
         ]);
     });
 
-    it('treats zero-valued badge map entries as absent badges', async () => {
+    it('treats subscriber badge version 0 as paypiggy while moderator 0 stays non-mod', async () => {
         platform = createPlatform({}, { twitchAuth: createReadyTwitchAuth() });
         const emitted = [];
         platform.on('platform:event', (payload) => {
@@ -181,7 +187,51 @@ describe('TwitchPlatform behavior standards', () => {
 
         expect(emitted).toHaveLength(1);
         expect(emitted[0].metadata.isMod).toBe(false);
-        expect(emitted[0].metadata.isSubscriber).toBe(false);
+        expect(emitted[0].metadata.isPaypiggy).toBe(true);
+        expect(emitted[0].isPaypiggy).toBe(true);
+    });
+
+    it('treats founder badge as paypiggy status for chat payloads', async () => {
+        platform = createPlatform({}, { twitchAuth: createReadyTwitchAuth() });
+        const emitted = [];
+        platform.on('platform:event', (payload) => {
+            if (payload.type === 'platform:chat-message') emitted.push(payload.data);
+        });
+
+        await platform.onMessageHandler({
+            chatter_user_id: 'test-user-founder',
+            chatter_user_name: 'founderviewer',
+            broadcaster_user_id: 'test-broadcaster-founder',
+            message: { text: 'founder message' },
+            badges: { founder: '0' },
+            timestamp: '2024-01-01T00:00:00.000Z'
+        });
+
+        expect(emitted).toHaveLength(1);
+        expect(emitted[0].isPaypiggy).toBe(true);
+        expect(emitted[0].metadata.isPaypiggy).toBe(true);
+    });
+
+    it('does not treat legacy subscriber payload flag as paypiggy without badges', async () => {
+        platform = createPlatform({}, { twitchAuth: createReadyTwitchAuth() });
+        const emitted = [];
+        platform.on('platform:event', (payload) => {
+            if (payload.type === 'platform:chat-message') emitted.push(payload.data);
+        });
+
+        await platform.onMessageHandler({
+            chatter_user_id: 'test-user-subscriber-flag',
+            chatter_user_name: 'subscriberflagviewer',
+            broadcaster_user_id: 'test-broadcaster-subscriber-flag',
+            message: { text: 'subscriber flag message' },
+            badges: {},
+            subscriber: true,
+            timestamp: '2024-01-01T00:00:00.000Z'
+        });
+
+        expect(emitted).toHaveLength(1);
+        expect(emitted[0].isPaypiggy).toBe(false);
+        expect(emitted[0].metadata.isPaypiggy).toBe(false);
     });
 
     it('skips chat emission when message text and message parts are both empty', async () => {

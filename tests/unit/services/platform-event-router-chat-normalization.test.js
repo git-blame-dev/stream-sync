@@ -38,8 +38,8 @@ describe('PlatformEventRouter chat normalization', () => {
                 message: { text: 'testMessageText' },
                 timestamp: '2025-11-20T12:18:40.192Z',
                 isMod: false,
-                isSubscriber: false,
-                metadata: { isMod: false, isSubscriber: false }
+                isPaypiggy: false,
+                metadata: { isMod: false, isPaypiggy: false }
             }
         };
 
@@ -53,7 +53,7 @@ describe('PlatformEventRouter chat normalization', () => {
         expect(normalized.message).toBe('testMessageText');
         expect(normalized.timestamp).toBe('2025-11-20T12:18:40.192Z');
         expect(normalized.isMod).toBe(false);
-        expect(normalized.isSubscriber).toBe(false);
+        expect(normalized.isPaypiggy).toBe(false);
     });
 
     it('handles string message payloads and falls back to top-level fields', async () => {
