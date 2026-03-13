@@ -135,6 +135,24 @@ describe('Event-to-GUI contract mapper behavior', () => {
         }));
     });
 
+    it('maps isPaypiggy flag for chat rows', async () => {
+        const mapper = createMapper({ messageCharacterLimit: 0 });
+
+        const mapped = await mapper.mapDisplayRow({
+            type: 'platform:chat-message',
+            platform: 'twitch',
+            data: {
+                username: 'test-user',
+                userId: 'test-user-id',
+                avatarUrl: 'https://example.invalid/avatar.png',
+                message: { text: 'hello' },
+                isPaypiggy: true
+            }
+        });
+
+        expect(mapped.isPaypiggy).toBe(true);
+    });
+
     it('maps canonical message.parts for chat rows', async () => {
         const mapper = createMapper({ messageCharacterLimit: 0 });
 

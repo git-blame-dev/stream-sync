@@ -108,7 +108,7 @@ function createTikTokEventFactory(options = {}) {
                 message: messagePayload,
                 timestamp: normalized.timestamp,
                 isMod: !!normalized.isMod,
-                isSubscriber: !!normalized.isSubscriber,
+                isPaypiggy: normalized.isPaypiggy === true,
                 isBroadcaster: !!normalized.isBroadcaster,
                 metadata: eventMetadata
             };

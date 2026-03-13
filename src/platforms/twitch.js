@@ -293,7 +293,9 @@ class TwitchPlatform extends EventEmitter {
                 return false;
             };
             const isMod = hasBadge('moderator');
-            const isSubscriber = hasBadge('subscriber');
+            const hasSubscriberBadge = Object.prototype.hasOwnProperty.call(badges, 'subscriber');
+            const hasFounderBadge = Object.prototype.hasOwnProperty.call(badges, 'founder');
+            const isPaypiggy = hasSubscriberBadge || hasFounderBadge;
 
             const normalizedData = {
                 platform: this.platformName,
@@ -302,7 +304,7 @@ class TwitchPlatform extends EventEmitter {
                 message: normalizedMessage,
                 timestamp,
                 isMod,
-                isSubscriber,
+                isPaypiggy,
                 isBroadcaster: isSelf,
                 metadata: {
                     badges,
@@ -338,10 +340,13 @@ class TwitchPlatform extends EventEmitter {
                         text: normalizedData.message
                     },
                     timestamp: normalizedData.timestamp,
+                    isMod: normalizedData.isMod,
+                    isPaypiggy: normalizedData.isPaypiggy,
+                    isBroadcaster: normalizedData.isBroadcaster,
                     metadata: {
                         platform: this.platformName,
                         isMod: normalizedData.isMod,
-                        isSubscriber: normalizedData.isSubscriber,
+                        isPaypiggy: normalizedData.isPaypiggy,
                         isBroadcaster: normalizedData.isBroadcaster,
                         correlationId: PlatformEvents._generateCorrelationId()
                     }

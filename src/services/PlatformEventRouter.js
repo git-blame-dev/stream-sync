@@ -253,7 +253,7 @@ class PlatformEventRouter {
             message: normalizedText,
             timestamp: String(data.timestamp),
             isMod: data.isMod,
-            isSubscriber: data.isSubscriber,
+            isPaypiggy: data.isPaypiggy === true,
             isBroadcaster: data.isBroadcaster
         };
         if (avatarUrl) {

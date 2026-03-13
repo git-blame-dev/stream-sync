@@ -11,6 +11,7 @@ export interface GuiRowDto {
   username: string
   text: string
   parts?: GuiMessagePart[]
+  isPaypiggy?: boolean
   avatarUrl: string
   timestamp: string | null
 }

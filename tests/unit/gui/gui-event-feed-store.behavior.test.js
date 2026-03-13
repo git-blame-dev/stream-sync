@@ -41,6 +41,25 @@ describe('GUI feed store behavior', () => {
         expect(Object.prototype.hasOwnProperty.call(rows[0], 'ignoredField')).toBe(false);
     });
 
+    it('preserves isPaypiggy on chat rows', () => {
+        const store = createGuiFeedStore();
+
+        store.pushEvent({
+            type: 'chat',
+            kind: 'chat',
+            platform: 'twitch',
+            username: 'test-user',
+            text: 'hello world',
+            avatarUrl: 'https://example.invalid/test-avatar.png',
+            timestamp: '2024-01-01T00:00:00.000Z',
+            isPaypiggy: true
+        });
+
+        const rows = store.getRows();
+        expect(rows.length).toBe(1);
+        expect(rows[0].isPaypiggy).toBe(true);
+    });
+
     it('preserves parts arrays emitted by GUI mapper', () => {
         const store = createGuiFeedStore();
 

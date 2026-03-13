@@ -147,6 +147,10 @@ function createEventToGuiContractMapper(options = {}) {
             timestamp: data.timestamp || row.timestamp || null
         };
 
+        if (rule.kind === 'chat') {
+            mapped.isPaypiggy = data.isPaypiggy === true;
+        }
+
         if (parts.length > 0) {
             mapped.parts = parts;
         }

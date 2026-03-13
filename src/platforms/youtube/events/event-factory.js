@@ -84,7 +84,7 @@ function createYouTubeEventFactory(options = {}) {
                 },
                 timestamp,
                 isMod: !!data.isMod,
-                isSubscriber: !!data.isSubscriber,
+                isPaypiggy: data.isPaypiggy === true,
                 isBroadcaster: !!data.isBroadcaster,
                 metadata: buildEventMetadata({
                     videoId: data.videoId,

@@ -123,7 +123,7 @@ describe('TikTok Unknown User Data Structure Mismatch', () => {
       expect(result).toHaveProperty('message');
       expect(result).toHaveProperty('timestamp');
       expect(result).toHaveProperty('isMod');
-      expect(result).toHaveProperty('isSubscriber');
+      expect(result).toHaveProperty('isPaypiggy');
       expect(result).toHaveProperty('isBroadcaster');
       expect(result).toHaveProperty('metadata');
       expect(result).toHaveProperty('rawData');

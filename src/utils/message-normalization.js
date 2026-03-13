@@ -262,7 +262,7 @@ function normalizeYouTubeMessage(chatItem, platformName = 'youtube') {
             message: normalizedMessage,
             timestamp,
             isMod: author.is_moderator === true,
-            isSubscriber: isMember,
+            isPaypiggy: isMember,
             isBroadcaster,
             metadata: {
                 uniqueId: messageData.id || null,
@@ -282,6 +282,10 @@ function normalizeYouTubeMessage(chatItem, platformName = 'youtube') {
         });
         throw error;
     }
+}
+
+function resolveTikTokChatIsPaypiggy(data) {
+    return data?.userIdentity?.isSubscriberOfAnchor === true;
 }
 
 function normalizeTikTokMessage(data, platformName = 'tiktok') {
@@ -326,7 +330,7 @@ function normalizeTikTokMessage(data, platformName = 'tiktok') {
             message,
             timestamp,
             isMod: !!data.isModerator,
-            isSubscriber: !!data.isSubscriber,
+            isPaypiggy: resolveTikTokChatIsPaypiggy(data),
             isBroadcaster: !!data.isOwner,
             metadata: {
                 profilePicture,
@@ -464,7 +468,7 @@ function validateNormalizedMessage(normalizedMessage) {
     }
     
     // Boolean fields
-    const booleanFields = ['isMod', 'isSubscriber', 'isBroadcaster'];
+    const booleanFields = ['isMod', 'isPaypiggy', 'isBroadcaster'];
     for (const field of booleanFields) {
         if (normalizedMessage[field] === undefined || normalizedMessage[field] === null) {
             issues.push(`Missing required field: ${field}`);

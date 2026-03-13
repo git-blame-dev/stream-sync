@@ -41,7 +41,7 @@ describe('Message Normalization', () => {
                 username: 'youtubeuser',
                 message: 'Hello YouTube!',
                 isMod: false,
-                isSubscriber: false,
+                isPaypiggy: false,
                 isBroadcaster: false
             });
             expect(normalized.metadata).toMatchObject({
@@ -122,7 +122,7 @@ describe('Message Normalization', () => {
                 username: 'superchatter',
                 message: 'Super chat message!',
                 isMod: false,
-                isSubscriber: false,
+                isPaypiggy: false,
                 isBroadcaster: false
             });
             expect(normalized.metadata).toMatchObject({
@@ -204,7 +204,7 @@ describe('Message Normalization', () => {
 
             const normalized = normalizeYouTubeMessage(chatItem, 'youtube');
 
-            expect(normalized.isSubscriber).toBe(true);
+            expect(normalized.isPaypiggy).toBe(true);
         });
 
         test('detects new member from badge tooltip', () => {
@@ -227,10 +227,10 @@ describe('Message Normalization', () => {
 
             const normalized = normalizeYouTubeMessage(chatItem, 'youtube');
 
-            expect(normalized.isSubscriber).toBe(true);
+            expect(normalized.isPaypiggy).toBe(true);
         });
 
-        test('returns false for isSubscriber when no member badge present', () => {
+        test('returns false for isPaypiggy when no member badge present', () => {
             const timestampMs = testClock.now();
             const chatItem = {
                 item: {
@@ -250,7 +250,7 @@ describe('Message Normalization', () => {
 
             const normalized = normalizeYouTubeMessage(chatItem, 'youtube');
 
-            expect(normalized.isSubscriber).toBe(false);
+            expect(normalized.isPaypiggy).toBe(false);
         });
     });
 
@@ -275,13 +275,55 @@ describe('Message Normalization', () => {
                 username: 'TikTokUser',
                 message: 'Hello TikTok!',
                 isMod: false,
-                isSubscriber: false,
+                isPaypiggy: false,
                 isBroadcaster: false
             });
             expect(normalized.metadata).toMatchObject({
                 profilePicture: 'avatar.jpg',
                 numericId: 'tt-123'
             });
+        });
+
+        test('derives TikTok isPaypiggy from userIdentity.isSubscriberOfAnchor', () => {
+            const data = {
+                user: {
+                    userId: 'tt-124',
+                    uniqueId: 'tiktokuser124',
+                    nickname: 'TikTokSubscriber',
+                    profilePictureUrl: 'avatar-124.jpg'
+                },
+                userIdentity: {
+                    isSubscriberOfAnchor: true,
+                    isGiftGiverOfAnchor: false,
+                    isFollowerOfAnchor: true
+                },
+                comment: 'subscriber check',
+                common: { createTime: testClock.now() }
+            };
+
+            const normalized = normalizeTikTokMessage(data, 'tiktok');
+
+            expect(normalized.isPaypiggy).toBe(true);
+        });
+
+        test('uses userIdentity subscriber signal when TikTok user.isSubscribe disagrees', () => {
+            const data = {
+                user: {
+                    userId: 'tt-125',
+                    uniqueId: 'tiktokuser125',
+                    nickname: 'TikTokConflictUser',
+                    isSubscribe: false
+                },
+                userIdentity: {
+                    isSubscriberOfAnchor: true
+                },
+                comment: 'conflict signal',
+                common: { createTime: testClock.now() }
+            };
+
+            const normalized = normalizeTikTokMessage(data, 'tiktok');
+
+            expect(normalized.isPaypiggy).toBe(true);
         });
 
         test('handles TikTok gift messages', () => {
@@ -743,7 +785,7 @@ describe('Message Normalization', () => {
                 message: 'Hello world!',
                 timestamp: new Date(testClock.now()).toISOString(),
                 isMod: false,
-                isSubscriber: false,
+                isPaypiggy: false,
                 isBroadcaster: false,
                 metadata: {},
                 rawData: {}
@@ -781,7 +823,7 @@ describe('Message Normalization', () => {
                 message: 'Hello world!',
                 timestamp: 'not-a-date',
                 isMod: false,
-                isSubscriber: false,
+                isPaypiggy: false,
                 isBroadcaster: false,
                 metadata: {},
                 rawData: {}
@@ -801,7 +843,7 @@ describe('Message Normalization', () => {
                 message: 'Hello world!',
                 timestamp: new Date(testClock.now()).toISOString(),
                 isMod: false,
-                isSubscriber: false,
+                isPaypiggy: false,
                 isBroadcaster: false,
                 metadata: null,
                 rawData: {}
@@ -821,7 +863,7 @@ describe('Message Normalization', () => {
                 message: 'Hello world!',
                 timestamp: new Date(testClock.now()).toISOString(),
                 isMod: 'true',
-                isSubscriber: false,
+                isPaypiggy: false,
                 isBroadcaster: false,
                 metadata: {},
                 rawData: {}
@@ -841,7 +883,7 @@ describe('Message Normalization', () => {
                 message: 'Hello world!',
                 timestamp: new Date(testClock.now()).toISOString(),
                 isMod: false,
-                isSubscriber: false,
+                isPaypiggy: false,
                 isBroadcaster: false,
                 metadata: {},
                 rawData: {}

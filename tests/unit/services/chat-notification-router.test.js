@@ -109,6 +109,21 @@ describe('ChatNotificationRouter', () => {
         expect(chatItem?.data?.avatarUrl).toBe('https://example.invalid/chat-avatar.png');
     });
 
+    it('preserves isPaypiggy on queued chat rows', async () => {
+        const { router, runtime } = createRouter();
+
+        await router.handleChatMessage('twitch', {
+            ...baseMessage,
+            isPaypiggy: true
+        });
+
+        const queuedItems = runtime.displayQueue.addItem.mock.calls.map((call) => call[0]);
+        const chatItem = queuedItems.find((item) => item.type === 'chat');
+
+        expect(chatItem).toBeDefined();
+        expect(chatItem?.data?.isPaypiggy).toBe(true);
+    });
+
     it('queues greeting before command for first-time command messages', async () => {
         const commandConfig = { command: '!testboom' };
         const { router, runtime } = createRouter({

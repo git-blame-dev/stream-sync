@@ -265,7 +265,8 @@ class ChatNotificationRouter {
             username: normalizedData.username,
             userId: normalizedData.userId,
             avatarUrl: normalizedData.avatarUrl,
-            message: sanitizedMessage
+            message: sanitizedMessage,
+            isPaypiggy: normalizedData.isPaypiggy === true
         };
         if (Array.isArray(messageParts) && messageParts.length > 0) {
             baseChatData.messageParts = messageParts;

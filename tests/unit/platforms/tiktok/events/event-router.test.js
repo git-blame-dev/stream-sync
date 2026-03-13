@@ -79,7 +79,7 @@ describe('TikTok event router', () => {
                 const normalized = String(msgId).trim();
                 return normalized || null;
             }),
-            _handleChatMessage: async () => handledChatMessages.push(true),
+            _handleChatMessage: async (rawData, normalizedData) => handledChatMessages.push({ rawData, normalizedData }),
             ...overrides
         };
 
@@ -182,12 +182,29 @@ describe('TikTok event router', () => {
             user: { userId: 'test-user-1', uniqueId: 'testuser', nickname: 'TestUser' },
             common: { createTime: '1700000000' },
             isModerator: false,
-            isSubscriber: false,
             isOwner: false
         });
 
         expect(handledChatMessages).toHaveLength(1);
+        expect(handledChatMessages[0].normalizedData.isPaypiggy).toBe(false);
         expect(selfMessageDetectionService.shouldFilterMessage.mock.calls).toHaveLength(1);
+    });
+
+    test('derives paypiggy flag from userIdentity subscriber signal at chat ingress', async () => {
+        const { platform, listeners, handledChatMessages } = createPlatformHarness();
+
+        setupTikTokEventListeners(platform);
+
+        await listeners[platform.WebcastEvent.CHAT]({
+            comment: 'paypiggy user',
+            user: { userId: 'test-user-paypiggy', uniqueId: 'paypiggy-user', nickname: 'PaypiggyUser' },
+            userIdentity: { isSubscriberOfAnchor: true },
+            common: { createTime: '1700000000' },
+            isOwner: false
+        });
+
+        expect(handledChatMessages).toHaveLength(1);
+        expect(handledChatMessages[0].normalizedData.isPaypiggy).toBe(true);
     });
 
     test('filters historical chat messages based on connection time', async () => {
@@ -207,7 +224,6 @@ describe('TikTok event router', () => {
             user: { userId: 'test-user-2', uniqueId: 'testuser2', nickname: 'TestUser2' },
             common: { createTime: '1700000000' },
             isModerator: false,
-            isSubscriber: false,
             isOwner: false
         });
 
@@ -287,7 +303,6 @@ describe('TikTok event router', () => {
             user: { userId: 'test-user-3', uniqueId: 'selfuser', nickname: 'SelfUser' },
             common: { createTime: '1700000000' },
             isModerator: false,
-            isSubscriber: false,
             isOwner: true
         });
 
