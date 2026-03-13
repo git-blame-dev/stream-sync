@@ -68,8 +68,14 @@ class CommandParser {
             keywords: new Set()
         };
 
+        let hasFarewellConfigText = false;
+
         for (const [key, configLine] of Object.entries(this.farewellCommands)) {
             if (key === 'enabled' || typeof configLine !== 'string') continue;
+
+            if (configLine.trim().length > 0) {
+                hasFarewellConfigText = true;
+            }
 
             const parts = configLine.split(',').map(p => p.trim());
             const triggers = (parts[0] || '').split('|').map(t => t.trim().toLowerCase());
@@ -82,6 +88,10 @@ class CommandParser {
             keywords.forEach(keyword => {
                 if (keyword) parsed.keywords.add(keyword);
             });
+        }
+
+        if (hasFarewellConfigText && parsed.triggers.size === 0 && parsed.keywords.size === 0) {
+            logger.warn('[CommandParser] Farewell configuration contains no usable triggers or keywords', 'command-parser');
         }
 
         return parsed;
@@ -222,6 +232,9 @@ class CommandParser {
         this.commands = newConfig.commands || this.commands;
         this.farewellCommands = newConfig.farewell || this.farewellCommands;
         this.vfxFilePath = newConfig.vfx?.filePath ?? this.vfxFilePath;
+        if (typeof newConfig.general?.keywordParsingEnabled === 'boolean') {
+            this.keywordParsingEnabled = newConfig.general.keywordParsingEnabled;
+        }
         
         // Re-parse configurations
         this.parsedCommands = this.parseCommandConfigurations();
