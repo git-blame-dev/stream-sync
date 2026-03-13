@@ -50,7 +50,7 @@ describe('PlatformEventRouter chat normalization', () => {
         expect(calledPlatform).toBe(platform);
         expect(normalized.username).toBe('testUsername');
         expect(normalized.userId).toBe('testUserId');
-        expect(normalized.message).toBe('testMessageText');
+        expect(normalized.message).toEqual({ text: 'testMessageText' });
         expect(normalized.timestamp).toBe('2025-11-20T12:18:40.192Z');
         expect(normalized.isMod).toBe(false);
         expect(normalized.isPaypiggy).toBe(false);
@@ -77,7 +77,7 @@ describe('PlatformEventRouter chat normalization', () => {
         const [, normalized] = runtime.handleChatMessage.mock.calls[0];
         expect(normalized.username).toBe('testStringUser');
         expect(normalized.userId).toBe('testUserId123');
-        expect(normalized.message).toBe('testPlainMessage');
+        expect(normalized.message).toEqual({ text: 'testPlainMessage' });
         expect(normalized.timestamp).toBe('2025-11-20T14:00:00.000Z');
         expect(normalized.isMod).toBe(true);
     });
@@ -132,9 +132,9 @@ describe('PlatformEventRouter chat normalization', () => {
 
         expect(runtime.handleChatMessage).toHaveBeenCalledTimes(1);
         const [, normalized] = runtime.handleChatMessage.mock.calls[0];
-        expect(normalized.message).toBe('');
-        expect(normalized.metadata).toMatchObject({
-            messageParts: [
+        expect(normalized.message).toEqual({
+            text: '',
+            parts: [
                 {
                     type: 'emote',
                     platform: 'tiktok',
@@ -173,9 +173,9 @@ describe('PlatformEventRouter chat normalization', () => {
 
         expect(runtime.handleChatMessage).toHaveBeenCalledTimes(1);
         const [, normalized] = runtime.handleChatMessage.mock.calls[0];
-        expect(normalized.message).toBe('');
-        expect(normalized.metadata).toMatchObject({
-            messageParts: [
+        expect(normalized.message).toEqual({
+            text: '',
+            parts: [
                 {
                     type: 'emote',
                     platform: 'twitch',
@@ -183,6 +183,55 @@ describe('PlatformEventRouter chat normalization', () => {
                     imageUrl: 'https://example.invalid/twitch-emote.webp'
                 }
             ]
+        });
+    });
+
+    it('preserves metadata fields while normalizing canonical chat payload', async () => {
+        const { router, runtime } = createRouter();
+
+        const event = {
+            ...baseEvent,
+            platform: 'twitch',
+            data: {
+                userId: 'test-user-id-metadata',
+                username: 'testMetadataUser',
+                message: {
+                    text: '',
+                    parts: [
+                        {
+                            type: 'emote',
+                            platform: 'twitch',
+                            emoteId: '1234512345',
+                            imageUrl: 'https://example.invalid/twitch-emote.webp'
+                        }
+                    ]
+                },
+                timestamp: '2025-11-20T15:55:00.000Z',
+                metadata: {
+                    channelId: 'test-channel-id',
+                    correlationId: 'test-correlation-id'
+                }
+            }
+        };
+
+        await router.routeEvent(event);
+
+        expect(runtime.handleChatMessage).toHaveBeenCalledTimes(1);
+        const [, normalized] = runtime.handleChatMessage.mock.calls[0];
+        expect(normalized.message).toEqual({
+            text: '',
+            parts: [
+                {
+                    type: 'emote',
+                    platform: 'twitch',
+                    emoteId: '1234512345',
+                    imageUrl: 'https://example.invalid/twitch-emote.webp'
+                }
+            ]
+        });
+        expect(normalized.metadata).toEqual({
+            channelId: 'test-channel-id',
+            correlationId: 'test-correlation-id'
         });
     });
 

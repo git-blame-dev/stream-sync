@@ -340,9 +340,12 @@ class AppRuntime {
 
     async handleChatMessage(platform, normalizedData) {
         try {
-            this.logger.debug(`Received message from ${platform}: ${normalizedData?.username} - ${normalizedData?.message}`, 'chat-handler');
+            const messageText = typeof normalizedData?.message === 'string'
+                ? normalizedData.message
+                : (typeof normalizedData?.message?.text === 'string' ? normalizedData.message.text : '');
+            this.logger.debug(`Received message from ${platform}: ${normalizedData?.username} - ${messageText}`, 'chat-handler');
             if (platform === 'tiktok') {
-                this.logger.debug(`[TikTok Debug] Message received in main handler: ${normalizedData?.username}: ${normalizedData?.message}`, 'system');
+                this.logger.debug(`[TikTok Debug] Message received in main handler: ${normalizedData?.username}: ${messageText}`, 'system');
             }
 
             if (this.chatNotificationRouter) {

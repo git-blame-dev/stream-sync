@@ -56,11 +56,7 @@ function createYouTubeEventFactory(options = {}) {
     };
 
     const resolveMessageParts = (data = {}) => {
-        const messageParts = Array.isArray(data?.message?.parts)
-            ? data.message.parts
-            : (Array.isArray(data?.metadata?.messageParts) ? data.metadata.messageParts : []);
-
-        return getValidMessageParts({ message: { parts: messageParts } }, { allowWhitespaceText: true })
+        return getValidMessageParts({ message: data?.message }, { allowWhitespaceText: true })
             .map((part) => {
                 if (part.type === 'text') {
                     return {

@@ -234,7 +234,7 @@ describe('Event-to-GUI contract mapper behavior', () => {
         ]);
     });
 
-    it('uses legacy messageParts fallback when canonical message.parts is missing', async () => {
+    it('omits parts when canonical message.parts is missing', async () => {
         const mapper = createMapper({ messageCharacterLimit: 0 });
 
         const mapped = await mapper.mapDisplayRow({
@@ -244,26 +244,13 @@ describe('Event-to-GUI contract mapper behavior', () => {
                 username: 'test-user',
                 userId: 'test-user-id',
                 avatarUrl: 'https://example.invalid/avatar.png',
-                message: '',
-                messageParts: [
-                    {
-                        type: 'emote',
-                        platform: 'tiktok',
-                        emoteId: '1234512346',
-                        imageUrl: 'https://example.invalid/tiktok-emote-2.webp'
-                    }
-                ]
+                message: {
+                    text: ''
+                }
             }
         });
 
-        expect(mapped.parts).toEqual([
-            {
-                type: 'emote',
-                platform: 'tiktok',
-                emoteId: '1234512346',
-                imageUrl: 'https://example.invalid/tiktok-emote-2.webp'
-            }
-        ]);
+        expect(mapped.parts).toBeUndefined();
     });
 
     it('resolves avatar by payload then cache then fallback', async () => {

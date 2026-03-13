@@ -85,38 +85,41 @@ describe('Twitch emote chat parts pipeline (smoke E2E)', () => {
             const queued = displayQueue.addItem.mock.calls[0][0];
             expect(queued.type).toBe('chat');
             expect(queued.platform).toBe('twitch');
-            expect(queued.data.messageParts).toEqual([
-                {
-                    type: 'emote',
-                    platform: 'twitch',
-                    emoteId: 'emotesv2_dcd06b30a5c24f6eb871e8f5edbd44f7',
-                    imageUrl: 'https://static-cdn.jtvnw.net/emoticons/v2/emotesv2_dcd06b30a5c24f6eb871e8f5edbd44f7/animated/dark/3.0'
-                },
-                {
-                    type: 'text',
-                    text: ' test message '
-                },
-                {
-                    type: 'emote',
-                    platform: 'twitch',
-                    emoteId: 'emotesv2_dcd06b30a5c24f6eb871e8f5edbd44f7',
-                    imageUrl: 'https://static-cdn.jtvnw.net/emoticons/v2/emotesv2_dcd06b30a5c24f6eb871e8f5edbd44f7/animated/dark/3.0'
-                },
-                {
-                    type: 'text',
-                    text: ' hello world this is a message to everyone '
-                },
-                {
-                    type: 'emote',
-                    platform: 'twitch',
-                    emoteId: 'emotesv2_dcd06b30a5c24f6eb871e8f5edbd44f7',
-                    imageUrl: 'https://static-cdn.jtvnw.net/emoticons/v2/emotesv2_dcd06b30a5c24f6eb871e8f5edbd44f7/animated/dark/3.0'
-                },
-                {
-                    type: 'text',
-                    text: ' how are we today?'
-                }
-            ]);
+            expect(queued.data.message).toEqual({
+                text: 'testEmote test message testEmote hello world this is a message to everyone testEmote how are we today?',
+                parts: [
+                    {
+                        type: 'emote',
+                        platform: 'twitch',
+                        emoteId: 'emotesv2_dcd06b30a5c24f6eb871e8f5edbd44f7',
+                        imageUrl: 'https://static-cdn.jtvnw.net/emoticons/v2/emotesv2_dcd06b30a5c24f6eb871e8f5edbd44f7/animated/dark/3.0'
+                    },
+                    {
+                        type: 'text',
+                        text: ' test message '
+                    },
+                    {
+                        type: 'emote',
+                        platform: 'twitch',
+                        emoteId: 'emotesv2_dcd06b30a5c24f6eb871e8f5edbd44f7',
+                        imageUrl: 'https://static-cdn.jtvnw.net/emoticons/v2/emotesv2_dcd06b30a5c24f6eb871e8f5edbd44f7/animated/dark/3.0'
+                    },
+                    {
+                        type: 'text',
+                        text: ' hello world this is a message to everyone '
+                    },
+                    {
+                        type: 'emote',
+                        platform: 'twitch',
+                        emoteId: 'emotesv2_dcd06b30a5c24f6eb871e8f5edbd44f7',
+                        imageUrl: 'https://static-cdn.jtvnw.net/emoticons/v2/emotesv2_dcd06b30a5c24f6eb871e8f5edbd44f7/animated/dark/3.0'
+                    },
+                    {
+                        type: 'text',
+                        text: ' how are we today?'
+                    }
+                ]
+            });
         } finally {
             platformEventRouter.dispose();
             await platform.cleanup();

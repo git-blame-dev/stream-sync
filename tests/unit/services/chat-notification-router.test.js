@@ -479,9 +479,9 @@ describe('ChatNotificationRouter', () => {
 
         await router.handleChatMessage('tiktok', {
             ...baseMessage,
-            message: '   ',
-            metadata: {
-                messageParts: [
+            message: {
+                text: '   ',
+                parts: [
                     {
                         type: 'emote',
                         platform: 'tiktok',
@@ -496,15 +496,17 @@ describe('ChatNotificationRouter', () => {
         const queuedItems = runtime.displayQueue.addItem.mock.calls.map((call) => call[0]);
         const chatItem = queuedItems.find((item) => item.type === 'chat');
         expect(chatItem).toBeDefined();
-        expect(chatItem?.data?.message).toBe('');
-        expect(chatItem?.data?.messageParts).toEqual([
-            {
-                type: 'emote',
-                platform: 'tiktok',
-                emoteId: '1234512345',
-                imageUrl: 'https://example.invalid/tiktok-emote.webp'
-            }
-        ]);
+        expect(chatItem?.data?.message).toEqual({
+            text: '',
+            parts: [
+                {
+                    type: 'emote',
+                    platform: 'tiktok',
+                    emoteId: '1234512345',
+                    imageUrl: 'https://example.invalid/tiktok-emote.webp'
+                }
+            ]
+        });
     });
 
     it('queues emote-only non-TikTok chat rows when canonical message parts are present', async () => {
@@ -512,9 +514,9 @@ describe('ChatNotificationRouter', () => {
 
         await router.handleChatMessage('twitch', {
             ...baseMessage,
-            message: '   ',
-            metadata: {
-                messageParts: [
+            message: {
+                text: '   ',
+                parts: [
                     {
                         type: 'emote',
                         platform: 'twitch',
@@ -529,14 +531,16 @@ describe('ChatNotificationRouter', () => {
         const queuedItems = runtime.displayQueue.addItem.mock.calls.map((call) => call[0]);
         const chatItem = queuedItems.find((item) => item.type === 'chat');
         expect(chatItem).toBeDefined();
-        expect(chatItem?.data?.message).toBe('');
-        expect(chatItem?.data?.messageParts).toEqual([
-            {
-                type: 'emote',
-                platform: 'twitch',
-                emoteId: '1234512345',
-                imageUrl: 'https://example.invalid/twitch-emote.webp'
-            }
-        ]);
+        expect(chatItem?.data?.message).toEqual({
+            text: '',
+            parts: [
+                {
+                    type: 'emote',
+                    platform: 'twitch',
+                    emoteId: '1234512345',
+                    imageUrl: 'https://example.invalid/twitch-emote.webp'
+                }
+            ]
+        });
     });
 });

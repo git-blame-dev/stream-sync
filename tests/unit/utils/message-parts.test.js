@@ -7,14 +7,10 @@ const {
 } = require('../../../src/utils/message-parts');
 
 describe('message parts utility', () => {
-    it('prefers canonical message.parts over fallback sources', () => {
+    it('reads canonical message.parts only', () => {
         const payload = {
             message: {
                 parts: [{ type: 'text', text: 'canonical' }]
-            },
-            messageParts: [{ type: 'text', text: 'top-level' }],
-            metadata: {
-                messageParts: [{ type: 'text', text: 'metadata' }]
             }
         };
 
@@ -23,17 +19,16 @@ describe('message parts utility', () => {
         expect(parts).toEqual([{ type: 'text', text: 'canonical' }]);
     });
 
-    it('uses top-level messageParts when canonical message.parts is missing', () => {
+    it('returns empty array when canonical message.parts is missing', () => {
         const payload = {
-            messageParts: [{ type: 'text', text: 'top-level' }],
-            metadata: {
-                messageParts: [{ type: 'text', text: 'metadata' }]
+            message: {
+                text: 'hello'
             }
         };
 
         const parts = getMessagePartsFromPayload(payload);
 
-        expect(parts).toEqual([{ type: 'text', text: 'top-level' }]);
+        expect(parts).toEqual([]);
     });
 
     it('validates emote and text parts with strict defaults', () => {

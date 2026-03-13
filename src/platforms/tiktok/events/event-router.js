@@ -8,7 +8,7 @@ const DEFAULT_CHAT_MAX_CACHE_SIZE = 10_000;
 const DEFAULT_CHAT_MAX_AGE_MS = 20 * 60 * 1000;
 
 function hasCanonicalMessageParts(normalizedData) {
-    return getValidMessageParts(normalizedData).length > 0;
+    return getValidMessageParts({ message: normalizedData?.message }).length > 0;
 }
 
 function getChatReplayConfig(platform) {
@@ -260,11 +260,14 @@ function setupTikTokEventListeners(platform) {
                 }
             }
 
-            if ((!normalizedData.message || normalizedData.message.trim() === '') && !hasCanonicalMessageParts(normalizedData)) {
+            const messageText = typeof normalizedData?.message === 'string'
+                ? normalizedData.message
+                : (typeof normalizedData?.message?.text === 'string' ? normalizedData.message.text : '');
+            if ((!messageText || messageText.trim() === '') && !hasCanonicalMessageParts(normalizedData)) {
                 platform.logger.debug('Skipping empty message after normalization', 'tiktok', {
                     originalComment: data.comment,
-                    normalizedMessage: normalizedData.message,
-                    messageParts: normalizedData?.metadata?.messageParts || []
+                    normalizedMessage: messageText,
+                    messageParts: normalizedData?.message?.parts || []
                 });
                 return;
             }

@@ -40,7 +40,7 @@ describe('Message Normalization', () => {
                 platform: 'youtube',
                 userId: 'UC123456789',
                 username: 'youtubeuser',
-                message: 'Hello YouTube!',
+                message: { text: 'Hello YouTube!' },
                 isMod: false,
                 isPaypiggy: false,
                 isBroadcaster: false
@@ -121,7 +121,7 @@ describe('Message Normalization', () => {
                 platform: 'youtube',
                 userId: 'UC987654321',
                 username: 'superchatter',
-                message: 'Super chat message!',
+                message: { text: 'Super chat message!' },
                 isMod: false,
                 isPaypiggy: false,
                 isBroadcaster: false
@@ -300,24 +300,26 @@ describe('Message Normalization', () => {
 
             const normalized = normalizeYouTubeMessage(chatItem, 'youtube');
 
-            expect(normalized.message).toBe('first :testOne:middle :testTwo:last');
-            expect(normalized.metadata.messageParts).toEqual([
-                { type: 'text', text: 'first ' },
-                {
-                    type: 'emote',
-                    platform: 'youtube',
-                    emoteId: 'UC_TEST_EMOTE_000101/TEST_EMOTE_101',
-                    imageUrl: 'https://yt3.ggpht.example.invalid/test-one-large=w48-h48-c-k-nd'
-                },
-                { type: 'text', text: 'middle ' },
-                {
-                    type: 'emote',
-                    platform: 'youtube',
-                    emoteId: 'UC_TEST_EMOTE_000102/TEST_EMOTE_102',
-                    imageUrl: 'https://yt3.ggpht.example.invalid/test-two-large=w48-h48-c-k-nd'
-                },
-                { type: 'text', text: 'last' }
-            ]);
+            expect(normalized.message).toEqual({
+                text: 'first :testOne:middle :testTwo:last',
+                parts: [
+                    { type: 'text', text: 'first ' },
+                    {
+                        type: 'emote',
+                        platform: 'youtube',
+                        emoteId: 'UC_TEST_EMOTE_000101/TEST_EMOTE_101',
+                        imageUrl: 'https://yt3.ggpht.example.invalid/test-one-large=w48-h48-c-k-nd'
+                    },
+                    { type: 'text', text: 'middle ' },
+                    {
+                        type: 'emote',
+                        platform: 'youtube',
+                        emoteId: 'UC_TEST_EMOTE_000102/TEST_EMOTE_102',
+                        imageUrl: 'https://yt3.ggpht.example.invalid/test-two-large=w48-h48-c-k-nd'
+                    },
+                    { type: 'text', text: 'last' }
+                ]
+            });
         });
 
         test('treats runs with both text and emoji as emote parts for custom-emote payload shape', () => {
@@ -349,15 +351,17 @@ describe('Message Normalization', () => {
 
             const normalized = normalizeYouTubeMessage(chatItem, 'youtube');
 
-            expect(normalized.message).toBe(':testEight:');
-            expect(normalized.metadata.messageParts).toEqual([
-                {
-                    type: 'emote',
-                    platform: 'youtube',
-                    emoteId: rawEmoteToken,
-                    imageUrl: 'https://yt3.ggpht.example.invalid/test-eight=w48-h48-c-k-nd'
-                }
-            ]);
+            expect(normalized.message).toEqual({
+                text: ':testEight:',
+                parts: [
+                    {
+                        type: 'emote',
+                        platform: 'youtube',
+                        emoteId: rawEmoteToken,
+                        imageUrl: 'https://yt3.ggpht.example.invalid/test-eight=w48-h48-c-k-nd'
+                    }
+                ]
+            });
         });
 
         test('uses largest numeric YouTube emoji image width when selecting emote imageUrl', () => {
@@ -396,13 +400,13 @@ describe('Message Normalization', () => {
 
             const normalized = normalizeYouTubeMessage(chatItem, 'youtube');
 
-            expect(normalized.metadata.messageParts).toEqual([
+            expect(normalized.message.parts).toEqual([
                 {
                     type: 'emote',
                     platform: 'youtube',
                     emoteId: 'UC_TEST_EMOTE_000103/TEST_EMOTE_103',
                     imageUrl: 'https://yt3.ggpht.example.invalid/test-three-96=w96-h96-c-k-nd'
-                }
+                },
             ]);
         });
 
@@ -429,7 +433,7 @@ describe('Message Normalization', () => {
 
             const normalized = normalizeYouTubeMessage(chatItem, 'youtube');
 
-            expect(normalized.metadata.messageParts).toEqual([
+            expect(normalized.message.parts).toEqual([
                 {
                     type: 'emote',
                     platform: 'youtube',
@@ -455,19 +459,21 @@ describe('Message Normalization', () => {
 
             const normalized = normalizeYouTubeMessage(chatItem, 'youtube');
 
-            expect(normalized.message).toBe('hello :missingId::missingImage::valid:');
-            expect(normalized.metadata.messageParts).toEqual([
-                { type: 'text', text: 'hello ' },
-                {
-                    type: 'emote',
-                    platform: 'youtube',
-                    emoteId: 'UC_TEST_EMOTE_000106/TEST_EMOTE_106',
-                    imageUrl: 'https://yt3.ggpht.example.invalid/valid=w48-h48-c-k-nd'
-                }
-            ]);
+            expect(normalized.message).toEqual({
+                text: 'hello :missingId::missingImage::valid:',
+                parts: [
+                    { type: 'text', text: 'hello ' },
+                    {
+                        type: 'emote',
+                        platform: 'youtube',
+                        emoteId: 'UC_TEST_EMOTE_000106/TEST_EMOTE_106',
+                        imageUrl: 'https://yt3.ggpht.example.invalid/valid=w48-h48-c-k-nd'
+                    }
+                ]
+            });
         });
 
-        test('normalizes emote-only runs without emoji shortcuts and keeps normalized.message as string', () => {
+        test('normalizes emote-only runs without emoji shortcuts and keeps normalized.message as canonical object', () => {
             const chatItem = createYouTubeRunsMessageChatItem({
                 item: {
                     message: {
@@ -491,16 +497,17 @@ describe('Message Normalization', () => {
 
             const normalized = normalizeYouTubeMessage(chatItem, 'youtube');
 
-            expect(normalized.message).toBe('');
-            expect(typeof normalized.message).toBe('string');
-            expect(normalized.metadata.messageParts).toEqual([
-                {
-                    type: 'emote',
-                    platform: 'youtube',
-                    emoteId: 'UC_TEST_EMOTE_000107/TEST_EMOTE_107',
-                    imageUrl: 'https://yt3.ggpht.example.invalid/test-seven=w48-h48-c-k-nd'
-                }
-            ]);
+            expect(normalized.message).toEqual({
+                text: '',
+                parts: [
+                    {
+                        type: 'emote',
+                        platform: 'youtube',
+                        emoteId: 'UC_TEST_EMOTE_000107/TEST_EMOTE_107',
+                        imageUrl: 'https://yt3.ggpht.example.invalid/test-seven=w48-h48-c-k-nd'
+                    }
+                ]
+            });
             expect(validateNormalizedMessage(normalized).isValid).toBe(true);
         });
 
@@ -522,8 +529,7 @@ describe('Message Normalization', () => {
 
             const normalized = normalizeYouTubeMessage(chatItem, 'youtube');
 
-            expect(normalized.message).toBe('Hello \ud83c\udf1f world');
-            expect(normalized.metadata.messageParts).toBeUndefined();
+            expect(normalized.message).toEqual({ text: 'Hello \ud83c\udf1f world' });
         });
 
         test('does not emit emote parts for non-custom runs emoji payloads', () => {
@@ -553,8 +559,7 @@ describe('Message Normalization', () => {
 
             const normalized = normalizeYouTubeMessage(chatItem, 'youtube');
 
-            expect(normalized.message).toBe(':thumbs_up:');
-            expect(normalized.metadata.messageParts).toBeUndefined();
+            expect(normalized.message).toEqual({ text: ':thumbs_up:' });
         });
     });
 
@@ -577,7 +582,7 @@ describe('Message Normalization', () => {
                 platform: 'tiktok',
                 userId: 'tiktokuser123',
                 username: 'TikTokUser',
-                message: 'Hello TikTok!',
+                message: { text: 'Hello TikTok!' },
                 isMod: false,
                 isPaypiggy: false,
                 isBroadcaster: false
@@ -696,7 +701,7 @@ describe('Message Normalization', () => {
             });
         });
 
-        test('normalizes emote-only TikTok chat into canonical metadata.messageParts', () => {
+        test('normalizes emote-only TikTok chat into canonical message.parts', () => {
             const data = {
                 user: {
                     userId: 'tt-789',
@@ -720,16 +725,18 @@ describe('Message Normalization', () => {
 
             const normalized = normalizeTikTokMessage(data, 'tiktok');
 
-            expect(normalized.message).toBe('');
-            expect(normalized.metadata.messageParts).toEqual([
-                {
-                    type: 'emote',
-                    platform: 'tiktok',
-                    emoteId: '1234512345123451234',
-                    imageUrl: 'https://example.invalid/tiktok-emote.webp',
-                    placeInComment: 0
-                }
-            ]);
+            expect(normalized.message).toEqual({
+                text: '',
+                parts: [
+                    {
+                        type: 'emote',
+                        platform: 'tiktok',
+                        emoteId: '1234512345123451234',
+                        imageUrl: 'https://example.invalid/tiktok-emote.webp',
+                        placeInComment: 0
+                    }
+                ]
+            });
         });
 
         test('normalizes mixed TikTok text and emote content into ordered message parts', () => {
@@ -756,24 +763,26 @@ describe('Message Normalization', () => {
 
             const normalized = normalizeTikTokMessage(data, 'tiktok');
 
-            expect(normalized.message).toBe('hi all');
-            expect(normalized.metadata.messageParts).toEqual([
-                {
-                    type: 'text',
-                    text: 'hi'
-                },
-                {
-                    type: 'emote',
-                    platform: 'tiktok',
-                    emoteId: '1234512346',
-                    imageUrl: 'https://example.invalid/tiktok-emote-2.webp',
-                    placeInComment: 2
-                },
-                {
-                    type: 'text',
-                    text: ' all'
-                }
-            ]);
+            expect(normalized.message).toEqual({
+                text: 'hi all',
+                parts: [
+                    {
+                        type: 'text',
+                        text: 'hi'
+                    },
+                    {
+                        type: 'emote',
+                        platform: 'tiktok',
+                        emoteId: '1234512346',
+                        imageUrl: 'https://example.invalid/tiktok-emote-2.webp',
+                        placeInComment: 2
+                    },
+                    {
+                        type: 'text',
+                        text: ' all'
+                    }
+                ]
+            });
         });
 
         test('adjusts insertion indexes for sequential emotes placed beyond comment length', () => {
@@ -818,7 +827,7 @@ describe('Message Normalization', () => {
 
             const normalized = normalizeTikTokMessage(data, 'tiktok');
 
-            expect(normalized.metadata.messageParts).toEqual([
+            expect(normalized.message.parts).toEqual([
                 {
                     type: 'text',
                     text: 'I watched your LIVE for 100 minutes!'
@@ -880,7 +889,7 @@ describe('Message Normalization', () => {
 
             const normalized = normalizeTikTokMessage(data, 'tiktok');
 
-            expect(normalized.metadata.messageParts).toEqual([
+            expect(normalized.message.parts).toEqual([
                 {
                     type: 'text',
                     text: 'a'

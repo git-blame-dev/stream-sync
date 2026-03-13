@@ -31,6 +31,30 @@ describe('TikTok event factory behavior', () => {
         expect(event.avatarUrl).toBe('https://example.invalid/tiktok-chat-avatar.jpg');
     });
 
+    it('accepts canonical message object text for chat message events', () => {
+        const { createTikTokEventFactory } = require('../../../../../src/platforms/tiktok/events/event-factory');
+
+        const eventFactory = createTikTokEventFactory({
+            platformName: 'tiktok',
+            generateCorrelationId: () => 'corr-chat-object-123'
+        });
+
+        const event = eventFactory.createChatMessage({}, {
+            normalizedData: {
+                userId: 'test-user-id',
+                username: 'test-username',
+                message: {
+                    text: '  test object message  '
+                },
+                timestamp: '2026-01-30T12:00:00.000Z'
+            }
+        });
+
+        expect(event.message).toEqual({
+            text: 'test object message'
+        });
+    });
+
     it('preserves avatarUrl on gift events', () => {
         const { createTikTokEventFactory } = require('../../../../../src/platforms/tiktok/events/event-factory');
 
@@ -192,6 +216,46 @@ describe('TikTok event factory behavior', () => {
                 timestamp: '2026-01-30T12:00:00.000Z'
             }
         })).toThrow('Missing TikTok message text');
+    });
+
+    it('emits canonical message.parts for emote-only chat payloads', () => {
+        const { createTikTokEventFactory } = require('../../../../../src/platforms/tiktok/events/event-factory');
+
+        const eventFactory = createTikTokEventFactory({
+            platformName: 'tiktok',
+            generateCorrelationId: () => 'corr-chat-parts-only'
+        });
+
+        const event = eventFactory.createChatMessage({}, {
+            normalizedData: {
+                userId: 'test-user-id',
+                username: 'test-username',
+                message: {
+                    text: '',
+                    parts: [
+                        {
+                            type: 'emote',
+                            platform: 'tiktok',
+                            emoteId: '1234512345',
+                            imageUrl: 'https://example.invalid/tiktok-emote.webp'
+                        }
+                    ]
+                },
+                timestamp: '2026-01-30T12:00:00.000Z'
+            }
+        });
+
+        expect(event.message).toEqual({
+            text: '',
+            parts: [
+                {
+                    type: 'emote',
+                    platform: 'tiktok',
+                    emoteId: '1234512345',
+                    imageUrl: 'https://example.invalid/tiktok-emote.webp'
+                }
+            ]
+        });
     });
 
     it('creates subscription paypiggy event with canonical payload fields', () => {

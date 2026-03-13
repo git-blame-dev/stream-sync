@@ -80,7 +80,7 @@ describe('PlatformEventRouter validation', () => {
 
         const [calledPlatform, calledPayload] = runtime.handleChatMessage.mock.calls[0];
         expect(calledPlatform).toBe('twitch');
-        expect(calledPayload.message).toBe('hello');
+        expect(calledPayload.message).toEqual({ text: 'hello' });
         expect(calledPayload.timestamp).toBe(timestamp);
     });
 
@@ -263,7 +263,7 @@ describe('PlatformEventRouter validation', () => {
         await expect(router.routeEvent({
             platform: 'twitch',
             type: 'gift',
-            data: { username: 'legacy', userId: 'u99', timestamp: new Date().toISOString() }
+            data: { username: 'test-user', userId: 'u99', timestamp: new Date().toISOString() }
         })).rejects.toThrow('Unsupported platform event type: gift');
 
         expect(runtime.handleGiftNotification).not.toHaveBeenCalled();

@@ -51,7 +51,7 @@ function resolveText(type, data = {}) {
 }
 
 function resolveMessageParts(data = {}) {
-    return getValidMessageParts(data, { allowWhitespaceText: true })
+    return getValidMessageParts({ message: data?.message }, { allowWhitespaceText: true })
         .map((part) => {
             if (part.type === 'emote') {
                 return {

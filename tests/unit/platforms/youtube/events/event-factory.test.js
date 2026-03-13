@@ -68,7 +68,7 @@ describe('YouTube event factory behavior', () => {
         });
     });
 
-    it('uses canonical message.parts with message object precedence over metadata fallback', () => {
+    it('uses canonical message.parts from message object', () => {
         const { createYouTubeEventFactory } = require('../../../../../src/platforms/youtube/events/event-factory');
 
         const eventFactory = createYouTubeEventFactory({
@@ -90,15 +90,6 @@ describe('YouTube event factory behavior', () => {
                         type: 'emote',
                         emoteId: ' UC_TEST_EMOTE_200/TEST_EMOTE_200 ',
                         imageUrl: ' https://yt3.ggpht.example.invalid/test-200=w48-h48-c-k-nd '
-                    }
-                ]
-            },
-            metadata: {
-                messageParts: [
-                    {
-                        type: 'emote',
-                        emoteId: 'UC_TEST_EMOTE_201/TEST_EMOTE_201',
-                        imageUrl: 'https://yt3.ggpht.example.invalid/test-201=w48-h48-c-k-nd'
                     }
                 ]
             },
@@ -127,7 +118,7 @@ describe('YouTube event factory behavior', () => {
         });
     });
 
-    it('falls back to metadata messageParts when message.parts is unavailable', () => {
+    it('emits text-only message when canonical message.parts is unavailable', () => {
         const { createYouTubeEventFactory } = require('../../../../../src/platforms/youtube/events/event-factory');
 
         const eventFactory = createYouTubeEventFactory({
@@ -140,38 +131,10 @@ describe('YouTube event factory behavior', () => {
             message: {
                 text: 'hello'
             },
-            metadata: {
-                messageParts: [
-                    {
-                        type: 'text',
-                        text: 'hello '
-                    },
-                    {
-                        type: 'emote',
-                        platform: 'youtube',
-                        emoteId: 'UC_TEST_EMOTE_202/TEST_EMOTE_202',
-                        imageUrl: 'https://yt3.ggpht.example.invalid/test-202=w48-h48-c-k-nd'
-                    }
-                ]
-            },
             timestamp: '2024-01-01T00:00:00.111Z'
         });
 
-        expect(event.message).toEqual({
-            text: 'hello',
-            parts: [
-                {
-                    type: 'text',
-                    text: 'hello '
-                },
-                {
-                    type: 'emote',
-                    platform: 'youtube',
-                    emoteId: 'UC_TEST_EMOTE_202/TEST_EMOTE_202',
-                    imageUrl: 'https://yt3.ggpht.example.invalid/test-202=w48-h48-c-k-nd'
-                }
-            ]
-        });
+        expect(event.message).toEqual({ text: 'hello' });
     });
 
     it('filters invalid message parts and preserves no-parts shape when all are invalid', () => {
