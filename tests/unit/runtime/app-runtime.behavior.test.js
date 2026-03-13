@@ -53,6 +53,13 @@ const createRuntime = (depsOverrides = {}, configOverrides = {}) => {
     return new AppRuntime(config, deps);
 };
 
+const createRecordingNotificationManager = (calls) => ({
+    handleNotification: async (...args) => {
+        calls.push(args);
+        return { success: true };
+    }
+});
+
 describe('AppRuntime behavior', () => {
     beforeEach(() => {
         testClock.reset();
@@ -68,9 +75,8 @@ describe('AppRuntime behavior', () => {
             .toThrow('AppRuntime missing required dependencies');
     });
 
-    it('requires a command parser dependency', () => {
-        expect(() => createRuntime({ commandParser: null }))
-            .toThrow('AppRuntime requires commandParser');
+    it('does not require a command parser dependency', () => {
+        expect(() => createRuntime({ commandParser: null })).not.toThrow();
     });
 
     it('builds system-ready payload with services, timestamp, and statuses', () => {
@@ -93,11 +99,7 @@ describe('AppRuntime behavior', () => {
 
     it('delegates unified notifications to the manager', async () => {
         const calls = [];
-        const notificationManager = {
-            handleNotification: async (...args) => {
-                calls.push(args);
-            }
-        };
+        const notificationManager = createRecordingNotificationManager(calls);
         const runtime = createRuntime({ notificationManager });
 
         await runtime.handleUnifiedNotification('platform:follow', 'twitch', 'test-user', {
@@ -113,9 +115,7 @@ describe('AppRuntime behavior', () => {
 
     it('accepts anonymous gift notifications without username', async () => {
         const calls = [];
-        const notificationManager = {
-            handleNotification: async (...args) => calls.push(args)
-        };
+        const notificationManager = createRecordingNotificationManager(calls);
         const runtime = createRuntime({ notificationManager });
 
         await runtime.handleUnifiedNotification('platform:gift', 'tiktok', '', {
@@ -144,6 +144,63 @@ describe('AppRuntime behavior', () => {
         expect(handled.length).toBe(1);
     });
 
+    it('returns failed result when notification manager reports failure', async () => {
+        const runtime = createRuntime({
+            notificationManager: {
+                handleNotification: createMockFn().mockResolvedValue({ success: false, error: 'Notifications disabled' })
+            }
+        });
+
+        const result = await runtime.handleUnifiedNotification('farewell', 'twitch', 'test-user', {
+            userId: 'test-user-id',
+            command: '!bye',
+            timestamp: '2024-01-01T00:00:00.000Z'
+        });
+
+        expect(result).toEqual(expect.objectContaining({
+            success: false,
+            error: 'Notifications disabled'
+        }));
+    });
+
+    it('returns failed result when notification manager throws', async () => {
+        const runtime = createRuntime({
+            notificationManager: {
+                handleNotification: createMockFn().mockRejectedValue(new Error('notification manager exploded'))
+            }
+        });
+
+        const result = await runtime.handleUnifiedNotification('farewell', 'twitch', 'test-user', {
+            userId: 'test-user-id',
+            command: '!bye',
+            timestamp: '2024-01-01T00:00:00.000Z'
+        });
+
+        expect(result).toEqual(expect.objectContaining({
+            success: false,
+            error: 'notification manager exploded'
+        }));
+    });
+
+    it('returns failed result when notification manager returns invalid result shape', async () => {
+        const runtime = createRuntime({
+            notificationManager: {
+                handleNotification: createMockFn().mockResolvedValue(undefined)
+            }
+        });
+
+        const result = await runtime.handleUnifiedNotification('farewell', 'twitch', 'test-user', {
+            userId: 'test-user-id',
+            command: '!bye',
+            timestamp: '2024-01-01T00:00:00.000Z'
+        });
+
+        expect(result).toEqual(expect.objectContaining({
+            success: false,
+            error: 'Notification manager returned invalid result shape'
+        }));
+    });
+
     it('enforces required fields for gift notifications', async () => {
         const runtime = createRuntime();
 
@@ -155,9 +212,7 @@ describe('AppRuntime behavior', () => {
 
     it('forwards gift notifications with VFX config', async () => {
         const calls = [];
-        const notificationManager = {
-            handleNotification: async (...args) => calls.push(args)
-        };
+        const notificationManager = createRecordingNotificationManager(calls);
         const runtime = createRuntime({
             notificationManager,
             vfxCommandService: { getVFXConfig: createMockFn().mockResolvedValue({ key: 'gifts' }) }
@@ -182,9 +237,7 @@ describe('AppRuntime behavior', () => {
 
     it('normalizes gift notification error payloads', async () => {
         const calls = [];
-        const notificationManager = {
-            handleNotification: async (...args) => calls.push(args)
-        };
+        const notificationManager = createRecordingNotificationManager(calls);
         const runtime = createRuntime({
             notificationManager,
             vfxCommandService: { getVFXConfig: createMockFn().mockResolvedValue({ key: 'gifts' }) }
@@ -217,9 +270,7 @@ describe('AppRuntime behavior', () => {
 
     it('routes giftpaypiggy events through unified handler', async () => {
         const calls = [];
-        const notificationManager = {
-            handleNotification: async (...args) => calls.push(args)
-        };
+        const notificationManager = createRecordingNotificationManager(calls);
         const runtime = createRuntime({ notificationManager });
 
         await runtime.handleGiftPaypiggyEvent('youtube', 'test-user', {
@@ -234,9 +285,7 @@ describe('AppRuntime behavior', () => {
 
     it('preserves explicit avatarUrl for giftpaypiggy notifications', async () => {
         const calls = [];
-        const notificationManager = {
-            handleNotification: async (...args) => calls.push(args)
-        };
+        const notificationManager = createRecordingNotificationManager(calls);
         const runtime = createRuntime({ notificationManager });
 
         await runtime.handleGiftPaypiggyEvent('youtube', 'test-user', {
@@ -282,9 +331,7 @@ describe('AppRuntime behavior', () => {
 
     it('routes envelope notifications with required payload', async () => {
         const calls = [];
-        const notificationManager = {
-            handleNotification: async (...args) => calls.push(args)
-        };
+        const notificationManager = createRecordingNotificationManager(calls);
         const runtime = createRuntime({ notificationManager });
 
         await runtime.handleEnvelopeNotification('tiktok', {
@@ -306,9 +353,7 @@ describe('AppRuntime behavior', () => {
 
     it('preserves explicit avatarUrl for envelope notifications', async () => {
         const calls = [];
-        const notificationManager = {
-            handleNotification: async (...args) => calls.push(args)
-        };
+        const notificationManager = createRecordingNotificationManager(calls);
         const runtime = createRuntime({ notificationManager });
 
         await runtime.handleEnvelopeNotification('tiktok', {
@@ -702,9 +747,7 @@ describe('AppRuntime behavior', () => {
 
     it('routes follow/share/paypiggy notifications through unified handler', async () => {
         const calls = [];
-        const notificationManager = {
-            handleNotification: async (...args) => calls.push(args)
-        };
+        const notificationManager = createRecordingNotificationManager(calls);
         const runtime = createRuntime({ notificationManager });
 
         await runtime.handleFollowNotification('twitch', 'test-user', { userId: 'test-user-id', timestamp: '2024-01-01T00:00:00.000Z' });
@@ -738,9 +781,7 @@ describe('AppRuntime behavior', () => {
 
     it('continues gift notifications when VFX lookup fails', async () => {
         const calls = [];
-        const notificationManager = {
-            handleNotification: async (...args) => calls.push(args)
-        };
+        const notificationManager = createRecordingNotificationManager(calls);
         const runtime = createRuntime({
             notificationManager,
             vfxCommandService: { getVFXConfig: createMockFn().mockRejectedValue(new Error('vfx lookup failed')) }

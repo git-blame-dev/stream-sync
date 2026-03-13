@@ -82,11 +82,15 @@ class AppRuntime {
                 notificationData.avatarUrl = avatarUrl;
             }
 
-            if (this.notificationManager) {
-                await this.notificationManager.handleNotification(type, platform, notificationData);
-            } else {
+            if (!this.notificationManager) {
                 throw new Error(`Notification manager not available for ${type} notification`);
             }
+
+            const managerResult = await this.notificationManager.handleNotification(type, platform, notificationData);
+            if (managerResult && typeof managerResult === 'object' && typeof managerResult.success === 'boolean') {
+                return managerResult;
+            }
+            throw new Error('Notification manager returned invalid result shape');
         } catch (error) {
             this._handleAppRuntimeError(
                 `Error handling ${type} notification for ${username}: ${error.message}`,
@@ -94,6 +98,14 @@ class AppRuntime {
                 { notificationType: type, username, platform },
                 { eventType: 'notification', logContext: platform }
             );
+
+            return {
+                success: false,
+                error: error.message,
+                notificationType: type,
+                platform,
+                username: typeof username === 'string' ? username : null
+            };
         }
     }
 
@@ -139,11 +151,6 @@ class AppRuntime {
 
         if (!this.config) {
             throw new Error('AppRuntime requires config');
-        }
-
-        this.commandParser = this.dependencies.commandParser;
-        if (!this.commandParser) {
-            throw new Error('AppRuntime requires commandParser');
         }
 
         this.commandCooldownService = this.dependencies.commandCooldownService;
