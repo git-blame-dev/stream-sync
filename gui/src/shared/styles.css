@@ -3,6 +3,10 @@ html, body {
   padding: 0;
 }
 
+:root {
+  --gui-row-background-opacity: 0.95;
+}
+
 .gui-shell {
   display: flex;
   flex-direction: column;
@@ -56,7 +60,19 @@ html, body {
   align-items: start;
   padding: 8px 10px;
   border-radius: 10px;
-  background: rgba(0, 0, 0, 0.9);
+  background: rgba(0, 0, 0, var(--gui-row-background-opacity));
+}
+
+.gui-row--paypiggy {
+  background: rgba(15, 157, 88, var(--gui-row-background-opacity));
+}
+
+.gui-row--paypiggy .gui-row__username {
+  color: #ffffff;
+}
+
+.gui-row--paypiggy .gui-row__text {
+  color: #ffffff;
 }
 
 .gui-row--overlay-enter {
