@@ -29,6 +29,68 @@ function createDockShellMock({ scrollTop = 0, clientHeight = 120, scrollHeight =
     };
 }
 
+function createGuiRow(index) {
+    return {
+        type: 'chat',
+        kind: 'chat',
+        platform: 'twitch',
+        username: `test-user-${index}`,
+        text: `message-${index}`,
+        avatarUrl: `https://example.invalid/test-avatar-${index}.png`,
+        timestamp: `2024-01-01T00:00:0${index}.000Z`
+    };
+}
+
+function createOverlayNodeMocks(layoutByAvatarUrl, shellClientHeight = 220) {
+    const shell = {
+        clientHeight: shellClientHeight,
+        getBoundingClientRect: () => ({ top: 0 })
+    };
+
+    return {
+        shell,
+        createNodeMock: (element) => {
+            if (element.type === 'main') {
+                return shell;
+            }
+
+            const children = Array.isArray(element.props && element.props.children)
+                ? element.props.children
+                : [];
+            const avatarElement = children[0] && children[0].props ? children[0] : null;
+            const avatarUrl = avatarElement && avatarElement.props && typeof avatarElement.props.src === 'string'
+                ? avatarElement.props.src
+                : '';
+            const layout = layoutByAvatarUrl[avatarUrl] || { offsetTop: 0, offsetHeight: 24 };
+
+            return {
+                style: {
+                    transition: '',
+                    transform: ''
+                },
+                get offsetTop() {
+                    return layout.offsetTop;
+                },
+                get offsetHeight() {
+                    return layout.offsetHeight;
+                },
+                getBoundingClientRect: () => ({ top: layout.offsetTop })
+            };
+        }
+    };
+}
+
+function findOverlayExitNodes(renderer) {
+    return renderer.root.findAll((node) => {
+        if (node.type !== 'div') {
+            return false;
+        }
+
+        const className = typeof node.props.className === 'string' ? node.props.className : '';
+        return className.includes('gui-row--overlay-exit');
+    });
+}
+
 describe('GuiShell behavior', () => {
     it('renders rows and mode class', () => {
         const html = renderToStaticMarkup(
@@ -155,6 +217,378 @@ describe('GuiShell behavior', () => {
                 renderer.unmount();
             });
         } finally {
+            if (previousTimeStamp) {
+                console.timeStamp = previousTimeStamp;
+            } else {
+                delete console.timeStamp;
+            }
+        }
+    });
+
+    it('keeps clipped top overlay row rendered in an exit layer until exit animation ends', async () => {
+        const previousTimeStamp = console.timeStamp;
+        console.timeStamp = previousTimeStamp || (() => {});
+
+        let renderer;
+        const layoutByAvatarUrl = {
+            'https://example.invalid/test-avatar-1.png': { offsetTop: -18, offsetHeight: 60 },
+            'https://example.invalid/test-avatar-2.png': { offsetTop: 52, offsetHeight: 60 },
+            'https://example.invalid/test-avatar-3.png': { offsetTop: 122, offsetHeight: 60 }
+        };
+        const overlayNodeMocks = createOverlayNodeMocks(layoutByAvatarUrl, 220);
+
+        try {
+            await TestRenderer.act(async () => {
+                renderer = TestRenderer.create(
+                    React.createElement(GuiShell, {
+                        mode: 'overlay',
+                        overlayMaxLinesPerMessage: 3,
+                        rows: [createGuiRow(1), createGuiRow(2), createGuiRow(3)]
+                    }),
+                    {
+                        createNodeMock: overlayNodeMocks.createNodeMock
+                    }
+                );
+            });
+
+            let rendered = JSON.stringify(renderer.toJSON());
+            expect(rendered).toContain('test-user-1');
+            expect(rendered).toContain('test-user-2');
+            expect(rendered).toContain('test-user-3');
+
+            const exitNodes = findOverlayExitNodes(renderer);
+            expect(exitNodes.length).toBe(1);
+
+            await TestRenderer.act(async () => {
+                exitNodes[0].props.onAnimationEnd({ animationName: 'gui-overlay-row-exit' });
+            });
+
+            rendered = JSON.stringify(renderer.toJSON());
+            expect(rendered).not.toContain('test-user-1');
+            expect(rendered).toContain('test-user-2');
+            expect(rendered).toContain('test-user-3');
+        } finally {
+            if (renderer) {
+                await TestRenderer.act(async () => {
+                    renderer.unmount();
+                });
+            }
+
+            if (previousTimeStamp) {
+                console.timeStamp = previousTimeStamp;
+            } else {
+                delete console.timeStamp;
+            }
+        }
+    });
+
+    it('keeps all overlay rows when every row fully fits the shell height', async () => {
+        const previousTimeStamp = console.timeStamp;
+        console.timeStamp = previousTimeStamp || (() => {});
+
+        let renderer;
+        const layoutByAvatarUrl = {
+            'https://example.invalid/test-avatar-1.png': { offsetTop: 20, offsetHeight: 50 },
+            'https://example.invalid/test-avatar-2.png': { offsetTop: 80, offsetHeight: 50 },
+            'https://example.invalid/test-avatar-3.png': { offsetTop: 140, offsetHeight: 50 }
+        };
+        const overlayNodeMocks = createOverlayNodeMocks(layoutByAvatarUrl, 220);
+
+        try {
+            await TestRenderer.act(async () => {
+                renderer = TestRenderer.create(
+                    React.createElement(GuiShell, {
+                        mode: 'overlay',
+                        overlayMaxLinesPerMessage: 3,
+                        rows: [createGuiRow(1), createGuiRow(2), createGuiRow(3)]
+                    }),
+                    {
+                        createNodeMock: overlayNodeMocks.createNodeMock
+                    }
+                );
+            });
+
+            const rendered = JSON.stringify(renderer.toJSON());
+            expect(rendered).toContain('test-user-1');
+            expect(rendered).toContain('test-user-2');
+            expect(rendered).toContain('test-user-3');
+        } finally {
+            if (renderer) {
+                await TestRenderer.act(async () => {
+                    renderer.unmount();
+                });
+            }
+
+            if (previousTimeStamp) {
+                console.timeStamp = previousTimeStamp;
+            } else {
+                delete console.timeStamp;
+            }
+        }
+    });
+
+    it('recomputes overlay row visibility after window resize', async () => {
+        const previousTimeStamp = console.timeStamp;
+        const previousWindow = global.window;
+        console.timeStamp = previousTimeStamp || (() => {});
+
+        let renderer;
+        const resizeListeners = new Set();
+        global.window = {
+            addEventListener: (eventName, handler) => {
+                if (eventName === 'resize') {
+                    resizeListeners.add(handler);
+                }
+            },
+            removeEventListener: (eventName, handler) => {
+                if (eventName === 'resize') {
+                    resizeListeners.delete(handler);
+                }
+            }
+        };
+
+        const layoutByAvatarUrl = {
+            'https://example.invalid/test-avatar-1.png': { offsetTop: 20, offsetHeight: 50 },
+            'https://example.invalid/test-avatar-2.png': { offsetTop: 80, offsetHeight: 50 },
+            'https://example.invalid/test-avatar-3.png': { offsetTop: 140, offsetHeight: 50 }
+        };
+        const overlayNodeMocks = createOverlayNodeMocks(layoutByAvatarUrl, 220);
+
+        try {
+            await TestRenderer.act(async () => {
+                renderer = TestRenderer.create(
+                    React.createElement(GuiShell, {
+                        mode: 'overlay',
+                        overlayMaxLinesPerMessage: 3,
+                        rows: [createGuiRow(1), createGuiRow(2), createGuiRow(3)]
+                    }),
+                    {
+                        createNodeMock: overlayNodeMocks.createNodeMock
+                    }
+                );
+            });
+
+            let rendered = JSON.stringify(renderer.toJSON());
+            expect(rendered).toContain('test-user-1');
+
+            layoutByAvatarUrl['https://example.invalid/test-avatar-1.png'].offsetTop = -16;
+
+            await TestRenderer.act(async () => {
+                for (const listener of resizeListeners) {
+                    listener();
+                }
+            });
+
+            rendered = JSON.stringify(renderer.toJSON());
+            expect(rendered).toContain('test-user-1');
+            expect(rendered).toContain('test-user-2');
+            expect(rendered).toContain('test-user-3');
+            expect(findOverlayExitNodes(renderer).length).toBeGreaterThanOrEqual(1);
+        } finally {
+            if (renderer) {
+                await TestRenderer.act(async () => {
+                    renderer.unmount();
+                });
+            }
+
+            if (previousWindow !== undefined) {
+                global.window = previousWindow;
+            } else {
+                delete global.window;
+            }
+
+            if (previousTimeStamp) {
+                console.timeStamp = previousTimeStamp;
+            } else {
+                delete console.timeStamp;
+            }
+        }
+    });
+
+    it('keeps an evicted top row in overlay exit layer until animation ends', async () => {
+        const previousTimeStamp = console.timeStamp;
+        console.timeStamp = previousTimeStamp || (() => {});
+
+        let renderer;
+        const layoutByAvatarUrl = {
+            'https://example.invalid/test-avatar-1.png': { offsetTop: 18, offsetHeight: 50 },
+            'https://example.invalid/test-avatar-2.png': { offsetTop: 78, offsetHeight: 50 },
+            'https://example.invalid/test-avatar-3.png': { offsetTop: 138, offsetHeight: 50 },
+            'https://example.invalid/test-avatar-4.png': { offsetTop: 138, offsetHeight: 50 }
+        };
+        const overlayNodeMocks = createOverlayNodeMocks(layoutByAvatarUrl, 220);
+
+        try {
+            await TestRenderer.act(async () => {
+                renderer = TestRenderer.create(
+                    React.createElement(GuiShell, {
+                        mode: 'overlay',
+                        overlayMaxLinesPerMessage: 3,
+                        rows: [createGuiRow(1), createGuiRow(2), createGuiRow(3)]
+                    }),
+                    {
+                        createNodeMock: overlayNodeMocks.createNodeMock
+                    }
+                );
+            });
+
+            let rendered = JSON.stringify(renderer.toJSON());
+            expect(rendered).toContain('test-user-1');
+            expect(rendered).toContain('test-user-2');
+            expect(rendered).toContain('test-user-3');
+
+            await TestRenderer.act(async () => {
+                renderer.update(
+                    React.createElement(GuiShell, {
+                        mode: 'overlay',
+                        overlayMaxLinesPerMessage: 3,
+                        rows: [createGuiRow(2), createGuiRow(3), createGuiRow(4)]
+                    })
+                );
+            });
+
+            rendered = JSON.stringify(renderer.toJSON());
+            expect(rendered).toContain('test-user-1');
+            expect(rendered).toContain('test-user-2');
+            expect(rendered).toContain('test-user-3');
+            expect(rendered).toContain('test-user-4');
+            expect(findOverlayExitNodes(renderer).length).toBeGreaterThanOrEqual(1);
+
+            const exitNodes = findOverlayExitNodes(renderer);
+            await TestRenderer.act(async () => {
+                for (const exitNode of exitNodes) {
+                    exitNode.props.onAnimationEnd({ animationName: 'gui-overlay-row-exit' });
+                }
+            });
+
+            rendered = JSON.stringify(renderer.toJSON());
+            expect(rendered).not.toContain('test-user-1');
+            expect(rendered).toContain('test-user-2');
+            expect(rendered).toContain('test-user-3');
+            expect(rendered).toContain('test-user-4');
+        } finally {
+            if (renderer) {
+                await TestRenderer.act(async () => {
+                    renderer.unmount();
+                });
+            }
+
+            if (previousTimeStamp) {
+                console.timeStamp = previousTimeStamp;
+            } else {
+                delete console.timeStamp;
+            }
+        }
+    });
+
+    it('keeps both evicted and clipped top rows in exit layer for restricted overlay height', async () => {
+        const previousTimeStamp = console.timeStamp;
+        console.timeStamp = previousTimeStamp || (() => {});
+
+        let renderer;
+        const layoutByAvatarUrl = {
+            'https://example.invalid/test-avatar-1.png': { offsetTop: 4, offsetHeight: 40 },
+            'https://example.invalid/test-avatar-2.png': { offsetTop: 52, offsetHeight: 40 },
+            'https://example.invalid/test-avatar-3.png': { offsetTop: 100, offsetHeight: 80 },
+            'https://example.invalid/test-avatar-4.png': { offsetTop: 132, offsetHeight: 80 }
+        };
+        const overlayNodeMocks = createOverlayNodeMocks(layoutByAvatarUrl, 220);
+
+        try {
+            await TestRenderer.act(async () => {
+                renderer = TestRenderer.create(
+                    React.createElement(GuiShell, {
+                        mode: 'overlay',
+                        overlayMaxLinesPerMessage: 3,
+                        rows: [createGuiRow(1), createGuiRow(2), createGuiRow(3)]
+                    }),
+                    {
+                        createNodeMock: overlayNodeMocks.createNodeMock
+                    }
+                );
+            });
+
+            layoutByAvatarUrl['https://example.invalid/test-avatar-2.png'].offsetTop = -8;
+
+            await TestRenderer.act(async () => {
+                renderer.update(
+                    React.createElement(GuiShell, {
+                        mode: 'overlay',
+                        overlayMaxLinesPerMessage: 3,
+                        rows: [createGuiRow(2), createGuiRow(3), createGuiRow(4)]
+                    })
+                );
+            });
+
+            const exitNodes = findOverlayExitNodes(renderer);
+            expect(exitNodes.length).toBeGreaterThanOrEqual(2);
+
+            await TestRenderer.act(async () => {
+                for (const exitNode of exitNodes) {
+                    exitNode.props.onAnimationEnd({ animationName: 'gui-overlay-row-exit' });
+                }
+            });
+
+            const rendered = JSON.stringify(renderer.toJSON());
+            expect(rendered).not.toContain('test-user-1');
+            expect(rendered).not.toContain('test-user-2');
+            expect(rendered).toContain('test-user-3');
+            expect(rendered).toContain('test-user-4');
+        } finally {
+            if (renderer) {
+                await TestRenderer.act(async () => {
+                    renderer.unmount();
+                });
+            }
+
+            if (previousTimeStamp) {
+                console.timeStamp = previousTimeStamp;
+            } else {
+                delete console.timeStamp;
+            }
+        }
+    });
+
+    it('does not render overlay exit rows in dock mode', async () => {
+        const previousTimeStamp = console.timeStamp;
+        console.timeStamp = previousTimeStamp || (() => {});
+        let renderer;
+
+        try {
+            await TestRenderer.act(async () => {
+                renderer = TestRenderer.create(
+                    React.createElement(GuiShell, {
+                        mode: 'dock',
+                        overlayMaxLinesPerMessage: 3,
+                        rows: [createGuiRow(1), createGuiRow(2), createGuiRow(3)]
+                    }),
+                    {
+                        createNodeMock: (element) => {
+                            if (element.type === 'main') {
+                                return createDockShellMock();
+                            }
+
+                            return {
+                                style: {
+                                    transition: '',
+                                    transform: ''
+                                },
+                                offsetHeight: 24,
+                                getBoundingClientRect: () => ({ top: 100 })
+                            };
+                        }
+                    }
+                );
+            });
+
+            expect(findOverlayExitNodes(renderer).length).toBe(0);
+        } finally {
+            if (renderer) {
+                await TestRenderer.act(async () => {
+                    renderer.unmount();
+                });
+            }
+
             if (previousTimeStamp) {
                 console.timeStamp = previousTimeStamp;
             } else {

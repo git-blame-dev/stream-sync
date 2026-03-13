@@ -7,9 +7,12 @@ interface GuiRowProps {
   row: GuiRowDto
   mode: 'dock' | 'overlay'
   rowRef?: (element: HTMLDivElement | null) => void
+  className?: string
+  style?: React.CSSProperties
+  onAnimationEnd?: React.AnimationEventHandler<HTMLDivElement>
 }
 
-export function GuiRow({ row, mode, rowRef }: GuiRowProps) {
+export function GuiRow({ row, mode, rowRef, className, style, onAnimationEnd }: GuiRowProps) {
   const platformIconUrl = getPlatformIconUrl(row.platform)
   const hasParts = Array.isArray(row.parts) && row.parts.length > 0
   const textClass = [
@@ -23,13 +26,14 @@ export function GuiRow({ row, mode, rowRef }: GuiRowProps) {
   const rowClass = [
     'gui-row',
     `gui-row--${row.kind}`,
-    mode === 'overlay' ? 'gui-row--overlay-enter' : ''
+    mode === 'overlay' ? 'gui-row--overlay-enter' : '',
+    className || ''
   ]
     .filter(Boolean)
     .join(' ')
 
   return (
-    <div className={rowClass} data-row-type={row.type} ref={rowRef}>
+    <div className={rowClass} style={style} onAnimationEnd={onAnimationEnd} data-row-type={row.type} ref={rowRef}>
       <img className="gui-row__avatar gui-row__avatar--circle" src={row.avatarUrl} alt="" />
       <div className="gui-row__content">
         <div className="gui-row__header">
