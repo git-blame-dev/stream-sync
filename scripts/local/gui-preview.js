@@ -6,10 +6,13 @@ const { safeSetInterval, safeSetTimeout } = require('../../src/utils/timeout-val
 
 const PREVIEW_DURATION_MS = 30000;
 const PREVIEW_INTERVAL_MS = 2000;
-const TIKTOK_PREVIEW_CUSTOM_EMOTE_URL = 'https://static-cdn.jtvnw.net/emoticons/v2/emotesv2_dcd06b30a5c24f6eb871e8f5edbd44f7/animated/dark/3.0';
-const TWITCH_PREVIEW_CUSTOM_EMOTE_URL = 'https://static-cdn.jtvnw.net/emoticons/v2/emotesv2_dcd06b30a5c24f6eb871e8f5edbd44f7/animated/dark/3.0';
-const PREVIEW_DEFAULT_EMOTE_ID = 'emotesv2_dcd06b30a5c24f6eb871e8f5edbd44f7';
-const PREVIEW_EMOTE_MESSAGE_TEXT = 'test message hello world this is a message to everyone how are we today?';
+const TIKTOK_EMOTE_URL = 'https://static-cdn.jtvnw.net/emoticons/v2/emotesv2_dcd06b30a5c24f6eb871e8f5edbd44f7/animated/dark/3.0';
+const TWITCH_EMOTE_URL = 'https://static-cdn.jtvnw.net/emoticons/v2/emotesv2_dcd06b30a5c24f6eb871e8f5edbd44f7/animated/dark/3.0';
+const YOUTUBE_EMOTE_URL = 'https://yt3.ggpht.com/KOxdr_z3A5h1Gb7kqnxqOCnbZrBmxI2B_tRQ453BhTWUhYAlpg5ZP8IKEBkcvRoY8grY91Q=w48-h48-c-k-nd';
+const TWITCH_EMOTE_ID = 'emotesv2_dcd06b30a5c24f6eb871e8f5edbd44f7';
+const TIKTOK_EMOTE_ID = '0123456789012345678';
+const YOUTUBE_EMOTE_ID = 'UCkszU2WH9gy1mb0dV-11UJg/G8AfY6yWGuKuhL0PlbiA2AE';
+const EMOTE_MESSAGE_TEXT = 'test message hello world this is a message to everyone how are we today?';
 const PREVIEW_PLATFORM_ACCOUNTS = [
     {
         platform: 'twitch',
@@ -49,7 +52,7 @@ function buildPreviewConfig(baseConfig) {
 
 function buildPreviewEmoteMessage(platform, emoteId, imageUrl) {
     return {
-        text: PREVIEW_EMOTE_MESSAGE_TEXT,
+        text: EMOTE_MESSAGE_TEXT,
         parts: [
             {
                 type: 'emote',
@@ -113,6 +116,30 @@ function buildPreviewRows(durationMs = PREVIEW_DURATION_MS, intervalMs = PREVIEW
             timestamp
         };
 
+        if (account.platform === 'youtube' && index === 1) {
+            rows.push({
+                type: 'chat',
+                platform: account.platform,
+                data: {
+                    ...baseData,
+                    message: buildPreviewEmoteMessage('youtube', YOUTUBE_EMOTE_ID, YOUTUBE_EMOTE_URL)
+                }
+            });
+            continue;
+        }
+
+        if (account.platform === 'tiktok' && index === 2) {
+            rows.push({
+                type: 'chat',
+                platform: account.platform,
+                data: {
+                    ...baseData,
+                    message: buildPreviewEmoteMessage('tiktok', TIKTOK_EMOTE_ID, TIKTOK_EMOTE_URL)
+                }
+            });
+            continue;
+        }
+
         if (type === 'chat') {
             if (account.platform === 'twitch' && index === 0) {
                 rows.push({
@@ -120,19 +147,7 @@ function buildPreviewRows(durationMs = PREVIEW_DURATION_MS, intervalMs = PREVIEW
                     platform: account.platform,
                     data: {
                         ...baseData,
-                        message: buildPreviewEmoteMessage('twitch', PREVIEW_DEFAULT_EMOTE_ID, TWITCH_PREVIEW_CUSTOM_EMOTE_URL)
-                    }
-                });
-                continue;
-            }
-
-            if (account.platform === 'tiktok' && index === eventTypes.length) {
-                rows.push({
-                    type,
-                    platform: account.platform,
-                    data: {
-                        ...baseData,
-                        message: buildPreviewEmoteMessage('tiktok', PREVIEW_DEFAULT_EMOTE_ID, TIKTOK_PREVIEW_CUSTOM_EMOTE_URL)
+                        message: buildPreviewEmoteMessage('twitch', TWITCH_EMOTE_ID, TWITCH_EMOTE_URL)
                     }
                 });
                 continue;

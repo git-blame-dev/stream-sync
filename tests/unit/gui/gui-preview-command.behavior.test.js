@@ -8,6 +8,60 @@ const {
     runGuiPreview
 } = require('../../../scripts/local/gui-preview');
 
+const EMOTE_MESSAGE_TEXT = 'test message hello world this is a message to everyone how are we today?';
+const TWITCH_EMOTE_ID = 'emotesv2_dcd06b30a5c24f6eb871e8f5edbd44f7';
+const TIKTOK_EMOTE_ID = '0123456789012345678';
+const TWITCH_TIKTOK_EMOTE_URL = 'https://static-cdn.jtvnw.net/emoticons/v2/emotesv2_dcd06b30a5c24f6eb871e8f5edbd44f7/animated/dark/3.0';
+const YOUTUBE_EMOTE_ID = 'UCkszU2WH9gy1mb0dV-11UJg/G8AfY6yWGuKuhL0PlbiA2AE';
+const YOUTUBE_EMOTE_URL = 'https://yt3.ggpht.com/KOxdr_z3A5h1Gb7kqnxqOCnbZrBmxI2B_tRQ453BhTWUhYAlpg5ZP8IKEBkcvRoY8grY91Q=w48-h48-c-k-nd';
+
+function buildExpectedPreviewEmoteMessage(platform, emoteId, imageUrl) {
+    return {
+        text: EMOTE_MESSAGE_TEXT,
+        parts: [
+            {
+                type: 'emote',
+                platform,
+                emoteId,
+                imageUrl
+            },
+            {
+                type: 'text',
+                text: ' test message '
+            },
+            {
+                type: 'emote',
+                platform,
+                emoteId,
+                imageUrl
+            },
+            {
+                type: 'text',
+                text: ' hello world this is a message to everyone '
+            },
+            {
+                type: 'emote',
+                platform,
+                emoteId,
+                imageUrl
+            },
+            {
+                type: 'text',
+                text: ' how are we today?'
+            }
+        ]
+    };
+}
+
+function expectPreviewEmoteChatRow(rows, index, platform, username, emoteId, imageUrl) {
+    expect(rows[index]).toEqual(expect.objectContaining({
+        type: 'chat',
+        platform
+    }));
+    expect(rows[index].data.username).toBe(username);
+    expect(rows[index].data.message).toEqual(buildExpectedPreviewEmoteMessage(platform, emoteId, imageUrl));
+}
+
 describe('GUI local preview command behavior', () => {
     it('uses 30s duration and 2s message cadence constants', () => {
         expect(PREVIEW_DURATION_MS).toBe(30000);
@@ -18,56 +72,9 @@ describe('GUI local preview command behavior', () => {
         const rows = buildPreviewRows();
 
         expect(rows.length).toBe(15);
-        expect(rows[0]).toEqual(expect.objectContaining({
-            type: 'chat',
-            platform: 'twitch'
-        }));
-        expect(rows[0].data.username).toBe('test-twitch-account');
-        expect(rows[0].data.message).toEqual({
-            text: 'test message hello world this is a message to everyone how are we today?',
-            parts: [
-                {
-                    type: 'emote',
-                    platform: 'twitch',
-                    emoteId: 'emotesv2_dcd06b30a5c24f6eb871e8f5edbd44f7',
-                    imageUrl: 'https://static-cdn.jtvnw.net/emoticons/v2/emotesv2_dcd06b30a5c24f6eb871e8f5edbd44f7/animated/dark/3.0'
-                },
-                {
-                    type: 'text',
-                    text: ' test message '
-                },
-                {
-                    type: 'emote',
-                    platform: 'twitch',
-                    emoteId: 'emotesv2_dcd06b30a5c24f6eb871e8f5edbd44f7',
-                    imageUrl: 'https://static-cdn.jtvnw.net/emoticons/v2/emotesv2_dcd06b30a5c24f6eb871e8f5edbd44f7/animated/dark/3.0'
-                },
-                {
-                    type: 'text',
-                    text: ' hello world this is a message to everyone '
-                },
-                {
-                    type: 'emote',
-                    platform: 'twitch',
-                    emoteId: 'emotesv2_dcd06b30a5c24f6eb871e8f5edbd44f7',
-                    imageUrl: 'https://static-cdn.jtvnw.net/emoticons/v2/emotesv2_dcd06b30a5c24f6eb871e8f5edbd44f7/animated/dark/3.0'
-                },
-                {
-                    type: 'text',
-                    text: ' how are we today?'
-                }
-            ]
-        });
-        expect(rows[1]).toEqual(expect.objectContaining({
-            type: 'platform:follow',
-            platform: 'youtube'
-        }));
-        expect(rows[1].data.username).toBe('test-youtube-account');
-        expect(rows[2]).toEqual(expect.objectContaining({
-            type: 'command',
-            platform: 'tiktok'
-        }));
-        expect(rows[2].data.username).toBe('test-tiktok-account');
+        expectPreviewEmoteChatRow(rows, 0, 'twitch', 'test-twitch-account', TWITCH_EMOTE_ID, TWITCH_TIKTOK_EMOTE_URL);
+        expectPreviewEmoteChatRow(rows, 1, 'youtube', 'test-youtube-account', YOUTUBE_EMOTE_ID, YOUTUBE_EMOTE_URL);
+        expectPreviewEmoteChatRow(rows, 2, 'tiktok', 'test-tiktok-account', TIKTOK_EMOTE_ID, TWITCH_TIKTOK_EMOTE_URL);
         expect(rows[3]).toEqual(expect.objectContaining({
             type: 'greeting',
             platform: 'twitch'
@@ -76,41 +83,7 @@ describe('GUI local preview command behavior', () => {
             type: 'chat',
             platform: 'tiktok'
         }));
-        expect(rows[11].data.message).toEqual({
-            text: 'test message hello world this is a message to everyone how are we today?',
-            parts: [
-                {
-                    type: 'emote',
-                    platform: 'tiktok',
-                    emoteId: 'emotesv2_dcd06b30a5c24f6eb871e8f5edbd44f7',
-                    imageUrl: 'https://static-cdn.jtvnw.net/emoticons/v2/emotesv2_dcd06b30a5c24f6eb871e8f5edbd44f7/animated/dark/3.0'
-                },
-                {
-                    type: 'text',
-                    text: ' test message '
-                },
-                {
-                    type: 'emote',
-                    platform: 'tiktok',
-                    emoteId: 'emotesv2_dcd06b30a5c24f6eb871e8f5edbd44f7',
-                    imageUrl: 'https://static-cdn.jtvnw.net/emoticons/v2/emotesv2_dcd06b30a5c24f6eb871e8f5edbd44f7/animated/dark/3.0'
-                },
-                {
-                    type: 'text',
-                    text: ' hello world this is a message to everyone '
-                },
-                {
-                    type: 'emote',
-                    platform: 'tiktok',
-                    emoteId: 'emotesv2_dcd06b30a5c24f6eb871e8f5edbd44f7',
-                    imageUrl: 'https://static-cdn.jtvnw.net/emoticons/v2/emotesv2_dcd06b30a5c24f6eb871e8f5edbd44f7/animated/dark/3.0'
-                },
-                {
-                    type: 'text',
-                    text: ' how are we today?'
-                }
-            ]
-        });
+        expect(rows[11].data.message).toBe('preview message 11');
     });
 
     it('forces dock and overlay on for preview config', () => {
