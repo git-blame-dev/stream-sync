@@ -68,6 +68,159 @@ describe('YouTube event factory behavior', () => {
         });
     });
 
+    it('uses canonical message.parts with message object precedence over metadata fallback', () => {
+        const { createYouTubeEventFactory } = require('../../../../../src/platforms/youtube/events/event-factory');
+
+        const eventFactory = createYouTubeEventFactory({
+            generateCorrelationId: () => 'corr-parts-1'
+        });
+
+        const event = eventFactory.createChatMessageEvent({
+            userId: 'test-user-id',
+            username: 'test-user',
+            avatarUrl: 'https://example.invalid/test-youtube-avatar-with-parts.jpg',
+            videoId: 'test-video-id-with-parts',
+            isMod: true,
+            isOwner: false,
+            isVerified: true,
+            message: {
+                text: '',
+                parts: [
+                    {
+                        type: 'emote',
+                        emoteId: ' UC_TEST_EMOTE_200/TEST_EMOTE_200 ',
+                        imageUrl: ' https://yt3.ggpht.example.invalid/test-200=w48-h48-c-k-nd '
+                    }
+                ]
+            },
+            metadata: {
+                messageParts: [
+                    {
+                        type: 'emote',
+                        emoteId: 'UC_TEST_EMOTE_201/TEST_EMOTE_201',
+                        imageUrl: 'https://yt3.ggpht.example.invalid/test-201=w48-h48-c-k-nd'
+                    }
+                ]
+            },
+            timestamp: '2024-01-01T00:00:00.111Z'
+        });
+
+        expect(event.message).toEqual({
+            text: '',
+            parts: [
+                {
+                    type: 'emote',
+                    platform: 'youtube',
+                    emoteId: 'UC_TEST_EMOTE_200/TEST_EMOTE_200',
+                    imageUrl: 'https://yt3.ggpht.example.invalid/test-200=w48-h48-c-k-nd'
+                }
+            ]
+        });
+        expect(event.avatarUrl).toBe('https://example.invalid/test-youtube-avatar-with-parts.jpg');
+        expect(event.metadata).toEqual({
+            platform: 'youtube',
+            videoId: 'test-video-id-with-parts',
+            isMod: true,
+            isOwner: false,
+            isVerified: true,
+            correlationId: 'corr-parts-1'
+        });
+    });
+
+    it('falls back to metadata messageParts when message.parts is unavailable', () => {
+        const { createYouTubeEventFactory } = require('../../../../../src/platforms/youtube/events/event-factory');
+
+        const eventFactory = createYouTubeEventFactory({
+            generateCorrelationId: () => 'corr-parts-2'
+        });
+
+        const event = eventFactory.createChatMessageEvent({
+            userId: 'test-user-id',
+            username: 'test-user',
+            message: {
+                text: 'hello'
+            },
+            metadata: {
+                messageParts: [
+                    {
+                        type: 'text',
+                        text: 'hello '
+                    },
+                    {
+                        type: 'emote',
+                        platform: 'youtube',
+                        emoteId: 'UC_TEST_EMOTE_202/TEST_EMOTE_202',
+                        imageUrl: 'https://yt3.ggpht.example.invalid/test-202=w48-h48-c-k-nd'
+                    }
+                ]
+            },
+            timestamp: '2024-01-01T00:00:00.111Z'
+        });
+
+        expect(event.message).toEqual({
+            text: 'hello',
+            parts: [
+                {
+                    type: 'text',
+                    text: 'hello '
+                },
+                {
+                    type: 'emote',
+                    platform: 'youtube',
+                    emoteId: 'UC_TEST_EMOTE_202/TEST_EMOTE_202',
+                    imageUrl: 'https://yt3.ggpht.example.invalid/test-202=w48-h48-c-k-nd'
+                }
+            ]
+        });
+    });
+
+    it('filters invalid message parts and preserves no-parts shape when all are invalid', () => {
+        const { createYouTubeEventFactory } = require('../../../../../src/platforms/youtube/events/event-factory');
+
+        const eventFactory = createYouTubeEventFactory({
+            generateCorrelationId: () => 'corr-parts-3'
+        });
+
+        const event = eventFactory.createChatMessageEvent({
+            userId: 'test-user-id',
+            username: 'test-user',
+            message: {
+                text: 'test',
+                parts: [
+                    { type: 'text', text: '' },
+                    { type: 'emote', emoteId: '   ', imageUrl: 'https://yt3.ggpht.example.invalid/invalid=w48-h48-c-k-nd' }
+                ]
+            },
+            timestamp: '2024-01-01T00:00:00.111Z'
+        });
+
+        expect(event.message).toEqual({ text: 'test' });
+    });
+
+    it('supports text sources from string message and object message.text', () => {
+        const { createYouTubeEventFactory } = require('../../../../../src/platforms/youtube/events/event-factory');
+
+        const eventFactory = createYouTubeEventFactory({
+            generateCorrelationId: () => 'corr-parts-4'
+        });
+
+        const fromString = eventFactory.createChatMessageEvent({
+            userId: 'test-user-id-a',
+            username: 'test-user-a',
+            message: 'string message',
+            timestamp: '2024-01-01T00:00:00.111Z'
+        });
+        const fromObject = eventFactory.createChatMessageEvent({
+            userId: 'test-user-id-b',
+            username: 'test-user-b',
+            message: { text: 'object message' },
+            timestamp: '2024-01-01T00:00:00.222Z'
+        });
+
+        expect(fromString.message).toEqual({ text: 'string message' });
+        expect(fromObject.message).toEqual({ text: 'object message' });
+    });
+
     it('preserves avatarUrl on chat-message events', () => {
         const { createYouTubeEventFactory } = require('../../../../../src/platforms/youtube/events/event-factory');
 

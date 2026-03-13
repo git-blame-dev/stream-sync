@@ -1,6 +1,7 @@
 const { describe, it, expect, afterEach } = require('bun:test');
 const { createMockFn, restoreAllMocks } = require('../../../helpers/bun-mock-utils');
 const { noOpLogger } = require('../../../helpers/mock-factories');
+const { createYouTubeRunsMessageChatItem } = require('../../../helpers/youtube-test-data');
 
 const { YouTubePlatform } = require('../../../../src/platforms/youtube');
 
@@ -199,6 +200,100 @@ describe('YouTubePlatform modern architecture', () => {
         expect(payload.platform).toBe('youtube');
         expect(payload.message.text).toBe('Hello world');
         expect(payload.metadata.videoId).toBe('vid-1');
+    });
+
+    it('emits emote-only chat when message text is empty but canonical parts exist', () => {
+        const { platform } = createPlatform();
+        const emitted = [];
+        platform.on('platform:event', (payload) => {
+            if (payload.type === 'platform:chat-message') {
+                emitted.push(payload.data);
+            }
+        });
+
+        platform._processRegularChatMessage(createYouTubeRunsMessageChatItem({
+            item: {
+                message: {
+                    runs: [
+                        {
+                            emoji: {
+                                emoji_id: 'UC_TEST_EMOTE_300/TEST_EMOTE_300',
+                                image: [
+                                    {
+                                        url: 'https://yt3.ggpht.example.invalid/test-300=w48-h48-c-k-nd',
+                                        width: 48,
+                                        height: 48
+                                    }
+                                ]
+                            }
+                        }
+                    ]
+                }
+            },
+            videoId: 'test-video-id'
+        }), 'test-youtube-user');
+
+        expect(emitted).toHaveLength(1);
+        expect(emitted[0].message).toEqual({
+            text: '',
+            parts: [
+                {
+                    type: 'emote',
+                    platform: 'youtube',
+                    emoteId: 'UC_TEST_EMOTE_300/TEST_EMOTE_300',
+                    imageUrl: 'https://yt3.ggpht.example.invalid/test-300=w48-h48-c-k-nd'
+                }
+            ]
+        });
+    });
+
+    it('skips chat with empty text and no valid message parts', () => {
+        const { platform } = createPlatform();
+        const emitted = [];
+        platform.on('platform:event', (payload) => {
+            if (payload.type === 'platform:chat-message') {
+                emitted.push(payload.data);
+            }
+        });
+
+        platform._processRegularChatMessage(createYouTubeRunsMessageChatItem({
+            item: {
+                message: {
+                    runs: [
+                        {
+                            emoji: {
+                                emoji_id: 'UC_TEST_EMOTE_301/TEST_EMOTE_301',
+                                image: []
+                            }
+                        }
+                    ]
+                }
+            }
+        }), 'test-youtube-user');
+
+        expect(emitted).toHaveLength(0);
+    });
+
+    it('emits chat with non-empty text even when message parts are missing', () => {
+        const { platform } = createPlatform();
+        const emitted = [];
+        platform.on('platform:event', (payload) => {
+            if (payload.type === 'platform:chat-message') {
+                emitted.push(payload.data);
+            }
+        });
+
+        platform._processRegularChatMessage(createYouTubeRunsMessageChatItem({
+            item: {
+                message: {
+                    text: 'plain text only',
+                    runs: []
+                }
+            }
+        }), 'test-youtube-user');
+
+        expect(emitted).toHaveLength(1);
+        expect(emitted[0].message).toEqual({ text: 'plain text only' });
     });
 
     it('emits chat connected event when connectToYouTubeStream succeeds', async () => {

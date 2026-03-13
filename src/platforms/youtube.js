@@ -23,6 +23,7 @@ const { createYouTubeEventFactory } = require('./youtube/events/event-factory');
 const { createYouTubeMonetizationParser } = require('./youtube/monetization/monetization-parser');
 const { createYouTubeConnectionFactory } = require('./youtube/connections/youtube-connection-factory');
 const { createYouTubeMultiStreamManager } = require('./youtube/streams/youtube-multistream-manager');
+const { getValidMessageParts } = require('../utils/message-parts');
 
 // Timeout and limit constants
 const INNERTUBE_CREATION_TIMEOUT_MS = 3000; // 3 seconds for Innertube instance creation
@@ -581,11 +582,32 @@ class YouTubePlatform extends EventEmitter {
         
         // Normalize message
         const { normalizeYouTubeMessage } = require('../utils/message-normalization');
-        const normalizedData = normalizeYouTubeMessage(chatItem, 'youtube', this.timestampService);
+        let normalizedData;
+        try {
+            normalizedData = normalizeYouTubeMessage(chatItem, 'youtube', this.timestampService);
+        } catch (error) {
+            if (error instanceof Error && error.message === 'Missing YouTube message text') {
+                this.logger.debug('Skipping empty message', 'youtube', {
+                    author: this._resolveChatItemAuthorNameForLog(chatItem)
+                });
+                return;
+            }
+
+            this._handleProcessingError(
+                `Error normalizing chat message: ${error.message}`,
+                error,
+                'chat-normalization',
+                chatItem
+            );
+            return;
+        }
+
+        const messageParts = getValidMessageParts({ metadata: normalizedData.metadata }, { allowWhitespaceText: true });
+        const hasMessageParts = messageParts.length > 0;
         
         
         // Skip empty messages
-        if (!normalizedData.message || normalizedData.message.trim() === '') {
+        if ((!normalizedData.message || normalizedData.message.trim() === '') && !hasMessageParts) {
             this.logger.debug('Skipping empty message', 'youtube', {
                 author: this._resolveChatItemAuthorNameForLog(chatItem),
                 extractedMessage: normalizedData.message

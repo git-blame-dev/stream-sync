@@ -73,4 +73,44 @@ describe('YouTube event router', () => {
             platform: 'youtube'
         });
     });
+
+    test('passes LiveChatTextMessage runs payload through to handleChatTextMessage', async () => {
+        const chatTextCalls = [];
+
+        const platform = {
+            logger: noOpLogger,
+            handleChatTextMessage: (item) => chatTextCalls.push(item),
+            _emitPlatformEvent: () => {},
+            eventFactory: {
+                createErrorEvent: () => ({ type: PlatformEvents.ERROR, platform: 'youtube' })
+            }
+        };
+
+        const router = createYouTubeEventRouter({ platform });
+        const chatItem = {
+            item: {
+                type: 'LiveChatTextMessage',
+                author: {
+                    id: 'UC_TEST_CHANNEL_000500',
+                    name: 'RouterRunsUser'
+                },
+                message: {
+                    runs: [
+                        { text: 'hello ' },
+                        {
+                            emoji: {
+                                emoji_id: 'UC_TEST_EMOTE_500/TEST_EMOTE_500',
+                                image: [{ url: 'https://yt3.ggpht.example.invalid/test-500=w48-h48-c-k-nd', width: 48 }]
+                            }
+                        }
+                    ]
+                }
+            }
+        };
+
+        await router.routeEvent(chatItem, 'LiveChatTextMessage');
+
+        expect(chatTextCalls).toHaveLength(1);
+        expect(chatTextCalls[0].item.message.runs).toEqual(chatItem.item.message.runs);
+    });
 });

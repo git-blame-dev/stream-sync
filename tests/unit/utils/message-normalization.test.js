@@ -1,6 +1,7 @@
 const { describe, test, expect, beforeEach } = require('bun:test');
 
 const testClock = require('../../helpers/test-clock');
+const { createYouTubeRunsMessageChatItem } = require('../../helpers/youtube-test-data');
 const {
     normalizeYouTubeMessage,
     normalizeTikTokMessage,
@@ -251,6 +252,309 @@ describe('Message Normalization', () => {
             const normalized = normalizeYouTubeMessage(chatItem, 'youtube');
 
             expect(normalized.isPaypiggy).toBe(false);
+        });
+
+        test('preserves YouTube runs ordering in canonical message parts', () => {
+            const chatItem = createYouTubeRunsMessageChatItem({
+                item: {
+                    message: {
+                        runs: [
+                            { text: 'first ' },
+                            {
+                                emoji: {
+                                    emoji_id: 'UC_TEST_EMOTE_000101/TEST_EMOTE_101',
+                                    shortcuts: [':testOne:'],
+                                    image: [
+                                        {
+                                            url: 'https://yt3.ggpht.example.invalid/test-one-small=w24-h24-c-k-nd',
+                                            width: 24,
+                                            height: 24
+                                        },
+                                        {
+                                            url: 'https://yt3.ggpht.example.invalid/test-one-large=w48-h48-c-k-nd',
+                                            width: 48,
+                                            height: 48
+                                        }
+                                    ]
+                                }
+                            },
+                            { text: 'middle ' },
+                            {
+                                emoji: {
+                                    emoji_id: 'UC_TEST_EMOTE_000102/TEST_EMOTE_102',
+                                    shortcuts: [':testTwo:'],
+                                    image: [
+                                        {
+                                            url: 'https://yt3.ggpht.example.invalid/test-two-large=w48-h48-c-k-nd',
+                                            width: 48,
+                                            height: 48
+                                        }
+                                    ]
+                                }
+                            },
+                            { text: 'last' }
+                        ]
+                    }
+                }
+            });
+
+            const normalized = normalizeYouTubeMessage(chatItem, 'youtube');
+
+            expect(normalized.message).toBe('first :testOne:middle :testTwo:last');
+            expect(normalized.metadata.messageParts).toEqual([
+                { type: 'text', text: 'first ' },
+                {
+                    type: 'emote',
+                    platform: 'youtube',
+                    emoteId: 'UC_TEST_EMOTE_000101/TEST_EMOTE_101',
+                    imageUrl: 'https://yt3.ggpht.example.invalid/test-one-large=w48-h48-c-k-nd'
+                },
+                { type: 'text', text: 'middle ' },
+                {
+                    type: 'emote',
+                    platform: 'youtube',
+                    emoteId: 'UC_TEST_EMOTE_000102/TEST_EMOTE_102',
+                    imageUrl: 'https://yt3.ggpht.example.invalid/test-two-large=w48-h48-c-k-nd'
+                },
+                { type: 'text', text: 'last' }
+            ]);
+        });
+
+        test('treats runs with both text and emoji as emote parts for custom-emote payload shape', () => {
+            const rawEmoteToken = 'UC_TEST_EMOTE_000108/TEST_EMOTE_108';
+            const chatItem = createYouTubeRunsMessageChatItem({
+                item: {
+                    message: {
+                        text: rawEmoteToken,
+                        runs: [
+                            {
+                                text: rawEmoteToken,
+                                emoji: {
+                                    emoji_id: rawEmoteToken,
+                                    is_custom: true,
+                                    shortcuts: [':testEight:'],
+                                    image: [
+                                        {
+                                            url: 'https://yt3.ggpht.example.invalid/test-eight=w48-h48-c-k-nd',
+                                            width: 48,
+                                            height: 48
+                                        }
+                                    ]
+                                }
+                            }
+                        ]
+                    }
+                }
+            });
+
+            const normalized = normalizeYouTubeMessage(chatItem, 'youtube');
+
+            expect(normalized.message).toBe(':testEight:');
+            expect(normalized.metadata.messageParts).toEqual([
+                {
+                    type: 'emote',
+                    platform: 'youtube',
+                    emoteId: rawEmoteToken,
+                    imageUrl: 'https://yt3.ggpht.example.invalid/test-eight=w48-h48-c-k-nd'
+                }
+            ]);
+        });
+
+        test('uses largest numeric YouTube emoji image width when selecting emote imageUrl', () => {
+            const chatItem = createYouTubeRunsMessageChatItem({
+                item: {
+                    message: {
+                        runs: [
+                            {
+                                emoji: {
+                                    emoji_id: 'UC_TEST_EMOTE_000103/TEST_EMOTE_103',
+                                    shortcuts: [':testThree:'],
+                                    image: [
+                                        { url: '', width: 200, height: 200 },
+                                        {
+                                            url: 'https://yt3.ggpht.example.invalid/test-three-nonnumeric=wXX-hXX-c-k-nd',
+                                            width: 'not-a-number',
+                                            height: 24
+                                        },
+                                        {
+                                            url: 'https://yt3.ggpht.example.invalid/test-three-24=w24-h24-c-k-nd',
+                                            width: '24',
+                                            height: 24
+                                        },
+                                        {
+                                            url: 'https://yt3.ggpht.example.invalid/test-three-96=w96-h96-c-k-nd',
+                                            width: '96',
+                                            height: 96
+                                        }
+                                    ]
+                                }
+                            }
+                        ]
+                    }
+                }
+            });
+
+            const normalized = normalizeYouTubeMessage(chatItem, 'youtube');
+
+            expect(normalized.metadata.messageParts).toEqual([
+                {
+                    type: 'emote',
+                    platform: 'youtube',
+                    emoteId: 'UC_TEST_EMOTE_000103/TEST_EMOTE_103',
+                    imageUrl: 'https://yt3.ggpht.example.invalid/test-three-96=w96-h96-c-k-nd'
+                }
+            ]);
+        });
+
+        test('falls back to first non-empty emoji image URL when width metadata is missing', () => {
+            const chatItem = createYouTubeRunsMessageChatItem({
+                item: {
+                    message: {
+                        runs: [
+                            {
+                                emoji: {
+                                    emoji_id: 'UC_TEST_EMOTE_000104/TEST_EMOTE_104',
+                                    shortcuts: [':testFour:'],
+                                    image: [
+                                        { url: '' },
+                                        { url: 'https://yt3.ggpht.example.invalid/test-four-first=w24-h24-c-k-nd' },
+                                        { url: 'https://yt3.ggpht.example.invalid/test-four-second=w48-h48-c-k-nd' }
+                                    ]
+                                }
+                            }
+                        ]
+                    }
+                }
+            });
+
+            const normalized = normalizeYouTubeMessage(chatItem, 'youtube');
+
+            expect(normalized.metadata.messageParts).toEqual([
+                {
+                    type: 'emote',
+                    platform: 'youtube',
+                    emoteId: 'UC_TEST_EMOTE_000104/TEST_EMOTE_104',
+                    imageUrl: 'https://yt3.ggpht.example.invalid/test-four-first=w24-h24-c-k-nd'
+                }
+            ]);
+        });
+
+        test('skips malformed YouTube emoji runs and keeps valid parts only', () => {
+            const chatItem = createYouTubeRunsMessageChatItem({
+                item: {
+                    message: {
+                        runs: [
+                            { text: 'hello ' },
+                            { emoji: { shortcuts: [':missingId:'], image: [{ url: 'https://yt3.ggpht.example.invalid/missing-id=w48-h48-c-k-nd', width: 48 }] } },
+                            { emoji: { emoji_id: 'UC_TEST_EMOTE_000105/TEST_EMOTE_105', shortcuts: [':missingImage:'], image: [{ url: '   ', width: 48 }] } },
+                            { emoji: { emoji_id: 'UC_TEST_EMOTE_000106/TEST_EMOTE_106', shortcuts: [':valid:'], image: [{ url: 'https://yt3.ggpht.example.invalid/valid=w48-h48-c-k-nd', width: 48 }] } }
+                        ]
+                    }
+                }
+            });
+
+            const normalized = normalizeYouTubeMessage(chatItem, 'youtube');
+
+            expect(normalized.message).toBe('hello :missingId::missingImage::valid:');
+            expect(normalized.metadata.messageParts).toEqual([
+                { type: 'text', text: 'hello ' },
+                {
+                    type: 'emote',
+                    platform: 'youtube',
+                    emoteId: 'UC_TEST_EMOTE_000106/TEST_EMOTE_106',
+                    imageUrl: 'https://yt3.ggpht.example.invalid/valid=w48-h48-c-k-nd'
+                }
+            ]);
+        });
+
+        test('normalizes emote-only runs without emoji shortcuts and keeps normalized.message as string', () => {
+            const chatItem = createYouTubeRunsMessageChatItem({
+                item: {
+                    message: {
+                        runs: [
+                            {
+                                emoji: {
+                                    emoji_id: 'UC_TEST_EMOTE_000107/TEST_EMOTE_107',
+                                    image: [
+                                        {
+                                            url: 'https://yt3.ggpht.example.invalid/test-seven=w48-h48-c-k-nd',
+                                            width: 48,
+                                            height: 48
+                                        }
+                                    ]
+                                }
+                            }
+                        ]
+                    }
+                }
+            });
+
+            const normalized = normalizeYouTubeMessage(chatItem, 'youtube');
+
+            expect(normalized.message).toBe('');
+            expect(typeof normalized.message).toBe('string');
+            expect(normalized.metadata.messageParts).toEqual([
+                {
+                    type: 'emote',
+                    platform: 'youtube',
+                    emoteId: 'UC_TEST_EMOTE_000107/TEST_EMOTE_107',
+                    imageUrl: 'https://yt3.ggpht.example.invalid/test-seven=w48-h48-c-k-nd'
+                }
+            ]);
+            expect(validateNormalizedMessage(normalized).isValid).toBe(true);
+        });
+
+        test('keeps non-custom unicode emoji extraction unchanged for plain text messages', () => {
+            const timestampMs = testClock.now();
+            const chatItem = {
+                item: {
+                    id: 'yt-unicode-emoji-001',
+                    timestamp: timestampMs,
+                    author: {
+                        id: 'UC_TEST_UNICODE_001',
+                        name: 'unicode-user',
+                        is_moderator: false,
+                        badges: []
+                    },
+                    message: { text: 'Hello \ud83c\udf1f world' }
+                }
+            };
+
+            const normalized = normalizeYouTubeMessage(chatItem, 'youtube');
+
+            expect(normalized.message).toBe('Hello \ud83c\udf1f world');
+            expect(normalized.metadata.messageParts).toBeUndefined();
+        });
+
+        test('does not emit emote parts for non-custom runs emoji payloads', () => {
+            const chatItem = createYouTubeRunsMessageChatItem({
+                item: {
+                    message: {
+                        runs: [
+                            {
+                                text: '\ud83d\udc4d',
+                                emoji: {
+                                    emoji_id: 'U+1F44D',
+                                    is_custom: false,
+                                    shortcuts: [':thumbs_up:'],
+                                    image: [
+                                        {
+                                            url: 'https://yt3.ggpht.example.invalid/non-custom-thumb=w48-h48-c-k-nd',
+                                            width: 48,
+                                            height: 48
+                                        }
+                                    ]
+                                }
+                            }
+                        ]
+                    }
+                }
+            });
+
+            const normalized = normalizeYouTubeMessage(chatItem, 'youtube');
+
+            expect(normalized.message).toBe(':thumbs_up:');
+            expect(normalized.metadata.messageParts).toBeUndefined();
         });
     });
 
@@ -768,6 +1072,35 @@ describe('Message Normalization', () => {
             const extracted = extractYouTubeMessageText(messageObj);
 
             expect(extracted).toBe('Simple message');
+        });
+
+        test('prefers runs-derived text over top-level text when both are present', () => {
+            const messageObj = {
+                text: 'UC_TEST_EMOTE_000109/TEST_EMOTE_109',
+                runs: [
+                    {
+                        text: 'UC_TEST_EMOTE_000109/TEST_EMOTE_109',
+                        emoji: {
+                            shortcuts: [':testNine:']
+                        }
+                    }
+                ]
+            };
+
+            const extracted = extractYouTubeMessageText(messageObj);
+
+            expect(extracted).toBe(':testNine:');
+        });
+
+        test('falls back to top-level text when runs are present but empty', () => {
+            const messageObj = {
+                text: 'plain text fallback',
+                runs: []
+            };
+
+            const extracted = extractYouTubeMessageText(messageObj);
+
+            expect(extracted).toBe('plain text fallback');
         });
 
         test('handles null/undefined message objects', () => {

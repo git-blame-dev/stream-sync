@@ -179,6 +179,57 @@ const createYouTubeSuperChatEvent = (amountOrOverrides = 5.00, currency = 'USD',
     return mergeDeep(defaultEvent, actualOverrides);
 };
 
+const createYouTubeRunsMessageChatItem = (overrides = {}) => {
+    const baseTimestamp = nextTimestampMs();
+    const baseUserId = generateYouTubeChannelId();
+    const defaultEvent = {
+        item: {
+            type: 'LiveChatTextMessage',
+            id: nextMessageId(),
+            timestamp_usec: String(baseTimestamp * 1000),
+            author: {
+                id: baseUserId,
+                name: 'test-youtube-user',
+                is_moderator: false,
+                badges: [],
+                thumbnails: [
+                    {
+                        url: 'https://yt3.ggpht.example.invalid/test-youtube-user=w48-h48-c-k-nd',
+                        width: 48,
+                        height: 48
+                    }
+                ]
+            },
+            message: {
+                runs: [
+                    { text: 'Hello ' },
+                    {
+                        emoji: {
+                            emoji_id: 'UC_TEST_EMOTE_000001/TEST_EMOTE_001',
+                            shortcuts: [':testEmoji:'],
+                            image: [
+                                {
+                                    url: 'https://yt3.ggpht.example.invalid/test-youtube-emote-small=w24-h24-c-k-nd',
+                                    width: 24,
+                                    height: 24
+                                },
+                                {
+                                    url: 'https://yt3.ggpht.example.invalid/test-youtube-emote-large=w48-h48-c-k-nd',
+                                    width: 48,
+                                    height: 48
+                                }
+                            ]
+                        }
+                    },
+                    { text: 'world' }
+                ]
+            }
+        }
+    };
+
+    return mergeDeep(defaultEvent, overrides);
+};
+
 // ================================================================================================
 // UTILITY FUNCTIONS
 // ================================================================================================
@@ -212,6 +263,7 @@ module.exports = {
     // Core event builders
     createYouTubeChatEvent,
     createYouTubeSuperChatEvent,
+    createYouTubeRunsMessageChatItem,
     
     // Utilities
     mergeDeep

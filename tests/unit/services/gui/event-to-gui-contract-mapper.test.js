@@ -195,6 +195,45 @@ describe('Event-to-GUI contract mapper behavior', () => {
         ]);
     });
 
+    it('preserves YouTube canonical message.parts while truncating text by messageCharacterLimit', async () => {
+        const mapper = createMapper({ messageCharacterLimit: 5 });
+
+        const mapped = await mapper.mapDisplayRow({
+            type: 'platform:chat-message',
+            platform: 'youtube',
+            data: {
+                username: 'test-youtube-user',
+                userId: 'test-youtube-user-id',
+                avatarUrl: 'https://example.invalid/youtube-avatar.png',
+                message: {
+                    text: 'abcdefghi',
+                    parts: [
+                        { type: 'text', text: 'abc' },
+                        {
+                            type: 'emote',
+                            platform: 'youtube',
+                            emoteId: 'UC_TEST_EMOTE_600/TEST_EMOTE_600',
+                            imageUrl: 'https://yt3.ggpht.example.invalid/test-600=w48-h48-c-k-nd'
+                        },
+                        { type: 'text', text: 'defghi' }
+                    ]
+                }
+            }
+        });
+
+        expect(mapped.text).toBe('abcde');
+        expect(mapped.parts).toEqual([
+            { type: 'text', text: 'abc' },
+            {
+                type: 'emote',
+                platform: 'youtube',
+                emoteId: 'UC_TEST_EMOTE_600/TEST_EMOTE_600',
+                imageUrl: 'https://yt3.ggpht.example.invalid/test-600=w48-h48-c-k-nd'
+            },
+            { type: 'text', text: 'defghi' }
+        ]);
+    });
+
     it('uses legacy messageParts fallback when canonical message.parts is missing', async () => {
         const mapper = createMapper({ messageCharacterLimit: 0 });
 
