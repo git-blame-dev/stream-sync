@@ -12,8 +12,8 @@ const EMOTE_MESSAGE_TEXT = 'test message hello world this is a message to everyo
 const TWITCH_EMOTE_ID = 'emotesv2_dcd06b30a5c24f6eb871e8f5edbd44f7';
 const TIKTOK_EMOTE_ID = '0123456789012345678';
 const TWITCH_TIKTOK_EMOTE_URL = 'https://static-cdn.jtvnw.net/emoticons/v2/emotesv2_dcd06b30a5c24f6eb871e8f5edbd44f7/animated/dark/3.0';
-const YOUTUBE_EMOTE_ID = 'UCkszU2WH9gy1mb0dV-11UJg/G8AfY6yWGuKuhL0PlbiA2AE';
-const YOUTUBE_EMOTE_URL = 'https://yt3.ggpht.com/KOxdr_z3A5h1Gb7kqnxqOCnbZrBmxI2B_tRQ453BhTWUhYAlpg5ZP8IKEBkcvRoY8grY91Q=w48-h48-c-k-nd';
+const YOUTUBE_EMOTE_ID = 'UCtestchannelid000000000/TESTEMOTEID0123456789ABCDEF';
+const YOUTUBE_EMOTE_URL = 'https://yt3.ggpht.example.invalid/test-youtube-emote-token-0123456789abcdef=w48-h48-c-k-nd';
 
 function buildExpectedPreviewEmoteMessage(platform, emoteId, imageUrl) {
     return {
