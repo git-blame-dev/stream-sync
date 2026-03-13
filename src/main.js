@@ -124,7 +124,6 @@ const { getDefaultGoalsManager } = require('./obs/goals');
 
 const { createTextProcessingManager } = require('./utils/text-processing');
 const textProcessing = createTextProcessingManager({ logger });
-const { CommandParser } = require('./chat/commands');
 const { AppRuntime } = require('./runtime/AppRuntime');
 const { clearExpiredGlobalCooldowns } = require('./utils/global-command-cooldown');
 
@@ -189,8 +188,6 @@ function createAppRuntime(config, dependencies) {
     const deps = dependencies;
 
     logger.info('Creating AppRuntime', 'system');
-
-    deps.commandParser = deps.commandParser || new CommandParser(config);
 
     return new AppRuntime(config, deps);
 }
