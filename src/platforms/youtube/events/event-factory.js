@@ -1,6 +1,7 @@
 const { PlatformEvents } = require('../../../interfaces/PlatformEvents');
 const { isIsoTimestamp } = require('../../../utils/timestamp');
 const { DEFAULT_AVATAR_URL } = require('../../../constants/avatar');
+const { getValidMessageParts } = require('../../../utils/message-parts');
 
 function createYouTubeEventFactory(options = {}) {
     const platformName = options.platformName || 'youtube';
@@ -42,6 +43,41 @@ function createYouTubeEventFactory(options = {}) {
 
     const normalizeText = (value) => (typeof value === 'string' ? value.trim() : '');
 
+    const resolveMessageText = (data = {}) => {
+        if (typeof data.message === 'string') {
+            return data.message;
+        }
+
+        if (data.message && typeof data.message === 'object' && typeof data.message.text === 'string') {
+            return data.message.text;
+        }
+
+        return '';
+    };
+
+    const resolveMessageParts = (data = {}) => {
+        const messageParts = Array.isArray(data?.message?.parts)
+            ? data.message.parts
+            : (Array.isArray(data?.metadata?.messageParts) ? data.metadata.messageParts : []);
+
+        return getValidMessageParts({ message: { parts: messageParts } }, { allowWhitespaceText: true })
+            .map((part) => {
+                if (part.type === 'text') {
+                    return {
+                        type: 'text',
+                        text: part.text
+                    };
+                }
+
+                return {
+                    type: 'emote',
+                    platform: normalizeText(part.platform) || platformName,
+                    emoteId: part.emoteId.trim(),
+                    imageUrl: part.imageUrl.trim()
+                };
+            });
+    };
+
     const getTimestamp = (data, errorMessage) => ensureIsoTimestamp(data.timestamp, errorMessage);
     const resolveAvatarUrl = (data) => {
         const avatarUrl = normalizeText(data.avatarUrl);
@@ -73,15 +109,20 @@ function createYouTubeEventFactory(options = {}) {
             const timestamp = getTimestamp(data, 'YouTube chat message event requires timestamp');
             const identity = normalizeIdentity(data);
             const avatarUrl = resolveAvatarUrl(data);
+            const messageText = resolveMessageText(data);
+            const messageParts = resolveMessageParts(data);
+            const message = { text: messageText };
+            if (messageParts.length > 0) {
+                message.parts = messageParts;
+            }
+
             return {
                 type: PlatformEvents.CHAT_MESSAGE,
                 platform: platformName,
                 username: identity.username,
                 userId: identity.userId,
                 avatarUrl,
-                message: {
-                    text: data.message
-                },
+                message,
                 timestamp,
                 isMod: !!data.isMod,
                 isPaypiggy: data.isPaypiggy === true,

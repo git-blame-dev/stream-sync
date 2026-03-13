@@ -203,6 +203,68 @@ function buildTwitchMessageParts(messageObj) {
         .filter((part) => part !== null);
 }
 
+function resolveYouTubeEmojiImageUrl(images = []) {
+    if (!Array.isArray(images) || images.length === 0) {
+        return '';
+    }
+
+    const normalizedImages = images
+        .filter((image) => image && typeof image === 'object')
+        .map((image) => ({
+            url: typeof image.url === 'string' ? image.url.trim() : '',
+            width: Number(image.width)
+        }))
+        .filter((image) => image.url.length > 0);
+
+    if (normalizedImages.length === 0) {
+        return '';
+    }
+
+    const widthCandidates = normalizedImages.filter((image) => Number.isFinite(image.width));
+    if (widthCandidates.length > 0) {
+        return widthCandidates
+            .sort((left, right) => right.width - left.width)[0]
+            .url;
+    }
+
+    return normalizedImages[0].url;
+}
+
+function buildYouTubeMessageParts(messageObj) {
+    if (!messageObj || typeof messageObj !== 'object' || !Array.isArray(messageObj.runs)) {
+        return [];
+    }
+
+    return messageObj.runs
+        .map((run) => {
+            if (!run || typeof run !== 'object') {
+                return null;
+            }
+
+            const emoteId = typeof run?.emoji?.emoji_id === 'string' ? run.emoji.emoji_id.trim() : '';
+            const imageUrl = resolveYouTubeEmojiImageUrl(run?.emoji?.image);
+            const isCustomEmote = run?.emoji?.is_custom === true || emoteId.includes('/');
+            if (isCustomEmote && emoteId && imageUrl) {
+                return {
+                    type: 'emote',
+                    platform: 'youtube',
+                    emoteId,
+                    imageUrl
+                };
+            }
+
+            if (typeof run.text === 'string' && run.text.length > 0) {
+                return {
+                    type: 'text',
+                    text: run.text
+                };
+            }
+
+            return null;
+        })
+        .filter((part) => part !== null);
+}
+
 
 function normalizeYouTubeMessage(chatItem, platformName = 'youtube') {
     try {
@@ -235,7 +297,10 @@ function normalizeYouTubeMessage(chatItem, platformName = 'youtube') {
         }
 
         const normalizedMessage = typeof message === 'string' ? message.trim() : '';
-        if (!normalizedMessage) {
+        const messageParts = buildYouTubeMessageParts(messageData.message);
+        const hasRenderableEmote = messageParts.some((part) => part.type === 'emote');
+
+        if (!normalizedMessage && !hasRenderableEmote) {
             throw new Error('Missing YouTube message text');
         }
 
@@ -273,6 +338,9 @@ function normalizeYouTubeMessage(chatItem, platformName = 'youtube') {
             },
             rawData: { chatItem }
         };
+        if (hasRenderableEmote) {
+            normalized.metadata.messageParts = messageParts;
+        }
 
         logger.debug(`Normalized YouTube message from ${normalized.username}`, 'message-normalization');
         return normalized;
@@ -415,8 +483,6 @@ function extractYouTubeMessageText(messageObj) {
         result = messageObj;
     } else if (!messageObj) {
         result = '';
-    } else if (messageObj.text) {
-        result = messageObj.text;
     } else if (Array.isArray(messageObj)) {
         result = messageObj
             .map(part => {
@@ -429,7 +495,7 @@ function extractYouTubeMessageText(messageObj) {
             .join('')
             .trim();
     } else if (typeof messageObj === 'object' && Array.isArray(messageObj.runs)) {
-        result = messageObj.runs
+        const runsText = messageObj.runs
             .map(run => {
                 if (run.emoji && Array.isArray(run.emoji.shortcuts) && run.emoji.shortcuts.length > 0) {
                     return run.emoji.shortcuts[0];
@@ -438,6 +504,7 @@ function extractYouTubeMessageText(messageObj) {
             })
             .join('')
             .trim();
+        result = runsText || (typeof messageObj.text === 'string' ? messageObj.text.trim() : '');
     } else if (typeof messageObj === 'object' && messageObj.text) {
         result = messageObj.text.trim();
     } else if (typeof messageObj === 'object' && messageObj.simpleText) {
