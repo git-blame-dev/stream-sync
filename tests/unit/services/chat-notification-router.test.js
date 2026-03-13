@@ -52,9 +52,10 @@ describe('ChatNotificationRouter', () => {
             userTrackingService: {
                 isFirstMessage: createMockFn().mockReturnValue(false)
             },
-            commandParser: {
-                getVFXConfig: createMockFn().mockReturnValue(null),
-                getMatchingFarewell: createMockFn().mockReturnValue(null)
+            vfxCommandService: {
+                selectVFXCommand: createMockFn().mockResolvedValue(null),
+                matchFarewell: createMockFn().mockReturnValue(null),
+                getVFXConfig: createMockFn().mockResolvedValue(null)
             },
             handleFarewellNotification: async (platform, username, options) => {
                 runtime.displayQueue.addItem({
@@ -66,6 +67,7 @@ describe('ChatNotificationRouter', () => {
                         displayMessage: `Goodbye, ${username}!`
                     }
                 });
+                return { success: true };
             },
             isFirstMessage: createMockFn().mockReturnValue(false)
         };
@@ -86,12 +88,10 @@ describe('ChatNotificationRouter', () => {
 
         await router.handleChatMessage('twitch', { ...baseMessage });
 
-        expect(runtime.displayQueue.addItem).toHaveBeenCalledWith(
-            expect.objectContaining({
-                type: 'chat',
-                platform: 'twitch'
-            })
-        );
+        expect(runtime.displayQueue.addItem).toHaveBeenCalledTimes(1);
+        const [queuedItem] = runtime.displayQueue.addItem.mock.calls[0];
+        expect(queuedItem?.type).toBe('chat');
+        expect(queuedItem?.platform).toBe('twitch');
     });
 
     it('preserves canonical avatarUrl on queued chat rows', async () => {
@@ -114,8 +114,10 @@ describe('ChatNotificationRouter', () => {
         const { router, runtime } = createRouter({
             runtime: {
                 isFirstMessage: createMockFn().mockReturnValue(true),
-                commandParser: {
-                    getVFXConfig: createMockFn().mockReturnValue(commandConfig)
+                vfxCommandService: {
+                    selectVFXCommand: createMockFn().mockResolvedValue(commandConfig),
+                    matchFarewell: createMockFn().mockReturnValue(null),
+                    getVFXConfig: createMockFn().mockResolvedValue(null)
                 }
             }
         });
@@ -164,11 +166,36 @@ describe('ChatNotificationRouter', () => {
         expect(greetingItem).toBeUndefined();
     });
 
+    it('queues greeting when messages are disabled but greetings are enabled', async () => {
+        const { router, runtime } = createRouter({
+            runtime: {
+                config: {
+                    general: { greetingsEnabled: true, messagesEnabled: false },
+                    cooldowns: {
+                        cmdCooldownMs: 60000,
+                        heavyCommandCooldownMs: 300000,
+                        globalCmdCooldownMs: 45000
+                    },
+                    twitch: { greetingsEnabled: true, messagesEnabled: false, farewellsEnabled: true }
+                },
+                isFirstMessage: createMockFn().mockReturnValue(true)
+            }
+        });
+
+        await router.handleChatMessage('twitch', { ...baseMessage, message: 'hello everyone' });
+
+        const queuedTypes = runtime.displayQueue.addItem.mock.calls.map((call) => call[0].type);
+        expect(queuedTypes).toContain('greeting');
+        expect(queuedTypes).not.toContain('chat');
+    });
+
     it('queues command when cooldowns pass', async () => {
         const { router, runtime } = createRouter({
             runtime: {
-                commandParser: {
-                    getVFXConfig: createMockFn().mockReturnValue({ command: '!testboom' })
+                vfxCommandService: {
+                    selectVFXCommand: createMockFn().mockResolvedValue({ command: '!testboom' }),
+                    matchFarewell: createMockFn().mockReturnValue(null),
+                    getVFXConfig: createMockFn().mockResolvedValue(null)
                 }
             }
         });
@@ -228,9 +255,9 @@ describe('ChatNotificationRouter', () => {
     it('routes farewell messages into a user-visible farewell row', async () => {
         const { router, runtime } = createRouter({
             runtime: {
-                commandParser: {
-                    getVFXConfig: createMockFn().mockReturnValue(null),
-                    getMatchingFarewell: createMockFn().mockReturnValue('!bye')
+                vfxCommandService: {
+                    selectVFXCommand: createMockFn().mockResolvedValue(null),
+                    matchFarewell: createMockFn().mockReturnValue('!bye')
                 }
             }
         });
@@ -245,6 +272,27 @@ describe('ChatNotificationRouter', () => {
         expect(queuedTypes).toContain('farewell');
     });
 
+    it('does not route commands when only runtime command parser is available', async () => {
+        const { router, runtime } = createRouter({
+            runtime: {
+                vfxCommandService: null,
+                commandParser: {
+                    getVFXConfig: createMockFn().mockReturnValue({ command: '!testboom' }),
+                    getMatchingFarewell: createMockFn().mockReturnValue(null)
+                }
+            }
+        });
+
+        await router.handleChatMessage('twitch', {
+            ...baseMessage,
+            message: '!testboom now'
+        });
+
+        const queuedTypes = runtime.displayQueue.addItem.mock.calls.map((call) => call[0].type);
+        expect(queuedTypes).toContain('chat');
+        expect(queuedTypes).not.toContain('command');
+    });
+
     it('does not emit farewell rows when farewells are disabled for platform', async () => {
         const { router, runtime } = createRouter({
             runtime: {
@@ -257,9 +305,9 @@ describe('ChatNotificationRouter', () => {
                     },
                     twitch: { greetingsEnabled: true, messagesEnabled: true, farewellsEnabled: false }
                 },
-                commandParser: {
-                    getVFXConfig: createMockFn().mockReturnValue(null),
-                    getMatchingFarewell: createMockFn().mockReturnValue('!bye')
+                vfxCommandService: {
+                    selectVFXCommand: createMockFn().mockResolvedValue(null),
+                    matchFarewell: createMockFn().mockReturnValue('!bye')
                 }
             }
         });
@@ -286,9 +334,9 @@ describe('ChatNotificationRouter', () => {
                     },
                     twitch: { greetingsEnabled: true, messagesEnabled: true, farewellsEnabled: false }
                 },
-                commandParser: {
-                    getVFXConfig: createMockFn().mockReturnValue({ command: '!testboom' }),
-                    getMatchingFarewell: createMockFn().mockReturnValue('!bye')
+                vfxCommandService: {
+                    selectVFXCommand: createMockFn().mockResolvedValue({ command: '!testboom' }),
+                    matchFarewell: createMockFn().mockReturnValue('!bye')
                 }
             }
         });
@@ -308,9 +356,9 @@ describe('ChatNotificationRouter', () => {
         const { router, runtime } = createRouter({
             runtime: {
                 isFirstMessage: createMockFn().mockReturnValue(true),
-                commandParser: {
-                    getVFXConfig: createMockFn().mockReturnValue({ command: '!testboom' }),
-                    getMatchingFarewell: createMockFn().mockReturnValue('!bye')
+                vfxCommandService: {
+                    selectVFXCommand: createMockFn().mockResolvedValue({ command: '!testboom' }),
+                    matchFarewell: createMockFn().mockReturnValue('!bye')
                 }
             }
         });
@@ -325,6 +373,90 @@ describe('ChatNotificationRouter', () => {
         expect(farewellCount).toBe(1);
         expect(queuedTypes).not.toContain('command');
         expect(queuedTypes).not.toContain('greeting');
+    });
+
+    it('continues command routing when farewell notification reports failure', async () => {
+        const { router, runtime } = createRouter({
+            runtime: {
+                handleFarewellNotification: createMockFn().mockResolvedValue({ success: false, error: 'Notifications disabled' }),
+                vfxCommandService: {
+                    selectVFXCommand: createMockFn().mockResolvedValue({ command: '!testboom' }),
+                    matchFarewell: createMockFn().mockReturnValue('!bye')
+                }
+            }
+        });
+
+        await router.handleChatMessage('twitch', {
+            ...baseMessage,
+            message: '!bye everyone'
+        });
+
+        const queuedTypes = runtime.displayQueue.addItem.mock.calls.map((call) => call[0].type);
+        expect(queuedTypes).toContain('chat');
+        expect(queuedTypes).toContain('command');
+        expect(queuedTypes).not.toContain('farewell');
+    });
+
+    it('detects farewell triggers after sanitizing zero-width characters', async () => {
+        const { router, runtime } = createRouter({
+            runtime: {
+                vfxCommandService: {
+                    selectVFXCommand: createMockFn().mockResolvedValue(null),
+                    matchFarewell: createMockFn().mockReturnValue('!bye')
+                }
+            }
+        });
+
+        await router.handleChatMessage('twitch', {
+            ...baseMessage,
+            message: '!bye\u200B everyone'
+        });
+
+        const queuedTypes = runtime.displayQueue.addItem.mock.calls.map((call) => call[0].type);
+        expect(queuedTypes).toContain('farewell');
+    });
+
+    it('detects farewell triggers with trailing punctuation', async () => {
+        const { router, runtime } = createRouter({
+            runtime: {
+                vfxCommandService: {
+                    selectVFXCommand: createMockFn().mockResolvedValue(null),
+                    matchFarewell: createMockFn().mockReturnValue('!bye')
+                }
+            }
+        });
+
+        await router.handleChatMessage('twitch', {
+            ...baseMessage,
+            message: '!bye!!! everyone'
+        });
+
+        const queuedTypes = runtime.displayQueue.addItem.mock.calls.map((call) => call[0].type);
+        expect(queuedTypes).toContain('farewell');
+    });
+
+    it('detects command triggers after sanitizing zero-width characters', async () => {
+        const { router, runtime } = createRouter({
+            runtime: {
+                vfxCommandService: {
+                    selectVFXCommand: createMockFn().mockImplementation((trigger) => {
+                        if (trigger === '!testboom') {
+                            return { command: '!testboom' };
+                        }
+                        return null;
+                    }),
+                    matchFarewell: createMockFn().mockReturnValue(null)
+                }
+            }
+        });
+
+        await router.handleChatMessage('twitch', {
+            ...baseMessage,
+            message: '!testboom\u200B now'
+        });
+
+        const queuedTypes = runtime.displayQueue.addItem.mock.calls.map((call) => call[0].type);
+        expect(queuedTypes).toContain('command');
     });
 
     it('queues emote-only TikTok chat rows when canonical message parts are present', async () => {

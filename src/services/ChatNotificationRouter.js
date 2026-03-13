@@ -39,9 +39,9 @@ class ChatNotificationRouter {
                 return;
             }
 
-            if (!this.isChatEnabled(platform)) {
-                this._logSkipped(platform, normalizedData.username, 'messages disabled');
-                return;
+            const chatEnabled = this.isChatEnabled(platform);
+            if (!chatEnabled) {
+                this._logSkipped(platform, normalizedData.username, 'messages disabled (chat row only)');
             }
 
             if (this.shouldSkipForConnection(platform, normalizedData.timestamp)) {
@@ -68,9 +68,11 @@ class ChatNotificationRouter {
             const isFirstMessage = this.isFirstMessage(normalizedData, platform);
             const greetingsEnabled = this.isGreetingEnabled(platform);
 
-            this.enqueueChatMessage(platform, normalizedData, sanitizedMessage.message, messageParts);
+            if (chatEnabled) {
+                this.enqueueChatMessage(platform, normalizedData, sanitizedMessage.message, messageParts);
+            }
 
-            const farewellTrigger = this.detectFarewell(normalizedData);
+            const farewellTrigger = this.detectFarewell(sanitizedMessage.message);
             if (farewellTrigger) {
                 const handledFarewell = await this.processFarewell(platform, normalizedData, farewellTrigger);
                 if (handledFarewell) {
@@ -78,7 +80,7 @@ class ChatNotificationRouter {
                 }
             }
 
-            const commandConfig = await this.detectCommand(normalizedData);
+            const commandConfig = await this.detectCommand(sanitizedMessage.message);
             if (commandConfig) {
                 await this.processCommand(platform, normalizedData, commandConfig, {
                     isFirstMessage,
@@ -151,38 +153,64 @@ class ChatNotificationRouter {
         return false;
     }
 
-    async detectCommand(normalizedData) {
-        const message = typeof normalizedData?.message === 'string' ? normalizedData.message : '';
-        const trimmedMessage = message.trim();
-        const commandTrigger = trimmedMessage ? trimmedMessage.split(/\s+/)[0] : trimmedMessage;
+    async detectCommand(messageText) {
+        const message = typeof messageText === 'string' ? messageText : '';
+        const commandTrigger = this.extractCommandTrigger(message);
+        if (!commandTrigger) {
+            return null;
+        }
 
         if (this.runtime.vfxCommandService?.selectVFXCommand) {
             return this.runtime.vfxCommandService.selectVFXCommand(commandTrigger, message);
         }
-        if (this.runtime.commandParser) {
-            return this.runtime.commandParser.getVFXConfig(commandTrigger, message);
-        }
         return null;
     }
 
-    detectFarewell(normalizedData) {
-        if (typeof this.runtime.commandParser?.getMatchingFarewell !== 'function') {
+    detectFarewell(messageText) {
+        if (typeof this.runtime.vfxCommandService?.matchFarewell !== 'function') {
             return null;
         }
 
-        const message = typeof normalizedData?.message === 'string' ? normalizedData.message : '';
-        const trimmedMessage = message.trim();
-        if (!trimmedMessage) {
+        const message = typeof messageText === 'string' ? messageText : '';
+        const commandTrigger = this.extractCommandTrigger(message);
+        if (!commandTrigger) {
             return null;
         }
 
-        const commandTrigger = trimmedMessage.split(/\s+/)[0];
-        const farewellMatch = this.runtime.commandParser.getMatchingFarewell(message, commandTrigger);
+        const farewellMatch = this.runtime.vfxCommandService.matchFarewell(message, commandTrigger);
         if (typeof farewellMatch !== 'string' || farewellMatch.trim().length === 0) {
             return null;
         }
 
         return farewellMatch;
+    }
+
+    extractCommandTrigger(messageText) {
+        if (typeof messageText !== 'string') {
+            return '';
+        }
+
+        const trimmedMessage = messageText.trim();
+        if (!trimmedMessage) {
+            return '';
+        }
+
+        const firstToken = trimmedMessage.split(/\s+/)[0];
+        return this.normalizeTriggerToken(firstToken);
+    }
+
+    normalizeTriggerToken(token) {
+        if (typeof token !== 'string') {
+            return '';
+        }
+
+        const withoutZeroWidth = token.replace(/[\u200B-\u200D\uFEFF]/g, '');
+        const trimmedToken = withoutZeroWidth.trim();
+        if (!trimmedToken) {
+            return '';
+        }
+
+        return trimmedToken.replace(/[!?.,;:]+$/g, '');
     }
 
     isFirstMessage(normalizedData, platform) {
@@ -298,14 +326,24 @@ class ChatNotificationRouter {
             throw new Error('Runtime missing handleFarewellNotification');
         }
 
-        await this.runtime.handleFarewellNotification(platform, normalizedData.username, {
-            command: farewellTrigger,
-            trigger: farewellTrigger,
-            userId: normalizedData.userId,
-            timestamp: normalizedData.timestamp
-        });
+        try {
+            const result = await this.runtime.handleFarewellNotification(platform, normalizedData.username, {
+                command: farewellTrigger,
+                trigger: farewellTrigger,
+                userId: normalizedData.userId,
+                timestamp: normalizedData.timestamp
+            });
 
-        return true;
+            if (result && typeof result === 'object' && result.success === true) {
+                return true;
+            }
+
+            this._logSkipped(platform, normalizedData.username, 'farewell notification not enqueued');
+            return false;
+        } catch (error) {
+            this._handleRouterError(`Error handling farewell notification: ${error.message}`, error, 'farewell-routing');
+            return false;
+        }
     }
 
     getCooldownSettings() {

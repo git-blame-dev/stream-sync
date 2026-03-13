@@ -97,10 +97,13 @@ describe('PlatformEventRouter config gating error handling', () => {
             }
         });
 
-        expect(runtime.handleChatMessage).toHaveBeenCalledWith('twitch', expect.objectContaining({ message: 'hi' }));
+        expect(runtime.handleChatMessage).toHaveBeenCalledTimes(1);
+        const [calledPlatform, calledData] = runtime.handleChatMessage.mock.calls[0];
+        expect(calledPlatform).toBe('twitch');
+        expect(calledData?.message).toBe('hi');
     });
 
-    it('blocks chat routing when config disables messages', async () => {
+    it('still routes chat events when config disables chat display messaging', async () => {
         const config = createConfigFixture({ general: { messagesEnabled: false } });
         const runtime = {
             handleChatMessage: createMockFn().mockResolvedValue(true)
@@ -119,7 +122,7 @@ describe('PlatformEventRouter config gating error handling', () => {
                 metadata: {}
             }
         });
-        expect(runtime.handleChatMessage).not.toHaveBeenCalled();
+        expect(runtime.handleChatMessage).toHaveBeenCalledTimes(1);
     });
 
     it('blocks follow/raid routing when config disables them', async () => {
