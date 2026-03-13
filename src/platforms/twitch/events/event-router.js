@@ -42,6 +42,7 @@ function createTwitchEventSubEventRouter(options = {}) {
 
         try {
             if (!event?.timestamp) {
+                safeLogger.warn('[Twitch EventSub] Skipping chat message without timestamp after fallback resolution', 'twitch-eventsub');
                 errorHandler.handleEventProcessingError(
                     new Error('Chat message requires timestamp'),
                     'chat',

@@ -85,8 +85,7 @@ class PlatformEventRouter {
             throw new Error(`Unsupported paid alias event type: ${type}`);
         }
 
-        // Config gating only applies to notification types with explicit settings
-        if (NOTIFICATION_CONFIGS[type]?.settingKey) {
+        if (type !== PlatformEvents.CHAT_MESSAGE && NOTIFICATION_CONFIGS[type]?.settingKey) {
             if (this._isNotificationEnabled(type, platform) === false) {
                 this.logger.debug(`[${platform}] ${type} notifications disabled at router`, 'PlatformEventRouter');
                 return;
@@ -181,9 +180,10 @@ class PlatformEventRouter {
         if (!settingKey) {
             throw new Error(`Unknown notification type: ${type}`);
         }
-        const value = this.config[platform]?.[settingKey];
+        const platformName = String(platform).toLowerCase();
+        const value = this.config[platformName]?.[settingKey];
         if (value === undefined) {
-            throw new Error(`Config missing ${platform}.${settingKey}`);
+            throw new Error(`Config missing ${platformName}.${settingKey}`);
         }
         return !!value;
     }

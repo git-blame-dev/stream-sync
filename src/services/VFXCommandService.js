@@ -261,6 +261,20 @@ class VFXCommandService {
         }
     }
 
+    matchFarewell(message, commandTrigger) {
+        if (!this.commandParser) {
+            throw new Error('VFXCommandService requires commandParser');
+        }
+        if (typeof message !== 'string' || !message.trim()) {
+            return null;
+        }
+        if (typeof commandTrigger !== 'string' || !commandTrigger.trim()) {
+            return null;
+        }
+
+        return this.commandParser.getMatchingFarewell(message, commandTrigger);
+    }
+
     async executeCommandForKey(commandKey, context) {
         try {
             if (!commandKey) {
