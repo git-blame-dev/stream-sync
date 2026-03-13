@@ -11,7 +11,7 @@ export function calculateOverlayRowShiftDeltas(
     }
 
     const deltaY = previousTop - currentTop
-    if (deltaY !== 0) {
+    if (deltaY > 0) {
       deltas.set(key, deltaY)
     }
   }
@@ -33,6 +33,7 @@ interface ApplyOverlayRowShiftMotionOptions {
   rowElementsByKey: Map<string, OverlayRowElement>
   previousTopByKey: Map<string, number>
   durationMs: number
+  fallbackEntryShiftPx?: number
 }
 
 function applyShiftTransition(element: OverlayRowElement, shiftPx: number, durationMs: number): void {
@@ -57,7 +58,8 @@ export function applyOverlayRowShiftMotion({
   rowKeys,
   rowElementsByKey,
   previousTopByKey,
-  durationMs
+  durationMs,
+  fallbackEntryShiftPx = 0
 }: ApplyOverlayRowShiftMotionOptions): Map<string, number> {
   const newRowKeys: string[] = []
   const currentTopByKey = new Map<string, number>()
@@ -90,7 +92,11 @@ export function applyOverlayRowShiftMotion({
     applyShiftTransition(element, deltaY, durationMs)
   }
 
-  if (synchronizedEntryShiftPx <= 0) {
+  const entryShiftPx = synchronizedEntryShiftPx > 0
+    ? synchronizedEntryShiftPx
+    : Math.max(0, fallbackEntryShiftPx)
+
+  if (entryShiftPx <= 0) {
     return currentTopByKey
   }
 
@@ -100,7 +106,7 @@ export function applyOverlayRowShiftMotion({
       continue
     }
 
-    applyShiftTransition(element, synchronizedEntryShiftPx, durationMs)
+    applyShiftTransition(element, entryShiftPx, durationMs)
   }
 
   return currentTopByKey

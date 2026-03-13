@@ -17,9 +17,31 @@ html, body {
 }
 
 .gui-shell--overlay {
+  position: relative;
   background: transparent;
-  min-height: 100vh;
+  height: 100vh;
+  overflow: hidden;
   justify-content: flex-end;
+}
+
+.gui-row--overlay-exit {
+  position: absolute;
+  left: 12px;
+  right: 12px;
+  z-index: 2;
+  pointer-events: none;
+  will-change: transform;
+  animation: gui-overlay-row-exit 1000ms ease-out forwards;
+}
+
+@keyframes gui-overlay-row-exit {
+  from {
+    transform: translateY(0);
+  }
+
+  to {
+    transform: translateY(calc(-1 * var(--overlay-exit-travel, 0px)));
+  }
 }
 
 .gui-shell--dock {
@@ -39,6 +61,10 @@ html, body {
 
 .gui-row--overlay-enter {
   animation: none;
+}
+
+.gui-row--overlay-enter.gui-row--overlay-exit {
+  animation: gui-overlay-row-exit 1000ms ease-out forwards;
 }
 
 .gui-row__avatar {

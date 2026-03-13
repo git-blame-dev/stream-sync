@@ -18,6 +18,8 @@ describe('GUI shared styles behavior', () => {
     it('uses 90 percent opaque cards, no overlay enter fade, auto layout, and readable text sizing', () => {
         const cssText = readSharedStyles();
         const pageBlock = readCssBlock(cssText, 'html, body');
+        const overlayShellBlock = readCssBlock(cssText, '.gui-shell--overlay');
+        const overlayExitBlock = readCssBlock(cssText, '.gui-row--overlay-exit');
         const rowBlock = readCssBlock(cssText, '.gui-row');
         const overlayEnterBlock = readCssBlock(cssText, '.gui-row--overlay-enter');
         const avatarBlock = readCssBlock(cssText, '.gui-row__avatar');
@@ -26,6 +28,12 @@ describe('GUI shared styles behavior', () => {
 
         expect(pageBlock).toContain('margin: 0;');
         expect(pageBlock).toContain('padding: 0;');
+        expect(overlayShellBlock).toContain('height: 100vh;');
+        expect(overlayShellBlock).toContain('overflow: hidden;');
+        expect(overlayExitBlock).toContain('position: absolute;');
+        expect(overlayExitBlock).toContain('animation: gui-overlay-row-exit 1000ms ease-out forwards;');
+        expect(cssText).toContain('@keyframes gui-overlay-row-exit');
+        expect(cssText).toContain('translateY(calc(-1 * var(--overlay-exit-travel, 0px)))');
         expect(rowBlock).toContain('grid-template-columns: auto 1fr;');
         expect(rowBlock).toContain('background: rgba(0, 0, 0, 0.9);');
         expect(overlayEnterBlock).toContain('animation: none;');
