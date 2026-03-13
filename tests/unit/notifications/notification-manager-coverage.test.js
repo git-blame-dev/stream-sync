@@ -244,7 +244,7 @@ describe('NotificationManager coverage', () => {
             const deps = createDeps();
             const manager = new NotificationManager(deps);
 
-            const result = await manager.handleNotification('unknown:type', 'test', { userId: 'test' });
+            const result = await manager.handleNotification('unknown:type', 'twitch', { userId: 'test' });
 
             expect(result.success).toBe(false);
             expect(result.error).toContain('Unknown');

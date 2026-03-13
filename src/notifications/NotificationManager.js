@@ -119,9 +119,10 @@ class NotificationManager extends EventEmitter {
     async handleNotificationInternal(notificationType, platform, data, skipSpamDetection) {
         const platformValidation = this.inputValidator.validatePlatform(platform);
         if (!platformValidation.success) {
-            this.logger.warn(`[NotificationManager] Invalid platform type: ${typeof platform}`, 'notification-manager', { notificationType, platform });
+            this.logger.warn(`[NotificationManager] Invalid platform: ${String(platform)}`, 'notification-manager', { notificationType, platform });
             return { success: false, error: platformValidation.error, notificationType, platform };
         }
+        platform = platformValidation.canonicalPlatform;
 
         if (!this.notificationGate.hasConfigAccess()) {
             this.logger.warn(`[NotificationManager] No configuration access available, cannot process notification`, platform, { notificationType, data });
@@ -162,7 +163,7 @@ class NotificationManager extends EventEmitter {
         notificationType = canonicalType;
 
         const normalizedData = this.payloadBuilder.normalizeData(data, isMonetizationType);
-        const platformName = platform.toLowerCase();
+        const platformName = platform;
         const isErrorPayload = normalizedData.isError === true;
         
         const isEnabled = this.notificationGate.isEnabled(config.settingKey, platformName);
