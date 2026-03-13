@@ -100,7 +100,7 @@ describe('PlatformEventRouter config gating error handling', () => {
         expect(runtime.handleChatMessage).toHaveBeenCalledTimes(1);
         const [calledPlatform, calledData] = runtime.handleChatMessage.mock.calls[0];
         expect(calledPlatform).toBe('twitch');
-        expect(calledData?.message).toBe('hi');
+        expect(calledData?.message).toEqual({ text: 'hi' });
     });
 
     it('still routes chat events when config disables chat display messaging', async () => {

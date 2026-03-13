@@ -43,7 +43,11 @@ function createTikTokEventFactory(options = {}) {
     };
 
     const resolveMessageParts = (normalized = {}) => {
-        return getValidMessageParts(normalized)
+        const sourceParts = Array.isArray(normalized?.message?.parts)
+            ? normalized.message.parts
+            : [];
+
+        return getValidMessageParts({ message: { parts: sourceParts } })
             .map((part) => {
                 if (part.type === 'emote') {
                     const normalizedPart = {
@@ -67,6 +71,18 @@ function createTikTokEventFactory(options = {}) {
             });
     };
 
+    const resolveMessageText = (normalized = {}) => {
+        if (typeof normalized?.message === 'string') {
+            return normalized.message.trim();
+        }
+
+        if (normalized?.message && typeof normalized.message === 'object' && typeof normalized.message.text === 'string') {
+            return normalized.message.text.trim();
+        }
+
+        return '';
+    };
+
     return {
         createChatMessage: (data = {}, eventOptions = {}) => {
             const normalized = eventOptions.normalizedData || normalizeChatEvent(data);
@@ -75,7 +91,7 @@ function createTikTokEventFactory(options = {}) {
                 username: normalized?.username
             });
             const avatarUrl = resolveAvatarUrl(data, normalized || {});
-            const messageText = typeof normalized?.message === 'string' ? normalized.message.trim() : '';
+            const messageText = resolveMessageText(normalized);
             const messageParts = resolveMessageParts(normalized);
 
             if (!messageText && messageParts.length === 0) {
@@ -85,11 +101,11 @@ function createTikTokEventFactory(options = {}) {
                 throw new Error('Missing TikTok message timestamp');
             }
 
-            const eventMetadata = buildEventMetadata(normalized?.metadata);
-
-            if (messageParts.length > 0) {
-                eventMetadata.messageParts = messageParts;
-            }
+            const normalizedMetadata = normalized?.metadata && typeof normalized.metadata === 'object'
+                ? { ...normalized.metadata }
+                : {};
+            delete normalizedMetadata.messageParts;
+            const eventMetadata = buildEventMetadata(normalizedMetadata);
 
             const messagePayload = {
                 text: messageText

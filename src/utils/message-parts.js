@@ -3,14 +3,6 @@ function getMessagePartsFromPayload(data = {}) {
         return data.message.parts;
     }
 
-    if (Array.isArray(data?.messageParts)) {
-        return data.messageParts;
-    }
-
-    if (Array.isArray(data?.metadata?.messageParts)) {
-        return data.metadata.messageParts;
-    }
-
     return [];
 }
 

@@ -52,7 +52,7 @@ describe('TikTok Unknown User Data Structure Mismatch', () => {
 
         expect(result.username).toBe('TestNestedUser');
         expect(result.userId).toBe('testUserNested');
-        expect(result.message).toBe('Test nested message');
+        expect(result.message).toEqual({ text: 'Test nested message' });
         expect(result.platform).toBe('tiktok');
         expectNoTechnicalArtifacts(result.username);
       }, TEST_TIMEOUTS.FAST);

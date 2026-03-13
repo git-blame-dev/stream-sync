@@ -87,15 +87,17 @@ describe('YouTube emote chat parts pipeline (integration)', () => {
             const queued = displayQueue.addItem.mock.calls[0][0];
             expect(queued.type).toBe('chat');
             expect(queued.platform).toBe('youtube');
-            expect(queued.data.message).toBe('');
-            expect(queued.data.messageParts).toEqual([
-                {
-                    type: 'emote',
-                    platform: 'youtube',
-                    emoteId: 'UC_TEST_EMOTE_700/TEST_EMOTE_700',
-                    imageUrl: 'https://yt3.ggpht.example.invalid/test-youtube-emote-700=w48-h48-c-k-nd'
-                }
-            ]);
+            expect(queued.data.message).toEqual({
+                text: '',
+                parts: [
+                    {
+                        type: 'emote',
+                        platform: 'youtube',
+                        emoteId: 'UC_TEST_EMOTE_700/TEST_EMOTE_700',
+                        imageUrl: 'https://yt3.ggpht.example.invalid/test-youtube-emote-700=w48-h48-c-k-nd'
+                    }
+                ]
+            });
         } finally {
             platformEventRouter.dispose();
         }

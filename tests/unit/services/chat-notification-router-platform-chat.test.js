@@ -83,7 +83,8 @@ describe('ChatNotificationRouter platform chat behavior', () => {
 
         await router.handleChatMessage('twitch', { ...baseMessage, message: 'test hi' });
 
-        expect(runtime.displayQueue.addItem).not.toHaveBeenCalledWith(expect.objectContaining({ type: 'chat' }));
+        const queued = runtime.displayQueue.addItem.mock.calls.map((c) => c[0]).find((i) => i.type === 'chat');
+        expect(queued).toBeUndefined();
     });
 
     it('sanitizes Twitch chat payload with HTML and enqueues', async () => {
@@ -91,7 +92,7 @@ describe('ChatNotificationRouter platform chat behavior', () => {
         await router.handleChatMessage('twitch', { ...baseMessage, message: '<b>Test Hi</b>' });
 
         const queued = runtime.displayQueue.addItem.mock.calls.map((c) => c[0]).find((i) => i.type === 'chat');
-        expect(queued.data.message).toBe('Test Hi');
+        expect(queued.data.message).toEqual({ text: 'Test Hi' });
     });
 
     it('queues chat on YouTube when enabled', async () => {
@@ -99,13 +100,10 @@ describe('ChatNotificationRouter platform chat behavior', () => {
 
         await router.handleChatMessage('youtube', { ...baseMessage, username: 'testytuser', message: 'test hello youtube' });
 
-        expect(runtime.displayQueue.addItem).toHaveBeenCalledWith(
-            expect.objectContaining({
-                type: 'chat',
-                platform: 'youtube',
-                data: expect.objectContaining({ message: 'test hello youtube' })
-            })
-        );
+        const queued = runtime.displayQueue.addItem.mock.calls.map((c) => c[0]).find((i) => i.type === 'chat');
+        expect(queued).toBeDefined();
+        expect(queued.platform).toBe('youtube');
+        expect(queued.data.message).toEqual({ text: 'test hello youtube' });
     });
 
     it('skips chat on YouTube when messages disabled for platform', async () => {
@@ -120,7 +118,8 @@ describe('ChatNotificationRouter platform chat behavior', () => {
 
         await router.handleChatMessage('youtube', { ...baseMessage, message: 'test hello youtube' });
 
-        expect(runtime.displayQueue.addItem).not.toHaveBeenCalledWith(expect.objectContaining({ type: 'chat' }));
+        const queued = runtime.displayQueue.addItem.mock.calls.map((c) => c[0]).find((i) => i.type === 'chat');
+        expect(queued).toBeUndefined();
     });
 
     it('skips all platform chat when global messagesEnabled is false', async () => {

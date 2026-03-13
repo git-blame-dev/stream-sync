@@ -67,7 +67,7 @@ describe('ChatNotificationRouter TTS behavior', () => {
 
         const queuedChat = runtime.displayQueue.addItem.mock.calls.map(c => c[0]).find(i => i.type === 'chat');
         expect(queuedChat).toBeDefined();
-        expect(queuedChat.data.message).toBe('test great stream');
+        expect(queuedChat.data.message).toEqual({ text: 'test great stream' });
     });
 
     it('enqueues valid chat messages', async () => {

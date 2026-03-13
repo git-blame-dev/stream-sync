@@ -602,15 +602,19 @@ class YouTubePlatform extends EventEmitter {
             return;
         }
 
-        const messageParts = getValidMessageParts({ metadata: normalizedData.metadata }, { allowWhitespaceText: true });
+        const messageParts = getValidMessageParts({ message: normalizedData.message }, { allowWhitespaceText: true });
         const hasMessageParts = messageParts.length > 0;
         
         
         // Skip empty messages
-        if ((!normalizedData.message || normalizedData.message.trim() === '') && !hasMessageParts) {
+        const messageText = typeof normalizedData.message?.text === 'string'
+            ? normalizedData.message.text
+            : '';
+
+        if (!messageText && !hasMessageParts) {
             this.logger.debug('Skipping empty message', 'youtube', {
                 author: this._resolveChatItemAuthorNameForLog(chatItem),
-                extractedMessage: normalizedData.message
+                extractedMessage: messageText
             });
             return;
         }
@@ -618,7 +622,7 @@ class YouTubePlatform extends EventEmitter {
         // Add video ID context
         normalizedData.videoId = chatItem.videoId;
         
-        this.logger.debug(`Processing multi-stream chat from ${chatItem.videoId || 'unknown'}: ${normalizedData.username} - ${normalizedData.message}`, 'youtube');
+        this.logger.debug(`Processing multi-stream chat from ${chatItem.videoId || 'unknown'}: ${normalizedData.username} - ${messageText}`, 'youtube');
 
         // Emit standardized chat message event
         try {

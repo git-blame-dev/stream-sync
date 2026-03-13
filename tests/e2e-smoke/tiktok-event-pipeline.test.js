@@ -130,7 +130,7 @@ describe('TikTok event pipeline (smoke E2E)', () => {
             await new Promise(setImmediate);
 
             expect(runtimeCalls.chat).toHaveLength(1);
-            expect(runtimeCalls.chat[0].message.message).toBe('hello from tiktok');
+            expect(runtimeCalls.chat[0].message.message.text).toBe('hello from tiktok');
             expect(runtimeCalls.chat[0].message.username).toBe('test-user-one');
 
             expect(displayQueue.addItem).toHaveBeenCalledTimes(1);
@@ -239,16 +239,18 @@ describe('TikTok event pipeline (smoke E2E)', () => {
             await new Promise(setImmediate);
 
             expect(runtimeCalls.chat).toHaveLength(1);
-            expect(runtimeCalls.chat[0].message.message).toBe('');
-            expect(runtimeCalls.chat[0].message.metadata.messageParts).toEqual([
-                {
-                    type: 'emote',
-                    platform: 'tiktok',
-                    emoteId: '1234512345123451234',
-                    imageUrl: 'https://example.invalid/tiktok-emote.webp',
-                    placeInComment: 0
-                }
-            ]);
+            expect(runtimeCalls.chat[0].message.message).toEqual({
+                text: '',
+                parts: [
+                    {
+                        type: 'emote',
+                        platform: 'tiktok',
+                        emoteId: '1234512345123451234',
+                        imageUrl: 'https://example.invalid/tiktok-emote.webp',
+                        placeInComment: 0
+                    }
+                ]
+            });
         } finally {
             router.dispose();
             cleanupTikTokEventListeners(platform);
@@ -339,7 +341,7 @@ describe('TikTok event pipeline (smoke E2E)', () => {
             await new Promise(setImmediate);
 
             expect(runtimeCalls.chat).toHaveLength(2);
-            expect(runtimeCalls.chat.map((entry) => entry.message.message)).toEqual(['hello once', 'hello twice']);
+            expect(runtimeCalls.chat.map((entry) => entry.message.message.text)).toEqual(['hello once', 'hello twice']);
         } finally {
             router.dispose();
             cleanupTikTokEventListeners(platform);

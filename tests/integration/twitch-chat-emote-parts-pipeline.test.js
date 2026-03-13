@@ -87,16 +87,18 @@ describe('Twitch emote chat parts pipeline (integration)', () => {
             const queued = displayQueue.addItem.mock.calls[0][0];
             expect(queued.type).toBe('chat');
             expect(queued.platform).toBe('twitch');
-            expect(queued.data.message).toBe('');
+            expect(queued.data.message).toEqual({
+                text: '',
+                parts: [
+                    {
+                        type: 'emote',
+                        platform: 'twitch',
+                        emoteId: 'emotesv2_dcd06b30a5c24f6eb871e8f5edbd44f7',
+                        imageUrl: 'https://static-cdn.jtvnw.net/emoticons/v2/emotesv2_dcd06b30a5c24f6eb871e8f5edbd44f7/animated/dark/3.0'
+                    }
+                ]
+            });
             expect(queued.data.isPaypiggy).toBe(false);
-            expect(queued.data.messageParts).toEqual([
-                {
-                    type: 'emote',
-                    platform: 'twitch',
-                    emoteId: 'emotesv2_dcd06b30a5c24f6eb871e8f5edbd44f7',
-                    imageUrl: 'https://static-cdn.jtvnw.net/emoticons/v2/emotesv2_dcd06b30a5c24f6eb871e8f5edbd44f7/animated/dark/3.0'
-                }
-            ]);
         } finally {
             platformEventRouter.dispose();
         }

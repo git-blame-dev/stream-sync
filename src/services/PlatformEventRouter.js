@@ -250,22 +250,25 @@ class PlatformEventRouter {
             platform,
             userId: String(data.userId),
             username: String(data.username).trim(),
-            message: normalizedText,
+            message: {
+                text: normalizedText
+            },
             timestamp: String(data.timestamp),
             isMod: data.isMod,
             isPaypiggy: data.isPaypiggy === true,
             isBroadcaster: data.isBroadcaster
         };
+        if (messageParts.length > 0) {
+            normalized.message.parts = messageParts;
+        }
         if (avatarUrl) {
             normalized.avatarUrl = avatarUrl;
         }
-        if (metadata !== undefined || messageParts.length > 0) {
+        if (metadata !== undefined) {
             normalized.metadata = {
                 ...(metadata || {})
             };
-        }
-        if (messageParts.length > 0) {
-            normalized.metadata.messageParts = messageParts;
+            delete normalized.metadata.messageParts;
         }
 
         return normalized;

@@ -136,7 +136,7 @@ describe('TikTok event pipeline (integration)', () => {
             await new Promise(setImmediate);
 
             expect(runtimeCalls.chat).toHaveLength(1);
-            expect(runtimeCalls.chat[0].message.message).toBe('hello there');
+            expect(runtimeCalls.chat[0].message.message.text).toBe('hello there');
             expect(runtimeCalls.chat[0].message.username).toBe('test-user-one');
 
             expect(runtimeCalls.gift).toHaveLength(1);
@@ -243,16 +243,18 @@ describe('TikTok event pipeline (integration)', () => {
             await new Promise(setImmediate);
 
             expect(runtimeCalls.chat).toHaveLength(1);
-            expect(runtimeCalls.chat[0].message.message).toBe('');
-            expect(runtimeCalls.chat[0].message.metadata.messageParts).toEqual([
-                {
-                    type: 'emote',
-                    platform: 'tiktok',
-                    emoteId: '1234512345123451234',
-                    imageUrl: 'https://example.invalid/tiktok-emote.webp',
-                    placeInComment: 0
-                }
-            ]);
+            expect(runtimeCalls.chat[0].message.message).toEqual({
+                text: '',
+                parts: [
+                    {
+                        type: 'emote',
+                        platform: 'tiktok',
+                        emoteId: '1234512345123451234',
+                        imageUrl: 'https://example.invalid/tiktok-emote.webp',
+                        placeInComment: 0
+                    }
+                ]
+            });
         } finally {
             router.dispose();
             cleanupTikTokEventListeners(platform);
@@ -347,7 +349,7 @@ describe('TikTok event pipeline (integration)', () => {
             await new Promise(setImmediate);
 
             expect(runtimeCalls.chat).toHaveLength(3);
-            expect(runtimeCalls.chat.map((entry) => entry.message.message)).toEqual(['first', 'second', 'third']);
+            expect(runtimeCalls.chat.map((entry) => entry.message.message.text)).toEqual(['first', 'second', 'third']);
         } finally {
             router.dispose();
             cleanupTikTokEventListeners(platform);

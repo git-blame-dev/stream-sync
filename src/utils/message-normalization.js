@@ -324,7 +324,9 @@ function normalizeYouTubeMessage(chatItem, platformName = 'youtube') {
             userId,
             username,
             avatarUrl,
-            message: normalizedMessage,
+            message: {
+                text: normalizedMessage
+            },
             timestamp,
             isMod: author.is_moderator === true,
             isPaypiggy: isMember,
@@ -339,7 +341,7 @@ function normalizeYouTubeMessage(chatItem, platformName = 'youtube') {
             rawData: { chatItem }
         };
         if (hasRenderableEmote) {
-            normalized.metadata.messageParts = messageParts;
+            normalized.message.parts = messageParts;
         }
 
         logger.debug(`Normalized YouTube message from ${normalized.username}`, 'message-normalization');
@@ -395,7 +397,9 @@ function normalizeTikTokMessage(data, platformName = 'tiktok') {
             platform: platformName.toLowerCase(),
             userId,
             username,
-            message,
+            message: {
+                text: message
+            },
             timestamp,
             isMod: !!data.isModerator,
             isPaypiggy: resolveTikTokChatIsPaypiggy(data),
@@ -410,7 +414,7 @@ function normalizeTikTokMessage(data, platformName = 'tiktok') {
             rawData: { data }
         };
         if (messageParts.length > 0) {
-            normalized.metadata.messageParts = messageParts;
+            normalized.message.parts = messageParts;
         }
 
         logger.debug(`Normalized TikTok message from ${normalized.username}`, 'message-normalization');
@@ -525,12 +529,19 @@ function validateNormalizedMessage(normalizedMessage) {
     }
     
     // Required fields
-    const requiredFields = ['platform', 'userId', 'username', 'message', 'timestamp'];
+    const requiredFields = ['platform', 'userId', 'username', 'timestamp'];
     for (const field of requiredFields) {
         if (normalizedMessage[field] === undefined || normalizedMessage[field] === null) {
             issues.push(`Missing required field: ${field}`);
         } else if (typeof normalizedMessage[field] !== 'string') {
             issues.push(`${field} must be a string`);
+        }
+    }
+
+    const messagePayload = normalizedMessage.message;
+    if (typeof messagePayload !== 'string') {
+        if (!messagePayload || typeof messagePayload !== 'object' || typeof messagePayload.text !== 'string') {
+            issues.push('message must be a string or an object with string text');
         }
     }
     

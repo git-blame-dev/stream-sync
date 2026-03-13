@@ -21,7 +21,8 @@ class ChatNotificationRouter {
 
     async handleChatMessage(platform, normalizedData = {}) {
         try {
-            this.logger.debug(`Chat message via router from ${platform}: ${normalizedData.username} - ${normalizedData.message}`, 'chat-router');
+            const messageText = this.getMessageText(normalizedData);
+            this.logger.debug(`Chat message via router from ${platform}: ${normalizedData.username} - ${messageText}`, 'chat-router');
 
             const validation = validateNormalizedMessage(normalizedData) || { isValid: true };
             if (!validation.isValid) {
@@ -53,7 +54,7 @@ class ChatNotificationRouter {
                 return;
             }
 
-            const sanitizedMessage = this.sanitizeChatContent(normalizedData.message);
+            const sanitizedMessage = this.sanitizeChatContent(messageText);
             const messageParts = this.getCanonicalMessageParts(normalizedData);
             const hasRenderableParts = messageParts.length > 0;
             if (!sanitizedMessage.hasContent && !hasRenderableParts) {
@@ -99,15 +100,27 @@ class ChatNotificationRouter {
     }
 
     hasMessageContent(normalizedData) {
-        const message = normalizedData?.message;
-        if (typeof message === 'string' && message.trim().length > 0) {
+        const messageText = this.getMessageText(normalizedData);
+        if (typeof messageText === 'string' && messageText.trim().length > 0) {
             return true;
         }
         return this.getCanonicalMessageParts(normalizedData).length > 0;
     }
 
+    getMessageText(normalizedData = {}) {
+        if (typeof normalizedData?.message === 'string') {
+            return normalizedData.message;
+        }
+
+        if (normalizedData?.message && typeof normalizedData.message === 'object' && typeof normalizedData.message.text === 'string') {
+            return normalizedData.message.text;
+        }
+
+        return '';
+    }
+
     getCanonicalMessageParts(normalizedData = {}) {
-        return getValidMessageParts(normalizedData)
+        return getValidMessageParts({ message: normalizedData?.message })
             .map((part) => {
                 if (part.type === 'emote') {
                     return {
@@ -268,11 +281,14 @@ class ChatNotificationRouter {
             message: sanitizedMessage,
             isPaypiggy: normalizedData.isPaypiggy === true
         };
-        if (Array.isArray(messageParts) && messageParts.length > 0) {
-            baseChatData.messageParts = messageParts;
-        }
 
         const chatData = NotificationBuilder.build(baseChatData) || baseChatData;
+        chatData.message = {
+            text: sanitizedMessage
+        };
+        if (Array.isArray(messageParts) && messageParts.length > 0) {
+            chatData.message.parts = messageParts;
+        }
 
         this.runtime.displayQueue.addItem({
             type: 'chat',
@@ -474,7 +490,7 @@ class ChatNotificationRouter {
     }
 
     _formatChatMessage(platform, logSafeData) {
-        const { message } = logSafeData;
+        const message = this.getMessageText(logSafeData);
         const truncated = message.length > LOG_TRUNCATION_LENGTH ? message.substring(0, LOG_TRUNCATION_LENGTH - 3) + '...' : message;
         return `[${platform}] ${logSafeData.username}: ${truncated}`;
     }
