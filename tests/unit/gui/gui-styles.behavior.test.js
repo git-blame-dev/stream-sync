@@ -15,7 +15,7 @@ function readCssBlock(cssText, selector) {
 }
 
 describe('GUI shared styles behavior', () => {
-    it('uses a shared 95 percent opacity variable for row cards, no overlay enter fade, auto layout, and readable text sizing', () => {
+    it('uses shared gui size tokens for row visuals and typography', () => {
         const cssText = readSharedStyles();
         const pageBlock = readCssBlock(cssText, 'html, body');
         const rootBlock = readCssBlock(cssText, ':root');
@@ -28,11 +28,18 @@ describe('GUI shared styles behavior', () => {
         const overlayEnterBlock = readCssBlock(cssText, '.gui-row--overlay-enter');
         const avatarBlock = readCssBlock(cssText, '.gui-row__avatar');
         const platformIconBlock = readCssBlock(cssText, '.gui-row__platform-icon');
+        const usernameBlock = readCssBlock(cssText, '.gui-row__username');
         const textBlock = readCssBlock(cssText, '.gui-row__text');
+        const emoteBlock = readCssBlock(cssText, '.gui-row__emote');
 
         expect(pageBlock).toContain('margin: 0;');
         expect(pageBlock).toContain('padding: 0;');
         expect(rootBlock).toContain('--gui-row-background-opacity: 0.95;');
+        expect(rootBlock).toContain('--gui-avatar-size: 64px;');
+        expect(rootBlock).toContain('--gui-platform-icon-size: 45px;');
+        expect(rootBlock).toContain('--gui-username-font-size: 20px;');
+        expect(rootBlock).toContain('--gui-message-font-size: 27px;');
+        expect(rootBlock).toContain('--gui-emote-size: 90px;');
         expect(overlayShellBlock).toContain('height: 100vh;');
         expect(overlayShellBlock).toContain('overflow: hidden;');
         expect(overlayExitBlock).toContain('position: absolute;');
@@ -45,11 +52,14 @@ describe('GUI shared styles behavior', () => {
         expect(paypiggyUsernameBlock).toContain('color: #ffffff;');
         expect(paypiggyTextBlock).toContain('color: #ffffff;');
         expect(overlayEnterBlock).toContain('animation: none;');
-        expect(avatarBlock).toContain('width: 45px;');
-        expect(avatarBlock).toContain('height: 45px;');
-        expect(platformIconBlock).toContain('width: 30px;');
-        expect(platformIconBlock).toContain('height: 30px;');
+        expect(avatarBlock).toContain('width: var(--gui-avatar-size);');
+        expect(avatarBlock).toContain('height: var(--gui-avatar-size);');
+        expect(platformIconBlock).toContain('width: var(--gui-platform-icon-size);');
+        expect(platformIconBlock).toContain('height: var(--gui-platform-icon-size);');
         expect(platformIconBlock).toContain('transform: translateY(1px);');
-        expect(textBlock).toContain('font-size: 18px;');
+        expect(usernameBlock).toContain('font-size: var(--gui-username-font-size);');
+        expect(textBlock).toContain('font-size: var(--gui-message-font-size);');
+        expect(emoteBlock).toContain('width: var(--gui-emote-size);');
+        expect(emoteBlock).toContain('height: var(--gui-emote-size);');
     });
 });

@@ -5,6 +5,11 @@ html, body {
 
 :root {
   --gui-row-background-opacity: 0.95;
+  --gui-avatar-size: 64px;
+  --gui-platform-icon-size: 45px;
+  --gui-username-font-size: 20px;
+  --gui-message-font-size: 27px;
+  --gui-emote-size: 90px;
 }
 
 .gui-shell {
@@ -84,8 +89,8 @@ html, body {
 }
 
 .gui-row__avatar {
-  width: 45px;
-  height: 45px;
+  width: var(--gui-avatar-size);
+  height: var(--gui-avatar-size);
   object-fit: cover;
 }
 
@@ -106,8 +111,8 @@ html, body {
 }
 
 .gui-row__platform-icon {
-  width: 30px;
-  height: 30px;
+  width: var(--gui-platform-icon-size);
+  height: var(--gui-platform-icon-size);
   transform: translateY(1px);
   object-fit: contain;
   flex-shrink: 0;
@@ -115,12 +120,12 @@ html, body {
 
 .gui-row__username {
   font-weight: 600;
-  font-size: 14px;
+  font-size: var(--gui-username-font-size);
   color: #d9e0e8;
 }
 
 .gui-row__text {
-  font-size: 18px;
+  font-size: var(--gui-message-font-size);
   color: #c7d0d9;
   display: inline-flex;
   align-items: center;
@@ -141,8 +146,8 @@ html, body {
 }
 
 .gui-row__emote {
-  width: 64px;
-  height: 64px;
+  width: var(--gui-emote-size);
+  height: var(--gui-emote-size);
   object-fit: contain;
   vertical-align: middle;
 }
