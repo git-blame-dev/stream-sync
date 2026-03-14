@@ -54,6 +54,7 @@ const PREVIEW_SCENARIO_TEMPLATE = [
     { type: 'chat', adapter: 'twitch' },
     { type: 'chat', adapter: 'youtube' },
     { type: 'chat', adapter: 'tiktok' },
+    { type: 'chat-no', adapter: 'tiktok' },
     { type: 'follow', adapter: 'tiktok' },
     { type: 'chat-command', adapter: 'youtube' },
     { type: 'chat-farewell', adapter: 'twitch' },
@@ -419,7 +420,11 @@ function buildPreviewScenarioEvents(durationMs = PREVIEW_DURATION_MS, intervalMs
                 ? 'hi'
                 : (scenarioType === 'chat-hello'
                     ? 'hello'
-                    : (scenarioType === 'chat-farewell' ? '!bye' : PREVIEW_MESSAGE_TEXT)));
+                    : (scenarioType === 'chat-farewell'
+                        ? '!bye'
+                        : (scenarioType === 'chat-no'
+                            ? 'test no no no no no no no no no no no no no no no no no no on no no no no no no no no no no no no no no no no no . no no no no no no no no no no on no no no no no'
+                            : PREVIEW_MESSAGE_TEXT))));
         const tiktokEmotes = scenarioType === 'chat'
             ? [
                 {
@@ -470,7 +475,7 @@ function buildPreviewScenarioEvents(durationMs = PREVIEW_DURATION_MS, intervalMs
                     isModerator: false,
                     isOwner: false,
                     userIdentity: {
-                        isSubscriberOfAnchor: scenarioType === 'chat'
+                        isSubscriberOfAnchor: scenarioType === 'chat' || scenarioType === 'chat-no'
                     },
                     emotes: tiktokEmotes,
                     displayType: scenarioType === 'share' ? 'share' : undefined,

@@ -35,6 +35,7 @@ describe('GUI shared styles behavior', () => {
         const memberHeaderBlock = readCssBlock(cssText, '.gui-row__header--member-chat');
         const memberUsernameBlock = readCssBlock(cssText, '.gui-row__username--member-chat');
         const memberTextBlock = readCssBlock(cssText, '.gui-row__text--member-chat');
+        const memberImageClipBlock = readCssBlock(cssText, '.gui-row__member-image-clip');
         const memberImageBlock = readCssBlock(cssText, '.gui-row__member-image');
         const emoteBlock = readCssBlock(cssText, '.gui-row__emote');
 
@@ -44,7 +45,7 @@ describe('GUI shared styles behavior', () => {
         expect(rootBlock).toContain('--gui-avatar-size: 64px;');
         expect(rootBlock).toContain('--gui-platform-icon-size: 45px;');
         expect(rootBlock).toContain('--gui-username-font-size: 20px;');
-        expect(rootBlock).toContain('--gui-message-font-size: 27px;');
+        expect(rootBlock).toContain('--gui-message-font-size: 22px;');
         expect(rootBlock).toContain('--gui-emote-size: 50px;');
         expect(overlayShellBlock).toContain('height: 100vh;');
         expect(overlayShellBlock).toContain('overflow: hidden;');
@@ -79,11 +80,16 @@ describe('GUI shared styles behavior', () => {
         expect(memberTextBlock).toContain('display: block;');
         expect(memberTextBlock).toContain('overflow-wrap: anywhere;');
         expect(memberTextBlock).toContain('word-break: break-word;');
-        expect(memberImageBlock).toContain('width: 135px;');
-        expect(memberImageBlock).toContain('height: 135px;');
-        expect(memberImageBlock).toContain('float: right;');
-        expect(memberImageBlock).toContain('margin-left: 10px;');
-        expect(memberImageBlock).toContain('margin-bottom: 4px;');
+        expect(memberImageClipBlock).toContain('width: 120px;');
+        expect(memberImageClipBlock).toContain('height: 110px;');
+        expect(memberImageClipBlock).toContain('float: right;');
+        expect(memberImageClipBlock).toContain('margin-left: 10px;');
+        expect(memberImageClipBlock).toContain('margin-right: -80px;');
+        expect(memberImageClipBlock).toContain('margin-top: -40px;');
+        expect(memberImageClipBlock).toContain('margin-bottom: 0;');
+        expect(memberImageClipBlock).toContain('overflow: hidden;');
+        expect(memberImageBlock).toContain('width: 120px;');
+        expect(memberImageBlock).toContain('height: 120px;');
         expect(memberImageBlock).toContain('object-fit: contain;');
         expect(emoteBlock).toContain('width: var(--gui-emote-size);');
         expect(emoteBlock).toContain('height: var(--gui-emote-size);');
