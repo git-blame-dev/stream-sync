@@ -17,15 +17,43 @@ const { DisplayQueue } = require('../../src/obs/display-queue');
 const { createTwitchEventSubEventRouter } = require('../../src/platforms/twitch/events/event-router');
 const { createYouTubeEventRouter } = require('../../src/platforms/youtube/events/event-router');
 const { setupTikTokEventListeners } = require('../../src/platforms/tiktok/events/event-router');
+const { DEFAULT_AVATAR_URL } = require('../../src/constants/avatar');
 
 const PREVIEW_DURATION_MS = 30000;
 const PREVIEW_INTERVAL_MS = 2000;
 
-const PREVIEW_AVATAR_URL = 'https://static-cdn.jtvnw.net/jtv_user_pictures/xarth/404_user_70x70.png';
+const PREVIEW_AVATAR_URL = DEFAULT_AVATAR_URL;
 const PREVIEW_MESSAGE_TEXT = 'test message hello world this is a message to everyone how are we today?';
+const PREVIEW_MEDIA_CATALOG = {
+    twitch: {
+        avatarUrl: PREVIEW_AVATAR_URL,
+        emote: {
+            id: 'emotesv2_dcd06b30a5c24f6eb871e8f5edbd44f7',
+            imageUrl: 'https://static-cdn.jtvnw.net/emoticons/v2/emotesv2_dcd06b30a5c24f6eb871e8f5edbd44f7/animated/dark/3.0'
+        }
+    },
+    youtube: {
+        avatarUrl: PREVIEW_AVATAR_URL,
+        emote: {
+            id: 'UCkszU2WH9gy1mb0dV-11UJg/G8AfY6yWGuKuhL0PlbiA2AE',
+            imageUrl: 'https://yt3.ggpht.com/KOxdr_z3A5h1Gb7kqnxqOCnbZrBmxI2B_tRQ453BhTWUhYAlpg5ZP8IKEBkcvRoY8grY91Q=w48-h48-c-k-nd'
+        }
+    },
+    tiktok: {
+        avatarUrl: PREVIEW_AVATAR_URL,
+        emote: {
+            id: '0123456789012345678',
+            imageUrl: 'https://static-cdn.jtvnw.net/emoticons/v2/emotesv2_dcd06b30a5c24f6eb871e8f5edbd44f7/animated/dark/3.0'
+        }
+    }
+};
 
 const PREVIEW_SCENARIO_TEMPLATE = [
+    { type: 'chat-hi', adapter: 'twitch' },
+    { type: 'chat-hello', adapter: 'youtube' },
     { type: 'chat', adapter: 'twitch' },
+    { type: 'chat', adapter: 'youtube' },
+    { type: 'chat', adapter: 'tiktok' },
     { type: 'follow', adapter: 'tiktok' },
     { type: 'chat-command', adapter: 'youtube' },
     { type: 'chat-farewell', adapter: 'twitch' },
@@ -205,6 +233,7 @@ function buildPreviewScenarioEvents(durationMs = PREVIEW_DURATION_MS, intervalMs
         const scenarioType = scenarioStep.type;
         const adapter = scenarioStep.adapter;
         const account = getAccount(adapter);
+        const media = PREVIEW_MEDIA_CATALOG[adapter] || { avatarUrl: PREVIEW_AVATAR_URL, emote: null };
         const timestamp = new Date(Date.UTC(2024, 0, 1, 0, 0, index)).toISOString();
         const username = `${account.username}-${index}`;
         const userId = `${account.userId}-${index}`;
@@ -215,27 +244,63 @@ function buildPreviewScenarioEvents(durationMs = PREVIEW_DURATION_MS, intervalMs
         };
 
         if (adapter === 'twitch') {
-            if (scenarioType === 'chat' || scenarioType === 'chat-command' || scenarioType === 'chat-farewell') {
+            if (scenarioType === 'chat' || scenarioType === 'chat-hi' || scenarioType === 'chat-hello' || scenarioType === 'chat-command' || scenarioType === 'chat-farewell') {
                 const text = scenarioType === 'chat-command'
                     ? '!preview'
-                    : (scenarioType === 'chat-farewell' ? '!bye' : PREVIEW_MESSAGE_TEXT);
+                    : (scenarioType === 'chat-hi'
+                        ? 'hi'
+                        : (scenarioType === 'chat-hello'
+                            ? 'hello'
+                            : (scenarioType === 'chat-farewell' ? '!bye' : PREVIEW_MESSAGE_TEXT)));
                 events.push({
                     platform: 'twitch',
                     adapter: 'twitch',
                     rawEvent: {
                         subscriptionType: 'channel.chat.message',
                         metadata: {
-                            message_timestamp: timestamp
+                            message_timestamp: timestamp,
+                            previewPaypiggy: scenarioType === 'chat'
                         },
                         event: {
                             ...base,
                             user_name: username,
                             user_login: userId,
+                            isPaypiggy: scenarioType === 'chat',
                             is_mod: false,
                             is_broadcaster: false,
                             message: {
                                 text,
-                                fragments: [{ type: 'text', text }]
+                                fragments: scenarioType === 'chat'
+                                    ? [
+                                        {
+                                            type: 'emote',
+                                            text: ':preview1:',
+                                            emote: {
+                                                id: media.emote?.id || 'emotesv2_dcd06b30a5c24f6eb871e8f5edbd44f7',
+                                                emote_set_id: 'preview'
+                                            }
+                                        },
+                                        { type: 'text', text: ' test message ' },
+                                        {
+                                            type: 'emote',
+                                            text: ':preview2:',
+                                            emote: {
+                                                id: media.emote?.id || 'emotesv2_dcd06b30a5c24f6eb871e8f5edbd44f7',
+                                                emote_set_id: 'preview'
+                                            }
+                                        },
+                                        { type: 'text', text: ' hello world this is a message to everyone ' },
+                                        {
+                                            type: 'emote',
+                                            text: ':preview3:',
+                                            emote: {
+                                                id: media.emote?.id || 'emotesv2_dcd06b30a5c24f6eb871e8f5edbd44f7',
+                                                emote_set_id: 'preview'
+                                            }
+                                        },
+                                        { type: 'text', text: ' how are we today?' }
+                                    ]
+                                    : [{ type: 'text', text }]
                             }
                         }
                     }
@@ -285,7 +350,11 @@ function buildPreviewScenarioEvents(durationMs = PREVIEW_DURATION_MS, intervalMs
                 : (scenarioType === 'gift' ? 'LiveChatPaidSticker' : (scenarioType === 'paypiggy' ? 'LiveChatMembershipItem' : 'LiveChatTextMessage'));
             const text = scenarioType === 'chat-command'
                 ? '!preview'
-                : (scenarioType === 'chat-farewell' ? '!bye' : `preview message ${index}`);
+                : (scenarioType === 'chat-hi'
+                    ? 'hi'
+                    : (scenarioType === 'chat-hello'
+                        ? 'hello'
+                        : (scenarioType === 'chat-farewell' ? '!bye' : `preview message ${index}`)));
             events.push({
                 platform: 'youtube',
                 adapter: 'youtube',
@@ -297,6 +366,39 @@ function buildPreviewScenarioEvents(durationMs = PREVIEW_DURATION_MS, intervalMs
                             username,
                             userId,
                             message: text,
+                            isPaypiggy: scenarioType === 'chat',
+                            avatarUrl: media.avatarUrl,
+                            messageParts: scenarioType === 'chat'
+                                ? [
+                                    {
+                                        type: 'emote',
+                                        imageUrl: media.emote?.imageUrl,
+                                        emoteId: `${media.emote?.id || 'yt-preview-emote'}-1`
+                                    },
+                                    {
+                                        type: 'text',
+                                        text: ' test message '
+                                    },
+                                    {
+                                        type: 'emote',
+                                        imageUrl: media.emote?.imageUrl,
+                                        emoteId: `${media.emote?.id || 'yt-preview-emote'}-2`
+                                    },
+                                    {
+                                        type: 'text',
+                                        text: ' hello world this is a message to everyone '
+                                    },
+                                    {
+                                        type: 'emote',
+                                        imageUrl: media.emote?.imageUrl,
+                                        emoteId: `${media.emote?.id || 'yt-preview-emote'}-3`
+                                    },
+                                    {
+                                        type: 'text',
+                                        text: ' how are we today?'
+                                    }
+                                ]
+                                : undefined,
                             amount: 5,
                             currency: 'USD',
                             giftCount: 3,
@@ -313,7 +415,42 @@ function buildPreviewScenarioEvents(durationMs = PREVIEW_DURATION_MS, intervalMs
             : (scenarioType === 'follow' ? 'FOLLOW' : (scenarioType === 'share' ? 'SOCIAL' : (scenarioType === 'envelope' ? 'ENVELOPE' : 'CHAT')));
         const comment = scenarioType === 'chat-command'
             ? '!preview'
-            : (scenarioType === 'chat-farewell' ? '!bye' : `preview message ${index}`);
+            : (scenarioType === 'chat-hi'
+                ? 'hi'
+                : (scenarioType === 'chat-hello'
+                    ? 'hello'
+                    : (scenarioType === 'chat-farewell' ? '!bye' : PREVIEW_MESSAGE_TEXT)));
+        const tiktokEmotes = scenarioType === 'chat'
+            ? [
+                {
+                    placeInComment: 5,
+                    emote: {
+                        emoteId: media.emote?.id || '0123456789012345678',
+                        image: {
+                            imageUrl: media.emote?.imageUrl
+                        }
+                    }
+                },
+                {
+                    placeInComment: 17,
+                    emote: {
+                        emoteId: media.emote?.id || '0123456789012345678',
+                        image: {
+                            imageUrl: media.emote?.imageUrl
+                        }
+                    }
+                },
+                {
+                    placeInComment: 33,
+                    emote: {
+                        emoteId: media.emote?.id || '0123456789012345678',
+                        image: {
+                            imageUrl: media.emote?.imageUrl
+                        }
+                    }
+                }
+            ]
+            : undefined;
         events.push({
             platform: 'tiktok',
             adapter: 'tiktok',
@@ -324,7 +461,7 @@ function buildPreviewScenarioEvents(durationMs = PREVIEW_DURATION_MS, intervalMs
                     user: {
                         uniqueId: userId,
                         nickname: username,
-                        profilePictureUrl: PREVIEW_AVATAR_URL,
+                        profilePictureUrl: media.avatarUrl,
                         userId,
                         followRole: 0,
                         userBadges: []
@@ -333,8 +470,9 @@ function buildPreviewScenarioEvents(durationMs = PREVIEW_DURATION_MS, intervalMs
                     isModerator: false,
                     isOwner: false,
                     userIdentity: {
-                        isSubscriberOfAnchor: false
+                        isSubscriberOfAnchor: scenarioType === 'chat'
                     },
+                    emotes: tiktokEmotes,
                     displayType: scenarioType === 'share' ? 'share' : undefined,
                     giftName: 'Rose',
                     repeatCount: 5,
@@ -375,14 +513,45 @@ function createPreviewIngestAdapters(options = {}) {
         logger,
         emit(eventName, payload) {
             if (eventName === 'chatMessage') {
+                const messageText = payload?.message?.text || payload?.message || '';
+                const messageParts = Array.isArray(payload?.message?.fragments)
+                    ? payload.message.fragments
+                        .map((fragment) => {
+                            if (!fragment || typeof fragment !== 'object') {
+                                return null;
+                            }
+                            if (fragment.type === 'emote' && fragment?.emote?.id) {
+                                return {
+                                    type: 'emote',
+                                    platform: 'twitch',
+                                    emoteId: fragment.emote.id,
+                                    imageUrl: `https://static-cdn.jtvnw.net/emoticons/v2/${fragment.emote.id}/animated/dark/3.0`
+                                };
+                            }
+                            if (fragment.type === 'text' && typeof fragment.text === 'string') {
+                                return {
+                                    type: 'text',
+                                    text: fragment.text
+                                };
+                            }
+                            return null;
+                        })
+                        .filter(Boolean)
+                    : [];
                 emitChatEvent('twitch', {
                     username: payload?.username || payload?.user_name,
                     userId: payload?.userId || payload?.user_login,
                     timestamp: payload?.timestamp,
+                    isPaypiggy: payload?.isPaypiggy === true || payload?.metadata?.previewPaypiggy === true,
                     isMod: payload?.isMod === true || payload?.is_mod === true,
                     isBroadcaster: payload?.isBroadcaster === true || payload?.is_broadcaster === true,
                     metadata: payload?.metadata || {},
-                    message: { text: payload?.message?.text || payload?.message || '' }
+                    message: messageParts.length > 0
+                        ? {
+                            text: messageText,
+                            parts: messageParts
+                        }
+                        : { text: messageText }
                 });
                 return;
             }
@@ -407,11 +576,20 @@ function createPreviewIngestAdapters(options = {}) {
         handleLowPriorityEvent() {},
         handleChatTextMessage(chatItem) {
             const source = chatItem?.testData || {};
+            const messageParts = Array.isArray(source.messageParts)
+                ? source.messageParts.filter((part) => part && typeof part === 'object')
+                : [];
             emitChatEvent('youtube', {
                 username: source.username,
                 userId: source.userId,
                 timestamp: source.timestamp,
-                message: { text: source.message || '' }
+                isPaypiggy: source.isPaypiggy === true,
+                message: messageParts.length > 0
+                    ? {
+                        text: source.message || '',
+                        parts: messageParts
+                    }
+                    : { text: source.message || '' }
             });
         },
         handleSuperChat(chatItem) {
@@ -886,6 +1064,7 @@ if (require.main === module) {
 module.exports = {
     PREVIEW_DURATION_MS,
     PREVIEW_INTERVAL_MS,
+    PREVIEW_MEDIA_CATALOG,
     buildPreviewConfig,
     buildPreviewScenarioEvents,
     createPreviewPipeline,
