@@ -587,6 +587,104 @@ describe('GUI local preview command behavior', () => {
         expect(disposed).toBe(true);
     });
 
+    it('disposes pipeline when transport start fails', async () => {
+        let disposed = false;
+
+        const fakePipeline = {
+            eventBus: {
+                subscribe() {
+                    return () => {};
+                },
+                emit() {}
+            },
+            emitIngestEvent() {},
+            async dispose() {
+                disposed = true;
+            }
+        };
+
+        await expect(runGuiPreview({
+            logger: {
+                debug: () => {},
+                info: () => {},
+                warn: () => {},
+                error: () => {}
+            },
+            durationMs: 4,
+            intervalMs: 2,
+            createPreviewPipelineImpl: () => fakePipeline,
+            createGuiTransportServiceImpl: () => ({
+                async start() {
+                    throw new Error('start failed');
+                },
+                async stop() {}
+            }),
+            stdout: {
+                write() {}
+            }
+        })).rejects.toThrow('start failed');
+
+        expect(disposed).toBe(true);
+    });
+
+    it('clears active interval handle during cleanup', async () => {
+        const handles = [];
+        const originalClearInterval = global.clearInterval;
+        global.clearInterval = (handle) => {
+            handles.push(handle);
+        };
+
+        let intervalTick = null;
+
+        try {
+            await runGuiPreview({
+                logger: {
+                    debug: () => {},
+                    info: () => {},
+                    warn: () => {},
+                    error: () => {},
+                    console: () => {}
+                },
+                durationMs: 4,
+                intervalMs: 2,
+                createPreviewPipelineImpl: () => ({
+                    eventBus: {
+                        subscribe() {
+                            return () => {};
+                        },
+                        emit() {}
+                    },
+                    emitIngestEvent() {},
+                    async dispose() {}
+                }),
+                createPreviewIngestAdaptersImpl: () => ({
+                    twitch: { async ingest() {} },
+                    youtube: { async ingest() {} },
+                    tiktok: { async ingest() {} }
+                }),
+                createGuiTransportServiceImpl: () => ({
+                    async start() {},
+                    async stop() {}
+                }),
+                safeSetIntervalImpl: (callback) => {
+                    intervalTick = callback;
+                    return 77;
+                },
+                safeSetTimeoutImpl: (resolve) => {
+                    intervalTick();
+                    resolve();
+                },
+                stdout: {
+                    write() {}
+                }
+            });
+        } finally {
+            global.clearInterval = originalClearInterval;
+        }
+
+        expect(handles.includes(77)).toBe(true);
+    });
+
     it('runs raw ingest adapters end-to-end through scenario schedule', async () => {
         const routed = [];
         let intervalTick = null;
