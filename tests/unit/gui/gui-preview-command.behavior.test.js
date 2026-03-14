@@ -3,6 +3,7 @@ const { describe, it, expect } = require('bun:test');
 const {
     PREVIEW_DURATION_MS,
     PREVIEW_INTERVAL_MS,
+    PREVIEW_MEDIA_CATALOG,
     buildPreviewConfig,
     buildPreviewScenarioEvents,
     createPreviewPipeline,
@@ -24,14 +25,14 @@ describe('GUI local preview command behavior', () => {
             platform: 'twitch'
         }));
         expect(events[1]).toEqual(expect.objectContaining({
-            platform: 'tiktok'
-        }));
-        expect(events[2]).toEqual(expect.objectContaining({
             platform: 'youtube'
         }));
+        expect(events[2]).toEqual(expect.objectContaining({
+            platform: 'twitch'
+        }));
         expect(events[0].adapter).toBe('twitch');
-        expect(events[1].adapter).toBe('tiktok');
-        expect(events[2].adapter).toBe('youtube');
+        expect(events[1].adapter).toBe('youtube');
+        expect(events[2].adapter).toBe('twitch');
         expect(events[0].rawEvent).toBeDefined();
     });
 
@@ -42,6 +43,34 @@ describe('GUI local preview command behavior', () => {
         expect(adapters.has('twitch')).toBe(true);
         expect(adapters.has('youtube')).toBe(true);
         expect(adapters.has('tiktok')).toBe(true);
+    });
+
+    it('injects deterministic media URLs into raw ingest payloads', () => {
+        const events = buildPreviewScenarioEvents(20000, 2000);
+
+        const twitchChat = events.find((event) =>
+            event.adapter === 'twitch'
+            && event.rawEvent?.subscriptionType === 'channel.chat.message'
+            && Array.isArray(event.rawEvent?.event?.message?.fragments)
+            && event.rawEvent.event.message.fragments.some((fragment) => fragment.type === 'emote')
+        );
+        const youtubeStep = events.find((event) => event.adapter === 'youtube');
+        const tiktokStep = events.find((event) => event.adapter === 'tiktok');
+
+        expect(twitchChat.rawEvent.event.message.fragments[0].emote.id).toContain(PREVIEW_MEDIA_CATALOG.twitch.emote.id);
+        expect(youtubeStep.rawEvent.chatItem.testData.avatarUrl).toBe(PREVIEW_MEDIA_CATALOG.youtube.avatarUrl);
+        expect(tiktokStep.rawEvent.data.user.profilePictureUrl).toBe(PREVIEW_MEDIA_CATALOG.tiktok.avatarUrl);
+    });
+
+    it('uses explicit stable media catalog values without test-only URLs', () => {
+        const events = buildPreviewScenarioEvents(20000, 2000);
+        const serialized = JSON.stringify(events);
+
+        expect(serialized.includes(PREVIEW_MEDIA_CATALOG.twitch.emote.id)).toBe(true);
+        expect(serialized.includes(PREVIEW_MEDIA_CATALOG.youtube.avatarUrl)).toBe(true);
+        expect(serialized.includes(PREVIEW_MEDIA_CATALOG.tiktok.avatarUrl)).toBe(true);
+        expect(serialized.includes(PREVIEW_MEDIA_CATALOG.youtube.emote.id)).toBe(true);
+        expect(serialized.includes(PREVIEW_MEDIA_CATALOG.tiktok.emote.id)).toBe(true);
     });
 
     it('forces preview gate keys and gui toggles in preview config', () => {
@@ -352,6 +381,37 @@ describe('GUI local preview command behavior', () => {
         expect(emitted.some((event) => event.type === 'platform:follow' && event.platform === 'twitch')).toBe(true);
         expect(emitted.some((event) => event.type === 'platform:chat-message' && event.platform === 'youtube')).toBe(true);
         expect(emitted.some((event) => event.type === 'platform:share' && event.platform === 'tiktok')).toBe(true);
+    });
+
+    it('falls back to default avatar when ingest payload omits avatarUrl', async () => {
+        const emitted = [];
+        const adapters = createPreviewIngestAdapters({
+            config: buildPreviewConfig(),
+            logger: {
+                debug: () => {},
+                info: () => {},
+                warn: () => {},
+                error: () => {}
+            },
+            emitPlatformEvent: (event) => emitted.push(event)
+        });
+
+        await adapters.youtube.ingest({
+            eventType: 'LiveChatTextMessage',
+            chatItem: {
+                testData: {
+                    username: 'test-youtube-user',
+                    userId: 'test-youtube-user-id',
+                    timestamp: new Date(Date.UTC(2024, 0, 1, 0, 0, 1)).toISOString(),
+                    message: 'hello'
+                }
+            }
+        });
+
+        const chatEvent = emitted.find((event) => event.type === 'platform:chat-message' && event.platform === 'youtube');
+        expect(chatEvent).toBeDefined();
+        expect(typeof chatEvent.data.avatarUrl).toBe('string');
+        expect(chatEvent.data.avatarUrl.length).toBeGreaterThan(0);
     });
 
     it('maps additional twitch and youtube ingest events', async () => {
@@ -681,7 +741,7 @@ describe('GUI local preview command behavior', () => {
             emitPlatformEvent: (event) => pipeline.emitIngestEvent(event)
         });
 
-        const scenarioEvents = buildPreviewScenarioEvents(20000, 2000);
+        const scenarioEvents = buildPreviewScenarioEvents(30000, 2000);
         for (const event of scenarioEvents) {
             await adapters[event.adapter].ingest(event.rawEvent);
         }
