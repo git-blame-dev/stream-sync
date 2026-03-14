@@ -147,6 +147,7 @@ function buildPreviewRows(durationMs = PREVIEW_DURATION_MS, intervalMs = PREVIEW
                     platform: account.platform,
                     data: {
                         ...baseData,
+                        isPaypiggy: true,
                         message: buildPreviewEmoteMessage('twitch', TWITCH_EMOTE_ID, TWITCH_EMOTE_URL)
                     }
                 });
