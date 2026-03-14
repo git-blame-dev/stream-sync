@@ -1,3 +1,4 @@
+const EventEmitter = require('events');
 const configModule = require('../../src/core/config');
 const { logger: defaultLogger } = require('../../src/core/logging');
 const { createEventBus } = require('../../src/core/EventBus');
@@ -13,27 +14,27 @@ const CommandCooldownService = require('../../src/services/CommandCooldownServic
 const { createUserTrackingService } = require('../../src/services/UserTrackingService');
 const NotificationManager = require('../../src/notifications/NotificationManager');
 const { DisplayQueue } = require('../../src/obs/display-queue');
+const { createTwitchEventSubEventRouter } = require('../../src/platforms/twitch/events/event-router');
+const { createYouTubeEventRouter } = require('../../src/platforms/youtube/events/event-router');
+const { setupTikTokEventListeners } = require('../../src/platforms/tiktok/events/event-router');
 
 const PREVIEW_DURATION_MS = 30000;
 const PREVIEW_INTERVAL_MS = 2000;
 
-const PREVIEW_EMOTE_URL = 'https://static-cdn.jtvnw.net/emoticons/v2/emotesv2_dcd06b30a5c24f6eb871e8f5edbd44f7/animated/dark/3.0';
 const PREVIEW_AVATAR_URL = 'https://static-cdn.jtvnw.net/jtv_user_pictures/xarth/404_user_70x70.png';
-const PREVIEW_EMOTE_ID = 'emotesv2_dcd06b30a5c24f6eb871e8f5edbd44f7';
 const PREVIEW_MESSAGE_TEXT = 'test message hello world this is a message to everyone how are we today?';
 
-const PREVIEW_EVENT_TYPES = [
-    PlatformEvents.CHAT_MESSAGE,
-    PlatformEvents.FOLLOW,
-    'command',
-    'greeting',
-    'farewell',
-    PlatformEvents.GIFT,
-    PlatformEvents.RAID,
-    PlatformEvents.SHARE,
-    PlatformEvents.PAYPIGGY,
-    PlatformEvents.GIFTPAYPIGGY,
-    PlatformEvents.ENVELOPE
+const PREVIEW_SCENARIO_TEMPLATE = [
+    { type: 'chat', adapter: 'twitch' },
+    { type: 'follow', adapter: 'tiktok' },
+    { type: 'chat-command', adapter: 'youtube' },
+    { type: 'chat-farewell', adapter: 'twitch' },
+    { type: 'gift', adapter: 'tiktok' },
+    { type: 'raid', adapter: 'twitch' },
+    { type: 'share', adapter: 'tiktok' },
+    { type: 'paypiggy', adapter: 'youtube' },
+    { type: 'giftpaypiggy', adapter: 'youtube' },
+    { type: 'envelope', adapter: 'tiktok' }
 ];
 
 const PREVIEW_PLATFORM_ACCOUNTS = [
@@ -99,6 +100,16 @@ function buildPreviewConfig(baseConfig) {
         ...overrideConfig
     };
 
+    const resolveNonEmptyString = (preferredValue, fallbackValue) => {
+        if (typeof preferredValue === 'string' && preferredValue.trim().length > 0) {
+            return preferredValue;
+        }
+        if (typeof fallbackValue === 'string' && fallbackValue.trim().length > 0) {
+            return fallbackValue;
+        }
+        return '';
+    };
+
     merged.general = mergeSection(sourceConfig.general, overrideConfig.general, {
         messagesEnabled: true,
         commandsEnabled: true,
@@ -152,12 +163,12 @@ function buildPreviewConfig(baseConfig) {
     merged.cooldowns = {
         ...sourceCooldowns,
         ...overrideCooldowns,
-        cmdCooldown: overrideCooldowns.cmdCooldown ?? sourceCooldowns.cmdCooldown ?? 0,
-        cmdCooldownMs: overrideCooldowns.cmdCooldownMs ?? sourceCooldowns.cmdCooldownMs ?? 0,
-        globalCmdCooldown: overrideCooldowns.globalCmdCooldown ?? sourceCooldowns.globalCmdCooldown ?? 0,
-        globalCmdCooldownMs: overrideCooldowns.globalCmdCooldownMs ?? sourceCooldowns.globalCmdCooldownMs ?? 0,
-        heavyCommandCooldown: overrideCooldowns.heavyCommandCooldown ?? sourceCooldowns.heavyCommandCooldown ?? 0,
-        heavyCommandCooldownMs: overrideCooldowns.heavyCommandCooldownMs ?? sourceCooldowns.heavyCommandCooldownMs ?? 0,
+        cmdCooldown: 0,
+        cmdCooldownMs: 0,
+        globalCmdCooldown: 0,
+        globalCmdCooldownMs: 0,
+        heavyCommandCooldown: 0,
+        heavyCommandCooldownMs: 0,
         heavyCommandWindow: overrideCooldowns.heavyCommandWindow ?? sourceCooldowns.heavyCommandWindow ?? 1,
         heavyCommandWindowMs: overrideCooldowns.heavyCommandWindowMs ?? sourceCooldowns.heavyCommandWindowMs ?? 1000,
         heavyCommandThreshold: overrideCooldowns.heavyCommandThreshold ?? sourceCooldowns.heavyCommandThreshold ?? 999,
@@ -165,7 +176,8 @@ function buildPreviewConfig(baseConfig) {
     };
 
     merged.farewell = mergeSection(sourceConfig.farewell, overrideConfig.farewell, {
-        timeout: overrideConfig?.farewell?.timeout ?? sourceConfig?.farewell?.timeout ?? 1
+        timeout: overrideConfig?.farewell?.timeout ?? sourceConfig?.farewell?.timeout ?? 1,
+        command: resolveNonEmptyString(overrideConfig?.farewell?.command, sourceConfig?.farewell?.command) || '!bye'
     });
 
     merged.displayQueue = mergeSection(sourceConfig.displayQueue, overrideConfig.displayQueue, {
@@ -174,143 +186,392 @@ function buildPreviewConfig(baseConfig) {
 
     merged.commands = {
         ...(sourceConfig.commands || {}),
-        ...(overrideConfig.commands || {})
+        ...(overrideConfig.commands || {}),
+        preview: resolveNonEmptyString(overrideConfig?.commands?.preview, sourceConfig?.commands?.preview)
+            || '!preview,Preview Media,1000'
     };
 
     return merged;
-}
-
-function buildPreviewMessageParts(platform) {
-    return {
-        text: PREVIEW_MESSAGE_TEXT,
-        parts: [
-            {
-                type: 'emote',
-                platform,
-                emoteId: PREVIEW_EMOTE_ID,
-                imageUrl: PREVIEW_EMOTE_URL
-            },
-            {
-                type: 'text',
-                text: ' test message '
-            },
-            {
-                type: 'emote',
-                platform,
-                emoteId: PREVIEW_EMOTE_ID,
-                imageUrl: PREVIEW_EMOTE_URL
-            },
-            {
-                type: 'text',
-                text: ' hello world this is a message to everyone '
-            },
-            {
-                type: 'emote',
-                platform,
-                emoteId: PREVIEW_EMOTE_ID,
-                imageUrl: PREVIEW_EMOTE_URL
-            },
-            {
-                type: 'text',
-                text: ' how are we today?'
-            }
-        ]
-    };
-}
-
-function buildPreviewEventData(type, account, index, timestamp) {
-    const baseData = {
-        username: account.username,
-        userId: account.userId,
-        timestamp,
-        avatarUrl: PREVIEW_AVATAR_URL
-    };
-
-    if (type === PlatformEvents.CHAT_MESSAGE) {
-        const message = index < 3
-            ? buildPreviewMessageParts(account.platform)
-            : { text: `preview message ${index}` };
-        return {
-            ...baseData,
-            isPaypiggy: index === 0,
-            isMod: false,
-            isBroadcaster: false,
-            metadata: {},
-            message
-        };
-    }
-
-    if (type === 'command') {
-        return {
-            ...baseData,
-            command: '!preview',
-            commandName: 'preview'
-        };
-    }
-
-    if (type === 'farewell') {
-        return {
-            ...baseData,
-            command: '!bye',
-            trigger: '!bye'
-        };
-    }
-
-    if (type === PlatformEvents.GIFT || type === PlatformEvents.ENVELOPE) {
-        return {
-            ...baseData,
-            id: `test-gift-id-${index}`,
-            giftType: 'Rose',
-            giftCount: 5,
-            amount: 50,
-            currency: 'coins'
-        };
-    }
-
-    if (type === PlatformEvents.GIFTPAYPIGGY) {
-        return {
-            ...baseData,
-            giftCount: 3,
-            tier: '1'
-        };
-    }
-
-    if (type === PlatformEvents.RAID) {
-        return {
-            ...baseData,
-            viewerCount: 42
-        };
-    }
-
-    if (type === PlatformEvents.PAYPIGGY) {
-        return {
-            ...baseData,
-            tier: '1',
-            months: 2,
-            message: 'membership'
-        };
-    }
-
-    return baseData;
 }
 
 function buildPreviewScenarioEvents(durationMs = PREVIEW_DURATION_MS, intervalMs = PREVIEW_INTERVAL_MS) {
     const eventCount = Math.floor(durationMs / intervalMs);
     const events = [];
 
-    for (let index = 0; index < eventCount; index += 1) {
-        const type = PREVIEW_EVENT_TYPES[index % PREVIEW_EVENT_TYPES.length];
-        const account = PREVIEW_PLATFORM_ACCOUNTS[index % PREVIEW_PLATFORM_ACCOUNTS.length];
-        const timestamp = new Date(Date.UTC(2024, 0, 1, 0, 0, index)).toISOString();
+    const getAccount = (platform) => PREVIEW_PLATFORM_ACCOUNTS.find((entry) => entry.platform === platform) || PREVIEW_PLATFORM_ACCOUNTS[0];
 
+    for (let index = 0; index < eventCount; index += 1) {
+        const scenarioStep = PREVIEW_SCENARIO_TEMPLATE[index % PREVIEW_SCENARIO_TEMPLATE.length];
+        const scenarioType = scenarioStep.type;
+        const adapter = scenarioStep.adapter;
+        const account = getAccount(adapter);
+        const timestamp = new Date(Date.UTC(2024, 0, 1, 0, 0, index)).toISOString();
+        const username = `${account.username}-${index}`;
+        const userId = `${account.userId}-${index}`;
+        const base = {
+            username,
+            userId,
+            timestamp
+        };
+
+        if (adapter === 'twitch') {
+            if (scenarioType === 'chat' || scenarioType === 'chat-command' || scenarioType === 'chat-farewell') {
+                const text = scenarioType === 'chat-command'
+                    ? '!preview'
+                    : (scenarioType === 'chat-farewell' ? '!bye' : PREVIEW_MESSAGE_TEXT);
+                events.push({
+                    platform: 'twitch',
+                    adapter: 'twitch',
+                    rawEvent: {
+                        subscriptionType: 'channel.chat.message',
+                        metadata: {
+                            message_timestamp: timestamp
+                        },
+                        event: {
+                            ...base,
+                            user_name: username,
+                            user_login: userId,
+                            is_mod: false,
+                            is_broadcaster: false,
+                            message: {
+                                text,
+                                fragments: [{ type: 'text', text }]
+                            }
+                        }
+                    }
+                });
+                continue;
+            }
+
+            const twitchMap = {
+                follow: 'channel.follow',
+                gift: 'channel.bits.use',
+                raid: 'channel.raid',
+                paypiggy: 'channel.subscribe',
+                giftpaypiggy: 'channel.subscription.gift'
+            };
+            const subscriptionType = twitchMap[scenarioType] || 'channel.follow';
+            events.push({
+                platform: 'twitch',
+                adapter: 'twitch',
+                rawEvent: {
+                    subscriptionType,
+                    metadata: {
+                        message_timestamp: timestamp
+                    },
+                    event: {
+                        ...base,
+                        id: `test-${scenarioType}-${index}`,
+                        user_name: username,
+                        user_login: userId,
+                        followed_at: timestamp,
+                        from_broadcaster_user_name: username,
+                        from_broadcaster_user_login: userId,
+                        viewers: 42,
+                        tier: '1000',
+                        total: 2,
+                        bits: 100,
+                        is_anonymous: false,
+                        is_gift: false
+                    }
+                }
+            });
+            continue;
+        }
+
+        if (adapter === 'youtube') {
+            const eventType = scenarioType === 'giftpaypiggy'
+                ? 'LiveChatSponsorshipsGiftPurchaseAnnouncement'
+                : (scenarioType === 'gift' ? 'LiveChatPaidSticker' : (scenarioType === 'paypiggy' ? 'LiveChatMembershipItem' : 'LiveChatTextMessage'));
+            const text = scenarioType === 'chat-command'
+                ? '!preview'
+                : (scenarioType === 'chat-farewell' ? '!bye' : `preview message ${index}`);
+            events.push({
+                platform: 'youtube',
+                adapter: 'youtube',
+                rawEvent: {
+                    eventType,
+                    chatItem: {
+                        testData: {
+                            ...base,
+                            username,
+                            userId,
+                            message: text,
+                            amount: 5,
+                            currency: 'USD',
+                            giftCount: 3,
+                            tier: '1'
+                        }
+                    }
+                }
+            });
+            continue;
+        }
+
+        const tiktokEventType = scenarioType === 'gift'
+            ? 'GIFT'
+            : (scenarioType === 'follow' ? 'FOLLOW' : (scenarioType === 'share' ? 'SOCIAL' : (scenarioType === 'envelope' ? 'ENVELOPE' : 'CHAT')));
+        const comment = scenarioType === 'chat-command'
+            ? '!preview'
+            : (scenarioType === 'chat-farewell' ? '!bye' : `preview message ${index}`);
         events.push({
-            type,
-            platform: account.platform,
-            data: buildPreviewEventData(type, account, index, timestamp)
+            platform: 'tiktok',
+            adapter: 'tiktok',
+            rawEvent: {
+                eventType: tiktokEventType,
+                data: {
+                    ...base,
+                    user: {
+                        uniqueId: userId,
+                        nickname: username,
+                        profilePictureUrl: PREVIEW_AVATAR_URL,
+                        userId,
+                        followRole: 0,
+                        userBadges: []
+                    },
+                    comment,
+                    isModerator: false,
+                    isOwner: false,
+                    userIdentity: {
+                        isSubscriberOfAnchor: false
+                    },
+                    displayType: scenarioType === 'share' ? 'share' : undefined,
+                    giftName: 'Rose',
+                    repeatCount: 5,
+                    diamondCount: 10,
+                    msgId: `test-${scenarioType}-${index}`,
+                    createTime: Math.floor(Date.parse(timestamp) / 1000)
+                }
+            }
         });
     }
 
     return events;
+}
+
+function createPreviewIngestAdapters(options = {}) {
+    const { config, logger, emitPlatformEvent } = options;
+
+    const emitChatEvent = (platform, payload) => {
+        emitPlatformEvent({
+            type: PlatformEvents.CHAT_MESSAGE,
+            platform,
+            data: {
+                username: payload.username,
+                userId: payload.userId,
+                timestamp: payload.timestamp,
+                avatarUrl: payload.avatarUrl || PREVIEW_AVATAR_URL,
+                isPaypiggy: payload.isPaypiggy === true,
+                isMod: payload.isMod === true,
+                isBroadcaster: payload.isBroadcaster === true,
+                metadata: payload.metadata || {},
+                message: payload.message
+            }
+        });
+    };
+
+    const twitchRouter = createTwitchEventSubEventRouter({
+        config,
+        logger,
+        emit(eventName, payload) {
+            if (eventName === 'chatMessage') {
+                emitChatEvent('twitch', {
+                    username: payload?.username || payload?.user_name,
+                    userId: payload?.userId || payload?.user_login,
+                    timestamp: payload?.timestamp,
+                    isMod: payload?.isMod === true || payload?.is_mod === true,
+                    isBroadcaster: payload?.isBroadcaster === true || payload?.is_broadcaster === true,
+                    metadata: payload?.metadata || {},
+                    message: { text: payload?.message?.text || payload?.message || '' }
+                });
+                return;
+            }
+
+            const map = {
+                follow: PlatformEvents.FOLLOW,
+                gift: PlatformEvents.GIFT,
+                raid: PlatformEvents.RAID,
+                paypiggy: PlatformEvents.PAYPIGGY,
+                paypiggyGift: PlatformEvents.GIFTPAYPIGGY
+            };
+            const mappedType = map[eventName];
+            if (!mappedType) {
+                return;
+            }
+            emitPlatformEvent({ type: mappedType, platform: 'twitch', data: payload });
+        }
+    });
+
+    const youtubePlatform = {
+        logger,
+        handleLowPriorityEvent() {},
+        handleChatTextMessage(chatItem) {
+            const source = chatItem?.testData || {};
+            emitChatEvent('youtube', {
+                username: source.username,
+                userId: source.userId,
+                timestamp: source.timestamp,
+                message: { text: source.message || '' }
+            });
+        },
+        handleSuperChat(chatItem) {
+            const source = chatItem?.testData || {};
+            emitPlatformEvent({ type: PlatformEvents.PAYPIGGY, platform: 'youtube', data: source });
+        },
+        handleSuperSticker(chatItem) {
+            const source = chatItem?.testData || {};
+            emitPlatformEvent({
+                type: PlatformEvents.GIFT,
+                platform: 'youtube',
+                data: {
+                    ...source,
+                    id: source.id || `yt-gift-${source.timestamp}`,
+                    giftType: 'SuperSticker',
+                    giftCount: 1,
+                    amount: source.amount || 5,
+                    currency: source.currency || 'USD'
+                }
+            });
+        },
+        handleMembership(chatItem) {
+            const source = chatItem?.testData || {};
+            emitPlatformEvent({ type: PlatformEvents.PAYPIGGY, platform: 'youtube', data: source });
+        },
+        handleGiftMembershipPurchase(chatItem) {
+            const source = chatItem?.testData || {};
+            emitPlatformEvent({
+                type: PlatformEvents.GIFTPAYPIGGY,
+                platform: 'youtube',
+                data: {
+                    ...source,
+                    giftCount: source.giftCount || 1,
+                    tier: source.tier || '1'
+                }
+            });
+        }
+    };
+    const youtubeRouter = createYouTubeEventRouter({ platform: youtubePlatform });
+
+    const tiktokConnection = new EventEmitter();
+    const tiktokPlatform = {
+        logger,
+        config,
+        platformName: 'tiktok',
+        connection: tiktokConnection,
+        listenersConfigured: false,
+        connectionTime: 0,
+        WebcastEvent: {
+            CHAT: 'CHAT',
+            GIFT: 'GIFT',
+            FOLLOW: 'FOLLOW',
+            ROOM_USER: 'ROOM_USER',
+            ENVELOPE: 'ENVELOPE',
+            SUBSCRIBE: 'SUBSCRIBE',
+            SUPER_FAN: 'SUPER_FAN',
+            SOCIAL: 'SOCIAL',
+            ERROR: 'ERROR',
+            DISCONNECT: 'DISCONNECT',
+            STREAM_END: 'STREAM_END'
+        },
+        ControlEvent: {
+            DISCONNECTED: 'disconnected',
+            ERROR: 'error'
+        },
+        errorHandler: createGuiPreviewErrorHandler(logger),
+        _logIncomingEvent: async () => {},
+        _getTimestamp(data) {
+            return data.timestamp;
+        },
+        _getPlatformMessageId(data) {
+            return data.msgId || null;
+        },
+        _handleChatMessage(_raw, normalizedData) {
+            emitChatEvent('tiktok', normalizedData);
+        },
+        handleTikTokGift(data) {
+            const sourceUser = data?.user || {};
+            emitPlatformEvent({
+                type: PlatformEvents.GIFT,
+                platform: 'tiktok',
+                data: {
+                    username: sourceUser.nickname || sourceUser.uniqueId,
+                    userId: sourceUser.uniqueId || sourceUser.userId,
+                    timestamp: data.timestamp,
+                    id: data.msgId,
+                    giftType: data.giftName || 'Rose',
+                    giftCount: Number(data.repeatCount) || 1,
+                    amount: Number(data.diamondCount) || 10,
+                    currency: 'coins'
+                }
+            });
+        },
+        handleTikTokFollow(data) {
+            const sourceUser = data?.user || {};
+            emitPlatformEvent({
+                type: PlatformEvents.FOLLOW,
+                platform: 'tiktok',
+                data: {
+                    username: sourceUser.nickname || sourceUser.uniqueId,
+                    userId: sourceUser.uniqueId || sourceUser.userId,
+                    timestamp: data.timestamp
+                }
+            });
+        },
+        handleTikTokSocial(data) {
+            if (String(data.displayType || '').toLowerCase() !== 'share') {
+                return;
+            }
+            const sourceUser = data?.user || {};
+            emitPlatformEvent({
+                type: PlatformEvents.SHARE,
+                platform: 'tiktok',
+                data: {
+                    username: sourceUser.nickname || sourceUser.uniqueId,
+                    userId: sourceUser.uniqueId || sourceUser.userId,
+                    timestamp: data.timestamp
+                }
+            });
+        },
+        _handleStandardEvent(_eventType, data, options) {
+            const sourceUser = data?.user || {};
+            emitPlatformEvent({
+                type: options.emitType,
+                platform: 'tiktok',
+                data: {
+                    username: sourceUser.nickname || sourceUser.uniqueId,
+                    userId: sourceUser.uniqueId || sourceUser.userId,
+                    timestamp: data.timestamp,
+                    id: data.msgId,
+                    giftType: data.giftName || 'Rose',
+                    giftCount: Number(data.repeatCount) || 1,
+                    amount: Number(data.diamondCount) || 10,
+                    currency: 'coins'
+                }
+            });
+        }
+    };
+    setupTikTokEventListeners(tiktokPlatform);
+
+    return {
+        twitch: {
+            async ingest(rawEvent) {
+                const metadata = rawEvent.metadata || (rawEvent?.event?.timestamp
+                    ? { message_timestamp: rawEvent.event.timestamp }
+                    : {});
+                twitchRouter.handleNotificationEvent(rawEvent.subscriptionType, rawEvent.event, metadata);
+            }
+        },
+        youtube: {
+            async ingest(rawEvent) {
+                await youtubeRouter.routeEvent(rawEvent.chatItem, rawEvent.eventType);
+            }
+        },
+        tiktok: {
+            async ingest(rawEvent) {
+                tiktokConnection.emit(rawEvent.eventType, rawEvent.data);
+            }
+        }
+    };
 }
 
 function createPreviewRuntime(options) {
@@ -476,11 +737,13 @@ function createPreviewPipeline(options = {}) {
 async function runPreviewScenario(options = {}) {
     const {
         pipeline,
+        adapters,
         scenarioEvents,
         intervalMs,
         durationMs,
         safeSetIntervalImpl,
-        safeSetTimeoutImpl
+        safeSetTimeoutImpl,
+        errorHandler
     } = options;
 
     let eventIndex = 0;
@@ -489,7 +752,13 @@ async function runPreviewScenario(options = {}) {
             return;
         }
 
-        pipeline.emitIngestEvent(scenarioEvents[eventIndex]);
+        const event = scenarioEvents[eventIndex];
+        const adapter = adapters[event.adapter];
+        if (adapter && typeof adapter.ingest === 'function') {
+            Promise.resolve(adapter.ingest(event.rawEvent)).catch((error) => {
+                errorHandler.handleEventProcessingError(error, 'preview-ingest', event.rawEvent, 'Failed processing preview ingest event');
+            });
+        }
         eventIndex += 1;
     }, intervalMs);
 
@@ -541,6 +810,7 @@ async function runGuiPreview(options = {}) {
     const logger = resolveLogger(options.logger);
     const errorHandler = createGuiPreviewErrorHandler(logger);
     const createPreviewPipelineImpl = options.createPreviewPipelineImpl || createPreviewPipeline;
+    const createPreviewIngestAdaptersImpl = options.createPreviewIngestAdaptersImpl || createPreviewIngestAdapters;
     const createGuiTransportServiceImpl = options.createGuiTransportServiceImpl || createGuiTransportService;
     const safeSetIntervalImpl = options.safeSetIntervalImpl || safeSetInterval;
     const safeSetTimeoutImpl = options.safeSetTimeoutImpl || safeSetTimeout;
@@ -576,13 +846,20 @@ async function runGuiPreview(options = {}) {
         stdout.write(`Overlay URL: http://${host}:${port}/overlay\n`);
 
         const scenarioEvents = buildPreviewScenarioEvents(durationMs, intervalMs);
+        const adapters = createPreviewIngestAdaptersImpl({
+            config,
+            logger,
+            emitPlatformEvent: (event) => pipeline.emitIngestEvent(event)
+        });
         intervalHandle = await runPreviewScenario({
             pipeline,
+            adapters,
             scenarioEvents,
             intervalMs,
             durationMs,
             safeSetIntervalImpl,
-            safeSetTimeoutImpl
+            safeSetTimeoutImpl,
+            errorHandler
         });
 
         stdout.write('GUI preview finished\n');
@@ -612,6 +889,7 @@ module.exports = {
     buildPreviewConfig,
     buildPreviewScenarioEvents,
     createPreviewPipeline,
+    createPreviewIngestAdapters,
     runPreviewScenario,
     disposePreviewPipeline,
     runGuiPreview
