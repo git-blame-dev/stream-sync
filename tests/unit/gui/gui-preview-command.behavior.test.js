@@ -31,6 +31,9 @@ describe('GUI local preview command behavior', () => {
             type: 'command',
             platform: 'tiktok'
         }));
+        expect(events[0].data.isMod).toBe(false);
+        expect(events[0].data.isBroadcaster).toBe(false);
+        expect(events[0].data.metadata).toEqual({});
     });
 
     it('forces preview gate keys and gui toggles in preview config', () => {
@@ -64,6 +67,7 @@ describe('GUI local preview command behavior', () => {
         expect(config.twitch.followsEnabled).toBe(true);
         expect(config.twitch.giftsEnabled).toBe(true);
         expect(config.twitch.raidsEnabled).toBe(true);
+        expect(config.twitch.sharesEnabled).toBe(true);
         expect(config.twitch.paypiggiesEnabled).toBe(true);
 
         expect(config.tiktok.messagesEnabled).toBe(true);
@@ -83,6 +87,7 @@ describe('GUI local preview command behavior', () => {
         expect(config.youtube.followsEnabled).toBe(true);
         expect(config.youtube.giftsEnabled).toBe(true);
         expect(config.youtube.raidsEnabled).toBe(true);
+        expect(config.youtube.sharesEnabled).toBe(true);
         expect(config.youtube.paypiggiesEnabled).toBe(true);
 
         expect(typeof config.farewell.timeout).toBe('number');
