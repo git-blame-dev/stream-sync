@@ -555,6 +555,17 @@ describe('ConfigValidator simple command sections', () => {
     it('normalizes farewell section', () => {
         const result = ConfigValidator._normalizeFarewellSection({ command: 'bye-cmd' });
         expect(result.command).toBe('bye-cmd');
+        expect(result.timeout).toBe(300);
+    });
+
+    it('normalizes farewell timeout to numeric seconds', () => {
+        const result = ConfigValidator._normalizeFarewellSection({
+            command: 'bye-cmd',
+            timeout: '120'
+        });
+
+        expect(result.command).toBe('bye-cmd');
+        expect(result.timeout).toBe(120);
     });
 
     it('normalizes commands section preserves command definitions', () => {

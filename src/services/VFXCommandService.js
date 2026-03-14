@@ -245,7 +245,8 @@ class VFXCommandService {
                 return null;
             }
 
-            const selectedCommand = this._selectCommandVariant(command);
+            const selectableCommandSpec = this._resolveSelectableCommandSpec(commandKey, command);
+            const selectedCommand = this._selectCommandVariant(selectableCommandSpec);
             if (!selectedCommand) {
                 logger.debug(`[VFXCommandService] No valid command variant for key: ${commandKey}`, 'vfx-service');
                 return null;
@@ -532,6 +533,24 @@ class VFXCommandService {
 
         const randomIndex = crypto.randomInt(options.length);
         return options[randomIndex];
+    }
+
+    _resolveSelectableCommandSpec(commandKey, commandSpec) {
+        if (typeof commandSpec !== 'string') {
+            return commandSpec;
+        }
+
+        const normalizedSpec = commandSpec.trim();
+        if (!normalizedSpec) {
+            return normalizedSpec;
+        }
+
+        if (!SECTION_COMMAND_KEYS.has(commandKey)) {
+            return normalizedSpec;
+        }
+
+        const triggerSegment = normalizedSpec.split(',')[0];
+        return triggerSegment.trim();
     }
 
 }

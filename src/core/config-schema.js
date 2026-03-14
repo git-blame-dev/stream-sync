@@ -228,7 +228,8 @@ const CONFIG_SCHEMA = {
     },
 
     farewell: {
-        command: { type: 'string', userDefined: true }
+        command: { type: 'string', userDefined: true },
+        timeout: { type: 'number', default: 300, min: 1, integer: true }
     },
 
     commands: {

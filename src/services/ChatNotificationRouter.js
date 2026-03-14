@@ -343,6 +343,14 @@ class ChatNotificationRouter {
             throw new Error('Runtime missing handleFarewellNotification');
         }
 
+        const farewellCooldownMs = this.getFarewellCooldownMs();
+        const farewellCooldownKey = `farewell:${platform}`;
+        const globalAllowed = this.checkGlobalCooldown(farewellCooldownKey, farewellCooldownMs);
+        if (!globalAllowed) {
+            this._logSkipped(platform, normalizedData.username, 'farewell timeout active');
+            return true;
+        }
+
         try {
             const result = await this.runtime.handleFarewellNotification(platform, normalizedData.username, {
                 command: farewellTrigger,
@@ -352,6 +360,7 @@ class ChatNotificationRouter {
             });
 
             if (result && typeof result === 'object' && result.success === true) {
+                this.updateGlobalCooldown(farewellCooldownKey);
                 return true;
             }
 
@@ -370,6 +379,10 @@ class ChatNotificationRouter {
             heavyCooldown: cooldownConfig.heavyCommandCooldownMs,
             globalCooldown: cooldownConfig.globalCmdCooldownMs
         };
+    }
+
+    getFarewellCooldownMs() {
+        return this.runtime.config.farewell.timeout * 1000;
     }
 
     checkGlobalCooldown(commandName, globalCooldownMs) {

@@ -59,6 +59,26 @@ describe('CommandParser Keyword Parsing', () => {
             expect(result).toBe('!bye');
         });
 
+        test('ignores farewell timeout config when parsing farewell triggers', () => {
+            configFixture.farewell = {
+                command: '!bye|!bye2|!bye3, bye|goodbye|cya',
+                timeout: '300'
+            };
+            commandParser = new CommandParser(configFixture);
+
+            expect(commandParser.getMatchingFarewell('!bye everyone!', '!bye')).toBe('!bye');
+            expect(commandParser.getMatchingFarewell('300 everyone!', '300')).toBeNull();
+        });
+
+        test('does not treat command-key aliases as farewell triggers', () => {
+            configFixture.farewell = {
+                command: 'bye-bye-bye|bye-bye-bye2|bye-bye-bye3'
+            };
+            commandParser = new CommandParser(configFixture);
+
+            expect(commandParser.getMatchingFarewell('!bye everyone!', '!bye')).toBeNull();
+        });
+
         test('should detect farewell keywords when keyword parsing is enabled', () => {
             const result = commandParser.getMatchingFarewell('Goodbye everyone!', 'goodbye');
             expect(result).toBeNull();
@@ -145,4 +165,4 @@ describe('CommandParser Keyword Parsing', () => {
             commandParser.parsedCommands.keywords = originalKeywordCheck;
         });
     });
-}); 
+});
