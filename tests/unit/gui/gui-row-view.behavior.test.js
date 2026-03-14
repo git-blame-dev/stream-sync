@@ -169,6 +169,30 @@ describe('GuiRow rendering behavior', () => {
         expect(html).toContain('gui-row--paypiggy');
     });
 
+    it('renders member label after username for paypiggy chat rows', () => {
+        const html = renderToStaticMarkup(
+            React.createElement(GuiRow, {
+                mode: 'dock',
+                row: {
+                    type: 'chat',
+                    kind: 'chat',
+                    platform: 'twitch',
+                    username: 'test-paypiggy-user',
+                    text: 'paypiggy chat',
+                    isPaypiggy: true,
+                    avatarUrl: 'https://example.invalid/test-avatar.png',
+                    timestamp: '2024-01-01T00:00:00.000Z'
+                }
+            })
+        );
+
+        const usernameIndex = html.indexOf('class="gui-row__username"');
+        const memberLabelIndex = html.indexOf('class="gui-row__member-tag"');
+        expect(memberLabelIndex).toBeGreaterThan(-1);
+        expect(memberLabelIndex).toBeGreaterThan(usernameIndex);
+        expect(html).toContain('>[member]<');
+    });
+
     it('does not add paypiggy row class for chat rows with isPaypiggy false', () => {
         const html = renderToStaticMarkup(
             React.createElement(GuiRow, {
@@ -187,6 +211,27 @@ describe('GuiRow rendering behavior', () => {
         );
 
         expect(html).not.toContain('gui-row--paypiggy');
+    });
+
+    it('does not render member label for non-paypiggy chat rows', () => {
+        const html = renderToStaticMarkup(
+            React.createElement(GuiRow, {
+                mode: 'dock',
+                row: {
+                    type: 'chat',
+                    kind: 'chat',
+                    platform: 'twitch',
+                    username: 'test-non-paypiggy-user',
+                    text: 'non paypiggy chat',
+                    isPaypiggy: false,
+                    avatarUrl: 'https://example.invalid/test-avatar.png',
+                    timestamp: '2024-01-01T00:00:00.000Z'
+                }
+            })
+        );
+
+        expect(html).not.toContain('gui-row__member-tag');
+        expect(html).not.toContain('>[member]<');
     });
 
     it('does not add paypiggy row class when isPaypiggy is omitted', () => {
@@ -226,6 +271,27 @@ describe('GuiRow rendering behavior', () => {
         );
 
         expect(html).not.toContain('gui-row--paypiggy');
+    });
+
+    it('does not render member label for notification rows', () => {
+        const html = renderToStaticMarkup(
+            React.createElement(GuiRow, {
+                mode: 'dock',
+                row: {
+                    type: 'platform:paypiggy',
+                    kind: 'notification',
+                    platform: 'twitch',
+                    username: 'test-notification-user',
+                    text: 'notification row',
+                    isPaypiggy: true,
+                    avatarUrl: 'https://example.invalid/test-avatar.png',
+                    timestamp: '2024-01-01T00:00:00.000Z'
+                }
+            })
+        );
+
+        expect(html).not.toContain('gui-row__member-tag');
+        expect(html).not.toContain('>[member]<');
     });
 
     it('keeps paypiggy class on overlay chat rows', () => {

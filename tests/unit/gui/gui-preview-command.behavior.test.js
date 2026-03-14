@@ -73,6 +73,7 @@ describe('GUI local preview command behavior', () => {
 
         expect(rows.length).toBe(15);
         expectPreviewEmoteChatRow(rows, 0, 'twitch', 'test-twitch-account', TWITCH_EMOTE_ID, TWITCH_TIKTOK_EMOTE_URL);
+        expect(rows[0].data.isPaypiggy).toBe(true);
         expectPreviewEmoteChatRow(rows, 1, 'youtube', 'test-youtube-account', YOUTUBE_EMOTE_ID, YOUTUBE_EMOTE_URL);
         expectPreviewEmoteChatRow(rows, 2, 'tiktok', 'test-tiktok-account', TIKTOK_EMOTE_ID, TWITCH_TIKTOK_EMOTE_URL);
         expect(rows[3]).toEqual(expect.objectContaining({

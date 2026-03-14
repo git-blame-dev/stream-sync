@@ -29,6 +29,7 @@ describe('GUI shared styles behavior', () => {
         const avatarBlock = readCssBlock(cssText, '.gui-row__avatar');
         const platformIconBlock = readCssBlock(cssText, '.gui-row__platform-icon');
         const usernameBlock = readCssBlock(cssText, '.gui-row__username');
+        const memberTagBlock = readCssBlock(cssText, '.gui-row__member-tag');
         const textBlock = readCssBlock(cssText, '.gui-row__text');
         const emoteBlock = readCssBlock(cssText, '.gui-row__emote');
 
@@ -58,6 +59,10 @@ describe('GUI shared styles behavior', () => {
         expect(platformIconBlock).toContain('height: var(--gui-platform-icon-size);');
         expect(platformIconBlock).toContain('transform: translateY(1px);');
         expect(usernameBlock).toContain('font-size: var(--gui-username-font-size);');
+        expect(memberTagBlock).toContain('font-size: calc(var(--gui-username-font-size) * 0.65 * 1.15);');
+        expect(memberTagBlock).toContain('color: gold;');
+        expect(memberTagBlock).toContain('display: inline-flex;');
+        expect(memberTagBlock).toContain('align-items: center;');
         expect(textBlock).toContain('font-size: var(--gui-message-font-size);');
         expect(emoteBlock).toContain('width: var(--gui-emote-size);');
         expect(emoteBlock).toContain('height: var(--gui-emote-size);');

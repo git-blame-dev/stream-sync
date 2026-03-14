@@ -41,6 +41,7 @@ export function GuiRow({ row, mode, rowRef, className, style, onAnimationEnd }: 
         <div className="gui-row__header">
           {platformIconUrl ? <img className="gui-row__platform-icon" src={platformIconUrl} alt="" /> : null}
           <span className="gui-row__username">{row.username}</span>
+          {isPaypiggyChatRow ? <span className="gui-row__member-tag">[member]</span> : null}
         </div>
         <span className={textClass}>
           {hasParts
