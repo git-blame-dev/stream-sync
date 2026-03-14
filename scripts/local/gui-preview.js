@@ -120,6 +120,7 @@ function buildPreviewConfig(baseConfig) {
         followsEnabled: true,
         giftsEnabled: true,
         raidsEnabled: true,
+        sharesEnabled: true,
         paypiggiesEnabled: true
     };
 
@@ -232,6 +233,9 @@ function buildPreviewEventData(type, account, index, timestamp) {
         return {
             ...baseData,
             isPaypiggy: index === 0,
+            isMod: false,
+            isBroadcaster: false,
+            metadata: {},
             message
         };
     }
