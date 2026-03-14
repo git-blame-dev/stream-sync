@@ -3,6 +3,12 @@ import React from 'react'
 import type { GuiRowDto } from '../types'
 import { getPlatformIconUrl } from '../platform-icon-map'
 
+const RAYQUAZA_IMAGE_URL = 'https://img.pokemondb.net/sprites/black-white/anim/normal/rayquaza.gif'
+
+function normalizePlatform(value: unknown): string {
+  return typeof value === 'string' ? value.trim().toLowerCase() : ''
+}
+
 interface GuiRowProps {
   row: GuiRowDto
   mode: 'dock' | 'overlay'
@@ -13,11 +19,14 @@ interface GuiRowProps {
 }
 
 export function GuiRow({ row, mode, rowRef, className, style, onAnimationEnd }: GuiRowProps) {
-  const platformIconUrl = getPlatformIconUrl(row.platform)
+  const normalizedPlatform = normalizePlatform(row.platform)
+  const platformIconUrl = getPlatformIconUrl(normalizedPlatform)
   const hasParts = Array.isArray(row.parts) && row.parts.length > 0
   const isPaypiggyChatRow = row.kind === 'chat' && row.isPaypiggy === true
+  const isMemberChatRow = isPaypiggyChatRow
   const textClass = [
     'gui-row__text',
+    isMemberChatRow ? 'gui-row__text--member-chat' : '',
     row.kind === 'notification' ? 'gui-row__text--notification' : '',
     mode === 'overlay' ? 'gui-row__text--overlay-clamp' : ''
   ]
@@ -37,10 +46,19 @@ export function GuiRow({ row, mode, rowRef, className, style, onAnimationEnd }: 
   return (
     <div className={rowClass} style={style} onAnimationEnd={onAnimationEnd} data-row-type={row.type} ref={rowRef}>
       <img className="gui-row__avatar gui-row__avatar--circle" src={row.avatarUrl} alt="" />
-      <div className="gui-row__content">
-        <div className="gui-row__header">
+      <div className={["gui-row__content", isMemberChatRow ? 'gui-row__content--member-chat' : ''].filter(Boolean).join(' ')}>
+        {isMemberChatRow ? (
+          <img
+            className="gui-row__member-image"
+            src={RAYQUAZA_IMAGE_URL}
+            alt=""
+            loading="lazy"
+            decoding="async"
+          />
+        ) : null}
+        <div className={["gui-row__header", isMemberChatRow ? 'gui-row__header--member-chat' : ''].filter(Boolean).join(' ')}>
           {platformIconUrl ? <img className="gui-row__platform-icon" src={platformIconUrl} alt="" /> : null}
-          <span className="gui-row__username">{row.username}</span>
+          <span className={["gui-row__username", isMemberChatRow ? 'gui-row__username--member-chat' : ''].filter(Boolean).join(' ')}>{row.username}</span>
           {isPaypiggyChatRow ? <span className="gui-row__member-tag">[member]</span> : null}
         </div>
         <span className={textClass}>

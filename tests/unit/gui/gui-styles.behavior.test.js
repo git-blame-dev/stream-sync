@@ -31,6 +31,11 @@ describe('GUI shared styles behavior', () => {
         const usernameBlock = readCssBlock(cssText, '.gui-row__username');
         const memberTagBlock = readCssBlock(cssText, '.gui-row__member-tag');
         const textBlock = readCssBlock(cssText, '.gui-row__text');
+        const memberContentBlock = readCssBlock(cssText, '.gui-row__content--member-chat');
+        const memberHeaderBlock = readCssBlock(cssText, '.gui-row__header--member-chat');
+        const memberUsernameBlock = readCssBlock(cssText, '.gui-row__username--member-chat');
+        const memberTextBlock = readCssBlock(cssText, '.gui-row__text--member-chat');
+        const memberImageBlock = readCssBlock(cssText, '.gui-row__member-image');
         const emoteBlock = readCssBlock(cssText, '.gui-row__emote');
 
         expect(pageBlock).toContain('margin: 0;');
@@ -40,7 +45,7 @@ describe('GUI shared styles behavior', () => {
         expect(rootBlock).toContain('--gui-platform-icon-size: 45px;');
         expect(rootBlock).toContain('--gui-username-font-size: 20px;');
         expect(rootBlock).toContain('--gui-message-font-size: 27px;');
-        expect(rootBlock).toContain('--gui-emote-size: 90px;');
+        expect(rootBlock).toContain('--gui-emote-size: 50px;');
         expect(overlayShellBlock).toContain('height: 100vh;');
         expect(overlayShellBlock).toContain('overflow: hidden;');
         expect(overlayExitBlock).toContain('position: absolute;');
@@ -64,6 +69,22 @@ describe('GUI shared styles behavior', () => {
         expect(memberTagBlock).toContain('display: inline-flex;');
         expect(memberTagBlock).toContain('align-items: center;');
         expect(textBlock).toContain('font-size: var(--gui-message-font-size);');
+        expect(memberContentBlock).toContain('display: flow-root;');
+        expect(memberHeaderBlock).toContain('min-width: 0;');
+        expect(memberUsernameBlock).toContain('min-width: 0;');
+        expect(memberUsernameBlock).toContain('overflow: hidden;');
+        expect(memberUsernameBlock).toContain('text-overflow: ellipsis;');
+        expect(memberUsernameBlock).toContain('white-space: nowrap;');
+        expect(memberUsernameBlock).toContain('flex: 0 1 auto;');
+        expect(memberTextBlock).toContain('display: block;');
+        expect(memberTextBlock).toContain('overflow-wrap: anywhere;');
+        expect(memberTextBlock).toContain('word-break: break-word;');
+        expect(memberImageBlock).toContain('width: 135px;');
+        expect(memberImageBlock).toContain('height: 135px;');
+        expect(memberImageBlock).toContain('float: right;');
+        expect(memberImageBlock).toContain('margin-left: 10px;');
+        expect(memberImageBlock).toContain('margin-bottom: 4px;');
+        expect(memberImageBlock).toContain('object-fit: contain;');
         expect(emoteBlock).toContain('width: var(--gui-emote-size);');
         expect(emoteBlock).toContain('height: var(--gui-emote-size);');
     });
