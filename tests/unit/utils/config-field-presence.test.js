@@ -488,7 +488,8 @@ describe('Config field presence - all normalizers return expected fields', () =>
 
     describe('_normalizeFarewellSection', () => {
         const EXPECTED_FIELDS = [
-            'command'
+            'command',
+            'timeout'
         ];
 
         it('returns all expected fields', () => {

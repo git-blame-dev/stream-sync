@@ -71,7 +71,7 @@ class CommandParser {
         let hasFarewellConfigText = false;
 
         for (const [key, configLine] of Object.entries(this.farewellCommands)) {
-            if (key === 'enabled' || typeof configLine !== 'string') continue;
+            if (key !== 'command' || typeof configLine !== 'string') continue;
 
             if (configLine.trim().length > 0) {
                 hasFarewellConfigText = true;

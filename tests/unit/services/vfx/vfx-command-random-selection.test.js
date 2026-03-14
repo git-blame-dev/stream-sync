@@ -78,4 +78,37 @@ describe('VFXCommandService random variant selection', () => {
         expect(result.reason).toBe('No VFX configured for gifts');
         expect(capturedCommands.length).toBe(0);
     });
+
+    test('selects farewell trigger variants from trigger segment only', async () => {
+        const config = createConfig('!one');
+        config.farewell = {
+            command: '!bye|!bye2|!bye3, bye|goodbye|cya'
+        };
+        crypto.randomInt = createMockFn().mockReturnValue(2);
+
+        const service = new VFXCommandService(config, null, {
+            effectsManager: mockEffectsManager
+        });
+        service.commandParser = {
+            getVFXConfig: createMockFn((message) => ({
+                command: message,
+                commandKey: message,
+                filename: `${message}.mp4`,
+                mediaSource: 'VFX Source',
+                vfxFilePath: `${message}.vfx`,
+                duration: 5000
+            }))
+        };
+
+        const result = await service.executeCommandForKey('farewell', {
+            username: 'testUser2',
+            platform: 'twitch',
+            userId: 'test-user-456',
+            skipCooldown: true
+        });
+
+        expect(result.success).toBe(true);
+        expect(capturedCommands.length).toBe(1);
+        expect(capturedCommands[0].filename).toBe('!bye3.mp4');
+    });
 });

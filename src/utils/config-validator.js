@@ -366,7 +366,8 @@ class ConfigValidator {
 
     static _normalizeFarewellSection(raw) {
         return {
-            command: ConfigValidator.parseString(raw.command, '')
+            command: ConfigValidator.parseString(raw.command, ''),
+            timeout: ConfigValidator.parseNumber(raw.timeout, { defaultValue: 300, min: 1, requireInteger: true })
         };
     }
 

@@ -34,6 +34,9 @@ describe('ChatNotificationRouter', () => {
                     heavyCommandCooldownMs: 300000,
                     globalCmdCooldownMs: 45000
                 },
+                farewell: {
+                    timeout: 300
+                },
                 twitch: { greetingsEnabled: true, messagesEnabled: true, farewellsEnabled: true },
                 tiktok: { greetingsEnabled: true, messagesEnabled: true, farewellsEnabled: true }
             },
@@ -448,6 +451,177 @@ describe('ChatNotificationRouter', () => {
 
         const queuedTypes = runtime.displayQueue.addItem.mock.calls.map((call) => call[0].type);
         expect(queuedTypes).toContain('farewell');
+    });
+
+    it('suppresses repeated farewell triggers on the same platform within timeout', async () => {
+        const activeCooldowns = new Set();
+        const { router, runtime } = createRouter({
+            runtime: {
+                config: {
+                    general: { greetingsEnabled: true, messagesEnabled: true },
+                    cooldowns: {
+                        cmdCooldownMs: 60000,
+                        heavyCommandCooldownMs: 300000,
+                        globalCmdCooldownMs: 45000
+                    },
+                    farewell: {
+                        timeout: 300
+                    },
+                    twitch: { greetingsEnabled: true, messagesEnabled: true, farewellsEnabled: true }
+                },
+                commandCooldownService: {
+                    checkUserCooldown: createMockFn().mockReturnValue(true),
+                    checkGlobalCooldown: createMockFn().mockImplementation((key) => !activeCooldowns.has(key)),
+                    updateUserCooldown: createMockFn(),
+                    updateGlobalCooldown: createMockFn().mockImplementation((key) => {
+                        activeCooldowns.add(key);
+                    })
+                },
+                vfxCommandService: {
+                    selectVFXCommand: createMockFn().mockResolvedValue({ command: '!testboom' }),
+                    matchFarewell: createMockFn().mockReturnValue('!bye')
+                }
+            }
+        });
+
+        await router.handleChatMessage('twitch', { ...baseMessage, message: '!bye now' });
+        await router.handleChatMessage('twitch', { ...baseMessage, message: '!bye again' });
+
+        const queuedTypes = runtime.displayQueue.addItem.mock.calls.map((call) => call[0].type);
+        const farewellCount = queuedTypes.filter((type) => type === 'farewell').length;
+        expect(farewellCount).toBe(1);
+    });
+
+    it('allows farewell triggers independently per platform within timeout window', async () => {
+        const activeCooldowns = new Set();
+        const { router, runtime } = createRouter({
+            runtime: {
+                config: {
+                    general: { greetingsEnabled: true, messagesEnabled: true },
+                    cooldowns: {
+                        cmdCooldownMs: 60000,
+                        heavyCommandCooldownMs: 300000,
+                        globalCmdCooldownMs: 45000
+                    },
+                    farewell: {
+                        timeout: 300
+                    },
+                    twitch: { greetingsEnabled: true, messagesEnabled: true, farewellsEnabled: true },
+                    tiktok: { greetingsEnabled: true, messagesEnabled: true, farewellsEnabled: true }
+                },
+                commandCooldownService: {
+                    checkUserCooldown: createMockFn().mockReturnValue(true),
+                    checkGlobalCooldown: createMockFn().mockImplementation((key) => !activeCooldowns.has(key)),
+                    updateUserCooldown: createMockFn(),
+                    updateGlobalCooldown: createMockFn().mockImplementation((key) => {
+                        activeCooldowns.add(key);
+                    })
+                },
+                vfxCommandService: {
+                    selectVFXCommand: createMockFn().mockResolvedValue({ command: '!testboom' }),
+                    matchFarewell: createMockFn().mockReturnValue('!bye')
+                }
+            }
+        });
+
+        await router.handleChatMessage('twitch', { ...baseMessage, message: '!bye twitch' });
+        await router.handleChatMessage('tiktok', { ...baseMessage, message: '!bye tiktok' });
+
+        const queuedItems = runtime.displayQueue.addItem.mock.calls.map((call) => call[0]);
+        const farewellPlatforms = queuedItems
+            .filter((item) => item.type === 'farewell')
+            .map((item) => item.platform);
+        expect(farewellPlatforms).toContain('twitch');
+        expect(farewellPlatforms).toContain('tiktok');
+    });
+
+    it('treats cooldown-suppressed farewell as handled and does not fall through to commands', async () => {
+        const activeCooldowns = new Set(['farewell:twitch']);
+        const { router, runtime } = createRouter({
+            runtime: {
+                config: {
+                    general: { greetingsEnabled: true, messagesEnabled: true },
+                    cooldowns: {
+                        cmdCooldownMs: 60000,
+                        heavyCommandCooldownMs: 300000,
+                        globalCmdCooldownMs: 45000
+                    },
+                    farewell: {
+                        timeout: 300
+                    },
+                    twitch: { greetingsEnabled: true, messagesEnabled: true, farewellsEnabled: true }
+                },
+                commandCooldownService: {
+                    checkUserCooldown: createMockFn().mockReturnValue(true),
+                    checkGlobalCooldown: createMockFn().mockImplementation((key) => !activeCooldowns.has(key)),
+                    updateUserCooldown: createMockFn(),
+                    updateGlobalCooldown: createMockFn().mockImplementation((key) => {
+                        activeCooldowns.add(key);
+                    })
+                },
+                vfxCommandService: {
+                    selectVFXCommand: createMockFn().mockResolvedValue({ command: '!testboom' }),
+                    matchFarewell: createMockFn().mockReturnValue('!bye')
+                }
+            }
+        });
+
+        await router.handleChatMessage('twitch', { ...baseMessage, message: '!bye now' });
+
+        const queuedTypes = runtime.displayQueue.addItem.mock.calls.map((call) => call[0].type);
+        expect(queuedTypes).not.toContain('farewell');
+        expect(queuedTypes).not.toContain('command');
+    });
+
+    it('uses isolated farewell cooldown keys that do not block regular command cooldown keys', async () => {
+        const activeCooldowns = new Set(['farewell:twitch']);
+        const checkGlobalCooldown = createMockFn().mockImplementation((key) => !activeCooldowns.has(key));
+        const updateGlobalCooldown = createMockFn().mockImplementation((key) => {
+            activeCooldowns.add(key);
+        });
+        const { router, runtime } = createRouter({
+            runtime: {
+                config: {
+                    general: { greetingsEnabled: true, messagesEnabled: true },
+                    cooldowns: {
+                        cmdCooldownMs: 60000,
+                        heavyCommandCooldownMs: 300000,
+                        globalCmdCooldownMs: 45000
+                    },
+                    farewell: {
+                        timeout: 300
+                    },
+                    twitch: { greetingsEnabled: true, messagesEnabled: true, farewellsEnabled: true }
+                },
+                commandCooldownService: {
+                    checkUserCooldown: createMockFn().mockReturnValue(true),
+                    checkGlobalCooldown,
+                    updateUserCooldown: createMockFn(),
+                    updateGlobalCooldown
+                },
+                vfxCommandService: {
+                    selectVFXCommand: createMockFn().mockImplementation((trigger) => {
+                        if (trigger === '!testboom') {
+                            return { command: '!testboom' };
+                        }
+                        return null;
+                    }),
+                    matchFarewell: createMockFn().mockImplementation((message, trigger) => {
+                        if (trigger === '!bye') {
+                            return '!bye';
+                        }
+                        return null;
+                    })
+                }
+            }
+        });
+
+        await router.handleChatMessage('twitch', { ...baseMessage, message: '!bye now' });
+        await router.handleChatMessage('twitch', { ...baseMessage, message: '!testboom now' });
+
+        const queuedTypes = runtime.displayQueue.addItem.mock.calls.map((call) => call[0].type);
+        expect(queuedTypes).not.toContain('farewell');
+        expect(queuedTypes).toContain('command');
     });
 
     it('detects command triggers after sanitizing zero-width characters', async () => {
