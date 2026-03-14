@@ -9,7 +9,7 @@ html, body {
   --gui-platform-icon-size: 45px;
   --gui-username-font-size: 20px;
   --gui-message-font-size: 27px;
-  --gui-emote-size: 90px;
+  --gui-emote-size: 50px;
 }
 
 .gui-shell {
@@ -104,10 +104,18 @@ html, body {
   gap: 2px;
 }
 
+.gui-row__content--member-chat {
+  display: flow-root;
+}
+
 .gui-row__header {
   display: flex;
   align-items: center;
   gap: 6px;
+}
+
+.gui-row__header--member-chat {
+  min-width: 0;
 }
 
 .gui-row__platform-icon {
@@ -122,6 +130,14 @@ html, body {
   font-weight: 600;
   font-size: var(--gui-username-font-size);
   color: #d9e0e8;
+}
+
+.gui-row__username--member-chat {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 0 1 auto;
 }
 
 .gui-row__member-tag {
@@ -139,6 +155,21 @@ html, body {
   align-items: center;
   flex-wrap: wrap;
   gap: 2px;
+}
+
+.gui-row__text--member-chat {
+  display: block;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.gui-row__member-image {
+  width: 135px;
+  height: 135px;
+  object-fit: contain;
+  float: right;
+  margin-left: 10px;
+  margin-bottom: 4px;
 }
 
 .gui-row__text--overlay-clamp {

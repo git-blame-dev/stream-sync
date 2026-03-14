@@ -314,4 +314,156 @@ describe('GuiRow rendering behavior', () => {
         expect(html).toContain('gui-row--overlay-enter');
         expect(html).toContain('gui-row--paypiggy');
     });
+
+    it('renders Rayquaza image for YouTube member chat rows', () => {
+        const html = renderToStaticMarkup(
+            React.createElement(GuiRow, {
+                mode: 'dock',
+                row: {
+                    type: 'chat',
+                    kind: 'chat',
+                    platform: 'youtube',
+                    username: 'test-youtube-member',
+                    text: 'hello from member',
+                    isPaypiggy: true,
+                    avatarUrl: 'https://example.invalid/test-avatar.png',
+                    timestamp: '2024-01-01T00:00:00.000Z'
+                }
+            })
+        );
+
+        expect(html).toContain('class="gui-row__member-image"');
+        expect(html).toContain('src="https://img.pokemondb.net/sprites/black-white/anim/normal/rayquaza.gif"');
+        expect(html).toContain('loading="lazy"');
+        expect(html).toContain('decoding="async"');
+        expect(html).toContain('gui-row__content--member-chat');
+        expect(html).toContain('gui-row__header--member-chat');
+        expect(html).toContain('gui-row__username--member-chat');
+        expect(html).toContain('gui-row__text--member-chat');
+
+        const imageIndex = html.indexOf('class="gui-row__member-image"');
+        const textIndex = html.indexOf('class="gui-row__text');
+        expect(imageIndex).toBeGreaterThan(-1);
+        expect(textIndex).toBeGreaterThan(-1);
+        expect(imageIndex).toBeLessThan(textIndex);
+    });
+
+    it('renders Rayquaza image for trimmed mixed-case YouTube member rows', () => {
+        const html = renderToStaticMarkup(
+            React.createElement(GuiRow, {
+                mode: 'dock',
+                row: {
+                    type: 'chat',
+                    kind: 'chat',
+                    platform: '  YouTube  ',
+                    username: 'test-youtube-member',
+                    text: 'hello from member',
+                    isPaypiggy: true,
+                    avatarUrl: 'https://example.invalid/test-avatar.png',
+                    timestamp: '2024-01-01T00:00:00.000Z'
+                }
+            })
+        );
+
+        expect(html).toContain('class="gui-row__member-image"');
+    });
+
+    it('does not render Rayquaza image for non-member YouTube chat rows', () => {
+        const html = renderToStaticMarkup(
+            React.createElement(GuiRow, {
+                mode: 'dock',
+                row: {
+                    type: 'chat',
+                    kind: 'chat',
+                    platform: 'youtube',
+                    username: 'test-youtube-user',
+                    text: 'hello from non-member',
+                    isPaypiggy: false,
+                    avatarUrl: 'https://example.invalid/test-avatar.png',
+                    timestamp: '2024-01-01T00:00:00.000Z'
+                }
+            })
+        );
+
+        expect(html).not.toContain('gui-row__member-image');
+        expect(html).not.toContain('gui-row__content--member-chat');
+    });
+
+    it('renders Rayquaza image for non-YouTube paypiggy chat rows', () => {
+        const twitchHtml = renderToStaticMarkup(
+            React.createElement(GuiRow, {
+                mode: 'dock',
+                row: {
+                    type: 'chat',
+                    kind: 'chat',
+                    platform: 'twitch',
+                    username: 'test-twitch-member',
+                    text: 'hello from twitch member',
+                    isPaypiggy: true,
+                    avatarUrl: 'https://example.invalid/test-avatar.png',
+                    timestamp: '2024-01-01T00:00:00.000Z'
+                }
+            })
+        );
+
+        const tiktokHtml = renderToStaticMarkup(
+            React.createElement(GuiRow, {
+                mode: 'dock',
+                row: {
+                    type: 'chat',
+                    kind: 'chat',
+                    platform: 'tiktok',
+                    username: 'test-tiktok-member',
+                    text: 'hello from tiktok member',
+                    isPaypiggy: true,
+                    avatarUrl: 'https://example.invalid/test-avatar.png',
+                    timestamp: '2024-01-01T00:00:00.000Z'
+                }
+            })
+        );
+
+        expect(twitchHtml).toContain('gui-row__member-image');
+        expect(tiktokHtml).toContain('gui-row__member-image');
+    });
+
+    it('does not render Rayquaza image for notification rows', () => {
+        const html = renderToStaticMarkup(
+            React.createElement(GuiRow, {
+                mode: 'dock',
+                row: {
+                    type: 'platform:paypiggy',
+                    kind: 'notification',
+                    platform: 'youtube',
+                    username: 'test-youtube-member',
+                    text: 'became a member',
+                    isPaypiggy: true,
+                    avatarUrl: 'https://example.invalid/test-avatar.png',
+                    timestamp: '2024-01-01T00:00:00.000Z'
+                }
+            })
+        );
+
+        expect(html).not.toContain('gui-row__member-image');
+    });
+
+    it('keeps overlay text clamp class for member rows', () => {
+        const html = renderToStaticMarkup(
+            React.createElement(GuiRow, {
+                mode: 'overlay',
+                row: {
+                    type: 'chat',
+                    kind: 'chat',
+                    platform: 'twitch',
+                    username: 'test-twitch-member',
+                    text: 'hello from member',
+                    isPaypiggy: true,
+                    avatarUrl: 'https://example.invalid/test-avatar.png',
+                    timestamp: '2024-01-01T00:00:00.000Z'
+                }
+            })
+        );
+
+        expect(html).toContain('gui-row__text--overlay-clamp');
+        expect(html).toContain('gui-row__text--member-chat');
+    });
 });

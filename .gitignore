@@ -18,3 +18,4 @@ GEMINI.md
 config.ini
 tasks/
 gui/dist/
+gui/public/assets/platform-icons/Thumbs.db
