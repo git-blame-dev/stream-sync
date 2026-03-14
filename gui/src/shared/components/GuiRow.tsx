@@ -37,6 +37,7 @@ export function GuiRow({ row, mode, rowRef, className, style, onAnimationEnd }: 
     'gui-row',
     `gui-row--${row.kind}`,
     isPaypiggyChatRow ? 'gui-row--paypiggy' : '',
+    isMemberChatRow ? 'gui-row--member-chat' : '',
     mode === 'overlay' ? 'gui-row--overlay-enter' : '',
     className || ''
   ]
@@ -48,13 +49,15 @@ export function GuiRow({ row, mode, rowRef, className, style, onAnimationEnd }: 
       <img className="gui-row__avatar gui-row__avatar--circle" src={row.avatarUrl} alt="" />
       <div className={["gui-row__content", isMemberChatRow ? 'gui-row__content--member-chat' : ''].filter(Boolean).join(' ')}>
         {isMemberChatRow ? (
-          <img
-            className="gui-row__member-image"
-            src={RAYQUAZA_IMAGE_URL}
-            alt=""
-            loading="lazy"
-            decoding="async"
-          />
+          <span className="gui-row__member-image-clip">
+            <img
+              className="gui-row__member-image"
+              src={RAYQUAZA_IMAGE_URL}
+              alt=""
+              loading="lazy"
+              decoding="async"
+            />
+          </span>
         ) : null}
         <div className={["gui-row__header", isMemberChatRow ? 'gui-row__header--member-chat' : ''].filter(Boolean).join(' ')}>
           {platformIconUrl ? <img className="gui-row__platform-icon" src={platformIconUrl} alt="" /> : null}
