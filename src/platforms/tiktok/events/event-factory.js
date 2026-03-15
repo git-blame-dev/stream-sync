@@ -3,7 +3,7 @@ const { normalizeTikTokMessage } = require('../../../utils/message-normalization
 const { extractTikTokUserData } = require('../../../utils/tiktok-data-extraction');
 const { getSystemTimestampISO } = require('../../../utils/timestamp');
 const { DEFAULT_AVATAR_URL } = require('../../../constants/avatar');
-const { getValidMessageParts } = require('../../../utils/message-parts');
+const { getValidMessageParts, normalizeBadgeImages } = require('../../../utils/message-parts');
 
 function createTikTokEventFactory(options = {}) {
     const platformName = options.platformName || 'tiktok';
@@ -93,6 +93,7 @@ function createTikTokEventFactory(options = {}) {
             const avatarUrl = resolveAvatarUrl(data, normalized || {});
             const messageText = resolveMessageText(normalized);
             const messageParts = resolveMessageParts(normalized);
+            const badgeImages = normalizeBadgeImages(normalized?.badgeImages);
 
             if (!messageText && messageParts.length === 0) {
                 throw new Error('Missing TikTok message text');
@@ -115,7 +116,7 @@ function createTikTokEventFactory(options = {}) {
                 messagePayload.parts = messageParts;
             }
 
-            return {
+            const eventData = {
                 type: PlatformEvents.CHAT_MESSAGE,
                 platform: platformName,
                 username: identity.username,
@@ -128,6 +129,12 @@ function createTikTokEventFactory(options = {}) {
                 isBroadcaster: !!normalized.isBroadcaster,
                 metadata: eventMetadata
             };
+
+            if (badgeImages.length > 0) {
+                eventData.badgeImages = badgeImages;
+            }
+
+            return eventData;
         },
         createGift: (data = {}) => {
             const identity = normalizeIdentityFromCanonical(data);

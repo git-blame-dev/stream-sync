@@ -55,6 +55,37 @@ describe('TikTok event factory behavior', () => {
         });
     });
 
+    it('emits canonical badgeImages for chat message events', () => {
+        const { createTikTokEventFactory } = require('../../../../../src/platforms/tiktok/events/event-factory');
+
+        const eventFactory = createTikTokEventFactory({
+            platformName: 'tiktok',
+            generateCorrelationId: () => 'corr-chat-badges-123'
+        });
+
+        const event = eventFactory.createChatMessage({}, {
+            normalizedData: {
+                userId: 'test-user-id',
+                username: 'test-username',
+                message: {
+                    text: 'test message'
+                },
+                badgeImages: [
+                    { imageUrl: '   ', source: 'tiktok', label: 'invalid' },
+                    { imageUrl: ' https://example.invalid/badge-1.png ', source: 'tiktok', label: 'Level 22' },
+                    { imageUrl: 'https://example.invalid/badge-1.png', source: 'tiktok', label: 'Level 22' },
+                    { imageUrl: 'https://example.invalid/badge-2.png', source: 'tiktok', label: 'Fans' }
+                ],
+                timestamp: '2026-01-30T12:00:00.000Z'
+            }
+        });
+
+        expect(event.badgeImages).toEqual([
+            { imageUrl: 'https://example.invalid/badge-1.png', source: 'tiktok', label: 'Level 22' },
+            { imageUrl: 'https://example.invalid/badge-2.png', source: 'tiktok', label: 'Fans' }
+        ]);
+    });
+
     it('preserves avatarUrl on gift events', () => {
         const { createTikTokEventFactory } = require('../../../../../src/platforms/tiktok/events/event-factory');
 
