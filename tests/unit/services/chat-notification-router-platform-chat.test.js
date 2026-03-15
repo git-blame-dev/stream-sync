@@ -106,6 +106,25 @@ describe('ChatNotificationRouter platform chat behavior', () => {
         expect(queued.data.message).toEqual({ text: 'test hello youtube' });
     });
 
+    it('preserves canonical badgeImages on queued chat rows', async () => {
+        const { router, runtime } = createRouter();
+
+        await router.handleChatMessage('youtube', {
+            ...baseMessage,
+            username: 'testytuser',
+            message: 'test hello youtube',
+            badgeImages: [
+                { imageUrl: 'https://example.invalid/badge-1.png', source: 'youtube', label: 'member' },
+                { imageUrl: 'https://example.invalid/badge-1.png', source: 'youtube', label: 'dupe' }
+            ]
+        });
+
+        const queued = runtime.displayQueue.addItem.mock.calls.map((c) => c[0]).find((i) => i.type === 'chat');
+        expect(queued.data.badgeImages).toEqual([
+            { imageUrl: 'https://example.invalid/badge-1.png', source: 'youtube', label: 'member' }
+        ]);
+    });
+
     it('skips chat on YouTube when messages disabled for platform', async () => {
         const { router, runtime } = createRouter({
             runtime: {

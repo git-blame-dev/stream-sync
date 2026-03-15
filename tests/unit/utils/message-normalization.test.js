@@ -8,7 +8,9 @@ const {
     buildTwitchMessageParts,
     extractTwitchMessageData,
     extractYouTubeMessageText,
-    validateNormalizedMessage
+    validateNormalizedMessage,
+    extractYouTubeBadgeImages,
+    extractTikTokBadgeImages
 } = require('../../../src/utils/message-normalization');
 
 beforeEach(() => {
@@ -252,6 +254,32 @@ describe('Message Normalization', () => {
             const normalized = normalizeYouTubeMessage(chatItem, 'youtube');
 
             expect(normalized.isPaypiggy).toBe(false);
+        });
+
+        test('extracts YouTube badge images preferring largest custom thumbnail', () => {
+            const badgeImages = extractYouTubeBadgeImages({
+                badges: [
+                    {
+                        tooltip: 'Moderator',
+                        custom_thumbnail: []
+                    },
+                    {
+                        tooltip: 'Member (6 months)',
+                        custom_thumbnail: [
+                            { url: 'https://example.invalid/member-s16.png', width: 16, height: 16 },
+                            { url: 'https://example.invalid/member-s32.png', width: 32, height: 32 }
+                        ]
+                    }
+                ]
+            });
+
+            expect(badgeImages).toEqual([
+                {
+                    imageUrl: 'https://example.invalid/member-s32.png',
+                    source: 'youtube',
+                    label: 'Member (6 months)'
+                }
+            ]);
         });
 
         test('preserves YouTube runs ordering in canonical message parts', () => {
@@ -638,6 +666,57 @@ describe('Message Normalization', () => {
                 profilePicture: 'avatar.jpg',
                 numericId: 'tt-123'
             });
+        });
+
+        test('extracts TikTok badge images from first urls and removes duplicates', () => {
+            const badgeImages = extractTikTokBadgeImages({
+                user: {
+                    badgeImageList: [
+                        {
+                            url: [
+                                'https://example.invalid/tiktok-admin-p16.png',
+                                'https://example.invalid/tiktok-admin-p19.png'
+                            ]
+                        }
+                    ],
+                    badges: [
+                        {
+                            text: { defaultPattern: 'Moderator' },
+                            combine: {
+                                icon: {
+                                    url: [
+                                        'https://example.invalid/tiktok-level-p16.png',
+                                        'https://example.invalid/tiktok-level-p19.png'
+                                    ]
+                                }
+                            }
+                        },
+                        {
+                            text: { defaultPattern: 'Duplicate' },
+                            combine: {
+                                icon: {
+                                    url: [
+                                        'https://example.invalid/tiktok-level-p16.png'
+                                    ]
+                                }
+                            }
+                        }
+                    ]
+                }
+            });
+
+            expect(badgeImages).toEqual([
+                {
+                    imageUrl: 'https://example.invalid/tiktok-admin-p16.png',
+                    source: 'tiktok',
+                    label: ''
+                },
+                {
+                    imageUrl: 'https://example.invalid/tiktok-level-p16.png',
+                    source: 'tiktok',
+                    label: 'Moderator'
+                }
+            ]);
         });
 
         test('derives TikTok isPaypiggy from userIdentity.isSubscriberOfAnchor', () => {

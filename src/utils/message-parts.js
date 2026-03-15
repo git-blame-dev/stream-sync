@@ -36,8 +36,38 @@ function getValidMessageParts(data = {}, options = {}) {
         .filter((part) => isValidMessagePart(part, options));
 }
 
+function normalizeBadgeImages(value) {
+    if (!Array.isArray(value) || value.length === 0) {
+        return [];
+    }
+
+    const seen = new Set();
+    const result = [];
+
+    for (const badge of value) {
+        if (!badge || typeof badge !== 'object') {
+            continue;
+        }
+
+        const imageUrl = typeof badge.imageUrl === 'string' ? badge.imageUrl.trim() : '';
+        if (!imageUrl || seen.has(imageUrl)) {
+            continue;
+        }
+
+        seen.add(imageUrl);
+        result.push({
+            imageUrl,
+            source: typeof badge.source === 'string' ? badge.source.trim() : '',
+            label: typeof badge.label === 'string' ? badge.label : ''
+        });
+    }
+
+    return result;
+}
+
 module.exports = {
     getMessagePartsFromPayload,
     isValidMessagePart,
-    getValidMessageParts
+    getValidMessageParts,
+    normalizeBadgeImages
 };

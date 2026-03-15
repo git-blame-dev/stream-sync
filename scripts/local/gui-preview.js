@@ -27,6 +27,23 @@ const PREVIEW_MESSAGE_TEXT = 'test message hello world this is a message to ever
 const PREVIEW_MEDIA_CATALOG = {
     twitch: {
         avatarUrl: PREVIEW_AVATAR_URL,
+        badges: [
+            {
+                imageUrl: 'https://static-cdn.jtvnw.net/badges/v1/3267646d-33f0-4b17-b3df-f923a41db1d0/3',
+                source: 'twitch',
+                label: 'Moderator'
+            },
+            {
+                imageUrl: 'https://static-cdn.jtvnw.net/badges/v1/511b78a9-ab37-472f-9569-457753bbe7d3/3',
+                source: 'twitch',
+                label: 'Founder'
+            },
+            {
+                imageUrl: 'https://static-cdn.jtvnw.net/badges/v1/bbbe0db0-a598-423e-86d0-f9fb98ca1933/3',
+                source: 'twitch',
+                label: 'Prime Gaming'
+            }
+        ],
         emote: {
             id: 'emotesv2_dcd06b30a5c24f6eb871e8f5edbd44f7',
             imageUrl: 'https://static-cdn.jtvnw.net/emoticons/v2/emotesv2_dcd06b30a5c24f6eb871e8f5edbd44f7/animated/dark/3.0'
@@ -34,6 +51,13 @@ const PREVIEW_MEDIA_CATALOG = {
     },
     youtube: {
         avatarUrl: PREVIEW_AVATAR_URL,
+        badges: [
+            {
+                imageUrl: 'https://yt3.ggpht.com/qh4HyXNMbx5x0_HtQ53rpdtMdEv7OTq6hsebWwybYRlKtdYH5m6bq8kviuVZMvxAbGHWH86FV15Opfs=s32-c-k',
+                source: 'youtube',
+                label: 'Member'
+            }
+        ],
         emote: {
             id: 'UCkszU2WH9gy1mb0dV-11UJg/G8AfY6yWGuKuhL0PlbiA2AE',
             imageUrl: 'https://yt3.ggpht.com/KOxdr_z3A5h1Gb7kqnxqOCnbZrBmxI2B_tRQ453BhTWUhYAlpg5ZP8IKEBkcvRoY8grY91Q=w48-h48-c-k-nd'
@@ -41,6 +65,18 @@ const PREVIEW_MEDIA_CATALOG = {
     },
     tiktok: {
         avatarUrl: PREVIEW_AVATAR_URL,
+        badges: [
+            {
+                imageUrl: 'https://p16-webcast.tiktokcdn.com/webcast-sg/webcast_admin_badge_tiktok.png~tplv-obj.image',
+                source: 'tiktok',
+                label: 'Moderator'
+            },
+            {
+                imageUrl: 'https://p16-webcast.tiktokcdn.com/webcast-va/grade_badge_icon_lite_lv20_v1.png~tplv-obj.image',
+                source: 'tiktok',
+                label: 'Level'
+            }
+        ],
         emote: {
             id: '0123456789012345678',
             imageUrl: 'https://static-cdn.jtvnw.net/emoticons/v2/emotesv2_dcd06b30a5c24f6eb871e8f5edbd44f7/animated/dark/3.0'
@@ -229,6 +265,7 @@ function buildPreviewScenarioEvents(durationMs = PREVIEW_DURATION_MS, intervalMs
     const events = [];
 
     const getAccount = (platform) => PREVIEW_PLATFORM_ACCOUNTS.find((entry) => entry.platform === platform) || PREVIEW_PLATFORM_ACCOUNTS[0];
+    const firstPrimaryChatByPlatform = new Set();
 
     for (let index = 0; index < eventCount; index += 1) {
         const scenarioStep = PREVIEW_SCENARIO_TEMPLATE[index % PREVIEW_SCENARIO_TEMPLATE.length];
@@ -244,6 +281,11 @@ function buildPreviewScenarioEvents(durationMs = PREVIEW_DURATION_MS, intervalMs
             userId,
             timestamp
         };
+        const isPrimaryChatStep = scenarioType === 'chat';
+        const includePreviewBadges = isPrimaryChatStep && !firstPrimaryChatByPlatform.has(adapter);
+        if (includePreviewBadges) {
+            firstPrimaryChatByPlatform.add(adapter);
+        }
 
         if (adapter === 'twitch') {
             if (scenarioType === 'chat' || scenarioType === 'chat-hi' || scenarioType === 'chat-hello' || scenarioType === 'chat-command' || scenarioType === 'chat-farewell') {
@@ -268,6 +310,7 @@ function buildPreviewScenarioEvents(durationMs = PREVIEW_DURATION_MS, intervalMs
                             user_name: username,
                             user_login: userId,
                             isPaypiggy: scenarioType === 'chat',
+                            badgeImages: includePreviewBadges ? media.badges : undefined,
                             is_mod: false,
                             is_broadcaster: false,
                             message: {
@@ -373,6 +416,7 @@ function buildPreviewScenarioEvents(durationMs = PREVIEW_DURATION_MS, intervalMs
                             userId,
                             message: text,
                             isPaypiggy: isPreviewPaypiggyChat || isMemberHiChat,
+                            badgeImages: includePreviewBadges ? media.badges : undefined,
                             avatarUrl: media.avatarUrl,
                             messageParts: isPreviewPaypiggyChat
                                 ? [
@@ -476,6 +520,7 @@ function buildPreviewScenarioEvents(durationMs = PREVIEW_DURATION_MS, intervalMs
                         followRole: 0,
                         userBadges: []
                     },
+                    badgeImages: includePreviewBadges ? media.badges : undefined,
                     comment,
                     isModerator: false,
                     isOwner: false,
@@ -513,6 +558,7 @@ function createPreviewIngestAdapters(options = {}) {
                 isMod: payload.isMod === true,
                 isBroadcaster: payload.isBroadcaster === true,
                 metadata: payload.metadata || {},
+                badgeImages: Array.isArray(payload.badgeImages) ? payload.badgeImages : [],
                 message: payload.message
             }
         });
@@ -556,6 +602,7 @@ function createPreviewIngestAdapters(options = {}) {
                     isMod: payload?.isMod === true || payload?.is_mod === true,
                     isBroadcaster: payload?.isBroadcaster === true || payload?.is_broadcaster === true,
                     metadata: payload?.metadata || {},
+                    badgeImages: Array.isArray(payload?.badgeImages) ? payload.badgeImages : [],
                     message: messageParts.length > 0
                         ? {
                             text: messageText,
@@ -594,6 +641,7 @@ function createPreviewIngestAdapters(options = {}) {
                 userId: source.userId,
                 timestamp: source.timestamp,
                 isPaypiggy: source.isPaypiggy === true,
+                badgeImages: Array.isArray(source.badgeImages) ? source.badgeImages : [],
                 message: messageParts.length > 0
                     ? {
                         text: source.message || '',
@@ -674,7 +722,13 @@ function createPreviewIngestAdapters(options = {}) {
             return data.msgId || null;
         },
         _handleChatMessage(_raw, normalizedData) {
-            emitChatEvent('tiktok', normalizedData);
+            const payload = {
+                ...normalizedData,
+                badgeImages: Array.isArray(normalizedData?.badgeImages)
+                    ? normalizedData.badgeImages
+                    : (Array.isArray(_raw?.badgeImages) ? _raw.badgeImages : [])
+            };
+            emitChatEvent('tiktok', payload);
         },
         handleTikTokGift(data) {
             const sourceUser = data?.user || {};

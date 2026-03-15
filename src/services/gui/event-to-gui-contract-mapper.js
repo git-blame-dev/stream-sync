@@ -1,5 +1,5 @@
 const { DEFAULT_AVATAR_URL } = require('../../constants/avatar');
-const { getValidMessageParts } = require('../../utils/message-parts');
+const { getValidMessageParts, normalizeBadgeImages } = require('../../utils/message-parts');
 
 const EVENT_RULES = {
     chat: { kind: 'chat', toggleKey: 'showMessages' },
@@ -135,6 +135,7 @@ function createEventToGuiContractMapper(options = {}) {
         const messageLimit = Number(guiConfig.messageCharacterLimit) || 0;
         const text = applyMessageLimit(textSource, messageLimit);
         const parts = resolveMessageParts(data);
+        const badgeImages = normalizeBadgeImages(data.badgeImages);
         const avatarUrl = await resolveAvatarUrl({ platform, data });
 
         const mapped = {
@@ -149,6 +150,9 @@ function createEventToGuiContractMapper(options = {}) {
 
         if (rule.kind === 'chat') {
             mapped.isPaypiggy = data.isPaypiggy === true;
+            if (badgeImages.length > 0) {
+                mapped.badgeImages = badgeImages;
+            }
         }
 
         if (parts.length > 0) {

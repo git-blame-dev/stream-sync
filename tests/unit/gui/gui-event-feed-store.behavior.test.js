@@ -93,6 +93,32 @@ describe('GUI feed store behavior', () => {
         ]);
     });
 
+    it('preserves canonical badgeImages and drops duplicate urls', () => {
+        const store = createGuiFeedStore();
+
+        store.pushEvent({
+            type: 'chat',
+            kind: 'chat',
+            platform: 'twitch',
+            username: 'test-user',
+            text: 'hello world',
+            badgeImages: [
+                { imageUrl: 'https://example.invalid/badge-1.png', source: 'twitch', label: 'mod' },
+                { imageUrl: 'https://example.invalid/badge-1.png', source: 'twitch', label: 'dupe' },
+                { imageUrl: 'https://example.invalid/badge-2.png', source: 'twitch', label: 'founder' }
+            ],
+            avatarUrl: 'https://example.invalid/test-avatar.png',
+            timestamp: '2024-01-01T00:00:00.000Z'
+        });
+
+        const rows = store.getRows();
+        expect(rows).toHaveLength(1);
+        expect(rows[0].badgeImages).toEqual([
+            { imageUrl: 'https://example.invalid/badge-1.png', source: 'twitch', label: 'mod' },
+            { imageUrl: 'https://example.invalid/badge-2.png', source: 'twitch', label: 'founder' }
+        ]);
+    });
+
     it('appends multiple rows in arrival order', () => {
         const store = createGuiFeedStore();
 

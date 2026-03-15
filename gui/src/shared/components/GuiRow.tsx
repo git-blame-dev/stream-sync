@@ -22,6 +22,7 @@ export function GuiRow({ row, mode, rowRef, className, style, onAnimationEnd }: 
   const normalizedPlatform = normalizePlatform(row.platform)
   const platformIconUrl = getPlatformIconUrl(normalizedPlatform)
   const hasParts = Array.isArray(row.parts) && row.parts.length > 0
+  const badgeImages = Array.isArray(row.badgeImages) ? row.badgeImages : []
   const isPaypiggyChatRow = row.kind === 'chat' && row.isPaypiggy === true
   const isMemberChatRow = isPaypiggyChatRow
   const textClass = [
@@ -62,6 +63,20 @@ export function GuiRow({ row, mode, rowRef, className, style, onAnimationEnd }: 
         <div className={["gui-row__header", isMemberChatRow ? 'gui-row__header--member-chat' : ''].filter(Boolean).join(' ')}>
           {platformIconUrl ? <img className="gui-row__platform-icon" src={platformIconUrl} alt="" /> : null}
           <span className={["gui-row__username", isMemberChatRow ? 'gui-row__username--member-chat' : ''].filter(Boolean).join(' ')}>{row.username}</span>
+          {badgeImages.length > 0 ? (
+            <span className="gui-row__badges" aria-hidden="true">
+              {badgeImages.map((badge, index) => (
+                <img
+                  key={`${badge.imageUrl}-${index}`}
+                  className="gui-row__badge"
+                  src={badge.imageUrl}
+                  alt=""
+                  loading="lazy"
+                  decoding="async"
+                />
+              ))}
+            </span>
+          ) : null}
           {isPaypiggyChatRow ? <span className="gui-row__member-tag">[member]</span> : null}
         </div>
         <span className={textClass}>

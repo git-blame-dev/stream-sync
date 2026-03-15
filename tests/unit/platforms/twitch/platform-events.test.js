@@ -243,6 +243,135 @@ describe('TwitchPlatform event behaviors', () => {
         expect(events[0].metadata.correlationId).toBeDefined();
     });
 
+    it('resolves twitch badge image urls into canonical badgeImages', async () => {
+        const platform = new TwitchPlatform(baseConfig, {
+            twitchAuth: createTwitchAuth({ userId: TEST_USER_ID }),
+            logger: noOpLogger
+        });
+
+        platform.apiClient = {
+            getGlobalChatBadges: createMockFn().mockResolvedValue([
+                {
+                    set_id: 'moderator',
+                    versions: [{ id: '1', title: 'Moderator', image_url_4x: 'https://example.invalid/twitch-mod-4x.png' }]
+                },
+                {
+                    set_id: 'premium',
+                    versions: [{ id: '1', title: 'Prime Gaming', image_url_4x: 'https://example.invalid/twitch-prime-4x.png' }]
+                }
+            ]),
+            getChannelChatBadges: createMockFn().mockResolvedValue([
+                {
+                    set_id: 'founder',
+                    versions: [{ id: '0', title: 'Founder', image_url_4x: 'https://example.invalid/twitch-founder-4x.png' }]
+                }
+            ])
+        };
+
+        const events = [];
+        platform.handlers = { onChat: (payload) => events.push(payload) };
+
+        await platform.onMessageHandler({
+            chatter_user_id: 'test-user-id',
+            chatter_user_name: 'test-user',
+            broadcaster_user_id: 'test-broadcaster-id',
+            message: { text: 'hello' },
+            badges: [
+                { set_id: 'moderator', id: '1', info: '' },
+                { set_id: 'founder', id: '0', info: '10' },
+                { set_id: 'premium', id: '1', info: '' }
+            ],
+            timestamp: '2024-01-01T00:00:00Z'
+        });
+
+        expect(events).toHaveLength(1);
+        expect(events[0].badgeImages).toEqual([
+            { imageUrl: 'https://example.invalid/twitch-mod-4x.png', source: 'twitch', label: 'Moderator' },
+            { imageUrl: 'https://example.invalid/twitch-founder-4x.png', source: 'twitch', label: 'Founder' },
+            { imageUrl: 'https://example.invalid/twitch-prime-4x.png', source: 'twitch', label: 'Prime Gaming' }
+        ]);
+    });
+
+    it('falls back to global twitch badge version when channel version is missing', async () => {
+        const platform = new TwitchPlatform(baseConfig, {
+            twitchAuth: createTwitchAuth({ userId: TEST_USER_ID }),
+            logger: noOpLogger
+        });
+
+        platform.apiClient = {
+            getGlobalChatBadges: createMockFn().mockResolvedValue([
+                {
+                    set_id: 'moderator',
+                    versions: [{ id: '1', title: 'Moderator', image_url_4x: 'https://example.invalid/twitch-global-mod-4x.png' }]
+                }
+            ]),
+            getChannelChatBadges: createMockFn().mockResolvedValue([
+                {
+                    set_id: 'moderator',
+                    versions: [{ id: '2', title: 'Channel Mod Alt', image_url_4x: 'https://example.invalid/twitch-channel-mod-4x.png' }]
+                }
+            ])
+        };
+
+        const events = [];
+        platform.handlers = { onChat: (payload) => events.push(payload) };
+
+        await platform.onMessageHandler({
+            chatter_user_id: 'test-user-id',
+            chatter_user_name: 'test-user',
+            broadcaster_user_id: 'test-broadcaster-id',
+            message: { text: 'hello' },
+            badges: [{ set_id: 'moderator', id: '1', info: '' }],
+            timestamp: '2024-01-01T00:00:00Z'
+        });
+
+        expect(events).toHaveLength(1);
+        expect(events[0].badgeImages).toEqual([
+            { imageUrl: 'https://example.invalid/twitch-global-mod-4x.png', source: 'twitch', label: 'Moderator' }
+        ]);
+    });
+
+    it('reloads badge catalogs once when initial cache misses incoming badge keys', async () => {
+        const platform = new TwitchPlatform(baseConfig, {
+            twitchAuth: createTwitchAuth({ userId: TEST_USER_ID }),
+            logger: noOpLogger
+        });
+
+        const getGlobalChatBadges = createMockFn()
+            .mockResolvedValueOnce([])
+            .mockResolvedValueOnce([
+                {
+                    set_id: 'moderator',
+                    versions: [{ id: '1', title: 'Moderator', image_url_4x: 'https://example.invalid/twitch-mod-reloaded-4x.png' }]
+                }
+            ]);
+        const getChannelChatBadges = createMockFn()
+            .mockResolvedValueOnce([])
+            .mockResolvedValueOnce([]);
+
+        platform.apiClient = {
+            getGlobalChatBadges,
+            getChannelChatBadges
+        };
+
+        const events = [];
+        platform.handlers = { onChat: (payload) => events.push(payload) };
+
+        await platform.onMessageHandler({
+            chatter_user_id: 'test-user-id',
+            chatter_user_name: 'test-user',
+            broadcaster_user_id: 'test-broadcaster-id',
+            message: { text: 'hello' },
+            badges: [{ set_id: 'moderator', id: '1', info: '' }],
+            timestamp: '2024-01-01T00:00:00Z'
+        });
+
+        expect(events).toHaveLength(1);
+        expect(events[0].badgeImages).toEqual([
+            { imageUrl: 'https://example.invalid/twitch-mod-reloaded-4x.png', source: 'twitch', label: 'Moderator' }
+        ]);
+    });
+
     it('resolves and caches Twitch avatar by user id for repeated events', async () => {
         const platform = new TwitchPlatform(baseConfig, {
             twitchAuth: createTwitchAuth({ userId: TEST_USER_ID }),

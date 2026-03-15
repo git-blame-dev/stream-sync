@@ -4,7 +4,7 @@ const { validateNormalizedMessage } = require('../utils/message-normalization');
 const { checkGlobalCommandCooldown, updateGlobalCommandCooldown } = require('../utils/global-command-cooldown');
 const { createPlatformErrorHandler } = require('../utils/platform-error-handler');
 const { sanitizeForDisplay } = require('../utils/validation');
-const { getValidMessageParts } = require('../utils/message-parts');
+const { getValidMessageParts, normalizeBadgeImages } = require('../utils/message-parts');
 
 const LOG_TRUNCATION_LENGTH = 200;
 
@@ -288,6 +288,10 @@ class ChatNotificationRouter {
         };
         if (Array.isArray(messageParts) && messageParts.length > 0) {
             chatData.message.parts = messageParts;
+        }
+        const badgeImages = normalizeBadgeImages(normalizedData.badgeImages);
+        if (badgeImages.length > 0) {
+            chatData.badgeImages = badgeImages;
         }
 
         this.runtime.displayQueue.addItem({

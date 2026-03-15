@@ -8,6 +8,7 @@ html, body {
   --gui-monetization-notification-background: rgba(138, 90, 0, var(--gui-row-background-opacity));
   --gui-avatar-size: 75px;
   --gui-platform-icon-size: 30px;
+  --gui-badge-size: 18px;
   --gui-username-font-size: 20px;
   --gui-message-font-size: 22px;
   --gui-emote-size: 50px;
@@ -146,6 +147,19 @@ html, body {
   text-overflow: ellipsis;
   white-space: nowrap;
   flex: 0 1 auto;
+}
+
+.gui-row__badges {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.gui-row__badge {
+  width: var(--gui-badge-size);
+  height: var(--gui-badge-size);
+  object-fit: contain;
+  flex-shrink: 0;
 }
 
 .gui-row__member-tag {
