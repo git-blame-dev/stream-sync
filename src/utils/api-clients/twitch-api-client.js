@@ -140,6 +140,31 @@ class TwitchApiClient {
         }
     }
 
+    async getGlobalChatBadges() {
+        try {
+            const data = await this.makeRequest('/chat/badges/global');
+            return Array.isArray(data?.data) ? data.data : [];
+        } catch (error) {
+            this._handleApiError(`Failed to get global chat badges: ${error.message}`, error, 'getGlobalChatBadges');
+            return [];
+        }
+    }
+
+    async getChannelChatBadges(broadcasterId) {
+        const normalizedBroadcasterId = typeof broadcasterId === 'string' ? broadcasterId.trim() : '';
+        if (!normalizedBroadcasterId) {
+            return [];
+        }
+
+        try {
+            const data = await this.makeRequest(`/chat/badges?broadcaster_id=${encodeURIComponent(normalizedBroadcasterId)}`);
+            return Array.isArray(data?.data) ? data.data : [];
+        } catch (error) {
+            this._handleApiError(`Failed to get channel chat badges: ${error.message}`, error, 'getChannelChatBadges');
+            return [];
+        }
+    }
+
     _handleApiError(message, error, context) {
         if (this.errorHandler && error instanceof Error) {
             this.errorHandler.handleConnectionError(error, context, message);

@@ -193,6 +193,37 @@ describe('GuiRow rendering behavior', () => {
         expect(html).toContain('>[member]<');
     });
 
+    it('renders badges between username and member label for chat rows', () => {
+        const html = renderToStaticMarkup(
+            React.createElement(GuiRow, {
+                mode: 'dock',
+                row: {
+                    type: 'chat',
+                    kind: 'chat',
+                    platform: 'twitch',
+                    username: 'test-paypiggy-user',
+                    text: 'paypiggy chat',
+                    isPaypiggy: true,
+                    badgeImages: [
+                        { imageUrl: 'https://example.invalid/badge-1.png', source: 'twitch', label: 'mod' },
+                        { imageUrl: 'https://example.invalid/badge-2.png', source: 'twitch', label: 'founder' }
+                    ],
+                    avatarUrl: 'https://example.invalid/test-avatar.png',
+                    timestamp: '2024-01-01T00:00:00.000Z'
+                }
+            })
+        );
+
+        const usernameIndex = html.indexOf('class="gui-row__username"');
+        const badgesIndex = html.indexOf('class="gui-row__badges"');
+        const memberLabelIndex = html.indexOf('class="gui-row__member-tag"');
+        expect(badgesIndex).toBeGreaterThan(usernameIndex);
+        expect(memberLabelIndex).toBeGreaterThan(badgesIndex);
+        expect(html).toContain('class="gui-row__badge"');
+        expect(html).toContain('src="https://example.invalid/badge-1.png"');
+        expect(html).toContain('src="https://example.invalid/badge-2.png"');
+    });
+
     it('does not add paypiggy row class for chat rows with isPaypiggy false', () => {
         const html = renderToStaticMarkup(
             React.createElement(GuiRow, {

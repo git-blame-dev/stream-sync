@@ -3,7 +3,7 @@ const { createPlatformErrorHandler } = require('../utils/platform-error-handler'
 const { NOTIFICATION_CONFIGS } = require('../core/constants');
 const { PlatformEvents } = require('../interfaces/PlatformEvents');
 const { isIsoTimestamp } = require('../utils/timestamp');
-const { getValidMessageParts } = require('../utils/message-parts');
+const { getValidMessageParts, normalizeBadgeImages } = require('../utils/message-parts');
 
 const ALIAS_PAID_TYPES = [
     'subscription',
@@ -223,6 +223,7 @@ class PlatformEventRouter {
         const metadata = data.metadata;
         const avatarUrl = typeof data.avatarUrl === 'string' ? data.avatarUrl.trim() : '';
         const messageParts = resolveCanonicalMessageParts(data);
+        const badgeImages = normalizeBadgeImages(data.badgeImages);
         if (metadata !== undefined && (typeof metadata !== 'object' || metadata === null)) {
             throw new Error('Chat event metadata must be an object');
         }
@@ -269,6 +270,9 @@ class PlatformEventRouter {
                 ...(metadata || {})
             };
             delete normalized.metadata.messageParts;
+        }
+        if (badgeImages.length > 0) {
+            normalized.badgeImages = badgeImages;
         }
 
         return normalized;

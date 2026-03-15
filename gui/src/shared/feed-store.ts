@@ -55,6 +55,30 @@ function normalizeParts(value: unknown): GuiRowDto['parts'] {
   return parts.length > 0 ? parts : undefined
 }
 
+function normalizeBadgeImages(value: unknown): GuiRowDto['badgeImages'] {
+  if (!Array.isArray(value) || value.length === 0) {
+    return undefined
+  }
+
+  const seen = new Set<string>()
+  const badges = value
+    .filter((badge): badge is Record<string, unknown> => !!badge && typeof badge === 'object')
+    .map((badge) => ({
+      imageUrl: normalizeString(badge.imageUrl),
+      source: normalizeString(badge.source),
+      label: typeof badge.label === 'string' ? badge.label : ''
+    }))
+    .filter((badge) => {
+      if (!badge.imageUrl || seen.has(badge.imageUrl)) {
+        return false
+      }
+      seen.add(badge.imageUrl)
+      return true
+    })
+
+  return badges.length > 0 ? badges : undefined
+}
+
 function normalizeRow(input: unknown): GuiRowDto {
   const row = input && typeof input === 'object' ? (input as Record<string, unknown>) : {}
   const kind = normalizeString(row.kind)
@@ -76,6 +100,7 @@ function normalizeRow(input: unknown): GuiRowDto {
     username: normalizeString(row.username),
     text: normalizeString(row.text),
     parts: normalizeParts(row.parts),
+    badgeImages: normalizeBadgeImages(row.badgeImages),
     isPaypiggy: typeof row.isPaypiggy === 'boolean' ? row.isPaypiggy : undefined,
     avatarUrl: normalizeString(row.avatarUrl),
     timestamp: row.timestamp === null ? null : normalizeString(row.timestamp)

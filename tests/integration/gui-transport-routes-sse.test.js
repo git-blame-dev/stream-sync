@@ -226,6 +226,53 @@ describe('GUI transport routes and SSE integration', () => {
         }
     });
 
+    it('delivers canonical badgeImages over SSE for chat rows', async () => {
+        const port = await getAvailablePort();
+        const eventBus = new TestEventBus();
+        const config = buildConfig({
+            enableDock: true,
+            enableOverlay: false,
+            port,
+            messageCharacterLimit: 0
+        });
+        const service = createGuiTransportService({ config, eventBus, logger: null });
+        await service.start();
+
+        const baseUrl = `http://127.0.0.1:${port}`;
+        const abort = new AbortController();
+        try {
+            const response = await fetch(`${baseUrl}/gui/events`, {
+                signal: abort.signal
+            });
+            expect(response.status).toBe(200);
+
+            const reader = createSseReader(response);
+            eventBus.emit('display:row', {
+                type: 'platform:chat-message',
+                platform: 'youtube',
+                data: {
+                    username: 'test-user',
+                    userId: 'test-user-id',
+                    avatarUrl: 'https://example.invalid/test-avatar.png',
+                    message: { text: 'hello' },
+                    badgeImages: [
+                        { imageUrl: 'https://example.invalid/badge-1.png', source: 'youtube', label: 'member' },
+                        { imageUrl: 'https://example.invalid/badge-1.png', source: 'youtube', label: 'dupe' }
+                    ],
+                    timestamp: '2024-01-01T00:00:00.000Z'
+                }
+            });
+
+            const event = await reader.readEvent();
+            expect(event.badgeImages).toEqual([
+                { imageUrl: 'https://example.invalid/badge-1.png', source: 'youtube', label: 'member' }
+            ]);
+        } finally {
+            abort.abort();
+            await service.stop();
+        }
+    });
+
     it('returns disabled dock shell and enabled overlay shell', async () => {
         const port = await getAvailablePort();
         const eventBus = new TestEventBus();

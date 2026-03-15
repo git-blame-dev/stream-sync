@@ -2,6 +2,7 @@
 const { logger } = require('../core/logging');
 const { resolveTikTokTimestampMs, resolveTikTokTimestampISO, resolveYouTubeTimestampISO } = require('./platform-timestamp');
 const { createPlatformErrorHandler } = require('../utils/platform-error-handler');
+const { normalizeBadgeImages } = require('./message-parts');
 
 const normalizationErrorHandler = createPlatformErrorHandler(logger, 'message-normalization');
 
@@ -230,6 +231,78 @@ function resolveYouTubeEmojiImageUrl(images = []) {
     return normalizedImages[0].url;
 }
 
+function resolveLargestImageUrl(images = []) {
+    if (!Array.isArray(images) || images.length === 0) {
+        return '';
+    }
+
+    const normalizedImages = images
+        .filter((image) => image && typeof image === 'object')
+        .map((image) => ({
+            url: typeof image.url === 'string' ? image.url.trim() : '',
+            width: Number(image.width)
+        }))
+        .filter((image) => image.url.length > 0);
+
+    if (normalizedImages.length === 0) {
+        return '';
+    }
+
+    const widthCandidates = normalizedImages.filter((image) => Number.isFinite(image.width));
+    if (widthCandidates.length > 0) {
+        return widthCandidates.sort((left, right) => right.width - left.width)[0].url;
+    }
+
+    return normalizedImages[0].url;
+}
+
+function extractYouTubeBadgeImages(author = {}) {
+    const badges = Array.isArray(author.badges) ? author.badges : [];
+    return normalizeBadgeImages(
+        badges.map((badge) => {
+            const imageUrl = resolveLargestImageUrl(badge?.custom_thumbnail);
+            if (!imageUrl) {
+                return null;
+            }
+            return {
+                imageUrl,
+                source: 'youtube',
+                label: typeof badge?.tooltip === 'string' ? badge.tooltip : ''
+            };
+        })
+    );
+}
+
+function extractTikTokBadgeImages(data = {}) {
+    const userData = data?.user && typeof data.user === 'object' ? data.user : {};
+    const entries = [];
+
+    const badgeImageList = Array.isArray(userData.badgeImageList) ? userData.badgeImageList : [];
+    for (const badgeImage of badgeImageList) {
+        const firstUrl = Array.isArray(badgeImage?.url) && typeof badgeImage.url[0] === 'string'
+            ? badgeImage.url[0].trim()
+            : '';
+        if (!firstUrl) {
+            continue;
+        }
+        entries.push({ imageUrl: firstUrl, source: 'tiktok', label: '' });
+    }
+
+    const badges = Array.isArray(userData.badges) ? userData.badges : [];
+    for (const badge of badges) {
+        const firstUrl = Array.isArray(badge?.combine?.icon?.url) && typeof badge.combine.icon.url[0] === 'string'
+            ? badge.combine.icon.url[0].trim()
+            : '';
+        if (!firstUrl) {
+            continue;
+        }
+        const label = typeof badge?.text?.defaultPattern === 'string' ? badge.text.defaultPattern : '';
+        entries.push({ imageUrl: firstUrl, source: 'tiktok', label });
+    }
+
+    return normalizeBadgeImages(entries);
+}
+
 function buildYouTubeMessageParts(messageObj) {
     if (!messageObj || typeof messageObj !== 'object' || !Array.isArray(messageObj.runs)) {
         return [];
@@ -340,6 +413,10 @@ function normalizeYouTubeMessage(chatItem, platformName = 'youtube') {
             },
             rawData: { chatItem }
         };
+        const badgeImages = extractYouTubeBadgeImages(author);
+        if (badgeImages.length > 0) {
+            normalized.badgeImages = badgeImages;
+        }
         if (hasRenderableEmote) {
             normalized.message.parts = messageParts;
         }
@@ -413,6 +490,10 @@ function normalizeTikTokMessage(data, platformName = 'tiktok') {
             },
             rawData: { data }
         };
+        const badgeImages = extractTikTokBadgeImages(data);
+        if (badgeImages.length > 0) {
+            normalized.badgeImages = badgeImages;
+        }
         if (messageParts.length > 0) {
             normalized.message.parts = messageParts;
         }
@@ -640,5 +721,7 @@ module.exports = {
     buildTwitchMessageParts,
     extractTwitchMessageData,
     extractYouTubeMessageText,
-    validateNormalizedMessage
+    validateNormalizedMessage,
+    extractYouTubeBadgeImages,
+    extractTikTokBadgeImages
 };

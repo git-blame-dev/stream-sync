@@ -195,6 +195,43 @@ describe('Event-to-GUI contract mapper behavior', () => {
         ]);
     });
 
+    it('maps canonical badgeImages for chat rows only', async () => {
+        const mapper = createMapper({ messageCharacterLimit: 0 });
+
+        const chatMapped = await mapper.mapDisplayRow({
+            type: 'platform:chat-message',
+            platform: 'twitch',
+            data: {
+                username: 'test-user',
+                userId: 'test-user-id',
+                avatarUrl: 'https://example.invalid/avatar.png',
+                message: { text: 'hello' },
+                badgeImages: [
+                    { imageUrl: 'https://example.invalid/badge-1.png', source: 'twitch', label: 'mod' },
+                    { imageUrl: 'https://example.invalid/badge-1.png', source: 'twitch', label: 'dupe' },
+                    { imageUrl: 'https://example.invalid/badge-2.png', source: 'twitch', label: 'founder' }
+                ]
+            }
+        });
+
+        const notificationMapped = await mapper.mapDisplayRow({
+            type: 'platform:follow',
+            platform: 'twitch',
+            data: {
+                username: 'test-user',
+                userId: 'test-user-id',
+                displayMessage: 'followed',
+                badgeImages: [{ imageUrl: 'https://example.invalid/badge-1.png', source: 'twitch', label: 'mod' }]
+            }
+        });
+
+        expect(chatMapped.badgeImages).toEqual([
+            { imageUrl: 'https://example.invalid/badge-1.png', source: 'twitch', label: 'mod' },
+            { imageUrl: 'https://example.invalid/badge-2.png', source: 'twitch', label: 'founder' }
+        ]);
+        expect(notificationMapped.badgeImages).toBeUndefined();
+    });
+
     it('preserves YouTube canonical message.parts while truncating text by messageCharacterLimit', async () => {
         const mapper = createMapper({ messageCharacterLimit: 5 });
 

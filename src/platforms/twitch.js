@@ -13,6 +13,7 @@ const { getSystemTimestampISO } = require('../utils/timestamp');
 const { createTwitchEventFactory } = require('./twitch/events/event-factory');
 const { createTwitchEventSubWiring } = require('./twitch/connections/wiring');
 const { DEFAULT_AVATAR_URL } = require('../constants/avatar');
+const { normalizeBadgeImages } = require('../utils/message-parts');
 
 class TwitchPlatform extends EventEmitter {
     constructor(config, dependencies = {}) {
@@ -65,6 +66,12 @@ class TwitchPlatform extends EventEmitter {
         this.viewerCountProvider = null;
         this.avatarUrlCache = new Map();
         this.avatarLookupMissCache = new Set();
+        this.badgeCatalogCache = {
+            broadcasterId: '',
+            global: [],
+            channel: [],
+            loaded: false
+        };
         this.avatarCacheMaxSize = Number.isFinite(Number(dependencies.avatarCacheMaxSize)) && Number(dependencies.avatarCacheMaxSize) > 0
             ? Number(dependencies.avatarCacheMaxSize)
             : 2000;
@@ -316,6 +323,7 @@ class TwitchPlatform extends EventEmitter {
                 },
                 rawData: { event }
             };
+            normalizedData.badgeImages = await this._resolveBadgeImages(event);
             normalizedData.avatarUrl = await this._resolveAvatarUrl(normalizedData);
 
             const validation = this.validateNormalizedMessage(normalizedData);
@@ -343,6 +351,7 @@ class TwitchPlatform extends EventEmitter {
                     isMod: normalizedData.isMod,
                     isPaypiggy: normalizedData.isPaypiggy,
                     isBroadcaster: normalizedData.isBroadcaster,
+                    badgeImages: Array.isArray(normalizedData.badgeImages) ? normalizedData.badgeImages : [],
                     metadata: {
                         platform: this.platformName,
                         isMod: normalizedData.isMod,
@@ -366,6 +375,109 @@ class TwitchPlatform extends EventEmitter {
 
     _capitalize(str) {
         return str.charAt(0).toUpperCase() + str.slice(1);
+    }
+
+    _normalizeBadgeKeyList(event = {}) {
+        if (Array.isArray(event.badges)) {
+            return event.badges
+                .filter((badge) => badge && typeof badge === 'object')
+                .map((badge) => ({
+                    setId: typeof badge.set_id === 'string' ? badge.set_id.trim() : '',
+                    version: badge.id === undefined || badge.id === null ? '' : String(badge.id).trim(),
+                    info: badge.info === undefined || badge.info === null ? '' : String(badge.info).trim()
+                }))
+                .filter((badge) => badge.setId && badge.version);
+        }
+
+        if (event.badges && typeof event.badges === 'object') {
+            return Object.entries(event.badges)
+                .map(([setId, version]) => ({
+                    setId: typeof setId === 'string' ? setId.trim() : '',
+                    version: version === undefined || version === null ? '' : String(version).trim(),
+                    info: ''
+                }))
+                .filter((badge) => badge.setId && badge.version);
+        }
+
+        return [];
+    }
+
+    async _ensureBadgeCatalogs(broadcasterUserId = '', forceReload = false) {
+        if (!this.apiClient) {
+            return;
+        }
+
+        const broadcasterId = typeof broadcasterUserId === 'string' ? broadcasterUserId.trim() : '';
+        if (!forceReload && this.badgeCatalogCache.loaded && this.badgeCatalogCache.broadcasterId === broadcasterId) {
+            return;
+        }
+
+        this.badgeCatalogCache.global = await this.apiClient.getGlobalChatBadges();
+        this.badgeCatalogCache.channel = broadcasterId
+            ? await this.apiClient.getChannelChatBadges(broadcasterId)
+            : [];
+        this.badgeCatalogCache.broadcasterId = broadcasterId;
+        this.badgeCatalogCache.loaded = true;
+    }
+
+    _findBadgeVersion(catalog = [], setId = '', version = '') {
+        if (!Array.isArray(catalog) || !setId || !version) {
+            return null;
+        }
+        const set = catalog.find((entry) => entry?.set_id === setId);
+        if (!set || !Array.isArray(set.versions)) {
+            return null;
+        }
+        return set.versions.find((entry) => String(entry?.id) === version) || null;
+    }
+
+    async _resolveBadgeImages(event = {}) {
+        const badgeKeys = this._normalizeBadgeKeyList(event);
+        if (badgeKeys.length === 0) {
+            return [];
+        }
+
+        try {
+            await this._ensureBadgeCatalogs(event?.broadcaster_user_id);
+            const resolveFromCache = () => {
+                const resolved = [];
+                const unresolved = [];
+
+                for (const badge of badgeKeys) {
+                    const fromChannel = this._findBadgeVersion(this.badgeCatalogCache.channel, badge.setId, badge.version);
+                    const fromGlobal = this._findBadgeVersion(this.badgeCatalogCache.global, badge.setId, badge.version);
+                    const version = fromChannel || fromGlobal;
+                    const imageUrl = typeof version?.image_url_4x === 'string' ? version.image_url_4x.trim() : '';
+                    if (!imageUrl) {
+                        unresolved.push(badge);
+                        continue;
+                    }
+                    resolved.push({
+                        imageUrl,
+                        source: 'twitch',
+                        label: typeof version?.title === 'string' ? version.title : `${badge.setId}:${badge.version}`
+                    });
+                }
+
+                return { resolved, unresolved };
+            };
+
+            let { resolved, unresolved } = resolveFromCache();
+            if (unresolved.length > 0) {
+                await this._ensureBadgeCatalogs(event?.broadcaster_user_id, true);
+                ({ resolved } = resolveFromCache());
+            }
+
+            return normalizeBadgeImages(resolved);
+        } catch (error) {
+            this.errorHandler.handleEventProcessingError(
+                error,
+                'badge-resolution',
+                event,
+                'Failed to resolve Twitch chat badge images, continuing without badge images'
+            );
+            return [];
+        }
     }
 
     _getTimestamp(data) {

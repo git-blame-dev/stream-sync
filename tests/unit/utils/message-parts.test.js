@@ -3,7 +3,8 @@ const { describe, it, expect } = require('bun:test');
 const {
     getMessagePartsFromPayload,
     isValidMessagePart,
-    getValidMessageParts
+    getValidMessageParts,
+    normalizeBadgeImages
 } = require('../../../src/utils/message-parts');
 
 describe('message parts utility', () => {
@@ -59,6 +60,44 @@ describe('message parts utility', () => {
         expect(parts).toEqual([
             { type: 'emote', emoteId: '1234', imageUrl: 'https://example.invalid/e.webp' },
             { type: 'text', text: 'hello' }
+        ]);
+    });
+
+    it('normalizes badge images by deduping trimmed urls in stable order', () => {
+        const badges = normalizeBadgeImages([
+            { imageUrl: ' https://example.invalid/badge-1.png ', source: ' twitch ', label: 'mod' },
+            { imageUrl: 'https://example.invalid/badge-1.png', source: 'youtube', label: 'dupe' },
+            { imageUrl: 'https://example.invalid/badge-2.png', source: ' youtube ', label: 'member' }
+        ]);
+
+        expect(badges).toEqual([
+            { imageUrl: 'https://example.invalid/badge-1.png', source: 'twitch', label: 'mod' },
+            { imageUrl: 'https://example.invalid/badge-2.png', source: 'youtube', label: 'member' }
+        ]);
+    });
+
+    it('drops invalid badge entries and returns empty list when nothing usable exists', () => {
+        expect(normalizeBadgeImages(null)).toEqual([]);
+        expect(normalizeBadgeImages([
+            null,
+            undefined,
+            '',
+            {},
+            { imageUrl: '   ' },
+            { imageUrl: 42 },
+            { imageUrl: 'https://example.invalid/badge-1.png' }
+        ])).toEqual([
+            { imageUrl: 'https://example.invalid/badge-1.png', source: '', label: '' }
+        ]);
+    });
+
+    it('normalizes non-string label values to an empty string', () => {
+        const badges = normalizeBadgeImages([
+            { imageUrl: 'https://example.invalid/badge-1.png', source: 'twitch', label: { text: 'mod' } }
+        ]);
+
+        expect(badges).toEqual([
+            { imageUrl: 'https://example.invalid/badge-1.png', source: 'twitch', label: '' }
         ]);
     });
 });
