@@ -482,6 +482,72 @@ function extractTwitchMessageData(messageObj) {
 
 function extractYouTubeMessageText(messageObj) {
     const { logger } = require('../core/logging');
+
+    const resolveEmojiIdGlyph = (emojiId) => {
+        if (typeof emojiId !== 'string') {
+            return '';
+        }
+
+        const normalized = emojiId.trim();
+        if (!normalized) {
+            return '';
+        }
+
+        const codePointTokens = (normalized.match(/U\+[0-9A-Fa-f]{2,6}/g) || [])
+            .map((token) => Number.parseInt(token.slice(2), 16))
+            .filter((value) => Number.isInteger(value) && value > 0);
+
+        if (codePointTokens.length === 0) {
+            return '';
+        }
+
+        try {
+            return String.fromCodePoint(...codePointTokens);
+        } catch {
+            return '';
+        }
+    };
+
+    const resolveEmojiRunText = (emoji) => {
+        if (!emoji || typeof emoji !== 'object') {
+            return '';
+        }
+
+        const emojiIdGlyph = resolveEmojiIdGlyph(emoji.emoji_id);
+        if (emojiIdGlyph) {
+            return emojiIdGlyph;
+        }
+
+        if (Array.isArray(emoji.shortcuts) && emoji.shortcuts.length > 0 && typeof emoji.shortcuts[0] === 'string') {
+            return emoji.shortcuts[0];
+        }
+
+        return '';
+    };
+
+    const resolveRunText = (run) => {
+        if (!run || typeof run !== 'object') {
+            return '';
+        }
+
+        const runEmojiId = typeof run.emoji?.emoji_id === 'string' ? run.emoji.emoji_id : '';
+        const isCustomEmojiRun = run.emoji?.is_custom === true || runEmojiId.includes('/');
+        const runText = typeof run.text === 'string' ? run.text : '';
+
+        if (isCustomEmojiRun
+            && Array.isArray(run.emoji.shortcuts)
+            && run.emoji.shortcuts.length > 0
+            && typeof run.emoji.shortcuts[0] === 'string') {
+            return run.emoji.shortcuts[0];
+        }
+
+        if (runText.length > 0) {
+            return runText;
+        }
+
+        return resolveEmojiRunText(run.emoji);
+    };
+
     let result;
     if (typeof messageObj === 'string') {
         result = messageObj;
@@ -489,23 +555,14 @@ function extractYouTubeMessageText(messageObj) {
         result = '';
     } else if (Array.isArray(messageObj)) {
         result = messageObj
-            .map(part => {
-                if (part.emoji && Array.isArray(part.emoji.shortcuts) && part.emoji.shortcuts.length > 0) {
-                    return part.emoji.shortcuts[0];
-                }
-                if (part.text) return part.text;
-                return '';
+            .map((part) => {
+                return resolveRunText(part);
             })
             .join('')
             .trim();
     } else if (typeof messageObj === 'object' && Array.isArray(messageObj.runs)) {
         const runsText = messageObj.runs
-            .map(run => {
-                if (run.emoji && Array.isArray(run.emoji.shortcuts) && run.emoji.shortcuts.length > 0) {
-                    return run.emoji.shortcuts[0];
-                }
-                return run.text || '';
-            })
+            .map((run) => resolveRunText(run))
             .join('')
             .trim();
         result = runsText || (typeof messageObj.text === 'string' ? messageObj.text.trim() : '');
