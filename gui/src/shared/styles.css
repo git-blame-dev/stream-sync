@@ -6,8 +6,8 @@ html, body {
 :root {
   --gui-row-background-opacity: 0.95;
   --gui-monetization-notification-background: rgba(138, 90, 0, var(--gui-row-background-opacity));
-  --gui-avatar-size: 64px;
-  --gui-platform-icon-size: 45px;
+  --gui-avatar-size: 75px;
+  --gui-platform-icon-size: 30px;
   --gui-username-font-size: 20px;
   --gui-message-font-size: 22px;
   --gui-emote-size: 50px;
@@ -158,6 +158,8 @@ html, body {
 
 .gui-row__text {
   font-size: var(--gui-message-font-size);
+  line-height: 1;
+  margin-top: 5px;
   color: #c7d0d9;
   display: inline-flex;
   align-items: center;
