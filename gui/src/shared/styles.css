@@ -72,10 +72,6 @@ html, body {
   background: rgba(15, 157, 88, var(--gui-row-background-opacity));
 }
 
-.gui-row--member-chat {
-  padding-bottom: 0;
-}
-
 .gui-row--paypiggy .gui-row__username {
   color: #ffffff;
 }

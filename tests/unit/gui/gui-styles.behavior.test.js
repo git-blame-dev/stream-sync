@@ -25,6 +25,7 @@ describe('GUI shared styles behavior', () => {
         const paypiggyRowBlock = readCssBlock(cssText, '.gui-row--paypiggy');
         const paypiggyUsernameBlock = readCssBlock(cssText, '.gui-row--paypiggy .gui-row__username');
         const paypiggyTextBlock = readCssBlock(cssText, '.gui-row--paypiggy .gui-row__text');
+        const memberChatRowBlock = readCssBlock(cssText, '.gui-row--member-chat');
         const overlayEnterBlock = readCssBlock(cssText, '.gui-row--overlay-enter');
         const avatarBlock = readCssBlock(cssText, '.gui-row__avatar');
         const platformIconBlock = readCssBlock(cssText, '.gui-row__platform-icon');
@@ -58,6 +59,7 @@ describe('GUI shared styles behavior', () => {
         expect(paypiggyRowBlock).toContain('background: rgba(15, 157, 88, var(--gui-row-background-opacity));');
         expect(paypiggyUsernameBlock).toContain('color: #ffffff;');
         expect(paypiggyTextBlock).toContain('color: #ffffff;');
+        expect(memberChatRowBlock).not.toContain('padding-bottom: 0;');
         expect(overlayEnterBlock).toContain('animation: none;');
         expect(avatarBlock).toContain('width: var(--gui-avatar-size);');
         expect(avatarBlock).toContain('height: var(--gui-avatar-size);');
