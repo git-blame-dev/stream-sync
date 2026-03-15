@@ -48,6 +48,7 @@ describe('GUI shared styles behavior', () => {
         expect(rootBlock).toContain('--gui-username-font-size: 20px;');
         expect(rootBlock).toContain('--gui-message-font-size: 22px;');
         expect(rootBlock).toContain('--gui-emote-size: 50px;');
+        expect(rootBlock).toContain('--gui-monetization-notification-background: rgba(138, 90, 0, var(--gui-row-background-opacity));');
         expect(overlayShellBlock).toContain('height: 100vh;');
         expect(overlayShellBlock).toContain('overflow: hidden;');
         expect(overlayExitBlock).toContain('position: absolute;');
@@ -57,6 +58,11 @@ describe('GUI shared styles behavior', () => {
         expect(rowBlock).toContain('grid-template-columns: auto 1fr;');
         expect(rowBlock).toContain('background: rgba(0, 0, 0, var(--gui-row-background-opacity));');
         expect(paypiggyRowBlock).toContain('background: rgba(15, 157, 88, var(--gui-row-background-opacity));');
+        expect(cssText).toContain('.gui-row[data-row-type="platform:gift"],');
+        expect(cssText).toContain('.gui-row[data-row-type="platform:giftpaypiggy"],');
+        expect(cssText).toContain('.gui-row[data-row-type="platform:paypiggy"],');
+        expect(cssText).toContain('.gui-row[data-row-type="platform:envelope"] {');
+        expect(cssText).toContain('background: var(--gui-monetization-notification-background);');
         expect(paypiggyUsernameBlock).toContain('color: #ffffff;');
         expect(paypiggyTextBlock).toContain('color: #ffffff;');
         expect(memberChatRowBlock).not.toContain('padding-bottom: 0;');
