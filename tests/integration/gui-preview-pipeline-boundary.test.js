@@ -31,7 +31,7 @@ describe('GUI preview pipeline boundary integration', () => {
             emitPlatformEvent: (event) => pipeline.emitIngestEvent(event)
         });
 
-        const scenarioEvents = buildPreviewScenarioEvents(30000, 2000);
+        const scenarioEvents = buildPreviewScenarioEvents(32000, 2000);
         for (const event of scenarioEvents) {
             await adapters[event.adapter].ingest(event.rawEvent);
         }

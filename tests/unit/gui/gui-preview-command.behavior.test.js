@@ -12,15 +12,15 @@ const {
 } = require('../../../scripts/local/gui-preview');
 
 describe('GUI local preview command behavior', () => {
-    it('uses 30s duration and 2s message cadence constants', () => {
-        expect(PREVIEW_DURATION_MS).toBe(30000);
+    it('uses 32s duration and 2s message cadence constants', () => {
+        expect(PREVIEW_DURATION_MS).toBe(32000);
         expect(PREVIEW_INTERVAL_MS).toBe(2000);
     });
 
     it('builds deterministic ingest events for the full preview window', () => {
         const events = buildPreviewScenarioEvents();
 
-        expect(events.length).toBe(15);
+        expect(events.length).toBe(16);
         expect(events[0]).toEqual(expect.objectContaining({
             platform: 'twitch'
         }));
@@ -34,6 +34,21 @@ describe('GUI local preview command behavior', () => {
         expect(events[1].adapter).toBe('youtube');
         expect(events[2].adapter).toBe('twitch');
         expect(events[0].rawEvent).toBeDefined();
+    });
+
+    it('inserts youtube member hi chat immediately after raid notification', () => {
+        const events = buildPreviewScenarioEvents();
+        const raidIndex = events.findIndex((event) =>
+            event.adapter === 'twitch' && event.rawEvent?.subscriptionType === 'channel.raid'
+        );
+
+        expect(raidIndex).toBeGreaterThan(-1);
+
+        const memberHiEvent = events[raidIndex + 1];
+        expect(memberHiEvent.adapter).toBe('youtube');
+        expect(memberHiEvent.rawEvent.eventType).toBe('LiveChatTextMessage');
+        expect(memberHiEvent.rawEvent.chatItem.testData.message).toBe('Hi!');
+        expect(memberHiEvent.rawEvent.chatItem.testData.isPaypiggy).toBe(true);
     });
 
     it('builds scenario steps that include all adapter families', () => {
@@ -839,7 +854,7 @@ describe('GUI local preview command behavior', () => {
             emitPlatformEvent: (event) => pipeline.emitIngestEvent(event)
         });
 
-        const scenarioEvents = buildPreviewScenarioEvents(30000, 2000);
+        const scenarioEvents = buildPreviewScenarioEvents(32000, 2000);
         for (const event of scenarioEvents) {
             await adapters[event.adapter].ingest(event.rawEvent);
         }
