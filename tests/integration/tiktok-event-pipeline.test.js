@@ -116,7 +116,12 @@ describe('TikTok event pipeline (integration)', () => {
             common: { createTime: eventTimestamp }
         };
         const giftPayload = {
-            user: { userId: 'test-user-id-2', uniqueId: 'test-user-2', nickname: 'test-user-two' },
+            user: {
+                userId: 'test-user-id-2',
+                uniqueId: 'test-user-2',
+                nickname: 'test-user-two',
+                profilePictureUrl: 'https://example.invalid/tiktok-integration-immediate-avatar.jpg'
+            },
             repeatCount: 2,
             repeatEnd: true,
             giftDetails: { giftName: 'Rose', diamondCount: 1, giftType: 0 },
@@ -142,6 +147,7 @@ describe('TikTok event pipeline (integration)', () => {
             expect(runtimeCalls.gift).toHaveLength(1);
             expect(runtimeCalls.gift[0].payload.giftType).toBe('Rose');
             expect(runtimeCalls.gift[0].payload.giftCount).toBe(2);
+            expect(runtimeCalls.gift[0].payload.avatarUrl).toBe('https://example.invalid/tiktok-integration-immediate-avatar.jpg');
 
             expect(runtimeCalls.share).toHaveLength(1);
             expect(runtimeCalls.share[0].payload.username).toBe('test-user-three');
@@ -432,7 +438,14 @@ describe('TikTok event pipeline (integration)', () => {
 
         const baseEventTimestamp = Date.parse('2025-01-20T12:00:00.000Z');
         const buildGiftPayload = (msgId, offsetMs) => ({
-            user: { userId: 'test-user-id-2', uniqueId: 'test-user-2', nickname: 'test-user-two' },
+            user: {
+                userId: 'test-user-id-2',
+                uniqueId: 'test-user-2',
+                nickname: 'test-user-two',
+                profilePicture: {
+                    url: ['https://example.invalid/tiktok-integration-aggregated-avatar.jpg']
+                }
+            },
             repeatCount: 1,
             repeatEnd: 0,
             giftDetails: { giftName: 'Hand Heart', diamondCount: 100, giftType: 2 },
@@ -454,6 +467,7 @@ describe('TikTok event pipeline (integration)', () => {
             expect(runtimeCalls.gift[0].payload.giftCount).toBe(4);
             expect(runtimeCalls.gift[0].payload.aggregatedCount).toBe(4);
             expect(runtimeCalls.gift[0].payload.isAggregated).toBe(true);
+            expect(runtimeCalls.gift[0].payload.avatarUrl).toBe('https://example.invalid/tiktok-integration-aggregated-avatar.jpg');
         } finally {
             router.dispose();
             cleanupTikTokEventListeners(platform);

@@ -25,6 +25,7 @@ describe('TikTok gift aggregator', () => {
         platform: 'tiktok',
         userId: 'tt-user1',
         username: 'testUserOne',
+        avatarUrl: 'https://example.invalid/tiktok-avatar.jpg',
         giftType: 'Rose',
         giftCount: 2,
         repeatCount: 2,
@@ -297,6 +298,49 @@ describe('TikTok gift aggregator', () => {
 
             expect(handledGifts).toHaveLength(1);
             expect(handledGifts[0].sourceType).toBe('streak');
+        });
+
+        test('includes avatarUrl in delivered aggregated payload', async () => {
+            const handledGifts = [];
+            const platform = createTestPlatform({
+                _handleGift: async (payload) => handledGifts.push(payload)
+            });
+
+            const giftAggregator = createTikTokGiftAggregator({ platform });
+
+            await giftAggregator.handleStandardGift(buildGift({
+                avatarUrl: 'https://example.invalid/tiktok-aggregated-avatar.jpg'
+            }));
+            await advanceTimersByTime(platform.giftAggregationDelay);
+
+            expect(handledGifts).toHaveLength(1);
+            expect(handledGifts[0].avatarUrl).toBe('https://example.invalid/tiktok-aggregated-avatar.jpg');
+        });
+
+        test('preserves last non-empty avatarUrl when later packets are empty', async () => {
+            const handledGifts = [];
+            const platform = createTestPlatform({
+                _handleGift: async (payload) => handledGifts.push(payload)
+            });
+
+            const giftAggregator = createTikTokGiftAggregator({ platform });
+
+            await giftAggregator.handleStandardGift(buildGift({
+                id: 'gift-msg-avatar-1',
+                giftCount: 1,
+                avatarUrl: 'https://example.invalid/tiktok-aggregated-avatar-initial.jpg'
+            }));
+            await giftAggregator.handleStandardGift(buildGift({
+                id: 'gift-msg-avatar-2',
+                giftCount: 1,
+                avatarUrl: ''
+            }));
+
+            await advanceTimersByTime(platform.giftAggregationDelay);
+
+            expect(handledGifts).toHaveLength(1);
+            expect(handledGifts[0].giftCount).toBe(2);
+            expect(handledGifts[0].avatarUrl).toBe('https://example.invalid/tiktok-aggregated-avatar-initial.jpg');
         });
 
         test('cleans up aggregation state after delivery', async () => {

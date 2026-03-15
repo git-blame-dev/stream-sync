@@ -1,5 +1,5 @@
 const { normalizeTikTokMessage } = require('../../../utils/message-normalization');
-const { extractTikTokUserData, extractTikTokGiftData } = require('../../../utils/tiktok-data-extraction');
+const { extractTikTokUserData, extractTikTokGiftData, extractTikTokAvatarUrl } = require('../../../utils/tiktok-data-extraction');
 const { resolveTikTokTimestampISO } = require('../../../utils/platform-timestamp');
 
 function normalizeTikTokChatEvent(data, options = {}) {
@@ -51,6 +51,7 @@ function normalizeTikTokGiftEvent(data, options = {}) {
         platform: platformName,
         userId,
         username,
+        avatarUrl: extractTikTokAvatarUrl(data),
         giftType: giftData.giftType,
         giftCount: giftData.giftCount,
         repeatCount,
