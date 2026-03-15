@@ -19,7 +19,7 @@ const { createYouTubeEventRouter } = require('../../src/platforms/youtube/events
 const { setupTikTokEventListeners } = require('../../src/platforms/tiktok/events/event-router');
 const { DEFAULT_AVATAR_URL } = require('../../src/constants/avatar');
 
-const PREVIEW_DURATION_MS = 30000;
+const PREVIEW_DURATION_MS = 32000;
 const PREVIEW_INTERVAL_MS = 2000;
 
 const PREVIEW_AVATAR_URL = DEFAULT_AVATAR_URL;
@@ -60,6 +60,7 @@ const PREVIEW_SCENARIO_TEMPLATE = [
     { type: 'chat-farewell', adapter: 'twitch' },
     { type: 'gift', adapter: 'tiktok' },
     { type: 'raid', adapter: 'twitch' },
+    { type: 'chat-member-hi', adapter: 'youtube' },
     { type: 'share', adapter: 'tiktok' },
     { type: 'paypiggy', adapter: 'youtube' },
     { type: 'giftpaypiggy', adapter: 'youtube' },
@@ -346,16 +347,20 @@ function buildPreviewScenarioEvents(durationMs = PREVIEW_DURATION_MS, intervalMs
         }
 
         if (adapter === 'youtube') {
+            const isMemberHiChat = scenarioType === 'chat-member-hi';
+            const isPreviewPaypiggyChat = scenarioType === 'chat';
             const eventType = scenarioType === 'giftpaypiggy'
                 ? 'LiveChatSponsorshipsGiftPurchaseAnnouncement'
                 : (scenarioType === 'gift' ? 'LiveChatPaidSticker' : (scenarioType === 'paypiggy' ? 'LiveChatMembershipItem' : 'LiveChatTextMessage'));
-            const text = scenarioType === 'chat-command'
+            const text = isMemberHiChat
+                ? 'Hi!'
+                : (scenarioType === 'chat-command'
                 ? '!preview'
                 : (scenarioType === 'chat-hi'
                     ? 'hi'
                     : (scenarioType === 'chat-hello'
                         ? 'hello'
-                        : (scenarioType === 'chat-farewell' ? '!bye' : `preview message ${index}`)));
+                        : (scenarioType === 'chat-farewell' ? '!bye' : `preview message ${index}`))));
             events.push({
                 platform: 'youtube',
                 adapter: 'youtube',
@@ -367,9 +372,9 @@ function buildPreviewScenarioEvents(durationMs = PREVIEW_DURATION_MS, intervalMs
                             username,
                             userId,
                             message: text,
-                            isPaypiggy: scenarioType === 'chat',
+                            isPaypiggy: isPreviewPaypiggyChat || isMemberHiChat,
                             avatarUrl: media.avatarUrl,
-                            messageParts: scenarioType === 'chat'
+                            messageParts: isPreviewPaypiggyChat
                                 ? [
                                     {
                                         type: 'emote',
