@@ -116,7 +116,12 @@ describe('TikTok event pipeline (smoke E2E)', () => {
             common: { createTime: eventTimestamp }
         };
         const giftPayload = {
-            user: { userId: 'test-user-id-2', uniqueId: 'test-user-2', nickname: 'test-user-two' },
+            user: {
+                userId: 'test-user-id-2',
+                uniqueId: 'test-user-2',
+                nickname: 'test-user-two',
+                profilePictureUrl: 'https://example.invalid/tiktok-smoke-immediate-avatar.jpg'
+            },
             repeatCount: 1,
             repeatEnd: true,
             giftDetails: { giftName: 'Rose', diamondCount: 1, giftType: 0 },
@@ -143,6 +148,7 @@ describe('TikTok event pipeline (smoke E2E)', () => {
             expectNoTechnicalArtifacts(queued.data.logMessage);
             expect(queued.data.username).toBe('test-user-two');
             expect(queued.data.giftType).toBe('Rose');
+            expect(queued.data.avatarUrl).toBe('https://example.invalid/tiktok-smoke-immediate-avatar.jpg');
         } finally {
             router.dispose();
             cleanupTikTokEventListeners(platform);
@@ -422,7 +428,14 @@ describe('TikTok event pipeline (smoke E2E)', () => {
 
         const baseEventTimestamp = Date.parse('2025-01-20T12:00:00.000Z');
         const buildGiftPayload = (msgId, offsetMs) => ({
-            user: { userId: 'test-user-id-2', uniqueId: 'test-user-2', nickname: 'test-user-two' },
+            user: {
+                userId: 'test-user-id-2',
+                uniqueId: 'test-user-2',
+                nickname: 'test-user-two',
+                profilePicture: {
+                    url: ['https://example.invalid/tiktok-smoke-aggregated-avatar.jpg']
+                }
+            },
             repeatCount: 1,
             repeatEnd: 0,
             giftDetails: { giftName: 'Hand Heart', diamondCount: 100, giftType: 2 },
@@ -451,6 +464,7 @@ describe('TikTok event pipeline (smoke E2E)', () => {
             expectNoTechnicalArtifacts(queued.data.displayMessage);
             expectNoTechnicalArtifacts(queued.data.ttsMessage);
             expectNoTechnicalArtifacts(queued.data.logMessage);
+            expect(queued.data.avatarUrl).toBe('https://example.invalid/tiktok-smoke-aggregated-avatar.jpg');
         } finally {
             router.dispose();
             cleanupTikTokEventListeners(platform);

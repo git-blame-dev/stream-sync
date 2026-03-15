@@ -67,6 +67,7 @@ function createTikTokGiftAggregator(options = {}) {
             }
         }
         const resolvedCurrency = currency.trim();
+        const resolvedAvatarUrl = typeof gift.avatarUrl === 'string' ? gift.avatarUrl.trim() : '';
 
         const key = `${userId}-${giftType}`;
         const existingAggregation = platform.giftAggregation[key];
@@ -83,6 +84,7 @@ function createTikTokGiftAggregator(options = {}) {
                 userId,
                 username,
                 giftType,
+                avatarUrl: resolvedAvatarUrl,
                 currency: resolvedCurrency,
                 totalCount: 0,
                 timer: null,
@@ -125,6 +127,9 @@ function createTikTokGiftAggregator(options = {}) {
         aggregationState.lastId = giftId;
         aggregationState.lastTimestamp = timestamp;
         aggregationState.sourceType = typeof gift.sourceType === 'string' ? gift.sourceType : undefined;
+        if (resolvedAvatarUrl) {
+            aggregationState.avatarUrl = resolvedAvatarUrl;
+        }
 
         platform.logger.debug(
             `[TikTok Gift] Updated standard gift aggregation for ${key}: totalCount=${aggregationState.totalCount}, delta=${deltaCount}, unitAmount=${unitAmount}`,
@@ -197,6 +202,7 @@ function createTikTokGiftAggregator(options = {}) {
                     platform: aggregationData.platform,
                     userId: aggregationData.userId,
                     username: finalUsername,
+                    avatarUrl: aggregationData.avatarUrl,
                     giftType,
                     giftCount: aggregatedCount,
                     repeatCount: aggregatedCount,
