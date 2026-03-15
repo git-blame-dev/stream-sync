@@ -5,6 +5,7 @@ html, body {
 
 :root {
   --gui-row-background-opacity: 0.95;
+  --gui-monetization-notification-background: rgba(138, 90, 0, var(--gui-row-background-opacity));
   --gui-avatar-size: 64px;
   --gui-platform-icon-size: 45px;
   --gui-username-font-size: 20px;
@@ -70,6 +71,13 @@ html, body {
 
 .gui-row--paypiggy {
   background: rgba(15, 157, 88, var(--gui-row-background-opacity));
+}
+
+.gui-row[data-row-type="platform:gift"],
+.gui-row[data-row-type="platform:giftpaypiggy"],
+.gui-row[data-row-type="platform:paypiggy"],
+.gui-row[data-row-type="platform:envelope"] {
+  background: var(--gui-monetization-notification-background);
 }
 
 .gui-row--paypiggy .gui-row__username {
