@@ -114,4 +114,92 @@ describe('TikTok eventFactory chat message behavior', () => {
             ]
         });
     });
+
+    it('extracts and forwards canonical badgeImages from raw TikTok chat payload', () => {
+        const connectionFactory = {
+            createConnection: () => ({
+                connect: createMockFn(),
+                on: createMockFn(),
+                emit: createMockFn(),
+                removeAllListeners: createMockFn()
+            })
+        };
+        const platform = new TikTokPlatform(
+            { enabled: false },
+            {
+                WebcastEvent: {},
+                ControlEvent: {},
+                logger: noOpLogger,
+                connectionFactory,
+                timestampService: {
+                    extractTimestamp: createMockFn(() => new Date(testClock.now()).toISOString())
+                }
+            }
+        );
+
+        const rawChat = {
+            comment: 'test chat message',
+            user: {
+                userId: 'test-user-id-1',
+                uniqueId: 'test-user-unique-id-1',
+                nickname: 'test-user-display-name',
+                badges: [
+                    {
+                        text: { defaultPattern: 'Level 22' },
+                        combine: {
+                            icon: {
+                                url: [
+                                    'https://example.invalid/level-22-p16.png',
+                                    'https://example.invalid/level-22-p19.png'
+                                ]
+                            }
+                        }
+                    },
+                    {
+                        text: { defaultPattern: 'Fans Level 36' },
+                        combine: {
+                            icon: {
+                                url: [
+                                    'https://example.invalid/fans-36-p16.png',
+                                    'https://example.invalid/fans-36-p19.png'
+                                ]
+                            }
+                        }
+                    },
+                    {
+                        text: { defaultPattern: 'Moderator' },
+                        combine: {
+                            icon: {
+                                url: [
+                                    'https://example.invalid/moderator-p16.png',
+                                    'https://example.invalid/moderator-p19.png'
+                                ]
+                            }
+                        }
+                    }
+                ]
+            },
+            common: { createTime: testClock.now() }
+        };
+
+        const event = platform.eventFactory.createChatMessage(rawChat);
+
+        expect(event.badgeImages).toEqual([
+            {
+                imageUrl: 'https://example.invalid/level-22-p16.png',
+                source: 'tiktok',
+                label: 'Level 22'
+            },
+            {
+                imageUrl: 'https://example.invalid/fans-36-p16.png',
+                source: 'tiktok',
+                label: 'Fans Level 36'
+            },
+            {
+                imageUrl: 'https://example.invalid/moderator-p16.png',
+                source: 'tiktok',
+                label: 'Moderator'
+            }
+        ]);
+    });
 });
