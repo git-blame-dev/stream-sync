@@ -935,7 +935,7 @@ async function runPreviewScenario(options = {}) {
     } = options;
 
     let eventIndex = 0;
-    const intervalHandle = safeSetIntervalImpl(() => {
+    const dispatchNextEvent = () => {
         if (eventIndex >= scenarioEvents.length) {
             return;
         }
@@ -948,6 +948,12 @@ async function runPreviewScenario(options = {}) {
             });
         }
         eventIndex += 1;
+    };
+
+    dispatchNextEvent();
+
+    const intervalHandle = safeSetIntervalImpl(() => {
+        dispatchNextEvent();
     }, intervalMs);
 
     await new Promise((resolve) => {

@@ -8,6 +8,7 @@ const {
     buildPreviewScenarioEvents,
     createPreviewPipeline,
     createPreviewIngestAdapters,
+    runPreviewScenario,
     runGuiPreview
 } = require('../../../scripts/local/gui-preview');
 
@@ -237,6 +238,55 @@ describe('GUI local preview command behavior', () => {
         expect(emittedEvents.some((entry) => entry.eventName === 'display:row')).toBe(false);
         expect(writes.some((line) => line.includes('Dock URL'))).toBe(true);
         expect(writes.some((line) => line.includes('GUI preview finished'))).toBe(true);
+    });
+
+    it('ingests all default scenario events and ends on envelope within preview duration', async () => {
+        const scenarioEvents = buildPreviewScenarioEvents(32000, 2000);
+        const ingested = [];
+        let intervalTick = null;
+
+        const adapters = {
+            twitch: {
+                async ingest(rawEvent) {
+                    ingested.push({ adapter: 'twitch', rawEvent });
+                }
+            },
+            youtube: {
+                async ingest(rawEvent) {
+                    ingested.push({ adapter: 'youtube', rawEvent });
+                }
+            },
+            tiktok: {
+                async ingest(rawEvent) {
+                    ingested.push({ adapter: 'tiktok', rawEvent });
+                }
+            }
+        };
+
+        await runPreviewScenario({
+            adapters,
+            scenarioEvents,
+            intervalMs: 2000,
+            durationMs: 32000,
+            safeSetIntervalImpl: (callback) => {
+                intervalTick = callback;
+                return 1;
+            },
+            safeSetTimeoutImpl: (resolve, duration) => {
+                expect(duration).toBe(32000);
+                for (let index = 0; index < 15; index += 1) {
+                    intervalTick();
+                }
+                resolve();
+            },
+            errorHandler: {
+                handleEventProcessingError() {}
+            }
+        });
+
+        expect(ingested).toHaveLength(16);
+        expect(ingested[15].adapter).toBe('tiktok');
+        expect(ingested[15].rawEvent.eventType).toBe('ENVELOPE');
     });
 
     it('routes ingest events through the preview pipeline boundaries', async () => {
