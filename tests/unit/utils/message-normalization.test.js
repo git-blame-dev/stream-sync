@@ -559,7 +559,54 @@ describe('Message Normalization', () => {
 
             const normalized = normalizeYouTubeMessage(chatItem, 'youtube');
 
-            expect(normalized.message).toEqual({ text: ':thumbs_up:' });
+            expect(normalized.message).toEqual({ text: '👍' });
+        });
+
+        test('keeps non-custom YouTube emoji runs as glyph text for shortcode-style user messages', () => {
+            const chatItem = createYouTubeRunsMessageChatItem({
+                item: {
+                    message: {
+                        runs: [
+                            { text: 'hi how are you ' },
+                            {
+                                emoji: {
+                                    emoji_id: 'U+1F64F',
+                                    is_custom: false,
+                                    shortcuts: [':folded_hands:'],
+                                    image: [
+                                        {
+                                            url: 'https://yt3.ggpht.example.invalid/non-custom-folded-hands=w48-h48-c-k-nd',
+                                            width: 48,
+                                            height: 48
+                                        }
+                                    ]
+                                }
+                            },
+                            { text: 'goodbye ' },
+                            {
+                                emoji: {
+                                    emoji_id: 'U+1F494',
+                                    is_custom: false,
+                                    shortcuts: [':broken_heart:'],
+                                    image: [
+                                        {
+                                            url: 'https://yt3.ggpht.example.invalid/non-custom-broken-heart=w48-h48-c-k-nd',
+                                            width: 48,
+                                            height: 48
+                                        }
+                                    ]
+                                }
+                            }
+                        ]
+                    }
+                }
+            });
+
+            const normalized = normalizeYouTubeMessage(chatItem, 'youtube');
+
+            expect(normalized.message).toEqual({
+                text: 'hi how are you 🙏goodbye 💔'
+            });
         });
     });
 
@@ -1065,14 +1112,14 @@ describe('Message Normalization', () => {
             const messageObj = {
                 runs: [
                     { text: 'Welcome ' },
-                    { emoji: { shortcuts: [':sparkle:'] } },
+                    { text: '✨', emoji: { shortcuts: [':sparkle:'] } },
                     { text: 'home' }
                 ]
             };
 
             const extracted = extractYouTubeMessageText(messageObj);
 
-            expect(extracted).toBe('Welcome :sparkle:home');
+            expect(extracted).toBe('Welcome ✨home');
         });
 
         test('handles YouTube message simpleText payloads', () => {
@@ -1090,6 +1137,7 @@ describe('Message Normalization', () => {
                     {
                         text: 'UC_TEST_EMOTE_000109/TEST_EMOTE_109',
                         emoji: {
+                            emoji_id: 'UC_TEST_EMOTE_000109/TEST_EMOTE_109',
                             shortcuts: [':testNine:']
                         }
                     }
@@ -1099,6 +1147,23 @@ describe('Message Normalization', () => {
             const extracted = extractYouTubeMessageText(messageObj);
 
             expect(extracted).toBe(':testNine:');
+        });
+
+        test('keeps non-custom token-like run text when custom emoji metadata is missing', () => {
+            const messageObj = {
+                runs: [
+                    {
+                        text: 'UC_LIKE_TOKEN/NO_CUSTOM_METADATA',
+                        emoji: {
+                            shortcuts: [':shouldNotOverrideText:']
+                        }
+                    }
+                ]
+            };
+
+            const extracted = extractYouTubeMessageText(messageObj);
+
+            expect(extracted).toBe('UC_LIKE_TOKEN/NO_CUSTOM_METADATA');
         });
 
         test('falls back to top-level text when runs are present but empty', () => {

@@ -102,4 +102,72 @@ describe('YouTube emote chat parts pipeline (integration)', () => {
             platformEventRouter.dispose();
         }
     });
+
+    test('preserves non-custom emoji glyph text without emitting emote parts', async () => {
+        const eventBus = createEventBus();
+        const config = createConfigFixture({
+            general: {
+                messagesEnabled: true,
+                logChatMessages: false
+            },
+            youtube: {
+                enabled: true,
+                messagesEnabled: true
+            },
+            obs: { enabled: false }
+        });
+        const displayQueue = createMockDisplayQueue();
+        const runtime = {
+            config,
+            displayQueue,
+            handleChatMessage: async () => {}
+        };
+        const chatRouter = new ChatNotificationRouter({
+            runtime,
+            logger: noOpLogger,
+            config
+        });
+
+        runtime.handleChatMessage = (platform, normalizedData) => chatRouter.handleChatMessage(platform, normalizedData);
+
+        const platformEventRouter = new PlatformEventRouter({
+            eventBus,
+            runtime,
+            notificationManager: { handleNotification: async () => {} },
+            config,
+            logger: noOpLogger
+        });
+
+        try {
+            eventBus.emit('platform:event', {
+                platform: 'youtube',
+                type: PlatformEvents.CHAT_MESSAGE,
+                data: {
+                    username: 'test-youtube-unicode-user',
+                    userId: 'UC_TEST_CHANNEL_700001',
+                    avatarUrl: 'https://yt3.ggpht.example.invalid/test-youtube-unicode-user=w48-h48-c-k-nd',
+                    message: {
+                        text: 'hi how are you 🙏goodbye 💔'
+                    },
+                    timestamp: '2024-01-01T00:00:00.000Z',
+                    isMod: false,
+                    isPaypiggy: false,
+                    isBroadcaster: false,
+                    metadata: {}
+                }
+            });
+
+            await new Promise(setImmediate);
+
+            expect(displayQueue.addItem).toHaveBeenCalledTimes(1);
+            const queued = displayQueue.addItem.mock.calls[0][0];
+            expect(queued.type).toBe('chat');
+            expect(queued.platform).toBe('youtube');
+            expect(queued.data.message).toEqual({
+                text: 'hi how are you 🙏goodbye 💔'
+            });
+        } finally {
+            platformEventRouter.dispose();
+        }
+    });
 });
