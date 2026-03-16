@@ -52,6 +52,23 @@ const createPlatform = (configOverrides = {}, dependencyOverrides = {}) => {
     });
 };
 
+const createSharePayload = (overrides = {}) => ({
+    user: {
+        userId: 'test-share-user-id',
+        uniqueId: 'test-share-user',
+        nickname: 'Test Share User'
+    },
+    common: {
+        msgId: 'test-share-msg-1',
+        displayText: {
+            displayType: 'pm_mt_guidance_share',
+            defaultPattern: '{0:user} shared the LIVE'
+        },
+        createTime: Date.parse('2024-01-01T00:00:00Z')
+    },
+    ...overrides
+});
+
 describe('TikTokPlatform connection lifecycle', () => {
     afterEach(() => {
         restoreAllMocks();
@@ -135,6 +152,36 @@ describe('TikTokPlatform connection lifecycle', () => {
             expect(platform.connection).toBeNull();
             expect(platform.listenersConfigured).toBe(false);
             expect(platform.connectionActive).toBe(false);
+        });
+
+        it('clears tracked share actors when stream is not live', async () => {
+            const platform = createPlatform();
+            const shares = [];
+            platform.handlers = {
+                ...platform.handlers,
+                onShare: (data) => shares.push(data)
+            };
+
+            await platform._handleShare(createSharePayload({ common: { msgId: 'test-share-msg-error-a', createTime: Date.parse('2024-01-01T00:00:00Z') } }));
+            platform.handleConnectionError({ message: 'Stream is not live', code: 4404 });
+            await platform._handleShare(createSharePayload({ common: { msgId: 'test-share-msg-error-b', createTime: Date.parse('2024-01-01T00:00:01Z') } }));
+
+            expect(shares).toHaveLength(2);
+        });
+
+        it('keeps tracked share actors on recoverable connection errors', async () => {
+            const platform = createPlatform();
+            const shares = [];
+            platform.handlers = {
+                ...platform.handlers,
+                onShare: (data) => shares.push(data)
+            };
+
+            await platform._handleShare(createSharePayload({ common: { msgId: 'test-share-msg-error-c', createTime: Date.parse('2024-01-01T00:00:00Z') } }));
+            platform.handleConnectionError(new Error('network timeout'));
+            await platform._handleShare(createSharePayload({ common: { msgId: 'test-share-msg-error-d', createTime: Date.parse('2024-01-01T00:00:01Z') } }));
+
+            expect(shares).toHaveLength(1);
         });
     });
 
@@ -262,6 +309,46 @@ describe('TikTokPlatform connection lifecycle', () => {
             expect(result.retryResult).toEqual({ queued: true });
         });
 
+        it('keeps tracked share actors on transient disconnection', async () => {
+            const retrySystem = {
+                resetRetryCount: createMockFn(),
+                handleConnectionError: createMockFn(),
+                isConnected: createMockFn()
+            };
+            const platform = createPlatform({}, { retrySystem });
+            const shares = [];
+            platform.handlers = {
+                ...platform.handlers,
+                onShare: (data) => shares.push(data)
+            };
+
+            await platform._handleShare(createSharePayload({ common: { msgId: 'test-share-msg-a', createTime: Date.parse('2024-01-01T00:00:00Z') } }));
+            await platform.handleConnectionIssue('temporary network interruption');
+            await platform._handleShare(createSharePayload({ common: { msgId: 'test-share-msg-b', createTime: Date.parse('2024-01-01T00:00:01Z') } }));
+
+            expect(shares).toHaveLength(1);
+        });
+
+        it('clears tracked share actors on stream-not-live boundary', async () => {
+            const retrySystem = {
+                resetRetryCount: createMockFn(),
+                handleConnectionError: createMockFn(),
+                isConnected: createMockFn()
+            };
+            const platform = createPlatform({}, { retrySystem });
+            const shares = [];
+            platform.handlers = {
+                ...platform.handlers,
+                onShare: (data) => shares.push(data)
+            };
+
+            await platform._handleShare(createSharePayload({ common: { msgId: 'test-share-msg-c', createTime: Date.parse('2024-01-01T00:00:00Z') } }));
+            await platform.handleConnectionIssue({ message: 'Stream is not live', code: 4404 });
+            await platform._handleShare(createSharePayload({ common: { msgId: 'test-share-msg-d', createTime: Date.parse('2024-01-01T00:00:01Z') } }));
+
+            expect(shares).toHaveLength(2);
+        });
+
         it('skips retry when platform is disabled', async () => {
             const retrySystem = {
                 resetRetryCount: createMockFn(),
@@ -289,6 +376,24 @@ describe('TikTokPlatform connection lifecycle', () => {
             const result = await platform.handleConnectionIssue('stream ended');
 
             expect(result.retryResult).toEqual({ queued: false, reason: 'no-retry-needed' });
+        });
+    });
+
+    describe('_handleStreamEnd', () => {
+        it('clears tracked share actors when stream end is handled', async () => {
+            const platform = createPlatform();
+            const shares = [];
+            platform.handlers = {
+                ...platform.handlers,
+                onShare: (data) => shares.push(data)
+            };
+            platform.intervalManager.hasInterval = createMockFn().mockReturnValue(true);
+
+            await platform._handleShare(createSharePayload({ common: { msgId: 'test-share-msg-e', createTime: Date.parse('2024-01-01T00:00:00Z') } }));
+            await platform._handleStreamEnd();
+            await platform._handleShare(createSharePayload({ common: { msgId: 'test-share-msg-f', createTime: Date.parse('2024-01-01T00:00:01Z') } }));
+
+            expect(shares).toHaveLength(2);
         });
     });
 });

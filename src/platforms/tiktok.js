@@ -44,6 +44,7 @@ class TikTokPlatform extends EventEmitter {
         this.initializationStats = dependencies.initializationStats || new InitializationStatistics('tiktok', this.logger);
         this.listenersConfigured = false;
         this.recentPlatformMessageIds = new Map();
+        this.recentShareActors = new Set();
         this.deduplicationConfig = {
             maxCacheSize: dependencies.deduplicationMaxCacheSize ?? 2000,
             ttlMs: dependencies.deduplicationTtlMs ?? 2 * 60 * 1000
@@ -358,6 +359,7 @@ class TikTokPlatform extends EventEmitter {
         const errorMessage = details.message;
         const isStreamNotLive = this._isStreamNotLive(details);
         if (isStreamNotLive) {
+            this._resetShareActorTracking('stream-not-live');
             if (!this._wasRecentlyNotLiveLogged()) {
                 this.logger.warn(this._formatStreamNotLiveMessage(username, details), 'tiktok');
                 this._recordNotLiveWarning();
@@ -598,6 +600,7 @@ class TikTokPlatform extends EventEmitter {
 
             let issueType;
             if (isStreamNotLive) {
+                this._resetShareActorTracking('stream-not-live');
                 this.logger.warn(this._formatStreamNotLiveMessage(username, normalizedIssue), 'tiktok');
                 this._recordNotLiveWarning();
                 issueType = 'stream-not-live';
@@ -1175,6 +1178,35 @@ class TikTokPlatform extends EventEmitter {
         return { isDuplicate: false, cleanupPerformed };
     }
 
+    _shouldSkipDuplicateShareActor(userId) {
+        const normalizedUserId = typeof userId === 'string'
+            ? userId.trim()
+            : (typeof userId === 'number' ? String(userId).trim() : '');
+        if (!normalizedUserId) {
+            return false;
+        }
+
+        if (this.recentShareActors.has(normalizedUserId)) {
+            return true;
+        }
+
+        this.recentShareActors.add(normalizedUserId);
+        return false;
+    }
+
+    _resetShareActorTracking(reason) {
+        const trackedCount = this.recentShareActors.size;
+        if (trackedCount === 0) {
+            return;
+        }
+
+        this.recentShareActors.clear();
+        this.logger.debug('[TikTok Share] Cleared tracked share actors', 'tiktok', {
+            reason,
+            trackedCount
+        });
+    }
+
     _handleEventProcessingError(emitType, data, error) {
         this.errorHandler.handleEventProcessingError(error, emitType, data);
 
@@ -1339,6 +1371,14 @@ class TikTokPlatform extends EventEmitter {
                 return;
             }
 
+            if (this._shouldSkipDuplicateShareActor(userId)) {
+                this.logger.debug('[TikTok Share] Suppressed duplicate share actor in current stream', 'tiktok', {
+                    userId,
+                    username
+                });
+                return;
+            }
+
             const eventData = this.eventFactory.createShare({
                 username,
                 userId,
@@ -1408,6 +1448,7 @@ class TikTokPlatform extends EventEmitter {
 
         try {
             this.logger.info('TikTok stream ended; scheduling reconnect checks', 'tiktok');
+            this._resetShareActorTracking('stream-end');
             this.isPlannedDisconnection = false;
             this.connectionActive = false;
             this.connectionStateManager.markDisconnected();

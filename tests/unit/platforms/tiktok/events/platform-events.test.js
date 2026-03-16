@@ -203,6 +203,104 @@ describe('TikTokPlatform event emissions', () => {
         expect(follows).toHaveLength(0);
     });
 
+    it('emits only one share per user in the same stream when msgIds differ', async () => {
+        const { eventHandlers, shares, webcastEvent } = createPlatformUnderTest();
+        const firstPayload = {
+            user: { userId: 'test-share-user-id', uniqueId: 'test-share-user', nickname: 'Test Share User' },
+            common: {
+                msgId: 'msg_share_first',
+                displayText: {
+                    displayType: 'pm_mt_guidance_share',
+                    defaultPattern: '{0:user} shared the LIVE'
+                },
+                createTime: eventTimestamp
+            }
+        };
+        const secondPayload = {
+            user: { userId: 'test-share-user-id', uniqueId: 'test-share-user', nickname: 'Test Share User' },
+            common: {
+                msgId: 'msg_share_second',
+                displayText: {
+                    displayType: 'pm_mt_guidance_share',
+                    defaultPattern: '{0:user} shared the LIVE'
+                },
+                createTime: eventTimestamp + 1000
+            }
+        };
+
+        await eventHandlers[webcastEvent.SOCIAL](firstPayload);
+        await eventHandlers[webcastEvent.SOCIAL](secondPayload);
+
+        expect(shares).toHaveLength(1);
+        expect(shares[0].username).toBe('Test Share User');
+    });
+
+    it('suppresses repeat shares for the same user across SOCIAL and FOLLOW when msgIds differ', async () => {
+        const { eventHandlers, shares, follows, webcastEvent } = createPlatformUnderTest();
+        const socialPayload = {
+            user: { userId: 'test-share-user-id', uniqueId: 'test-share-user', nickname: 'Test Share User' },
+            common: {
+                msgId: 'msg_share_social_variant',
+                displayText: {
+                    displayType: 'pm_mt_guidance_share',
+                    defaultPattern: '{0:user} shared the LIVE'
+                },
+                createTime: eventTimestamp
+            }
+        };
+        const followPayload = {
+            user: { userId: 'test-share-user-id', uniqueId: 'test-share-user', nickname: 'Test Share User' },
+            common: {
+                msgId: 'msg_share_follow_variant',
+                displayText: {
+                    displayType: 'pm_mt_guidance_share',
+                    defaultPattern: '{0:user} shared the LIVE'
+                },
+                createTime: eventTimestamp + 1000
+            }
+        };
+
+        await eventHandlers[webcastEvent.SOCIAL](socialPayload);
+        await eventHandlers[webcastEvent.FOLLOW](followPayload);
+
+        expect(shares).toHaveLength(1);
+        expect(shares[0].username).toBe('Test Share User');
+        expect(follows).toHaveLength(0);
+    });
+
+    it('emits shares for different users in the same stream', async () => {
+        const { eventHandlers, shares, webcastEvent } = createPlatformUnderTest();
+        const firstUserPayload = {
+            user: { userId: 'test-share-user-id-1', uniqueId: 'test-share-user-one', nickname: 'Test Share User One' },
+            common: {
+                msgId: 'msg_share_user_1',
+                displayText: {
+                    displayType: 'pm_mt_guidance_share',
+                    defaultPattern: '{0:user} shared the LIVE'
+                },
+                createTime: eventTimestamp
+            }
+        };
+        const secondUserPayload = {
+            user: { userId: 'test-share-user-id-2', uniqueId: 'test-share-user-two', nickname: 'Test Share User Two' },
+            common: {
+                msgId: 'msg_share_user_2',
+                displayText: {
+                    displayType: 'pm_mt_guidance_share',
+                    defaultPattern: '{0:user} shared the LIVE'
+                },
+                createTime: eventTimestamp + 1000
+            }
+        };
+
+        await eventHandlers[webcastEvent.SOCIAL](firstUserPayload);
+        await eventHandlers[webcastEvent.SOCIAL](secondUserPayload);
+
+        expect(shares).toHaveLength(2);
+        expect(shares[0].username).toBe('Test Share User One');
+        expect(shares[1].username).toBe('Test Share User Two');
+    });
+
     it('emits subscribe events as paypiggy notifications', async () => {
         const { eventHandlers, paypiggies, webcastEvent } = createPlatformUnderTest();
         const subscribePayload = { user: { userId: 'sub-numeric-id', uniqueId: 'sub123', nickname: 'Subscriber' } };
