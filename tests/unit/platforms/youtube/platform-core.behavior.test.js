@@ -219,4 +219,50 @@ describe('YouTubePlatform behavior', () => {
         expect(chatEvents).toHaveLength(1);
         expect(chatEvents[0].avatarUrl).toBe(FALLBACK_AVATAR_URL);
     });
+
+    it('emits badgeImages for chat messages when author badges include custom thumbnails', () => {
+        const platform = createPlatform();
+        const chatEvents = [];
+        platform.handlers.onChat = (payload) => chatEvents.push(payload);
+
+        platform.handleChatTextMessage({
+            item: {
+                type: 'LiveChatTextMessage',
+                id: 'LCC.chat-badge-images',
+                timestamp_usec: '1700000000000000',
+                author: {
+                    id: 'test-user-id-chat-badges',
+                    name: 'test-badge-chat-user',
+                    is_moderator: true,
+                    badges: [
+                        {
+                            type: 'LiveChatAuthorBadge',
+                            icon_type: 'MODERATOR',
+                            tooltip: 'Moderator',
+                            custom_thumbnail: []
+                        },
+                        {
+                            type: 'LiveChatAuthorBadge',
+                            tooltip: 'Member (6 months)',
+                            custom_thumbnail: [
+                                { url: 'https://example.invalid/member-s16.png', width: 16, height: 16 },
+                                { url: 'https://example.invalid/member-s32.png', width: 32, height: 32 }
+                            ]
+                        }
+                    ],
+                    thumbnails: [{ url: 'https://example.invalid/youtube-chat-avatar.jpg' }]
+                },
+                message: { text: 'chat with member badge' }
+            }
+        });
+
+        expect(chatEvents).toHaveLength(1);
+        expect(chatEvents[0].badgeImages).toEqual([
+            {
+                imageUrl: 'https://example.invalid/member-s32.png',
+                source: 'youtube',
+                label: 'Member (6 months)'
+            }
+        ]);
+    });
 });

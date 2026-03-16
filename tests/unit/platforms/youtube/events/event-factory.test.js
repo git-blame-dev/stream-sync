@@ -202,6 +202,32 @@ describe('YouTube event factory behavior', () => {
         expect(event.avatarUrl).toBe('https://example.invalid/youtube-chat-avatar.jpg');
     });
 
+    it('emits canonical badgeImages on chat-message events', () => {
+        const { createYouTubeEventFactory } = require('../../../../../src/platforms/youtube/events/event-factory');
+
+        const eventFactory = createYouTubeEventFactory({
+            generateCorrelationId: () => 'corr-badges-chat'
+        });
+
+        const event = eventFactory.createChatMessageEvent({
+            userId: 'test-user-id-badge',
+            username: 'test-user-badge',
+            message: 'Hello world',
+            badgeImages: [
+                { imageUrl: '   ', source: 'youtube', label: 'invalid' },
+                { imageUrl: ' https://example.invalid/member-s32.png ', source: 'youtube', label: 'Member (6 months)' },
+                { imageUrl: 'https://example.invalid/member-s32.png', source: 'youtube', label: 'Member (6 months)' },
+                { imageUrl: 'https://example.invalid/member-s16.png', source: 'youtube', label: 'Member (6 months)' }
+            ],
+            timestamp: '2024-01-01T00:00:00.111Z'
+        });
+
+        expect(event.badgeImages).toEqual([
+            { imageUrl: 'https://example.invalid/member-s32.png', source: 'youtube', label: 'Member (6 months)' },
+            { imageUrl: 'https://example.invalid/member-s16.png', source: 'youtube', label: 'Member (6 months)' }
+        ]);
+    });
+
     it('rejects chat-message events missing timestamp', () => {
         const { createYouTubeEventFactory } = require('../../../../../src/platforms/youtube/events/event-factory');
 
