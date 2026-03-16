@@ -1,7 +1,7 @@
 const { PlatformEvents } = require('../../../interfaces/PlatformEvents');
 const { isIsoTimestamp } = require('../../../utils/timestamp');
 const { DEFAULT_AVATAR_URL } = require('../../../constants/avatar');
-const { getValidMessageParts } = require('../../../utils/message-parts');
+const { getValidMessageParts, normalizeBadgeImages } = require('../../../utils/message-parts');
 
 function createYouTubeEventFactory(options = {}) {
     const platformName = options.platformName || 'youtube';
@@ -107,12 +107,13 @@ function createYouTubeEventFactory(options = {}) {
             const avatarUrl = resolveAvatarUrl(data);
             const messageText = resolveMessageText(data);
             const messageParts = resolveMessageParts(data);
+            const badgeImages = normalizeBadgeImages(data.badgeImages);
             const message = { text: messageText };
             if (messageParts.length > 0) {
                 message.parts = messageParts;
             }
 
-            return {
+            const eventData = {
                 type: PlatformEvents.CHAT_MESSAGE,
                 platform: platformName,
                 username: identity.username,
@@ -130,6 +131,12 @@ function createYouTubeEventFactory(options = {}) {
                     isVerified: data.isVerified || false
                 })
             };
+
+            if (badgeImages.length > 0) {
+                eventData.badgeImages = badgeImages;
+            }
+
+            return eventData;
         },
 
         createViewerCountEvent: (data = {}) => {
