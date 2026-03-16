@@ -99,34 +99,21 @@ describe('TikTokPlatform _shouldSkipDuplicatePlatformMessage', () => {
             useRealTimers();
         });
 
-        it('emits share again after the TTL elapses', async () => {
+        it('does not treat a message as duplicate after TTL elapses', () => {
             const platform = createPlatform({}, { deduplicationTtlMs: 1000 });
-            const shareEvents = [];
-            platform.handlers = {
-                ...platform.handlers,
-                onShare: (data) => shareEvents.push(data)
-            };
+            const messagePayload = { common: { msgId: 'test-msg-ttl-1' } };
 
-            const sharePayload = {
-                user: {
-                    userId: 'test-user-id-ttl',
-                    uniqueId: 'test-user-ttl',
-                    nickname: 'test-user-ttl'
-                },
-                displayType: 'share',
-                common: { createTime: Date.parse('2025-01-15T12:00:00.000Z'), msgId: 'test-msg-ttl-1' }
-            };
+            const firstResult = platform._shouldSkipDuplicatePlatformMessage(messagePayload);
+            const secondResult = platform._shouldSkipDuplicatePlatformMessage(messagePayload);
 
-            await platform.handleTikTokSocial(sharePayload);
-            await platform.handleTikTokSocial(sharePayload);
-
-            expect(shareEvents).toHaveLength(1);
+            expect(firstResult.isDuplicate).toBe(false);
+            expect(secondResult.isDuplicate).toBe(true);
 
             advanceTimersByTime(1001);
 
-            await platform.handleTikTokSocial(sharePayload);
+            const thirdResult = platform._shouldSkipDuplicatePlatformMessage(messagePayload);
 
-            expect(shareEvents).toHaveLength(2);
+            expect(thirdResult.isDuplicate).toBe(false);
         });
     });
 
