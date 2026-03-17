@@ -9,8 +9,8 @@ html, body {
   --gui-avatar-size: 75px;
   --gui-platform-icon-size: 30px;
   --gui-badge-size: 18px;
-  --gui-username-font-size: 20px;
-  --gui-message-font-size: 22px;
+  --gui-row-header-font-size: 20px;
+  --gui-row-body-font-size: 22px;
   --gui-emote-size: 50px;
 }
 
@@ -137,7 +137,7 @@ html, body {
 
 .gui-row__username {
   font-weight: 600;
-  font-size: var(--gui-username-font-size);
+  font-size: var(--gui-row-header-font-size);
   color: #d9e0e8;
 }
 
@@ -163,7 +163,7 @@ html, body {
 }
 
 .gui-row__member-tag {
-  font-size: calc(var(--gui-username-font-size) * 0.65 * 1.15);
+  font-size: calc(var(--gui-row-header-font-size) * 0.65 * 1.15);
   font-weight: 600;
   color: gold;
   display: inline-flex;
@@ -171,7 +171,7 @@ html, body {
 }
 
 .gui-row__text {
-  font-size: var(--gui-message-font-size);
+  font-size: var(--gui-row-body-font-size);
   line-height: 1;
   margin-top: 5px;
   color: #c7d0d9;

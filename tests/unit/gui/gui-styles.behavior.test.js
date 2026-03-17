@@ -48,8 +48,8 @@ describe('GUI shared styles behavior', () => {
         expect(rootBlock).toContain('--gui-avatar-size: 75px;');
         expect(rootBlock).toContain('--gui-platform-icon-size: 30px;');
         expect(rootBlock).toContain('--gui-badge-size: 18px;');
-        expect(rootBlock).toContain('--gui-username-font-size: 20px;');
-        expect(rootBlock).toContain('--gui-message-font-size: 22px;');
+        expect(rootBlock).toContain('--gui-row-header-font-size: 20px;');
+        expect(rootBlock).toContain('--gui-row-body-font-size: 22px;');
         expect(rootBlock).toContain('--gui-emote-size: 50px;');
         expect(rootBlock).toContain('--gui-monetization-notification-background: rgba(138, 90, 0, var(--gui-row-background-opacity));');
         expect(overlayShellBlock).toContain('height: 100vh;');
@@ -75,8 +75,8 @@ describe('GUI shared styles behavior', () => {
         expect(platformIconBlock).toContain('width: var(--gui-platform-icon-size);');
         expect(platformIconBlock).toContain('height: var(--gui-platform-icon-size);');
         expect(platformIconBlock).toContain('transform: translateY(1px);');
-        expect(usernameBlock).toContain('font-size: var(--gui-username-font-size);');
-        expect(memberTagBlock).toContain('font-size: calc(var(--gui-username-font-size) * 0.65 * 1.15);');
+        expect(usernameBlock).toContain('font-size: var(--gui-row-header-font-size);');
+        expect(memberTagBlock).toContain('font-size: calc(var(--gui-row-header-font-size) * 0.65 * 1.15);');
         expect(memberTagBlock).toContain('color: gold;');
         expect(memberTagBlock).toContain('display: inline-flex;');
         expect(memberTagBlock).toContain('align-items: center;');
@@ -84,7 +84,7 @@ describe('GUI shared styles behavior', () => {
         expect(badgesBlock).toContain('align-items: center;');
         expect(badgeBlock).toContain('width: var(--gui-badge-size);');
         expect(badgeBlock).toContain('height: var(--gui-badge-size);');
-        expect(textBlock).toContain('font-size: var(--gui-message-font-size);');
+        expect(textBlock).toContain('font-size: var(--gui-row-body-font-size);');
         expect(memberContentBlock).toContain('display: flow-root;');
         expect(memberHeaderBlock).toContain('min-width: 0;');
         expect(memberUsernameBlock).toContain('min-width: 0;');
