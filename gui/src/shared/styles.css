@@ -6,12 +6,18 @@ html, body {
 :root {
   --gui-row-background-opacity: 0.95;
   --gui-monetization-notification-background: rgba(204, 170, 0, var(--gui-row-background-opacity));
-  --gui-avatar-size: 75px;
-  --gui-platform-icon-size: 30px;
-  --gui-badge-size: 18px;
-  --gui-row-header-font-size: 20px;
-  --gui-row-body-font-size: 23px;
-  --gui-emote-size: 50px;
+  --gui-overlay-avatar-size: 75px;
+  --gui-overlay-platform-icon-size: 30px;
+  --gui-overlay-badge-size: 18px;
+  --gui-overlay-row-header-font-size: 20px;
+  --gui-overlay-row-body-font-size: 23px;
+  --gui-overlay-emote-size: 50px;
+  --gui-dock-avatar-size: 48px;
+  --gui-dock-platform-icon-size: 24px;
+  --gui-dock-badge-size: 14px;
+  --gui-dock-row-header-font-size: 16px;
+  --gui-dock-row-body-font-size: 18px;
+  --gui-dock-emote-size: 36px;
 }
 
 .gui-shell {
@@ -33,6 +39,12 @@ html, body {
   height: 100vh;
   overflow: hidden;
   justify-content: flex-end;
+  --gui-avatar-size-current: var(--gui-overlay-avatar-size);
+  --gui-platform-icon-size-current: var(--gui-overlay-platform-icon-size);
+  --gui-badge-size-current: var(--gui-overlay-badge-size);
+  --gui-row-header-font-size-current: var(--gui-overlay-row-header-font-size);
+  --gui-row-body-font-size-current: var(--gui-overlay-row-body-font-size);
+  --gui-emote-size-current: var(--gui-overlay-emote-size);
 }
 
 .gui-row--overlay-exit {
@@ -58,6 +70,12 @@ html, body {
 .gui-shell--dock {
   min-height: 100vh;
   background: linear-gradient(180deg, #1a1f26 0%, #12161c 100%);
+  --gui-avatar-size-current: var(--gui-dock-avatar-size);
+  --gui-platform-icon-size-current: var(--gui-dock-platform-icon-size);
+  --gui-badge-size-current: var(--gui-dock-badge-size);
+  --gui-row-header-font-size-current: var(--gui-dock-row-header-font-size);
+  --gui-row-body-font-size-current: var(--gui-dock-row-body-font-size);
+  --gui-emote-size-current: var(--gui-dock-emote-size);
 }
 
 .gui-row {
@@ -98,8 +116,8 @@ html, body {
 }
 
 .gui-row__avatar {
-  width: var(--gui-avatar-size);
-  height: var(--gui-avatar-size);
+  width: var(--gui-avatar-size-current);
+  height: var(--gui-avatar-size-current);
   object-fit: cover;
 }
 
@@ -128,8 +146,8 @@ html, body {
 }
 
 .gui-row__platform-icon {
-  width: var(--gui-platform-icon-size);
-  height: var(--gui-platform-icon-size);
+  width: var(--gui-platform-icon-size-current);
+  height: var(--gui-platform-icon-size-current);
   transform: translateY(1px);
   object-fit: contain;
   flex-shrink: 0;
@@ -137,7 +155,7 @@ html, body {
 
 .gui-row__username {
   font-weight: 600;
-  font-size: var(--gui-row-header-font-size);
+  font-size: var(--gui-row-header-font-size-current);
   color: #d9e0e8;
 }
 
@@ -156,14 +174,14 @@ html, body {
 }
 
 .gui-row__badge {
-  width: var(--gui-badge-size);
-  height: var(--gui-badge-size);
+  width: var(--gui-badge-size-current);
+  height: var(--gui-badge-size-current);
   object-fit: contain;
   flex-shrink: 0;
 }
 
 .gui-row__member-tag {
-  font-size: calc(var(--gui-row-header-font-size) * 0.65 * 1.15);
+  font-size: calc(var(--gui-row-header-font-size-current) * 0.65 * 1.15);
   font-weight: 600;
   color: gold;
   display: inline-flex;
@@ -171,7 +189,7 @@ html, body {
 }
 
 .gui-row__text {
-  font-size: var(--gui-row-body-font-size);
+  font-size: var(--gui-row-body-font-size-current);
   line-height: 1;
   margin-top: 5px;
   color: #c7d0d9;
@@ -219,8 +237,8 @@ html, body {
 }
 
 .gui-row__emote {
-  width: var(--gui-emote-size);
-  height: var(--gui-emote-size);
+  width: var(--gui-emote-size-current);
+  height: var(--gui-emote-size-current);
   object-fit: contain;
   vertical-align: middle;
 }
