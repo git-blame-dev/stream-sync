@@ -5,12 +5,12 @@ html, body {
 
 :root {
   --gui-row-background-opacity: 0.95;
-  --gui-monetization-notification-background: rgba(138, 90, 0, var(--gui-row-background-opacity));
+  --gui-monetization-notification-background: rgba(204, 170, 0, var(--gui-row-background-opacity));
   --gui-avatar-size: 75px;
   --gui-platform-icon-size: 30px;
   --gui-badge-size: 18px;
   --gui-row-header-font-size: 20px;
-  --gui-row-body-font-size: 22px;
+  --gui-row-body-font-size: 23px;
   --gui-emote-size: 50px;
 }
 
