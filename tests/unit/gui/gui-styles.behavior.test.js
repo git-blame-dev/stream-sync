@@ -15,11 +15,12 @@ function readCssBlock(cssText, selector) {
 }
 
 describe('GUI shared styles behavior', () => {
-    it('uses shared gui size tokens for row visuals and typography', () => {
+    it('uses mode-specific gui size tokens for row visuals and typography', () => {
         const cssText = readSharedStyles();
         const pageBlock = readCssBlock(cssText, 'html, body');
         const rootBlock = readCssBlock(cssText, ':root');
         const overlayShellBlock = readCssBlock(cssText, '.gui-shell--overlay');
+        const dockShellBlock = readCssBlock(cssText, '.gui-shell--dock');
         const overlayExitBlock = readCssBlock(cssText, '.gui-row--overlay-exit');
         const rowBlock = readCssBlock(cssText, '.gui-row');
         const paypiggyRowBlock = readCssBlock(cssText, '.gui-row--paypiggy');
@@ -45,15 +46,35 @@ describe('GUI shared styles behavior', () => {
         expect(pageBlock).toContain('margin: 0;');
         expect(pageBlock).toContain('padding: 0;');
         expect(rootBlock).toContain('--gui-row-background-opacity: 0.95;');
-        expect(rootBlock).toContain('--gui-avatar-size: 75px;');
-        expect(rootBlock).toContain('--gui-platform-icon-size: 30px;');
-        expect(rootBlock).toContain('--gui-badge-size: 18px;');
-        expect(rootBlock).toContain('--gui-row-header-font-size: 20px;');
-        expect(rootBlock).toContain('--gui-row-body-font-size: 23px;');
-        expect(rootBlock).toContain('--gui-emote-size: 50px;');
+        expect(rootBlock).toContain('--gui-overlay-avatar-size: 75px;');
+        expect(rootBlock).toContain('--gui-overlay-platform-icon-size: 30px;');
+        expect(rootBlock).toContain('--gui-overlay-badge-size: 18px;');
+        expect(rootBlock).toContain('--gui-overlay-row-header-font-size: 20px;');
+        expect(rootBlock).toContain('--gui-overlay-row-body-font-size: 23px;');
+        expect(rootBlock).toContain('--gui-overlay-emote-size: 50px;');
+        expect(rootBlock).toContain('--gui-dock-avatar-size: 48px;');
+        expect(rootBlock).toContain('--gui-dock-platform-icon-size: 24px;');
+        expect(rootBlock).toContain('--gui-dock-badge-size: 14px;');
+        expect(rootBlock).toContain('--gui-dock-row-header-font-size: 16px;');
+        expect(rootBlock).toContain('--gui-dock-row-body-font-size: 18px;');
+        expect(rootBlock).toContain('--gui-dock-emote-size: 36px;');
         expect(rootBlock).toContain('--gui-monetization-notification-background: rgba(204, 170, 0, var(--gui-row-background-opacity));');
         expect(overlayShellBlock).toContain('height: 100vh;');
         expect(overlayShellBlock).toContain('overflow: hidden;');
+        expect(overlayShellBlock).toContain('--gui-avatar-size-current: var(--gui-overlay-avatar-size);');
+        expect(overlayShellBlock).toContain('--gui-platform-icon-size-current: var(--gui-overlay-platform-icon-size);');
+        expect(overlayShellBlock).toContain('--gui-badge-size-current: var(--gui-overlay-badge-size);');
+        expect(overlayShellBlock).toContain('--gui-row-header-font-size-current: var(--gui-overlay-row-header-font-size);');
+        expect(overlayShellBlock).toContain('--gui-row-body-font-size-current: var(--gui-overlay-row-body-font-size);');
+        expect(overlayShellBlock).toContain('--gui-emote-size-current: var(--gui-overlay-emote-size);');
+        expect(dockShellBlock).toContain('min-height: 100vh;');
+        expect(dockShellBlock).toContain('background: linear-gradient(180deg, #1a1f26 0%, #12161c 100%);');
+        expect(dockShellBlock).toContain('--gui-avatar-size-current: var(--gui-dock-avatar-size);');
+        expect(dockShellBlock).toContain('--gui-platform-icon-size-current: var(--gui-dock-platform-icon-size);');
+        expect(dockShellBlock).toContain('--gui-badge-size-current: var(--gui-dock-badge-size);');
+        expect(dockShellBlock).toContain('--gui-row-header-font-size-current: var(--gui-dock-row-header-font-size);');
+        expect(dockShellBlock).toContain('--gui-row-body-font-size-current: var(--gui-dock-row-body-font-size);');
+        expect(dockShellBlock).toContain('--gui-emote-size-current: var(--gui-dock-emote-size);');
         expect(overlayExitBlock).toContain('position: absolute;');
         expect(overlayExitBlock).toContain('animation: gui-overlay-row-exit 1000ms ease-out forwards;');
         expect(cssText).toContain('@keyframes gui-overlay-row-exit');
@@ -70,21 +91,21 @@ describe('GUI shared styles behavior', () => {
         expect(paypiggyTextBlock).toContain('color: #ffffff;');
         expect(memberChatRowBlock).not.toContain('padding-bottom: 0;');
         expect(overlayEnterBlock).toContain('animation: none;');
-        expect(avatarBlock).toContain('width: var(--gui-avatar-size);');
-        expect(avatarBlock).toContain('height: var(--gui-avatar-size);');
-        expect(platformIconBlock).toContain('width: var(--gui-platform-icon-size);');
-        expect(platformIconBlock).toContain('height: var(--gui-platform-icon-size);');
+        expect(avatarBlock).toContain('width: var(--gui-avatar-size-current);');
+        expect(avatarBlock).toContain('height: var(--gui-avatar-size-current);');
+        expect(platformIconBlock).toContain('width: var(--gui-platform-icon-size-current);');
+        expect(platformIconBlock).toContain('height: var(--gui-platform-icon-size-current);');
         expect(platformIconBlock).toContain('transform: translateY(1px);');
-        expect(usernameBlock).toContain('font-size: var(--gui-row-header-font-size);');
-        expect(memberTagBlock).toContain('font-size: calc(var(--gui-row-header-font-size) * 0.65 * 1.15);');
+        expect(usernameBlock).toContain('font-size: var(--gui-row-header-font-size-current);');
+        expect(memberTagBlock).toContain('font-size: calc(var(--gui-row-header-font-size-current) * 0.65 * 1.15);');
         expect(memberTagBlock).toContain('color: gold;');
         expect(memberTagBlock).toContain('display: inline-flex;');
         expect(memberTagBlock).toContain('align-items: center;');
         expect(badgesBlock).toContain('display: inline-flex;');
         expect(badgesBlock).toContain('align-items: center;');
-        expect(badgeBlock).toContain('width: var(--gui-badge-size);');
-        expect(badgeBlock).toContain('height: var(--gui-badge-size);');
-        expect(textBlock).toContain('font-size: var(--gui-row-body-font-size);');
+        expect(badgeBlock).toContain('width: var(--gui-badge-size-current);');
+        expect(badgeBlock).toContain('height: var(--gui-badge-size-current);');
+        expect(textBlock).toContain('font-size: var(--gui-row-body-font-size-current);');
         expect(memberContentBlock).toContain('display: flow-root;');
         expect(memberHeaderBlock).toContain('min-width: 0;');
         expect(memberUsernameBlock).toContain('min-width: 0;');
@@ -106,7 +127,7 @@ describe('GUI shared styles behavior', () => {
         expect(memberImageBlock).toContain('width: 120px;');
         expect(memberImageBlock).toContain('height: 120px;');
         expect(memberImageBlock).toContain('object-fit: contain;');
-        expect(emoteBlock).toContain('width: var(--gui-emote-size);');
-        expect(emoteBlock).toContain('height: var(--gui-emote-size);');
+        expect(emoteBlock).toContain('width: var(--gui-emote-size-current);');
+        expect(emoteBlock).toContain('height: var(--gui-emote-size-current);');
     });
 });
