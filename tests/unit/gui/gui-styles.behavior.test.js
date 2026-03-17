@@ -49,9 +49,9 @@ describe('GUI shared styles behavior', () => {
         expect(rootBlock).toContain('--gui-platform-icon-size: 30px;');
         expect(rootBlock).toContain('--gui-badge-size: 18px;');
         expect(rootBlock).toContain('--gui-row-header-font-size: 20px;');
-        expect(rootBlock).toContain('--gui-row-body-font-size: 22px;');
+        expect(rootBlock).toContain('--gui-row-body-font-size: 23px;');
         expect(rootBlock).toContain('--gui-emote-size: 50px;');
-        expect(rootBlock).toContain('--gui-monetization-notification-background: rgba(138, 90, 0, var(--gui-row-background-opacity));');
+        expect(rootBlock).toContain('--gui-monetization-notification-background: rgba(204, 170, 0, var(--gui-row-background-opacity));');
         expect(overlayShellBlock).toContain('height: 100vh;');
         expect(overlayShellBlock).toContain('overflow: hidden;');
         expect(overlayExitBlock).toContain('position: absolute;');
