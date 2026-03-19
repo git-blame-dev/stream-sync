@@ -323,6 +323,61 @@ describe('DisplayQueue control', () => {
             expect(hidden).toEqual(['chat', 'platform:follow']);
             expect(queue.isProcessing).toBe(false);
         });
+
+        it('continues draining when new work arrives during teardown', async () => {
+            const queue = createQueue({
+                autoProcess: false,
+                timing: { transitionDelay: 0, notificationClearDelay: 0 }
+            });
+            const processedTypes = [];
+            let teardownInjectionDone = false;
+
+            queue.delay = async () => {};
+            queue.getDuration = () => 0;
+            queue.displayItem = async (item) => {
+                processedTypes.push(item.type);
+            };
+            queue.hideCurrentDisplay = async () => {};
+            queue.displayLingeringChat = async () => {
+                if (teardownInjectionDone) {
+                    return;
+                }
+
+                teardownInjectionDone = true;
+                queue.addItem({
+                    type: 'platform:gift',
+                    platform: 'tiktok',
+                    priority: PRIORITY_LEVELS.GIFT,
+                    data: {
+                        username: 'test-user',
+                        userId: 'test-user-id',
+                        giftType: 'Rose',
+                        giftCount: 5,
+                        amount: 5,
+                        currency: 'coins',
+                        displayMessage: 'test-user sent 5x Rose gift (5 coins)'
+                    }
+                });
+            };
+
+            queue.addItem({
+                type: 'chat',
+                platform: 'tiktok',
+                priority: PRIORITY_LEVELS.CHAT,
+                data: {
+                    username: 'test-user',
+                    userId: 'test-user-id',
+                    message: 'test wakeup trigger'
+                }
+            });
+
+            queue.config.autoProcess = true;
+
+            await queue.processQueue();
+
+            expect(processedTypes).toEqual(['chat', 'platform:gift']);
+            expect(queue.getQueueLength()).toBe(0);
+        });
     });
 
     describe('stop() behavior', () => {

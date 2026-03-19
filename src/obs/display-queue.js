@@ -243,6 +243,11 @@ class DisplayQueue {
         } finally {
             this.isProcessing = false;
             logger.debug('[Display Queue] Queue processing complete', 'display-queue');
+
+            if (this.config.autoProcess && !this.isRetryScheduled && this.queue.length > 0) {
+                logger.debug('[Display Queue] New items queued during teardown, restarting processing', 'display-queue');
+                void this.processQueue();
+            }
         }
     }
     
