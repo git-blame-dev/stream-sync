@@ -6,6 +6,17 @@ html, body {
 :root {
   --gui-row-background-opacity: 0.95;
   --gui-monetization-notification-background: rgba(204, 170, 0, var(--gui-row-background-opacity));
+  --gui-member-background-gradient-top: rgba(28, 138, 83, var(--gui-row-background-opacity));
+  --gui-member-background-gradient-mid: rgba(34, 165, 99, var(--gui-row-background-opacity));
+  --gui-member-background-gradient-bottom: rgba(44, 197, 114, var(--gui-row-background-opacity));
+  --gui-member-border-color: rgba(184, 255, 214, 0.56);
+  --gui-member-inner-highlight: rgba(220, 255, 236, 0.2);
+  --gui-member-glow-ring: rgba(152, 255, 201, 0.42);
+  --gui-member-glow-soft: rgba(84, 255, 154, 0.5);
+  --gui-member-glow-deep: rgba(10, 95, 54, 0.72);
+  --gui-member-avatar-halo-ring: rgba(236, 255, 244, 0.98);
+  --gui-member-avatar-halo-glow: rgba(122, 255, 189, 0.92);
+  --gui-member-avatar-halo-deep: rgba(22, 140, 84, 0.9);
   --gui-overlay-avatar-size: 75px;
   --gui-overlay-platform-icon-size: 30px;
   --gui-overlay-badge-size: 18px;
@@ -88,22 +99,63 @@ html, body {
   background: rgba(0, 0, 0, var(--gui-row-background-opacity));
 }
 
-.gui-row--paypiggy {
-  background: rgba(15, 157, 88, var(--gui-row-background-opacity));
+.gui-row-compare-shell {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.gui-row--compare-card {
+  position: relative;
+  min-width: 0;
+}
+
+.gui-row--compare-card::after {
+  content: attr(data-compare-label);
+  position: absolute;
+  top: 6px;
+  right: 8px;
+  padding: 2px 7px;
+  border-radius: 999px;
+  border: 1px solid rgba(198, 220, 235, 0.36);
+  background: rgba(8, 13, 18, 0.9);
+  color: #e6eef5;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.gui-row--paypiggy,
+.gui-row[data-row-type="platform:paypiggy"] {
+  border: 1px solid var(--gui-member-border-color);
+  box-shadow:
+    inset 0 1px 0 var(--gui-member-inner-highlight),
+    0 0 16px -4px var(--gui-member-glow-ring),
+    0 0 28px -7px var(--gui-member-glow-soft),
+    0 0 48px -16px var(--gui-member-glow-deep);
+  background:
+    linear-gradient(
+      180deg,
+      var(--gui-member-background-gradient-top) 0%,
+      var(--gui-member-background-gradient-mid) 58%,
+      var(--gui-member-background-gradient-bottom) 100%
+    );
 }
 
 .gui-row[data-row-type="platform:gift"],
 .gui-row[data-row-type="platform:giftpaypiggy"],
-.gui-row[data-row-type="platform:paypiggy"],
 .gui-row[data-row-type="platform:envelope"] {
   background: var(--gui-monetization-notification-background);
 }
 
-.gui-row--paypiggy .gui-row__username {
+.gui-row--paypiggy .gui-row__username,
+.gui-row[data-row-type="platform:paypiggy"] .gui-row__username {
   color: #ffffff;
 }
 
-.gui-row--paypiggy .gui-row__text {
+.gui-row--paypiggy .gui-row__text,
+.gui-row[data-row-type="platform:paypiggy"] .gui-row__text {
   color: #ffffff;
 }
 
@@ -119,6 +171,27 @@ html, body {
   width: var(--gui-avatar-size-current);
   height: var(--gui-avatar-size-current);
   object-fit: cover;
+}
+
+.gui-row--paypiggy .gui-row__avatar,
+.gui-row[data-row-type="platform:paypiggy"] .gui-row__avatar {
+  outline: 2px solid var(--gui-member-avatar-halo-ring);
+  outline-offset: 0;
+  box-shadow:
+    0 0 0 3px var(--gui-member-avatar-halo-ring),
+    0 0 18px 2px var(--gui-member-avatar-halo-glow),
+    0 0 34px 6px var(--gui-member-avatar-halo-deep);
+  filter: drop-shadow(0 0 10px var(--gui-member-avatar-halo-glow));
+}
+
+.gui-row--compare-after.gui-row--paypiggy .gui-row__avatar,
+.gui-row--compare-after.gui-row[data-row-type="platform:paypiggy"] .gui-row__avatar {
+  outline: 1px solid color-mix(in srgb, var(--gui-member-avatar-halo-glow) 78%, transparent);
+  box-shadow:
+    0 0 0 2px color-mix(in srgb, var(--gui-member-avatar-halo-glow) 78%, transparent),
+    0 0 14px 1px color-mix(in srgb, var(--gui-member-avatar-halo-glow) 74%, transparent),
+    0 0 24px 3px color-mix(in srgb, var(--gui-member-avatar-halo-deep) 71%, transparent);
+  filter: drop-shadow(0 0 6px color-mix(in srgb, var(--gui-member-avatar-halo-glow) 74%, transparent));
 }
 
 .gui-row__avatar--circle {
