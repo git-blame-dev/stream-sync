@@ -356,6 +356,31 @@ describe('GUI transport routes and SSE integration', () => {
             expect(response.status).toBe(200);
             expect(html).toContain('"overlayMaxMessages":7');
             expect(html).toContain('"overlayMaxLinesPerMessage":4');
+            expect(html).toContain('"uiCompareMode":false');
+        } finally {
+            await service.stop();
+        }
+    });
+
+    it('embeds ui compare mode into dock runtime config when enabled', async () => {
+        const port = await getAvailablePort();
+        const eventBus = new TestEventBus();
+        const config = buildConfig({
+            enableDock: true,
+            enableOverlay: false,
+            uiCompareMode: true,
+            port
+        });
+        const service = createGuiTransportService({ config, eventBus, logger: null });
+        await service.start();
+
+        const baseUrl = `http://127.0.0.1:${port}`;
+        try {
+            const response = await fetch(`${baseUrl}/dock`);
+            const html = await response.text();
+
+            expect(response.status).toBe(200);
+            expect(html).toContain('"uiCompareMode":true');
         } finally {
             await service.stop();
         }

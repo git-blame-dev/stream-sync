@@ -497,4 +497,50 @@ describe('GuiRow rendering behavior', () => {
         expect(html).toContain('gui-row__text--overlay-clamp');
         expect(html).toContain('gui-row__text--member-chat');
     });
+
+    it('renders baseline and experiment cards in dock compare mode for all row types', () => {
+        const html = renderToStaticMarkup(
+            React.createElement(GuiRow, {
+                mode: 'dock',
+                uiCompareMode: true,
+                row: {
+                    type: 'platform:follow',
+                    kind: 'notification',
+                    platform: 'youtube',
+                    username: 'test-compare-user',
+                    text: 'test-compare-user followed',
+                    avatarUrl: 'https://example.invalid/test-avatar.png',
+                    timestamp: '2024-01-01T00:00:00.000Z'
+                }
+            })
+        );
+
+        expect(html).toContain('class="gui-row-compare-shell"');
+        expect(html).toContain('data-compare-label="baseline"');
+        expect(html).toContain('data-compare-label="experiment"');
+        expect(html).toContain('gui-row--compare-before');
+        expect(html).toContain('gui-row--compare-after');
+        expect(html.split('test-compare-user').length - 1).toBeGreaterThanOrEqual(2);
+    });
+
+    it('does not render compare shell in overlay mode when compare mode is enabled', () => {
+        const html = renderToStaticMarkup(
+            React.createElement(GuiRow, {
+                mode: 'overlay',
+                uiCompareMode: true,
+                row: {
+                    type: 'chat',
+                    kind: 'chat',
+                    platform: 'twitch',
+                    username: 'test-overlay-user',
+                    text: 'test overlay',
+                    avatarUrl: 'https://example.invalid/test-avatar.png',
+                    timestamp: '2024-01-01T00:00:00.000Z'
+                }
+            })
+        );
+
+        expect(html).not.toContain('gui-row-compare-shell');
+        expect(html).toContain('gui-row--overlay-enter');
+    });
 });

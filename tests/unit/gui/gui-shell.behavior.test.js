@@ -42,6 +42,34 @@ function createGuiRow(index) {
 }
 
 function createOverlayNodeMocks(layoutByAvatarUrl, shellClientHeight = 220) {
+    function extractAvatarUrl(element) {
+        if (!element || !element.props) {
+            return '';
+        }
+
+        if (
+            typeof element.type === 'string'
+            && element.type === 'img'
+            && typeof element.props.className === 'string'
+            && element.props.className.includes('gui-row__avatar')
+            && typeof element.props.src === 'string'
+        ) {
+            return element.props.src;
+        }
+
+        const children = Array.isArray(element.props.children)
+            ? element.props.children
+            : [element.props.children];
+        for (const child of children) {
+            const childAvatarUrl = extractAvatarUrl(child);
+            if (childAvatarUrl) {
+                return childAvatarUrl;
+            }
+        }
+
+        return '';
+    }
+
     const shell = {
         clientHeight: shellClientHeight,
         getBoundingClientRect: () => ({ top: 0 })
@@ -54,13 +82,7 @@ function createOverlayNodeMocks(layoutByAvatarUrl, shellClientHeight = 220) {
                 return shell;
             }
 
-            const children = Array.isArray(element.props && element.props.children)
-                ? element.props.children
-                : [];
-            const avatarElement = children[0] && children[0].props ? children[0] : null;
-            const avatarUrl = avatarElement && avatarElement.props && typeof avatarElement.props.src === 'string'
-                ? avatarElement.props.src
-                : '';
+            const avatarUrl = extractAvatarUrl(element);
             const layout = layoutByAvatarUrl[avatarUrl] || { offsetTop: 0, offsetHeight: 24 };
 
             return {

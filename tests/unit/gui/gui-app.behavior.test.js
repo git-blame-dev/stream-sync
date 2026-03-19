@@ -31,6 +31,42 @@ describe('GUI app behavior', () => {
         expect(html).toContain('gui-shell--dock');
     });
 
+    it('propagates compare mode to rendered dock rows', async () => {
+        let onEventHandler = null;
+        const createEventFeedImpl = ({ onEvent }) => {
+            onEventHandler = onEvent;
+            return () => {};
+        };
+
+        let renderer;
+        await TestRenderer.act(async () => {
+            renderer = TestRenderer.create(
+                React.createElement(App, {
+                    mode: 'dock',
+                    eventsPath: '/gui/events',
+                    uiCompareMode: true,
+                    createEventFeedImpl
+                })
+            );
+        });
+
+        await TestRenderer.act(async () => {
+            onEventHandler({
+                type: 'chat',
+                kind: 'chat',
+                platform: 'twitch',
+                username: 'test-user',
+                text: 'hello',
+                avatarUrl: 'https://example.invalid/test-avatar.png',
+                timestamp: '2024-01-01T00:00:00.000Z'
+            });
+        });
+
+        const text = JSON.stringify(renderer.toJSON());
+        expect(text).toContain('gui-row-compare-shell');
+        expect(text).toContain('test-user');
+    });
+
     it('wires event feed through useEffect in app component', async () => {
         let onEventHandler = null;
         const createEventFeedImpl = ({ onEvent }) => {
