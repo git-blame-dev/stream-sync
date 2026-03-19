@@ -101,6 +101,7 @@ describe('GUI local preview command behavior', () => {
 
         expect(config.gui.enableDock).toBe(true);
         expect(config.gui.enableOverlay).toBe(true);
+        expect(config.gui.uiCompareMode).toBe(true);
         expect(config.gui.showMessages).toBe(true);
         expect(config.gui.showCommands).toBe(true);
         expect(config.gui.showGreetings).toBe(true);

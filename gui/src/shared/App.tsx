@@ -10,6 +10,7 @@ interface AppProps {
   eventsPath?: string
   overlayMaxMessages?: number
   overlayMaxLinesPerMessage?: number
+  uiCompareMode?: boolean
   createEventFeedImpl?: typeof createEventFeed
 }
 
@@ -48,6 +49,7 @@ export function App({
   eventsPath = '/gui/events',
   overlayMaxMessages,
   overlayMaxLinesPerMessage,
+  uiCompareMode = false,
   createEventFeedImpl = createEventFeed
 }: AppProps) {
   const overlayLimits = useMemo(
@@ -80,6 +82,7 @@ export function App({
       rows={rows}
       mode={mode}
       overlayMaxLinesPerMessage={overlayLimits.maxLinesPerMessage}
+      uiCompareMode={uiCompareMode}
     />
   )
 }

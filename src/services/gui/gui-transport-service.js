@@ -87,7 +87,8 @@ function createGuiTransportService(options = {}) {
             : 'margin:0;background:#101317;color:#ffffff;font-family:Georgia,serif;';
         const runtimeGuiConfig = {
             overlayMaxMessages: guiConfig.overlayMaxMessages,
-            overlayMaxLinesPerMessage: guiConfig.overlayMaxLinesPerMessage
+            overlayMaxLinesPerMessage: guiConfig.overlayMaxLinesPerMessage,
+            uiCompareMode: guiConfig.uiCompareMode === true
         };
         return `<!doctype html><html><head><meta charset="utf-8"><title>${title}</title><link rel="stylesheet" href="/gui/assets/styles.css?v=${assetVersion}"></head><body style="${bodyStyle}"><div id="app" data-kind="${kind}"></div><script>window.__STREAM_SYNC_GUI_KIND__=${JSON.stringify(kind)};window.__STREAM_SYNC_GUI_EVENTS__='/gui/events';window.__STREAM_SYNC_GUI_CONFIG__=${JSON.stringify(runtimeGuiConfig)};</script><script type="module" src="/gui/assets/${kind}.js?v=${assetVersion}"></script></body></html>`;
     };

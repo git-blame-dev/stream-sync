@@ -211,6 +211,7 @@ function buildPreviewConfig(baseConfig) {
     merged.gui = mergeSection(sourceConfig.gui, overrideConfig.gui, {
         enableDock: true,
         enableOverlay: true,
+        uiCompareMode: true,
         showMessages: true,
         showCommands: true,
         showGreetings: true,

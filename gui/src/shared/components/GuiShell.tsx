@@ -22,6 +22,7 @@ interface GuiShellProps {
   rows: GuiRowDto[]
   mode: 'dock' | 'overlay'
   overlayMaxLinesPerMessage: number
+  uiCompareMode?: boolean
 }
 
 interface GuiShellRowEntry {
@@ -165,7 +166,7 @@ function createOverlayExitStyle(topPx: number, travelPx: number): React.CSSPrope
   return style
 }
 
-export function GuiShell({ rows, mode, overlayMaxLinesPerMessage }: GuiShellProps) {
+export function GuiShell({ rows, mode, overlayMaxLinesPerMessage, uiCompareMode = false }: GuiShellProps) {
   const shellStyle = mode === 'overlay'
     ? ({ '--overlay-line-clamp': String(overlayMaxLinesPerMessage) } as React.CSSProperties)
     : mode === 'dock'
@@ -469,6 +470,7 @@ export function GuiShell({ rows, mode, overlayMaxLinesPerMessage }: GuiShellProp
                 key={exitRow.exitId}
                 row={exitRow.row}
                 mode={mode}
+                uiCompareMode={uiCompareMode}
                 className="gui-row--overlay-exit"
                 style={createOverlayExitStyle(exitRow.topPx, exitRow.travelPx)}
                 onAnimationEnd={(event) => {
@@ -490,6 +492,7 @@ export function GuiShell({ rows, mode, overlayMaxLinesPerMessage }: GuiShellProp
             key={entry.key}
             row={entry.row}
             mode={mode}
+            uiCompareMode={uiCompareMode}
             rowRef={(element) => {
               if (element) {
                 rowElementsByKeyRef.current.set(entry.key, element)
