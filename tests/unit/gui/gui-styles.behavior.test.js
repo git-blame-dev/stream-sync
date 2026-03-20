@@ -122,6 +122,10 @@ describe('GUI shared styles behavior', () => {
         expect(memberTagBlock).toContain('color: gold;');
         expect(memberTagBlock).toContain('display: inline-flex;');
         expect(memberTagBlock).toContain('align-items: center;');
+        expect(cssText).toContain('.gui-row--compare-after.gui-row--paypiggy .gui-row__member-tag {');
+        expect(cssText).toContain('padding: 1px 5px;');
+        expect(cssText).toContain('font-size: calc(var(--gui-row-header-font-size-current) * 0.62);');
+        expect(cssText).toContain('color: #0f5d33;');
         expect(badgesBlock).toContain('display: inline-flex;');
         expect(badgesBlock).toContain('align-items: center;');
         expect(badgeBlock).toContain('width: var(--gui-badge-size-current);');

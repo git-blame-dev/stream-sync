@@ -190,7 +190,7 @@ describe('GuiRow rendering behavior', () => {
         const memberLabelIndex = html.indexOf('class="gui-row__member-tag"');
         expect(memberLabelIndex).toBeGreaterThan(-1);
         expect(memberLabelIndex).toBeGreaterThan(usernameIndex);
-        expect(html).toContain('>[member]<');
+        expect(html).toContain('>MEMBER<');
     });
 
     it('renders badges between username and member label for chat rows', () => {
@@ -262,7 +262,7 @@ describe('GuiRow rendering behavior', () => {
         );
 
         expect(html).not.toContain('gui-row__member-tag');
-        expect(html).not.toContain('>[member]<');
+        expect(html).not.toContain('>MEMBER<');
     });
 
     it('does not add paypiggy row class when isPaypiggy is omitted', () => {
@@ -322,7 +322,7 @@ describe('GuiRow rendering behavior', () => {
         );
 
         expect(html).not.toContain('gui-row__member-tag');
-        expect(html).not.toContain('>[member]<');
+        expect(html).not.toContain('>MEMBER<');
     });
 
     it('keeps paypiggy class on overlay chat rows', () => {

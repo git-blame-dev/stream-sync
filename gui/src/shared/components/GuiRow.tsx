@@ -84,7 +84,7 @@ export function GuiRow({ row, mode, uiCompareMode = false, rowRef, className, st
                 ))}
               </span>
             ) : null}
-            {isPaypiggyChatRow ? <span className="gui-row__member-tag">[member]</span> : null}
+            {isPaypiggyChatRow ? <span className="gui-row__member-tag">MEMBER</span> : null}
           </div>
           <span className={textClass}>
             {hasParts
