@@ -60,6 +60,8 @@ describe('GUI shared styles behavior', () => {
         expect(rootBlock).toContain('--gui-member-background-gradient-bottom: rgba(44, 197, 114, var(--gui-row-background-opacity));');
         expect(rootBlock).toContain('--gui-member-pill-border: #ffc400;');
         expect(rootBlock).toContain('--gui-member-pill-font-scale: 0.62;');
+        expect(rootBlock).toContain('--gui-member-sheen-peak-opacity: 0.46;');
+        expect(rootBlock).toContain('--gui-member-sheen-cycle-duration: 5s;');
         expect(overlayShellBlock).toContain('height: 100vh;');
         expect(overlayShellBlock).toContain('overflow: hidden;');
         expect(overlayShellBlock).toContain('--gui-avatar-size-current: var(--gui-overlay-avatar-size);');
@@ -121,6 +123,11 @@ describe('GUI shared styles behavior', () => {
         expect(memberTagBlock).toContain('text-transform: uppercase;');
         expect(memberTagBlock).toContain('display: inline-flex;');
         expect(memberTagBlock).toContain('align-items: center;');
+        expect(cssText).toContain('.gui-row--compare-after.gui-row--paypiggy::before,');
+        expect(cssText).toContain('.gui-row--compare-after.gui-row[data-row-type="platform:paypiggy"]::before {');
+        expect(cssText).toContain('animation: gui-member-sheen-sweep var(--gui-member-sheen-cycle-duration) ease-out infinite;');
+        expect(cssText).toContain('@media (prefers-reduced-motion: reduce)');
+        expect(cssText).toContain('opacity: 0;');
         expect(badgesBlock).toContain('display: inline-flex;');
         expect(badgesBlock).toContain('align-items: center;');
         expect(badgeBlock).toContain('width: var(--gui-badge-size-current);');
