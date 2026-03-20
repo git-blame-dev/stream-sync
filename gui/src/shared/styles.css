@@ -175,18 +175,8 @@ html, body {
 
 .gui-row--paypiggy .gui-row__avatar,
 .gui-row[data-row-type="platform:paypiggy"] .gui-row__avatar {
-  outline: 2px solid var(--gui-member-avatar-halo-ring);
-  outline-offset: 0;
-  box-shadow:
-    0 0 0 3px var(--gui-member-avatar-halo-ring),
-    0 0 18px 2px var(--gui-member-avatar-halo-glow),
-    0 0 34px 6px var(--gui-member-avatar-halo-deep);
-  filter: drop-shadow(0 0 10px var(--gui-member-avatar-halo-glow));
-}
-
-.gui-row--compare-after.gui-row--paypiggy .gui-row__avatar,
-.gui-row--compare-after.gui-row[data-row-type="platform:paypiggy"] .gui-row__avatar {
   outline: 1px solid color-mix(in srgb, var(--gui-member-avatar-halo-glow) 78%, transparent);
+  outline-offset: 0;
   box-shadow:
     0 0 0 2px color-mix(in srgb, var(--gui-member-avatar-halo-glow) 78%, transparent),
     0 0 14px 1px color-mix(in srgb, var(--gui-member-avatar-halo-glow) 74%, transparent),
@@ -254,14 +244,6 @@ html, body {
 }
 
 .gui-row__member-tag {
-  font-size: calc(var(--gui-row-header-font-size-current) * 0.65 * 1.15);
-  font-weight: 600;
-  color: gold;
-  display: inline-flex;
-  align-items: center;
-}
-
-.gui-row--compare-after.gui-row--paypiggy .gui-row__member-tag {
   padding: 1px 5px;
   border-radius: 999px;
   border: 1px solid color-mix(in srgb, #ffc400 88%, transparent);
@@ -279,6 +261,8 @@ html, body {
   box-shadow:
     inset 0 1px 0 color-mix(in srgb, #fff8a8 92%, transparent),
     0 0 10px -2px color-mix(in srgb, #ffc400 56%, transparent);
+  display: inline-flex;
+  align-items: center;
 }
 
 .gui-row__text {
