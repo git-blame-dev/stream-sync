@@ -123,8 +123,8 @@ describe('GUI shared styles behavior', () => {
         expect(memberTagBlock).toContain('text-transform: uppercase;');
         expect(memberTagBlock).toContain('display: inline-flex;');
         expect(memberTagBlock).toContain('align-items: center;');
-        expect(cssText).toContain('.gui-row--compare-after.gui-row--paypiggy::before,');
-        expect(cssText).toContain('.gui-row--compare-after.gui-row[data-row-type="platform:paypiggy"]::before {');
+        expect(cssText).toContain('.gui-row--paypiggy::before,');
+        expect(cssText).toContain('.gui-row[data-row-type="platform:paypiggy"]::before {');
         expect(cssText).toContain('animation: gui-member-sheen-sweep var(--gui-member-sheen-cycle-duration) ease-out infinite;');
         expect(cssText).toContain('@media (prefers-reduced-motion: reduce)');
         expect(cssText).toContain('opacity: 0;');
