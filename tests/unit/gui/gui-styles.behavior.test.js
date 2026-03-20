@@ -45,13 +45,13 @@ describe('GUI shared styles behavior', () => {
         expect(rootBlock).toContain('--gui-row-background-opacity: 0.95;');
         expect(rootBlock).toContain('--gui-overlay-avatar-size: 75px;');
         expect(rootBlock).toContain('--gui-overlay-platform-icon-size: 30px;');
-        expect(rootBlock).toContain('--gui-overlay-badge-size: 18px;');
+        expect(rootBlock).toContain('--gui-overlay-badge-size: 27px;');
         expect(rootBlock).toContain('--gui-overlay-row-header-font-size: 20px;');
         expect(rootBlock).toContain('--gui-overlay-row-body-font-size: 23px;');
         expect(rootBlock).toContain('--gui-overlay-emote-size: 50px;');
         expect(rootBlock).toContain('--gui-dock-avatar-size: 48px;');
         expect(rootBlock).toContain('--gui-dock-platform-icon-size: 24px;');
-        expect(rootBlock).toContain('--gui-dock-badge-size: 14px;');
+        expect(rootBlock).toContain('--gui-dock-badge-size: 21px;');
         expect(rootBlock).toContain('--gui-dock-row-header-font-size: 16px;');
         expect(rootBlock).toContain('--gui-dock-row-body-font-size: 18px;');
         expect(rootBlock).toContain('--gui-dock-emote-size: 36px;');
