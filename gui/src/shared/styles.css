@@ -19,13 +19,13 @@ html, body {
   --gui-member-avatar-halo-deep: rgba(22, 140, 84, 0.9);
   --gui-overlay-avatar-size: 75px;
   --gui-overlay-platform-icon-size: 30px;
-  --gui-overlay-badge-size: 18px;
+  --gui-overlay-badge-size: 27px;
   --gui-overlay-row-header-font-size: 20px;
   --gui-overlay-row-body-font-size: 23px;
   --gui-overlay-emote-size: 50px;
   --gui-dock-avatar-size: 48px;
   --gui-dock-platform-icon-size: 24px;
-  --gui-dock-badge-size: 14px;
+  --gui-dock-badge-size: 21px;
   --gui-dock-row-header-font-size: 16px;
   --gui-dock-row-body-font-size: 18px;
   --gui-dock-emote-size: 36px;
