@@ -14,7 +14,13 @@ html, body {
   --gui-member-glow-ring: rgba(152, 255, 201, 0.42);
   --gui-member-glow-soft: rgba(84, 255, 154, 0.5);
   --gui-member-glow-deep: rgba(10, 95, 54, 0.72);
-  --gui-member-avatar-halo-ring: rgba(236, 255, 244, 0.98);
+  --gui-member-pill-border: #ffc400;
+  --gui-member-pill-top: #fff35a;
+  --gui-member-pill-mid: #ffd000;
+  --gui-member-pill-bottom: #ffb300;
+  --gui-member-pill-text: #0f5d33;
+  --gui-member-pill-shine: #fff8a8;
+  --gui-member-pill-font-scale: 0.62;
   --gui-member-avatar-halo-glow: rgba(122, 255, 189, 0.92);
   --gui-member-avatar-halo-deep: rgba(22, 140, 84, 0.9);
   --gui-overlay-avatar-size: 75px;
@@ -246,21 +252,21 @@ html, body {
 .gui-row__member-tag {
   padding: 1px 5px;
   border-radius: 999px;
-  border: 1px solid color-mix(in srgb, #ffc400 88%, transparent);
+  border: 1px solid color-mix(in srgb, var(--gui-member-pill-border) 88%, transparent);
   background: linear-gradient(
     180deg,
-    color-mix(in srgb, #fff35a 96%, transparent) 0%,
-    color-mix(in srgb, #ffd000 96%, transparent) 55%,
-    color-mix(in srgb, #ffb300 96%, transparent) 100%
+    color-mix(in srgb, var(--gui-member-pill-top) 96%, transparent) 0%,
+    color-mix(in srgb, var(--gui-member-pill-mid) 96%, transparent) 55%,
+    color-mix(in srgb, var(--gui-member-pill-bottom) 96%, transparent) 100%
   );
-  color: #0f5d33;
+  color: var(--gui-member-pill-text);
   font-weight: 700;
-  font-size: calc(var(--gui-row-header-font-size-current) * 0.62);
+  font-size: calc(var(--gui-row-header-font-size-current) * var(--gui-member-pill-font-scale));
   letter-spacing: 0.01em;
   text-transform: uppercase;
   box-shadow:
-    inset 0 1px 0 color-mix(in srgb, #fff8a8 92%, transparent),
-    0 0 10px -2px color-mix(in srgb, #ffc400 56%, transparent);
+    inset 0 1px 0 color-mix(in srgb, var(--gui-member-pill-shine) 92%, transparent),
+    0 0 10px -2px color-mix(in srgb, var(--gui-member-pill-border) 56%, transparent);
   display: inline-flex;
   align-items: center;
 }
