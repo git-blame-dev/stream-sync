@@ -273,13 +273,13 @@ html, body {
   align-items: center;
 }
 
-.gui-row--compare-after.gui-row--paypiggy,
-.gui-row--compare-after.gui-row[data-row-type="platform:paypiggy"] {
+.gui-row--paypiggy,
+.gui-row[data-row-type="platform:paypiggy"] {
   position: relative;
 }
 
-.gui-row--compare-after.gui-row--paypiggy::before,
-.gui-row--compare-after.gui-row[data-row-type="platform:paypiggy"]::before {
+.gui-row--paypiggy::before,
+.gui-row[data-row-type="platform:paypiggy"]::before {
   content: '';
   position: absolute;
   inset: 0;
@@ -321,8 +321,8 @@ html, body {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .gui-row--compare-after.gui-row--paypiggy::before,
-  .gui-row--compare-after.gui-row[data-row-type="platform:paypiggy"]::before {
+  .gui-row--paypiggy::before,
+  .gui-row[data-row-type="platform:paypiggy"]::before {
     animation: none;
     opacity: 0;
   }
