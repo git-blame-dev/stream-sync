@@ -261,6 +261,26 @@ html, body {
   align-items: center;
 }
 
+.gui-row--compare-after.gui-row--paypiggy .gui-row__member-tag {
+  padding: 1px 5px;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, #ffc400 88%, transparent);
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, #fff35a 96%, transparent) 0%,
+    color-mix(in srgb, #ffd000 96%, transparent) 55%,
+    color-mix(in srgb, #ffb300 96%, transparent) 100%
+  );
+  color: #0f5d33;
+  font-weight: 700;
+  font-size: calc(var(--gui-row-header-font-size-current) * 0.62);
+  letter-spacing: 0.01em;
+  text-transform: uppercase;
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, #fff8a8 92%, transparent),
+    0 0 10px -2px color-mix(in srgb, #ffc400 56%, transparent);
+}
+
 .gui-row__text {
   font-size: var(--gui-row-body-font-size-current);
   line-height: 1;
