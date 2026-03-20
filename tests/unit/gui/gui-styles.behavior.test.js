@@ -58,7 +58,8 @@ describe('GUI shared styles behavior', () => {
         expect(rootBlock).toContain('--gui-monetization-notification-background: rgba(204, 170, 0, var(--gui-row-background-opacity));');
         expect(rootBlock).toContain('--gui-member-background-gradient-top: rgba(28, 138, 83, var(--gui-row-background-opacity));');
         expect(rootBlock).toContain('--gui-member-background-gradient-bottom: rgba(44, 197, 114, var(--gui-row-background-opacity));');
-        expect(rootBlock).toContain('--gui-member-avatar-halo-ring: rgba(236, 255, 244, 0.98);');
+        expect(rootBlock).toContain('--gui-member-pill-border: #ffc400;');
+        expect(rootBlock).toContain('--gui-member-pill-font-scale: 0.62;');
         expect(overlayShellBlock).toContain('height: 100vh;');
         expect(overlayShellBlock).toContain('overflow: hidden;');
         expect(overlayShellBlock).toContain('--gui-avatar-size-current: var(--gui-overlay-avatar-size);');
@@ -115,8 +116,8 @@ describe('GUI shared styles behavior', () => {
         expect(platformIconBlock).toContain('transform: translateY(1px);');
         expect(usernameBlock).toContain('font-size: var(--gui-row-header-font-size-current);');
         expect(memberTagBlock).toContain('padding: 1px 5px;');
-        expect(memberTagBlock).toContain('font-size: calc(var(--gui-row-header-font-size-current) * 0.62);');
-        expect(memberTagBlock).toContain('color: #0f5d33;');
+        expect(memberTagBlock).toContain('font-size: calc(var(--gui-row-header-font-size-current) * var(--gui-member-pill-font-scale));');
+        expect(memberTagBlock).toContain('color: var(--gui-member-pill-text);');
         expect(memberTagBlock).toContain('text-transform: uppercase;');
         expect(memberTagBlock).toContain('display: inline-flex;');
         expect(memberTagBlock).toContain('align-items: center;');
