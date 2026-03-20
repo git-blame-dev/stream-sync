@@ -21,6 +21,8 @@ html, body {
   --gui-member-pill-text: #0f5d33;
   --gui-member-pill-shine: #fff8a8;
   --gui-member-pill-font-scale: 0.62;
+  --gui-member-sheen-peak-opacity: 0.46;
+  --gui-member-sheen-cycle-duration: 5s;
   --gui-member-avatar-halo-glow: rgba(122, 255, 189, 0.92);
   --gui-member-avatar-halo-deep: rgba(22, 140, 84, 0.9);
   --gui-overlay-avatar-size: 75px;
@@ -269,6 +271,61 @@ html, body {
     0 0 10px -2px color-mix(in srgb, var(--gui-member-pill-border) 56%, transparent);
   display: inline-flex;
   align-items: center;
+}
+
+.gui-row--compare-after.gui-row--paypiggy,
+.gui-row--compare-after.gui-row[data-row-type="platform:paypiggy"] {
+  position: relative;
+}
+
+.gui-row--compare-after.gui-row--paypiggy::before,
+.gui-row--compare-after.gui-row[data-row-type="platform:paypiggy"]::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background-image: linear-gradient(
+    120deg,
+    transparent 42%,
+    color-mix(in srgb, var(--gui-member-pill-top) 58%, white) 49%,
+    color-mix(in srgb, white 82%, var(--gui-member-pill-top)) 50%,
+    color-mix(in srgb, var(--gui-member-pill-top) 58%, white) 51%,
+    transparent 58%
+  );
+  background-size: 240% 100%;
+  background-position-x: -170%;
+  opacity: var(--gui-member-sheen-peak-opacity);
+  pointer-events: none;
+  animation: gui-member-sheen-sweep var(--gui-member-sheen-cycle-duration) ease-out infinite;
+}
+
+@keyframes gui-member-sheen-sweep {
+  0% {
+    background-position-x: -170%;
+    opacity: 0;
+  }
+
+  12% {
+    opacity: var(--gui-member-sheen-peak-opacity);
+  }
+
+  35% {
+    background-position-x: 170%;
+    opacity: 0;
+  }
+
+  100% {
+    background-position-x: 170%;
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .gui-row--compare-after.gui-row--paypiggy::before,
+  .gui-row--compare-after.gui-row[data-row-type="platform:paypiggy"]::before {
+    animation: none;
+    opacity: 0;
+  }
 }
 
 .gui-row__text {
