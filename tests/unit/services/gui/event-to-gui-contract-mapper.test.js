@@ -232,6 +232,73 @@ describe('Event-to-GUI contract mapper behavior', () => {
         expect(notificationMapped.badgeImages).toBeUndefined();
     });
 
+    it('maps notification-level parts for gift rows', async () => {
+        const mapper = createMapper({ messageCharacterLimit: 0 });
+
+        const mapped = await mapper.mapDisplayRow({
+            type: 'platform:gift',
+            platform: 'tiktok',
+            data: {
+                username: 'test-user',
+                userId: 'test-user-id',
+                avatarUrl: 'https://example.invalid/avatar.png',
+                displayMessage: 'test-user sent 5x Rose gift (10 coins)',
+                parts: [
+                    { type: 'text', text: 'sent 5x ' },
+                    {
+                        type: 'emote',
+                        platform: 'tiktok',
+                        emoteId: 'Rose',
+                        imageUrl: 'https://example.invalid/tiktok/gifts/rose.webp'
+                    },
+                    { type: 'text', text: ' (10 coins)' }
+                ]
+            }
+        });
+
+        expect(mapped.parts).toEqual([
+            { type: 'text', text: 'sent 5x ' },
+            {
+                type: 'emote',
+                platform: 'tiktok',
+                emoteId: 'Rose',
+                imageUrl: 'https://example.invalid/tiktok/gifts/rose.webp'
+            },
+            { type: 'text', text: ' (10 coins)' }
+        ]);
+    });
+
+    it('derives TikTok gift parts from giftImageUrl when notification parts are missing', async () => {
+        const mapper = createMapper({ messageCharacterLimit: 0 });
+
+        const mapped = await mapper.mapDisplayRow({
+            type: 'platform:gift',
+            platform: 'tiktok',
+            data: {
+                username: 'test-user',
+                userId: 'test-user-id',
+                avatarUrl: 'https://example.invalid/avatar.png',
+                displayMessage: 'test-user sent 5x Rose gift (10 coins)',
+                giftType: 'Rose',
+                giftCount: 5,
+                amount: 10,
+                currency: 'coins',
+                giftImageUrl: 'https://example.invalid/tiktok/gifts/rose.webp'
+            }
+        });
+
+        expect(mapped.parts).toEqual([
+            { type: 'text', text: 'sent 5x ' },
+            {
+                type: 'emote',
+                platform: 'tiktok',
+                emoteId: 'Rose',
+                imageUrl: 'https://example.invalid/tiktok/gifts/rose.webp'
+            },
+            { type: 'text', text: ' (10 coins)' }
+        ]);
+    });
+
     it('preserves YouTube canonical message.parts while truncating text by messageCharacterLimit', async () => {
         const mapper = createMapper({ messageCharacterLimit: 5 });
 

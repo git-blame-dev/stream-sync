@@ -13,6 +13,9 @@ const baseGiftPayload = {
         diamondCount: 1,
         giftType: 0
     },
+    gift: {
+        giftPictureUrl: 'https://example.invalid/tiktok/gifts/rose.webp'
+    },
     repeatCount: 1,
     common: {
         msgId: 'test-msg-1',
@@ -54,5 +57,11 @@ describe('normalizeTikTokGiftEvent', () => {
         const event = normalizeTikTokGiftEvent(payload, normalizerOptions);
 
         expect(event.avatarUrl).toBe('https://example.invalid/tiktok-avatar-array.jpg');
+    });
+
+    test('maps giftImageUrl from gift image payload fields', () => {
+        const event = normalizeTikTokGiftEvent(baseGiftPayload, normalizerOptions);
+
+        expect(event.giftImageUrl).toBe('https://example.invalid/tiktok/gifts/rose.webp');
     });
 });

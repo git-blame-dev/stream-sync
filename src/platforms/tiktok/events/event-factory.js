@@ -157,6 +157,7 @@ function createTikTokEventFactory(options = {}) {
                 throw new Error('TikTok gift requires timestamp');
             }
             const giftType = data.giftType.trim();
+            const giftImageUrl = typeof data.giftImageUrl === 'string' ? data.giftImageUrl.trim() : '';
             const giftCount = data.giftCount;
             const repeatCount = Number.isFinite(Number(data.repeatCount))
                 ? Number(data.repeatCount)
@@ -187,6 +188,7 @@ function createTikTokEventFactory(options = {}) {
                 userId: identity.userId,
                 avatarUrl,
                 giftType,
+                ...(giftImageUrl ? { giftImageUrl } : {}),
                 giftCount,
                 amount: resolvedAmount,
                 currency,
