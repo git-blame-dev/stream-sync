@@ -50,8 +50,43 @@ function resolveText(type, data = {}) {
     return normalizeString(data.displayMessage || data.message);
 }
 
-function resolveMessageParts(data = {}) {
-    return getValidMessageParts({ message: data?.message }, { allowWhitespaceText: true })
+function resolveMessageParts(type, platform, data = {}) {
+    const canonicalMessageParts = Array.isArray(data?.message?.parts)
+        ? data.message.parts
+        : [];
+    const notificationParts = Array.isArray(data?.parts)
+        ? data.parts
+        : [];
+    const sourceParts = canonicalMessageParts.length > 0
+        ? canonicalMessageParts
+        : notificationParts;
+
+    if (sourceParts.length === 0 && type === 'platform:gift') {
+        const normalizedPlatform = normalizeString(platform || data.platform).toLowerCase();
+        const giftType = normalizeString(data.giftType);
+        const giftImageUrl = normalizeString(data.giftImageUrl);
+        const amount = Number(data.amount);
+        const giftCount = Number(data.giftCount);
+        const currency = normalizeString(data.currency).toLowerCase();
+
+        if (normalizedPlatform === 'tiktok' && giftType && giftImageUrl && currency === 'coins') {
+            const countText = giftCount > 1 ? `${giftCount}x ` : '';
+            const coinLabel = amount === 1 ? 'coin' : 'coins';
+            const coinText = amount > 0 ? ` (${amount} ${coinLabel})` : '';
+            const derivedParts = [
+                { type: 'text', text: `sent ${countText}` },
+                { type: 'emote', platform: 'tiktok', emoteId: giftType, imageUrl: giftImageUrl }
+            ];
+
+            if (coinText) {
+                derivedParts.push({ type: 'text', text: coinText });
+            }
+
+            return derivedParts;
+        }
+    }
+
+    return getValidMessageParts({ message: { parts: sourceParts } }, { allowWhitespaceText: true })
         .map((part) => {
             if (part.type === 'emote') {
                 return {
@@ -134,7 +169,7 @@ function createEventToGuiContractMapper(options = {}) {
         const textSource = resolveText(type, data);
         const messageLimit = Number(guiConfig.messageCharacterLimit) || 0;
         const text = applyMessageLimit(textSource, messageLimit);
-        const parts = resolveMessageParts(data);
+        const parts = resolveMessageParts(type, platform, data);
         const badgeImages = normalizeBadgeImages(data.badgeImages);
         const avatarUrl = await resolveAvatarUrl({ platform, data });
 

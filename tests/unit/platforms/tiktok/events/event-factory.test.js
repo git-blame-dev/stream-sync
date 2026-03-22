@@ -98,6 +98,7 @@ describe('TikTok event factory behavior', () => {
             userId: 'test-user-id',
             username: 'test-username',
             avatarUrl: 'https://example.invalid/tiktok-gift-avatar.jpg',
+            giftImageUrl: 'https://example.invalid/tiktok-gifts/rose.webp',
             giftType: 'Rose',
             giftCount: 1,
             amount: 1,
@@ -107,6 +108,7 @@ describe('TikTok event factory behavior', () => {
         });
 
         expect(event.avatarUrl).toBe('https://example.invalid/tiktok-gift-avatar.jpg');
+        expect(event.giftImageUrl).toBe('https://example.invalid/tiktok-gifts/rose.webp');
     });
 
     it('preserves avatarUrl on follow events', () => {

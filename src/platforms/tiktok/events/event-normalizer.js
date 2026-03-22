@@ -53,6 +53,9 @@ function normalizeTikTokGiftEvent(data, options = {}) {
         username,
         avatarUrl: extractTikTokAvatarUrl(data),
         giftType: giftData.giftType,
+        ...(typeof giftData.giftImageUrl === 'string' && giftData.giftImageUrl.trim()
+            ? { giftImageUrl: giftData.giftImageUrl.trim() }
+            : {}),
         giftCount: giftData.giftCount,
         repeatCount,
         amount: giftData.amount,

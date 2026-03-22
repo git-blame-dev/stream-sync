@@ -57,6 +57,18 @@ describe('extractTikTokGiftData', () => {
 
         expect(build).toThrow('requires repeatCount');
     });
+
+    it('extracts giftImageUrl from TikTok gift payload image fields', () => {
+        const result = extractTikTokGiftData({
+            giftDetails: { giftName: 'TestGiftRose', diamondCount: 2, giftType: 1 },
+            gift: {
+                giftPictureUrl: 'https://example.invalid/tiktok/gifts/rose.webp'
+            },
+            repeatCount: 5
+        });
+
+        expect(result.giftImageUrl).toBe('https://example.invalid/tiktok/gifts/rose.webp');
+    });
 });
 
 describe('extractTikTokAvatarUrl', () => {

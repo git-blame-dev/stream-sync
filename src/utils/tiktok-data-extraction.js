@@ -53,6 +53,9 @@ function extractTikTokGiftData(data) {
     const giftCount = data.repeatCount;
     const unitAmount = giftDetails.diamondCount;
     const amount = unitAmount * giftCount;
+    const giftImageUrl = typeof data?.gift?.giftPictureUrl === 'string'
+        ? data.gift.giftPictureUrl.trim()
+        : '';
 
     return {
         // giftDetails.giftName is the user-facing localized name (e.g., "Popular Vote")
@@ -73,7 +76,8 @@ function extractTikTokGiftData(data) {
 
         // Combo metadata fields at root level
         groupId: data.groupId,
-        repeatEnd: data.repeatEnd === 1
+        repeatEnd: data.repeatEnd === 1,
+        ...(giftImageUrl ? { giftImageUrl } : {})
     };
 }
 
