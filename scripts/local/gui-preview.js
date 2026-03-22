@@ -80,6 +80,9 @@ const PREVIEW_MEDIA_CATALOG = {
         emote: {
             id: '0123456789012345678',
             imageUrl: 'https://static-cdn.jtvnw.net/emoticons/v2/emotesv2_dcd06b30a5c24f6eb871e8f5edbd44f7/animated/dark/3.0'
+        },
+        gift: {
+            imageUrl: 'https://p16-webcast.tiktokcdn.com/img/maliva/webcast-va/eba3a9bb85c33e017f3648eaf88d7189~tplv-obj.webp'
         }
     }
 };
@@ -533,6 +536,13 @@ function buildPreviewScenarioEvents(durationMs = PREVIEW_DURATION_MS, intervalMs
                     giftName: 'Rose',
                     repeatCount: 5,
                     diamondCount: 10,
+                    ...(scenarioType === 'gift' && media?.gift?.imageUrl
+                        ? {
+                            gift: {
+                                giftPictureUrl: media.gift.imageUrl
+                            }
+                        }
+                        : {}),
                     msgId: `test-${scenarioType}-${index}`,
                     createTime: Math.floor(Date.parse(timestamp) / 1000)
                 }
@@ -733,6 +743,9 @@ function createPreviewIngestAdapters(options = {}) {
         },
         handleTikTokGift(data) {
             const sourceUser = data?.user || {};
+            const giftImageUrl = typeof data?.gift?.giftPictureUrl === 'string'
+                ? data.gift.giftPictureUrl
+                : '';
             emitPlatformEvent({
                 type: PlatformEvents.GIFT,
                 platform: 'tiktok',
@@ -742,6 +755,7 @@ function createPreviewIngestAdapters(options = {}) {
                     timestamp: data.timestamp,
                     id: data.msgId,
                     giftType: data.giftName || 'Rose',
+                    ...(giftImageUrl ? { giftImageUrl } : {}),
                     giftCount: Number(data.repeatCount) || 1,
                     amount: Number(data.diamondCount) || 10,
                     currency: 'coins'
