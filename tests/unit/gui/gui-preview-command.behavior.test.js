@@ -78,6 +78,16 @@ describe('GUI local preview command behavior', () => {
         expect(tiktokStep.rawEvent.data.user.profilePictureUrl).toBe(PREVIEW_MEDIA_CATALOG.tiktok.avatarUrl);
     });
 
+    it('includes tiktok gift image payload for the preview 5x Rose gift event', () => {
+        const events = buildPreviewScenarioEvents(32000, 2000);
+        const tiktokGiftStep = events.find((event) => event.adapter === 'tiktok' && event.rawEvent?.eventType === 'GIFT');
+
+        expect(tiktokGiftStep).toBeDefined();
+        expect(tiktokGiftStep.rawEvent.data.repeatCount).toBe(5);
+        expect(tiktokGiftStep.rawEvent.data.giftName).toBe('Rose');
+        expect(tiktokGiftStep.rawEvent.data.gift.giftPictureUrl).toBe(PREVIEW_MEDIA_CATALOG.tiktok.gift.imageUrl);
+    });
+
     it('uses explicit stable media catalog values without test-only URLs', () => {
         const events = buildPreviewScenarioEvents(20000, 2000);
         const serialized = JSON.stringify(events);
@@ -565,7 +575,10 @@ describe('GUI local preview command behavior', () => {
                 msgId: 'gift-id',
                 giftName: 'Rose',
                 repeatCount: 2,
-                diamondCount: 20
+                diamondCount: 20,
+                gift: {
+                    giftPictureUrl: 'https://example.com/tiktok/gift-rose.png'
+                }
             }
         });
 
@@ -588,7 +601,10 @@ describe('GUI local preview command behavior', () => {
             }
         });
 
-        expect(emitted.some((event) => event.type === 'platform:gift' && event.platform === 'tiktok')).toBe(true);
+        const tiktokGiftEvent = emitted.find((event) => event.type === 'platform:gift' && event.platform === 'tiktok');
+
+        expect(tiktokGiftEvent).toBeDefined();
+        expect(tiktokGiftEvent.data.giftImageUrl).toBe('https://example.com/tiktok/gift-rose.png');
         expect(emitted.some((event) => event.type === 'platform:envelope' && event.platform === 'tiktok')).toBe(true);
     });
 
