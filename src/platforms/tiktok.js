@@ -772,6 +772,7 @@ class TikTokPlatform extends EventEmitter {
             userId: gift.userId,
             username,
             avatarUrl: gift.avatarUrl,
+            giftImageUrl: gift.giftImageUrl,
             giftType,
             giftCount,
             repeatCount: Number.isFinite(Number(gift.repeatCount)) ? Number(gift.repeatCount) : giftCount,

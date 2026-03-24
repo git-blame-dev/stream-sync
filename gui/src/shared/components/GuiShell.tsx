@@ -1,7 +1,8 @@
 import React, { useLayoutEffect, useMemo, useRef, useState } from 'react'
 
 import { GuiRow } from './GuiRow'
-import type { GuiRowDto } from '../types'
+import { GiftAnimationLayer } from './GiftAnimationLayer'
+import type { GuiGiftAnimationEffectEnvelope, GuiRowDto } from '../types'
 import { applyOverlayRowShiftMotion } from '../overlay-row-motion'
 
 const ROW_SLIDE_ANIMATION_MS = 1000
@@ -23,6 +24,8 @@ interface GuiShellProps {
   mode: 'dock' | 'overlay'
   overlayMaxLinesPerMessage: number
   uiCompareMode?: boolean
+  activeEffect?: GuiGiftAnimationEffectEnvelope | null
+  onEffectComplete?: (playbackId: string) => void
 }
 
 interface GuiShellRowEntry {
@@ -166,7 +169,17 @@ function createOverlayExitStyle(topPx: number, travelPx: number): React.CSSPrope
   return style
 }
 
-export function GuiShell({ rows, mode, overlayMaxLinesPerMessage, uiCompareMode = false }: GuiShellProps) {
+export function GuiShell({
+  rows,
+  mode,
+  overlayMaxLinesPerMessage,
+  uiCompareMode = false,
+  activeEffect = null,
+  onEffectComplete
+}: GuiShellProps) {
+  const handleEffectComplete = typeof onEffectComplete === 'function'
+    ? onEffectComplete
+    : (_playbackId: string) => undefined
   const shellStyle = mode === 'overlay'
     ? ({ '--overlay-line-clamp': String(overlayMaxLinesPerMessage) } as React.CSSProperties)
     : mode === 'dock'
@@ -486,6 +499,10 @@ export function GuiShell({ rows, mode, overlayMaxLinesPerMessage, uiCompareMode 
             )
           })
         : null}
+      <GiftAnimationLayer
+        effect={activeEffect}
+        onComplete={handleEffectComplete}
+      />
       {renderedRowEntries.map((entry) => {
         return (
           <GuiRow

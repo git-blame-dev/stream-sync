@@ -43,14 +43,14 @@ function createSseReader(response) {
     return {
         async readEvent() {
             while (true) {
-                const { value, done } = await readWithTimeout();
-                if (done) {
-                    throw new Error('SSE stream ended before receiving an event');
-                }
-
-                buffer += decoder.decode(value, { stream: true });
                 const separatorIndex = buffer.indexOf('\n\n');
                 if (separatorIndex === -1) {
+                    const { value, done } = await readWithTimeout();
+                    if (done) {
+                        throw new Error('SSE stream ended before receiving an event');
+                    }
+
+                    buffer += decoder.decode(value, { stream: true });
                     continue;
                 }
 
@@ -164,6 +164,370 @@ describe('GUI transport routes and SSE integration', () => {
             }
         } finally {
             await service.stop();
+        }
+    });
+
+    it('delivers gift animation effect envelopes after display rows and serves runtime media', async () => {
+        const port = await getAvailablePort();
+        const eventBus = new TestEventBus();
+        const config = buildConfig({
+            enableDock: true,
+            enableOverlay: false,
+            showGifts: true,
+            port,
+            messageCharacterLimit: 0
+        });
+        const tempDirectory = fs.mkdtempSync(path.join(os.tmpdir(), 'gui-transport-gift-animation-'));
+        const mediaPath = path.join(tempDirectory, 'gift.mp4');
+        fs.writeFileSync(mediaPath, Buffer.from('test-mp4-content'));
+        const service = createGuiTransportService({
+            config,
+            eventBus,
+            logger: null,
+            runtimeAssetRoots: [tempDirectory]
+        });
+        await service.start();
+
+        const baseUrl = `http://127.0.0.1:${port}`;
+        const abort = new AbortController();
+
+        try {
+            const response = await fetch(`${baseUrl}/gui/events`, {
+                signal: abort.signal
+            });
+            expect(response.status).toBe(200);
+            const reader = createSseReader(response);
+
+            eventBus.emit('display:row', {
+                type: 'platform:gift',
+                platform: 'tiktok',
+                data: {
+                    username: 'test-user',
+                    userId: 'test-user-id',
+                    displayMessage: 'test-user sent Corgi',
+                    avatarUrl: 'https://example.invalid/test-avatar.png',
+                    giftType: 'Corgi',
+                    giftCount: 1,
+                    amount: 299,
+                    currency: 'coins',
+                    timestamp: '2024-01-01T00:00:00.000Z'
+                }
+            });
+
+            eventBus.emit('display:gift-animation', {
+                playbackId: 'test-playback-id',
+                durationMs: 4000,
+                mediaFilePath: mediaPath,
+                mediaContentType: 'video/mp4',
+                animationConfig: {
+                    profileName: 'portrait',
+                    sourceWidth: 960,
+                    sourceHeight: 864,
+                    renderWidth: 480,
+                    renderHeight: 854,
+                    rgbFrame: [0, 0, 480, 854],
+                    aFrame: [480, 0, 480, 854]
+                }
+            });
+
+            const rowEvent = await reader.readEvent();
+            const effectEvent = await reader.readEvent();
+
+            expect(rowEvent.type).toBe('platform:gift');
+            expect(effectEvent.__guiEvent).toBe('effect');
+            expect(effectEvent.effectType).toBe('tiktok-gift-animation');
+            expect(effectEvent.playbackId).toBe('test-playback-id');
+            expect(effectEvent.assetUrl).toMatch(/^\/gui\/runtime\/[a-f0-9]+\.mp4$/);
+            expect(effectEvent.config).toBeDefined();
+
+            const mediaResponse = await fetch(`${baseUrl}${effectEvent.assetUrl}`);
+            expect(mediaResponse.status).toBe(200);
+            expect(mediaResponse.headers.get('x-content-type-options')).toBe('nosniff');
+            expect(mediaResponse.headers.get('content-type')).toContain('video/mp4');
+            expect(mediaResponse.headers.get('accept-ranges')).toBe('bytes');
+
+            const rangeResponse = await fetch(`${baseUrl}${effectEvent.assetUrl}`, {
+                headers: {
+                    Range: 'bytes=0-3'
+                }
+            });
+            expect(rangeResponse.status).toBe(206);
+            expect(rangeResponse.headers.get('content-range')).toMatch(/^bytes 0-3\//);
+            const chunk = Buffer.from(await rangeResponse.arrayBuffer()).toString('utf8');
+            expect(chunk).toBe('test');
+        } finally {
+            abort.abort();
+            await service.stop();
+            fs.rmSync(tempDirectory, { recursive: true, force: true });
+        }
+    });
+
+    it('returns 416 for malformed or unsatisfiable runtime asset ranges', async () => {
+        const port = await getAvailablePort();
+        const eventBus = new TestEventBus();
+        const config = buildConfig({
+            enableDock: true,
+            enableOverlay: false,
+            showGifts: true,
+            port,
+            messageCharacterLimit: 0
+        });
+        const tempDirectory = fs.mkdtempSync(path.join(os.tmpdir(), 'gui-transport-gift-animation-range-'));
+        const mediaPath = path.join(tempDirectory, 'gift.mp4');
+        fs.writeFileSync(mediaPath, Buffer.from('test-mp4-content'));
+        const service = createGuiTransportService({
+            config,
+            eventBus,
+            logger: null,
+            runtimeAssetRoots: [tempDirectory]
+        });
+        await service.start();
+
+        const baseUrl = `http://127.0.0.1:${port}`;
+        const abort = new AbortController();
+        try {
+            const response = await fetch(`${baseUrl}/gui/events`, { signal: abort.signal });
+            expect(response.status).toBe(200);
+            const reader = createSseReader(response);
+
+            eventBus.emit('display:gift-animation', {
+                playbackId: 'test-range-playback-id',
+                durationMs: 4000,
+                mediaFilePath: mediaPath,
+                mediaContentType: 'video/mp4',
+                animationConfig: {
+                    profileName: 'portrait',
+                    sourceWidth: 960,
+                    sourceHeight: 864,
+                    renderWidth: 480,
+                    renderHeight: 854,
+                    rgbFrame: [0, 0, 480, 854],
+                    aFrame: [480, 0, 480, 854]
+                }
+            });
+
+            const effectEvent = await reader.readEvent();
+
+            const malformedRangeResponse = await fetch(`${baseUrl}${effectEvent.assetUrl}`, {
+                headers: { Range: 'bytes=abc-def' }
+            });
+            expect(malformedRangeResponse.status).toBe(416);
+            expect(malformedRangeResponse.headers.get('content-range')).toMatch(/^bytes \*\/\d+$/);
+
+            const emptyRangeResponse = await fetch(`${baseUrl}${effectEvent.assetUrl}`, {
+                headers: { Range: 'bytes=-' }
+            });
+            expect(emptyRangeResponse.status).toBe(416);
+            expect(emptyRangeResponse.headers.get('content-range')).toMatch(/^bytes \*\/\d+$/);
+
+            const unsatisfiableRangeResponse = await fetch(`${baseUrl}${effectEvent.assetUrl}`, {
+                headers: { Range: 'bytes=999999-' }
+            });
+            expect(unsatisfiableRangeResponse.status).toBe(416);
+            expect(unsatisfiableRangeResponse.headers.get('content-range')).toMatch(/^bytes \*\/\d+$/);
+        } finally {
+            abort.abort();
+            await service.stop();
+            fs.rmSync(tempDirectory, { recursive: true, force: true });
+        }
+    });
+
+    it('serves zero-byte runtime assets with correct headers and rejects ranged reads', async () => {
+        const port = await getAvailablePort();
+        const eventBus = new TestEventBus();
+        const config = buildConfig({
+            enableDock: true,
+            enableOverlay: false,
+            showGifts: true,
+            port,
+            messageCharacterLimit: 0
+        });
+        const tempDirectory = fs.mkdtempSync(path.join(os.tmpdir(), 'gui-transport-gift-animation-empty-'));
+        const mediaPath = path.join(tempDirectory, 'gift-empty.mp4');
+        fs.writeFileSync(mediaPath, Buffer.alloc(0));
+        const service = createGuiTransportService({
+            config,
+            eventBus,
+            logger: null,
+            runtimeAssetRoots: [tempDirectory]
+        });
+        await service.start();
+
+        const baseUrl = `http://127.0.0.1:${port}`;
+        const abort = new AbortController();
+        try {
+            const response = await fetch(`${baseUrl}/gui/events`, { signal: abort.signal });
+            expect(response.status).toBe(200);
+            const reader = createSseReader(response);
+
+            eventBus.emit('display:gift-animation', {
+                playbackId: 'test-empty-playback-id',
+                durationMs: 4000,
+                mediaFilePath: mediaPath,
+                mediaContentType: 'video/mp4',
+                animationConfig: {
+                    profileName: 'portrait',
+                    sourceWidth: 960,
+                    sourceHeight: 864,
+                    renderWidth: 480,
+                    renderHeight: 854,
+                    rgbFrame: [0, 0, 480, 854],
+                    aFrame: [480, 0, 480, 854]
+                }
+            });
+
+            const effectEvent = await reader.readEvent();
+
+            const mediaResponse = await fetch(`${baseUrl}${effectEvent.assetUrl}`);
+            expect(mediaResponse.status).toBe(200);
+            expect(mediaResponse.headers.get('content-length')).toBe('0');
+            const mediaBody = await mediaResponse.arrayBuffer();
+            expect(mediaBody.byteLength).toBe(0);
+
+            const rangedResponse = await fetch(`${baseUrl}${effectEvent.assetUrl}`, {
+                headers: { Range: 'bytes=0-0' }
+            });
+            expect(rangedResponse.status).toBe(416);
+            expect(rangedResponse.headers.get('content-range')).toBe('bytes */0');
+        } finally {
+            abort.abort();
+            await service.stop();
+            fs.rmSync(tempDirectory, { recursive: true, force: true });
+        }
+    });
+
+    it('rejects runtime assets that resolve outside allowed roots', async () => {
+        const port = await getAvailablePort();
+        const eventBus = new TestEventBus();
+        const allowedRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'gui-transport-allowed-'));
+        const blockedRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'gui-transport-blocked-'));
+        const blockedMediaPath = path.join(blockedRoot, 'gift.mp4');
+        fs.writeFileSync(blockedMediaPath, Buffer.from('blocked-mp4-content'));
+
+        const config = buildConfig({
+            enableDock: true,
+            enableOverlay: false,
+            showGifts: true,
+            port,
+            messageCharacterLimit: 0
+        });
+        const service = createGuiTransportService({
+            config,
+            eventBus,
+            logger: null,
+            runtimeAssetRoots: [allowedRoot]
+        });
+        await service.start();
+
+        const baseUrl = `http://127.0.0.1:${port}`;
+        const abort = new AbortController();
+
+        try {
+            const response = await fetch(`${baseUrl}/gui/events`, {
+                signal: abort.signal
+            });
+            expect(response.status).toBe(200);
+            const reader = createSseReader(response);
+
+            eventBus.emit('display:gift-animation', {
+                playbackId: 'blocked-playback-id',
+                durationMs: 4000,
+                mediaFilePath: blockedMediaPath,
+                mediaContentType: 'video/mp4',
+                animationConfig: {
+                    profileName: 'portrait',
+                    sourceWidth: 960,
+                    sourceHeight: 864,
+                    renderWidth: 480,
+                    renderHeight: 854,
+                    rgbFrame: [0, 0, 480, 854],
+                    aFrame: [480, 0, 480, 854]
+                }
+            });
+
+            let receivedEvent = false;
+            reader.readEvent()
+                .then(() => {
+                    receivedEvent = true;
+                })
+                .catch(() => {});
+
+            await new Promise((resolve) => {
+                safeSetTimeout(resolve, 300);
+            });
+
+            expect(receivedEvent).toBe(false);
+        } finally {
+            abort.abort();
+            await service.stop();
+            fs.rmSync(allowedRoot, { recursive: true, force: true });
+            fs.rmSync(blockedRoot, { recursive: true, force: true });
+        }
+    });
+
+    it('enforces runtime asset max entries without exceeding cap', async () => {
+        const port = await getAvailablePort();
+        const eventBus = new TestEventBus();
+        const config = buildConfig({
+            enableDock: true,
+            enableOverlay: false,
+            showGifts: true,
+            port,
+            messageCharacterLimit: 0
+        });
+        const tempDirectory = fs.mkdtempSync(path.join(os.tmpdir(), 'gui-transport-runtime-cap-'));
+        const mediaPath = path.join(tempDirectory, 'gift.mp4');
+        fs.writeFileSync(mediaPath, Buffer.from('test-mp4-content'));
+        const service = createGuiTransportService({
+            config,
+            eventBus,
+            logger: null,
+            runtimeAssetRoots: [tempDirectory]
+        });
+        await service.start();
+
+        const baseUrl = `http://127.0.0.1:${port}`;
+        const abort = new AbortController();
+
+        try {
+            const response = await fetch(`${baseUrl}/gui/events`, {
+                signal: abort.signal
+            });
+            expect(response.status).toBe(200);
+            const reader = createSseReader(response);
+
+            const assetUrls = [];
+            for (let index = 0; index < 65; index += 1) {
+                eventBus.emit('display:gift-animation', {
+                    playbackId: `cap-playback-${index}`,
+                    durationMs: 4000,
+                    mediaFilePath: mediaPath,
+                    mediaContentType: 'video/mp4',
+                    animationConfig: {
+                        profileName: 'portrait',
+                        sourceWidth: 960,
+                        sourceHeight: 864,
+                        renderWidth: 480,
+                        renderHeight: 854,
+                        rgbFrame: [0, 0, 480, 854],
+                        aFrame: [480, 0, 480, 854]
+                    }
+                });
+
+                const effectEvent = await reader.readEvent();
+                expect(effectEvent.__guiEvent).toBe('effect');
+                assetUrls.push(effectEvent.assetUrl);
+            }
+
+            const oldestAssetResponse = await fetch(`${baseUrl}${assetUrls[0]}`);
+            expect(oldestAssetResponse.status).toBe(404);
+
+            const newestAssetResponse = await fetch(`${baseUrl}${assetUrls[64]}`);
+            expect(newestAssetResponse.status).toBe(200);
+        } finally {
+            abort.abort();
+            await service.stop();
+            fs.rmSync(tempDirectory, { recursive: true, force: true });
         }
     });
 
@@ -490,6 +854,78 @@ describe('GUI transport routes and SSE integration', () => {
         } finally {
             await service.stop();
             fs.rmSync(assetsRoot, { recursive: true, force: true });
+        }
+    });
+
+    it('does not deliver stale queued row dispatches after stop/start', async () => {
+        const port = await getAvailablePort();
+        const eventBus = new TestEventBus();
+        const config = buildConfig({
+            enableDock: true,
+            enableOverlay: false,
+            port
+        });
+        const mapper = {
+            async mapDisplayRow(row) {
+                await new Promise((resolve) => {
+                    safeSetTimeout(resolve, 30);
+                });
+                return {
+                    type: row.type,
+                    text: row.data.message,
+                    username: row.data.username,
+                    avatarUrl: row.data.avatarUrl,
+                    timestamp: row.data.timestamp
+                };
+            }
+        };
+
+        const service = createGuiTransportService({ config, eventBus, mapper, logger: null });
+
+        try {
+            await service.start();
+            eventBus.emit('display:row', {
+                type: 'chat',
+                platform: 'twitch',
+                data: {
+                    username: 'test-user-stale',
+                    userId: 'test-user-stale-id',
+                    message: 'stale-message',
+                    avatarUrl: 'https://example.invalid/stale-avatar.png',
+                    timestamp: '2024-01-01T00:00:00.000Z'
+                }
+            });
+
+            await service.stop();
+            await service.start();
+
+            const baseUrl = `http://127.0.0.1:${port}`;
+            const abortController = new AbortController();
+            try {
+                const response = await fetch(`${baseUrl}/gui/events`, { signal: abortController.signal });
+                expect(response.status).toBe(200);
+                const reader = createSseReader(response);
+
+                eventBus.emit('display:row', {
+                    type: 'chat',
+                    platform: 'twitch',
+                    data: {
+                        username: 'test-user-fresh',
+                        userId: 'test-user-fresh-id',
+                        message: 'fresh-message',
+                        avatarUrl: 'https://example.invalid/fresh-avatar.png',
+                        timestamp: '2024-01-01T00:00:01.000Z'
+                    }
+                });
+
+                const freshEvent = await reader.readEvent();
+                expect(freshEvent.username).toBe('test-user-fresh');
+                expect(freshEvent.text).toBe('fresh-message');
+            } finally {
+                abortController.abort();
+            }
+        } finally {
+            await service.stop();
         }
     });
 

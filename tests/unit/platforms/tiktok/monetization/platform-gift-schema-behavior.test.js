@@ -107,6 +107,7 @@ describe('TikTokPlatform gift aggregation and schema behavior', () => {
         await platform.handleTikTokGift({
             user: { userId: 'tt-gifter-2', uniqueId: 'gifter123', nickname: 'Gifter One' },
             giftDetails: { giftName: 'Heart Me', diamondCount: 25, giftType: 0 },
+            gift: { giftPictureUrl: 'https://example.invalid/tiktok-gifts/heart-me.png' },
             repeatCount: 3,
             repeatEnd: true,
             common: { msgId: 'gift-msg-1', createTime: testClock.now() },
@@ -120,6 +121,7 @@ describe('TikTokPlatform gift aggregation and schema behavior', () => {
         expect(giftEvent.repeatCount).toBe(3);
         expect(giftEvent.amount).toBe(75);
         expect(giftEvent.currency).toBe('coins');
+        expect(giftEvent.giftImageUrl).toBe('https://example.invalid/tiktok-gifts/heart-me.png');
         expect(giftEvent.isAggregated).toBe(false);
     });
 

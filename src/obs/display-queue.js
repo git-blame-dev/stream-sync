@@ -97,7 +97,8 @@ class DisplayQueue {
                 config: this.config,
                 delay: this.delay,
                 handleDisplayQueueError,
-                extractUsername: (data) => this.extractUsername(data)
+                extractUsername: (data) => this.extractUsername(data),
+                giftAnimationResolver: dependencies.giftAnimationResolver
             });
         } catch (error) {
             handleDisplayQueueError('[DisplayQueue] Error during construction', error);
@@ -151,7 +152,9 @@ class DisplayQueue {
         if (removedChatCount > 0) {
             logger.debug(`[Display Queue] Removing ${removedChatCount} stale chat messages to show latest`, 'display-queue');
         }
-        this.emitDisplayRow(item);
+        if (!isNotificationType(item.type)) {
+            this.emitDisplayRow(item);
+        }
         logger.debug(`[Display Queue] Added ${item.type} (priority ${item.priority}) at position ${insertIndex}. Queue length: ${this.queue.length}`, 'display-queue');
         
         if (!this.isProcessing && !this.isRetryScheduled && this.config.autoProcess) {
@@ -214,18 +217,34 @@ class DisplayQueue {
                 logger.debug(`[Display Queue] Processing ${item.type} item. Remaining: ${this.queue.length}`, 'display-queue');
                 
                 try {
-                    await this.displayItem(item);
+                    const displayed = await this.displayItem(item);
+                    const isNotification = isNotificationType(item.type);
+                    const isDisplayedNotification = isNotification && displayed !== false;
+
+                    if (isNotification) {
+                        if (!isDisplayedNotification) {
+                            logger.debug(`[Display Queue] Notification ${item.type} was not displayed; skipping wait/hide/transition`, 'display-queue');
+                            this.currentDisplay = null;
+                            continue;
+                        }
+
+                        await this.delay(this.getDuration(item));
+                        await this.hideCurrentDisplay(item);
+                        await this.delay(this.config.timing.transitionDelay);
+                        this.currentDisplay = null;
+                        continue;
+                    }
+
                     await this.delay(this.getDuration(item));
 
-                    if (item.type === 'chat') {
+                    if (isChatType(item.type)) {
                         if (this.queue.length > 0 || !this.lastChatItem) {
                             await this.hideCurrentDisplay(item);
                         }
-                    } else {
-                        await this.hideCurrentDisplay(item);
                     }
-                    
+
                     await this.delay(this.config.timing.transitionDelay);
+                    this.currentDisplay = null;
 
                 } catch (err) {
                     handleDisplayQueueError(`[Display Queue] Error processing ${item.type}`, err, { itemType: item.type });
@@ -254,11 +273,9 @@ class DisplayQueue {
     async displayItem(item) {
         switch (item.type) {
             case 'chat':
-                await this.displayChatItem(item);
-                break;
+                return await this.displayChatItem(item);
             default:
-                await this.displayNotificationItem(item);
-                break;
+                return await this.displayNotificationItem(item);
         }
     }
     
@@ -268,9 +285,13 @@ class DisplayQueue {
 
     async displayNotificationItem(item) {
         const displayed = await this.renderer.displayNotificationItem(item);
-        if (displayed !== false) {
-            await this.handleNotificationEffects(item);
+        if (displayed === false) {
+            return false;
         }
+
+        this.emitDisplayRow(item);
+        await this.handleNotificationEffects(item);
+        return true;
     }
 
     async handleNotificationEffects(item) {
@@ -336,18 +357,23 @@ class DisplayQueue {
     }
 
     getDuration(item) {
+        const holdDurationMs = Number(item?.holdDurationMs);
+        const normalizedHoldDurationMs = Number.isFinite(holdDurationMs) && holdDurationMs > 0
+            ? holdDurationMs
+            : 0;
+
         if (!item?.data) {
-            return 0;
+            return normalizedHoldDurationMs;
         }
 
         let ttsStages;
         try {
             ttsStages = MessageTTSHandler.createTTSStages(item.data) || [];
         } catch {
-            return 0;
+            return normalizedHoldDurationMs;
         }
         if (ttsStages.length === 0) {
-            return 0;
+            return normalizedHoldDurationMs;
         }
 
         const estimateSpeechMs = (text) => {
@@ -369,7 +395,8 @@ class DisplayQueue {
         const minWindow = 2000;
         const maxWindow = 20000;
 
-        return Math.min(maxWindow, Math.max(minWindow, maxStageMs + tailBufferMs));
+        const ttsWindowMs = Math.min(maxWindow, Math.max(minWindow, maxStageMs + tailBufferMs));
+        return Math.max(ttsWindowMs, normalizedHoldDurationMs);
     }
 
     extractUsername(data) {

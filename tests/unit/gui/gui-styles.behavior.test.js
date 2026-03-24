@@ -25,6 +25,9 @@ describe('GUI shared styles behavior', () => {
         const rowBlock = readCssBlock(cssText, '.gui-row');
         const memberChatRowBlock = readCssBlock(cssText, '.gui-row--member-chat');
         const overlayEnterBlock = readCssBlock(cssText, '.gui-row--overlay-enter');
+        const effectLayerBlock = readCssBlock(cssText, '.gui-shell__effect-layer');
+        const effectVideoBlock = readCssBlock(cssText, '.gui-shell__effect-video');
+        const effectCanvasBlock = readCssBlock(cssText, '.gui-shell__gift-animation');
         const avatarBlock = readCssBlock(cssText, '.gui-row__avatar');
         const platformIconBlock = readCssBlock(cssText, '.gui-row__platform-icon');
         const usernameBlock = readCssBlock(cssText, '.gui-row__username');
@@ -71,6 +74,7 @@ describe('GUI shared styles behavior', () => {
         expect(overlayShellBlock).toContain('--gui-row-body-font-size-current: var(--gui-overlay-row-body-font-size);');
         expect(overlayShellBlock).toContain('--gui-emote-size-current: var(--gui-overlay-emote-size);');
         expect(dockShellBlock).toContain('min-height: 100vh;');
+        expect(dockShellBlock).toContain('position: relative;');
         expect(dockShellBlock).toContain('background: linear-gradient(180deg, #1a1f26 0%, #12161c 100%);');
         expect(dockShellBlock).toContain('--gui-avatar-size-current: var(--gui-dock-avatar-size);');
         expect(dockShellBlock).toContain('--gui-platform-icon-size-current: var(--gui-dock-platform-icon-size);');
@@ -80,6 +84,15 @@ describe('GUI shared styles behavior', () => {
         expect(dockShellBlock).toContain('--gui-emote-size-current: var(--gui-dock-emote-size);');
         expect(overlayExitBlock).toContain('position: absolute;');
         expect(overlayExitBlock).toContain('animation: gui-overlay-row-exit 1000ms ease-out forwards;');
+        expect(effectLayerBlock).toContain('position: absolute;');
+        expect(effectLayerBlock).toContain('inset: 0;');
+        expect(effectLayerBlock).toContain('z-index: 3;');
+        expect(effectLayerBlock).toContain('pointer-events: none;');
+        expect(effectVideoBlock).toContain('opacity: 0;');
+        expect(effectVideoBlock).toContain('width: 1px;');
+        expect(effectCanvasBlock).toContain('position: absolute;');
+        expect(effectCanvasBlock).toContain('width: 100%;');
+        expect(effectCanvasBlock).toContain('height: 100%;');
         expect(cssText).toContain('@keyframes gui-overlay-row-exit');
         expect(cssText).toContain('translateY(calc(-1 * var(--overlay-exit-travel, 0px)))');
         expect(rowBlock).toContain('grid-template-columns: auto 1fr;');

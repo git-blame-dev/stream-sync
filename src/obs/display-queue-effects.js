@@ -4,6 +4,7 @@ const MessageTTSHandler = require('../utils/message-tts-handler');
 const { safeDelay } = require('../utils/timeout-validator');
 const { PlatformEvents } = require('../interfaces/PlatformEvents');
 const { triggerHandcamGlow } = require('./handcam-glow');
+const { createTikTokGiftAnimationResolver } = require('../services/tiktok-gift-animation/resolver');
 
 class DisplayQueueEffects {
     constructor({
@@ -15,7 +16,8 @@ class DisplayQueueEffects {
         delay,
         handleDisplayQueueError,
         triggerHandcamGlow: triggerHandcamGlowOverride,
-        extractUsername
+        extractUsername,
+        giftAnimationResolver
     }) {
         this.obsManager = obsManager;
         this.sourcesManager = sourcesManager;
@@ -26,6 +28,46 @@ class DisplayQueueEffects {
         this.handleDisplayQueueError = handleDisplayQueueError;
         this.triggerHandcamGlow = triggerHandcamGlowOverride || triggerHandcamGlow;
         this.extractUsername = extractUsername;
+        this.giftAnimationResolver = giftAnimationResolver || createTikTokGiftAnimationResolver({ logger });
+    }
+
+    isGuiGiftAnimationEnabled() {
+        const gui = this.config?.gui || {};
+        const guiEnabled = gui.enableDock === true || gui.enableOverlay === true;
+        const giftsVisible = gui.showGifts !== false;
+        return guiEnabled && giftsVisible;
+    }
+
+    isTikTokGiftAnimationCandidate(item) {
+        return item?.type === 'platform:gift' && item?.platform === 'tiktok';
+    }
+
+    async resolveAndEmitGiftAnimation(item) {
+        if (!this.eventBus || !this.isTikTokGiftAnimationCandidate(item) || !this.isGuiGiftAnimationEnabled()) {
+            return 0;
+        }
+
+        const resolved = await this.giftAnimationResolver.resolveFromNotificationData(item?.data);
+        if (!resolved) {
+            return 0;
+        }
+
+        const durationMs = Number(resolved.durationMs);
+        if (!Number.isFinite(durationMs) || durationMs <= 0) {
+            return 0;
+        }
+
+        this.eventBus.emit('display:gift-animation', {
+            playbackId: crypto.randomUUID(),
+            type: item.type,
+            platform: item.platform,
+            durationMs,
+            mediaFilePath: resolved.mediaFilePath,
+            mediaContentType: resolved.mediaContentType,
+            animationConfig: resolved.animationConfig
+        });
+
+        return durationMs;
     }
 
     isTTSEnabled() {
@@ -107,6 +149,24 @@ class DisplayQueueEffects {
         const username = this.extractUsername(item.data);
         logger.debug(`[Display Queue] Gift notification - concurrent execution for ${username}`, 'display-queue');
         const allPromises = [];
+        const animationPromise = this.resolveAndEmitGiftAnimation(item)
+            .then((animationDurationMs) => {
+                if (!(animationDurationMs > 0)) {
+                    return;
+                }
+
+                const previousHold = Number(item?.holdDurationMs);
+                const nextHold = Number.isFinite(previousHold) && previousHold > 0
+                    ? Math.max(previousHold, animationDurationMs)
+                    : animationDurationMs;
+                item.holdDurationMs = nextHold;
+            })
+            .catch((error) => {
+                this.handleDisplayQueueError('[Gift] Gift animation resolution failed', error, {
+                    platform: item?.platform,
+                    type: item?.type
+                });
+            });
         const vfxConfig = item.vfxConfig;
         const hasVfx = !!(this.eventBus && vfxConfig);
         let vfxMatch = null;
@@ -184,6 +244,7 @@ class DisplayQueueEffects {
         }
 
         await Promise.all(allPromises);
+        await animationPromise;
     }
 
     async handleSequentialEffects(item, ttsStages) {
