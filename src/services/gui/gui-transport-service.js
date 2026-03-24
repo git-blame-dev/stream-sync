@@ -1,9 +1,11 @@
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
+const crypto = require('crypto');
 
 const { createPlatformErrorHandler } = require('../../utils/platform-error-handler');
 const { createEventToGuiContractMapper } = require('./event-to-gui-contract-mapper');
+const { GIFT_ANIMATION_CACHE_DIR } = require('../tiktok-gift-animation/resolver');
 
 function isGuiActive(config = {}) {
     const gui = config.gui || {};
@@ -24,11 +26,25 @@ function createGuiTransportService(options = {}) {
     const assetsRoot = typeof options.assetsRoot === 'string' && options.assetsRoot.trim()
         ? options.assetsRoot
         : path.resolve(__dirname, '../../../gui/dist');
+    const runtimeAssetRoots = Array.isArray(options.runtimeAssetRoots) && options.runtimeAssetRoots.length > 0
+        ? options.runtimeAssetRoots
+        : [GIFT_ANIMATION_CACHE_DIR];
+    const normalizedRuntimeAssetRoots = runtimeAssetRoots
+        .map((root) => (typeof root === 'string' ? root.trim() : ''))
+        .filter((root) => root.length > 0)
+        .map((root) => path.resolve(root));
 
     let server = null;
     let active = false;
     let unsubscribeDisplayRows = null;
+    let unsubscribeDisplayEffects = null;
     const clients = new Set();
+    const runtimeAssetRegistry = new Map();
+    let dispatchChain = Promise.resolve();
+    let dispatchEpoch = 0;
+
+    const RUNTIME_ASSET_MAX_ENTRIES = 64;
+    const RUNTIME_ASSET_TTL_MS = 5 * 60 * 1000;
 
     const getAssetContentType = (filePath) => {
         if (filePath.endsWith('.js')) {
@@ -44,6 +60,117 @@ function createGuiTransportService(options = {}) {
             return 'image/png';
         }
         return 'application/octet-stream';
+    };
+
+    const normalizeRuntimeAssetRecord = (record) => {
+        if (!record || typeof record !== 'object') {
+            return null;
+        }
+
+        const filePath = typeof record.filePath === 'string' ? record.filePath.trim() : '';
+        if (!filePath) {
+            return null;
+        }
+
+        const contentType = typeof record.contentType === 'string' && record.contentType.trim()
+            ? record.contentType
+            : 'video/mp4';
+
+        const expiresAt = Date.now() + RUNTIME_ASSET_TTL_MS;
+        return {
+            filePath,
+            contentType,
+            expiresAt
+        };
+    };
+
+    const pruneRuntimeAssets = () => {
+        const now = Date.now();
+        for (const [assetId, record] of runtimeAssetRegistry) {
+            if (!record || record.expiresAt <= now) {
+                runtimeAssetRegistry.delete(assetId);
+            }
+        }
+
+        if (runtimeAssetRegistry.size <= RUNTIME_ASSET_MAX_ENTRIES) {
+            return;
+        }
+
+        const ordered = Array.from(runtimeAssetRegistry.entries())
+            .sort((left, right) => left[1].expiresAt - right[1].expiresAt);
+        while (ordered.length > RUNTIME_ASSET_MAX_ENTRIES) {
+            const oldest = ordered.shift();
+            if (!oldest) {
+                break;
+            }
+            runtimeAssetRegistry.delete(oldest[0]);
+        }
+    };
+
+    const registerRuntimeAsset = (record) => {
+        const normalizedRecord = normalizeRuntimeAssetRecord(record);
+        if (!normalizedRecord) {
+            throw new Error('Runtime asset registration requires filePath');
+        }
+
+        const realFilePath = fs.realpathSync(normalizedRecord.filePath);
+        const extension = path.extname(realFilePath).toLowerCase();
+        if (extension !== '.mp4') {
+            throw new Error('Runtime asset registration only supports .mp4 files');
+        }
+
+        const stat = fs.existsSync(realFilePath) ? fs.statSync(realFilePath) : null;
+        if (!stat || !stat.isFile()) {
+            throw new Error('Runtime asset file does not exist');
+        }
+
+        const isAllowedPath = normalizedRuntimeAssetRoots.some((rootPath) => {
+            const relativePath = path.relative(rootPath, realFilePath);
+            return !relativePath.startsWith('..') && !path.isAbsolute(relativePath);
+        });
+        if (!isAllowedPath) {
+            throw new Error('Runtime asset path is outside allowed roots');
+        }
+
+        pruneRuntimeAssets();
+        const assetId = crypto.randomBytes(12).toString('hex');
+        runtimeAssetRegistry.set(assetId, {
+            ...normalizedRecord,
+            filePath: realFilePath
+        });
+        pruneRuntimeAssets();
+        return assetId;
+    };
+
+    const resolveRuntimeAsset = (assetId) => {
+        pruneRuntimeAssets();
+        const record = runtimeAssetRegistry.get(assetId);
+        if (!record) {
+            return null;
+        }
+        record.expiresAt = Date.now() + RUNTIME_ASSET_TTL_MS;
+        runtimeAssetRegistry.set(assetId, record);
+        return record;
+    };
+
+    const enqueueDispatch = (operation) => {
+        const enqueueEpoch = dispatchEpoch;
+        dispatchChain = dispatchChain
+            .then(() => {
+                if (enqueueEpoch !== dispatchEpoch) {
+                    return;
+                }
+
+                return Promise.resolve().then(operation);
+            })
+            .catch((error) => {
+                errorHandler.handleEventProcessingError(
+                    error,
+                    'gui-dispatch',
+                    null,
+                    'GUI transport dispatch failed'
+                );
+            });
     };
 
     const resolveAssetFilePath = (url) => {
@@ -99,6 +226,14 @@ function createGuiTransportService(options = {}) {
             try {
                 client.write(packet);
             } catch (error) {
+                clients.delete(client);
+                try {
+                    client.destroy();
+                } catch (destroyError) {
+                    errorHandler.logOperationalError('Failed destroying stale GUI SSE client', 'sse-write', {
+                        error: destroyError.message
+                    });
+                }
                 errorHandler.handleEventProcessingError(
                     error,
                     'sse-write',
@@ -115,20 +250,53 @@ function createGuiTransportService(options = {}) {
         }
 
         unsubscribeDisplayRows = eventBus.subscribe('display:row', async (row) => {
-            try {
-                const mapped = await mapper.mapDisplayRow(row);
-                if (!mapped) {
+            enqueueDispatch(async () => {
+                try {
+                    const mapped = await mapper.mapDisplayRow(row);
+                    if (!mapped) {
+                        return;
+                    }
+                    sendSse(mapped);
+                } catch (error) {
+                    errorHandler.handleEventProcessingError(
+                        error,
+                        'display-row-map',
+                        { rowType: row?.type },
+                        'Failed mapping display row for GUI transport'
+                    );
+                }
+            });
+        });
+    };
+
+    const subscribeToDisplayEffects = () => {
+        if (!eventBus || typeof eventBus.subscribe !== 'function') {
+            return;
+        }
+
+        unsubscribeDisplayEffects = eventBus.subscribe('display:gift-animation', (payload) => {
+            enqueueDispatch(() => {
+                const giftsVisible = guiConfig.showGifts !== false;
+                if (!giftsVisible) {
                     return;
                 }
-                sendSse(mapped);
-            } catch (error) {
-                errorHandler.handleEventProcessingError(
-                    error,
-                    'display-row-map',
-                    { rowType: row?.type },
-                    'Failed mapping display row for GUI transport'
-                );
-            }
+
+                const runtimeAssetId = registerRuntimeAsset({
+                    filePath: payload?.mediaFilePath,
+                    contentType: payload?.mediaContentType || 'video/mp4'
+                });
+
+                const effectPayload = {
+                    __guiEvent: 'effect',
+                    effectType: 'tiktok-gift-animation',
+                    playbackId: payload?.playbackId,
+                    durationMs: payload?.durationMs,
+                    assetUrl: `/gui/runtime/${runtimeAssetId}.mp4`,
+                    config: payload?.animationConfig
+                };
+
+                sendSse(effectPayload);
+            });
         });
     };
 
@@ -137,6 +305,13 @@ function createGuiTransportService(options = {}) {
             unsubscribeDisplayRows();
         }
         unsubscribeDisplayRows = null;
+    };
+
+    const unsubscribeFromDisplayEffects = () => {
+        if (typeof unsubscribeDisplayEffects === 'function') {
+            unsubscribeDisplayEffects();
+        }
+        unsubscribeDisplayEffects = null;
     };
 
     const requestHandler = (req, res) => {
@@ -161,6 +336,147 @@ function createGuiTransportService(options = {}) {
             req.on('close', () => {
                 clients.delete(res);
             });
+            return;
+        }
+
+        const runtimeAssetMatch = url.match(/^\/gui\/runtime\/([a-f0-9]+)\.mp4$/);
+        if (runtimeAssetMatch) {
+            const runtimeAsset = resolveRuntimeAsset(runtimeAssetMatch[1]);
+            if (!runtimeAsset || !fs.existsSync(runtimeAsset.filePath)) {
+                res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' });
+                res.end('Not Found');
+                return;
+            }
+
+            const stat = fs.statSync(runtimeAsset.filePath);
+            if (!stat.isFile()) {
+                res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' });
+                res.end('Not Found');
+                return;
+            }
+
+            const totalSize = stat.size;
+            const rangeHeader = typeof req.headers.range === 'string' ? req.headers.range.trim() : '';
+
+            if (totalSize === 0) {
+                if (rangeHeader) {
+                    res.writeHead(416, {
+                        'Content-Type': 'text/plain; charset=utf-8',
+                        'Content-Range': 'bytes */0',
+                        'Accept-Ranges': 'bytes'
+                    });
+                    res.end('Requested Range Not Satisfiable');
+                    return;
+                }
+
+                res.writeHead(200, {
+                    'Content-Type': runtimeAsset.contentType,
+                    'Cache-Control': 'no-cache, no-store, must-revalidate',
+                    'X-Content-Type-Options': 'nosniff',
+                    'Accept-Ranges': 'bytes',
+                    'Content-Length': '0'
+                });
+                res.end();
+                return;
+            }
+
+            let start = 0;
+            let end = Math.max(0, totalSize - 1);
+            let partialContent = false;
+
+            if (rangeHeader) {
+                const match = /^bytes=(\d*)-(\d*)$/i.exec(rangeHeader);
+                if (!match) {
+                    res.writeHead(416, {
+                        'Content-Type': 'text/plain; charset=utf-8',
+                        'Content-Range': `bytes */${totalSize}`,
+                        'Accept-Ranges': 'bytes'
+                    });
+                    res.end('Requested Range Not Satisfiable');
+                    return;
+                }
+
+                const startToken = match[1];
+                const endToken = match[2];
+
+                if (startToken.length === 0 && endToken.length === 0) {
+                    res.writeHead(416, {
+                        'Content-Type': 'text/plain; charset=utf-8',
+                        'Content-Range': `bytes */${totalSize}`,
+                        'Accept-Ranges': 'bytes'
+                    });
+                    res.end('Requested Range Not Satisfiable');
+                    return;
+                }
+
+                if (startToken.length === 0) {
+                    const suffixLength = Number(endToken);
+                    if (!Number.isInteger(suffixLength) || suffixLength <= 0) {
+                        res.writeHead(416, {
+                            'Content-Type': 'text/plain; charset=utf-8',
+                            'Content-Range': `bytes */${totalSize}`,
+                            'Accept-Ranges': 'bytes'
+                        });
+                        res.end('Requested Range Not Satisfiable');
+                        return;
+                    }
+
+                    start = Math.max(0, totalSize - suffixLength);
+                    end = Math.max(0, totalSize - 1);
+                } else {
+                    start = Number(startToken);
+                    end = endToken.length > 0 ? Number(endToken) : Math.max(0, totalSize - 1);
+
+                    if (!Number.isInteger(start) || !Number.isInteger(end) || start < 0 || end < start) {
+                        res.writeHead(416, {
+                            'Content-Type': 'text/plain; charset=utf-8',
+                            'Content-Range': `bytes */${totalSize}`,
+                            'Accept-Ranges': 'bytes'
+                        });
+                        res.end('Requested Range Not Satisfiable');
+                        return;
+                    }
+
+                    if (start >= totalSize) {
+                        res.writeHead(416, {
+                            'Content-Type': 'text/plain; charset=utf-8',
+                            'Content-Range': `bytes */${totalSize}`,
+                            'Accept-Ranges': 'bytes'
+                        });
+                        res.end('Requested Range Not Satisfiable');
+                        return;
+                    }
+
+                    end = Math.min(end, totalSize - 1);
+                }
+
+                partialContent = true;
+            }
+
+            const contentLength = Math.max(0, end - start + 1);
+            const headers = {
+                'Content-Type': runtimeAsset.contentType,
+                'Cache-Control': 'no-cache, no-store, must-revalidate',
+                'X-Content-Type-Options': 'nosniff',
+                'Accept-Ranges': 'bytes',
+                'Content-Length': String(contentLength)
+            };
+
+            if (partialContent) {
+                headers['Content-Range'] = `bytes ${start}-${end}/${totalSize}`;
+                res.writeHead(206, headers);
+            } else {
+                res.writeHead(200, headers);
+            }
+
+            const stream = fs.createReadStream(runtimeAsset.filePath, { start, end });
+            stream.on('error', () => {
+                if (!res.headersSent) {
+                    res.writeHead(500, { 'Content-Type': 'text/plain; charset=utf-8' });
+                }
+                res.end('Failed to read runtime asset');
+            });
+            stream.pipe(res);
             return;
         }
 
@@ -230,6 +546,7 @@ function createGuiTransportService(options = {}) {
         }
 
         subscribeToDisplayRows();
+        subscribeToDisplayEffects();
 
         try {
             await new Promise((resolve, reject) => {
@@ -242,6 +559,7 @@ function createGuiTransportService(options = {}) {
             });
         } catch (error) {
             unsubscribeFromDisplayRows();
+            unsubscribeFromDisplayEffects();
             if (server) {
                 try {
                     server.close();
@@ -258,7 +576,11 @@ function createGuiTransportService(options = {}) {
     };
 
     const stop = async () => {
+        dispatchEpoch += 1;
         unsubscribeFromDisplayRows();
+        unsubscribeFromDisplayEffects();
+        await dispatchChain;
+        runtimeAssetRegistry.clear();
         for (const client of clients) {
             try {
                 client.end();

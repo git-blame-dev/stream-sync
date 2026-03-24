@@ -317,6 +317,23 @@ describe('TikTok gift aggregator', () => {
             expect(handledGifts[0].avatarUrl).toBe('https://example.invalid/tiktok-aggregated-avatar.jpg');
         });
 
+        test('includes giftImageUrl in delivered aggregated payload', async () => {
+            const handledGifts = [];
+            const platform = createTestPlatform({
+                _handleGift: async (payload) => handledGifts.push(payload)
+            });
+
+            const giftAggregator = createTikTokGiftAggregator({ platform });
+
+            await giftAggregator.handleStandardGift(buildGift({
+                giftImageUrl: 'https://example.invalid/tiktok-gifts/corgi.png'
+            }));
+            await advanceTimersByTime(platform.giftAggregationDelay);
+
+            expect(handledGifts).toHaveLength(1);
+            expect(handledGifts[0].giftImageUrl).toBe('https://example.invalid/tiktok-gifts/corgi.png');
+        });
+
         test('preserves last non-empty avatarUrl when later packets are empty', async () => {
             const handledGifts = [];
             const platform = createTestPlatform({

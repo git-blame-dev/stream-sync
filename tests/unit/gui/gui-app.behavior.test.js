@@ -4,6 +4,7 @@ const { renderToStaticMarkup } = require('react-dom/server');
 const TestRenderer = require('react-test-renderer');
 
 const { App } = require('../../../gui/src/shared/App');
+const { GuiShell } = require('../../../gui/src/shared/components/GuiShell');
 
 let originalConsoleTimeStamp;
 
@@ -181,5 +182,204 @@ describe('GUI app behavior', () => {
                 })
             );
         }).toThrow('Overlay mode requires positive integer overlay limits');
+    });
+
+    it('routes effect events separately from row feed updates', async () => {
+        let onEventHandler = null;
+        const createEventFeedImpl = ({ onEvent }) => {
+            onEventHandler = onEvent;
+            return () => {};
+        };
+
+        let renderer;
+        await TestRenderer.act(async () => {
+            renderer = TestRenderer.create(
+                React.createElement(App, {
+                    mode: 'overlay',
+                    eventsPath: '/gui/events',
+                    createEventFeedImpl,
+                    overlayMaxMessages: 3,
+                    overlayMaxLinesPerMessage: 3
+                })
+            );
+        });
+
+        await TestRenderer.act(async () => {
+            onEventHandler({
+                __guiEvent: 'effect',
+                effectType: 'tiktok-gift-animation',
+                playbackId: 'effect-1',
+                durationMs: 2500,
+                assetUrl: '/gui/runtime/test.mp4',
+                config: {
+                    profileName: 'portrait',
+                    sourceWidth: 960,
+                    sourceHeight: 864,
+                    renderWidth: 480,
+                    renderHeight: 854,
+                    rgbFrame: [0, 0, 480, 854],
+                    aFrame: [480, 0, 480, 854]
+                }
+            });
+        });
+
+        await TestRenderer.act(async () => {
+            onEventHandler({
+                type: 'chat',
+                kind: 'chat',
+                platform: 'twitch',
+                username: 'test-user',
+                text: 'hello',
+                avatarUrl: 'https://example.invalid/test-avatar.png',
+                timestamp: '2024-01-01T00:00:00.000Z'
+            });
+        });
+
+        const text = JSON.stringify(renderer.toJSON());
+        expect(text).toContain('test-user');
+        expect(text).toContain('gui-shell__effect-layer');
+    });
+
+    it('ignores malformed gift effect payloads missing config shape', async () => {
+        let onEventHandler = null;
+        const createEventFeedImpl = ({ onEvent }) => {
+            onEventHandler = onEvent;
+            return () => {};
+        };
+
+        let renderer;
+        await TestRenderer.act(async () => {
+            renderer = TestRenderer.create(
+                React.createElement(App, {
+                    mode: 'overlay',
+                    eventsPath: '/gui/events',
+                    createEventFeedImpl,
+                    overlayMaxMessages: 3,
+                    overlayMaxLinesPerMessage: 3
+                })
+            );
+        });
+
+        await TestRenderer.act(async () => {
+            onEventHandler({
+                __guiEvent: 'effect',
+                effectType: 'tiktok-gift-animation',
+                playbackId: 'effect-1',
+                durationMs: 2500,
+                assetUrl: '/gui/runtime/test.mp4'
+            });
+        });
+
+        const text = JSON.stringify(renderer.toJSON());
+        expect(text).not.toContain('gui-shell__effect-layer');
+    });
+
+    it('ignores malformed gift effect payloads with string duration', async () => {
+        let onEventHandler = null;
+        const createEventFeedImpl = ({ onEvent }) => {
+            onEventHandler = onEvent;
+            return () => {};
+        };
+
+        let renderer;
+        await TestRenderer.act(async () => {
+            renderer = TestRenderer.create(
+                React.createElement(App, {
+                    mode: 'overlay',
+                    eventsPath: '/gui/events',
+                    createEventFeedImpl,
+                    overlayMaxMessages: 3,
+                    overlayMaxLinesPerMessage: 3
+                })
+            );
+        });
+
+        await TestRenderer.act(async () => {
+            onEventHandler({
+                __guiEvent: 'effect',
+                effectType: 'tiktok-gift-animation',
+                playbackId: 'effect-bad-duration',
+                durationMs: '2500',
+                assetUrl: '/gui/runtime/test.mp4',
+                config: {
+                    profileName: 'portrait',
+                    sourceWidth: 960,
+                    sourceHeight: 864,
+                    renderWidth: 480,
+                    renderHeight: 854,
+                    rgbFrame: [0, 0, 480, 854],
+                    aFrame: [480, 0, 480, 854]
+                }
+            });
+        });
+
+        const text = JSON.stringify(renderer.toJSON());
+        expect(text).not.toContain('gui-shell__effect-layer');
+    });
+
+    it('queues gift effects and advances only after active playback completion', async () => {
+        let onEventHandler = null;
+        const createEventFeedImpl = ({ onEvent }) => {
+            onEventHandler = onEvent;
+            return () => {};
+        };
+
+        let renderer;
+        await TestRenderer.act(async () => {
+            renderer = TestRenderer.create(
+                React.createElement(App, {
+                    mode: 'overlay',
+                    eventsPath: '/gui/events',
+                    createEventFeedImpl,
+                    overlayMaxMessages: 3,
+                    overlayMaxLinesPerMessage: 3
+                })
+            );
+        });
+
+        await TestRenderer.act(async () => {
+            onEventHandler({
+                __guiEvent: 'effect',
+                effectType: 'tiktok-gift-animation',
+                playbackId: 'effect-1',
+                durationMs: 2500,
+                assetUrl: '/gui/runtime/test-1.mp4',
+                config: {
+                    profileName: 'portrait',
+                    sourceWidth: 960,
+                    sourceHeight: 864,
+                    renderWidth: 480,
+                    renderHeight: 854,
+                    rgbFrame: [0, 0, 480, 854],
+                    aFrame: [480, 0, 480, 854]
+                }
+            });
+            onEventHandler({
+                __guiEvent: 'effect',
+                effectType: 'tiktok-gift-animation',
+                playbackId: 'effect-2',
+                durationMs: 2600,
+                assetUrl: '/gui/runtime/test-2.mp4',
+                config: {
+                    profileName: 'portrait',
+                    sourceWidth: 960,
+                    sourceHeight: 864,
+                    renderWidth: 480,
+                    renderHeight: 854,
+                    rgbFrame: [0, 0, 480, 854],
+                    aFrame: [480, 0, 480, 854]
+                }
+            });
+        });
+
+        let shell = renderer.root.findByType(GuiShell);
+        expect(shell.props.activeEffect.playbackId).toBe('effect-1');
+
+        await TestRenderer.act(async () => {
+            shell.props.onEffectComplete('effect-1');
+        });
+
+        shell = renderer.root.findByType(GuiShell);
+        expect(shell.props.activeEffect.playbackId).toBe('effect-2');
     });
 });

@@ -22,3 +22,22 @@ export interface GuiRowDto {
   avatarUrl: string
   timestamp: string | null
 }
+
+export interface GuiGiftAnimationConfig {
+  profileName: string
+  sourceWidth: number
+  sourceHeight: number
+  renderWidth: number
+  renderHeight: number
+  rgbFrame: [number, number, number, number]
+  aFrame: [number, number, number, number] | null
+}
+
+export interface GuiGiftAnimationEffectEnvelope {
+  __guiEvent: 'effect'
+  effectType: 'tiktok-gift-animation'
+  playbackId: string
+  durationMs: number
+  assetUrl: string
+  config: GuiGiftAnimationConfig
+}

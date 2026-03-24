@@ -5,7 +5,7 @@ const { createEventBus } = require('../../src/core/EventBus');
 const { PlatformEvents } = require('../../src/interfaces/PlatformEvents');
 const { PRIORITY_LEVELS, NOTIFICATION_CONFIGS } = require('../../src/core/constants');
 const { createPlatformErrorHandler } = require('../../src/utils/platform-error-handler');
-const { safeSetInterval, safeSetTimeout } = require('../../src/utils/timeout-validator');
+const { safeSetInterval, safeSetTimeout, safeDelay } = require('../../src/utils/timeout-validator');
 const { createGuiTransportService } = require('../../src/services/gui/gui-transport-service');
 const PlatformEventRouter = require('../../src/services/PlatformEventRouter');
 const ChatNotificationRouter = require('../../src/services/ChatNotificationRouter');
@@ -14,6 +14,7 @@ const CommandCooldownService = require('../../src/services/CommandCooldownServic
 const { createUserTrackingService } = require('../../src/services/UserTrackingService');
 const NotificationManager = require('../../src/notifications/NotificationManager');
 const { DisplayQueue } = require('../../src/obs/display-queue');
+const { createTikTokGiftAnimationResolver } = require('../../src/services/tiktok-gift-animation/resolver');
 const { createTwitchEventSubEventRouter } = require('../../src/platforms/twitch/events/event-router');
 const { createYouTubeEventRouter } = require('../../src/platforms/youtube/events/event-router');
 const { setupTikTokEventListeners } = require('../../src/platforms/tiktok/events/event-router');
@@ -82,13 +83,47 @@ const PREVIEW_MEDIA_CATALOG = {
             imageUrl: 'https://static-cdn.jtvnw.net/emoticons/v2/emotesv2_dcd06b30a5c24f6eb871e8f5edbd44f7/animated/dark/3.0'
         },
         gift: {
-            imageUrl: 'https://p16-webcast.tiktokcdn.com/img/maliva/webcast-va/eba3a9bb85c33e017f3648eaf88d7189~tplv-obj.webp'
+            name: 'Corgi',
+            giftId: '6267',
+            primaryEffectId: '9695',
+            imageUrl: 'https://p16-webcast.tiktokcdn.com/img/maliva/webcast-va/148eef0884fdb12058d1c6897d1e02b9~tplv-obj.png',
+            unitAmount: 299,
+            animation: {
+                resourceModelUrl: 'https://sf16-webcast.tiktokcdn.com/obj/maliva/webcast-va/resource/942b9cf600824c3a4834d1d73cc058d2.zip',
+                videoResources: [
+                    {
+                        videoTypeName: 'h264',
+                        videoUrl: {
+                            urlList: [
+                                'https://sf16-webcast.tiktokcdn.com/obj/maliva/webcast-va/resource/942b9cf600824c3a4834d1d73cc058d2.zip'
+                            ]
+                        }
+                    },
+                    {
+                        videoTypeName: 'bytevc1opt',
+                        videoUrl: {
+                            urlList: [
+                                'https://sf16-webcast.tiktokcdn.com/obj/maliva/webcast-va/resource/02e8c5dfa12e71ed4a2015b1d7d8c36d.zip'
+                            ]
+                        }
+                    },
+                    {
+                        videoTypeName: '480p',
+                        videoUrl: {
+                            urlList: [
+                                'https://sf16-webcast.tiktokcdn.com/obj/maliva/webcast-va/resource/e2e5daca28d71225a72bd4fbb9698e64.zip'
+                            ]
+                        }
+                    }
+                ]
+            }
         }
     }
 };
 
 const PREVIEW_SCENARIO_TEMPLATE = [
     { type: 'chat-hi', adapter: 'twitch' },
+    { type: 'gift', adapter: 'tiktok' },
     { type: 'chat-hello', adapter: 'youtube' },
     { type: 'chat', adapter: 'twitch' },
     { type: 'chat', adapter: 'youtube' },
@@ -97,7 +132,6 @@ const PREVIEW_SCENARIO_TEMPLATE = [
     { type: 'follow', adapter: 'tiktok' },
     { type: 'chat-command', adapter: 'youtube' },
     { type: 'chat-farewell', adapter: 'twitch' },
-    { type: 'gift', adapter: 'tiktok' },
     { type: 'raid', adapter: 'twitch' },
     { type: 'chat-member-hi', adapter: 'youtube' },
     { type: 'share', adapter: 'tiktok' },
@@ -192,6 +226,8 @@ function buildPreviewConfig(baseConfig) {
         filterOldMessages: false
     });
 
+    merged.ttsEnabled = false;
+
     const platformFlags = {
         messagesEnabled: true,
         commandsEnabled: true,
@@ -228,6 +264,25 @@ function buildPreviewConfig(baseConfig) {
         showEnvelopes: true
     });
 
+    merged.chat = mergeSection(sourceConfig.chat, overrideConfig.chat, {
+        sourceName: 'preview-chat-source',
+        sceneName: 'preview-chat-scene',
+        groupName: null,
+        platformLogos: {}
+    });
+
+    merged.notification = mergeSection(sourceConfig.notification, overrideConfig.notification, {
+        sourceName: 'preview-notification-source',
+        sceneName: 'preview-notification-scene',
+        groupName: null,
+        platformLogos: {}
+    });
+
+    merged.gifts = mergeSection(sourceConfig.gifts, overrideConfig.gifts, {
+        giftVideoSource: 'preview-gift-video',
+        giftAudioSource: 'preview-gift-audio'
+    });
+
     const sourceCooldowns = sourceConfig.cooldowns || {};
     const overrideCooldowns = overrideConfig.cooldowns || {};
     merged.cooldowns = {
@@ -251,7 +306,13 @@ function buildPreviewConfig(baseConfig) {
     });
 
     merged.displayQueue = mergeSection(sourceConfig.displayQueue, overrideConfig.displayQueue, {
-        autoProcess: false
+        autoProcess: true
+    });
+
+    merged.timing = mergeSection(sourceConfig.timing, overrideConfig.timing, {
+        transitionDelay: 120,
+        notificationClearDelay: 0,
+        commentDuration: 1500
     });
 
     merged.commands = {
@@ -533,13 +594,30 @@ function buildPreviewScenarioEvents(durationMs = PREVIEW_DURATION_MS, intervalMs
                     },
                     emotes: tiktokEmotes,
                     displayType: scenarioType === 'share' ? 'share' : undefined,
-                    giftName: 'Rose',
-                    repeatCount: 5,
-                    diamondCount: 10,
+                    giftName: media?.gift?.name || 'Rose',
+                    repeatCount: scenarioType === 'gift' ? 1 : 5,
+                    diamondCount: scenarioType === 'gift'
+                        ? Number(media?.gift?.unitAmount || 10)
+                        : 10,
                     ...(scenarioType === 'gift' && media?.gift?.imageUrl
                         ? {
                             gift: {
                                 giftPictureUrl: media.gift.imageUrl
+                            },
+                            giftDetails: {
+                                id: media.gift.giftId,
+                                giftName: media.gift.name,
+                                diamondCount: Number(media.gift.unitAmount || 10),
+                                primaryEffectId: media.gift.primaryEffectId,
+                                giftImage: {
+                                    url: [media.gift.imageUrl]
+                                }
+                            },
+                            asset: {
+                                resourceModel: {
+                                    urlList: [media.gift.animation.resourceModelUrl]
+                                },
+                                videoResourceList: media.gift.animation.videoResources
                             }
                         }
                         : {}),
@@ -746,6 +824,9 @@ function createPreviewIngestAdapters(options = {}) {
             const giftImageUrl = typeof data?.gift?.giftPictureUrl === 'string'
                 ? data.gift.giftPictureUrl
                 : '';
+            const giftName = data?.giftName || data?.giftDetails?.giftName || 'Rose';
+            const repeatCount = Number(data?.repeatCount) || 1;
+            const unitAmount = Number(data?.diamondCount) || 10;
             emitPlatformEvent({
                 type: PlatformEvents.GIFT,
                 platform: 'tiktok',
@@ -754,11 +835,28 @@ function createPreviewIngestAdapters(options = {}) {
                     userId: sourceUser.uniqueId || sourceUser.userId,
                     timestamp: data.timestamp,
                     id: data.msgId,
-                    giftType: data.giftName || 'Rose',
+                    giftType: giftName,
                     ...(giftImageUrl ? { giftImageUrl } : {}),
-                    giftCount: Number(data.repeatCount) || 1,
-                    amount: Number(data.diamondCount) || 10,
-                    currency: 'coins'
+                    giftCount: repeatCount,
+                    repeatCount,
+                    unitAmount,
+                    amount: unitAmount,
+                    currency: 'coins',
+                    enhancedGiftData: {
+                        username: sourceUser.nickname || sourceUser.uniqueId,
+                        userId: sourceUser.uniqueId || sourceUser.userId,
+                        giftType: giftName,
+                        giftCount: repeatCount,
+                        amount: unitAmount,
+                        currency: 'coins',
+                        isAggregated: false,
+                        isStreakCompleted: true,
+                        originalData: {
+                            asset: data.asset,
+                            giftDetails: data.giftDetails,
+                            gift: data.gift
+                        }
+                    }
                 }
             });
         },
@@ -902,22 +1000,53 @@ function createPreviewPipeline(options = {}) {
     const eventBus = options.eventBus || createEventBus();
 
     const obsManager = options.obsManager || {
-        isReady: async () => false
+        isReady: async () => true,
+        call: async () => ({})
+    };
+
+    const previewSourcesManager = {
+        clearTextSource: async () => {},
+        updateTextSource: async () => {},
+        updateChatMsgText: async () => {},
+        setPlatformLogoVisibility: async () => {},
+        setGroupSourceVisibility: async () => {},
+        setChatDisplayVisibility: async () => {},
+        setNotificationPlatformLogoVisibility: async () => {},
+        setNotificationDisplayVisibility: async () => {}
+    };
+
+    const previewGoalsManager = {
+        processDonationGoal: async () => {}
     };
 
     const displayQueue = options.displayQueue || new DisplayQueue(
         obsManager,
         {
             ...(config.displayQueue || {}),
-            autoProcess: false,
+            autoProcess: true,
             timing: config.timing,
-            obs: config.obs
+            obs: config.obs,
+            chat: config.chat || {},
+            notification: config.notification || {},
+            gui: config.gui || {},
+            gifts: config.gifts || {},
+            twitch: config.twitch || {},
+            youtube: config.youtube || {},
+            tiktok: config.tiktok || {}
         },
         {
             PRIORITY_LEVELS,
             NOTIFICATION_CONFIGS
         },
-        eventBus
+        eventBus,
+        {
+            sourcesManager: previewSourcesManager,
+            goalsManager: previewGoalsManager,
+            delay: typeof options.delay === 'function' ? options.delay : async () => {},
+            giftAnimationResolver: options.giftAnimationResolver || {
+                resolveFromNotificationData: async () => null
+            }
+        }
     );
 
     const commandCooldownService = options.commandCooldownService || new CommandCooldownService({
@@ -968,6 +1097,12 @@ function createPreviewPipeline(options = {}) {
         logger
     });
 
+    const unsubscribePreviewVfxAck = eventBus.subscribe(PlatformEvents.VFX_COMMAND_RECEIVED, (payload) => {
+        safeSetTimeout(() => {
+            eventBus.emit(PlatformEvents.VFX_COMMAND_EXECUTED, payload);
+        }, 0);
+    });
+
     return {
         eventBus,
         emitIngestEvent(event) {
@@ -978,6 +1113,12 @@ function createPreviewPipeline(options = {}) {
                 platformEventRouter.dispose();
             } catch (error) {
                 errorHandler.handleEventProcessingError(error, 'pipeline-dispose', null, 'Failed disposing platform router');
+            }
+
+            try {
+                unsubscribePreviewVfxAck();
+            } catch (error) {
+                errorHandler.handleEventProcessingError(error, 'pipeline-dispose', null, 'Failed disposing preview VFX acknowledgement');
             }
 
             if (commandCooldownService && typeof commandCooldownService.dispose === 'function') {
@@ -1078,16 +1219,23 @@ async function runGuiPreview(options = {}) {
     const safeSetIntervalImpl = options.safeSetIntervalImpl || safeSetInterval;
     const safeSetTimeoutImpl = options.safeSetTimeoutImpl || safeSetTimeout;
     const stdout = options.stdout || process.stdout;
+    const delay = options.delay || ((ms) => {
+        const parsed = Number(ms);
+        return safeDelay(parsed, Number.isFinite(parsed) ? parsed : 5000, 'gui-preview delay');
+    });
 
     let pipeline = null;
     let service = null;
     let intervalHandle = null;
+    const giftAnimationResolver = options.giftAnimationResolver || createTikTokGiftAnimationResolver({ logger });
 
     try {
         pipeline = createPreviewPipelineImpl({
             config,
             logger,
-            eventBus: options.eventBus
+            eventBus: options.eventBus,
+            giftAnimationResolver,
+            delay
         });
 
         if (!pipeline || typeof pipeline.emitIngestEvent !== 'function' || !pipeline.eventBus) {

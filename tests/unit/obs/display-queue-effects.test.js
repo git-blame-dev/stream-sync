@@ -1,6 +1,7 @@
 const { describe, expect, it } = require('bun:test');
 
 const { DisplayQueueEffects } = require('../../../src/obs/display-queue-effects');
+const { waitForDelay } = require('../../helpers/time-utils');
 
 describe('DisplayQueueEffects', () => {
     it('runs TTS stages for non-gift notifications', async () => {
@@ -153,5 +154,217 @@ describe('DisplayQueueEffects', () => {
 
         expect(ttsUpdates).toContain('test-gift-tts');
         expect(emittedVfx).toHaveLength(0);
+    });
+
+    it('emits tiktok gift animation effect and sets hold duration', async () => {
+        const emittedEvents = [];
+        const effects = new DisplayQueueEffects({
+            config: {
+                ttsEnabled: false,
+                obs: { ttsTxt: 'tts' },
+                handcam: { enabled: false },
+                gifts: { giftVideoSource: 'gift-video', giftAudioSource: 'gift-audio' },
+                gui: { enableOverlay: true, enableDock: false, showGifts: true }
+            },
+            sourcesManager: { clearTextSource: async () => {}, updateTextSource: async () => {} },
+            obsManager: { call: async () => ({}) },
+            goalsManager: { processDonationGoal: async () => {} },
+            eventBus: { emit: (eventName, payload) => emittedEvents.push({ eventName, payload }) },
+            delay: async () => {},
+            handleDisplayQueueError: () => {},
+            extractUsername: (data) => data?.username ?? null,
+            giftAnimationResolver: {
+                resolveFromNotificationData: async () => ({
+                    mediaFilePath: '/tmp/test-animation.mp4',
+                    mediaContentType: 'video/mp4',
+                    durationMs: 4500,
+                    animationConfig: {
+                        profileName: 'portrait',
+                        sourceWidth: 960,
+                        sourceHeight: 864,
+                        renderWidth: 480,
+                        renderHeight: 854,
+                        rgbFrame: [0, 0, 480, 854],
+                        aFrame: [480, 0, 480, 854]
+                    }
+                })
+            }
+        });
+
+        const item = {
+            type: 'platform:gift',
+            platform: 'tiktok',
+            data: {
+                username: 'test-user',
+                userId: 'test-user-id',
+                giftType: 'Corgi',
+                giftCount: 1,
+                amount: 299,
+                currency: 'coins'
+            }
+        };
+
+        await effects.handleGiftEffects(item, []);
+
+        const animationEvent = emittedEvents.find((entry) => entry.eventName === 'display:gift-animation');
+        expect(animationEvent).toBeDefined();
+        expect(animationEvent.payload.durationMs).toBe(4500);
+        expect(item.holdDurationMs).toBe(4500);
+    });
+
+    it('does not resolve animation for non-tiktok gifts', async () => {
+        let resolveCallCount = 0;
+        const effects = new DisplayQueueEffects({
+            config: {
+                ttsEnabled: false,
+                obs: { ttsTxt: 'tts' },
+                handcam: { enabled: false },
+                gifts: { giftVideoSource: 'gift-video', giftAudioSource: 'gift-audio' },
+                gui: { enableOverlay: true, enableDock: false, showGifts: true }
+            },
+            sourcesManager: { clearTextSource: async () => {}, updateTextSource: async () => {} },
+            obsManager: { call: async () => ({}) },
+            goalsManager: { processDonationGoal: async () => {} },
+            eventBus: { emit: () => {} },
+            delay: async () => {},
+            handleDisplayQueueError: () => {},
+            extractUsername: (data) => data?.username ?? null,
+            giftAnimationResolver: {
+                resolveFromNotificationData: async () => {
+                    resolveCallCount += 1;
+                    return null;
+                }
+            }
+        });
+
+        await effects.handleGiftEffects({
+            type: 'platform:gift',
+            platform: 'twitch',
+            data: {
+                username: 'test-user',
+                userId: 'test-user-id',
+                giftType: 'Rose',
+                giftCount: 1,
+                amount: 1,
+                currency: 'coins'
+            }
+        }, []);
+
+        expect(resolveCallCount).toBe(0);
+    });
+
+    it('starts gift media effects before animation resolution settles', async () => {
+        const obsCalls = [];
+        let resolveAnimation;
+        const effects = new DisplayQueueEffects({
+            config: {
+                ttsEnabled: false,
+                obs: { ttsTxt: 'tts' },
+                handcam: { enabled: false },
+                gifts: { giftVideoSource: 'gift-video', giftAudioSource: 'gift-audio' },
+                gui: { enableOverlay: true, enableDock: false, showGifts: true }
+            },
+            sourcesManager: { clearTextSource: async () => {}, updateTextSource: async () => {} },
+            obsManager: {
+                call: async (method) => {
+                    obsCalls.push(method);
+                    return {};
+                }
+            },
+            goalsManager: { processDonationGoal: async () => {} },
+            eventBus: { emit: () => {} },
+            delay: async () => {},
+            handleDisplayQueueError: () => {},
+            extractUsername: (data) => data?.username ?? null,
+            giftAnimationResolver: {
+                resolveFromNotificationData: () => new Promise((resolve) => {
+                    resolveAnimation = resolve;
+                })
+            }
+        });
+
+        const handlePromise = effects.handleGiftEffects({
+            type: 'platform:gift',
+            platform: 'tiktok',
+            data: {
+                username: 'test-user',
+                userId: 'test-user-id',
+                giftType: 'Corgi',
+                giftCount: 1,
+                amount: 299,
+                currency: 'coins'
+            }
+        }, []);
+
+        await waitForDelay(1);
+
+        expect(obsCalls).toContain('TriggerMediaInputAction');
+
+        resolveAnimation(null);
+        await handlePromise;
+    });
+
+    it('does not finish gift effects before animation hold resolution completes', async () => {
+        let resolveAnimation;
+        let settled = false;
+        const effects = new DisplayQueueEffects({
+            config: {
+                ttsEnabled: false,
+                obs: { ttsTxt: 'tts' },
+                handcam: { enabled: false },
+                gifts: { giftVideoSource: 'gift-video', giftAudioSource: 'gift-audio' },
+                gui: { enableOverlay: true, enableDock: false, showGifts: true }
+            },
+            sourcesManager: { clearTextSource: async () => {}, updateTextSource: async () => {} },
+            obsManager: { call: async () => ({}) },
+            goalsManager: { processDonationGoal: async () => {} },
+            eventBus: { emit: () => {} },
+            delay: async () => {},
+            handleDisplayQueueError: () => {},
+            extractUsername: (data) => data?.username ?? null,
+            giftAnimationResolver: {
+                resolveFromNotificationData: () => new Promise((resolve) => {
+                    resolveAnimation = resolve;
+                })
+            }
+        });
+
+        const item = {
+            type: 'platform:gift',
+            platform: 'tiktok',
+            data: {
+                username: 'test-user',
+                userId: 'test-user-id',
+                giftType: 'Corgi',
+                giftCount: 1,
+                amount: 299,
+                currency: 'coins'
+            }
+        };
+
+        const handlePromise = effects.handleGiftEffects(item, []).then(() => {
+            settled = true;
+        });
+
+        await waitForDelay(1);
+        expect(settled).toBe(false);
+
+        resolveAnimation({
+            mediaFilePath: '/tmp/test-animation.mp4',
+            mediaContentType: 'video/mp4',
+            durationMs: 4200,
+            animationConfig: {
+                profileName: 'portrait',
+                sourceWidth: 960,
+                sourceHeight: 864,
+                renderWidth: 480,
+                renderHeight: 854,
+                rgbFrame: [0, 0, 480, 854],
+                aFrame: [480, 0, 480, 854]
+            }
+        });
+
+        await handlePromise;
+        expect(item.holdDurationMs).toBe(4200);
     });
 });

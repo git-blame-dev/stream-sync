@@ -23,6 +23,11 @@ cp config.example.ini config.ini
 npm start
 ```
 
+## Runtime Dependencies
+- `unzip` is required for TikTok gift animation asset extraction.
+- `ffprobe` is recommended for accurate TikTok gift animation duration probing and is part of the FFmpeg toolchain.
+- Without `ffprobe`, TikTok gift animation duration falls back to TikTok metadata estimation.
+
 ## Development Commands
 ```bash
 bun lint

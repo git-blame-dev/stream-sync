@@ -91,4 +91,49 @@ describe('DisplayQueue TTS-driven durations', () => {
         expect(queue.getDuration({ type: 'platform:gift' })).toBe(0);
         expect(queue.getDuration({ type: 'platform:gift', data: null })).toBe(0);
     });
+
+    it('preserves baseline tts-derived window when tts is disabled', () => {
+        const queue = new DisplayQueue(
+            {},
+            { ttsEnabled: false },
+            {
+                CHAT_MESSAGE_DURATION: 4500,
+                CHAT_TRANSITION_DELAY: 0,
+                PRIORITY_LEVELS
+            },
+            new EventEmitter(),
+            {}
+        );
+
+        const duration = queue.getDuration({ type: 'platform:gift', data: { ttsMessage: 'hello' } });
+        expect(duration).toBe(2000);
+    });
+
+    it('uses max of baseline window and hold duration when tts is disabled', () => {
+        const queue = new DisplayQueue(
+            {},
+            { ttsEnabled: false },
+            {
+                CHAT_MESSAGE_DURATION: 4500,
+                CHAT_TRANSITION_DELAY: 0,
+                PRIORITY_LEVELS
+            },
+            new EventEmitter(),
+            {}
+        );
+
+        const duration = queue.getDuration({ type: 'platform:gift', holdDurationMs: 4200, data: { ttsMessage: 'hello' } });
+        expect(duration).toBe(4200);
+    });
+
+    it('uses max of tts window and hold duration', () => {
+        const queue = createQueue();
+        const duration = queue.getDuration({
+            type: 'platform:gift',
+            holdDurationMs: 9000,
+            data: { ttsMessage: 'hello world' }
+        });
+
+        expect(duration).toBe(9000);
+    });
 });

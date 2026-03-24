@@ -213,6 +213,45 @@ describe('DisplayQueue control', () => {
             expect(emittedRows[0].payload.type).toBe('chat');
             expect(emittedRows[0].payload.platform).toBe('twitch');
         });
+
+        it('emits notification display row only when notification is displayed', async () => {
+            const emittedRows = [];
+            const eventBus = {
+                emit: (eventName, payload) => {
+                    emittedRows.push({ eventName, payload });
+                }
+            };
+
+            const queue = new DisplayQueue(
+                createMockOBSManager('connected'),
+                createConfig({ autoProcess: false, timing: { transitionDelay: 0 } }),
+                constants,
+                eventBus,
+                createMockDependencies()
+            );
+
+            queue.renderer.displayNotificationItem = createMockFn().mockResolvedValue(true);
+            queue.handleNotificationEffects = createMockFn().mockResolvedValue();
+
+            queue.addItem({
+                type: 'platform:gift',
+                platform: 'tiktok',
+                data: {
+                    username: 'test-user',
+                    userId: 'test-user-id',
+                    giftType: 'Rose',
+                    giftCount: 1,
+                    amount: 1,
+                    currency: 'coins'
+                }
+            });
+
+            expect(emittedRows.find((entry) => entry.payload?.type === 'platform:gift')).toBeUndefined();
+
+            const displayResult = await queue.displayNotificationItem(queue.queue[0]);
+            expect(displayResult).toBe(true);
+            expect(emittedRows.some((entry) => entry.eventName === 'display:row' && entry.payload?.type === 'platform:gift')).toBe(true);
+        });
     });
 
     describe('processQueue readiness', () => {
@@ -377,6 +416,32 @@ describe('DisplayQueue control', () => {
 
             expect(processedTypes).toEqual(['chat', 'platform:gift']);
             expect(queue.getQueueLength()).toBe(0);
+        });
+
+        it('clears current display when notification rendering is declined', async () => {
+            const queue = createQueue({
+                autoProcess: false,
+                timing: { transitionDelay: 0, notificationClearDelay: 0 }
+            });
+
+            queue.renderer.displayNotificationItem = createMockFn().mockResolvedValue(false);
+            queue.handleNotificationEffects = createMockFn().mockResolvedValue();
+            queue.hideCurrentDisplay = createMockFn().mockResolvedValue();
+
+            queue.addItem({
+                type: 'platform:follow',
+                platform: 'twitch',
+                priority: PRIORITY_LEVELS.FOLLOW,
+                data: {
+                    username: 'test-user',
+                    userId: 'test-user-id',
+                    displayMessage: 'test-user followed'
+                }
+            });
+
+            await queue.processQueue();
+
+            expect(queue.currentDisplay).toBe(null);
         });
     });
 

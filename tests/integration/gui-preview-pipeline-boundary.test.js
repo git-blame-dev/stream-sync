@@ -19,7 +19,15 @@ describe('GUI preview pipeline boundary integration', () => {
             console: () => {}
         };
 
-        const pipeline = createPreviewPipeline({ config, logger });
+        const pipeline = createPreviewPipeline({
+            config,
+            logger,
+            giftAnimationResolver: {
+                async resolveFromNotificationData() {
+                    return null;
+                }
+            }
+        });
         const rows = [];
         const unsubscribe = pipeline.eventBus.subscribe('display:row', (row) => {
             rows.push(row);

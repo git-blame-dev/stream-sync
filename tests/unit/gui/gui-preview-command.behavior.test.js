@@ -11,6 +11,7 @@ const {
     runPreviewScenario,
     runGuiPreview
 } = require('../../../scripts/local/gui-preview');
+const { waitForDelay } = require('../../helpers/time-utils');
 
 describe('GUI local preview command behavior', () => {
     it('uses 32s duration and 2s message cadence constants', () => {
@@ -26,14 +27,14 @@ describe('GUI local preview command behavior', () => {
             platform: 'twitch'
         }));
         expect(events[1]).toEqual(expect.objectContaining({
-            platform: 'youtube'
+            platform: 'tiktok'
         }));
         expect(events[2]).toEqual(expect.objectContaining({
-            platform: 'twitch'
+            platform: 'youtube'
         }));
         expect(events[0].adapter).toBe('twitch');
-        expect(events[1].adapter).toBe('youtube');
-        expect(events[2].adapter).toBe('twitch');
+        expect(events[1].adapter).toBe('tiktok');
+        expect(events[2].adapter).toBe('youtube');
         expect(events[0].rawEvent).toBeDefined();
     });
 
@@ -78,14 +79,18 @@ describe('GUI local preview command behavior', () => {
         expect(tiktokStep.rawEvent.data.user.profilePictureUrl).toBe(PREVIEW_MEDIA_CATALOG.tiktok.avatarUrl);
     });
 
-    it('includes tiktok gift image payload for the preview 5x Rose gift event', () => {
+    it('includes tiktok corgi gift payload with animation resources for preview', () => {
         const events = buildPreviewScenarioEvents(32000, 2000);
         const tiktokGiftStep = events.find((event) => event.adapter === 'tiktok' && event.rawEvent?.eventType === 'GIFT');
 
         expect(tiktokGiftStep).toBeDefined();
-        expect(tiktokGiftStep.rawEvent.data.repeatCount).toBe(5);
-        expect(tiktokGiftStep.rawEvent.data.giftName).toBe('Rose');
+        expect(events[1]?.rawEvent?.eventType).toBe('GIFT');
+        expect(events[1]?.adapter).toBe('tiktok');
+        expect(tiktokGiftStep.rawEvent.data.repeatCount).toBe(1);
+        expect(tiktokGiftStep.rawEvent.data.giftName).toBe('Corgi');
         expect(tiktokGiftStep.rawEvent.data.gift.giftPictureUrl).toBe(PREVIEW_MEDIA_CATALOG.tiktok.gift.imageUrl);
+        expect(Array.isArray(tiktokGiftStep.rawEvent.data.asset.videoResourceList)).toBe(true);
+        expect(tiktokGiftStep.rawEvent.data.asset.videoResourceList.length).toBeGreaterThan(0);
     });
 
     it('uses explicit stable media catalog values without test-only URLs', () => {
@@ -243,6 +248,9 @@ describe('GUI local preview command behavior', () => {
         expect(disposed).toBe(true);
         expect(createdPipelineArgs.length).toBe(1);
         expect(createdTransportArgs.length).toBe(1);
+        expect(typeof createdPipelineArgs[0].delay).toBe('function');
+        expect(createdPipelineArgs[0].giftAnimationResolver).toBeDefined();
+        expect(typeof createdPipelineArgs[0].giftAnimationResolver.resolveFromNotificationData).toBe('function');
         expect(createdTransportArgs[0].eventBus).toBe(fakeEventBus);
         expect(emittedEvents.length).toBeGreaterThanOrEqual(1);
         expect(emittedEvents[0].eventName).toBe('platform:event');
@@ -902,6 +910,11 @@ describe('GUI local preview command behavior', () => {
                 warn: () => {},
                 error: () => {},
                 console: () => {}
+            },
+            giftAnimationResolver: {
+                async resolveFromNotificationData() {
+                    return null;
+                }
             }
         });
 
@@ -931,7 +944,7 @@ describe('GUI local preview command behavior', () => {
             if (emittedTypes.has('farewell') && emittedTypes.has('command') && emittedTypes.has('platform:envelope')) {
                 break;
             }
-            await Promise.resolve();
+            await waitForDelay(1);
         }
 
         const emittedTypes = new Set(rows.map((row) => row.type));
@@ -948,6 +961,182 @@ describe('GUI local preview command behavior', () => {
         expect(emittedTypes.has('platform:envelope')).toBe(true);
 
         unsubscribe();
+        await pipeline.dispose();
+    });
+
+    it('uses deterministic no-op gift animation resolver by default in preview pipeline', async () => {
+        const config = buildPreviewConfig();
+        const emittedEffects = [];
+
+        const pipeline = createPreviewPipeline({
+            config,
+            logger: {
+                debug: () => {},
+                info: () => {},
+                warn: () => {},
+                error: () => {},
+                console: () => {}
+            }
+        });
+
+        const unsubscribeEffect = pipeline.eventBus.subscribe('display:gift-animation', (effectPayload) => {
+            emittedEffects.push(effectPayload);
+        });
+
+        const adapters = createPreviewIngestAdapters({
+            config,
+            logger: {
+                debug: () => {},
+                info: () => {},
+                warn: () => {},
+                error: () => {},
+                console: () => {}
+            },
+            emitPlatformEvent: (event) => pipeline.emitIngestEvent(event)
+        });
+
+        const giftEvent = buildPreviewScenarioEvents(32000, 2000)
+            .find((event) => event.adapter === 'tiktok' && event.rawEvent?.eventType === 'GIFT');
+
+        expect(giftEvent).toBeDefined();
+
+        await adapters[giftEvent.adapter].ingest(giftEvent.rawEvent);
+        await waitForDelay(25);
+
+        expect(emittedEffects).toHaveLength(0);
+
+        unsubscribeEffect();
+        await pipeline.dispose();
+    });
+
+    it('emits gift animation effect in preview pipeline when resolver returns Corgi animation', async () => {
+        const config = buildPreviewConfig();
+        const emittedEffects = [];
+
+        const pipeline = createPreviewPipeline({
+            config,
+            logger: {
+                debug: () => {},
+                info: () => {},
+                warn: () => {},
+                error: () => {},
+                console: () => {}
+            },
+            giftAnimationResolver: {
+                async resolveFromNotificationData() {
+                    return {
+                        mediaFilePath: '/tmp/test-corgi-animation.mp4',
+                        mediaContentType: 'video/mp4',
+                        durationMs: 4200,
+                        animationConfig: {
+                            profileName: 'portrait',
+                            sourceWidth: 1440,
+                            sourceHeight: 1280,
+                            renderWidth: 720,
+                            renderHeight: 1280,
+                            rgbFrame: [0, 0, 720, 1280],
+                            aFrame: [720, 0, 720, 1280]
+                        }
+                    };
+                }
+            }
+        });
+
+        const unsubscribeEffect = pipeline.eventBus.subscribe('display:gift-animation', (effectPayload) => {
+            emittedEffects.push(effectPayload);
+        });
+
+        const adapters = createPreviewIngestAdapters({
+            config,
+            logger: {
+                debug: () => {},
+                info: () => {},
+                warn: () => {},
+                error: () => {},
+                console: () => {}
+            },
+            emitPlatformEvent: (event) => pipeline.emitIngestEvent(event)
+        });
+
+        const giftEvent = buildPreviewScenarioEvents(32000, 2000)
+            .find((event) => event.adapter === 'tiktok' && event.rawEvent?.eventType === 'GIFT');
+
+        expect(giftEvent).toBeDefined();
+
+        await adapters[giftEvent.adapter].ingest(giftEvent.rawEvent);
+
+        for (let attempt = 0; attempt < 50 && emittedEffects.length === 0; attempt += 1) {
+            await waitForDelay(1);
+        }
+
+        expect(emittedEffects).toHaveLength(1);
+        expect(emittedEffects[0].durationMs).toBe(4200);
+
+        unsubscribeEffect();
+        await pipeline.dispose();
+    });
+
+    it('uses injected delay in preview pipeline so gift hold timing can block later notifications', async () => {
+        const config = buildPreviewConfig();
+        const delayCalls = [];
+
+        const pipeline = createPreviewPipeline({
+            config,
+            logger: {
+                debug: () => {},
+                info: () => {},
+                warn: () => {},
+                error: () => {},
+                console: () => {}
+            },
+            delay: async (ms) => {
+                delayCalls.push(ms);
+            },
+            giftAnimationResolver: {
+                async resolveFromNotificationData() {
+                    return {
+                        mediaFilePath: '/tmp/test-corgi-animation.mp4',
+                        mediaContentType: 'video/mp4',
+                        durationMs: 4200,
+                        animationConfig: {
+                            profileName: 'portrait',
+                            sourceWidth: 1440,
+                            sourceHeight: 1280,
+                            renderWidth: 720,
+                            renderHeight: 1280,
+                            rgbFrame: [0, 0, 720, 1280],
+                            aFrame: [720, 0, 720, 1280]
+                        }
+                    };
+                }
+            }
+        });
+
+        const adapters = createPreviewIngestAdapters({
+            config,
+            logger: {
+                debug: () => {},
+                info: () => {},
+                warn: () => {},
+                error: () => {},
+                console: () => {}
+            },
+            emitPlatformEvent: (event) => pipeline.emitIngestEvent(event)
+        });
+
+        const giftEvent = buildPreviewScenarioEvents(32000, 2000)
+            .find((event) => event.adapter === 'tiktok' && event.rawEvent?.eventType === 'GIFT');
+
+        expect(giftEvent).toBeDefined();
+
+        await adapters[giftEvent.adapter].ingest(giftEvent.rawEvent);
+
+        for (let attempt = 0; attempt < 50 && !delayCalls.includes(4200); attempt += 1) {
+            await waitForDelay(1);
+        }
+
+        expect(delayCalls.includes(4200)).toBe(true);
+
         await pipeline.dispose();
     });
 });
