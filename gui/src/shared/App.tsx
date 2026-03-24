@@ -6,7 +6,7 @@ import { GuiShell } from './components/GuiShell'
 import type { GuiGiftAnimationEffectEnvelope, GuiRowDto } from './types'
 
 interface AppProps {
-  mode: 'dock' | 'overlay'
+  mode: 'dock' | 'overlay' | 'tiktok-animations'
   eventsPath?: string
   overlayMaxMessages?: number
   overlayMaxLinesPerMessage?: number
@@ -20,11 +20,11 @@ function readPositiveInteger(value: unknown): number | null {
 }
 
 function resolveOverlayLimits(
-  mode: 'dock' | 'overlay',
+  mode: 'dock' | 'overlay' | 'tiktok-animations',
   overlayMaxMessages: unknown,
   overlayMaxLinesPerMessage: unknown
 ): { maxRows: number, maxLinesPerMessage: number } {
-  if (mode === 'dock') {
+  if (mode !== 'overlay') {
     return {
       maxRows: 0,
       maxLinesPerMessage: 3
@@ -78,6 +78,12 @@ function isGiftAnimationEffectEnvelope(payload: unknown): payload is GuiGiftAnim
     (config.aFrame === null || hasValidFrame(config.aFrame))
 }
 
+function isGuiEffectEnvelope(payload: unknown): boolean {
+  return !!payload &&
+    typeof payload === 'object' &&
+    (payload as { __guiEvent?: string }).__guiEvent === 'effect'
+}
+
 export function App({
   mode,
   eventsPath = '/gui/events',
@@ -103,8 +109,14 @@ export function App({
     const dispose = createEventFeedImpl({
       url: eventsPath,
       onEvent: (payload) => {
-        if (isGiftAnimationEffectEnvelope(payload)) {
-          setEffectQueue((currentQueue) => [...currentQueue, payload])
+        if (isGuiEffectEnvelope(payload)) {
+          if (mode !== 'overlay' && isGiftAnimationEffectEnvelope(payload)) {
+            setEffectQueue((currentQueue) => [...currentQueue, payload])
+          }
+          return
+        }
+
+        if (mode === 'tiktok-animations') {
           return
         }
 
@@ -116,7 +128,7 @@ export function App({
     return () => {
       dispose()
     }
-  }, [createEventFeedImpl, eventsPath, store])
+  }, [createEventFeedImpl, eventsPath, mode, store])
 
   return (
     <GuiShell

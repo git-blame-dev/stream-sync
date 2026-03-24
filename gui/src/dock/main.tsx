@@ -6,6 +6,7 @@ import '../shared/styles.css'
 
 interface DockRuntimeConfigSource {
   __STREAM_SYNC_GUI_CONFIG__?: Record<string, unknown>
+  __STREAM_SYNC_GUI_KIND__?: string
 }
 
 interface DockBootstrapTarget {
@@ -23,10 +24,14 @@ function coerceMessage(error: unknown): string {
   return error instanceof Error && error.message ? error.message : 'Unknown bootstrap error'
 }
 
-export function readDockRuntimeConfig(scope: DockRuntimeConfigSource = globalThis as DockRuntimeConfigSource): { uiCompareMode: boolean } {
+export function readDockRuntimeConfig(scope: DockRuntimeConfigSource = globalThis as DockRuntimeConfigSource): { uiCompareMode: boolean, mode: 'dock' | 'tiktok-animations' } {
   const runtimeConfig = scope.__STREAM_SYNC_GUI_CONFIG__
+  const runtimeKind = typeof scope.__STREAM_SYNC_GUI_KIND__ === 'string'
+    ? scope.__STREAM_SYNC_GUI_KIND__.trim().toLowerCase()
+    : ''
   return {
-    uiCompareMode: runtimeConfig?.uiCompareMode === true
+    uiCompareMode: runtimeConfig?.uiCompareMode === true,
+    mode: runtimeKind === 'tiktok-animations' ? 'tiktok-animations' : 'dock'
   }
 }
 
@@ -46,7 +51,7 @@ export function bootstrapDockApp(dependencies: DockBootstrapDependencies = {}): 
     const root = createRootImpl(target)
     root.render(
       <App
-        mode="dock"
+        mode={runtimeConfig.mode}
         uiCompareMode={runtimeConfig.uiCompareMode}
       />
     )

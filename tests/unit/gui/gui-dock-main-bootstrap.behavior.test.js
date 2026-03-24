@@ -21,15 +21,19 @@ describe('Dock main bootstrap behavior', () => {
             __STREAM_SYNC_GUI_CONFIG__: {
                 uiCompareMode: true
             }
-        })).toEqual({ uiCompareMode: true });
+        })).toEqual({ uiCompareMode: true, mode: 'dock' });
 
         expect(readDockRuntimeConfig({
             __STREAM_SYNC_GUI_CONFIG__: {
                 uiCompareMode: 'true'
             }
-        })).toEqual({ uiCompareMode: false });
+        })).toEqual({ uiCompareMode: false, mode: 'dock' });
 
-        expect(readDockRuntimeConfig({})).toEqual({ uiCompareMode: false });
+        expect(readDockRuntimeConfig({
+            __STREAM_SYNC_GUI_KIND__: 'tiktok-animations'
+        })).toEqual({ uiCompareMode: false, mode: 'tiktok-animations' });
+
+        expect(readDockRuntimeConfig({})).toEqual({ uiCompareMode: false, mode: 'dock' });
     });
 
     it('renders dock app with runtime compare mode config', () => {
@@ -39,7 +43,8 @@ describe('Dock main bootstrap behavior', () => {
         const result = bootstrapDockApp({
             target,
             readDockRuntimeConfigImpl: () => ({
-                uiCompareMode: true
+                uiCompareMode: true,
+                mode: 'dock'
             }),
             createRootImpl: () => ({
                 render: (element) => {
@@ -51,6 +56,27 @@ describe('Dock main bootstrap behavior', () => {
         expect(result).toBe(true);
         expect(renderedElement.props.mode).toBe('dock');
         expect(renderedElement.props.uiCompareMode).toBe(true);
+    });
+
+    it('renders tiktok animations mode when runtime kind requests it', () => {
+        const target = createTarget();
+        let renderedElement = null;
+
+        const result = bootstrapDockApp({
+            target,
+            readDockRuntimeConfigImpl: () => ({
+                uiCompareMode: false,
+                mode: 'tiktok-animations'
+            }),
+            createRootImpl: () => ({
+                render: (element) => {
+                    renderedElement = element;
+                }
+            })
+        });
+
+        expect(result).toBe(true);
+        expect(renderedElement.props.mode).toBe('tiktok-animations');
     });
 
     it('returns false when no target is available', () => {

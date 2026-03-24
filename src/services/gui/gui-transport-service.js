@@ -207,7 +207,7 @@ function createGuiTransportService(options = {}) {
         return `<!doctype html><html><head><meta charset="utf-8"><title>${title}</title></head><body style="${bodyStyle}"><div data-gui-disabled="true" style="padding:12px;opacity:0.9">${message}</div></body></html>`;
     };
 
-    const renderActivePage = (title, kind, transparent = false) => {
+    const renderActivePage = (title, runtimeKind, scriptKind = runtimeKind, transparent = false) => {
         const assetVersion = Date.now().toString(36);
         const bodyStyle = transparent
             ? 'margin:0;background:transparent;color:#ffffff;font-family:Georgia,serif;'
@@ -217,7 +217,7 @@ function createGuiTransportService(options = {}) {
             overlayMaxLinesPerMessage: guiConfig.overlayMaxLinesPerMessage,
             uiCompareMode: guiConfig.uiCompareMode === true
         };
-        return `<!doctype html><html><head><meta charset="utf-8"><title>${title}</title><link rel="stylesheet" href="/gui/assets/styles.css?v=${assetVersion}"></head><body style="${bodyStyle}"><div id="app" data-kind="${kind}"></div><script>window.__STREAM_SYNC_GUI_KIND__=${JSON.stringify(kind)};window.__STREAM_SYNC_GUI_EVENTS__='/gui/events';window.__STREAM_SYNC_GUI_CONFIG__=${JSON.stringify(runtimeGuiConfig)};</script><script type="module" src="/gui/assets/${kind}.js?v=${assetVersion}"></script></body></html>`;
+        return `<!doctype html><html><head><meta charset="utf-8"><title>${title}</title><link rel="stylesheet" href="/gui/assets/styles.css?v=${assetVersion}"></head><body style="${bodyStyle}"><div id="app" data-kind="${runtimeKind}"></div><script>window.__STREAM_SYNC_GUI_KIND__=${JSON.stringify(runtimeKind)};window.__STREAM_SYNC_GUI_EVENTS__='/gui/events';window.__STREAM_SYNC_GUI_CONFIG__=${JSON.stringify(runtimeGuiConfig)};</script><script type="module" src="/gui/assets/${scriptKind}.js?v=${assetVersion}"></script></body></html>`;
     };
 
     const sendSse = (payload) => {
@@ -502,10 +502,23 @@ function createGuiTransportService(options = {}) {
                 'Cache-Control': 'no-cache, no-store, must-revalidate'
             });
             if (guiConfig.enableDock === true) {
-                res.end(renderActivePage('Stream Sync Dock', 'dock', false));
+                res.end(renderActivePage('Stream Sync Dock', 'dock', 'dock', true));
                 return;
             }
-            res.end(renderDisabledPage('Stream Sync Dock', 'Dock disabled', false));
+            res.end(renderDisabledPage('Stream Sync Dock', 'Dock disabled', true));
+            return;
+        }
+
+        if (url === '/tiktok-animations') {
+            res.writeHead(200, {
+                'Content-Type': 'text/html; charset=utf-8',
+                'Cache-Control': 'no-cache, no-store, must-revalidate'
+            });
+            if (guiConfig.enableDock === true || guiConfig.enableOverlay === true) {
+                res.end(renderActivePage('Stream Sync TikTok Animations', 'tiktok-animations', 'dock', true));
+                return;
+            }
+            res.end(renderDisabledPage('Stream Sync TikTok Animations', 'TikTok animations disabled', true));
             return;
         }
 
@@ -515,7 +528,7 @@ function createGuiTransportService(options = {}) {
                 'Cache-Control': 'no-cache, no-store, must-revalidate'
             });
             if (guiConfig.enableOverlay === true) {
-                res.end(renderActivePage('Stream Sync Overlay', 'overlay', true));
+                res.end(renderActivePage('Stream Sync Overlay', 'overlay', 'overlay', true));
                 return;
             }
             res.end(renderDisabledPage('Stream Sync Overlay', 'Overlay disabled', true));

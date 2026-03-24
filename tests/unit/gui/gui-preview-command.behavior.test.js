@@ -256,6 +256,7 @@ describe('GUI local preview command behavior', () => {
         expect(emittedEvents[0].eventName).toBe('platform:event');
         expect(emittedEvents.some((entry) => entry.eventName === 'display:row')).toBe(false);
         expect(writes.some((line) => line.includes('Dock URL'))).toBe(true);
+        expect(writes.some((line) => line.includes('TikTok Animation URL'))).toBe(true);
         expect(writes.some((line) => line.includes('GUI preview finished'))).toBe(true);
     });
 

@@ -21,7 +21,7 @@ function isDockNearBottom(
 
 interface GuiShellProps {
   rows: GuiRowDto[]
-  mode: 'dock' | 'overlay'
+  mode: 'dock' | 'overlay' | 'tiktok-animations'
   overlayMaxLinesPerMessage: number
   uiCompareMode?: boolean
   activeEffect?: GuiGiftAnimationEffectEnvelope | null
@@ -177,6 +177,7 @@ export function GuiShell({
   activeEffect = null,
   onEffectComplete
 }: GuiShellProps) {
+  const rowMode = mode === 'overlay' ? 'overlay' : 'dock'
   const handleEffectComplete = typeof onEffectComplete === 'function'
     ? onEffectComplete
     : (_playbackId: string) => undefined
@@ -184,7 +185,14 @@ export function GuiShell({
     ? ({ '--overlay-line-clamp': String(overlayMaxLinesPerMessage) } as React.CSSProperties)
     : mode === 'dock'
       ? ({ height: '100vh', overflowY: 'auto', overscrollBehavior: 'contain' } as React.CSSProperties)
-      : undefined
+      : ({
+          position: 'relative',
+          height: '100vh',
+          overflow: 'hidden',
+          padding: 0,
+          maxWidth: 'none',
+          background: 'transparent'
+        } as React.CSSProperties)
   const shellRef = useRef<HTMLElement | null>(null)
   const isDockPinnedToBottomRef = useRef(true)
   const rowElementsByKeyRef = useRef(new Map<string, HTMLDivElement>())
@@ -503,12 +511,12 @@ export function GuiShell({
         effect={activeEffect}
         onComplete={handleEffectComplete}
       />
-      {renderedRowEntries.map((entry) => {
+      {mode === 'tiktok-animations' ? null : renderedRowEntries.map((entry) => {
         return (
           <GuiRow
             key={entry.key}
             row={entry.row}
-            mode={mode}
+            mode={rowMode}
             uiCompareMode={uiCompareMode}
             rowRef={(element) => {
               if (element) {

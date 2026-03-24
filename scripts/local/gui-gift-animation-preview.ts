@@ -164,7 +164,7 @@ async function runGuiGiftAnimationPreview(options: GiftAnimationPreviewOptions =
 
         stdout.write(`GUI gift animation preview running for ${Math.floor(durationMs / 1000)}s\n`);
         stdout.write(`Dock URL: http://${config.gui.host}:${config.gui.port}/dock\n`);
-        stdout.write(`Overlay URL: http://${config.gui.host}:${config.gui.port}/overlay\n`);
+        stdout.write(`TikTok Animation URL: http://${config.gui.host}:${config.gui.port}/tiktok-animations\n`);
 
         const giftEvent = options.giftEvent || buildGiftAnimationPreviewEvent();
         const notificationData = buildGiftPreviewNotificationData(giftEvent);
