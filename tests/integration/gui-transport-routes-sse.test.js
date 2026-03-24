@@ -663,6 +663,15 @@ describe('GUI transport routes and SSE integration', () => {
             expect(overlayResponse.status).toBe(200);
             expect(overlayResponse.headers.get('cache-control')).toContain('no-cache');
             expect(overlayHtml).toContain('/gui/events');
+
+            const tiktokAnimationsResponse = await fetch(`${baseUrl}/tiktok-animations`);
+            const tiktokAnimationsHtml = await tiktokAnimationsResponse.text();
+            expect(tiktokAnimationsResponse.status).toBe(200);
+            expect(tiktokAnimationsResponse.headers.get('cache-control')).toContain('no-cache');
+            expect(tiktokAnimationsHtml).toContain('/gui/events');
+            expect(tiktokAnimationsHtml).toContain('/gui/assets/dock.js');
+            expect(tiktokAnimationsHtml).toContain('data-kind="tiktok-animations"');
+            expect(tiktokAnimationsHtml).toContain('background:transparent');
         } finally {
             await service.stop();
         }
@@ -694,6 +703,15 @@ describe('GUI transport routes and SSE integration', () => {
             expect(overlayHtml).toContain('Overlay disabled');
             expect(overlayHtml).toContain('data-gui-disabled="true"');
             expect(overlayHtml).not.toContain('/gui/events');
+
+            const tiktokAnimationsResponse = await fetch(`${baseUrl}/tiktok-animations`);
+            const tiktokAnimationsHtml = await tiktokAnimationsResponse.text();
+            expect(tiktokAnimationsResponse.status).toBe(200);
+            expect(tiktokAnimationsResponse.headers.get('cache-control')).toContain('no-cache');
+            expect(tiktokAnimationsHtml).toContain('/gui/events');
+            expect(tiktokAnimationsHtml).toContain('/gui/assets/dock.js');
+            expect(tiktokAnimationsHtml).toContain('data-kind="tiktok-animations"');
+            expect(tiktokAnimationsHtml).toContain('background:transparent');
         } finally {
             await service.stop();
         }
@@ -750,7 +768,7 @@ describe('GUI transport routes and SSE integration', () => {
         }
     });
 
-    it('serves enabled dock and overlay pages with built GUI asset entry paths', async () => {
+    it('serves enabled dock, overlay, and tiktok animations pages with built GUI asset entry paths', async () => {
         const port = await getAvailablePort();
         const eventBus = new TestEventBus();
         const config = buildConfig({
@@ -778,6 +796,15 @@ describe('GUI transport routes and SSE integration', () => {
             expect(overlayResponse.headers.get('cache-control')).toContain('no-cache');
             expect(overlayHtml).toContain('/gui/assets/overlay.js');
             expect(overlayHtml).toContain('/gui/assets/styles.css');
+
+            const tiktokAnimationsResponse = await fetch(`${baseUrl}/tiktok-animations`);
+            const tiktokAnimationsHtml = await tiktokAnimationsResponse.text();
+            expect(tiktokAnimationsResponse.status).toBe(200);
+            expect(tiktokAnimationsResponse.headers.get('cache-control')).toContain('no-cache');
+            expect(tiktokAnimationsHtml).toContain('/gui/assets/dock.js');
+            expect(tiktokAnimationsHtml).toContain('/gui/assets/styles.css');
+            expect(tiktokAnimationsHtml).toContain('data-kind="tiktok-animations"');
+            expect(tiktokAnimationsHtml).toContain('background:transparent');
         } finally {
             await service.stop();
         }

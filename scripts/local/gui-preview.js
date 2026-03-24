@@ -1254,6 +1254,7 @@ async function runGuiPreview(options = {}) {
         const port = config.gui.port;
         stdout.write(`GUI preview running for ${Math.floor(durationMs / 1000)}s\n`);
         stdout.write(`Dock URL: http://${host}:${port}/dock\n`);
+        stdout.write(`TikTok Animation URL: http://${host}:${port}/tiktok-animations\n`);
         stdout.write(`Overlay URL: http://${host}:${port}/overlay\n`);
 
         const scenarioEvents = buildPreviewScenarioEvents(durationMs, intervalMs);

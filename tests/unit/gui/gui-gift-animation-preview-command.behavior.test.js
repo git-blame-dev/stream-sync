@@ -107,6 +107,7 @@ describe('GUI gift animation preview command behavior', () => {
         expect(emittedEvents[0].eventName).toBe('display:gift-animation');
         expect(emittedEvents[0].payload.platform).toBe('tiktok');
         expect(writes.some((line) => line.includes('GUI gift animation preview running'))).toBe(true);
+        expect(writes.some((line) => line.includes('TikTok Animation URL'))).toBe(true);
         expect(writes.some((line) => line.includes('GUI gift animation preview finished'))).toBe(true);
     });
 

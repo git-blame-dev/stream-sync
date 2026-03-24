@@ -75,7 +75,7 @@ describe('GUI shared styles behavior', () => {
         expect(overlayShellBlock).toContain('--gui-emote-size-current: var(--gui-overlay-emote-size);');
         expect(dockShellBlock).toContain('min-height: 100vh;');
         expect(dockShellBlock).toContain('position: relative;');
-        expect(dockShellBlock).toContain('background: linear-gradient(180deg, #1a1f26 0%, #12161c 100%);');
+        expect(dockShellBlock).toContain('background: transparent;');
         expect(dockShellBlock).toContain('--gui-avatar-size-current: var(--gui-dock-avatar-size);');
         expect(dockShellBlock).toContain('--gui-platform-icon-size-current: var(--gui-dock-platform-icon-size);');
         expect(dockShellBlock).toContain('--gui-badge-size-current: var(--gui-dock-badge-size);');
