@@ -1,5 +1,25 @@
 const { logger } = require('../core/logging');
 
+function resolveChatMessageText(message) {
+    if (typeof message === 'string') {
+        return message;
+    }
+
+    if (message && typeof message === 'object') {
+        if (typeof message.text === 'string') {
+            return message.text;
+        }
+
+        if (Array.isArray(message.parts)) {
+            return message.parts
+                .map((part) => (part && typeof part.text === 'string' ? part.text : ''))
+                .join('');
+        }
+    }
+
+    return '';
+}
+
 class DisplayRenderer {
     constructor({
         obsManager,
@@ -25,7 +45,7 @@ class DisplayRenderer {
 
     async displayChatItem(item) {
         const username = this.extractUsername(item.data);
-        const message = item.data.message;
+        const message = resolveChatMessageText(item.data.message);
         const platform = item.platform;
         if (!platform || !this.config[platform]) {
             throw new Error(`DisplayQueue requires configured platform for chat: ${platform || 'unknown'}`);
@@ -117,7 +137,8 @@ class DisplayRenderer {
         }
 
         const username = this.extractUsername(lastChatItem.data);
-        logger.debug(`[Lingering Chat] Displaying lingering chat: ${username} - ${lastChatItem.data.message}`, 'display-queue');
+        const message = resolveChatMessageText(lastChatItem.data.message);
+        logger.debug(`[Lingering Chat] Displaying lingering chat: ${username} - ${message}`, 'display-queue');
 
         const { sourceName, sceneName, groupName, platformLogos } = this.config.chat;
         if (!this.validateDisplayConfig({ sourceName, sceneName, groupName }, 'chat')) {
@@ -127,7 +148,7 @@ class DisplayRenderer {
         await this.hideCurrentDisplay({ type: 'notification' });
         await this.delay(200);
 
-        await this.sourcesManager.updateChatMsgText(this.config.chat.sourceName, username, lastChatItem.data.message);
+        await this.sourcesManager.updateChatMsgText(this.config.chat.sourceName, username, message);
 
         if (lastChatItem.platform && platformLogos) {
             await this.sourcesManager.setPlatformLogoVisibility(lastChatItem.platform, this.config.chat.platformLogos);

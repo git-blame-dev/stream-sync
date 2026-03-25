@@ -68,6 +68,26 @@ describe('DisplayRenderer', () => {
         expect(actions.some(action => action.type === 'chatDisplay' && action.visible === true)).toBe(true);
     });
 
+    it('renders structured chat message text instead of object stringification', async () => {
+        const { renderer, actions } = createRenderer();
+
+        await renderer.displayChatItem({
+            type: 'chat',
+            platform: 'tiktok',
+            data: {
+                username: 'test-user',
+                message: {
+                    text: 'hello from object',
+                    parts: [{ type: 'text', text: 'hello from object' }]
+                }
+            }
+        });
+
+        const chatTextUpdate = actions.find((action) => action.type === 'chatText');
+        expect(chatTextUpdate).toBeDefined();
+        expect(chatTextUpdate.message).toBe('hello from object');
+    });
+
     it('skips chat rendering when messages are disabled', async () => {
         const { renderer, actions } = createRenderer({ messagesEnabled: false });
 

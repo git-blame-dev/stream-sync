@@ -15,8 +15,134 @@ const execFileAsyncDefault = promisify(execFile);
 const GIFT_ANIMATION_CACHE_DIR = path.join(os.tmpdir(), 'stream-sync-tiktok-gift-animation');
 const GIFT_ANIMATION_MAX_ENTRIES = 12;
 
+function fileExists(candidatePath) {
+    if (typeof candidatePath !== 'string' || candidatePath.trim().length === 0) {
+        return false;
+    }
+
+    try {
+        return fs.statSync(candidatePath).isFile();
+    } catch {
+        return false;
+    }
+}
+
 function normalizeString(value) {
     return typeof value === 'string' ? value.trim() : '';
+}
+
+function uniqueNonEmpty(values = []) {
+    const seen = new Set();
+    const result = [];
+
+    for (const value of values) {
+        const normalized = normalizeString(value);
+        if (!normalized || seen.has(normalized)) {
+            continue;
+        }
+        seen.add(normalized);
+        result.push(normalized);
+    }
+
+    return result;
+}
+
+function buildUnzipBinaryCandidates(options = {}) {
+    const configuredUnzipBinaries = Array.isArray(options.unzipBinaries)
+        ? options.unzipBinaries
+        : [options.unzipBinary];
+
+    const candidates = [...configuredUnzipBinaries, 'unzip'];
+    if (process.platform !== 'win32') {
+        candidates.push('/usr/bin/unzip', '/bin/unzip');
+    }
+
+    return uniqueNonEmpty(candidates);
+}
+
+function resolveMetadataDurationMs(profile = {}) {
+    const frameCount = Number(profile.f);
+    if (Number.isFinite(frameCount) && frameCount > 0) {
+        return Math.round((frameCount / 30) * 1000);
+    }
+
+    const durationMs = Number(profile.durationMs);
+    if (Number.isFinite(durationMs) && durationMs > 0) {
+        return Math.round(durationMs);
+    }
+
+    const durationSeconds = Number(profile.duration);
+    if (Number.isFinite(durationSeconds) && durationSeconds > 0) {
+        return Math.round(durationSeconds * 1000);
+    }
+
+    return 0;
+}
+
+function resolveCommandInPath(commandName, options = {}) {
+    const command = normalizeString(commandName);
+    if (!command) {
+        return null;
+    }
+
+    const fileExistsFn = typeof options.fileExists === 'function' ? options.fileExists : fileExists;
+    if (path.isAbsolute(command) || command.includes(path.sep)) {
+        return fileExistsFn(command) ? command : null;
+    }
+
+    const runtimePlatform = normalizeString(options.platform) || process.platform;
+    const pathEnv = typeof options.pathEnv === 'string' ? options.pathEnv : (process.env.PATH || '');
+    const pathEntries = pathEnv
+        .split(path.delimiter)
+        .map((entry) => entry.trim())
+        .filter((entry) => entry.length > 0);
+
+    const hasExtension = path.extname(command).length > 0;
+    let extensions = [''];
+    if (runtimePlatform === 'win32' && !hasExtension) {
+        const pathext = typeof options.pathext === 'string' ? options.pathext : (process.env.PATHEXT || '.EXE;.CMD;.BAT;.COM');
+        extensions = uniqueNonEmpty(pathext.split(';')).map((entry) => entry.toLowerCase());
+    }
+
+    for (const entry of pathEntries) {
+        for (const extension of extensions) {
+            const suffix = runtimePlatform === 'win32' ? extension : '';
+            const candidate = path.join(entry, `${command}${suffix}`);
+            if (fileExistsFn(candidate)) {
+                return candidate;
+            }
+        }
+    }
+
+    return null;
+}
+
+function resolveFirstAvailableCommand(candidates, options = {}) {
+    for (const candidate of uniqueNonEmpty(candidates)) {
+        const resolved = resolveCommandInPath(candidate, options);
+        if (resolved) {
+            return resolved;
+        }
+    }
+    return null;
+}
+
+function getGiftAnimationDependencyStatus(options = {}) {
+    const unzipCandidates = buildUnzipBinaryCandidates(options);
+
+    const unzipCommand = resolveFirstAvailableCommand(unzipCandidates, options);
+
+    return {
+        unzip: {
+            available: !!unzipCommand,
+            command: unzipCommand || null,
+            candidates: unzipCandidates
+        },
+        extraction: {
+            available: !!unzipCommand,
+            command: unzipCommand || null
+        }
+    };
 }
 
 function normalizeFrame(value) {
@@ -197,7 +323,8 @@ function isMissingExecutableError(error, executableName) {
 }
 
 function createTikTokGiftAnimationResolver(options = {}) {
-    const errorHandler = createPlatformErrorHandler(options.logger || logger, 'tiktok-gift-animation');
+    const resolverLogger = options.logger || logger;
+    const errorHandler = createPlatformErrorHandler(resolverLogger, 'tiktok-gift-animation');
     const cacheDirectory = normalizeString(options.cacheDirectory) || GIFT_ANIMATION_CACHE_DIR;
     const maxEntries = Number.isInteger(options.maxEntries) && options.maxEntries > 0
         ? options.maxEntries
@@ -209,24 +336,17 @@ function createTikTokGiftAnimationResolver(options = {}) {
     }));
     const executeFile = options.executeFile || execFileAsyncDefault;
 
+    const logDebug = (message, data = null) => {
+        if (!resolverLogger || typeof resolverLogger.debug !== 'function') {
+            return;
+        }
+        resolverLogger.debug(message, 'tiktok-gift-animation', data);
+    };
+
     const inFlight = new Map();
 
     const extractZipArchive = async (zipPath, extractDirectory) => {
-        const configuredUnzipBinaries = Array.isArray(options.unzipBinaries)
-            ? options.unzipBinaries
-            : [options.unzipBinary];
-
-        const unzipBinaries = [];
-        for (const candidate of configuredUnzipBinaries) {
-            const normalized = normalizeString(candidate);
-            if (normalized) {
-                unzipBinaries.push(normalized);
-            }
-        }
-        unzipBinaries.push('unzip');
-        if (process.platform !== 'win32') {
-            unzipBinaries.push('/usr/bin/unzip', '/bin/unzip');
-        }
+        const unzipBinaries = buildUnzipBinaryCandidates(options);
 
         const tried = new Set();
         for (const unzipBinary of unzipBinaries) {
@@ -290,28 +410,6 @@ function createTikTokGiftAnimationResolver(options = {}) {
         }
     };
 
-    const probeDurationMs = async (filePath) => {
-        try {
-            const { stdout } = await executeFile('ffprobe', [
-                '-v', 'error',
-                '-show_entries', 'format=duration',
-                '-of', 'default=noprint_wrappers=1:nokey=1',
-                filePath
-            ]);
-            const durationSeconds = Number(stdout.trim());
-            if (Number.isFinite(durationSeconds) && durationSeconds > 0) {
-                return Math.round(durationSeconds * 1000);
-            }
-            return null;
-        } catch (error) {
-            errorHandler.logOperationalError('Failed probing gift animation duration', 'gift-animation-duration', {
-                filePath,
-                error: error.message
-            });
-            return null;
-        }
-    };
-
     const readJson = async (filePath) => {
         const raw = await fsp.readFile(filePath, 'utf8');
         return JSON.parse(raw);
@@ -346,6 +444,11 @@ function createTikTokGiftAnimationResolver(options = {}) {
                     const safeMediaPath = await ensureMediaPathWithinExtractDirectory(extractDirectory, metadata.mediaFilePath);
                     await touchCacheEntry(entryDirectory);
                     await pruneCache();
+                    logDebug('Resolved TikTok gift animation from cache', {
+                        candidateUrl: candidate.url,
+                        cacheKey,
+                        durationMs: metadata.durationMs
+                    });
                     return {
                         ...metadata,
                         mediaFilePath: safeMediaPath
@@ -357,6 +460,10 @@ function createTikTokGiftAnimationResolver(options = {}) {
             const extractDirectory = path.join(entryDirectory, 'asset');
             await fsp.mkdir(extractDirectory, { recursive: true });
 
+            logDebug('Downloading TikTok gift animation candidate', {
+                candidateUrl: candidate.url,
+                cacheKey
+            });
             const response = await fetchBinary(candidate.url, { timeout: 30000 });
             await fsp.writeFile(zipPath, Buffer.from(response.data));
             await extractZipArchive(zipPath, extractDirectory);
@@ -391,11 +498,7 @@ function createTikTokGiftAnimationResolver(options = {}) {
 
             mediaFilePath = await ensureMediaPathWithinExtractDirectory(extractDirectory, mediaFilePath);
 
-            const parsedDuration = await probeDurationMs(mediaFilePath);
-            const fallbackDurationMs = Number(profileInfo.profile.f) > 0
-                ? Math.round((Number(profileInfo.profile.f) / 30) * 1000)
-                : 0;
-            const durationMs = parsedDuration || fallbackDurationMs;
+            const durationMs = resolveMetadataDurationMs(profileInfo.profile);
             if (!durationMs || durationMs <= 0) {
                 throw new Error('Gift animation duration unavailable');
             }
@@ -410,6 +513,12 @@ function createTikTokGiftAnimationResolver(options = {}) {
             await fsp.writeFile(metadataPath, JSON.stringify(resolved));
             await touchCacheEntry(entryDirectory);
             await pruneCache();
+            logDebug('Resolved TikTok gift animation candidate', {
+                candidateUrl: candidate.url,
+                cacheKey,
+                durationMs: resolved.durationMs,
+                profileName: resolved.animationConfig?.profileName || null
+            });
             return resolved;
         })();
 
@@ -427,14 +536,30 @@ function createTikTokGiftAnimationResolver(options = {}) {
         await initPromise;
 
         const candidates = extractAnimationCandidates(notificationData?.enhancedGiftData?.originalData);
+        logDebug('Resolving TikTok gift animation candidates', {
+            candidateCount: candidates.length
+        });
         if (candidates.length === 0) {
+            logDebug('No TikTok gift animation candidates found', {
+                candidateCount: 0
+            });
             return null;
         }
 
         for (const candidate of candidates) {
+            logDebug('Trying TikTok gift animation candidate', {
+                candidateUrl: candidate.url,
+                label: candidate.label,
+                score: candidate.score
+            });
             try {
                 const resolved = await resolveCandidate(candidate);
                 if (resolved) {
+                    logDebug('Selected TikTok gift animation candidate', {
+                        candidateUrl: candidate.url,
+                        durationMs: resolved.durationMs,
+                        profileName: resolved.animationConfig?.profileName || null
+                    });
                     return resolved;
                 }
             } catch (error) {
@@ -457,5 +582,6 @@ function createTikTokGiftAnimationResolver(options = {}) {
 
 module.exports = {
     createTikTokGiftAnimationResolver,
-    GIFT_ANIMATION_CACHE_DIR
+    GIFT_ANIMATION_CACHE_DIR,
+    getGiftAnimationDependencyStatus
 };

@@ -139,6 +139,7 @@ const { createGracefulExitService } = require('./services/GracefulExitService');
 
 const { createOBSEventService } = require('./obs/obs-event-service');
 const { createSceneManagementService } = require('./obs/scene-management-service');
+const { getGiftAnimationDependencyStatus } = require('./services/tiktok-gift-animation/resolver');
 
 let app;
 
@@ -304,10 +305,31 @@ async function main(overrides = {}) {
             youtube: config.youtube,
             twitch: config.twitch,
             tiktok: config.tiktok,
+            gui: config.gui,
             ttsEnabled
         };
+
+        const guiGiftAnimationState = {
+            enableDock: displayQueueConfig.gui?.enableDock === true,
+            enableOverlay: displayQueueConfig.gui?.enableOverlay === true,
+            showGifts: displayQueueConfig.gui?.showGifts !== false
+        };
+        guiGiftAnimationState.guiEnabled = guiGiftAnimationState.enableDock || guiGiftAnimationState.enableOverlay;
+        guiGiftAnimationState.giftAnimationsEnabled = guiGiftAnimationState.guiEnabled && guiGiftAnimationState.showGifts;
         
         logger.debug(`[Display Queue Config] Notification: ${displayQueueConfig.notification.sourceName}, Chat: ${displayQueueConfig.chat.sourceName}`, 'Main');
+        logger.debug('[Display Queue Config] GUI gift animation gating state', 'Main', guiGiftAnimationState);
+
+        if (guiGiftAnimationState.giftAnimationsEnabled) {
+            const giftAnimationDependencies = getGiftAnimationDependencyStatus();
+            logger.debug('[Gift Animation] Runtime dependency diagnostics', 'Main', giftAnimationDependencies);
+            if (!giftAnimationDependencies.extraction.available) {
+                logger.warn('[Gift Animation] Runtime dependency missing; gift animations may not play', 'Main', {
+                    extractionAvailable: giftAnimationDependencies.extraction.available,
+                    extractionCommand: giftAnimationDependencies.extraction.command
+                });
+            }
+        }
         
         const chatTransitionDelay = config.timing.transitionDelay;
         const notificationClearDelay = config.timing.notificationClearDelay;

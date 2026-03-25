@@ -5,7 +5,8 @@ const os = require('os');
 const path = require('path');
 
 const {
-    createTikTokGiftAnimationResolver
+    createTikTokGiftAnimationResolver,
+    getGiftAnimationDependencyStatus
 } = require('../../../../src/services/tiktok-gift-animation/resolver');
 
 function createNotificationData(urls) {
@@ -55,17 +56,19 @@ function createResolverTestHarness(options = {}) {
         throw new Error('onUnzip handler is required');
     });
 
+    const logger = options.logger || {
+        debug: () => {},
+        info: () => {},
+        warn: () => {},
+        error: () => {}
+    };
+
     const resolver = createTikTokGiftAnimationResolver({
         cacheDirectory,
         maxEntries: options.maxEntries || 12,
         fetchBinary,
         executeFile,
-        logger: {
-            debug: () => {},
-            info: () => {},
-            warn: () => {},
-            error: () => {}
-        }
+        logger
     });
 
     return {
@@ -349,4 +352,19 @@ describe('TikTok gift animation resolver behavior', () => {
         }
     });
 
+});
+
+describe('TikTok gift animation dependency diagnostics', () => {
+    it('reports unzip extraction availability', () => {
+        const status = getGiftAnimationDependencyStatus({
+            platform: 'linux',
+            pathEnv: '/usr/local/bin:/usr/bin',
+            fileExists: (candidatePath) => candidatePath === '/usr/bin/unzip'
+        });
+
+        expect(status.unzip.available).toBe(true);
+        expect(status.unzip.command).toBe('/usr/bin/unzip');
+        expect(status.extraction.available).toBe(true);
+        expect(status.extraction.command).toBe('/usr/bin/unzip');
+    });
 });
