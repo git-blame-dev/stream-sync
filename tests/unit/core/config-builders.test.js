@@ -472,5 +472,29 @@ describe('config-builders', () => {
 
             expect(result.gui).toEqual(normalized.gui);
         });
+
+        it('includes greetings custom VFX profile mapping from normalized config', () => {
+            const normalized = ConfigValidator.normalize({
+                ...getRawTestConfig(),
+                greetings: {
+                    command: '!hello',
+                    seasonMain: 'tiktok:testseason|youtube:@testseasonyt, !water'
+                }
+            });
+
+            const result = buildConfig(normalized);
+
+            expect(result.greetings.command).toBe('!hello');
+            expect(result.greetings.customVfxProfiles).toEqual({
+                'tiktok:testseason': {
+                    profileId: 'seasonMain',
+                    command: '!water'
+                },
+                'youtube:testseasonyt': {
+                    profileId: 'seasonMain',
+                    command: '!water'
+                }
+            });
+        });
     });
 });

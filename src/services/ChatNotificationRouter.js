@@ -66,7 +66,11 @@ class ChatNotificationRouter {
             const level = this.runtime.config.general.logChatMessages ? 'console' : 'debug';
             this.logger[level](this._formatChatMessage(platform, logSafeData), 'chat-router');
 
-            const isFirstMessage = this.isFirstMessage(normalizedData, platform);
+            const greetingProfile = this.resolveGreetingProfile(platform, normalizedData.username);
+            const firstMessageTrackingId = greetingProfile
+                ? `greeting-profile:${greetingProfile.profileId}`
+                : normalizedData.userId;
+            const isFirstMessage = this.isFirstMessage(normalizedData, platform, firstMessageTrackingId);
             const greetingsEnabled = this.isGreetingEnabled(platform);
 
             if (chatEnabled) {
@@ -85,13 +89,17 @@ class ChatNotificationRouter {
             if (commandConfig) {
                 await this.processCommand(platform, normalizedData, commandConfig, {
                     isFirstMessage,
-                    greetingsEnabled
+                    greetingsEnabled,
+                    greetingProfile
                 });
                 return;
             }
 
             if (isFirstMessage && greetingsEnabled) {
-                await this.queueGreeting(platform, normalizedData.username, { userId });
+                await this.queueGreeting(platform, normalizedData.username, {
+                    userId,
+                    greetingProfile
+                });
             }
         } catch (error) {
             const errorDetails = error instanceof Error ? error.message : String(error);
@@ -226,18 +234,18 @@ class ChatNotificationRouter {
         return trimmedToken.replace(/[!?.,;:]+$/g, '');
     }
 
-    isFirstMessage(normalizedData, platform) {
+    isFirstMessage(normalizedData, platform, trackingUserId = normalizedData.userId) {
         const context = {
             username: normalizedData.username,
             platform
         };
 
         if (typeof this.runtime.isFirstMessage === 'function') {
-            return this.runtime.isFirstMessage(normalizedData.userId, context);
+            return this.runtime.isFirstMessage(trackingUserId, context);
         }
 
         if (this.runtime.userTrackingService?.isFirstMessage) {
-            return this.runtime.userTrackingService.isFirstMessage(normalizedData.userId, context);
+            return this.runtime.userTrackingService.isFirstMessage(trackingUserId, context);
         }
 
         return false;
@@ -307,7 +315,7 @@ class ChatNotificationRouter {
             return;
         }
 
-        const { isFirstMessage, greetingsEnabled } = options;
+        const { isFirstMessage, greetingsEnabled, greetingProfile } = options;
         const { perUserCooldown, heavyCooldown, globalCooldown } = this.getCooldownSettings();
 
         const userAllowed = this.runtime.commandCooldownService.checkUserCooldown(
@@ -331,7 +339,11 @@ class ChatNotificationRouter {
         this.updateGlobalCooldown(commandConfig.command);
 
         if (isFirstMessage && greetingsEnabled) {
-            await this.queueGreeting(platform, normalizedData.username, { priority: 6, userId: normalizedData.userId });
+            await this.queueGreeting(platform, normalizedData.username, {
+                priority: 6,
+                userId: normalizedData.userId,
+                greetingProfile
+            });
         }
 
         await this.queueCommand(platform, normalizedData, commandConfig);
@@ -435,9 +447,51 @@ class ChatNotificationRouter {
             vfxFilePath: commandConfig.vfxFilePath,
             commandKey: commandConfig.commandKey,
             command: commandConfig.command,
-            // Preserve the original trigger so VFXCommandService can resolve the correct config
             triggerWord: commandConfig.command
         };
+    }
+
+    shapeVfxConfig(vfxResult, errorPrefix) {
+        if (!vfxResult || typeof vfxResult !== 'object') {
+            return null;
+        }
+
+        if (!vfxResult.commandKey || !vfxResult.filename || !vfxResult.mediaSource || !vfxResult.vfxFilePath || !vfxResult.command || !Number.isFinite(vfxResult.duration)) {
+            throw new Error(`${errorPrefix} requires commandKey, filename, mediaSource, vfxFilePath, command, and duration`);
+        }
+
+        return {
+            commandKey: vfxResult.commandKey,
+            filename: vfxResult.filename,
+            mediaSource: vfxResult.mediaSource,
+            vfxFilePath: vfxResult.vfxFilePath,
+            duration: vfxResult.duration,
+            command: vfxResult.command,
+            triggerWord: vfxResult.command
+        };
+    }
+
+    normalizeGreetingIdentityUsername(platform, username) {
+        let normalized = typeof username === 'string' ? username.trim().toLowerCase() : '';
+        if (platform === 'youtube') {
+            normalized = normalized.replace(/^@+/, '');
+        }
+        return normalized;
+    }
+
+    resolveGreetingProfile(platform, username) {
+        const profiles = this.runtime?.config?.greetings?.customVfxProfiles;
+        if (!profiles || typeof profiles !== 'object') {
+            return null;
+        }
+
+        const normalizedUsername = this.normalizeGreetingIdentityUsername(platform, username);
+        if (!normalizedUsername) {
+            return null;
+        }
+
+        const identityKey = `${platform}:${normalizedUsername}`;
+        return profiles[identityKey] || null;
     }
 
     async queueGreeting(platform, username, options = {}) {
@@ -459,6 +513,11 @@ class ChatNotificationRouter {
             platform
         };
 
+        const secondaryVfxConfig = await this.resolveSecondaryGreetingVFX(options.greetingProfile);
+        if (secondaryVfxConfig) {
+            queueItem.secondaryVfxConfig = secondaryVfxConfig;
+        }
+
         if (typeof options.priority !== 'undefined') {
             queueItem.priority = options.priority;
         }
@@ -474,24 +533,37 @@ class ChatNotificationRouter {
         try {
             const vfxResult = await this.runtime.vfxCommandService.getVFXConfig('greetings', null);
             if (vfxResult) {
-                if (!vfxResult.commandKey || !vfxResult.filename || !vfxResult.mediaSource || !vfxResult.vfxFilePath || !vfxResult.command || !Number.isFinite(vfxResult.duration)) {
-                    throw new Error('Greeting VFX config requires commandKey, filename, mediaSource, vfxFilePath, command, and duration');
-                }
-                return {
-                    commandKey: vfxResult.commandKey,
-                    filename: vfxResult.filename,
-                    mediaSource: vfxResult.mediaSource,
-                    vfxFilePath: vfxResult.vfxFilePath,
-                    duration: vfxResult.duration,
-                    command: vfxResult.command,
-                    triggerWord: vfxResult.command
-                };
+                return this.shapeVfxConfig(vfxResult, 'Greeting VFX config');
             }
         } catch (error) {
             this._handleRouterError(`Error getting greeting VFX config: ${error.message}`, error, 'greeting-vfx');
         }
 
         return null;
+    }
+
+    async resolveSecondaryGreetingVFX(greetingProfile) {
+        if (!greetingProfile || typeof greetingProfile !== 'object') {
+            return null;
+        }
+        if (typeof greetingProfile.command !== 'string' || greetingProfile.command.trim().length === 0) {
+            return null;
+        }
+        if (!this.runtime.vfxCommandService?.selectVFXCommand) {
+            return null;
+        }
+
+        const trigger = greetingProfile.command.trim();
+        try {
+            const vfxResult = await this.runtime.vfxCommandService.selectVFXCommand(trigger, trigger);
+            if (!vfxResult) {
+                return null;
+            }
+            return this.shapeVfxConfig(vfxResult, 'Greeting secondary VFX config');
+        } catch (error) {
+            this._handleRouterError(`Error getting greeting secondary VFX config: ${error.message}`, error, 'greeting-secondary-vfx');
+            return null;
+        }
     }
 
     sanitizeChatContent(rawMessage) {
