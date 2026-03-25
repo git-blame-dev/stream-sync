@@ -253,6 +253,49 @@ describe('DisplayQueueEffects', () => {
         expect(resolveCallCount).toBe(0);
     });
 
+    it('does not resolve animation when gui gift animations are disabled', async () => {
+        let resolveCallCount = 0;
+        const emittedEvents = [];
+        const effects = new DisplayQueueEffects({
+            config: {
+                ttsEnabled: false,
+                obs: { ttsTxt: 'tts' },
+                handcam: { enabled: false },
+                gifts: { giftVideoSource: 'gift-video', giftAudioSource: 'gift-audio' },
+                gui: { enableOverlay: false, enableDock: false, showGifts: true }
+            },
+            sourcesManager: { clearTextSource: async () => {}, updateTextSource: async () => {} },
+            obsManager: { call: async () => ({}) },
+            goalsManager: { processDonationGoal: async () => {} },
+            eventBus: { emit: (eventName, payload) => emittedEvents.push({ eventName, payload }) },
+            delay: async () => {},
+            handleDisplayQueueError: () => {},
+            extractUsername: (data) => data?.username ?? null,
+            giftAnimationResolver: {
+                resolveFromNotificationData: async () => {
+                    resolveCallCount += 1;
+                    return null;
+                }
+            }
+        });
+
+        await effects.handleGiftEffects({
+            type: 'platform:gift',
+            platform: 'tiktok',
+            data: {
+                username: 'test-user',
+                userId: 'test-user-id',
+                giftType: 'Rose',
+                giftCount: 1,
+                amount: 1,
+                currency: 'coins'
+            }
+        }, []);
+
+        expect(resolveCallCount).toBe(0);
+        expect(emittedEvents.find((entry) => entry.eventName === 'display:gift-animation')).toBeUndefined();
+    });
+
     it('starts gift media effects before animation resolution settles', async () => {
         const obsCalls = [];
         let resolveAnimation;

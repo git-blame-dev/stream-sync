@@ -32,23 +32,51 @@ class DisplayQueueEffects {
     }
 
     isGuiGiftAnimationEnabled() {
+        const state = this.getGuiGiftAnimationState();
+        return state.guiEnabled && state.giftsVisible;
+    }
+
+    getGuiGiftAnimationState() {
         const gui = this.config?.gui || {};
         const guiEnabled = gui.enableDock === true || gui.enableOverlay === true;
         const giftsVisible = gui.showGifts !== false;
-        return guiEnabled && giftsVisible;
+        return {
+            enableDock: gui.enableDock === true,
+            enableOverlay: gui.enableOverlay === true,
+            showGifts: gui.showGifts !== false,
+            guiEnabled,
+            giftsVisible
+        };
     }
 
-    isTikTokGiftAnimationCandidate(item) {
-        return item?.type === 'platform:gift' && item?.platform === 'tiktok';
+    logDebug(message, data = null) {
+        if (!logger || typeof logger.debug !== 'function') {
+            return;
+        }
+        logger.debug(message, 'display-queue', data);
     }
 
     async resolveAndEmitGiftAnimation(item) {
-        if (!this.eventBus || !this.isTikTokGiftAnimationCandidate(item) || !this.isGuiGiftAnimationEnabled()) {
+        if (!this.eventBus || item?.type !== 'platform:gift' || item?.platform !== 'tiktok') {
+            return 0;
+        }
+
+        if (!this.isGuiGiftAnimationEnabled()) {
+            this.logDebug('[Gift] Skipped gift animation resolution', {
+                reason: 'gui-gift-animation-disabled',
+                platform: item?.platform || null,
+                type: item?.type || null,
+                gui: this.getGuiGiftAnimationState()
+            });
             return 0;
         }
 
         const resolved = await this.giftAnimationResolver.resolveFromNotificationData(item?.data);
         if (!resolved) {
+            this.logDebug('[Gift] No TikTok gift animation asset resolved', {
+                platform: item?.platform || null,
+                type: item?.type || null
+            });
             return 0;
         }
 
@@ -57,14 +85,22 @@ class DisplayQueueEffects {
             return 0;
         }
 
+        const playbackId = crypto.randomUUID();
         this.eventBus.emit('display:gift-animation', {
-            playbackId: crypto.randomUUID(),
+            playbackId,
             type: item.type,
             platform: item.platform,
             durationMs,
             mediaFilePath: resolved.mediaFilePath,
             mediaContentType: resolved.mediaContentType,
             animationConfig: resolved.animationConfig
+        });
+
+        this.logDebug('[Gift] Emitted TikTok gift animation effect', {
+            playbackId,
+            platform: item.platform,
+            type: item.type,
+            durationMs
         });
 
         return durationMs;

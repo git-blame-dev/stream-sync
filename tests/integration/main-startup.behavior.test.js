@@ -61,6 +61,7 @@ const buildMainConfig = (overrides = {}) => createConfigFixture({
 const buildOverrides = (options = {}) => {
     const displayQueue = createMockDisplayQueue();
     const obsManager = { isConnected: () => false, isReady: () => false };
+    let capturedDisplayQueueConfig = null;
 
     const ensureSecrets = async () => {
         if (options.ensureSecretsError) {
@@ -89,12 +90,16 @@ const buildOverrides = (options = {}) => {
             cliArgs: options.cliArgs || {},
             ensureSecrets,
             TwitchAuth: TwitchAuthStub,
-            initializeDisplayQueue: () => displayQueue,
+            initializeDisplayQueue: (_obsManager, displayQueueConfig) => {
+                capturedDisplayQueueConfig = displayQueueConfig;
+                return displayQueue;
+            },
             getOBSConnectionManager: () => obsManager,
             createOBSEventService: () => ({ disconnect: async () => {} }),
             createSceneManagementService: () => ({}),
             createDonationSpamDetection: createDonationSpamDetectionNoCleanup
-        }
+        },
+        getCapturedDisplayQueueConfig: () => capturedDisplayQueueConfig
     };
 };
 
@@ -185,5 +190,26 @@ describe('main startup behavior', () => {
 
         expect(result.authValid).toBe(false);
         expect(result.success).toBe(true);
+    });
+
+    it('passes gui settings to display queue configuration', async () => {
+        process.env.CHAT_BOT_STARTUP_ONLY = 'true';
+        const { overrides, getCapturedDisplayQueueConfig } = buildOverrides({ cliArgs: { chat: 1 } });
+        const config = buildMainConfig({
+            gui: {
+                enableDock: false,
+                enableOverlay: false,
+                showGifts: true
+            }
+        });
+
+        const result = await main({
+            ...overrides,
+            config
+        });
+
+        expect(result.success).toBe(true);
+        expect(getCapturedDisplayQueueConfig()).toBeDefined();
+        expect(getCapturedDisplayQueueConfig().gui).toEqual(config.gui);
     });
 });

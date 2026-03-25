@@ -23,6 +23,11 @@ function createGuiTransportService(options = {}) {
     const eventBus = options.eventBus;
     const mapper = options.mapper || createEventToGuiContractMapper({ config });
     const errorHandler = createGuiTransportErrorHandler(logger);
+    const logDebug = (message, data) => {
+        if (logger && typeof logger.debug === 'function') {
+            logger.debug(message, 'gui-transport', data || null);
+        }
+    };
     const assetsRoot = typeof options.assetsRoot === 'string' && options.assetsRoot.trim()
         ? options.assetsRoot
         : path.resolve(__dirname, '../../../gui/dist');
@@ -278,6 +283,9 @@ function createGuiTransportService(options = {}) {
             enqueueDispatch(() => {
                 const giftsVisible = guiConfig.showGifts !== false;
                 if (!giftsVisible) {
+                    logDebug('Skipping gift animation effect packet because gifts are hidden', {
+                        playbackId: payload?.playbackId || null
+                    });
                     return;
                 }
 
@@ -294,6 +302,14 @@ function createGuiTransportService(options = {}) {
                     assetUrl: `/gui/runtime/${runtimeAssetId}.mp4`,
                     config: payload?.animationConfig
                 };
+
+                logDebug('Dispatching gift animation effect packet', {
+                    playbackId: effectPayload.playbackId || null,
+                    durationMs: effectPayload.durationMs || null,
+                    runtimeAssetId,
+                    assetUrl: effectPayload.assetUrl,
+                    clientCount: clients.size
+                });
 
                 sendSse(effectPayload);
             });
@@ -332,9 +348,15 @@ function createGuiTransportService(options = {}) {
             });
             res.write(': connected\n\n');
             clients.add(res);
+            logDebug('GUI SSE client connected', {
+                clientCount: clients.size
+            });
 
             req.on('close', () => {
                 clients.delete(res);
+                logDebug('GUI SSE client disconnected', {
+                    clientCount: clients.size
+                });
             });
             return;
         }
