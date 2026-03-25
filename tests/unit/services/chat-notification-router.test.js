@@ -270,6 +270,179 @@ describe('ChatNotificationRouter', () => {
         expect(greetingItem.vfxConfig.command).toBe('!testgreeting');
     });
 
+    it('includes secondary VFX config in greeting for mapped greeting profile', async () => {
+        const greetingVfx = {
+            command: '!hello',
+            commandKey: 'greetings',
+            filename: 'hello.mp4',
+            mediaSource: 'vfx top',
+            vfxFilePath: '/vfx',
+            duration: 5000
+        };
+        const secondaryVfx = {
+            command: '!water',
+            commandKey: 'under-the-water',
+            filename: 'under-the-water.mp4',
+            mediaSource: 'vfx bottom green',
+            vfxFilePath: '/vfx',
+            duration: 5000
+        };
+
+        const { router, runtime } = createRouter({
+            runtime: {
+                config: {
+                    ...testConfig,
+                    general: {
+                        ...testConfig.general,
+                        logChatMessages: false
+                    },
+                    twitch: { greetingsEnabled: true, messagesEnabled: true, farewellsEnabled: true },
+                    greetings: {
+                        command: '!hello',
+                        customVfxProfiles: {
+                            'twitch:testviewer': {
+                                profileId: 'seasonMain',
+                                command: '!water'
+                            }
+                        }
+                    }
+                },
+                isFirstMessage: createMockFn().mockReturnValue(true),
+                vfxCommandService: {
+                    getVFXConfig: createMockFn().mockResolvedValue(greetingVfx),
+                    selectVFXCommand: createMockFn().mockResolvedValue(secondaryVfx),
+                    matchFarewell: createMockFn().mockReturnValue(null)
+                }
+            }
+        });
+
+        await router.handleChatMessage('twitch', {
+            ...baseMessage,
+            username: 'testviewer'
+        });
+
+        const queuedItems = runtime.displayQueue.addItem.mock.calls.map(c => c[0]);
+        const greetingItem = queuedItems.find(item => item.type === 'greeting');
+        expect(greetingItem).toBeDefined();
+        expect(greetingItem.secondaryVfxConfig).toEqual(expect.objectContaining({
+            command: '!water',
+            commandKey: 'under-the-water'
+        }));
+    });
+
+    it('greets mapped profile only once across platforms', async () => {
+        const trackedFirstMessageKeys = new Set();
+        const { router, runtime } = createRouter({
+            runtime: {
+                config: {
+                    ...testConfig,
+                    general: {
+                        ...testConfig.general,
+                        logChatMessages: false
+                    },
+                    twitch: { greetingsEnabled: true, messagesEnabled: true, farewellsEnabled: true },
+                    tiktok: { greetingsEnabled: true, messagesEnabled: true, farewellsEnabled: true },
+                    greetings: {
+                        command: '!hello',
+                        customVfxProfiles: {
+                            'twitch:testseason': { profileId: 'seasonMain', command: '!water' },
+                            'tiktok:testseasonalt': { profileId: 'seasonMain', command: '!water' }
+                        }
+                    }
+                },
+                isFirstMessage: createMockFn().mockImplementation((trackingKey) => {
+                    if (trackedFirstMessageKeys.has(trackingKey)) {
+                        return false;
+                    }
+                    trackedFirstMessageKeys.add(trackingKey);
+                    return true;
+                })
+            }
+        });
+
+        await router.handleChatMessage('twitch', {
+            ...baseMessage,
+            username: 'testseason',
+            userId: 'tw-user-1'
+        });
+        await router.handleChatMessage('tiktok', {
+            ...baseMessage,
+            username: 'testseasonalt',
+            userId: 'tt-user-2'
+        });
+
+        const greetingRows = runtime.displayQueue.addItem.mock.calls
+            .map((call) => call[0])
+            .filter((item) => item.type === 'greeting');
+
+        expect(greetingRows.length).toBe(1);
+    });
+
+    it('queues greeting before command for mapped first-time command message', async () => {
+        const greetingVfx = {
+            command: '!hello',
+            commandKey: 'greetings',
+            filename: 'hello.mp4',
+            mediaSource: 'vfx top',
+            vfxFilePath: '/vfx',
+            duration: 5000
+        };
+        const secondaryVfx = {
+            command: '!water',
+            commandKey: 'under-the-water',
+            filename: 'under-the-water.mp4',
+            mediaSource: 'vfx bottom green',
+            vfxFilePath: '/vfx',
+            duration: 5000
+        };
+        const commandVfx = { command: '!testboom' };
+        const { router, runtime } = createRouter({
+            runtime: {
+                config: {
+                    ...testConfig,
+                    general: {
+                        ...testConfig.general,
+                        logChatMessages: false
+                    },
+                    twitch: { greetingsEnabled: true, messagesEnabled: true, farewellsEnabled: true },
+                    greetings: {
+                        command: '!hello',
+                        customVfxProfiles: {
+                            'twitch:testviewer': {
+                                profileId: 'seasonMain',
+                                command: '!water'
+                            }
+                        }
+                    }
+                },
+                isFirstMessage: createMockFn().mockReturnValue(true),
+                vfxCommandService: {
+                    getVFXConfig: createMockFn().mockResolvedValue(greetingVfx),
+                    selectVFXCommand: createMockFn((trigger) => {
+                        if (trigger === '!water') {
+                            return Promise.resolve(secondaryVfx);
+                        }
+                        return Promise.resolve(commandVfx);
+                    }),
+                    matchFarewell: createMockFn().mockReturnValue(null)
+                }
+            }
+        });
+
+        await router.handleChatMessage('twitch', {
+            ...baseMessage,
+            message: '!testboom hello',
+            username: 'testviewer'
+        });
+
+        const queuedItems = runtime.displayQueue.addItem.mock.calls.map(c => c[0]);
+        const queuedTypes = queuedItems.map((item) => item.type);
+        expect(queuedTypes[0]).toBe('chat');
+        expect(queuedTypes[1]).toBe('greeting');
+        expect(queuedTypes[2]).toBe('command');
+        expect(queuedItems[1].secondaryVfxConfig).toEqual(expect.objectContaining({ command: '!water' }));
+    });
+
     it('routes farewell messages into a user-visible farewell row', async () => {
         const { router, runtime } = createRouter({
             runtime: {

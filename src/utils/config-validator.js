@@ -1,6 +1,72 @@
 const { CONFIG_SCHEMA, getFieldsRequiredWhenEnabled, DEFAULTS } = require('../core/config-schema');
 
 class ConfigValidator {
+    static _normalizeGreetingIdentityUsername(platform, username) {
+        let normalizedUsername = String(username).trim().toLowerCase();
+        if (platform === 'youtube') {
+            normalizedUsername = normalizedUsername.replace(/^@+/, '');
+        }
+        return normalizedUsername;
+    }
+
+    static _parseGreetingCustomProfileLine(profileId, rawValue) {
+        if (typeof rawValue !== 'string' || rawValue.trim().length === 0) {
+            throw new Error(`greetings.${profileId} must be a non-empty string`);
+        }
+
+        const commaIndex = rawValue.indexOf(',');
+        if (commaIndex === -1) {
+            throw new Error(`greetings.${profileId} must include a comma separator`);
+        }
+
+        const identityPart = rawValue.slice(0, commaIndex).trim();
+        const commandPart = rawValue.slice(commaIndex + 1).trim();
+
+        if (!commandPart.startsWith('!')) {
+            throw new Error(`greetings.${profileId} command must start with !`);
+        }
+
+        if (!identityPart) {
+            throw new Error(`greetings.${profileId} requires at least one platform:username identity`);
+        }
+
+        const identityTokens = identityPart
+            .split('|')
+            .map((token) => token.trim())
+            .filter((token) => token.length > 0);
+
+        if (identityTokens.length === 0) {
+            throw new Error(`greetings.${profileId} requires at least one platform:username identity`);
+        }
+
+        const identities = identityTokens.map((token) => {
+            const separatorIndex = token.indexOf(':');
+            if (separatorIndex === -1) {
+                throw new Error(`greetings.${profileId} has invalid identity token: ${token}`);
+            }
+
+            const platform = token.slice(0, separatorIndex).trim().toLowerCase();
+            const usernameRaw = token.slice(separatorIndex + 1).trim();
+
+            if (!['tiktok', 'youtube', 'twitch'].includes(platform)) {
+                throw new Error(`greetings.${profileId} has unsupported platform: ${platform}`);
+            }
+
+            const normalizedUsername = ConfigValidator._normalizeGreetingIdentityUsername(platform, usernameRaw);
+            if (!normalizedUsername) {
+                throw new Error(`greetings.${profileId} has empty username for platform ${platform}`);
+            }
+
+            return `${platform}:${normalizedUsername}`;
+        });
+
+        return {
+            profileId,
+            command: commandPart,
+            identities
+        };
+    }
+
     static _readEnvString(envKey) {
         const value = process.env[envKey];
         if (value === undefined || value === null) return '';
@@ -418,8 +484,33 @@ class ConfigValidator {
     }
 
     static _normalizeGreetingsSection(raw) {
+        const customVfxProfiles = {};
+        for (const [key, value] of Object.entries(raw)) {
+            if (key === 'command') {
+                continue;
+            }
+
+            const profileId = String(key).trim();
+            if (!profileId) {
+                throw new Error('greetings profile key must be non-empty');
+            }
+
+            const parsedProfile = ConfigValidator._parseGreetingCustomProfileLine(profileId, value);
+            for (const identityKey of parsedProfile.identities) {
+                if (Object.prototype.hasOwnProperty.call(customVfxProfiles, identityKey)) {
+                    throw new Error(`greetings custom VFX identity mapped more than once: ${identityKey}`);
+                }
+
+                customVfxProfiles[identityKey] = {
+                    profileId: parsedProfile.profileId,
+                    command: parsedProfile.command
+                };
+            }
+        }
+
         return {
-            command: ConfigValidator.parseString(raw.command, '')
+            command: ConfigValidator.parseString(raw.command, ''),
+            customVfxProfiles
         };
     }
 

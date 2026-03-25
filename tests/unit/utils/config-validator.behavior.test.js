@@ -535,6 +535,45 @@ describe('ConfigValidator simple command sections', () => {
     it('normalizes greetings section', () => {
         const result = ConfigValidator._normalizeGreetingsSection({});
         expect(result.command).toBe('');
+        expect(result.customVfxProfiles).toEqual({});
+    });
+
+    it('normalizes greetings custom VFX profile entries', () => {
+        const result = ConfigValidator._normalizeGreetingsSection({
+            command: '!hello',
+            seasonMain: 'tiktok:theonlyseasonn|youtube:@seasonYT, !water'
+        });
+
+        expect(result.command).toBe('!hello');
+        expect(result.customVfxProfiles).toEqual({
+            'tiktok:theonlyseasonn': {
+                profileId: 'seasonMain',
+                command: '!water'
+            },
+            'youtube:seasonyt': {
+                profileId: 'seasonMain',
+                command: '!water'
+            }
+        });
+    });
+
+    it('throws when greetings custom profile row is malformed', () => {
+        expect(() => ConfigValidator._normalizeGreetingsSection({
+            seasonMain: 'tiktok:theonlyseasonn|youtube:seasonYT'
+        })).toThrow('greetings.seasonMain must include a comma separator');
+    });
+
+    it('throws when greetings custom profile uses unsupported platform', () => {
+        expect(() => ConfigValidator._normalizeGreetingsSection({
+            seasonMain: 'kick:season, !water'
+        })).toThrow('greetings.seasonMain has unsupported platform: kick');
+    });
+
+    it('throws when greetings custom profile maps same identity twice', () => {
+        expect(() => ConfigValidator._normalizeGreetingsSection({
+            seasonMain: 'tiktok:season, !water',
+            seasonAlt: 'tiktok:season, !run'
+        })).toThrow('greetings custom VFX identity mapped more than once: tiktok:season');
     });
 
     it('normalizes shares section', () => {

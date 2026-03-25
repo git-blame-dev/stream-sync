@@ -310,6 +310,29 @@ class DisplayQueueEffects {
             }
         }
 
+        if (item.type === 'greeting' && item.secondaryVfxConfig) {
+            let secondaryMatch = null;
+            try {
+                secondaryMatch = this.buildVfxMatch(item.secondaryVfxConfig);
+            } catch (error) {
+                logger.warn(`[Display Queue] Secondary greeting VFX match build failed: ${error.message}`, 'display-queue');
+                secondaryMatch = null;
+            }
+
+            if (secondaryMatch) {
+                const emitResult = await this.emitVfxFromConfig({
+                    ...item,
+                    vfxConfig: item.secondaryVfxConfig
+                }, username);
+                if (emitResult.emitted && emitResult.match?.correlationId) {
+                    secondaryMatch.correlationId = emitResult.match.correlationId;
+                }
+                if (!emitResult.error) {
+                    completionResult = await this.waitForVfxCompletion(secondaryMatch);
+                }
+            }
+        }
+
         if (this.isTTSEnabled()) {
             for (const stage of ttsStages) {
                 if (stage.delay > 0) {

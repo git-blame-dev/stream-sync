@@ -223,4 +223,46 @@ describe('DisplayQueue notification TTS staging', () => {
 
         expect(recordedTexts).toContain('test-gifter sent a gift');
     });
+
+    it('runs greeting secondary VFX after greeting primary VFX and before TTS', async () => {
+        const { queue, eventBus, recordedTexts } = createQueue();
+        const emittedCommands = [];
+
+        eventBus.on(PlatformEvents.VFX_COMMAND_RECEIVED, (payload) => {
+            emittedCommands.push(payload.command);
+            safeSetTimeout(() => {
+                eventBus.emit(PlatformEvents.VFX_EFFECT_COMPLETED, { correlationId: payload.correlationId });
+            }, 1, 'test greeting VFX completion emit');
+        });
+
+        await queue.effects.handleSequentialEffects({
+            type: 'greeting',
+            platform: 'twitch',
+            vfxConfig: {
+                commandKey: 'greetings',
+                command: '!hello',
+                filename: 'hello.mp4',
+                mediaSource: 'VFX Top',
+                vfxFilePath: '/tmp/vfx',
+                duration: 5000
+            },
+            secondaryVfxConfig: {
+                commandKey: 'under-the-water',
+                command: '!water',
+                filename: 'under-the-water.mp4',
+                mediaSource: 'VFX Bottom Green',
+                vfxFilePath: '/tmp/vfx',
+                duration: 5000
+            },
+            data: {
+                username: 'test-viewer',
+                userId: 'test-viewer-id',
+                displayMessage: 'Hello',
+                ttsMessage: 'Hello from test-viewer'
+            }
+        }, [{ type: 'primary', text: 'Hello from test-viewer', delay: 0 }]);
+
+        expect(emittedCommands).toEqual(['!hello', '!water']);
+        expect(recordedTexts).toEqual(['Hello from test-viewer']);
+    });
 });

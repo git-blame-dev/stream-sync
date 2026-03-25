@@ -186,7 +186,10 @@ function buildConfig(normalized, options = {}) {
         follows: { command: normalized.follows.command },
         raids: { command: normalized.raids.command },
         paypiggies: { command: normalized.paypiggies.command },
-        greetings: { command: normalized.greetings.command },
+        greetings: {
+            command: normalized.greetings.command,
+            customVfxProfiles: { ...(normalized.greetings.customVfxProfiles || {}) }
+        },
         shares: { command: normalized.shares.command },
         farewell: { ...normalized.farewell },
         streamelements: buildStreamElementsConfig(normalized),
