@@ -25,8 +25,7 @@ npm start
 
 ## Runtime Dependencies
 - `unzip` is required for TikTok gift animation asset extraction.
-- `ffprobe` is recommended for accurate TikTok gift animation duration probing and is part of the FFmpeg toolchain.
-- Without `ffprobe`, TikTok gift animation duration falls back to TikTok metadata estimation.
+- TikTok gift animation duration is derived from TikTok metadata in extracted asset config.
 
 ## Development Commands
 ```bash
@@ -46,5 +45,5 @@ StreamSync follows a strict TDD workflow and emphasizes behavior-first tests. Th
 - Node.js (runtime), Bun (test runner)
 - Twitch: EventSub WebSocket + Helix API
 - YouTube: youtubei.js
-- TikTok: tiktok-live-connector
+- TikTok: custom WebSocket client (`ws`) via EulerStream
 - OBS: obs-websocket-js
