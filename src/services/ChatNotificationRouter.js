@@ -66,7 +66,10 @@ class ChatNotificationRouter {
             const level = this.runtime.config.general.logChatMessages ? 'console' : 'debug';
             this.logger[level](this._formatChatMessage(platform, logSafeData), 'chat-router');
 
-            const greetingProfile = this.resolveGreetingProfile(platform, normalizedData.username);
+            const greetingIdentity = platform === 'tiktok'
+                ? normalizedData.userId
+                : normalizedData.username;
+            const greetingProfile = this.resolveGreetingProfile(platform, greetingIdentity);
             const firstMessageTrackingId = greetingProfile
                 ? `greeting-profile:${greetingProfile.profileId}`
                 : normalizedData.userId;

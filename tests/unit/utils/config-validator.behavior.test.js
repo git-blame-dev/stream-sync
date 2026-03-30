@@ -541,17 +541,17 @@ describe('ConfigValidator simple command sections', () => {
     it('normalizes greetings custom VFX profile entries', () => {
         const result = ConfigValidator._normalizeGreetingsSection({
             command: '!hello',
-            seasonMain: 'tiktok:theonlyseasonn|youtube:@seasonYT, !water'
+            profileMain: 'tiktok:test-user-alpha|youtube:@test-user-yt-alpha, !water'
         });
 
         expect(result.command).toBe('!hello');
         expect(result.customVfxProfiles).toEqual({
-            'tiktok:theonlyseasonn': {
-                profileId: 'seasonMain',
+            'tiktok:test-user-alpha': {
+                profileId: 'profileMain',
                 command: '!water'
             },
-            'youtube:seasonyt': {
-                profileId: 'seasonMain',
+            'youtube:test-user-yt-alpha': {
+                profileId: 'profileMain',
                 command: '!water'
             }
         });
@@ -559,21 +559,21 @@ describe('ConfigValidator simple command sections', () => {
 
     it('throws when greetings custom profile row is malformed', () => {
         expect(() => ConfigValidator._normalizeGreetingsSection({
-            seasonMain: 'tiktok:theonlyseasonn|youtube:seasonYT'
-        })).toThrow('greetings.seasonMain must include a comma separator');
+            profileMain: 'tiktok:test-user-alpha|youtube:test-user-yt-alpha'
+        })).toThrow('greetings.profileMain must include a comma separator');
     });
 
     it('throws when greetings custom profile uses unsupported platform', () => {
         expect(() => ConfigValidator._normalizeGreetingsSection({
-            seasonMain: 'kick:season, !water'
-        })).toThrow('greetings.seasonMain has unsupported platform: kick');
+            profileMain: 'kick:test-user-alpha, !water'
+        })).toThrow('greetings.profileMain has unsupported platform: kick');
     });
 
     it('throws when greetings custom profile maps same identity twice', () => {
         expect(() => ConfigValidator._normalizeGreetingsSection({
-            seasonMain: 'tiktok:season, !water',
-            seasonAlt: 'tiktok:season, !run'
-        })).toThrow('greetings custom VFX identity mapped more than once: tiktok:season');
+            profileMain: 'tiktok:test-user-alpha, !water',
+            profileAlt: 'tiktok:test-user-alpha, !run'
+        })).toThrow('greetings custom VFX identity mapped more than once: tiktok:test-user-alpha');
     });
 
     it('normalizes shares section', () => {
