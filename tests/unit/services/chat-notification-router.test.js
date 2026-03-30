@@ -17,7 +17,7 @@ describe('ChatNotificationRouter', () => {
     const baseMessage = {
         message: 'Test message',
         displayName: 'testViewer',
-        username: 'testviewer',
+        username: 'test-user-gamma',
         userId: 'test-user-1',
         timestamp: new Date(testClock.now()).toISOString()
     };
@@ -300,8 +300,8 @@ describe('ChatNotificationRouter', () => {
                     greetings: {
                         command: '!hello',
                         customVfxProfiles: {
-                            'twitch:testviewer': {
-                                profileId: 'seasonMain',
+                            'twitch:test-user-gamma': {
+                                profileId: 'profileMain',
                                 command: '!water'
                             }
                         }
@@ -318,7 +318,7 @@ describe('ChatNotificationRouter', () => {
 
         await router.handleChatMessage('twitch', {
             ...baseMessage,
-            username: 'testviewer'
+            username: 'test-user-gamma'
         });
 
         const queuedItems = runtime.displayQueue.addItem.mock.calls.map(c => c[0]);
@@ -345,8 +345,8 @@ describe('ChatNotificationRouter', () => {
                     greetings: {
                         command: '!hello',
                         customVfxProfiles: {
-                            'twitch:testseason': { profileId: 'seasonMain', command: '!water' },
-                            'tiktok:testseasonalt': { profileId: 'seasonMain', command: '!water' }
+                            'twitch:test-user-alpha': { profileId: 'profileMain', command: '!water' },
+                            'tiktok:test-user-beta': { profileId: 'profileMain', command: '!water' }
                         }
                     }
                 },
@@ -362,13 +362,13 @@ describe('ChatNotificationRouter', () => {
 
         await router.handleChatMessage('twitch', {
             ...baseMessage,
-            username: 'testseason',
+            username: 'test-user-alpha',
             userId: 'tw-user-1'
         });
         await router.handleChatMessage('tiktok', {
             ...baseMessage,
-            username: 'testseasonalt',
-            userId: 'tt-user-2'
+            username: 'test-user-beta',
+            userId: 'test-user-beta'
         });
 
         const greetingRows = runtime.displayQueue.addItem.mock.calls
@@ -408,8 +408,8 @@ describe('ChatNotificationRouter', () => {
                     greetings: {
                         command: '!hello',
                         customVfxProfiles: {
-                            'twitch:testviewer': {
-                                profileId: 'seasonMain',
+                            'twitch:test-user-gamma': {
+                                profileId: 'profileMain',
                                 command: '!water'
                             }
                         }
@@ -432,7 +432,7 @@ describe('ChatNotificationRouter', () => {
         await router.handleChatMessage('twitch', {
             ...baseMessage,
             message: '!testboom hello',
-            username: 'testviewer'
+            username: 'test-user-gamma'
         });
 
         const queuedItems = runtime.displayQueue.addItem.mock.calls.map(c => c[0]);

@@ -478,7 +478,7 @@ describe('config-builders', () => {
                 ...getRawTestConfig(),
                 greetings: {
                     command: '!hello',
-                    seasonMain: 'tiktok:testseason|youtube:@testseasonyt, !water'
+                    profileMain: 'tiktok:test-user-alpha|youtube:@test-user-yt-alpha, !water'
                 }
             });
 
@@ -486,12 +486,12 @@ describe('config-builders', () => {
 
             expect(result.greetings.command).toBe('!hello');
             expect(result.greetings.customVfxProfiles).toEqual({
-                'tiktok:testseason': {
-                    profileId: 'seasonMain',
+                'tiktok:test-user-alpha': {
+                    profileId: 'profileMain',
                     command: '!water'
                 },
-                'youtube:testseasonyt': {
-                    profileId: 'seasonMain',
+                'youtube:test-user-yt-alpha': {
+                    profileId: 'profileMain',
                     command: '!water'
                 }
             });
