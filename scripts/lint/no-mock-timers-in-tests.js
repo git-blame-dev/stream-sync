@@ -22,7 +22,7 @@ const path = require('path');
 
 const PROJECT_ROOT = path.resolve(__dirname, '../..');
 const TARGET_DIRECTORIES = ['tests'];
-const FILE_EXTENSIONS = new Set(['.js', '.mjs', '.cjs']);
+const FILE_EXTENSIONS = new Set(['.js', '.mjs', '.cjs', '.ts', '.tsx']);
 const IGNORE_DIRECTORIES = new Set([
     'node_modules',
     'coverage',

@@ -1134,7 +1134,6 @@ function createPreviewPipeline(options = {}) {
 
 async function runPreviewScenario(options = {}) {
     const {
-        pipeline,
         adapters,
         scenarioEvents,
         intervalMs,
@@ -1304,6 +1303,5 @@ module.exports = {
     createPreviewPipeline,
     createPreviewIngestAdapters,
     runPreviewScenario,
-    disposePreviewPipeline,
     runGuiPreview
 };

@@ -5,9 +5,9 @@ const path = require('path');
 
 const BOOLEAN_PATTERN = /(?<![a-zA-Z_.])Boolean\(([^)]+)\)/g;
 
-const SOURCE_DIRS = ['src', 'tests'];
+const SOURCE_DIRS = ['src', 'tests', 'scripts'];
 
-function findJsFiles(dir) {
+function findSourceFiles(dir) {
     const files = [];
     if (!fs.existsSync(dir)) return files;
     
@@ -15,8 +15,8 @@ function findJsFiles(dir) {
     for (const entry of entries) {
         const fullPath = path.join(dir, entry.name);
         if (entry.isDirectory()) {
-            files.push(...findJsFiles(fullPath));
-        } else if (entry.name.endsWith('.js')) {
+            files.push(...findSourceFiles(fullPath));
+        } else if (entry.name.endsWith('.js') || entry.name.endsWith('.ts') || entry.name.endsWith('.tsx')) {
             files.push(fullPath);
         }
     }
@@ -45,7 +45,7 @@ function checkFile(filePath) {
 }
 
 function main() {
-    const allFiles = SOURCE_DIRS.flatMap(findJsFiles);
+    const allFiles = SOURCE_DIRS.flatMap(findSourceFiles);
     let hasViolations = false;
     
     for (const file of allFiles) {

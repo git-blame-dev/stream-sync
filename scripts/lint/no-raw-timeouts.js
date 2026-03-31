@@ -12,13 +12,14 @@ const fs = require('fs');
 const path = require('path');
 
 const PROJECT_ROOT = path.resolve(__dirname, '../..');
-const TARGET_DIRECTORIES = ['src', 'tests'];
-const FILE_EXTENSIONS = new Set(['.js', '.mjs', '.cjs']);
+const TARGET_DIRECTORIES = ['src', 'tests', 'scripts'];
+const FILE_EXTENSIONS = new Set(['.js', '.mjs', '.cjs', '.ts', '.tsx']);
 const IGNORE_DIRECTORIES = new Set([
   'node_modules',
   'coverage',
   'logs',
   'archive',
+  'lint',
   'scripts/lint' // prevent self-scanning
 ]);
 

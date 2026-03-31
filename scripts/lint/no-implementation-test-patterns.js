@@ -22,7 +22,7 @@ const path = require('path');
 
 const PROJECT_ROOT = path.resolve(__dirname, '../..');
 const TARGET_DIRECTORIES = ['tests'];
-const FILE_EXTENSIONS = new Set(['.js', '.mjs', '.cjs']);
+const FILE_EXTENSIONS = new Set(['.js', '.mjs', '.cjs', '.ts', '.tsx']);
 const IGNORE_DIRECTORIES = new Set([
     'node_modules',
     'coverage',
@@ -62,10 +62,6 @@ const IMPLEMENTATION_PATTERNS = [
         hint: 'Error context strings (second arg) are implementation details. Only verify errors are handled via errorCalls.length.'
     }
 ];
-
-function normalizePath(filePath) {
-    return filePath.replace(/\\/g, '/');
-}
 
 function collectFiles(dir) {
     const entries = fs.readdirSync(dir, { withFileTypes: true });

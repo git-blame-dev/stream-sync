@@ -13,6 +13,7 @@ export function createEventFeed(options: GuiEventFeedOptions) {
       const payload = JSON.parse(event.data)
       options.onEvent(payload)
     } catch {
+      return
     }
   }
 

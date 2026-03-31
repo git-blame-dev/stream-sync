@@ -1,12 +1,15 @@
 {
   "$schema": "https://unpkg.com/knip@5/schema.json",
   "entry": [
-    "tests/**/*.test.js",
-    "tests/setup/**/*.js"
+    "tests/**/*.test.{js,ts}",
+    "tests/setup/**/*.{js,ts}",
+    "scripts/local/gui-preview.{js,ts}"
   ],
   "project": [
-    "src/**/*.js",
-    "tests/**/*.js"
+    "src/**/*.{js,ts}",
+    "tests/**/*.{js,ts}",
+    "scripts/**/*.{js,ts}",
+    "gui/**/*.{ts,tsx}"
   ],
   "eslint": false,
   "ignore": [
@@ -14,6 +17,9 @@
   ],
   "ignoreIssues": {
     "tests/helpers/**/*.js": [
+      "exports"
+    ],
+    "tests/helpers/**/*.ts": [
       "exports"
     ]
   }
