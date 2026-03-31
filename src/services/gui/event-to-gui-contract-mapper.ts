@@ -5,14 +5,31 @@ const { getValidMessageParts, normalizeBadgeImages } = require('../../utils/mess
 
 type UnknownRecord = Record<string, unknown>;
 
+type GuiToggleKey =
+    | 'showMessages'
+    | 'showCommands'
+    | 'showGreetings'
+    | 'showFarewells'
+    | 'showFollows'
+    | 'showShares'
+    | 'showRaids'
+    | 'showGifts'
+    | 'showPaypiggies'
+    | 'showGiftPaypiggies'
+    | 'showEnvelopes';
+
+type GuiMapperConfig = {
+    messageCharacterLimit?: unknown;
+} & Partial<Record<GuiToggleKey, unknown>>;
+
 type EventRule = {
     kind: GuiRowKind;
-    toggleKey: string;
+    toggleKey: GuiToggleKey;
 };
 
 type MapperOptions = {
     config?: {
-        gui?: UnknownRecord;
+        gui?: GuiMapperConfig;
     };
     fallbackAvatarUrl?: unknown;
     avatarCacheMaxSize?: unknown;
@@ -144,7 +161,7 @@ function resolveMessageParts(type: string, platform: string, data: UnknownRecord
 
 function createEventToGuiContractMapper(options: MapperOptions = {}) {
     const config = toRecord(options.config);
-    const guiConfig = toRecord(config.gui);
+    const guiConfig = toRecord(config.gui) as GuiMapperConfig;
     const fallbackAvatarUrl = normalizeString(options.fallbackAvatarUrl) || DEFAULT_AVATAR_URL;
     const avatarCacheMaxSize = Number.isFinite(Number(options.avatarCacheMaxSize)) && Number(options.avatarCacheMaxSize) > 0
         ? Number(options.avatarCacheMaxSize)
@@ -185,7 +202,7 @@ function createEventToGuiContractMapper(options: MapperOptions = {}) {
         return fallbackAvatarUrl;
     };
 
-    const isEnabled = (toggleKey: string): boolean => guiConfig[toggleKey] !== false;
+    const isEnabled = (toggleKey: GuiToggleKey): boolean => guiConfig[toggleKey] !== false;
 
     const mapDisplayRow = async (row: SourceRow = {}): Promise<GuiRowDto | null> => {
         const type = normalizeString(row.type);
