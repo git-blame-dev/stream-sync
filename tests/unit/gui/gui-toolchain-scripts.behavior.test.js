@@ -10,7 +10,7 @@ describe('GUI toolchain scripts behavior', () => {
         expect(packageJson.scripts.start).toBe('tsx src/bootstrap.js');
         expect(packageJson.scripts['start:debug']).toBe('tsx src/bootstrap.js --debug');
         expect(packageJson.scripts['start:debug:build']).toBe('npm run build && tsx src/bootstrap.js --debug');
-        expect(packageJson.scripts['gui:preview']).toBe('npm run build && tsx scripts/local/gui-preview.js');
+        expect(packageJson.scripts['gui:preview']).toBe('npm run build && tsx scripts/local/gui-preview.ts');
         expect(packageJson.scripts['typecheck:gui']).toBe('tsc --noEmit -p gui/tsconfig.json');
         expect(packageJson.scripts['typecheck:gui-node']).toBe('tsc --noEmit -p tsconfig.json');
     });

@@ -1,5 +1,72 @@
 const { describe, it, expect } = require('bun:test');
 
+type UnknownRecord = Record<string, any>;
+
+type PreviewAdapter = 'twitch' | 'youtube' | 'tiktok';
+
+type ScenarioEvent = {
+    platform: PreviewAdapter;
+    adapter: PreviewAdapter;
+    rawEvent: UnknownRecord;
+};
+
+type PreviewPipeline = {
+    eventBus: {
+        emit: (eventName: string, payload?: UnknownRecord) => void;
+        subscribe: (eventName: string, handler: (payload: UnknownRecord) => void) => () => void;
+    };
+    emitIngestEvent: (event: UnknownRecord) => void;
+    dispose: () => Promise<void>;
+};
+
+type PreviewIngestAdapters = Record<PreviewAdapter, { ingest: (rawEvent: UnknownRecord) => Promise<void> }>;
+
+type PreviewModule = {
+    PREVIEW_DURATION_MS: number;
+    PREVIEW_INTERVAL_MS: number;
+    PREVIEW_MEDIA_CATALOG: UnknownRecord;
+    buildPreviewConfig: (baseConfig?: UnknownRecord) => UnknownRecord;
+    buildPreviewScenarioEvents: (durationMs?: number, intervalMs?: number) => ScenarioEvent[];
+    createPreviewPipeline: (options?: UnknownRecord) => PreviewPipeline;
+    createPreviewIngestAdapters: (options: {
+        config?: UnknownRecord;
+        logger?: UnknownRecord;
+        emitPlatformEvent: (event: UnknownRecord) => void;
+        [key: string]: unknown;
+    }) => PreviewIngestAdapters;
+    runPreviewScenario: (options: {
+        adapters: PreviewIngestAdapters;
+        scenarioEvents: ScenarioEvent[];
+        intervalMs: number;
+        durationMs: number;
+        safeSetIntervalImpl: (callback: () => void, durationMs: number) => number | ReturnType<typeof setInterval>;
+        safeSetTimeoutImpl: (resolve: () => void, durationMs: number) => unknown;
+        errorHandler: {
+            handleEventProcessingError: (error: unknown, context: string, payload: unknown, message: string) => void;
+        };
+    }) => Promise<number | ReturnType<typeof setInterval>>;
+    runGuiPreview: (options?: {
+        logger?: UnknownRecord;
+        baseConfig?: UnknownRecord;
+        durationMs?: number;
+        intervalMs?: number;
+        eventBus?: PreviewPipeline['eventBus'];
+        createPreviewPipelineImpl?: (args: UnknownRecord) => PreviewPipeline;
+        createGuiTransportServiceImpl?: (args: UnknownRecord) => {
+            start: () => Promise<void>;
+            stop: () => Promise<void>;
+        };
+        safeSetIntervalImpl?: (callback: () => void, durationMs: number) => number | ReturnType<typeof setInterval>;
+        safeSetTimeoutImpl?: (resolve: () => void, durationMs: number) => unknown;
+        giftAnimationResolver?: UnknownRecord;
+        delay?: (ms: number) => Promise<unknown>;
+        stdout?: {
+            write: (text: string) => void;
+        };
+        [key: string]: unknown;
+    }) => Promise<void>;
+};
+
 const {
     PREVIEW_DURATION_MS,
     PREVIEW_INTERVAL_MS,
@@ -10,7 +77,7 @@ const {
     createPreviewIngestAdapters,
     runPreviewScenario,
     runGuiPreview
-} = require('../../../scripts/local/gui-preview');
+} = require('../../../scripts/local/gui-preview.ts') as PreviewModule;
 const { waitForDelay } = require('../../helpers/time-utils');
 
 describe('GUI local preview command behavior', () => {
@@ -69,19 +136,20 @@ describe('GUI local preview command behavior', () => {
             event.adapter === 'twitch'
             && event.rawEvent?.subscriptionType === 'channel.chat.message'
             && Array.isArray(event.rawEvent?.event?.message?.fragments)
-            && event.rawEvent.event.message.fragments.some((fragment) => fragment.type === 'emote')
+            && event.rawEvent.event.message.fragments.some((fragment: UnknownRecord) => fragment.type === 'emote')
         );
-        const youtubeStep = events.find((event) => event.adapter === 'youtube');
-        const tiktokStep = events.find((event) => event.adapter === 'tiktok');
+        const youtubeStep = events.find((event) => event.adapter === 'youtube')!;
+        const tiktokStep = events.find((event) => event.adapter === 'tiktok')!;
+        const requiredTwitchChat = twitchChat!;
 
-        expect(twitchChat.rawEvent.event.message.fragments[0].emote.id).toContain(PREVIEW_MEDIA_CATALOG.twitch.emote.id);
+        expect(requiredTwitchChat.rawEvent.event.message.fragments[0].emote.id).toContain(PREVIEW_MEDIA_CATALOG.twitch.emote.id);
         expect(youtubeStep.rawEvent.chatItem.testData.avatarUrl).toBe(PREVIEW_MEDIA_CATALOG.youtube.avatarUrl);
         expect(tiktokStep.rawEvent.data.user.profilePictureUrl).toBe(PREVIEW_MEDIA_CATALOG.tiktok.avatarUrl);
     });
 
     it('includes tiktok corgi gift payload with animation resources for preview', () => {
         const events = buildPreviewScenarioEvents(32000, 2000);
-        const tiktokGiftStep = events.find((event) => event.adapter === 'tiktok' && event.rawEvent?.eventType === 'GIFT');
+        const tiktokGiftStep = events.find((event) => event.adapter === 'tiktok' && event.rawEvent?.eventType === 'GIFT')!;
 
         expect(tiktokGiftStep).toBeDefined();
         expect(events[1]?.rawEvent?.eventType).toBe('GIFT');
@@ -171,27 +239,27 @@ describe('GUI local preview command behavior', () => {
     });
 
     it('runs preview via ingest pipeline and stops cleanly', async () => {
-        const writes = [];
-        const emittedEvents = [];
+        const writes: string[] = [];
+        const emittedEvents: UnknownRecord[] = [];
         let started = false;
         let stopped = false;
         let disposed = false;
-        let intervalTick = null;
-        const createdPipelineArgs = [];
-        const createdTransportArgs = [];
+        let intervalTick: null | (() => void) = null;
+        const createdPipelineArgs: UnknownRecord[] = [];
+        const createdTransportArgs: UnknownRecord[] = [];
 
         const fakeEventBus = {
             subscribe() {
                 return () => {};
             },
-            emit(eventName, payload) {
+            emit(eventName: string, payload?: UnknownRecord) {
                 emittedEvents.push({ eventName, payload });
             }
         };
 
         const fakePipeline = {
             eventBus: fakeEventBus,
-            emitIngestEvent(event) {
+            emitIngestEvent(event: UnknownRecord) {
                 fakeEventBus.emit('platform:event', event);
             },
             async dispose() {
@@ -220,26 +288,26 @@ describe('GUI local preview command behavior', () => {
             durationMs: 4,
             intervalMs: 2,
             eventBus: fakeEventBus,
-            createPreviewPipelineImpl: (args) => {
+            createPreviewPipelineImpl: (args: UnknownRecord) => {
                 createdPipelineArgs.push(args);
                 return fakePipeline;
             },
-            createGuiTransportServiceImpl: (args) => {
+            createGuiTransportServiceImpl: (args: UnknownRecord) => {
                 createdTransportArgs.push(args);
                 return fakeService;
             },
-            safeSetIntervalImpl: (callback) => {
+            safeSetIntervalImpl: (callback: () => void) => {
                 intervalTick = callback;
                 return 1;
             },
-            safeSetTimeoutImpl: (resolve, duration) => {
+            safeSetTimeoutImpl: (resolve: () => void, duration: number) => {
                 expect(duration).toBe(4);
-                intervalTick();
-                intervalTick();
+                intervalTick?.();
+                intervalTick?.();
                 resolve();
             },
             stdout: {
-                write: (text) => writes.push(text)
+                write: (text: string) => writes.push(text)
             }
         });
 
@@ -262,22 +330,22 @@ describe('GUI local preview command behavior', () => {
 
     it('ingests all default scenario events and ends on envelope within preview duration', async () => {
         const scenarioEvents = buildPreviewScenarioEvents(32000, 2000);
-        const ingested = [];
-        let intervalTick = null;
+        const ingested: UnknownRecord[] = [];
+        let intervalTick: null | (() => void) = null;
 
         const adapters = {
             twitch: {
-                async ingest(rawEvent) {
+                async ingest(rawEvent: UnknownRecord) {
                     ingested.push({ adapter: 'twitch', rawEvent });
                 }
             },
             youtube: {
-                async ingest(rawEvent) {
+                async ingest(rawEvent: UnknownRecord) {
                     ingested.push({ adapter: 'youtube', rawEvent });
                 }
             },
             tiktok: {
-                async ingest(rawEvent) {
+                async ingest(rawEvent: UnknownRecord) {
                     ingested.push({ adapter: 'tiktok', rawEvent });
                 }
             }
@@ -288,14 +356,14 @@ describe('GUI local preview command behavior', () => {
             scenarioEvents,
             intervalMs: 2000,
             durationMs: 32000,
-            safeSetIntervalImpl: (callback) => {
+            safeSetIntervalImpl: (callback: () => void) => {
                 intervalTick = callback;
                 return 1;
             },
-            safeSetTimeoutImpl: (resolve, duration) => {
+            safeSetTimeoutImpl: (resolve: () => void, duration: number) => {
                 expect(duration).toBe(32000);
                 for (let index = 0; index < 15; index += 1) {
-                    intervalTick();
+                    intervalTick?.();
                 }
                 resolve();
             },
@@ -310,8 +378,8 @@ describe('GUI local preview command behavior', () => {
     });
 
     it('routes ingest events through the preview pipeline boundaries', async () => {
-        const routedNotifications = [];
-        const routedChats = [];
+        const routedNotifications: UnknownRecord[] = [];
+        const routedChats: UnknownRecord[] = [];
         let disposedCooldown = false;
 
         const config = buildPreviewConfig();
@@ -324,12 +392,12 @@ describe('GUI local preview command behavior', () => {
                 error: () => {}
             },
             displayQueue: {
-                addItem(item) {
+                addItem(item: UnknownRecord) {
                     routedChats.push(item);
                 }
             },
             notificationManager: {
-                async handleNotification(type, platform, data) {
+                async handleNotification(type: string, platform: string, data: UnknownRecord) {
                     routedNotifications.push({ type, platform, data });
                     return { success: true };
                 }
@@ -412,7 +480,7 @@ describe('GUI local preview command behavior', () => {
     });
 
     it('creates raw ingest adapters that emit canonical platform events', async () => {
-        const emitted = [];
+        const emitted: UnknownRecord[] = [];
         const adapters = createPreviewIngestAdapters({
             config: buildPreviewConfig(),
             logger: {
@@ -421,7 +489,7 @@ describe('GUI local preview command behavior', () => {
                 warn: () => {},
                 error: () => {}
             },
-            emitPlatformEvent: (event) => emitted.push(event)
+            emitPlatformEvent: (event: UnknownRecord) => emitted.push(event)
         });
 
         await adapters.twitch.ingest({
@@ -469,7 +537,7 @@ describe('GUI local preview command behavior', () => {
     });
 
     it('falls back to default avatar when ingest payload omits avatarUrl', async () => {
-        const emitted = [];
+        const emitted: UnknownRecord[] = [];
         const adapters = createPreviewIngestAdapters({
             config: buildPreviewConfig(),
             logger: {
@@ -478,7 +546,7 @@ describe('GUI local preview command behavior', () => {
                 warn: () => {},
                 error: () => {}
             },
-            emitPlatformEvent: (event) => emitted.push(event)
+            emitPlatformEvent: (event: UnknownRecord) => emitted.push(event)
         });
 
         await adapters.youtube.ingest({
@@ -493,14 +561,14 @@ describe('GUI local preview command behavior', () => {
             }
         });
 
-        const chatEvent = emitted.find((event) => event.type === 'platform:chat-message' && event.platform === 'youtube');
+        const chatEvent = emitted.find((event) => event.type === 'platform:chat-message' && event.platform === 'youtube')!;
         expect(chatEvent).toBeDefined();
         expect(typeof chatEvent.data.avatarUrl).toBe('string');
         expect(chatEvent.data.avatarUrl.length).toBeGreaterThan(0);
     });
 
     it('maps additional twitch and youtube ingest events', async () => {
-        const emitted = [];
+        const emitted: UnknownRecord[] = [];
         const adapters = createPreviewIngestAdapters({
             config: buildPreviewConfig(),
             logger: {
@@ -509,7 +577,7 @@ describe('GUI local preview command behavior', () => {
                 warn: () => {},
                 error: () => {}
             },
-            emitPlatformEvent: (event) => emitted.push(event)
+            emitPlatformEvent: (event: UnknownRecord) => emitted.push(event)
         });
 
         const timestamp = new Date(Date.UTC(2024, 0, 1, 0, 0, 0)).toISOString();
@@ -555,7 +623,7 @@ describe('GUI local preview command behavior', () => {
     });
 
     it('maps additional tiktok ingest events', async () => {
-        const emitted = [];
+        const emitted: UnknownRecord[] = [];
         const adapters = createPreviewIngestAdapters({
             config: buildPreviewConfig(),
             logger: {
@@ -564,7 +632,7 @@ describe('GUI local preview command behavior', () => {
                 warn: () => {},
                 error: () => {}
             },
-            emitPlatformEvent: (event) => emitted.push(event)
+            emitPlatformEvent: (event: UnknownRecord) => emitted.push(event)
         });
 
         const timestamp = new Date(Date.UTC(2024, 0, 1, 0, 0, 0)).toISOString();
@@ -610,7 +678,7 @@ describe('GUI local preview command behavior', () => {
             }
         });
 
-        const tiktokGiftEvent = emitted.find((event) => event.type === 'platform:gift' && event.platform === 'tiktok');
+        const tiktokGiftEvent = emitted.find((event) => event.type === 'platform:gift' && event.platform === 'tiktok')!;
 
         expect(tiktokGiftEvent).toBeDefined();
         expect(tiktokGiftEvent.data.giftImageUrl).toBe('https://example.com/tiktok/gift-rose.png');
@@ -619,7 +687,7 @@ describe('GUI local preview command behavior', () => {
 
     it('fails fast when injected preview pipeline is invalid', async () => {
         await expect(runGuiPreview({
-            createPreviewPipelineImpl: () => ({ eventBus: {} }),
+            createPreviewPipelineImpl: (() => ({ eventBus: {} })) as unknown as (args: UnknownRecord) => PreviewPipeline,
             createGuiTransportServiceImpl: () => ({
                 async start() {},
                 async stop() {}
@@ -629,7 +697,7 @@ describe('GUI local preview command behavior', () => {
 
     it('disposes pipeline when transport stop throws', async () => {
         let disposed = false;
-        let intervalTick = null;
+        let intervalTick: null | (() => void) = null;
 
         const fakeEventBus = {
             subscribe() {
@@ -662,12 +730,12 @@ describe('GUI local preview command behavior', () => {
                     throw new Error('stop failed');
                 }
             }),
-            safeSetIntervalImpl: (callback) => {
+            safeSetIntervalImpl: (callback: () => void) => {
                 intervalTick = callback;
                 return 1;
             },
-            safeSetTimeoutImpl: (resolve) => {
-                intervalTick();
+            safeSetTimeoutImpl: (resolve: () => void) => {
+                intervalTick?.();
                 resolve();
             },
             stdout: {
@@ -719,13 +787,15 @@ describe('GUI local preview command behavior', () => {
     });
 
     it('clears active interval handle during cleanup', async () => {
-        const handles = [];
+        const handles: Array<number | ReturnType<typeof setInterval>> = [];
         const originalClearInterval = global.clearInterval;
-        global.clearInterval = (handle) => {
-            handles.push(handle);
-        };
+        global.clearInterval = ((handle: unknown) => {
+            if (typeof handle === 'number' || typeof handle === 'object') {
+                handles.push(handle as number | ReturnType<typeof setInterval>);
+            }
+        }) as typeof global.clearInterval;
 
-        let intervalTick = null;
+        let intervalTick: null | (() => void) = null;
 
         try {
             await runGuiPreview({
@@ -757,12 +827,12 @@ describe('GUI local preview command behavior', () => {
                     async start() {},
                     async stop() {}
                 }),
-                safeSetIntervalImpl: (callback) => {
+                safeSetIntervalImpl: (callback: () => void) => {
                     intervalTick = callback;
                     return 77;
                 },
-                safeSetTimeoutImpl: (resolve) => {
-                    intervalTick();
+                safeSetTimeoutImpl: (resolve: () => void) => {
+                    intervalTick?.();
                     resolve();
                 },
                 stdout: {
@@ -777,8 +847,8 @@ describe('GUI local preview command behavior', () => {
     });
 
     it('runs raw ingest adapters end-to-end through scenario schedule', async () => {
-        const routed = [];
-        let intervalTick = null;
+        const routed: UnknownRecord[] = [];
+        let intervalTick: null | (() => void) = null;
 
         await runGuiPreview({
             logger: {
@@ -797,7 +867,7 @@ describe('GUI local preview command behavior', () => {
                     },
                     emit() {}
                 },
-                emitIngestEvent(event) {
+                emitIngestEvent(event: UnknownRecord) {
                     routed.push(event);
                 },
                 async dispose() {}
@@ -806,13 +876,13 @@ describe('GUI local preview command behavior', () => {
                 async start() {},
                 async stop() {}
             }),
-            safeSetIntervalImpl: (callback) => {
+            safeSetIntervalImpl: (callback: () => void) => {
                 intervalTick = callback;
                 return 1;
             },
-            safeSetTimeoutImpl: (resolve) => {
+            safeSetTimeoutImpl: (resolve: () => void) => {
                 for (let i = 0; i < 10; i += 1) {
-                    intervalTick();
+                    intervalTick?.();
                 }
                 resolve();
             },
@@ -828,10 +898,10 @@ describe('GUI local preview command behavior', () => {
     });
 
     it('continues preview schedule when one ingest step fails', async () => {
-        const routed = [];
-        let intervalTick = null;
+        const routed: UnknownRecord[] = [];
+        let intervalTick: null | (() => void) = null;
         let failedOnce = false;
-        const errors = [];
+        const errors: UnknownRecord[] = [];
 
         await runGuiPreview({
             logger: {
@@ -839,7 +909,7 @@ describe('GUI local preview command behavior', () => {
                 info: () => {},
                 warn: () => {},
                 console: () => {},
-                error: (...args) => errors.push(args)
+                error: (...args: unknown[]) => errors.push(args)
             },
             durationMs: 6,
             intervalMs: 2,
@@ -850,7 +920,7 @@ describe('GUI local preview command behavior', () => {
                     },
                     emit() {}
                 },
-                emitIngestEvent(event) {
+                emitIngestEvent(event: UnknownRecord) {
                     routed.push(event);
                 },
                 async dispose() {}
@@ -880,14 +950,14 @@ describe('GUI local preview command behavior', () => {
                 async start() {},
                 async stop() {}
             }),
-            safeSetIntervalImpl: (callback) => {
+            safeSetIntervalImpl: (callback: () => void) => {
                 intervalTick = callback;
                 return 1;
             },
-            safeSetTimeoutImpl: (resolve) => {
-                intervalTick();
-                intervalTick();
-                intervalTick();
+            safeSetTimeoutImpl: (resolve: () => void) => {
+                intervalTick?.();
+                intervalTick?.();
+                intervalTick?.();
                 resolve();
             },
             stdout: {
@@ -901,7 +971,7 @@ describe('GUI local preview command behavior', () => {
 
     it('emits all required row types through full preview pipeline', async () => {
         const config = buildPreviewConfig();
-        const rows = [];
+        const rows: UnknownRecord[] = [];
 
         const pipeline = createPreviewPipeline({
             config,
@@ -919,7 +989,7 @@ describe('GUI local preview command behavior', () => {
             }
         });
 
-        const unsubscribe = pipeline.eventBus.subscribe('display:row', (row) => {
+        const unsubscribe = pipeline.eventBus.subscribe('display:row', (row: UnknownRecord) => {
             rows.push(row);
         });
 
@@ -932,7 +1002,7 @@ describe('GUI local preview command behavior', () => {
                 error: () => {},
                 console: () => {}
             },
-            emitPlatformEvent: (event) => pipeline.emitIngestEvent(event)
+            emitPlatformEvent: (event: UnknownRecord) => pipeline.emitIngestEvent(event)
         });
 
         const scenarioEvents = buildPreviewScenarioEvents(32000, 2000);
@@ -967,7 +1037,7 @@ describe('GUI local preview command behavior', () => {
 
     it('uses deterministic no-op gift animation resolver by default in preview pipeline', async () => {
         const config = buildPreviewConfig();
-        const emittedEffects = [];
+        const emittedEffects: UnknownRecord[] = [];
 
         const pipeline = createPreviewPipeline({
             config,
@@ -980,7 +1050,7 @@ describe('GUI local preview command behavior', () => {
             }
         });
 
-        const unsubscribeEffect = pipeline.eventBus.subscribe('display:gift-animation', (effectPayload) => {
+        const unsubscribeEffect = pipeline.eventBus.subscribe('display:gift-animation', (effectPayload: UnknownRecord) => {
             emittedEffects.push(effectPayload);
         });
 
@@ -993,11 +1063,11 @@ describe('GUI local preview command behavior', () => {
                 error: () => {},
                 console: () => {}
             },
-            emitPlatformEvent: (event) => pipeline.emitIngestEvent(event)
+            emitPlatformEvent: (event: UnknownRecord) => pipeline.emitIngestEvent(event)
         });
 
         const giftEvent = buildPreviewScenarioEvents(32000, 2000)
-            .find((event) => event.adapter === 'tiktok' && event.rawEvent?.eventType === 'GIFT');
+            .find((event) => event.adapter === 'tiktok' && event.rawEvent?.eventType === 'GIFT')!;
 
         expect(giftEvent).toBeDefined();
 
@@ -1012,7 +1082,7 @@ describe('GUI local preview command behavior', () => {
 
     it('emits gift animation effect in preview pipeline when resolver returns Corgi animation', async () => {
         const config = buildPreviewConfig();
-        const emittedEffects = [];
+        const emittedEffects: UnknownRecord[] = [];
 
         const pipeline = createPreviewPipeline({
             config,
@@ -1043,7 +1113,7 @@ describe('GUI local preview command behavior', () => {
             }
         });
 
-        const unsubscribeEffect = pipeline.eventBus.subscribe('display:gift-animation', (effectPayload) => {
+        const unsubscribeEffect = pipeline.eventBus.subscribe('display:gift-animation', (effectPayload: UnknownRecord) => {
             emittedEffects.push(effectPayload);
         });
 
@@ -1056,11 +1126,11 @@ describe('GUI local preview command behavior', () => {
                 error: () => {},
                 console: () => {}
             },
-            emitPlatformEvent: (event) => pipeline.emitIngestEvent(event)
+            emitPlatformEvent: (event: UnknownRecord) => pipeline.emitIngestEvent(event)
         });
 
         const giftEvent = buildPreviewScenarioEvents(32000, 2000)
-            .find((event) => event.adapter === 'tiktok' && event.rawEvent?.eventType === 'GIFT');
+            .find((event) => event.adapter === 'tiktok' && event.rawEvent?.eventType === 'GIFT')!;
 
         expect(giftEvent).toBeDefined();
 
@@ -1079,7 +1149,7 @@ describe('GUI local preview command behavior', () => {
 
     it('uses injected delay in preview pipeline so gift hold timing can block later notifications', async () => {
         const config = buildPreviewConfig();
-        const delayCalls = [];
+        const delayCalls: number[] = [];
 
         const pipeline = createPreviewPipeline({
             config,
@@ -1090,7 +1160,7 @@ describe('GUI local preview command behavior', () => {
                 error: () => {},
                 console: () => {}
             },
-            delay: async (ms) => {
+            delay: async (ms: number) => {
                 delayCalls.push(ms);
             },
             giftAnimationResolver: {
@@ -1122,11 +1192,11 @@ describe('GUI local preview command behavior', () => {
                 error: () => {},
                 console: () => {}
             },
-            emitPlatformEvent: (event) => pipeline.emitIngestEvent(event)
+            emitPlatformEvent: (event: UnknownRecord) => pipeline.emitIngestEvent(event)
         });
 
         const giftEvent = buildPreviewScenarioEvents(32000, 2000)
-            .find((event) => event.adapter === 'tiktok' && event.rawEvent?.eventType === 'GIFT');
+            .find((event) => event.adapter === 'tiktok' && event.rawEvent?.eventType === 'GIFT')!;
 
         expect(giftEvent).toBeDefined();
 

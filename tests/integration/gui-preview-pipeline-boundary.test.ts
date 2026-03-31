@@ -1,11 +1,42 @@
 const { describe, it, expect } = require('bun:test');
 
+type UnknownRecord = Record<string, any>;
+
+type PreviewAdapter = 'twitch' | 'youtube' | 'tiktok';
+
+type ScenarioEvent = {
+    adapter: PreviewAdapter;
+    rawEvent: UnknownRecord;
+};
+
+type PreviewPipeline = {
+    eventBus: {
+        subscribe: (eventName: string, handler: (payload: UnknownRecord) => void) => () => void;
+    };
+    dispose: () => Promise<void>;
+    emitIngestEvent: (event: UnknownRecord) => void;
+};
+
+type PreviewAdapters = Record<PreviewAdapter, { ingest: (rawEvent: UnknownRecord) => Promise<void> }>;
+
+type PreviewModule = {
+    buildPreviewConfig: (baseConfig?: UnknownRecord) => UnknownRecord;
+    buildPreviewScenarioEvents: (durationMs?: number, intervalMs?: number) => ScenarioEvent[];
+    createPreviewPipeline: (options?: UnknownRecord) => PreviewPipeline;
+    createPreviewIngestAdapters: (options: {
+        config?: UnknownRecord;
+        logger?: UnknownRecord;
+        emitPlatformEvent: (event: UnknownRecord) => void;
+        [key: string]: unknown;
+    }) => PreviewAdapters;
+};
+
 const {
     buildPreviewConfig,
     buildPreviewScenarioEvents,
     createPreviewPipeline,
     createPreviewIngestAdapters
-} = require('../../scripts/local/gui-preview');
+} = require('../../scripts/local/gui-preview.ts') as PreviewModule;
 const { waitForDelay } = require('../helpers/time-utils');
 
 describe('GUI preview pipeline boundary integration', () => {
@@ -28,15 +59,15 @@ describe('GUI preview pipeline boundary integration', () => {
                 }
             }
         });
-        const rows = [];
-        const unsubscribe = pipeline.eventBus.subscribe('display:row', (row) => {
+        const rows: UnknownRecord[] = [];
+        const unsubscribe = pipeline.eventBus.subscribe('display:row', (row: UnknownRecord) => {
             rows.push(row);
         });
 
         const adapters = createPreviewIngestAdapters({
             config,
             logger,
-            emitPlatformEvent: (event) => pipeline.emitIngestEvent(event)
+            emitPlatformEvent: (event: UnknownRecord) => pipeline.emitIngestEvent(event)
         });
 
         const scenarioEvents = buildPreviewScenarioEvents(32000, 2000);

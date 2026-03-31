@@ -14,7 +14,6 @@
   "include": [
     "src/services/gui/**/*.js",
     "src/services/gui/**/*.ts",
-    "scripts/local/gui-preview.js",
     "scripts/local/gui-preview.ts",
     "tests/unit/gui/**/*.js",
     "tests/unit/gui/**/*.ts",
