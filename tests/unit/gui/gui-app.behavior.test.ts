@@ -1,4 +1,3 @@
-// @ts-nocheck
 const { describe, it, expect, beforeAll, afterAll } = require('bun:test');
 const React = require('react');
 const { renderToStaticMarkup } = require('react-dom/server');
@@ -7,7 +6,15 @@ const TestRenderer = require('react-test-renderer');
 const { App } = require('../../../gui/src/shared/App');
 const { GuiShell } = require('../../../gui/src/shared/components/GuiShell');
 
-let originalConsoleTimeStamp;
+type EventPayload = Record<string, unknown>;
+type EventHandler = (payload: EventPayload) => void;
+type EventFeedArgs = { onEvent: EventHandler };
+type AppRenderer = {
+    toJSON: () => unknown;
+    root: { findByType: (component: unknown) => { props: Record<string, unknown> } };
+};
+
+let originalConsoleTimeStamp: typeof console.timeStamp | undefined;
 
 beforeAll(() => {
     originalConsoleTimeStamp = console.timeStamp;
@@ -17,7 +24,11 @@ beforeAll(() => {
 });
 
 afterAll(() => {
-    console.timeStamp = originalConsoleTimeStamp;
+    if (originalConsoleTimeStamp) {
+        console.timeStamp = originalConsoleTimeStamp;
+    } else {
+        Reflect.deleteProperty(console, 'timeStamp');
+    }
 });
 
 describe('GUI app behavior', () => {
@@ -34,13 +45,13 @@ describe('GUI app behavior', () => {
     });
 
     it('propagates compare mode to rendered dock rows', async () => {
-        let onEventHandler = null;
-        const createEventFeedImpl = ({ onEvent }) => {
+        let onEventHandler: EventHandler | null = null;
+        const createEventFeedImpl = ({ onEvent }: EventFeedArgs) => {
             onEventHandler = onEvent;
             return () => {};
         };
 
-        let renderer;
+        let renderer: AppRenderer | null = null;
         await TestRenderer.act(async () => {
             renderer = TestRenderer.create(
                 React.createElement(App, {
@@ -53,7 +64,7 @@ describe('GUI app behavior', () => {
         });
 
         await TestRenderer.act(async () => {
-            onEventHandler({
+            onEventHandler!({
                 type: 'chat',
                 kind: 'chat',
                 platform: 'twitch',
@@ -64,19 +75,19 @@ describe('GUI app behavior', () => {
             });
         });
 
-        const text = JSON.stringify(renderer.toJSON());
+        const text = JSON.stringify(renderer!.toJSON());
         expect(text).toContain('gui-row-compare-shell');
         expect(text).toContain('test-user');
     });
 
     it('wires event feed through useEffect in app component', async () => {
-        let onEventHandler = null;
-        const createEventFeedImpl = ({ onEvent }) => {
+        let onEventHandler: EventHandler | null = null;
+        const createEventFeedImpl = ({ onEvent }: EventFeedArgs) => {
             onEventHandler = onEvent;
             return () => {};
         };
 
-        let renderer;
+        let renderer: AppRenderer | null = null;
         await TestRenderer.act(async () => {
             renderer = TestRenderer.create(
                 React.createElement(App, {
@@ -92,7 +103,7 @@ describe('GUI app behavior', () => {
         expect(typeof onEventHandler).toBe('function');
 
         await TestRenderer.act(async () => {
-            onEventHandler({
+            onEventHandler!({
                 type: 'chat',
                 kind: 'chat',
                 platform: 'twitch',
@@ -103,19 +114,19 @@ describe('GUI app behavior', () => {
             });
         });
 
-        const text = JSON.stringify(renderer.toJSON());
+        const text = JSON.stringify(renderer!.toJSON());
         expect(text).toContain('gui-shell--overlay');
         expect(text).toContain('test-user');
     });
 
     it('applies overlay max message limit from app configuration', async () => {
-        let onEventHandler = null;
-        const createEventFeedImpl = ({ onEvent }) => {
+        let onEventHandler: EventHandler | null = null;
+        const createEventFeedImpl = ({ onEvent }: EventFeedArgs) => {
             onEventHandler = onEvent;
             return () => {};
         };
 
-        let renderer;
+        let renderer: AppRenderer | null = null;
         await TestRenderer.act(async () => {
             renderer = TestRenderer.create(
                 React.createElement(App, {
@@ -129,7 +140,7 @@ describe('GUI app behavior', () => {
         });
 
         await TestRenderer.act(async () => {
-            onEventHandler({
+            onEventHandler!({
                 type: 'chat',
                 kind: 'chat',
                 platform: 'twitch',
@@ -138,7 +149,7 @@ describe('GUI app behavior', () => {
                 avatarUrl: 'https://example.invalid/test-avatar-1.png',
                 timestamp: '2024-01-01T00:00:01.000Z'
             });
-            onEventHandler({
+            onEventHandler!({
                 type: 'chat',
                 kind: 'chat',
                 platform: 'twitch',
@@ -147,7 +158,7 @@ describe('GUI app behavior', () => {
                 avatarUrl: 'https://example.invalid/test-avatar-2.png',
                 timestamp: '2024-01-01T00:00:02.000Z'
             });
-            onEventHandler({
+            onEventHandler!({
                 type: 'chat',
                 kind: 'chat',
                 platform: 'twitch',
@@ -156,7 +167,7 @@ describe('GUI app behavior', () => {
                 avatarUrl: 'https://example.invalid/test-avatar-3.png',
                 timestamp: '2024-01-01T00:00:03.000Z'
             });
-            onEventHandler({
+            onEventHandler!({
                 type: 'chat',
                 kind: 'chat',
                 platform: 'twitch',
@@ -167,7 +178,7 @@ describe('GUI app behavior', () => {
             });
         });
 
-        const text = JSON.stringify(renderer.toJSON());
+        const text = JSON.stringify(renderer!.toJSON());
         expect(text).toContain('test-user-2');
         expect(text).toContain('test-user-3');
         expect(text).toContain('test-user-4');
@@ -186,13 +197,13 @@ describe('GUI app behavior', () => {
     });
 
     it('routes effect events separately from row feed updates', async () => {
-        let onEventHandler = null;
-        const createEventFeedImpl = ({ onEvent }) => {
+        let onEventHandler: EventHandler | null = null;
+        const createEventFeedImpl = ({ onEvent }: EventFeedArgs) => {
             onEventHandler = onEvent;
             return () => {};
         };
 
-        let renderer;
+        let renderer: AppRenderer | null = null;
         await TestRenderer.act(async () => {
             renderer = TestRenderer.create(
                 React.createElement(App, {
@@ -204,7 +215,7 @@ describe('GUI app behavior', () => {
         });
 
         await TestRenderer.act(async () => {
-            onEventHandler({
+            onEventHandler!({
                 __guiEvent: 'effect',
                 effectType: 'tiktok-gift-animation',
                 playbackId: 'effect-1',
@@ -223,7 +234,7 @@ describe('GUI app behavior', () => {
         });
 
         await TestRenderer.act(async () => {
-            onEventHandler({
+            onEventHandler!({
                 type: 'chat',
                 kind: 'chat',
                 platform: 'twitch',
@@ -234,19 +245,19 @@ describe('GUI app behavior', () => {
             });
         });
 
-        const text = JSON.stringify(renderer.toJSON());
+        const text = JSON.stringify(renderer!.toJSON());
         expect(text).toContain('test-user');
         expect(text).toContain('gui-shell__effect-layer');
     });
 
     it('ignores malformed gift effect payloads missing config shape', async () => {
-        let onEventHandler = null;
-        const createEventFeedImpl = ({ onEvent }) => {
+        let onEventHandler: EventHandler | null = null;
+        const createEventFeedImpl = ({ onEvent }: EventFeedArgs) => {
             onEventHandler = onEvent;
             return () => {};
         };
 
-        let renderer;
+        let renderer: AppRenderer | null = null;
         await TestRenderer.act(async () => {
             renderer = TestRenderer.create(
                 React.createElement(App, {
@@ -258,7 +269,7 @@ describe('GUI app behavior', () => {
         });
 
         await TestRenderer.act(async () => {
-            onEventHandler({
+            onEventHandler!({
                 __guiEvent: 'effect',
                 effectType: 'tiktok-gift-animation',
                 playbackId: 'effect-1',
@@ -267,18 +278,18 @@ describe('GUI app behavior', () => {
             });
         });
 
-        const text = JSON.stringify(renderer.toJSON());
+        const text = JSON.stringify(renderer!.toJSON());
         expect(text).not.toContain('gui-shell__effect-layer');
     });
 
     it('ignores malformed gift effect payloads with string duration', async () => {
-        let onEventHandler = null;
-        const createEventFeedImpl = ({ onEvent }) => {
+        let onEventHandler: EventHandler | null = null;
+        const createEventFeedImpl = ({ onEvent }: EventFeedArgs) => {
             onEventHandler = onEvent;
             return () => {};
         };
 
-        let renderer;
+        let renderer: AppRenderer | null = null;
         await TestRenderer.act(async () => {
             renderer = TestRenderer.create(
                 React.createElement(App, {
@@ -290,7 +301,7 @@ describe('GUI app behavior', () => {
         });
 
         await TestRenderer.act(async () => {
-            onEventHandler({
+            onEventHandler!({
                 __guiEvent: 'effect',
                 effectType: 'tiktok-gift-animation',
                 playbackId: 'effect-bad-duration',
@@ -308,18 +319,18 @@ describe('GUI app behavior', () => {
             });
         });
 
-        const text = JSON.stringify(renderer.toJSON());
+        const text = JSON.stringify(renderer!.toJSON());
         expect(text).not.toContain('gui-shell__effect-layer');
     });
 
     it('queues gift effects and advances only after active playback completion', async () => {
-        let onEventHandler = null;
-        const createEventFeedImpl = ({ onEvent }) => {
+        let onEventHandler: EventHandler | null = null;
+        const createEventFeedImpl = ({ onEvent }: EventFeedArgs) => {
             onEventHandler = onEvent;
             return () => {};
         };
 
-        let renderer;
+        let renderer: AppRenderer | null = null;
         await TestRenderer.act(async () => {
             renderer = TestRenderer.create(
                 React.createElement(App, {
@@ -331,7 +342,7 @@ describe('GUI app behavior', () => {
         });
 
         await TestRenderer.act(async () => {
-            onEventHandler({
+            onEventHandler!({
                 __guiEvent: 'effect',
                 effectType: 'tiktok-gift-animation',
                 playbackId: 'effect-1',
@@ -347,7 +358,7 @@ describe('GUI app behavior', () => {
                     aFrame: [480, 0, 480, 854]
                 }
             });
-            onEventHandler({
+            onEventHandler!({
                 __guiEvent: 'effect',
                 effectType: 'tiktok-gift-animation',
                 playbackId: 'effect-2',
@@ -365,25 +376,29 @@ describe('GUI app behavior', () => {
             });
         });
 
-        let shell = renderer.root.findByType(GuiShell);
+        let shell = renderer!.root.findByType(GuiShell) as {
+            props: { activeEffect: { playbackId: string }; onEffectComplete: (playbackId: string) => void };
+        };
         expect(shell.props.activeEffect.playbackId).toBe('effect-1');
 
         await TestRenderer.act(async () => {
             shell.props.onEffectComplete('effect-1');
         });
 
-        shell = renderer.root.findByType(GuiShell);
+        shell = renderer!.root.findByType(GuiShell) as {
+            props: { activeEffect: { playbackId: string }; onEffectComplete: (playbackId: string) => void };
+        };
         expect(shell.props.activeEffect.playbackId).toBe('effect-2');
     });
 
     it('ignores gift animation effects in overlay mode', async () => {
-        let onEventHandler = null;
-        const createEventFeedImpl = ({ onEvent }) => {
+        let onEventHandler: EventHandler | null = null;
+        const createEventFeedImpl = ({ onEvent }: EventFeedArgs) => {
             onEventHandler = onEvent;
             return () => {};
         };
 
-        let renderer;
+        let renderer: AppRenderer | null = null;
         await TestRenderer.act(async () => {
             renderer = TestRenderer.create(
                 React.createElement(App, {
@@ -397,7 +412,7 @@ describe('GUI app behavior', () => {
         });
 
         await TestRenderer.act(async () => {
-            onEventHandler({
+            onEventHandler!({
                 __guiEvent: 'effect',
                 effectType: 'tiktok-gift-animation',
                 playbackId: 'effect-ignored-overlay',
@@ -415,18 +430,18 @@ describe('GUI app behavior', () => {
             });
         });
 
-        const text = JSON.stringify(renderer.toJSON());
+        const text = JSON.stringify(renderer!.toJSON());
         expect(text).not.toContain('gui-shell__effect-layer');
     });
 
     it('renders only gift animation effects in tiktok-animations mode', async () => {
-        let onEventHandler = null;
-        const createEventFeedImpl = ({ onEvent }) => {
+        let onEventHandler: EventHandler | null = null;
+        const createEventFeedImpl = ({ onEvent }: EventFeedArgs) => {
             onEventHandler = onEvent;
             return () => {};
         };
 
-        let renderer;
+        let renderer: AppRenderer | null = null;
         await TestRenderer.act(async () => {
             renderer = TestRenderer.create(
                 React.createElement(App, {
@@ -438,7 +453,7 @@ describe('GUI app behavior', () => {
         });
 
         await TestRenderer.act(async () => {
-            onEventHandler({
+            onEventHandler!({
                 type: 'chat',
                 kind: 'chat',
                 platform: 'twitch',
@@ -447,7 +462,7 @@ describe('GUI app behavior', () => {
                 avatarUrl: 'https://example.invalid/test-avatar.png',
                 timestamp: '2024-01-01T00:00:00.000Z'
             });
-            onEventHandler({
+            onEventHandler!({
                 __guiEvent: 'effect',
                 effectType: 'tiktok-gift-animation',
                 playbackId: 'effect-tiktok-only',
@@ -465,7 +480,7 @@ describe('GUI app behavior', () => {
             });
         });
 
-        const text = JSON.stringify(renderer.toJSON());
+        const text = JSON.stringify(renderer!.toJSON());
         expect(text).toContain('gui-shell__effect-layer');
         expect(text).not.toContain('hidden-row');
     });

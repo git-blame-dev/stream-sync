@@ -1,4 +1,3 @@
-// @ts-nocheck
 const { describe, it, expect } = require('bun:test');
 const React = require('react');
 const { renderToStaticMarkup } = require('react-dom/server');
@@ -6,17 +5,31 @@ const TestRenderer = require('react-test-renderer');
 
 const { GuiShell } = require('../../../gui/src/shared/components/GuiShell');
 
-function createDockShellMock({ scrollTop = 0, clientHeight = 120, scrollHeight = 320 } = {}) {
-    const listenersByEvent = new Map();
+type ScrollListener = () => void;
+type OverlayLayout = { offsetTop: number; offsetHeight: number };
+type OverlayNode = { type?: unknown; props?: Record<string, any> };
+type ShellRenderer = {
+    toJSON: () => unknown;
+    unmount: () => void;
+    update: (element: unknown) => void;
+    root: {
+        findAll: (predicate: (node: any) => boolean) => Array<{ props: Record<string, any> }>;
+    };
+};
+
+function createDockShellMock(
+    { scrollTop = 0, clientHeight = 120, scrollHeight = 320 }: { scrollTop?: number; clientHeight?: number; scrollHeight?: number } = {}
+) {
+    const listenersByEvent = new Map<string, ScrollListener>();
 
     return {
         scrollTop,
         clientHeight,
         scrollHeight,
-        addEventListener: (eventName, handler) => {
+        addEventListener: (eventName: string, handler: ScrollListener) => {
             listenersByEvent.set(eventName, handler);
         },
-        removeEventListener: (eventName, handler) => {
+        removeEventListener: (eventName: string, handler: ScrollListener) => {
             if (listenersByEvent.get(eventName) === handler) {
                 listenersByEvent.delete(eventName);
             }
@@ -30,7 +43,7 @@ function createDockShellMock({ scrollTop = 0, clientHeight = 120, scrollHeight =
     };
 }
 
-function createGuiRow(index) {
+function createGuiRow(index: number) {
     return {
         type: 'chat',
         kind: 'chat',
@@ -42,8 +55,8 @@ function createGuiRow(index) {
     };
 }
 
-function createOverlayNodeMocks(layoutByAvatarUrl, shellClientHeight = 220) {
-    function extractAvatarUrl(element) {
+function createOverlayNodeMocks(layoutByAvatarUrl: Record<string, OverlayLayout>, shellClientHeight = 220) {
+    function extractAvatarUrl(element: OverlayNode): string {
         if (!element || !element.props) {
             return '';
         }
@@ -61,7 +74,7 @@ function createOverlayNodeMocks(layoutByAvatarUrl, shellClientHeight = 220) {
         const children = Array.isArray(element.props.children)
             ? element.props.children
             : [element.props.children];
-        for (const child of children) {
+        for (const child of children as OverlayNode[]) {
             const childAvatarUrl = extractAvatarUrl(child);
             if (childAvatarUrl) {
                 return childAvatarUrl;
@@ -78,7 +91,7 @@ function createOverlayNodeMocks(layoutByAvatarUrl, shellClientHeight = 220) {
 
     return {
         shell,
-        createNodeMock: (element) => {
+        createNodeMock: (element: OverlayNode) => {
             if (element.type === 'main') {
                 return shell;
             }
@@ -103,8 +116,8 @@ function createOverlayNodeMocks(layoutByAvatarUrl, shellClientHeight = 220) {
     };
 }
 
-function findOverlayExitNodes(renderer) {
-    return renderer.root.findAll((node) => {
+function findOverlayExitNodes(renderer: ShellRenderer) {
+    return renderer.root.findAll((node: any) => {
         if (node.type !== 'div') {
             return false;
         }
@@ -201,7 +214,7 @@ describe('GuiShell behavior', () => {
     it('handles overlay row refs across mount and unmount lifecycle', async () => {
         const previousTimeStamp = console.timeStamp;
         console.timeStamp = previousTimeStamp || (() => {});
-        let renderer;
+        let renderer: ShellRenderer | null = null;
 
         try {
             await TestRenderer.act(async () => {
@@ -234,16 +247,16 @@ describe('GuiShell behavior', () => {
                 );
             });
 
-            expect(renderer.toJSON()).not.toBeNull();
+            expect(renderer!.toJSON()).not.toBeNull();
 
             await TestRenderer.act(async () => {
-                renderer.unmount();
+                renderer!.unmount();
             });
         } finally {
             if (previousTimeStamp) {
                 console.timeStamp = previousTimeStamp;
             } else {
-                delete console.timeStamp;
+                Reflect.deleteProperty(console, 'timeStamp');
             }
         }
     });
@@ -252,7 +265,7 @@ describe('GuiShell behavior', () => {
         const previousTimeStamp = console.timeStamp;
         console.timeStamp = previousTimeStamp || (() => {});
 
-        let renderer;
+        let renderer: ShellRenderer | null = null;
         const layoutByAvatarUrl = {
             'https://example.invalid/test-avatar-1.png': { offsetTop: -18, offsetHeight: 60 },
             'https://example.invalid/test-avatar-2.png': { offsetTop: 52, offsetHeight: 60 },
@@ -274,33 +287,33 @@ describe('GuiShell behavior', () => {
                 );
             });
 
-            let rendered = JSON.stringify(renderer.toJSON());
+            let rendered = JSON.stringify(renderer!.toJSON());
             expect(rendered).toContain('test-user-1');
             expect(rendered).toContain('test-user-2');
             expect(rendered).toContain('test-user-3');
 
-            const exitNodes = findOverlayExitNodes(renderer);
+            const exitNodes = findOverlayExitNodes(renderer!);
             expect(exitNodes.length).toBe(1);
 
             await TestRenderer.act(async () => {
                 exitNodes[0].props.onAnimationEnd({ animationName: 'gui-overlay-row-exit' });
             });
 
-            rendered = JSON.stringify(renderer.toJSON());
+            rendered = JSON.stringify(renderer!.toJSON());
             expect(rendered).not.toContain('test-user-1');
             expect(rendered).toContain('test-user-2');
             expect(rendered).toContain('test-user-3');
         } finally {
             if (renderer) {
                 await TestRenderer.act(async () => {
-                    renderer.unmount();
+                    renderer!.unmount();
                 });
             }
 
             if (previousTimeStamp) {
                 console.timeStamp = previousTimeStamp;
             } else {
-                delete console.timeStamp;
+                Reflect.deleteProperty(console, 'timeStamp');
             }
         }
     });
@@ -309,7 +322,7 @@ describe('GuiShell behavior', () => {
         const previousTimeStamp = console.timeStamp;
         console.timeStamp = previousTimeStamp || (() => {});
 
-        let renderer;
+        let renderer: ShellRenderer | null = null;
         const layoutByAvatarUrl = {
             'https://example.invalid/test-avatar-1.png': { offsetTop: 20, offsetHeight: 50 },
             'https://example.invalid/test-avatar-2.png': { offsetTop: 80, offsetHeight: 50 },
@@ -331,21 +344,21 @@ describe('GuiShell behavior', () => {
                 );
             });
 
-            const rendered = JSON.stringify(renderer.toJSON());
+            const rendered = JSON.stringify(renderer!.toJSON());
             expect(rendered).toContain('test-user-1');
             expect(rendered).toContain('test-user-2');
             expect(rendered).toContain('test-user-3');
         } finally {
             if (renderer) {
                 await TestRenderer.act(async () => {
-                    renderer.unmount();
+                    renderer!.unmount();
                 });
             }
 
             if (previousTimeStamp) {
                 console.timeStamp = previousTimeStamp;
             } else {
-                delete console.timeStamp;
+                Reflect.deleteProperty(console, 'timeStamp');
             }
         }
     });
@@ -355,20 +368,20 @@ describe('GuiShell behavior', () => {
         const previousWindow = global.window;
         console.timeStamp = previousTimeStamp || (() => {});
 
-        let renderer;
-        const resizeListeners = new Set();
-        global.window = {
-            addEventListener: (eventName, handler) => {
+        let renderer: ShellRenderer | null = null;
+        const resizeListeners = new Set<ScrollListener>();
+        global.window = ({
+            addEventListener: (eventName: string, handler: ScrollListener) => {
                 if (eventName === 'resize') {
                     resizeListeners.add(handler);
                 }
             },
-            removeEventListener: (eventName, handler) => {
+            removeEventListener: (eventName: string, handler: ScrollListener) => {
                 if (eventName === 'resize') {
                     resizeListeners.delete(handler);
                 }
             }
-        };
+        }) as unknown as Window & typeof globalThis;
 
         const layoutByAvatarUrl = {
             'https://example.invalid/test-avatar-1.png': { offsetTop: 20, offsetHeight: 50 },
@@ -391,7 +404,7 @@ describe('GuiShell behavior', () => {
                 );
             });
 
-            let rendered = JSON.stringify(renderer.toJSON());
+            let rendered = JSON.stringify(renderer!.toJSON());
             expect(rendered).toContain('test-user-1');
 
             layoutByAvatarUrl['https://example.invalid/test-avatar-1.png'].offsetTop = -16;
@@ -402,28 +415,28 @@ describe('GuiShell behavior', () => {
                 }
             });
 
-            rendered = JSON.stringify(renderer.toJSON());
+            rendered = JSON.stringify(renderer!.toJSON());
             expect(rendered).toContain('test-user-1');
             expect(rendered).toContain('test-user-2');
             expect(rendered).toContain('test-user-3');
-            expect(findOverlayExitNodes(renderer).length).toBeGreaterThanOrEqual(1);
+            expect(findOverlayExitNodes(renderer!).length).toBeGreaterThanOrEqual(1);
         } finally {
             if (renderer) {
                 await TestRenderer.act(async () => {
-                    renderer.unmount();
+                    renderer!.unmount();
                 });
             }
 
             if (previousWindow !== undefined) {
                 global.window = previousWindow;
             } else {
-                delete global.window;
+                Reflect.deleteProperty(global, 'window');
             }
 
             if (previousTimeStamp) {
                 console.timeStamp = previousTimeStamp;
             } else {
-                delete console.timeStamp;
+                Reflect.deleteProperty(console, 'timeStamp');
             }
         }
     });
@@ -432,7 +445,7 @@ describe('GuiShell behavior', () => {
         const previousTimeStamp = console.timeStamp;
         console.timeStamp = previousTimeStamp || (() => {});
 
-        let renderer;
+        let renderer: ShellRenderer | null = null;
         const layoutByAvatarUrl = {
             'https://example.invalid/test-avatar-1.png': { offsetTop: 18, offsetHeight: 50 },
             'https://example.invalid/test-avatar-2.png': { offsetTop: 78, offsetHeight: 50 },
@@ -455,13 +468,13 @@ describe('GuiShell behavior', () => {
                 );
             });
 
-            let rendered = JSON.stringify(renderer.toJSON());
+            let rendered = JSON.stringify(renderer!.toJSON());
             expect(rendered).toContain('test-user-1');
             expect(rendered).toContain('test-user-2');
             expect(rendered).toContain('test-user-3');
 
             await TestRenderer.act(async () => {
-                renderer.update(
+                renderer!.update(
                     React.createElement(GuiShell, {
                         mode: 'overlay',
                         overlayMaxLinesPerMessage: 3,
@@ -470,21 +483,21 @@ describe('GuiShell behavior', () => {
                 );
             });
 
-            rendered = JSON.stringify(renderer.toJSON());
+            rendered = JSON.stringify(renderer!.toJSON());
             expect(rendered).toContain('test-user-1');
             expect(rendered).toContain('test-user-2');
             expect(rendered).toContain('test-user-3');
             expect(rendered).toContain('test-user-4');
-            expect(findOverlayExitNodes(renderer).length).toBeGreaterThanOrEqual(1);
+            expect(findOverlayExitNodes(renderer!).length).toBeGreaterThanOrEqual(1);
 
-            const exitNodes = findOverlayExitNodes(renderer);
+            const exitNodes = findOverlayExitNodes(renderer!);
             await TestRenderer.act(async () => {
                 for (const exitNode of exitNodes) {
                     exitNode.props.onAnimationEnd({ animationName: 'gui-overlay-row-exit' });
                 }
             });
 
-            rendered = JSON.stringify(renderer.toJSON());
+            rendered = JSON.stringify(renderer!.toJSON());
             expect(rendered).not.toContain('test-user-1');
             expect(rendered).toContain('test-user-2');
             expect(rendered).toContain('test-user-3');
@@ -492,14 +505,14 @@ describe('GuiShell behavior', () => {
         } finally {
             if (renderer) {
                 await TestRenderer.act(async () => {
-                    renderer.unmount();
+                    renderer!.unmount();
                 });
             }
 
             if (previousTimeStamp) {
                 console.timeStamp = previousTimeStamp;
             } else {
-                delete console.timeStamp;
+                Reflect.deleteProperty(console, 'timeStamp');
             }
         }
     });
@@ -508,7 +521,7 @@ describe('GuiShell behavior', () => {
         const previousTimeStamp = console.timeStamp;
         console.timeStamp = previousTimeStamp || (() => {});
 
-        let renderer;
+        let renderer: ShellRenderer | null = null;
         const layoutByAvatarUrl = {
             'https://example.invalid/test-avatar-1.png': { offsetTop: 4, offsetHeight: 40 },
             'https://example.invalid/test-avatar-2.png': { offsetTop: 52, offsetHeight: 40 },
@@ -534,7 +547,7 @@ describe('GuiShell behavior', () => {
             layoutByAvatarUrl['https://example.invalid/test-avatar-2.png'].offsetTop = -8;
 
             await TestRenderer.act(async () => {
-                renderer.update(
+                renderer!.update(
                     React.createElement(GuiShell, {
                         mode: 'overlay',
                         overlayMaxLinesPerMessage: 3,
@@ -543,7 +556,7 @@ describe('GuiShell behavior', () => {
                 );
             });
 
-            const exitNodes = findOverlayExitNodes(renderer);
+            const exitNodes = findOverlayExitNodes(renderer!);
             expect(exitNodes.length).toBeGreaterThanOrEqual(2);
 
             await TestRenderer.act(async () => {
@@ -552,7 +565,7 @@ describe('GuiShell behavior', () => {
                 }
             });
 
-            const rendered = JSON.stringify(renderer.toJSON());
+            const rendered = JSON.stringify(renderer!.toJSON());
             expect(rendered).not.toContain('test-user-1');
             expect(rendered).not.toContain('test-user-2');
             expect(rendered).toContain('test-user-3');
@@ -560,14 +573,14 @@ describe('GuiShell behavior', () => {
         } finally {
             if (renderer) {
                 await TestRenderer.act(async () => {
-                    renderer.unmount();
+                    renderer!.unmount();
                 });
             }
 
             if (previousTimeStamp) {
                 console.timeStamp = previousTimeStamp;
             } else {
-                delete console.timeStamp;
+                Reflect.deleteProperty(console, 'timeStamp');
             }
         }
     });
@@ -575,7 +588,7 @@ describe('GuiShell behavior', () => {
     it('does not render overlay exit rows in dock mode', async () => {
         const previousTimeStamp = console.timeStamp;
         console.timeStamp = previousTimeStamp || (() => {});
-        let renderer;
+        let renderer: ShellRenderer | null = null;
 
         try {
             await TestRenderer.act(async () => {
@@ -586,7 +599,7 @@ describe('GuiShell behavior', () => {
                         rows: [createGuiRow(1), createGuiRow(2), createGuiRow(3)]
                     }),
                     {
-                        createNodeMock: (element) => {
+                        createNodeMock: (element: OverlayNode) => {
                             if (element.type === 'main') {
                                 return createDockShellMock();
                             }
@@ -604,18 +617,18 @@ describe('GuiShell behavior', () => {
                 );
             });
 
-            expect(findOverlayExitNodes(renderer).length).toBe(0);
+            expect(findOverlayExitNodes(renderer!).length).toBe(0);
         } finally {
             if (renderer) {
                 await TestRenderer.act(async () => {
-                    renderer.unmount();
+                    renderer!.unmount();
                 });
             }
 
             if (previousTimeStamp) {
                 console.timeStamp = previousTimeStamp;
             } else {
-                delete console.timeStamp;
+                Reflect.deleteProperty(console, 'timeStamp');
             }
         }
     });
@@ -623,7 +636,7 @@ describe('GuiShell behavior', () => {
     it('auto-scrolls dock shell to latest rows when messages update', async () => {
         const previousTimeStamp = console.timeStamp;
         console.timeStamp = previousTimeStamp || (() => {});
-        let renderer;
+        let renderer: ShellRenderer | null = null;
         const dockShell = createDockShellMock();
 
         try {
@@ -645,7 +658,7 @@ describe('GuiShell behavior', () => {
                         ]
                     }),
                     {
-                        createNodeMock: (element) => {
+                        createNodeMock: (element: OverlayNode) => {
                             if (element.type === 'main') {
                                 return dockShell;
                             }
@@ -671,7 +684,7 @@ describe('GuiShell behavior', () => {
             dockShell.scrollHeight = 640;
 
             await TestRenderer.act(async () => {
-                renderer.update(
+                renderer!.update(
                     React.createElement(GuiShell, {
                         mode: 'dock',
                         overlayMaxLinesPerMessage: 3,
@@ -703,14 +716,14 @@ describe('GuiShell behavior', () => {
         } finally {
             if (renderer) {
                 await TestRenderer.act(async () => {
-                    renderer.unmount();
+                    renderer!.unmount();
                 });
             }
 
             if (previousTimeStamp) {
                 console.timeStamp = previousTimeStamp;
             } else {
-                delete console.timeStamp;
+                Reflect.deleteProperty(console, 'timeStamp');
             }
         }
     });
@@ -718,7 +731,7 @@ describe('GuiShell behavior', () => {
     it('keeps dock scroll position when user is reading older rows', async () => {
         const previousTimeStamp = console.timeStamp;
         console.timeStamp = previousTimeStamp || (() => {});
-        let renderer;
+        let renderer: ShellRenderer | null = null;
         const dockShell = createDockShellMock({ scrollTop: 40 });
 
         try {
@@ -740,7 +753,7 @@ describe('GuiShell behavior', () => {
                         ]
                     }),
                     {
-                        createNodeMock: (element) => {
+                        createNodeMock: (element: OverlayNode) => {
                             if (element.type === 'main') {
                                 return dockShell;
                             }
@@ -766,7 +779,7 @@ describe('GuiShell behavior', () => {
             dockShell.scrollHeight = 640;
 
             await TestRenderer.act(async () => {
-                renderer.update(
+                renderer!.update(
                     React.createElement(GuiShell, {
                         mode: 'dock',
                         overlayMaxLinesPerMessage: 3,
@@ -802,7 +815,7 @@ describe('GuiShell behavior', () => {
             dockShell.scrollHeight = 760;
 
             await TestRenderer.act(async () => {
-                renderer.update(
+                renderer!.update(
                     React.createElement(GuiShell, {
                         mode: 'dock',
                         overlayMaxLinesPerMessage: 3,
@@ -843,14 +856,14 @@ describe('GuiShell behavior', () => {
         } finally {
             if (renderer) {
                 await TestRenderer.act(async () => {
-                    renderer.unmount();
+                    renderer!.unmount();
                 });
             }
 
             if (previousTimeStamp) {
                 console.timeStamp = previousTimeStamp;
             } else {
-                delete console.timeStamp;
+                Reflect.deleteProperty(console, 'timeStamp');
             }
         }
     });
@@ -858,7 +871,7 @@ describe('GuiShell behavior', () => {
     it('pins dock when user is within 8px of the bottom', async () => {
         const previousTimeStamp = console.timeStamp;
         console.timeStamp = previousTimeStamp || (() => {});
-        let renderer;
+        let renderer: ShellRenderer | null = null;
         const dockShell = createDockShellMock();
 
         try {
@@ -880,7 +893,7 @@ describe('GuiShell behavior', () => {
                         ]
                     }),
                     {
-                        createNodeMock: (element) => {
+                        createNodeMock: (element: OverlayNode) => {
                             if (element.type === 'main') {
                                 return dockShell;
                             }
@@ -906,7 +919,7 @@ describe('GuiShell behavior', () => {
             dockShell.scrollHeight = 640;
 
             await TestRenderer.act(async () => {
-                renderer.update(
+                renderer!.update(
                     React.createElement(GuiShell, {
                         mode: 'dock',
                         overlayMaxLinesPerMessage: 3,
@@ -942,7 +955,7 @@ describe('GuiShell behavior', () => {
             dockShell.scrollHeight = 760;
 
             await TestRenderer.act(async () => {
-                renderer.update(
+                renderer!.update(
                     React.createElement(GuiShell, {
                         mode: 'dock',
                         overlayMaxLinesPerMessage: 3,
@@ -983,14 +996,14 @@ describe('GuiShell behavior', () => {
         } finally {
             if (renderer) {
                 await TestRenderer.act(async () => {
-                    renderer.unmount();
+                    renderer!.unmount();
                 });
             }
 
             if (previousTimeStamp) {
                 console.timeStamp = previousTimeStamp;
             } else {
-                delete console.timeStamp;
+                Reflect.deleteProperty(console, 'timeStamp');
             }
         }
     });
@@ -1002,12 +1015,12 @@ describe('GuiShell behavior', () => {
 
         const dockShell = createDockShellMock({ clientHeight: 200, scrollHeight: 200 });
         let rafCalls = 0;
-        let renderer;
+        let renderer: ShellRenderer | null = null;
 
         global.requestAnimationFrame = (callback) => {
             rafCalls += 1;
             dockShell.scrollHeight = 420;
-            callback();
+            callback(0);
             return 1;
         };
 
@@ -1020,7 +1033,7 @@ describe('GuiShell behavior', () => {
                         rows: []
                     }),
                     {
-                        createNodeMock: (element) => {
+                        createNodeMock: (element: OverlayNode) => {
                             if (element.type === 'main') {
                                 return dockShell;
                             }
@@ -1043,20 +1056,20 @@ describe('GuiShell behavior', () => {
         } finally {
             if (renderer) {
                 await TestRenderer.act(async () => {
-                    renderer.unmount();
+                    renderer!.unmount();
                 });
             }
 
             if (typeof previousRequestAnimationFrame === 'function') {
                 global.requestAnimationFrame = previousRequestAnimationFrame;
             } else {
-                delete global.requestAnimationFrame;
+                Reflect.deleteProperty(global, 'requestAnimationFrame');
             }
 
             if (previousTimeStamp) {
                 console.timeStamp = previousTimeStamp;
             } else {
-                delete console.timeStamp;
+                Reflect.deleteProperty(console, 'timeStamp');
             }
         }
     });
@@ -1067,11 +1080,11 @@ describe('GuiShell behavior', () => {
         console.timeStamp = previousTimeStamp || (() => {});
 
         const dockShell = createDockShellMock();
-        let renderer;
+        let renderer: ShellRenderer | null = null;
 
         global.requestAnimationFrame = (callback) => {
             dockShell.scrollHeight += 100;
-            callback();
+            callback(0);
             return 1;
         };
 
@@ -1094,7 +1107,7 @@ describe('GuiShell behavior', () => {
                         ]
                     }),
                     {
-                        createNodeMock: (element) => {
+                        createNodeMock: (element: OverlayNode) => {
                             if (element.type === 'main') {
                                 return dockShell;
                             }
@@ -1118,7 +1131,7 @@ describe('GuiShell behavior', () => {
             dockShell.scrollHeight = 480;
 
             await TestRenderer.act(async () => {
-                renderer.update(
+                renderer!.update(
                     React.createElement(GuiShell, {
                         mode: 'dock',
                         overlayMaxLinesPerMessage: 3,
@@ -1150,20 +1163,20 @@ describe('GuiShell behavior', () => {
         } finally {
             if (renderer) {
                 await TestRenderer.act(async () => {
-                    renderer.unmount();
+                    renderer!.unmount();
                 });
             }
 
             if (typeof previousRequestAnimationFrame === 'function') {
                 global.requestAnimationFrame = previousRequestAnimationFrame;
             } else {
-                delete global.requestAnimationFrame;
+                Reflect.deleteProperty(global, 'requestAnimationFrame');
             }
 
             if (previousTimeStamp) {
                 console.timeStamp = previousTimeStamp;
             } else {
-                delete console.timeStamp;
+                Reflect.deleteProperty(console, 'timeStamp');
             }
         }
     });
@@ -1171,7 +1184,7 @@ describe('GuiShell behavior', () => {
     it('keeps dock pinned when geometry drifts after a pinned scroll event', async () => {
         const previousTimeStamp = console.timeStamp;
         console.timeStamp = previousTimeStamp || (() => {});
-        let renderer;
+        let renderer: ShellRenderer | null = null;
         const dockShell = createDockShellMock();
 
         try {
@@ -1193,7 +1206,7 @@ describe('GuiShell behavior', () => {
                         ]
                     }),
                     {
-                        createNodeMock: (element) => {
+                        createNodeMock: (element: OverlayNode) => {
                             if (element.type === 'main') {
                                 return dockShell;
                             }
@@ -1221,7 +1234,7 @@ describe('GuiShell behavior', () => {
             dockShell.scrollHeight = 640;
 
             await TestRenderer.act(async () => {
-                renderer.update(
+                renderer!.update(
                     React.createElement(GuiShell, {
                         mode: 'dock',
                         overlayMaxLinesPerMessage: 3,
@@ -1253,14 +1266,14 @@ describe('GuiShell behavior', () => {
         } finally {
             if (renderer) {
                 await TestRenderer.act(async () => {
-                    renderer.unmount();
+                    renderer!.unmount();
                 });
             }
 
             if (previousTimeStamp) {
                 console.timeStamp = previousTimeStamp;
             } else {
-                delete console.timeStamp;
+                Reflect.deleteProperty(console, 'timeStamp');
             }
         }
     });

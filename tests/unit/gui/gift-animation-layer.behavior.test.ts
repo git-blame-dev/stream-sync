@@ -1,4 +1,3 @@
-// @ts-nocheck
 const { describe, it, expect, beforeEach } = require('bun:test');
 const React = require('react');
 const TestRenderer = require('react-test-renderer');
@@ -6,7 +5,7 @@ const TestRenderer = require('react-test-renderer');
 const { GiftAnimationLayer } = require('../../../gui/src/shared/components/GiftAnimationLayer');
 const { createMockFn } = require('../../helpers/bun-mock-utils');
 
-function createEffect(overrides = {}) {
+function createEffect(overrides: Record<string, any> = {}) {
     const baseConfig = {
         profileName: 'portrait',
         sourceWidth: 960,
@@ -31,18 +30,35 @@ function createEffect(overrides = {}) {
     };
 }
 
-function createCanvasContext(overrides = {}) {
+function createCanvasContext(overrides: Record<string, any> = {}) {
     return {
         clearRect: createMockFn(),
         drawImage: createMockFn(),
         getImageData: createMockFn(() => ({ data: new Uint8ClampedArray([10, 20, 30, 255, 40, 50, 60, 255]) })),
-        createImageData: createMockFn((width, height) => ({ data: new Uint8ClampedArray(width * height * 4) })),
+        createImageData: createMockFn((width: number, height: number) => ({ data: new Uint8ClampedArray(width * height * 4) })),
         putImageData: createMockFn(),
         ...overrides
     };
 }
 
-function createVideoNode() {
+type VideoNode = {
+    readyState: number;
+    paused: boolean;
+    ended: boolean;
+    currentTime: number;
+    muted: boolean;
+    playsInline: boolean;
+    src: string;
+    onended: (() => void) | null;
+    onerror: (() => void) | null;
+    onloadeddata: (() => void) | null;
+    play: ReturnType<typeof createMockFn>;
+    pause: ReturnType<typeof createMockFn>;
+    removeAttribute: ReturnType<typeof createMockFn>;
+    load: ReturnType<typeof createMockFn>;
+};
+
+function createVideoNode(): VideoNode {
     return {
         readyState: 2,
         paused: false,
@@ -61,7 +77,7 @@ function createVideoNode() {
     };
 }
 
-function createCanvasNode(context) {
+function createCanvasNode(context: any) {
     return {
         width: 0,
         height: 0,
@@ -69,38 +85,38 @@ function createCanvasNode(context) {
     };
 }
 
-function installDomRuntime(options = {}) {
+function installDomRuntime(options: { createElement?: (tagName: string) => any } = {}) {
     const previousWindow = global.window;
     const previousDocument = global.document;
     const previousHtmlMediaElement = global.HTMLMediaElement;
     const previousTimeStamp = console.timeStamp;
-    const rafCallbacks = [];
-    const timeoutCallbacks = [];
+    const rafCallbacks: FrameRequestCallback[] = [];
+    const timeoutCallbacks: Array<() => void> = [];
 
     const windowMock = {
-        requestAnimationFrame: (callback) => {
+        requestAnimationFrame: (callback: FrameRequestCallback) => {
             rafCallbacks.push(callback);
             return rafCallbacks.length;
         },
         cancelAnimationFrame: createMockFn(),
-        setTimeout: (callback) => {
+        setTimeout: (callback: () => void) => {
             timeoutCallbacks.push(callback);
             return timeoutCallbacks.length;
         },
         clearTimeout: createMockFn()
     };
 
-    global.window = windowMock;
-    global.document = {
-        createElement: options.createElement || ((tagName) => {
+    global.window = windowMock as unknown as Window & typeof globalThis;
+    global.document = ({
+        createElement: options.createElement || ((tagName: string) => {
             if (tagName === 'canvas') {
                 return createCanvasNode(createCanvasContext());
             }
 
             return {};
         })
-    };
-    global.HTMLMediaElement = { HAVE_CURRENT_DATA: 2 };
+    }) as unknown as Document;
+    global.HTMLMediaElement = { HAVE_CURRENT_DATA: 2 } as unknown as typeof HTMLMediaElement;
     console.timeStamp = previousTimeStamp || (() => {});
 
     return {
@@ -108,7 +124,7 @@ function installDomRuntime(options = {}) {
         runNextAnimationFrame() {
             const callback = rafCallbacks.shift();
             if (typeof callback === 'function') {
-                callback();
+                callback(0);
             }
         },
         runLatestTimeout() {
@@ -121,25 +137,25 @@ function installDomRuntime(options = {}) {
             if (previousWindow !== undefined) {
                 global.window = previousWindow;
             } else {
-                delete global.window;
+                Reflect.deleteProperty(global, 'window');
             }
 
             if (previousDocument !== undefined) {
                 global.document = previousDocument;
             } else {
-                delete global.document;
+                Reflect.deleteProperty(global, 'document');
             }
 
             if (previousHtmlMediaElement !== undefined) {
                 global.HTMLMediaElement = previousHtmlMediaElement;
             } else {
-                delete global.HTMLMediaElement;
+                Reflect.deleteProperty(global, 'HTMLMediaElement');
             }
 
             if (previousTimeStamp) {
                 console.timeStamp = previousTimeStamp;
             } else {
-                delete console.timeStamp;
+                Reflect.deleteProperty(console, 'timeStamp');
             }
         }
     };
@@ -151,7 +167,7 @@ describe('GiftAnimationLayer behavior', () => {
     });
 
     it('renders nothing when no effect is active', async () => {
-        let renderer;
+        let renderer: any = null;
 
         await TestRenderer.act(async () => {
             renderer = TestRenderer.create(
@@ -171,7 +187,7 @@ describe('GiftAnimationLayer behavior', () => {
 
     it('completes immediately when canvas context is unavailable', async () => {
         const harness = installDomRuntime({
-            createElement: (tagName) => {
+            createElement: (tagName: string) => {
                 if (tagName === 'canvas') {
                     return createCanvasNode(createCanvasContext());
                 }
@@ -179,19 +195,19 @@ describe('GiftAnimationLayer behavior', () => {
                 return {};
             }
         });
-        const onCompleteCalls = [];
+        const onCompleteCalls: string[] = [];
         const videoNode = createVideoNode();
-        let renderer;
+        let renderer: any = null;
 
         try {
             await TestRenderer.act(async () => {
                 renderer = TestRenderer.create(
                     React.createElement(GiftAnimationLayer, {
                         effect: createEffect(),
-                        onComplete: (playbackId) => onCompleteCalls.push(playbackId)
+                        onComplete: (playbackId: string) => onCompleteCalls.push(playbackId)
                     }),
                     {
-                        createNodeMock: (element) => {
+                        createNodeMock: (element: any) => {
                             if (element.type === 'video') {
                                 return videoNode;
                             }
@@ -219,7 +235,7 @@ describe('GiftAnimationLayer behavior', () => {
 
     it('renders RGB-only frames and completes on video end when alpha metadata is absent', async () => {
         const harness = installDomRuntime({
-            createElement: (tagName) => {
+            createElement: (tagName: string) => {
                 if (tagName === 'canvas') {
                     return createCanvasNode(createCanvasContext());
                 }
@@ -227,10 +243,10 @@ describe('GiftAnimationLayer behavior', () => {
                 return {};
             }
         });
-        const onCompleteCalls = [];
+        const onCompleteCalls: string[] = [];
         const canvasContext = createCanvasContext();
         const videoNode = createVideoNode();
-        let renderer;
+        let renderer: any = null;
 
         try {
             await TestRenderer.act(async () => {
@@ -241,10 +257,10 @@ describe('GiftAnimationLayer behavior', () => {
                                 aFrame: null
                             }
                         }),
-                        onComplete: (playbackId) => onCompleteCalls.push(playbackId)
+                        onComplete: (playbackId: string) => onCompleteCalls.push(playbackId)
                     }),
                     {
-                        createNodeMock: (element) => {
+                        createNodeMock: (element: any) => {
                             if (element.type === 'video') {
                                 return videoNode;
                             }
@@ -260,7 +276,7 @@ describe('GiftAnimationLayer behavior', () => {
             });
 
             await TestRenderer.act(async () => {
-                videoNode.onloadeddata();
+                videoNode.onloadeddata!();
             });
 
             await TestRenderer.act(async () => {
@@ -271,7 +287,7 @@ describe('GiftAnimationLayer behavior', () => {
             expect(canvasContext.drawImage.mock.calls.length).toBeGreaterThan(0);
 
             await TestRenderer.act(async () => {
-                videoNode.onended();
+                videoNode.onended!();
             });
 
             expect(onCompleteCalls).toEqual(['test-playback-id']);
@@ -294,7 +310,7 @@ describe('GiftAnimationLayer behavior', () => {
         });
         let createdCanvasCount = 0;
         const harness = installDomRuntime({
-            createElement: (tagName) => {
+            createElement: (tagName: string) => {
                 if (tagName !== 'canvas') {
                     return {};
                 }
@@ -305,14 +321,14 @@ describe('GiftAnimationLayer behavior', () => {
                     : createCanvasNode(alphaBufferContext);
             }
         });
-        const onCompleteCalls = [];
+        const onCompleteCalls: string[] = [];
         const videoNode = createVideoNode();
         const canvasContext = createCanvasContext({
             drawImage: createMockFn(),
             clearRect: createMockFn()
         });
-        let renderer;
-        let staleOnEnded;
+        let renderer: any = null;
+        let staleOnEnded: (() => void) | null = null;
 
         try {
             await TestRenderer.act(async () => {
@@ -328,10 +344,10 @@ describe('GiftAnimationLayer behavior', () => {
                                 aFrame: [2, 0, 2, 1]
                             }
                         }),
-                        onComplete: (playbackId) => onCompleteCalls.push(playbackId)
+                        onComplete: (playbackId: string) => onCompleteCalls.push(playbackId)
                     }),
                     {
-                        createNodeMock: (element) => {
+                        createNodeMock: (element: any) => {
                             if (element.type === 'video') {
                                 return videoNode;
                             }
@@ -347,7 +363,7 @@ describe('GiftAnimationLayer behavior', () => {
             });
 
             await TestRenderer.act(async () => {
-                videoNode.onloadeddata();
+                videoNode.onloadeddata!();
             });
 
             await TestRenderer.act(async () => {
@@ -362,13 +378,13 @@ describe('GiftAnimationLayer behavior', () => {
                         effect: createEffect({
                             playbackId: 'test-playback-id-2'
                         }),
-                        onComplete: (playbackId) => onCompleteCalls.push(playbackId)
+                        onComplete: (playbackId: string) => onCompleteCalls.push(playbackId)
                     })
                 );
             });
 
             await TestRenderer.act(async () => {
-                staleOnEnded();
+                staleOnEnded!();
             });
 
             expect(onCompleteCalls).toHaveLength(0);
@@ -394,7 +410,7 @@ describe('GiftAnimationLayer behavior', () => {
         const alphaBufferContext = createCanvasContext();
         let createdCanvasCount = 0;
         const harness = installDomRuntime({
-            createElement: (tagName) => {
+            createElement: (tagName: string) => {
                 if (tagName !== 'canvas') {
                     return {};
                 }
@@ -407,7 +423,7 @@ describe('GiftAnimationLayer behavior', () => {
         });
         const videoNode = createVideoNode();
         const canvasContext = createCanvasContext();
-        let renderer;
+        let renderer: any = null;
 
         try {
             await TestRenderer.act(async () => {
@@ -426,7 +442,7 @@ describe('GiftAnimationLayer behavior', () => {
                         onComplete: () => {}
                     }),
                     {
-                        createNodeMock: (element) => {
+                        createNodeMock: (element: any) => {
                             if (element.type === 'video') {
                                 return videoNode;
                             }
@@ -442,7 +458,7 @@ describe('GiftAnimationLayer behavior', () => {
             });
 
             await TestRenderer.act(async () => {
-                videoNode.onloadeddata();
+                videoNode.onloadeddata!();
             });
 
             await TestRenderer.act(async () => {
@@ -466,7 +482,7 @@ describe('GiftAnimationLayer behavior', () => {
 
     it('does not restart active playback when only onComplete identity changes', async () => {
         const harness = installDomRuntime({
-            createElement: (tagName) => {
+            createElement: (tagName: string) => {
                 if (tagName === 'canvas') {
                     return createCanvasNode(createCanvasContext());
                 }
@@ -477,7 +493,7 @@ describe('GiftAnimationLayer behavior', () => {
         const activeEffect = createEffect();
         const videoNode = createVideoNode();
         const canvasContext = createCanvasContext();
-        let renderer;
+        let renderer: any = null;
 
         try {
             await TestRenderer.act(async () => {
@@ -487,7 +503,7 @@ describe('GiftAnimationLayer behavior', () => {
                         onComplete: () => {}
                     }),
                     {
-                        createNodeMock: (element) => {
+                        createNodeMock: (element: any) => {
                             if (element.type === 'video') {
                                 return videoNode;
                             }
@@ -503,7 +519,7 @@ describe('GiftAnimationLayer behavior', () => {
             });
 
             await TestRenderer.act(async () => {
-                videoNode.onloadeddata();
+                videoNode.onloadeddata!();
             });
 
             const pauseCallsBeforeRerender = videoNode.pause.mock.calls.length;
@@ -532,7 +548,7 @@ describe('GiftAnimationLayer behavior', () => {
 
     it('retries video playback when paused mid-animation', async () => {
         const harness = installDomRuntime({
-            createElement: (tagName) => {
+            createElement: (tagName: string) => {
                 if (tagName === 'canvas') {
                     return createCanvasNode(createCanvasContext());
                 }
@@ -542,7 +558,7 @@ describe('GiftAnimationLayer behavior', () => {
         });
         const videoNode = createVideoNode();
         const canvasContext = createCanvasContext();
-        let renderer;
+        let renderer: any = null;
 
         try {
             await TestRenderer.act(async () => {
@@ -552,7 +568,7 @@ describe('GiftAnimationLayer behavior', () => {
                         onComplete: () => {}
                     }),
                     {
-                        createNodeMock: (element) => {
+                        createNodeMock: (element: any) => {
                             if (element.type === 'video') {
                                 return videoNode;
                             }
@@ -568,7 +584,7 @@ describe('GiftAnimationLayer behavior', () => {
             });
 
             await TestRenderer.act(async () => {
-                videoNode.onloadeddata();
+                videoNode.onloadeddata!();
             });
 
             const playCallsAfterLoad = videoNode.play.mock.calls.length;
