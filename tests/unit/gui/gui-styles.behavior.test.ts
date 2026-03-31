@@ -7,7 +7,7 @@ function readSharedStyles() {
     return fs.readFileSync(filePath, 'utf8');
 }
 
-function readCssBlock(cssText, selector) {
+function readCssBlock(cssText: string, selector: string): string {
     const escapedSelector = selector.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     const blockPattern = new RegExp(`(?:^|\\n)\\s*${escapedSelector}\\s*\\{([\\s\\S]*?)\\}`, 'm');
     const match = cssText.match(blockPattern);

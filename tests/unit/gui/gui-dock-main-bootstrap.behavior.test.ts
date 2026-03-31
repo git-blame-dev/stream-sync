@@ -3,13 +3,13 @@ const { describe, it, expect } = require('bun:test');
 const { bootstrapDockApp, readDockRuntimeConfig } = require('../../../gui/src/dock/main');
 
 function createTarget() {
-    const attributes = {};
+    const attributes: Record<string, string> = {};
     return {
         textContent: '',
-        setAttribute(name, value) {
+        setAttribute(name: string, value: string) {
             attributes[name] = value;
         },
-        getAttribute(name) {
+        getAttribute(name: string) {
             return attributes[name] || null;
         }
     };
@@ -38,7 +38,7 @@ describe('Dock main bootstrap behavior', () => {
 
     it('renders dock app with runtime compare mode config', () => {
         const target = createTarget();
-        let renderedElement = null;
+        let renderedElement: { props: Record<string, unknown> } | null = null;
 
         const result = bootstrapDockApp({
             target,
@@ -47,20 +47,20 @@ describe('Dock main bootstrap behavior', () => {
                 mode: 'dock'
             }),
             createRootImpl: () => ({
-                render: (element) => {
+                render: (element: { props: Record<string, unknown> }) => {
                     renderedElement = element;
                 }
             })
         });
 
         expect(result).toBe(true);
-        expect(renderedElement.props.mode).toBe('dock');
-        expect(renderedElement.props.uiCompareMode).toBe(true);
+        expect(renderedElement!.props.mode).toBe('dock');
+        expect(renderedElement!.props.uiCompareMode).toBe(true);
     });
 
     it('renders tiktok animations mode when runtime kind requests it', () => {
         const target = createTarget();
-        let renderedElement = null;
+        let renderedElement: { props: Record<string, unknown> } | null = null;
 
         const result = bootstrapDockApp({
             target,
@@ -69,14 +69,14 @@ describe('Dock main bootstrap behavior', () => {
                 mode: 'tiktok-animations'
             }),
             createRootImpl: () => ({
-                render: (element) => {
+                render: (element: { props: Record<string, unknown> }) => {
                     renderedElement = element;
                 }
             })
         });
 
         expect(result).toBe(true);
-        expect(renderedElement.props.mode).toBe('tiktok-animations');
+        expect(renderedElement!.props.mode).toBe('tiktok-animations');
     });
 
     it('returns false when no target is available', () => {

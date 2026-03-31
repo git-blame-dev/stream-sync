@@ -3,13 +3,13 @@ const { describe, it, expect } = require('bun:test');
 const { bootstrapOverlayApp } = require('../../../gui/src/overlay/main');
 
 function createTarget() {
-    const attributes = {};
+    const attributes: Record<string, string> = {};
     return {
         textContent: '',
-        setAttribute(name, value) {
+        setAttribute(name: string, value: string) {
             attributes[name] = value;
         },
-        getAttribute(name) {
+        getAttribute(name: string) {
             return attributes[name] || null;
         }
     };
@@ -18,7 +18,7 @@ function createTarget() {
 describe('Overlay main bootstrap behavior', () => {
     it('renders overlay app when runtime config is valid', () => {
         const target = createTarget();
-        let renderedElement = null;
+        let renderedElement: { props: Record<string, unknown> } | null = null;
 
         const result = bootstrapOverlayApp({
             target,
@@ -27,16 +27,16 @@ describe('Overlay main bootstrap behavior', () => {
                 overlayMaxLinesPerMessage: 4
             }),
             createRootImpl: () => ({
-                render: (element) => {
+                render: (element: { props: Record<string, unknown> }) => {
                     renderedElement = element;
                 }
             })
         });
 
         expect(result).toBe(true);
-        expect(renderedElement.props.mode).toBe('overlay');
-        expect(renderedElement.props.overlayMaxMessages).toBe(5);
-        expect(renderedElement.props.overlayMaxLinesPerMessage).toBe(4);
+        expect(renderedElement!.props.mode).toBe('overlay');
+        expect(renderedElement!.props.overlayMaxMessages).toBe(5);
+        expect(renderedElement!.props.overlayMaxLinesPerMessage).toBe(4);
     });
 
     it('returns false when no target is available', () => {
