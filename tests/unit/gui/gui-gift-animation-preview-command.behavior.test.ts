@@ -6,6 +6,12 @@ const {
     runGuiGiftAnimationPreview
 } = require('../../../scripts/local/gui-gift-animation-preview.ts');
 
+type UnknownRecord = Record<string, unknown>;
+type PreviewPipelineArgs = {
+    giftAnimationResolver: { resolveFromNotificationData: (...args: unknown[]) => unknown };
+    delay: (...args: unknown[]) => unknown;
+};
+
 describe('GUI gift animation preview command behavior', () => {
     it('builds the isolated Corgi gift preview event', () => {
         const event = buildGiftAnimationPreviewEvent();
@@ -20,17 +26,17 @@ describe('GUI gift animation preview command behavior', () => {
         let started = false;
         let stopped = false;
         let disposed = false;
-        const writes = [];
-        const scheduledDurations = [];
-        const clearedHandles = [];
-        const createdPipelineArgs = [];
-        const emittedEvents = [];
+        const writes: string[] = [];
+        const scheduledDurations: number[] = [];
+        const clearedHandles: number[] = [];
+        const createdPipelineArgs: PreviewPipelineArgs[] = [];
+        const emittedEvents: Array<{ eventName: string; payload: UnknownRecord }> = [];
 
         const fakeEventBus = {
             subscribe() {
                 return () => {};
             },
-            emit(eventName, payload) {
+            emit(eventName: string, payload: UnknownRecord) {
                 emittedEvents.push({ eventName, payload });
             }
         };
@@ -54,7 +60,7 @@ describe('GUI gift animation preview command behavior', () => {
 
         await runGuiGiftAnimationPreview({
             durationMs: 4,
-            createPreviewPipelineImpl: (args) => {
+            createPreviewPipelineImpl: (args: PreviewPipelineArgs) => {
                 createdPipelineArgs.push(args);
                 return fakePipeline;
             },
@@ -77,18 +83,18 @@ describe('GUI gift animation preview command behavior', () => {
                     };
                 }
             },
-            safeSetTimeoutImpl: (resolve, duration) => {
+            safeSetTimeoutImpl: (resolve: () => void, duration: number) => {
                 scheduledDurations.push(duration);
                 if (duration === 4) {
                     resolve();
                 }
                 return duration;
             },
-            clearTimeoutImpl: (handle) => {
+            clearTimeoutImpl: (handle: number) => {
                 clearedHandles.push(handle);
             },
             stdout: {
-                write: (text) => writes.push(text)
+                write: (text: string) => writes.push(text)
             }
         });
 
@@ -112,7 +118,7 @@ describe('GUI gift animation preview command behavior', () => {
     });
 
     it('uses default preview duration when value is missing', async () => {
-        let capturedDuration = null;
+        let capturedDuration: number | null = null;
 
         await runGuiGiftAnimationPreview({
             createPreviewPipelineImpl: () => ({
@@ -142,7 +148,7 @@ describe('GUI gift animation preview command behavior', () => {
                     };
                 }
             },
-            safeSetTimeoutImpl: (resolve, duration) => {
+            safeSetTimeoutImpl: (resolve: () => void, duration: number) => {
                 capturedDuration = duration;
                 resolve();
             },

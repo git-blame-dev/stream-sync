@@ -5,7 +5,7 @@ const {
     applyOverlayRowShiftMotion
 } = require('../../../gui/src/shared/overlay-row-motion')
 
-function createFakeElement(top) {
+function createFakeElement(top: number) {
     return {
         style: {
             transition: '',
@@ -76,7 +76,7 @@ describe('overlay row motion behavior', () => {
 
     it('uses synchronized initial shift for existing and new rows before transition frame', () => {
         const previousRaf = global.requestAnimationFrame
-        const queuedCallbacks = []
+        const queuedCallbacks: FrameRequestCallback[] = []
         global.requestAnimationFrame = (callback) => {
             queuedCallbacks.push(callback)
             return queuedCallbacks.length
@@ -109,7 +109,7 @@ describe('overlay row motion behavior', () => {
             expect(rowB.style.transform).toBe('translateY(30px)')
 
             for (const callback of queuedCallbacks) {
-                callback()
+                callback(0)
             }
 
             expect(rowA.style.transition).toBe('transform 1000ms ease-out')
@@ -120,7 +120,7 @@ describe('overlay row motion behavior', () => {
             if (typeof previousRaf === 'function') {
                 global.requestAnimationFrame = previousRaf
             } else {
-                delete global.requestAnimationFrame
+                Reflect.deleteProperty(global, 'requestAnimationFrame')
             }
         }
     })
@@ -130,7 +130,7 @@ describe('overlay row motion behavior', () => {
         let rafCalls = 0
         global.requestAnimationFrame = (callback) => {
             rafCalls += 1
-            callback()
+            callback(0)
             return 1
         }
 
@@ -160,7 +160,7 @@ describe('overlay row motion behavior', () => {
             if (typeof previousRaf === 'function') {
                 global.requestAnimationFrame = previousRaf
             } else {
-                delete global.requestAnimationFrame
+                Reflect.deleteProperty(global, 'requestAnimationFrame')
             }
         }
     })

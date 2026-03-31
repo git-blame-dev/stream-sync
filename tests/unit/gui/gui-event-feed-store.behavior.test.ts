@@ -2,7 +2,7 @@ const { describe, it, expect } = require('bun:test');
 
 const { createGuiFeedStore } = require('../../../gui/src/shared/feed-store');
 
-function createRow(index) {
+function createRow(index: number) {
     return {
         type: 'chat',
         kind: 'chat',
@@ -167,7 +167,7 @@ describe('GUI feed store behavior', () => {
 
         const rows = store.getRows();
         expect(rows.length).toBe(3);
-        expect(rows.map((row) => row.username)).toEqual([
+        expect(rows.map((row: { username: string }) => row.username)).toEqual([
             'test-user-2',
             'test-user-3',
             'test-user-4'
@@ -184,7 +184,7 @@ describe('GUI feed store behavior', () => {
         store.pushEvent(createRow(5));
 
         const rows = store.getRows();
-        expect(rows.map((row) => row.text)).toEqual([
+        expect(rows.map((row: { text: string }) => row.text)).toEqual([
             'message-3',
             'message-4',
             'message-5'

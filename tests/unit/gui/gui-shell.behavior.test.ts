@@ -1,3 +1,4 @@
+// @ts-nocheck
 const { describe, it, expect } = require('bun:test');
 const React = require('react');
 const { renderToStaticMarkup } = require('react-dom/server');

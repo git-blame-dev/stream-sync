@@ -1,3 +1,4 @@
+// @ts-nocheck
 const { describe, it, expect, beforeEach } = require('bun:test');
 const React = require('react');
 const TestRenderer = require('react-test-renderer');
