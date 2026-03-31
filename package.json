@@ -6,7 +6,7 @@
   "scripts": {
     "build": "vite build --config gui/vite.config.ts",
     "dev": "vite --config gui/vite.config.ts",
-    "gui:preview": "npm run build && tsx scripts/local/gui-preview.js",
+    "gui:preview": "npm run build && tsx scripts/local/gui-preview.ts",
     "gui:preview:gift-animation": "npm run build && bun scripts/local/gui-gift-animation-preview.ts",
     "start": "tsx src/bootstrap.js",
     "start:debug": "tsx src/bootstrap.js --debug",

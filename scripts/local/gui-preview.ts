@@ -20,12 +20,189 @@ const { createYouTubeEventRouter } = require('../../src/platforms/youtube/events
 const { setupTikTokEventListeners } = require('../../src/platforms/tiktok/events/event-router');
 const { DEFAULT_AVATAR_URL } = require('../../src/constants/avatar');
 
+type UnknownRecord = Record<string, any>;
+
+type PreviewAdapter = 'twitch' | 'youtube' | 'tiktok';
+
+type PreviewLogFn = (...args: unknown[]) => void;
+
+interface PreviewLogger {
+    debug: PreviewLogFn;
+    console: PreviewLogFn;
+    info: PreviewLogFn;
+    warn: PreviewLogFn;
+    error: PreviewLogFn;
+}
+
+interface PreviewScenarioStep {
+    type: string;
+    adapter: PreviewAdapter;
+}
+
+interface PreviewScenarioEvent {
+    platform: PreviewAdapter;
+    adapter: PreviewAdapter;
+    rawEvent: UnknownRecord;
+}
+
+interface PreviewIngestAdapter {
+    ingest: (rawEvent: UnknownRecord) => Promise<void>;
+}
+
+interface PreviewIngestAdapters {
+    twitch: PreviewIngestAdapter;
+    youtube: PreviewIngestAdapter;
+    tiktok: PreviewIngestAdapter;
+}
+
+interface PreviewPipeline {
+    eventBus: {
+        emit: (eventName: string, payload?: unknown) => void;
+        subscribe: (eventName: string, handler: (payload: unknown) => void) => () => void;
+    };
+    emitIngestEvent: (event: UnknownRecord) => void;
+    dispose: () => Promise<void>;
+}
+
+interface PreviewService {
+    start: () => Promise<void>;
+    stop: () => Promise<void>;
+}
+
+interface PreviewErrorHandler {
+    handleEventProcessingError: (error: unknown, context: string, payload: unknown, message: string) => void;
+}
+
+interface CreatePreviewIngestAdaptersOptions {
+    config?: UnknownRecord;
+    logger?: PreviewLogger | UnknownRecord;
+    emitPlatformEvent: (event: UnknownRecord) => void;
+}
+
+interface CreatePreviewPipelineOptions {
+    config?: UnknownRecord;
+    logger?: PreviewLogger | UnknownRecord;
+    eventBus?: PreviewPipeline['eventBus'];
+    obsManager?: {
+        isReady: () => Promise<boolean>;
+        call: (method: string, params?: UnknownRecord) => Promise<UnknownRecord>;
+    };
+    displayQueue?: unknown;
+    commandCooldownService?: {
+        dispose?: () => void;
+    };
+    userTrackingService?: {
+        isFirstMessage?: (userId: unknown, context: unknown) => unknown;
+    };
+    vfxCommandService?: unknown;
+    notificationManager?: {
+        handleNotification?: (type: string, platform: string, payload: UnknownRecord) => Promise<UnknownRecord>;
+    };
+    platformLifecycleService?: {
+        getPlatformConnectionTime?: (platform?: string) => unknown;
+    };
+    delay?: (ms: number) => Promise<unknown>;
+    giftAnimationResolver?: {
+        resolveFromNotificationData?: (payload: unknown) => Promise<unknown>;
+    };
+}
+
+interface CreatePreviewRuntimeOptions {
+    config: UnknownRecord;
+    logger: PreviewLogger;
+    displayQueue: unknown;
+    notificationManager: {
+        handleNotification: (type: string, platform: string, payload: UnknownRecord) => Promise<unknown>;
+    };
+    commandCooldownService: {
+        dispose?: () => void;
+    };
+    userTrackingService: {
+        isFirstMessage: (userId: unknown, context: unknown) => unknown;
+    };
+    vfxCommandService: unknown;
+    platformLifecycleService: {
+        getPlatformConnectionTime?: (platform?: string) => unknown;
+    };
+}
+
+interface PreviewRuntime {
+    config: UnknownRecord;
+    logger: PreviewLogger;
+    displayQueue: unknown;
+    notificationManager: {
+        handleNotification: (type: string, platform: string, payload: UnknownRecord) => Promise<unknown>;
+    };
+    commandCooldownService: {
+        dispose?: () => void;
+    };
+    userTrackingService: {
+        isFirstMessage: (userId: unknown, context: unknown) => unknown;
+    };
+    vfxCommandService: unknown;
+    platformLifecycleService: {
+        getPlatformConnectionTime?: (platform?: string) => unknown;
+    };
+    gracefulExitService: null;
+    isFirstMessage: (userId: unknown, context: unknown) => unknown;
+    handleFollowNotification?: (platform: string, username: string, payload?: UnknownRecord) => Promise<unknown>;
+    handleShareNotification?: (platform: string, username: string, payload?: UnknownRecord) => Promise<unknown>;
+    handleRaidNotification?: (platform: string, username: string, payload?: UnknownRecord) => Promise<unknown>;
+    handleGiftNotification?: (platform: string, username: string, payload?: UnknownRecord) => Promise<unknown>;
+    handlePaypiggyNotification?: (platform: string, username: string, payload?: UnknownRecord) => Promise<unknown>;
+    handleGiftPaypiggyNotification?: (platform: string, username: string, payload?: UnknownRecord) => Promise<unknown>;
+    handleFarewellNotification?: (platform: string, username: string, payload?: UnknownRecord) => Promise<unknown>;
+    handleEnvelopeNotification?: (platform: string, payload?: UnknownRecord) => Promise<unknown>;
+    handleChatMessage?: (platform: string, normalizedData?: UnknownRecord) => Promise<unknown>;
+}
+
+interface RunPreviewScenarioOptions {
+    adapters: Partial<Record<PreviewAdapter, PreviewIngestAdapter>>;
+    scenarioEvents: PreviewScenarioEvent[];
+    intervalMs: number;
+    durationMs: number;
+    safeSetIntervalImpl: (handler: () => void, delayMs: number) => ReturnType<typeof setInterval> | number;
+    safeSetTimeoutImpl: (handler: () => void, delayMs: number) => unknown;
+    errorHandler: PreviewErrorHandler;
+}
+
+interface DisposePreviewPipelineOptions {
+    intervalHandle?: ReturnType<typeof setInterval> | number | null;
+    service?: PreviewService | null;
+    pipeline?: PreviewPipeline | null;
+    errorHandler: PreviewErrorHandler;
+}
+
+interface RunGuiPreviewOptions {
+    baseConfig?: UnknownRecord;
+    durationMs?: number;
+    intervalMs?: number;
+    logger?: PreviewLogger | UnknownRecord;
+    createPreviewPipelineImpl?: (options: CreatePreviewPipelineOptions) => PreviewPipeline;
+    createPreviewIngestAdaptersImpl?: (options: CreatePreviewIngestAdaptersOptions) => PreviewIngestAdapters;
+    createGuiTransportServiceImpl?: (options: {
+        config: UnknownRecord;
+        eventBus: PreviewPipeline['eventBus'];
+        logger: PreviewLogger;
+    }) => PreviewService;
+    safeSetIntervalImpl?: (handler: () => void, delayMs: number) => ReturnType<typeof setInterval> | number;
+    safeSetTimeoutImpl?: (handler: () => void, delayMs: number) => unknown;
+    stdout?: {
+        write: (text: string) => void;
+    };
+    delay?: (ms: number) => Promise<unknown>;
+    giftAnimationResolver?: {
+        resolveFromNotificationData: (payload: unknown) => Promise<unknown>;
+    };
+    eventBus?: PreviewPipeline['eventBus'];
+}
+
 const PREVIEW_DURATION_MS = 32000;
 const PREVIEW_INTERVAL_MS = 2000;
 
 const PREVIEW_AVATAR_URL = DEFAULT_AVATAR_URL;
 const PREVIEW_MESSAGE_TEXT = 'test message hello world this is a message to everyone how are we today?';
-const PREVIEW_MEDIA_CATALOG = {
+const PREVIEW_MEDIA_CATALOG: Record<PreviewAdapter, UnknownRecord> = {
     twitch: {
         avatarUrl: PREVIEW_AVATAR_URL,
         badges: [
@@ -166,12 +343,12 @@ const NOOP_LOGGER = {
     error: () => {}
 };
 
-function createGuiPreviewErrorHandler(logger) {
+function createGuiPreviewErrorHandler(logger: PreviewLogger): PreviewErrorHandler {
     return createPlatformErrorHandler(logger, 'gui-preview');
 }
 
-function resolveLogger(logger) {
-    const source = (logger && typeof logger.error === 'function')
+function resolveLogger(logger?: PreviewLogger | UnknownRecord): PreviewLogger {
+    const source: UnknownRecord = (logger && typeof logger.error === 'function')
         ? logger
         : ((defaultLogger && typeof defaultLogger.error === 'function') ? defaultLogger : NOOP_LOGGER);
 
@@ -186,7 +363,11 @@ function resolveLogger(logger) {
     };
 }
 
-function mergeSection(baseSection, overrideSection, forcedSection) {
+function mergeSection(
+    baseSection?: UnknownRecord | null,
+    overrideSection?: UnknownRecord | null,
+    forcedSection?: UnknownRecord | null
+): UnknownRecord {
     return {
         ...(baseSection || {}),
         ...(overrideSection || {}),
@@ -194,7 +375,7 @@ function mergeSection(baseSection, overrideSection, forcedSection) {
     };
 }
 
-function buildPreviewConfig(baseConfig) {
+function buildPreviewConfig(baseConfig: UnknownRecord = {}): UnknownRecord {
     const sourceConfig = configModule.config || {};
     const overrideConfig = baseConfig || {};
 
@@ -203,7 +384,7 @@ function buildPreviewConfig(baseConfig) {
         ...overrideConfig
     };
 
-    const resolveNonEmptyString = (preferredValue, fallbackValue) => {
+    const resolveNonEmptyString = (preferredValue: unknown, fallbackValue: unknown): string => {
         if (typeof preferredValue === 'string' && preferredValue.trim().length > 0) {
             return preferredValue;
         }
@@ -325,15 +506,18 @@ function buildPreviewConfig(baseConfig) {
     return merged;
 }
 
-function buildPreviewScenarioEvents(durationMs = PREVIEW_DURATION_MS, intervalMs = PREVIEW_INTERVAL_MS) {
+function buildPreviewScenarioEvents(
+    durationMs: number = PREVIEW_DURATION_MS,
+    intervalMs: number = PREVIEW_INTERVAL_MS
+): PreviewScenarioEvent[] {
     const eventCount = Math.floor(durationMs / intervalMs);
-    const events = [];
+    const events: PreviewScenarioEvent[] = [];
 
-    const getAccount = (platform) => PREVIEW_PLATFORM_ACCOUNTS.find((entry) => entry.platform === platform) || PREVIEW_PLATFORM_ACCOUNTS[0];
+    const getAccount = (platform: PreviewAdapter): UnknownRecord => PREVIEW_PLATFORM_ACCOUNTS.find((entry) => entry.platform === platform) || PREVIEW_PLATFORM_ACCOUNTS[0];
     const firstPrimaryChatByPlatform = new Set();
 
     for (let index = 0; index < eventCount; index += 1) {
-        const scenarioStep = PREVIEW_SCENARIO_TEMPLATE[index % PREVIEW_SCENARIO_TEMPLATE.length];
+        const scenarioStep = PREVIEW_SCENARIO_TEMPLATE[index % PREVIEW_SCENARIO_TEMPLATE.length] as PreviewScenarioStep;
         const scenarioType = scenarioStep.type;
         const adapter = scenarioStep.adapter;
         const account = getAccount(adapter);
@@ -418,7 +602,7 @@ function buildPreviewScenarioEvents(durationMs = PREVIEW_DURATION_MS, intervalMs
                 continue;
             }
 
-            const twitchMap = {
+            const twitchMap: Record<string, string> = {
                 follow: 'channel.follow',
                 gift: 'channel.bits.use',
                 raid: 'channel.raid',
@@ -631,10 +815,13 @@ function buildPreviewScenarioEvents(durationMs = PREVIEW_DURATION_MS, intervalMs
     return events;
 }
 
-function createPreviewIngestAdapters(options = {}) {
-    const { config, logger, emitPlatformEvent } = options;
+function createPreviewIngestAdapters(
+    options: CreatePreviewIngestAdaptersOptions
+): PreviewIngestAdapters {
+    const { config = {}, logger, emitPlatformEvent } = options;
+    const resolvedLogger = resolveLogger(logger);
 
-    const emitChatEvent = (platform, payload) => {
+    const emitChatEvent = (platform: PreviewAdapter, payload: UnknownRecord): void => {
         emitPlatformEvent({
             type: PlatformEvents.CHAT_MESSAGE,
             platform,
@@ -655,13 +842,13 @@ function createPreviewIngestAdapters(options = {}) {
 
     const twitchRouter = createTwitchEventSubEventRouter({
         config,
-        logger,
-        emit(eventName, payload) {
+        logger: resolvedLogger,
+        emit(eventName: string, payload: UnknownRecord) {
             if (eventName === 'chatMessage') {
                 const messageText = payload?.message?.text || payload?.message || '';
                 const messageParts = Array.isArray(payload?.message?.fragments)
                     ? payload.message.fragments
-                        .map((fragment) => {
+                        .map((fragment: UnknownRecord | null) => {
                             if (!fragment || typeof fragment !== 'object') {
                                 return null;
                             }
@@ -702,7 +889,7 @@ function createPreviewIngestAdapters(options = {}) {
                 return;
             }
 
-            const map = {
+            const map: Record<string, string> = {
                 follow: PlatformEvents.FOLLOW,
                 gift: PlatformEvents.GIFT,
                 raid: PlatformEvents.RAID,
@@ -718,12 +905,12 @@ function createPreviewIngestAdapters(options = {}) {
     });
 
     const youtubePlatform = {
-        logger,
+        logger: resolvedLogger,
         handleLowPriorityEvent() {},
-        handleChatTextMessage(chatItem) {
+        handleChatTextMessage(chatItem: UnknownRecord) {
             const source = chatItem?.testData || {};
             const messageParts = Array.isArray(source.messageParts)
-                ? source.messageParts.filter((part) => part && typeof part === 'object')
+                ? source.messageParts.filter((part: unknown) => part && typeof part === 'object')
                 : [];
             emitChatEvent('youtube', {
                 username: source.username,
@@ -739,11 +926,11 @@ function createPreviewIngestAdapters(options = {}) {
                     : { text: source.message || '' }
             });
         },
-        handleSuperChat(chatItem) {
+        handleSuperChat(chatItem: UnknownRecord) {
             const source = chatItem?.testData || {};
             emitPlatformEvent({ type: PlatformEvents.PAYPIGGY, platform: 'youtube', data: source });
         },
-        handleSuperSticker(chatItem) {
+        handleSuperSticker(chatItem: UnknownRecord) {
             const source = chatItem?.testData || {};
             emitPlatformEvent({
                 type: PlatformEvents.GIFT,
@@ -758,11 +945,11 @@ function createPreviewIngestAdapters(options = {}) {
                 }
             });
         },
-        handleMembership(chatItem) {
+        handleMembership(chatItem: UnknownRecord) {
             const source = chatItem?.testData || {};
             emitPlatformEvent({ type: PlatformEvents.PAYPIGGY, platform: 'youtube', data: source });
         },
-        handleGiftMembershipPurchase(chatItem) {
+        handleGiftMembershipPurchase(chatItem: UnknownRecord) {
             const source = chatItem?.testData || {};
             emitPlatformEvent({
                 type: PlatformEvents.GIFTPAYPIGGY,
@@ -779,7 +966,7 @@ function createPreviewIngestAdapters(options = {}) {
 
     const tiktokConnection = new EventEmitter();
     const tiktokPlatform = {
-        logger,
+        logger: resolvedLogger,
         config,
         platformName: 'tiktok',
         connection: tiktokConnection,
@@ -802,15 +989,15 @@ function createPreviewIngestAdapters(options = {}) {
             DISCONNECTED: 'disconnected',
             ERROR: 'error'
         },
-        errorHandler: createGuiPreviewErrorHandler(logger),
+        errorHandler: createGuiPreviewErrorHandler(resolvedLogger),
         _logIncomingEvent: async () => {},
-        _getTimestamp(data) {
+        _getTimestamp(data: UnknownRecord) {
             return data.timestamp;
         },
-        _getPlatformMessageId(data) {
+        _getPlatformMessageId(data: UnknownRecord) {
             return data.msgId || null;
         },
-        _handleChatMessage(_raw, normalizedData) {
+        _handleChatMessage(_raw: UnknownRecord, normalizedData: UnknownRecord) {
             const payload = {
                 ...normalizedData,
                 badgeImages: Array.isArray(normalizedData?.badgeImages)
@@ -819,7 +1006,7 @@ function createPreviewIngestAdapters(options = {}) {
             };
             emitChatEvent('tiktok', payload);
         },
-        handleTikTokGift(data) {
+        handleTikTokGift(data: UnknownRecord) {
             const sourceUser = data?.user || {};
             const giftImageUrl = typeof data?.gift?.giftPictureUrl === 'string'
                 ? data.gift.giftPictureUrl
@@ -860,7 +1047,7 @@ function createPreviewIngestAdapters(options = {}) {
                 }
             });
         },
-        handleTikTokFollow(data) {
+        handleTikTokFollow(data: UnknownRecord) {
             const sourceUser = data?.user || {};
             emitPlatformEvent({
                 type: PlatformEvents.FOLLOW,
@@ -872,7 +1059,7 @@ function createPreviewIngestAdapters(options = {}) {
                 }
             });
         },
-        handleTikTokSocial(data) {
+        handleTikTokSocial(data: UnknownRecord) {
             if (String(data.displayType || '').toLowerCase() !== 'share') {
                 return;
             }
@@ -887,7 +1074,7 @@ function createPreviewIngestAdapters(options = {}) {
                 }
             });
         },
-        _handleStandardEvent(_eventType, data, options) {
+        _handleStandardEvent(_eventType: string, data: UnknownRecord, options: UnknownRecord) {
             const sourceUser = data?.user || {};
             emitPlatformEvent({
                 type: options.emitType,
@@ -909,7 +1096,7 @@ function createPreviewIngestAdapters(options = {}) {
 
     return {
         twitch: {
-            async ingest(rawEvent) {
+            async ingest(rawEvent: UnknownRecord) {
                 const metadata = rawEvent.metadata || (rawEvent?.event?.timestamp
                     ? { message_timestamp: rawEvent.event.timestamp }
                     : {});
@@ -917,19 +1104,19 @@ function createPreviewIngestAdapters(options = {}) {
             }
         },
         youtube: {
-            async ingest(rawEvent) {
+            async ingest(rawEvent: UnknownRecord) {
                 await youtubeRouter.routeEvent(rawEvent.chatItem, rawEvent.eventType);
             }
         },
         tiktok: {
-            async ingest(rawEvent) {
+            async ingest(rawEvent: UnknownRecord) {
                 tiktokConnection.emit(rawEvent.eventType, rawEvent.data);
             }
         }
     };
 }
 
-function createPreviewRuntime(options) {
+function createPreviewRuntime(options: CreatePreviewRuntimeOptions) {
     const {
         config,
         logger,
@@ -941,7 +1128,7 @@ function createPreviewRuntime(options) {
         platformLifecycleService
     } = options;
 
-    const runtime = {
+    const runtime: PreviewRuntime = {
         config,
         logger,
         displayQueue,
@@ -951,10 +1138,10 @@ function createPreviewRuntime(options) {
         vfxCommandService,
         platformLifecycleService,
         gracefulExitService: null,
-        isFirstMessage: (userId, context) => userTrackingService.isFirstMessage(userId, context)
+        isFirstMessage: (userId: unknown, context: unknown) => userTrackingService.isFirstMessage(userId, context)
     };
 
-    const forwardNotification = (notificationType) => async (platform, username, payload = {}) => {
+    const forwardNotification = (notificationType: string) => async (platform: string, username: string, payload: UnknownRecord = {}) => {
         const response = await notificationManager.handleNotification(notificationType, platform, {
             ...payload,
             username,
@@ -970,7 +1157,7 @@ function createPreviewRuntime(options) {
     runtime.handlePaypiggyNotification = forwardNotification(PlatformEvents.PAYPIGGY);
     runtime.handleGiftPaypiggyNotification = forwardNotification(PlatformEvents.GIFTPAYPIGGY);
     runtime.handleFarewellNotification = forwardNotification('farewell');
-    runtime.handleEnvelopeNotification = async (platform, payload = {}) => {
+    runtime.handleEnvelopeNotification = async (platform: string, payload: UnknownRecord = {}) => {
         return notificationManager.handleNotification(PlatformEvents.ENVELOPE, platform, {
             ...payload,
             type: PlatformEvents.ENVELOPE
@@ -983,7 +1170,7 @@ function createPreviewRuntime(options) {
         config
     });
 
-    runtime.handleChatMessage = async (platform, normalizedData = {}) => {
+    runtime.handleChatMessage = async (platform: string, normalizedData: UnknownRecord = {}) => {
         return chatNotificationRouter.handleChatMessage(platform, normalizedData);
     };
 
@@ -993,8 +1180,8 @@ function createPreviewRuntime(options) {
     };
 }
 
-function createPreviewPipeline(options = {}) {
-    const config = options.config;
+function createPreviewPipeline(options: CreatePreviewPipelineOptions = {}): PreviewPipeline {
+    const config = options.config || {};
     const logger = resolveLogger(options.logger);
     const errorHandler = createGuiPreviewErrorHandler(logger);
     const eventBus = options.eventBus || createEventBus();
@@ -1097,7 +1284,7 @@ function createPreviewPipeline(options = {}) {
         logger
     });
 
-    const unsubscribePreviewVfxAck = eventBus.subscribe(PlatformEvents.VFX_COMMAND_RECEIVED, (payload) => {
+    const unsubscribePreviewVfxAck = eventBus.subscribe(PlatformEvents.VFX_COMMAND_RECEIVED, (payload: unknown) => {
         safeSetTimeout(() => {
             eventBus.emit(PlatformEvents.VFX_COMMAND_EXECUTED, payload);
         }, 0);
@@ -1105,7 +1292,7 @@ function createPreviewPipeline(options = {}) {
 
     return {
         eventBus,
-        emitIngestEvent(event) {
+        emitIngestEvent(event: UnknownRecord) {
             eventBus.emit('platform:event', event);
         },
         async dispose() {
@@ -1132,7 +1319,7 @@ function createPreviewPipeline(options = {}) {
     };
 }
 
-async function runPreviewScenario(options = {}) {
+async function runPreviewScenario(options: RunPreviewScenarioOptions): Promise<ReturnType<typeof setInterval> | number> {
     const {
         adapters,
         scenarioEvents,
@@ -1152,7 +1339,7 @@ async function runPreviewScenario(options = {}) {
         const event = scenarioEvents[eventIndex];
         const adapter = adapters[event.adapter];
         if (adapter && typeof adapter.ingest === 'function') {
-            Promise.resolve(adapter.ingest(event.rawEvent)).catch((error) => {
+            Promise.resolve(adapter.ingest(event.rawEvent)).catch((error: unknown) => {
                 errorHandler.handleEventProcessingError(error, 'preview-ingest', event.rawEvent, 'Failed processing preview ingest event');
             });
         }
@@ -1165,14 +1352,14 @@ async function runPreviewScenario(options = {}) {
         dispatchNextEvent();
     }, intervalMs);
 
-    await new Promise((resolve) => {
-        safeSetTimeoutImpl(resolve, durationMs);
+    await new Promise<void>((resolve) => {
+        safeSetTimeoutImpl(() => resolve(), durationMs);
     });
 
     return intervalHandle;
 }
 
-async function disposePreviewPipeline(options = {}) {
+async function disposePreviewPipeline(options: DisposePreviewPipelineOptions): Promise<void> {
     const {
         intervalHandle,
         service,
@@ -1201,13 +1388,15 @@ async function disposePreviewPipeline(options = {}) {
     }
 }
 
-async function runGuiPreview(options = {}) {
+async function runGuiPreview(options: RunGuiPreviewOptions = {}): Promise<void> {
     const config = buildPreviewConfig(options.baseConfig);
-    const durationMs = Number.isInteger(options.durationMs) && options.durationMs > 0
-        ? options.durationMs
+    const requestedDurationMs = options.durationMs;
+    const durationMs = typeof requestedDurationMs === 'number' && Number.isInteger(requestedDurationMs) && requestedDurationMs > 0
+        ? requestedDurationMs
         : PREVIEW_DURATION_MS;
-    const intervalMs = Number.isInteger(options.intervalMs) && options.intervalMs > 0
-        ? options.intervalMs
+    const requestedIntervalMs = options.intervalMs;
+    const intervalMs = typeof requestedIntervalMs === 'number' && Number.isInteger(requestedIntervalMs) && requestedIntervalMs > 0
+        ? requestedIntervalMs
         : PREVIEW_INTERVAL_MS;
 
     const logger = resolveLogger(options.logger);
@@ -1218,14 +1407,14 @@ async function runGuiPreview(options = {}) {
     const safeSetIntervalImpl = options.safeSetIntervalImpl || safeSetInterval;
     const safeSetTimeoutImpl = options.safeSetTimeoutImpl || safeSetTimeout;
     const stdout = options.stdout || process.stdout;
-    const delay = options.delay || ((ms) => {
+    const delay = options.delay || ((ms: number) => {
         const parsed = Number(ms);
         return safeDelay(parsed, Number.isFinite(parsed) ? parsed : 5000, 'gui-preview delay');
     });
 
-    let pipeline = null;
-    let service = null;
-    let intervalHandle = null;
+    let pipeline: PreviewPipeline | null = null;
+    let service: PreviewService | null = null;
+    let intervalHandle: ReturnType<typeof setInterval> | number | null = null;
     const giftAnimationResolver = options.giftAnimationResolver || createTikTokGiftAnimationResolver({ logger });
 
     try {
@@ -1240,14 +1429,16 @@ async function runGuiPreview(options = {}) {
         if (!pipeline || typeof pipeline.emitIngestEvent !== 'function' || !pipeline.eventBus) {
             throw new Error('Preview pipeline requires eventBus and emitIngestEvent');
         }
+        const activePipeline = pipeline;
 
-        service = createGuiTransportServiceImpl({
+        const activeService = createGuiTransportServiceImpl({
             config,
-            eventBus: pipeline.eventBus,
+            eventBus: activePipeline.eventBus,
             logger
         });
+        service = activeService;
 
-        await service.start();
+        await activeService.start();
 
         const host = config.gui.host;
         const port = config.gui.port;
@@ -1260,10 +1451,9 @@ async function runGuiPreview(options = {}) {
         const adapters = createPreviewIngestAdaptersImpl({
             config,
             logger,
-            emitPlatformEvent: (event) => pipeline.emitIngestEvent(event)
+            emitPlatformEvent: (event: UnknownRecord) => activePipeline.emitIngestEvent(event)
         });
         intervalHandle = await runPreviewScenario({
-            pipeline,
             adapters,
             scenarioEvents,
             intervalMs,
@@ -1288,8 +1478,11 @@ async function runGuiPreview(options = {}) {
 }
 
 if (require.main === module) {
-    runGuiPreview().catch((error) => {
-        process.stderr.write(`GUI preview failed: ${error && error.message ? error.message : error}\n`);
+    runGuiPreview().catch((error: unknown) => {
+        const errorMessage = error && typeof error === 'object' && 'message' in error
+            ? String((error as { message?: unknown }).message)
+            : String(error);
+        process.stderr.write(`GUI preview failed: ${errorMessage}\n`);
         process.exit(1);
     });
 }
