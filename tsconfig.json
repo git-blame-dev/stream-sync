@@ -1,0 +1,30 @@
+{
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "module": "CommonJS",
+    "moduleResolution": "Node",
+    "allowJs": true,
+    "checkJs": false,
+    "noEmit": true,
+    "types": ["node", "bun"],
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "jsx": "react-jsx"
+  },
+  "include": [
+    "src/services/gui/**/*.js",
+    "src/services/gui/**/*.ts",
+    "scripts/local/gui-preview.js",
+    "scripts/local/gui-preview.ts",
+    "tests/unit/gui/**/*.js",
+    "tests/unit/gui/**/*.ts",
+    "tests/unit/services/gui/**/*.js",
+    "tests/unit/services/gui/**/*.ts",
+    "tests/integration/gui-*.js",
+    "tests/integration/gui-*.ts",
+    "tests/e2e-smoke/gui-*.js",
+    "tests/e2e-smoke/gui-*.ts",
+    "tests/helpers/gui-transport-test-utils.js",
+    "tests/helpers/gui-transport-test-utils.ts"
+  ],
+  "exclude": ["node_modules", "gui/dist"]
+}

@@ -12,7 +12,7 @@ const PATTERN = new RegExp(
 
 const TEST_DIRS = ['tests/helpers', 'tests/unit', 'tests/integration', 'tests/e2e-smoke'];
 
-function findJsFiles(dir) {
+function findTestFiles(dir) {
     const files = [];
     if (!fs.existsSync(dir)) return files;
     
@@ -20,8 +20,8 @@ function findJsFiles(dir) {
     for (const entry of entries) {
         const fullPath = path.join(dir, entry.name);
         if (entry.isDirectory()) {
-            files.push(...findJsFiles(fullPath));
-        } else if (entry.name.endsWith('.js')) {
+            files.push(...findTestFiles(fullPath));
+        } else if (entry.name.endsWith('.js') || entry.name.endsWith('.ts') || entry.name.endsWith('.tsx')) {
             files.push(fullPath);
         }
     }
@@ -48,7 +48,7 @@ function checkFile(filePath) {
 }
 
 function main() {
-    const allFiles = TEST_DIRS.flatMap(findJsFiles);
+    const allFiles = TEST_DIRS.flatMap(findTestFiles);
     let hasViolations = false;
     
     for (const file of allFiles) {

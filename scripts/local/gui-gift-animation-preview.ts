@@ -35,6 +35,13 @@ interface GiftAnimationPreviewOptions {
     giftEvent?: { adapter: string; rawEvent: unknown };
 }
 
+type PreviewScenarioEvent = {
+    adapter: string;
+    rawEvent: {
+        eventType?: string;
+    } | null;
+};
+
 function resolveLogger(logger: GiftAnimationPreviewOptions['logger']) {
     if (logger && typeof logger.error === 'function') {
         return logger;
@@ -53,7 +60,8 @@ function resolveLogger(logger: GiftAnimationPreviewOptions['logger']) {
 }
 
 function buildGiftAnimationPreviewEvent(): { adapter: string; rawEvent: unknown } {
-    const event = buildPreviewScenarioEvents().find((entry) => entry.adapter === 'tiktok' && entry.rawEvent?.eventType === 'GIFT');
+    const event = (buildPreviewScenarioEvents() as PreviewScenarioEvent[])
+        .find((entry) => entry.adapter === 'tiktok' && entry.rawEvent?.eventType === 'GIFT');
     if (!event) {
         throw new Error('Gift preview scenario is missing TikTok gift event');
     }
