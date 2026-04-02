@@ -62,6 +62,7 @@ describe('Twitch Platform', () => {
             on: createMockFn(),
             emit: createMockFn(),
             isConnected: createMockFn().mockReturnValue(true),
+            isActive: createMockFn().mockReturnValue(true),
             sendMessage: createMockFn().mockResolvedValue()
         };
 
@@ -143,7 +144,10 @@ describe('Twitch Platform', () => {
             };
 
             const testPlatform = new TwitchPlatform(validConfig, { twitchAuth: mockTwitchAuth });
-            testPlatform.eventSub = { isConnected: () => true };
+            testPlatform.eventSub = {
+                isConnected: () => true,
+                isActive: () => true
+            };
             const status = testPlatform.getStatus();
 
             expect(status.isReady).toBe(true);
@@ -229,19 +233,20 @@ describe('Twitch Platform', () => {
             expect(platform.handlers.onPaypiggyNotification).toBeDefined();
         });
 
-        it('should initialize when EventSub connection is active before subscriptions settle', async () => {
+        it('should fail initialization when EventSub subscriptions are not active yet', async () => {
             const handlers = {
                 onChatMessage: createMockFn(),
                 onFollowNotification: createMockFn(),
                 onPaypiggyNotification: createMockFn()
             };
             mockTwitchEventSub.isConnected.mockReturnValue(true);
+            mockTwitchEventSub.isActive = createMockFn().mockReturnValue(false);
             mockTwitchEventSub.subscriptionsReady = false;
 
-            await expect(platform.initialize(handlers)).resolves.toBeUndefined();
+            await expect(platform.initialize(handlers)).rejects.toThrow('subscriptions are not active');
 
             expect(eventSubCalls.initialize).toHaveLength(1);
-            expect(platform.isConnected).toBe(true);
+            expect(platform.isConnected).toBe(false);
         });
     });
 
@@ -479,6 +484,7 @@ describe('Twitch Platform', () => {
 
             await disconnectedHandler();
             mockTwitchEventSub.isConnected.mockReturnValue(false);
+            mockTwitchEventSub.isActive.mockReturnValue(false);
             expect(platform.isConnected).toBe(false);
             expect(platform.isConnecting).toBe(false);
             const disconnectedState = platform.getConnectionState();

@@ -280,21 +280,10 @@ class TwitchEventSub extends EventEmitter {
 
     async initialize() {
         try {
-        this.logger.debug('[EVENTSUB-DEBUG] Starting EventSub initialization...', 'twitch');
-        this.logger.debug('[EVENTSUB-DEBUG] Current state:', 'twitch', {
-            isInitialized: this.isInitialized,
-            hasTwitchAuth: !!this.twitchAuth,
-            authReady: this.twitchAuth?.isReady?.(),
-            hasConfig: !!this.config,
-            hasAccessToken: !!secrets.twitch.accessToken,
-            hasClientId: !!this.config.clientId
-        });
-        
-        this.logger.debug('[EVENTSUB-DEBUG] Validating configuration...', 'twitch');
-        const validation = await this._validateConfig();
-        if (!validation.valid) {
-            throw new Error(`EventSub validation failed: ${validation.issues.join(', ')}`);
-        }
+            const validation = await this._validateConfig();
+            if (!validation.valid) {
+                throw new Error(`EventSub validation failed: ${validation.issues.join(', ')}`);
+            }
             
             this.logger.info('EventSub configuration validation passed', 'twitch');
         
@@ -305,24 +294,17 @@ class TwitchEventSub extends EventEmitter {
             
             this.logger.info('Initializing Manual EventSub WebSocket connection', 'twitch');
             
-            // Get user ID from auth manager
-            this.logger.debug('[EVENTSUB-DEBUG] Getting user ID from auth manager...', 'twitch');
             const userIdRaw = this.twitchAuth.getUserId();
-            this.logger.debug('[EVENTSUB-DEBUG] User ID result:', 'twitch', { userIdRaw, type: typeof userIdRaw });
             if (!userIdRaw) {
                 throw new Error('No user ID available from AuthManager');
             }
             
-            this.userId = userIdRaw.toString(); // Keep as string for API calls
+            this.userId = userIdRaw.toString();
             this.logger.debug(`Using user ID: ${this.userId}`, 'twitch');
             
-            this.logger.debug('[EVENTSUB-DEBUG] Cleaning up existing subscriptions...', 'twitch');
             await this._cleanupAllWebSocketSubscriptions();
-            this.logger.debug('[EVENTSUB-DEBUG] Cleanup complete', 'twitch');
 
-            this.logger.debug('[EVENTSUB-DEBUG] Connecting to WebSocket...', 'twitch');
             await this._connectWebSocket();
-            this.logger.debug('[EVENTSUB-DEBUG] WebSocket connection established', 'twitch');
             
             this.isInitialized = true;
             this.retryAttempts = 0;
@@ -334,6 +316,7 @@ class TwitchEventSub extends EventEmitter {
                 stack: error.stack
             });
             this._handleInitializationError(error);
+            throw error;
         }
     }
 

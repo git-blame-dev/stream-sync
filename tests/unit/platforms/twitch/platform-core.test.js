@@ -68,14 +68,30 @@ describe('TwitchPlatform core behavior', () => {
         expect(status.issues).toContain('Not connected');
     });
 
-    it('returns isReady=true when enabled and connected', () => {
+    it('returns isReady=true when EventSub is connected and active', () => {
         platform = createPlatform({}, { twitchAuth: createReadyTwitchAuth() });
-        platform.eventSub = { isConnected: () => true };
+        platform.eventSub = {
+            isConnected: () => true,
+            isActive: () => true
+        };
 
         const status = platform.getStatus();
 
         expect(status.isReady).toBe(true);
         expect(status.issues).toEqual([]);
+    });
+
+    it('returns isReady=false when EventSub is connected but inactive', () => {
+        platform = createPlatform({}, { twitchAuth: createReadyTwitchAuth() });
+        platform.eventSub = {
+            isConnected: () => true,
+            isActive: () => false
+        };
+
+        const status = platform.getStatus();
+
+        expect(status.isReady).toBe(false);
+        expect(status.issues).toContain('EventSub not active');
     });
 
     it('fails EventSub initialization when auth is not ready', async () => {
@@ -112,11 +128,26 @@ describe('TwitchPlatform core behavior', () => {
         await expect(platform.initialize({})).rejects.toThrow('Twitch EventSub connection missing isConnected()');
     });
 
+    it('fails platform initialization when EventSub has no active-state interface', async () => {
+        const eventSubWithoutActiveState = {
+            initialize: createMockFn().mockResolvedValue(),
+            on: createMockFn(),
+            isConnected: () => true
+        };
+        platform = createPlatform({}, {
+            twitchAuth: createReadyTwitchAuth(),
+            TwitchEventSub: createMockFn(() => eventSubWithoutActiveState)
+        });
+
+        await expect(platform.initialize({})).rejects.toThrow('Twitch EventSub connection missing isActive()');
+    });
+
     it('fails platform initialization when EventSub is not connected after initialize', async () => {
         const disconnectedEventSub = {
             initialize: createMockFn().mockResolvedValue(),
             on: createMockFn(),
-            isConnected: () => false
+            isConnected: () => false,
+            isActive: () => false
         };
         platform = createPlatform({}, {
             twitchAuth: createReadyTwitchAuth(),
@@ -130,7 +161,8 @@ describe('TwitchPlatform core behavior', () => {
         const disconnectedEventSub = {
             initialize: createMockFn().mockResolvedValue(),
             on: createMockFn(),
-            isConnected: () => false
+            isConnected: () => false,
+            isActive: () => false
         };
         platform = createPlatform({}, {
             twitchAuth: createReadyTwitchAuth(),
@@ -143,11 +175,30 @@ describe('TwitchPlatform core behavior', () => {
         expect(platform.isConnecting).toBe(false);
     });
 
+    it('fails platform initialization when EventSub is connected but inactive after initialize', async () => {
+        const inactiveEventSub = {
+            initialize: createMockFn().mockResolvedValue(),
+            on: createMockFn(),
+            isConnected: () => true,
+            isActive: () => false
+        };
+        platform = createPlatform({}, {
+            twitchAuth: createReadyTwitchAuth(),
+            TwitchEventSub: createMockFn(() => inactiveEventSub)
+        });
+
+        await expect(platform.initialize({})).rejects.toThrow('Twitch EventSub initialization failed: subscriptions are not active');
+        expect(platform.isConnected).toBe(false);
+    });
+
     it('clears stale EventSub references when initialization fails', async () => {
         platform = createPlatform({}, {
             twitchAuth: { isReady: () => false }
         });
-        platform.eventSub = { isConnected: () => true };
+        platform.eventSub = {
+            isConnected: () => true,
+            isActive: () => true
+        };
         platform.eventSubListeners = [{ eventName: 'chatMessage', handler: () => {} }];
         platform.eventSubWiring = { unbindAll: createMockFn() };
 
@@ -239,6 +290,19 @@ describe('TwitchPlatform core behavior', () => {
         expect(sendMessageCalls).toHaveLength(0);
     });
 
+    it('surfaces a friendly error when EventSub active-state interface is missing before sending', async () => {
+        platform = createPlatform({}, { twitchAuth: createReadyTwitchAuth() });
+        const sendMessageCalls = [];
+        const mockEventSub = {
+            sendMessage: (msg) => sendMessageCalls.push(msg),
+            isConnected: () => true
+        };
+        platform.eventSub = mockEventSub;
+
+        await expect(platform.sendMessage('hi')).rejects.toThrow(/unavailable/i);
+        expect(sendMessageCalls).toHaveLength(0);
+    });
+
     it('keeps emitting chat events when logging fails', async () => {
         platform = createPlatform({ dataLoggingEnabled: true }, { twitchAuth: createReadyTwitchAuth() });
         platform._logRawEvent = createMockFn().mockRejectedValue(new Error('disk full'));
@@ -305,7 +369,8 @@ describe('TwitchPlatform core behavior', () => {
                 initialize: createMockFn().mockResolvedValue(),
                 cleanup: createMockFn().mockResolvedValue(),
                 disconnect: createMockFn().mockResolvedValue(),
-                isConnected: createMockFn(() => true)
+                isConnected: createMockFn(() => true),
+                isActive: createMockFn(() => true)
             };
         })();
 
