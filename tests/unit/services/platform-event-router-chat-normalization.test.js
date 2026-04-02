@@ -235,4 +235,55 @@ describe('PlatformEventRouter chat normalization', () => {
         });
     });
 
+    it('allows degraded chat payloads when metadata.missingFields marks missing identity and timestamp', async () => {
+        const { router, runtime } = createRouter();
+
+        const event = {
+            ...baseEvent,
+            platform: 'twitch',
+            data: {
+                message: {
+                    text: 'partial chat content'
+                },
+                metadata: {
+                    missingFields: ['username', 'userId', 'timestamp']
+                }
+            }
+        };
+
+        await router.routeEvent(event);
+
+        expect(runtime.handleChatMessage).toHaveBeenCalledTimes(1);
+        const [, normalized] = runtime.handleChatMessage.mock.calls[0];
+        expect(normalized.username).toBe('Unknown Username');
+        expect(normalized.userId).toBeUndefined();
+        expect(normalized.timestamp).toBeUndefined();
+        expect(normalized.message).toEqual({ text: 'partial chat content' });
+        expect(normalized.metadata.missingFields).toEqual(['username', 'userId', 'timestamp']);
+    });
+
+    it('allows degraded chat payloads with unknown-message placeholder when message is marked missing', async () => {
+        const { router, runtime } = createRouter();
+
+        const event = {
+            ...baseEvent,
+            platform: 'twitch',
+            data: {
+                metadata: {
+                    missingFields: ['message', 'username', 'userId', 'timestamp']
+                }
+            }
+        };
+
+        await router.routeEvent(event);
+
+        expect(runtime.handleChatMessage).toHaveBeenCalledTimes(1);
+        const [, normalized] = runtime.handleChatMessage.mock.calls[0];
+        expect(normalized.message).toEqual({ text: 'Unknown Message' });
+        expect(normalized.username).toBe('Unknown Username');
+        expect(normalized.userId).toBeUndefined();
+        expect(normalized.timestamp).toBeUndefined();
+        expect(normalized.metadata.missingFields).toEqual(['message', 'username', 'userId', 'timestamp']);
+    });
+
 });

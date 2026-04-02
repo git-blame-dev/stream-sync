@@ -14,6 +14,10 @@ const { createTwitchEventFactory } = require('./twitch/events/event-factory');
 const { createTwitchEventSubWiring } = require('./twitch/connections/wiring');
 const { DEFAULT_AVATAR_URL } = require('../constants/avatar');
 const { normalizeBadgeImages } = require('../utils/message-parts');
+const { collectMissingFields, mergeMissingFieldsMetadata } = require('../utils/missing-fields');
+
+const UNKNOWN_TWITCH_USERNAME = 'Unknown Username';
+const UNKNOWN_TWITCH_MESSAGE = 'Unknown Message';
 
 class TwitchPlatform extends EventEmitter {
     constructor(config, dependencies = {}) {
@@ -267,23 +271,15 @@ class TwitchPlatform extends EventEmitter {
         try {
             const userId = typeof event?.chatter_user_id === 'string' ? event.chatter_user_id.trim() : '';
             const username = typeof event?.chatter_user_name === 'string' ? event.chatter_user_name.trim() : '';
-            if (!userId) {
-                throw new Error('Missing Twitch userId');
-            }
-            if (!username) {
-                throw new Error('Missing Twitch username');
-            }
-
             const normalizedMessage = typeof event?.message?.text === 'string' ? event.message.text.trim() : '';
             const messageParts = buildTwitchMessageParts(event?.message);
-            if (!normalizedMessage && messageParts.length === 0) {
-                throw new Error('Missing Twitch message text');
-            }
-
             const timestamp = event?.timestamp;
-            if (!timestamp || typeof timestamp !== 'string') {
-                throw new Error('Missing Twitch timestamp');
-            }
+            const missingFields = collectMissingFields({
+                userId: !!userId,
+                username: !!username,
+                message: !!normalizedMessage || messageParts.length > 0,
+                timestamp: typeof timestamp === 'string' && timestamp.trim().length > 0
+            });
 
             const badges = Array.isArray(event?.badges)
                 ? event.badges.reduce((acc, badge) => {
@@ -319,21 +315,23 @@ class TwitchPlatform extends EventEmitter {
 
             const normalizedData = {
                 platform: this.platformName,
-                userId,
-                username,
-                message: normalizedMessage,
-                timestamp,
+                ...(userId ? { userId } : {}),
+                username: username || UNKNOWN_TWITCH_USERNAME,
+                message: normalizedMessage || (messageParts.length > 0 ? '' : UNKNOWN_TWITCH_MESSAGE),
+                ...(typeof timestamp === 'string' && timestamp.trim().length > 0 ? { timestamp } : {}),
                 isMod,
                 isPaypiggy,
                 isBroadcaster: isSelf,
-                metadata: {
+                metadata: mergeMissingFieldsMetadata({
                     badges,
                     color: event?.color ?? null,
                     emotes: (event?.message?.emotes && typeof event.message.emotes === 'object')
                         ? event.message.emotes
                         : {},
                     roomId: event?.broadcaster_user_id ?? null
-                },
+                }, missingFields, {
+                    ...(typeof timestamp === 'string' && timestamp.trim().length > 0 ? { sourceTimestamp: timestamp } : {})
+                }),
                 rawData: { event }
             };
             normalizedData.badgeImages = await this._resolveBadgeImages(event);
@@ -355,23 +353,25 @@ class TwitchPlatform extends EventEmitter {
                     type: PlatformEvents.CHAT_MESSAGE,
                     platform: this.platformName,
                     username: normalizedData.username,
-                    userId: normalizedData.userId,
+                    ...(normalizedData.userId ? { userId: normalizedData.userId } : {}),
                     avatarUrl: normalizedData.avatarUrl,
                     message: {
                         text: normalizedData.message
                     },
-                    timestamp: normalizedData.timestamp,
+                    ...(normalizedData.timestamp ? { timestamp: normalizedData.timestamp } : {}),
                     isMod: normalizedData.isMod,
                     isPaypiggy: normalizedData.isPaypiggy,
                     isBroadcaster: normalizedData.isBroadcaster,
                     badgeImages: Array.isArray(normalizedData.badgeImages) ? normalizedData.badgeImages : [],
-                    metadata: {
+                    metadata: mergeMissingFieldsMetadata({
                         platform: this.platformName,
                         isMod: normalizedData.isMod,
                         isPaypiggy: normalizedData.isPaypiggy,
                         isBroadcaster: normalizedData.isBroadcaster,
                         correlationId: PlatformEvents._generateCorrelationId()
-                    }
+                    }, missingFields, {
+                        ...(normalizedData.timestamp ? { sourceTimestamp: normalizedData.timestamp } : {})
+                    })
                 };
                 if (messageParts.length > 0) {
                     eventData.message.parts = messageParts;
@@ -603,7 +603,9 @@ class TwitchPlatform extends EventEmitter {
             const baseOverrides = {
                 username: data?.username,
                 userId: data?.userId,
-                avatarUrl
+                avatarUrl,
+                missingFields: this._getMonetizationMissingFields(eventType, data, payloadTimestamp),
+                sourceTimestamp: payloadTimestamp
             };
             if (errorNotificationType === 'gift') {
                 if (typeof data?.giftType === 'string' && data.giftType.trim()) {
@@ -757,6 +759,30 @@ class TwitchPlatform extends EventEmitter {
         };
 
         return mapping[eventType] || eventType;
+    }
+
+    _getMonetizationMissingFields(eventType, data, payloadTimestamp) {
+        const fieldPresence = {
+            timestamp: !!payloadTimestamp,
+            username: typeof data?.username === 'string' && data.username.trim().length > 0,
+            userId: typeof data?.userId === 'string' && data.userId.trim().length > 0
+        };
+
+        if (eventType === 'gift') {
+            fieldPresence.giftType = typeof data?.giftType === 'string' && data.giftType.trim().length > 0;
+            fieldPresence.giftCount = Number.isFinite(Number(data?.giftCount)) && Number(data.giftCount) > 0;
+            fieldPresence.amount = Number.isFinite(Number(data?.amount)) && Number(data.amount) > 0;
+            fieldPresence.currency = typeof data?.currency === 'string' && data.currency.trim().length > 0;
+        }
+
+        if (eventType === 'giftpaypiggy') {
+            fieldPresence.giftCount = Number.isFinite(Number(data?.giftCount)) && Number(data.giftCount) > 0;
+            if (this.platformName === 'twitch') {
+                fieldPresence.tier = typeof data?.tier === 'string' && data.tier.trim().length > 0;
+            }
+        }
+
+        return collectMissingFields(fieldPresence);
     }
 
     handleStreamOnlineEvent(data) {

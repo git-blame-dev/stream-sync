@@ -4,6 +4,10 @@ const { NOTIFICATION_CONFIGS } = require('../core/constants');
 const { PlatformEvents } = require('../interfaces/PlatformEvents');
 const { isIsoTimestamp } = require('../utils/timestamp');
 const { getValidMessageParts, normalizeBadgeImages } = require('../utils/message-parts');
+const { getMissingFields } = require('../utils/missing-fields');
+
+const UNKNOWN_USERNAME = 'Unknown Username';
+const UNKNOWN_MESSAGE_TEXT = 'Unknown Message';
 
 const ALIAS_PAID_TYPES = [
     'subscription',
@@ -224,37 +228,48 @@ class PlatformEventRouter {
         const avatarUrl = typeof data.avatarUrl === 'string' ? data.avatarUrl.trim() : '';
         const messageParts = resolveCanonicalMessageParts(data);
         const badgeImages = normalizeBadgeImages(data.badgeImages);
+        const missingFields = getMissingFields(metadata);
+        const isMissingField = (fieldName) => missingFields.includes(fieldName);
         if (metadata !== undefined && (typeof metadata !== 'object' || metadata === null)) {
             throw new Error('Chat event metadata must be an object');
         }
-        if (!data.message || typeof data.message !== 'object') {
+        if ((!data.message || typeof data.message !== 'object') && !isMissingField('message')) {
             throw new Error('Chat event requires message payload');
         }
-        if (typeof data.message.text !== 'string') {
+        if ((typeof data?.message?.text !== 'string') && !isMissingField('message')) {
             throw new Error('Chat event requires message text');
         }
-        const normalizedText = String(data.message.text).trim();
-        if (!normalizedText && messageParts.length === 0) {
+        const normalizedText = typeof data?.message?.text === 'string'
+            ? String(data.message.text).trim()
+            : '';
+        if (!normalizedText && messageParts.length === 0 && !isMissingField('message')) {
             throw new Error('Chat event requires non-empty message text');
         }
-        if (!data.username || typeof data.username !== 'string' || !data.username.trim()) {
+        const normalizedUsername = typeof data.username === 'string' ? data.username.trim() : '';
+        if (!normalizedUsername && !isMissingField('username')) {
             throw new Error('Chat event requires username');
         }
-        if (!data.userId) {
+        const normalizedUserId = (typeof data.userId === 'string' && data.userId.trim())
+            ? data.userId.trim()
+            : (data.userId !== undefined && data.userId !== null ? String(data.userId).trim() : '');
+        if (!normalizedUserId && !isMissingField('userId')) {
             throw new Error('Chat event requires userId');
         }
-        if (!data.timestamp || !isIsoTimestamp(String(data.timestamp))) {
+        const normalizedTimestamp = (typeof data.timestamp === 'string' && data.timestamp.trim() && isIsoTimestamp(String(data.timestamp)))
+            ? String(data.timestamp)
+            : '';
+        if (!normalizedTimestamp && !isMissingField('timestamp')) {
             throw new Error('Chat event requires ISO timestamp');
         }
 
         const normalized = {
             platform,
-            userId: String(data.userId),
-            username: String(data.username).trim(),
+            ...(normalizedUserId ? { userId: normalizedUserId } : {}),
+            username: normalizedUsername || UNKNOWN_USERNAME,
             message: {
-                text: normalizedText
+                text: normalizedText || (isMissingField('message') ? UNKNOWN_MESSAGE_TEXT : '')
             },
-            timestamp: String(data.timestamp),
+            ...(normalizedTimestamp ? { timestamp: normalizedTimestamp } : {}),
             isMod: data.isMod,
             isPaypiggy: data.isPaypiggy === true,
             isBroadcaster: data.isBroadcaster
@@ -265,11 +280,14 @@ class PlatformEventRouter {
         if (avatarUrl) {
             normalized.avatarUrl = avatarUrl;
         }
-        if (metadata !== undefined) {
+        if (metadata !== undefined || missingFields.length > 0) {
             normalized.metadata = {
                 ...(metadata || {})
             };
             delete normalized.metadata.messageParts;
+            if (missingFields.length > 0) {
+                normalized.metadata.missingFields = missingFields;
+            }
         }
         if (badgeImages.length > 0) {
             normalized.badgeImages = badgeImages;
