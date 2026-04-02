@@ -27,6 +27,7 @@ function resolvePositiveNumber(value) {
 }
 
 const { isIsoTimestamp } = require('./timestamp');
+const { normalizeMissingFields, mergeMissingFieldsMetadata } = require('./missing-fields');
 
 function resolveTimestampValue(value) {
     if (typeof value !== 'string') {
@@ -54,7 +55,9 @@ function createMonetizationErrorPayload(options = {}) {
         amount,
         currency,
         tier,
-        months
+        months,
+        missingFields,
+        sourceTimestamp
     } = options;
 
     const resolvedNotificationType = resolveNonEmptyString(notificationType);
@@ -82,6 +85,12 @@ function createMonetizationErrorPayload(options = {}) {
     const resolvedUsername = resolveNonEmptyString(username);
     const resolvedUserId = resolveIdValue(userId);
     const resolvedEventType = resolveNonEmptyString(eventType);
+    const resolvedSourceTimestamp = resolveTimestampValue(sourceTimestamp);
+    const normalizedMissingFields = normalizeMissingFields(missingFields);
+
+    const metadata = mergeMissingFieldsMetadata({}, normalizedMissingFields, {
+        ...(resolvedSourceTimestamp ? { sourceTimestamp: resolvedSourceTimestamp } : {})
+    });
 
     const payload = {
         type: canonicalType,
@@ -92,7 +101,8 @@ function createMonetizationErrorPayload(options = {}) {
         ...(resolvedAvatarUrl ? { avatarUrl: resolvedAvatarUrl } : {}),
         ...(resolvedUsername ? { username: resolvedUsername } : {}),
         ...(resolvedUserId ? { userId: resolvedUserId } : {}),
-        eventType: resolvedEventType || canonicalType
+        eventType: resolvedEventType || canonicalType,
+        ...(Object.keys(metadata).length > 0 ? { metadata } : {})
     };
 
     switch (canonicalType) {

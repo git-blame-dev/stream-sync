@@ -221,4 +221,42 @@ describe('monetization error payload no-fallback behavior', () => {
         expect(payload.giftType).toBe('rose');
         expect(payload.giftCount).toBe(5);
     });
+
+    it('includes metadata.missingFields using normalized unique field names', () => {
+        const { createMonetizationErrorPayload } = require('../../../src/utils/monetization-error-utils');
+
+        const payload = createMonetizationErrorPayload({
+            notificationType: 'platform:gift',
+            platform: 'twitch',
+            timestamp: '2024-01-01T00:00:00.000Z',
+            missingFields: [' username ', 'username', 'amount', '', 123]
+        });
+
+        expect(payload.metadata.missingFields).toEqual(['username', 'amount']);
+    });
+
+    it('includes metadata.sourceTimestamp when provided as ISO timestamp', () => {
+        const { createMonetizationErrorPayload } = require('../../../src/utils/monetization-error-utils');
+
+        const payload = createMonetizationErrorPayload({
+            notificationType: 'platform:gift',
+            platform: 'twitch',
+            timestamp: '2024-01-01T00:00:00.000Z',
+            sourceTimestamp: '2024-01-01T00:00:00.000Z'
+        });
+
+        expect(payload.metadata.sourceTimestamp).toBe('2024-01-01T00:00:00.000Z');
+    });
+
+    it('omits metadata when neither missingFields nor sourceTimestamp are provided', () => {
+        const { createMonetizationErrorPayload } = require('../../../src/utils/monetization-error-utils');
+
+        const payload = createMonetizationErrorPayload({
+            notificationType: 'platform:gift',
+            platform: 'twitch',
+            timestamp: '2024-01-01T00:00:00.000Z'
+        });
+
+        expect(payload).not.toHaveProperty('metadata');
+    });
 });

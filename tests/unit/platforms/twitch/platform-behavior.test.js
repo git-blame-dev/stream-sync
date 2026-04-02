@@ -4,6 +4,7 @@ const { noOpLogger } = require('../../../helpers/mock-factories');
 const { createTwitchEventSubChatMessageEvent } = require('../../../helpers/twitch-test-data');
 
 const { TwitchPlatform } = require('../../../../src/platforms/twitch');
+const { DEFAULT_AVATAR_URL } = require('../../../../src/constants/avatar');
 
 const createReadyTwitchAuth = () => ({
     isReady: () => true,
@@ -234,7 +235,7 @@ describe('TwitchPlatform behavior standards', () => {
         expect(emitted[0].metadata.isPaypiggy).toBe(false);
     });
 
-    it('skips chat emission when message text and message parts are both empty', async () => {
+    it('emits degraded chat payload when message text and message parts are both empty', async () => {
         platform = createPlatform({}, { twitchAuth: createReadyTwitchAuth() });
         const emitted = [];
         platform.on('platform:event', (payload) => {
@@ -262,7 +263,11 @@ describe('TwitchPlatform behavior standards', () => {
             timestamp: '2024-01-01T00:00:00.000Z'
         });
 
-        expect(emitted).toHaveLength(0);
+        expect(emitted).toHaveLength(1);
+        expect(emitted[0].username).toBe('testvieweremptychat');
+        expect(emitted[0].avatarUrl).toBe(DEFAULT_AVATAR_URL);
+        expect(emitted[0].message).toEqual({ text: 'Unknown Message' });
+        expect(emitted[0].metadata.missingFields).toContain('message');
     });
 
     it('emits connection lifecycle events for EventSub changes', () => {
