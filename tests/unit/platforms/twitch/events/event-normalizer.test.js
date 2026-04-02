@@ -1,5 +1,8 @@
 const { describe, test, expect } = require('bun:test');
-const { applyTimestampFallback } = require('../../../../../src/platforms/twitch/events/event-normalizer');
+const {
+    applyNotificationMetadataFallback,
+    applyTimestampFallback
+} = require('../../../../../src/platforms/twitch/events/event-normalizer');
 
 describe('twitch event timestamp normalization', () => {
     test('uses metadata message timestamp for chat notifications', () => {
@@ -10,6 +13,34 @@ describe('twitch event timestamp normalization', () => {
 
         expect(result.timestamp).toBe('2024-01-01T00:00:00.987Z');
         expect(event.timestamp).toBeUndefined();
+    });
+
+    test('keeps chat body message id when envelope metadata id is also present', () => {
+        const result = applyNotificationMetadataFallback({
+            message_id: 'chat-body-id'
+        }, {
+            message_id: 'eventsub-envelope-id',
+            message_timestamp: '2024-01-01T00:00:00.123456789Z'
+        }, 'channel.chat.message');
+
+        expect(result.message_id).toBe('chat-body-id');
+        expect(result.id).toBeUndefined();
+        expect(result.timestamp).toBe('2024-01-01T00:00:00.123Z');
+    });
+
+    test('derives canonical bits id from metadata message id', () => {
+        const result = applyNotificationMetadataFallback({
+            bits: 25,
+            user_name: 'test-cheerer',
+            user_login: 'test-cheerer'
+        }, {
+            message_id: 'eventsub-bits-message-id',
+            message_timestamp: '2024-01-01T00:00:00.999999999Z'
+        }, 'channel.bits.use');
+
+        expect(result.id).toBe('eventsub-bits-message-id');
+        expect(result.message_id).toBeUndefined();
+        expect(result.timestamp).toBe('2024-01-01T00:00:00.999Z');
     });
 
     test('uses followed_at for follow notifications', () => {

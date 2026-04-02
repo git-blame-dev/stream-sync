@@ -33,6 +33,15 @@ const normalizeTimestampValue = (value) => {
     return new Date(parsedTimestamp).toISOString();
 };
 
+const normalizeCanonicalIdValue = (value) => {
+    if (typeof value !== 'string') {
+        return null;
+    }
+
+    const trimmedValue = value.trim();
+    return trimmedValue ? trimmedValue : null;
+};
+
 const metadataMessageTimestamp = (_event, metadata) => normalizeTimestampValue(metadata?.message_timestamp);
 
 const TIMESTAMP_RESOLVERS = {
@@ -84,7 +93,34 @@ const applyTimestampFallback = (event, metadata, subscriptionType) => {
     return { ...event, timestamp: resolvedTimestamp };
 };
 
+const applyIdFallback = (event, metadata, subscriptionType) => {
+    if (!event || typeof event !== 'object') {
+        return event;
+    }
+
+    if (subscriptionType !== 'channel.bits.use') {
+        return event;
+    }
+
+    const canonicalBitsId = normalizeCanonicalIdValue(metadata?.message_id);
+    const { id: _dropRawId, message_id: _dropRawMessageId, ...eventWithoutRawIds } = event;
+    if (!canonicalBitsId) {
+        return eventWithoutRawIds;
+    }
+
+    return {
+        ...eventWithoutRawIds,
+        id: canonicalBitsId
+    };
+};
+
+const applyNotificationMetadataFallback = (event, metadata, subscriptionType) => {
+    const timestampNormalizedEvent = applyTimestampFallback(event, metadata, subscriptionType);
+    return applyIdFallback(timestampNormalizedEvent, metadata, subscriptionType);
+};
+
 module.exports = {
+    applyNotificationMetadataFallback,
     applyTimestampFallback,
     normalizeMonths,
     normalizeUserIdentity

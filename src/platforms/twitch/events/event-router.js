@@ -2,7 +2,7 @@ const { extractTwitchMessageData } = require('../../../utils/message-normalizati
 const { validateLoggerInterface } = require('../../../utils/dependency-validator');
 const { createPlatformErrorHandler } = require('../../../utils/platform-error-handler');
 const {
-    applyTimestampFallback,
+    applyNotificationMetadataFallback,
     normalizeMonths,
     normalizeUserIdentity
 } = require('./event-normalizer');
@@ -142,7 +142,7 @@ function createTwitchEventSubEventRouter(options = {}) {
     const handleBitsUseEvent = (event, rawEvent = event) => {
         logRawIfEnabled('bits_use', rawEvent, 'bits-data-log', 'Error logging raw bits use data');
 
-        const eventId = event?.message_id || event?.id;
+        const eventId = event?.id;
         const isAnonymous = event?.is_anonymous === true;
         const rawUsername = typeof event?.user_name === 'string' ? event.user_name.trim() : '';
         const rawUserLogin = typeof event?.user_login === 'string' ? event.user_login.trim() : '';
@@ -151,7 +151,7 @@ function createTwitchEventSubEventRouter(options = {}) {
 
         if (!eventId || typeof event?.bits !== 'number' || (!isAnonymous && !hasIdentity) || hasPartialIdentity || !event?.timestamp) {
             errorHandler.handleEventProcessingError(
-                new Error('Bits use event requires id/message_id, bits, timestamp, and identity unless anonymous'),
+                new Error('Bits use event requires id, bits, timestamp, and identity unless anonymous'),
                 'gift',
                 event
             );
@@ -286,7 +286,7 @@ function createTwitchEventSubEventRouter(options = {}) {
 
     const handleNotificationEvent = (subscriptionType, event, metadata) => {
         safeLogger.debug(`EventSub notification received: ${subscriptionType}`, 'twitch', event);
-        const normalizedEvent = applyTimestampFallback(event, metadata, subscriptionType);
+        const normalizedEvent = applyNotificationMetadataFallback(event, metadata, subscriptionType);
 
         switch (subscriptionType) {
             case 'channel.chat.message':

@@ -235,4 +235,36 @@ describe('TwitchEventSub notification routing', () => {
         expect(raidEvents[0].viewerCount).toBe(50);
         expect(raidEvents[0].timestamp).toBe('2024-01-01T00:00:00.456Z');
     });
+
+    it('routes bits notifications when canonical id comes from metadata message_id', async () => {
+        eventSub = createEventSub({}, { twitchAuth: createReadyTwitchAuth() });
+        const giftEvents = [];
+        eventSub.on('gift', (data) => giftEvents.push(data));
+
+        const payload = {
+            metadata: {
+                message_type: 'notification',
+                message_id: 'test-eventsub-bits-id-1',
+                message_timestamp: '2024-01-01T00:00:00.654321987Z'
+            },
+            payload: {
+                subscription: { type: 'channel.bits.use' },
+                event: {
+                    user_name: 'BitsCheerer',
+                    user_login: 'bitscheerer',
+                    bits: 88,
+                    message: {
+                        text: 'Cheer88 test message'
+                    }
+                }
+            }
+        };
+
+        await eventSub.handleWebSocketMessage(payload);
+
+        expect(giftEvents).toHaveLength(1);
+        expect(giftEvents[0].id).toBe('test-eventsub-bits-id-1');
+        expect(giftEvents[0].amount).toBe(88);
+        expect(giftEvents[0].timestamp).toBe('2024-01-01T00:00:00.654Z');
+    });
 });
