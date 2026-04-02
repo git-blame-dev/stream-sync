@@ -163,7 +163,7 @@ describe('Twitch EventSub event router', () => {
             user_id: '777',
             user_login: 'cheerer',
             bits: 50,
-            message_id: 'bits-msg-1',
+            id: 'bits-msg-1',
             message: { text: 'hello' },
             timestamp: '2024-01-01T00:00:00Z'
         });
@@ -364,6 +364,69 @@ describe('Twitch EventSub event router', () => {
                     { type: 'text', text: 'world' }
                 ]
             }
+        });
+
+        const giftEvent = emitted.find((evt) => evt.type === 'gift');
+        expect(giftEvent).toBeUndefined();
+    });
+
+    test('emits bits gifts when metadata provides canonical id and payload has no message_id', () => {
+        const emitted = [];
+        const router = createTwitchEventSubEventRouter({
+            config: { dataLoggingEnabled: false },
+            logger: noOpLogger,
+            emit: (type, payload) => emitted.push({ type, payload }),
+            logRawPlatformData: async () => {},
+            logError: () => {}
+        });
+
+        router.handleNotificationEvent('channel.bits.use', {
+            user_name: 'Cheerer',
+            user_id: '777',
+            user_login: 'cheerer',
+            bits: 50,
+            message: {
+                fragments: [
+                    { type: 'cheermote', text: 'Cheer50', cheermote: { prefix: 'Cheer', bits: 50 } },
+                    { type: 'text', text: 'hello ' },
+                    { type: 'text', text: 'world' }
+                ]
+            }
+        }, {
+            message_id: 'eventsub-bits-id-1',
+            message_timestamp: '2024-01-01T00:00:00.123456789Z'
+        });
+
+        const giftEvent = emitted.find((evt) => evt.type === 'gift');
+        expect(giftEvent).toBeDefined();
+        expect(giftEvent.payload.id).toBe('eventsub-bits-id-1');
+        expect(giftEvent.payload.timestamp).toBe('2024-01-01T00:00:00.123Z');
+    });
+
+    test('does not emit bits gifts when only event body message_id is provided', () => {
+        const emitted = [];
+        const router = createTwitchEventSubEventRouter({
+            config: { dataLoggingEnabled: false },
+            logger: noOpLogger,
+            emit: (type, payload) => emitted.push({ type, payload }),
+            logRawPlatformData: async () => {},
+            logError: () => {}
+        });
+
+        router.handleNotificationEvent('channel.bits.use', {
+            user_name: 'Cheerer',
+            user_id: '777',
+            user_login: 'cheerer',
+            bits: 50,
+            message_id: 'payload-message-id-should-not-be-used',
+            message: {
+                fragments: [
+                    { type: 'cheermote', text: 'Cheer50', cheermote: { prefix: 'Cheer', bits: 50 } },
+                    { type: 'text', text: 'hello world' }
+                ]
+            }
+        }, {
+            message_timestamp: '2024-01-01T00:00:00.123456789Z'
         });
 
         const giftEvent = emitted.find((evt) => evt.type === 'gift');
