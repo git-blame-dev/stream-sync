@@ -160,7 +160,8 @@ class TwitchPlatform extends EventEmitter {
             await this.initializeEventSub(broadcasterId);
             this.logger.debug('EventSub initialization completed', 'twitch', {
                 eventSubExists: !!this.eventSub,
-                eventSubConnected: this.eventSub?.isConnected?.()
+                eventSubConnected: this.eventSub?.isConnected?.(),
+                eventSubActive: this.eventSub?.isActive?.()
             });
 
             if (!this.eventSub) {
@@ -181,9 +182,21 @@ class TwitchPlatform extends EventEmitter {
                 throw error;
             }
 
+            if (typeof this.eventSub.isActive !== 'function') {
+                const error = new Error('Twitch EventSub connection missing isActive()');
+                this._logPlatformError('EventSub missing active-state method', error, 'platform-init');
+                throw error;
+            }
+
             if (!this.eventSub.isConnected()) {
                 const error = new Error('Twitch EventSub initialization failed: connection is not active');
                 this._logPlatformError('EventSub not active after initialization', error, 'platform-init');
+                throw error;
+            }
+
+            if (!this.eventSub.isActive()) {
+                const error = new Error('Twitch EventSub initialization failed: subscriptions are not active');
+                this._logPlatformError('EventSub subscriptions not active after initialization', error, 'platform-init');
                 throw error;
             }
 
@@ -212,7 +225,7 @@ class TwitchPlatform extends EventEmitter {
             });
 
             this.logger.info('Twitch platform initialized with EventSub WebSocket', 'twitch');
-            this.isConnected = this.eventSub?.isConnected?.() || false;
+            this.isConnected = this.eventSub?.isActive?.() || false;
             this.isConnecting = false;
 
         } catch (error) {
@@ -806,7 +819,7 @@ class TwitchPlatform extends EventEmitter {
         }
 
         const isConnected = typeof this.eventSub.isConnected === 'function' ? this.eventSub.isConnected() : this.isConnected;
-        const isActive = typeof this.eventSub.isActive === 'function' ? this.eventSub.isActive() : isConnected;
+        const isActive = typeof this.eventSub.isActive === 'function' ? this.eventSub.isActive() : false;
         if (!isConnected || isActive === false) {
             const userFriendlyError = new Error('Twitch chat is unavailable: EventSub connection is not active');
             this.errorHandler.handleMessageSendError(userFriendlyError, 'eventsub-not-connected');
@@ -861,17 +874,17 @@ class TwitchPlatform extends EventEmitter {
     }
 
     getConnectionState() {
-        const connected = this.eventSub?.isConnected() || false;
+        const active = this.eventSub?.isActive?.() || false;
         const connecting = this.isConnecting || false;
-        const status = connected ? 'connected' : (connecting ? 'connecting' : 'disconnected');
+        const status = active ? 'connected' : (connecting ? 'connecting' : 'disconnected');
         
         return {
             platform: this.platformName,
             status: status,
-            isConnected: connected,
+            isConnected: active,
             channel: this.config.channel,
             username: this.config.username,
-            eventSubActive: this.eventSub ? (this.eventSub.isActive ? this.eventSub.isActive() : connected) : false,
+            eventSubActive: active,
             platformEnabled: this.config.enabled
         };
     }
@@ -898,13 +911,17 @@ class TwitchPlatform extends EventEmitter {
     getStatus() {
         const issues = [];
         const isConnected = this.eventSub?.isConnected?.() || false;
+        const isActive = this.eventSub?.isActive?.() || false;
 
         if (this.config.enabled && !isConnected) {
             issues.push('Not connected');
         }
+        if (this.config.enabled && isConnected && !isActive) {
+            issues.push('EventSub not active');
+        }
 
         return {
-            isReady: this.config.enabled && isConnected,
+            isReady: this.config.enabled && isConnected && isActive,
             issues
         };
     }

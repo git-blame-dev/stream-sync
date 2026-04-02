@@ -117,6 +117,30 @@ describe('TwitchEventSub lifecycle', () => {
     });
 
     describe('initialization error handling', () => {
+        it('initialize rethrows when configuration validation fails', async () => {
+            secrets.twitch.accessToken = 'test-access-token';
+            eventSub = createEventSub({ broadcasterId: '' });
+            eventSub.maxRetryAttempts = 0;
+            eventSub._connectWebSocket = createMockFn(async () => {});
+
+            await expect(eventSub.initialize()).rejects.toThrow('EventSub validation failed');
+            expect(eventSub._connectWebSocket.mock.calls).toHaveLength(0);
+            expect(eventSub.isInitialized).toBe(false);
+        });
+
+        it('initialize rethrows when websocket initialization fails', async () => {
+            secrets.twitch.accessToken = 'test-access-token';
+            eventSub = createEventSub();
+            eventSub.maxRetryAttempts = 0;
+            eventSub._connectWebSocket = createMockFn(async () => {
+                throw new Error('ws connect failed');
+            });
+
+            await expect(eventSub.initialize()).rejects.toThrow('ws connect failed');
+            expect(eventSub.isInitialized).toBe(false);
+            expect(eventSub._isConnected).toBe(false);
+        });
+
         it('increments retry attempts and schedules retry on initialization failure', async () => {
             eventSub = createEventSub();
             eventSub.maxRetryAttempts = 3;

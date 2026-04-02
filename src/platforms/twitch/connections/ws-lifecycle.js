@@ -77,7 +77,6 @@ function createTwitchEventSubWsLifecycle(options = {}) {
                         await handleWebSocketMessage(message);
 
                         if (message.metadata.message_type === 'session_welcome' && !state.sessionId && !connectionResolved) {
-                            connectionResolved = true;
                             if (connectionTimeout) {
                                 clearTimeout(connectionTimeout);
                             }
@@ -88,6 +87,7 @@ function createTwitchEventSubWsLifecycle(options = {}) {
                             const sessionId = message?.payload?.session?.id;
                             if (!sessionId || sessionId.trim() === '') {
                                 logError('Invalid session ID received', null, 'invalid-session');
+                                connectionResolved = true;
                                 reject(new Error('Invalid session ID'));
                                 return;
                             }
@@ -100,9 +100,12 @@ function createTwitchEventSubWsLifecycle(options = {}) {
                             emit('eventSubConnected', {
                                 sessionId: state.sessionId
                             });
-                            resolve();
 
                             setImmediateFn(async () => {
+                                if (connectionResolved) {
+                                    return;
+                                }
+
                                 try {
                                     const isConnectionValid = state._validateConnectionForSubscriptions?.();
                                     if (!isConnectionValid) {
@@ -112,9 +115,11 @@ function createTwitchEventSubWsLifecycle(options = {}) {
                                             sessionId: state.sessionId,
                                             reason: 'connection-validation'
                                         });
-                                        if (state._isConnected) {
+                                        if (state._isConnected && state.isInitialized) {
                                             state._scheduleReconnect?.();
                                         }
+                                        connectionResolved = true;
+                                        reject(new Error('Connection validation failed before subscription setup'));
                                         return;
                                     }
 
@@ -129,13 +134,17 @@ function createTwitchEventSubWsLifecycle(options = {}) {
                                             sessionId: state.sessionId,
                                             failures
                                         });
-                                        if (state._isConnected) {
+                                        if (state._isConnected && state.isInitialized) {
                                             state._scheduleReconnect?.();
                                         }
+                                        connectionResolved = true;
+                                        reject(new Error('Subscription setup completed with failures'));
                                         return;
                                     }
 
                                     state.subscriptionsReady = true;
+                                    connectionResolved = true;
+                                    resolve();
                                 } catch (error) {
                                     state.subscriptionsReady = false;
                                     logError('Error during subscription setup', error, 'subscription-setup');
@@ -143,9 +152,11 @@ function createTwitchEventSubWsLifecycle(options = {}) {
                                         sessionId: state.sessionId,
                                         error: error.message
                                     });
-                                    if (state._isConnected) {
+                                    if (state._isConnected && state.isInitialized) {
                                         state._scheduleReconnect?.();
                                     }
+                                    connectionResolved = true;
+                                    reject(error);
                                 }
                             });
                         }
@@ -199,10 +210,10 @@ function createTwitchEventSubWsLifecycle(options = {}) {
                             clearTimeout(connectionTimeout);
                         }
 
-                        if (code === 1006) {
-                            reject(new Error('Connection closed abnormally during initial handshake'));
-                            return;
-                        }
+                        const startupError = code === 1006
+                            ? new Error('Connection closed abnormally during initial handshake')
+                            : new Error('Connection closed before EventSub startup completed');
+                        reject(startupError);
                     }
 
                     state._isConnected = false;

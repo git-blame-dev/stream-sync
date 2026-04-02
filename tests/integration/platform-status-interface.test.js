@@ -118,14 +118,30 @@ describe('Platform getStatus() interface standardization', () => {
             expect(Array.isArray(status.issues)).toBe(true);
         });
 
-        test('isReady is true when enabled and EventSub connected', () => {
+        test('isReady is true when enabled and EventSub is connected + active', () => {
             const platform = createTwitchPlatform({ enabled: true });
-            platform.eventSub = { isConnected: () => true };
+            platform.eventSub = {
+                isConnected: () => true,
+                isActive: () => true
+            };
 
             const status = platform.getStatus();
 
             expect(status.isReady).toBe(true);
             expect(status.issues).toEqual([]);
+        });
+
+        test('isReady is false with issue when EventSub is connected but inactive', () => {
+            const platform = createTwitchPlatform({ enabled: true });
+            platform.eventSub = {
+                isConnected: () => true,
+                isActive: () => false
+            };
+
+            const status = platform.getStatus();
+
+            expect(status.isReady).toBe(false);
+            expect(status.issues).toContain('EventSub not active');
         });
 
         test('isReady is false when disabled with no issues (by design)', () => {

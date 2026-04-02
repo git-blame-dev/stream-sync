@@ -88,7 +88,7 @@ describe('Twitch EventSub WS lifecycle', () => {
         return state;
     };
 
-    test('connectWebSocket resolves on session welcome before subscriptions complete', async () => {
+    test('connectWebSocket waits for subscriptions before resolving startup', async () => {
         const lifecycle = buildLifecycle();
 
         let resolveSubscriptions;
@@ -132,7 +132,7 @@ describe('Twitch EventSub WS lifecycle', () => {
 
         expect(state.sessionId).toBe('test-session-123');
         expect(state._isConnected).toBe(true);
-        expect(resolvedBeforeSubscriptions).toBe(true);
+        expect(resolvedBeforeSubscriptions).toBe(false);
         expect(state.emitCalls.some(({ event, payload }) => event === 'eventSubConnected' && payload.sessionId === 'test-session-123')).toBe(true);
         expect(state.subscriptionsReady).toBe(true);
     });
@@ -183,7 +183,7 @@ describe('Twitch EventSub WS lifecycle', () => {
         await expect(connectPromise).rejects.toThrow('Connection timeout - no welcome message');
     });
 
-    test('connectWebSocket stays resolved when subscription setup reports failures', async () => {
+    test('connectWebSocket rejects when subscription setup reports failures', async () => {
         const lifecycle = buildLifecycle();
 
         const state = createState({
@@ -208,7 +208,7 @@ describe('Twitch EventSub WS lifecycle', () => {
             }))
         );
 
-        await expect(connectPromise).resolves.toBeUndefined();
+        await expect(connectPromise).rejects.toThrow('Subscription setup completed with failures');
         await Promise.resolve();
         expect(state.subscriptionsReady).toBe(false);
         expect(state.scheduleReconnectCalls).toHaveLength(1);
@@ -317,7 +317,7 @@ describe('Twitch EventSub WS lifecycle', () => {
         await expect(connectPromise).rejects.toThrow('Invalid session ID');
     });
 
-    test('connectWebSocket stays resolved when connection validation fails', async () => {
+    test('connectWebSocket rejects when connection validation fails', async () => {
         const lifecycle = buildLifecycle();
 
         const state = createState({
@@ -332,7 +332,7 @@ describe('Twitch EventSub WS lifecycle', () => {
             payload: { session: { id: 'test-session-789' } }
         })));
 
-        await expect(connectPromise).resolves.toBeUndefined();
+        await expect(connectPromise).rejects.toThrow('Connection validation failed before subscription setup');
         await Promise.resolve();
         expect(state.emitCalls.some(({ event, payload }) =>
             event === 'eventSubSubscriptionFailed' && payload.reason === 'connection-validation'
@@ -341,7 +341,7 @@ describe('Twitch EventSub WS lifecycle', () => {
         expect(state.scheduleReconnectCalls).toHaveLength(1);
     });
 
-    test('connectWebSocket stays resolved when subscription setup throws', async () => {
+    test('connectWebSocket rejects when subscription setup throws', async () => {
         const lifecycle = buildLifecycle();
 
         const state = createState({
@@ -356,7 +356,7 @@ describe('Twitch EventSub WS lifecycle', () => {
             payload: { session: { id: 'test-session-error' } }
         })));
 
-        await expect(connectPromise).resolves.toBeUndefined();
+        await expect(connectPromise).rejects.toThrow('API error');
         await Promise.resolve();
         expect(state.subscriptionsReady).toBe(false);
         expect(state.scheduleReconnectCalls).toHaveLength(1);
@@ -425,6 +425,17 @@ describe('Twitch EventSub WS lifecycle', () => {
         state.ws.emit('close', 1006, 'abnormal');
 
         await expect(connectPromise).rejects.toThrow('Connection closed abnormally during initial handshake');
+    });
+
+    test('connectWebSocket rejects on non-abnormal close during handshake', async () => {
+        const lifecycle = buildLifecycle();
+
+        const state = createState();
+        const connectPromise = lifecycle.connectWebSocket(state);
+
+        state.ws.emit('close', 1000, 'normal');
+
+        await expect(connectPromise).rejects.toThrow('Connection closed before EventSub startup completed');
     });
 
     test('connectWebSocket emits eventSubDisconnected on close with various codes', async () => {
