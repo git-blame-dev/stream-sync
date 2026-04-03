@@ -18,7 +18,8 @@
     "globals"
   ],
   "ignore": [
-    "src/interfaces/PlatformEvents.js",
+    "src/interfaces/PlatformEvents.ts",
+    "src/core/types/config-types.ts",
     "src/types/external-modules.d.ts"
   ],
   "ignoreIssues": {
