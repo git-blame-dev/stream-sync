@@ -576,6 +576,13 @@ describe('ConfigValidator simple command sections', () => {
         })).toThrow('greetings custom VFX identity mapped more than once: tiktok:test-user-alpha');
     });
 
+    it('throws when greetings custom profile identities collide after normalization', () => {
+        expect(() => ConfigValidator._normalizeGreetingsSection({
+            profileMain: 'youtube:@Test-User-YT-Alpha, !water',
+            profileAlt: 'youtube:test-user-yt-alpha, !run'
+        })).toThrow('greetings custom VFX identity mapped more than once: youtube:test-user-yt-alpha');
+    });
+
     it('normalizes shares section', () => {
         const result = ConfigValidator._normalizeSharesSection({ command: 'share-cmd' });
         expect(result.command).toBe('share-cmd');

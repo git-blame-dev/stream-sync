@@ -1,14 +1,7 @@
 const { CONFIG_SCHEMA, getFieldsRequiredWhenEnabled, DEFAULTS } = require('../core/config-schema');
+const { normalizeGreetingIdentityKey } = require('./greeting-identity-key-normalizer');
 
 class ConfigValidator {
-    static _normalizeGreetingIdentityUsername(platform, username) {
-        let normalizedUsername = String(username).trim().toLowerCase();
-        if (platform === 'youtube') {
-            normalizedUsername = normalizedUsername.replace(/^@+/, '');
-        }
-        return normalizedUsername;
-    }
-
     static _parseGreetingCustomProfileLine(profileId, rawValue) {
         if (typeof rawValue !== 'string' || rawValue.trim().length === 0) {
             throw new Error(`greetings.${profileId} must be a non-empty string`);
@@ -46,18 +39,18 @@ class ConfigValidator {
             }
 
             const platform = token.slice(0, separatorIndex).trim().toLowerCase();
-            const usernameRaw = token.slice(separatorIndex + 1).trim();
+            const identityValueRaw = token.slice(separatorIndex + 1).trim();
 
             if (!['tiktok', 'youtube', 'twitch'].includes(platform)) {
                 throw new Error(`greetings.${profileId} has unsupported platform: ${platform}`);
             }
 
-            const normalizedUsername = ConfigValidator._normalizeGreetingIdentityUsername(platform, usernameRaw);
-            if (!normalizedUsername) {
+            const normalizedIdentity = normalizeGreetingIdentityKey(platform, identityValueRaw);
+            if (!normalizedIdentity) {
                 throw new Error(`greetings.${profileId} has empty username for platform ${platform}`);
             }
 
-            return `${platform}:${normalizedUsername}`;
+            return `${platform}:${normalizedIdentity}`;
         });
 
         return {

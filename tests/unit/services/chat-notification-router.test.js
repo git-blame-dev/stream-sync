@@ -280,9 +280,9 @@ describe('ChatNotificationRouter', () => {
             duration: 5000
         };
         const secondaryVfx = {
-            command: '!water',
-            commandKey: 'under-the-water',
-            filename: 'under-the-water.mp4',
+            command: '!bye',
+            commandKey: 'bye',
+            filename: 'bye.mp4',
             mediaSource: 'vfx bottom green',
             vfxFilePath: '/vfx',
             duration: 5000
@@ -302,7 +302,7 @@ describe('ChatNotificationRouter', () => {
                         customVfxProfiles: {
                             'twitch:test-user-gamma': {
                                 profileId: 'profileMain',
-                                command: '!water'
+                                command: '!bye'
                             }
                         }
                     }
@@ -325,8 +325,129 @@ describe('ChatNotificationRouter', () => {
         const greetingItem = queuedItems.find(item => item.type === 'greeting');
         expect(greetingItem).toBeDefined();
         expect(greetingItem.secondaryVfxConfig).toEqual(expect.objectContaining({
-            command: '!water',
-            commandKey: 'under-the-water'
+            command: '!bye',
+            commandKey: 'bye'
+        }));
+    });
+
+    it('matches youtube greeting profile keys with mixed-case and leading-@ identity input', async () => {
+        const greetingVfx = {
+            command: '!hello',
+            commandKey: 'greetings',
+            filename: 'hello.mp4',
+            mediaSource: 'vfx top',
+            vfxFilePath: '/vfx',
+            duration: 5000
+        };
+        const secondaryVfx = {
+            command: '!bye',
+            commandKey: 'bye',
+            filename: 'bye.mp4',
+            mediaSource: 'vfx bottom green',
+            vfxFilePath: '/vfx',
+            duration: 5000
+        };
+
+        const { router, runtime } = createRouter({
+            runtime: {
+                config: {
+                    ...testConfig,
+                    general: {
+                        ...testConfig.general,
+                        logChatMessages: false
+                    },
+                    youtube: { greetingsEnabled: true, messagesEnabled: true, farewellsEnabled: true },
+                    greetings: {
+                        command: '!hello',
+                        customVfxProfiles: {
+                            'youtube:test-user-yt-gamma': {
+                                profileId: 'profileMain',
+                                command: '!bye'
+                            }
+                        }
+                    }
+                },
+                isFirstMessage: createMockFn().mockReturnValue(true),
+                vfxCommandService: {
+                    getVFXConfig: createMockFn().mockResolvedValue(greetingVfx),
+                    selectVFXCommand: createMockFn().mockResolvedValue(secondaryVfx),
+                    matchFarewell: createMockFn().mockReturnValue(null)
+                }
+            }
+        });
+
+        await router.handleChatMessage('youtube', {
+            ...baseMessage,
+            username: '@TeSt-UsEr-Yt-GaMmA'
+        });
+
+        const queuedItems = runtime.displayQueue.addItem.mock.calls.map((call) => call[0]);
+        const greetingItem = queuedItems.find((item) => item.type === 'greeting');
+        expect(greetingItem).toBeDefined();
+        expect(greetingItem.secondaryVfxConfig).toEqual(expect.objectContaining({
+            command: '!bye',
+            commandKey: 'bye'
+        }));
+    });
+
+    it('matches tiktok greeting profiles by userId identity value rather than nickname', async () => {
+        const greetingVfx = {
+            command: '!hello',
+            commandKey: 'greetings',
+            filename: 'hello.mp4',
+            mediaSource: 'vfx top',
+            vfxFilePath: '/vfx',
+            duration: 5000
+        };
+        const secondaryVfx = {
+            command: '!bye',
+            commandKey: 'bye',
+            filename: 'bye.mp4',
+            mediaSource: 'vfx bottom green',
+            vfxFilePath: '/vfx',
+            duration: 5000
+        };
+
+        const { router, runtime } = createRouter({
+            runtime: {
+                config: {
+                    ...testConfig,
+                    general: {
+                        ...testConfig.general,
+                        logChatMessages: false
+                    },
+                    tiktok: { greetingsEnabled: true, messagesEnabled: true, farewellsEnabled: true },
+                    greetings: {
+                        command: '!hello',
+                        customVfxProfiles: {
+                            'tiktok:test-unique-id-alpha': {
+                                profileId: 'profileMain',
+                                command: '!bye'
+                            }
+                        }
+                    }
+                },
+                isFirstMessage: createMockFn().mockReturnValue(true),
+                vfxCommandService: {
+                    getVFXConfig: createMockFn().mockResolvedValue(greetingVfx),
+                    selectVFXCommand: createMockFn().mockResolvedValue(secondaryVfx),
+                    matchFarewell: createMockFn().mockReturnValue(null)
+                }
+            }
+        });
+
+        await router.handleChatMessage('tiktok', {
+            ...baseMessage,
+            userId: 'TeSt-Unique-Id-Alpha',
+            username: 'DifferentNicknameShouldNotKeyMatch'
+        });
+
+        const queuedItems = runtime.displayQueue.addItem.mock.calls.map((call) => call[0]);
+        const greetingItem = queuedItems.find((item) => item.type === 'greeting');
+        expect(greetingItem).toBeDefined();
+        expect(greetingItem.secondaryVfxConfig).toEqual(expect.objectContaining({
+            command: '!bye',
+            commandKey: 'bye'
         }));
     });
 
@@ -345,8 +466,8 @@ describe('ChatNotificationRouter', () => {
                     greetings: {
                         command: '!hello',
                         customVfxProfiles: {
-                            'twitch:test-user-alpha': { profileId: 'profileMain', command: '!water' },
-                            'tiktok:test-user-beta': { profileId: 'profileMain', command: '!water' }
+                            'twitch:test-user-alpha': { profileId: 'profileMain', command: '!bye' },
+                            'tiktok:test-user-beta': { profileId: 'profileMain', command: '!bye' }
                         }
                     }
                 },
@@ -388,9 +509,9 @@ describe('ChatNotificationRouter', () => {
             duration: 5000
         };
         const secondaryVfx = {
-            command: '!water',
-            commandKey: 'under-the-water',
-            filename: 'under-the-water.mp4',
+            command: '!bye',
+            commandKey: 'bye',
+            filename: 'bye.mp4',
             mediaSource: 'vfx bottom green',
             vfxFilePath: '/vfx',
             duration: 5000
@@ -410,7 +531,7 @@ describe('ChatNotificationRouter', () => {
                         customVfxProfiles: {
                             'twitch:test-user-gamma': {
                                 profileId: 'profileMain',
-                                command: '!water'
+                                command: '!bye'
                             }
                         }
                     }
@@ -419,7 +540,7 @@ describe('ChatNotificationRouter', () => {
                 vfxCommandService: {
                     getVFXConfig: createMockFn().mockResolvedValue(greetingVfx),
                     selectVFXCommand: createMockFn((trigger) => {
-                        if (trigger === '!water') {
+                        if (trigger === '!bye') {
                             return Promise.resolve(secondaryVfx);
                         }
                         return Promise.resolve(commandVfx);
@@ -440,7 +561,7 @@ describe('ChatNotificationRouter', () => {
         expect(queuedTypes[0]).toBe('chat');
         expect(queuedTypes[1]).toBe('greeting');
         expect(queuedTypes[2]).toBe('command');
-        expect(queuedItems[1].secondaryVfxConfig).toEqual(expect.objectContaining({ command: '!water' }));
+        expect(queuedItems[1].secondaryVfxConfig).toEqual(expect.objectContaining({ command: '!bye' }));
     });
 
     it('routes farewell messages into a user-visible farewell row', async () => {
