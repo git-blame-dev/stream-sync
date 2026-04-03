@@ -473,7 +473,7 @@ describe('ConfigValidator._normalizeGuiSection()', () => {
     it('falls back to defaults for invalid gui values', () => {
         const result = ConfigValidator._normalizeGuiSection({
             host: '   ',
-            port: '0',
+            port: '-1',
             messageCharacterLimit: '-1',
             overlayMaxMessages: '0',
             overlayMaxLinesPerMessage: '-4'
@@ -1006,5 +1006,13 @@ describe('ConfigValidator.normalizeFromSchema()', () => {
         expect(result.messageCharacterLimit).toBe(0);
         expect(result.overlayMaxMessages).toBe(3);
         expect(result.overlayMaxLinesPerMessage).toBe(3);
+    });
+
+    it('allows gui port zero for ephemeral server binding', () => {
+        const result = ConfigValidator.normalizeFromSchema('gui', {
+            port: '0'
+        });
+
+        expect(result.port).toBe(0);
     });
 });

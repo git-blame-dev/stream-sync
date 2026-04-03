@@ -28,6 +28,11 @@ function createGuiTransportService(options: any = {}) {
             logger.debug(message, 'gui-transport', data || null);
         }
     };
+    const logInfo = (message: string, data?: any) => {
+        if (logger && typeof logger.info === 'function') {
+            logger.info(message, 'gui-transport', data || null);
+        }
+    };
     const assetsRoot = typeof options.assetsRoot === 'string' && options.assetsRoot.trim()
         ? options.assetsRoot
         : path.resolve(__dirname, '../../../gui/dist');
@@ -576,8 +581,8 @@ function createGuiTransportService(options: any = {}) {
             throw new Error('GUI transport requires non-empty host');
         }
         const port = Number(guiConfig.port);
-        if (!Number.isInteger(port) || port < 1 || port > 65535) {
-            throw new Error('GUI transport requires integer port between 1 and 65535');
+        if (!Number.isInteger(port) || port < 0 || port > 65535) {
+            throw new Error('GUI transport requires integer port between 0 and 65535');
         }
 
         subscribeToDisplayRows();
@@ -589,6 +594,9 @@ function createGuiTransportService(options: any = {}) {
                 server.once('error', reject);
                 server.listen(port, host, () => {
                     active = true;
+                    const address = server && typeof server.address === 'function' ? server.address() : null;
+                    const boundPort = address && typeof address === 'object' ? address.port : port;
+                    logInfo(`GUI transport started on ${host}:${boundPort}`);
                     resolve();
                 });
             });

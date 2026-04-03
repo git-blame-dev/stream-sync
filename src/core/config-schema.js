@@ -126,7 +126,7 @@ const CONFIG_SCHEMA = {
         enableDock: { type: 'boolean', default: false },
         enableOverlay: { type: 'boolean', default: false },
         host: { type: 'string', default: '127.0.0.1' },
-        port: { type: 'number', default: 3399, min: 1, max: 65535, integer: true },
+        port: { type: 'number', default: 3399, min: 0, max: 65535, integer: true },
         messageCharacterLimit: { type: 'number', default: 0, min: 0, integer: true },
         overlayMaxMessages: { type: 'number', default: 3, min: 1, integer: true },
         overlayMaxLinesPerMessage: { type: 'number', default: 3, min: 1, integer: true },
