@@ -5,6 +5,7 @@ const { checkGlobalCommandCooldown, updateGlobalCommandCooldown } = require('../
 const { createPlatformErrorHandler } = require('../utils/platform-error-handler');
 const { sanitizeForDisplay } = require('../utils/validation');
 const { getValidMessageParts, normalizeBadgeImages } = require('../utils/message-parts');
+const { normalizeGreetingIdentityKey } = require('../utils/greeting-identity-key-normalizer');
 
 const LOG_TRUNCATION_LENGTH = 200;
 
@@ -474,26 +475,18 @@ class ChatNotificationRouter {
         };
     }
 
-    normalizeGreetingIdentityUsername(platform, username) {
-        let normalized = typeof username === 'string' ? username.trim().toLowerCase() : '';
-        if (platform === 'youtube') {
-            normalized = normalized.replace(/^@+/, '');
-        }
-        return normalized;
-    }
-
-    resolveGreetingProfile(platform, username) {
+    resolveGreetingProfile(platform, identityValue) {
         const profiles = this.runtime?.config?.greetings?.customVfxProfiles;
         if (!profiles || typeof profiles !== 'object') {
             return null;
         }
 
-        const normalizedUsername = this.normalizeGreetingIdentityUsername(platform, username);
-        if (!normalizedUsername) {
+        const normalizedIdentity = normalizeGreetingIdentityKey(platform, identityValue);
+        if (!normalizedIdentity) {
             return null;
         }
 
-        const identityKey = `${platform}:${normalizedUsername}`;
+        const identityKey = `${platform}:${normalizedIdentity}`;
         return profiles[identityKey] || null;
     }
 
