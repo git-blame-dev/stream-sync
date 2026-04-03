@@ -4,10 +4,8 @@ const { NOTIFICATION_CONFIGS } = require('../core/constants');
 const { PlatformEvents } = require('../interfaces/PlatformEvents');
 const { isIsoTimestamp } = require('../utils/timestamp');
 const { getValidMessageParts, normalizeBadgeImages } = require('../utils/message-parts');
+const { UNKNOWN_CHAT_MESSAGE, UNKNOWN_CHAT_USERNAME } = require('../constants/degraded-chat');
 const { getMissingFields } = require('../utils/missing-fields');
-
-const UNKNOWN_USERNAME = 'Unknown Username';
-const UNKNOWN_MESSAGE_TEXT = 'Unknown Message';
 
 const ALIAS_PAID_TYPES = [
     'subscription',
@@ -265,9 +263,9 @@ class PlatformEventRouter {
         const normalized = {
             platform,
             ...(normalizedUserId ? { userId: normalizedUserId } : {}),
-            username: normalizedUsername || UNKNOWN_USERNAME,
+            username: normalizedUsername || UNKNOWN_CHAT_USERNAME,
             message: {
-                text: normalizedText || (isMissingField('message') ? UNKNOWN_MESSAGE_TEXT : '')
+                text: normalizedText || (isMissingField('message') ? UNKNOWN_CHAT_MESSAGE : '')
             },
             ...(normalizedTimestamp ? { timestamp: normalizedTimestamp } : {}),
             isMod: data.isMod,

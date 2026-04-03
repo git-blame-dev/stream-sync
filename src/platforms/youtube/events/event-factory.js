@@ -1,7 +1,9 @@
 const { PlatformEvents } = require('../../../interfaces/PlatformEvents');
 const { isIsoTimestamp } = require('../../../utils/timestamp');
 const { DEFAULT_AVATAR_URL } = require('../../../constants/avatar');
+const { UNKNOWN_CHAT_MESSAGE, UNKNOWN_CHAT_USERNAME } = require('../../../constants/degraded-chat');
 const { getValidMessageParts, normalizeBadgeImages } = require('../../../utils/message-parts');
+const { getMissingFields, mergeMissingFieldsMetadata } = require('../../../utils/missing-fields');
 
 function createYouTubeEventFactory(options = {}) {
     const platformName = options.platformName || 'youtube';
@@ -102,34 +104,62 @@ function createYouTubeEventFactory(options = {}) {
         },
 
         createChatMessageEvent: (data = {}) => {
-            const timestamp = getTimestamp(data, 'YouTube chat message event requires timestamp');
-            const identity = normalizeIdentity(data);
+            const dataMetadata = data?.metadata && typeof data.metadata === 'object'
+                ? data.metadata
+                : {};
+            const missingFields = getMissingFields(dataMetadata);
+            const isMissingField = (fieldName) => missingFields.includes(fieldName);
+            const rawTimestamp = normalizeText(data.timestamp);
+            const timestamp = rawTimestamp && isIsoTimestamp(rawTimestamp)
+                ? rawTimestamp
+                : undefined;
+            if (!timestamp && !isMissingField('timestamp')) {
+                throw new Error('YouTube chat message event requires timestamp');
+            }
+
+            const identity = normalizeIdentity(data, { allowMissing: true });
+            if (!identity.username && !isMissingField('username')) {
+                throw new Error('YouTube event payload requires userId and username');
+            }
+            if (!identity.userId && !isMissingField('userId')) {
+                throw new Error('YouTube event payload requires userId and username');
+            }
+
             const avatarUrl = resolveAvatarUrl(data);
-            const messageText = resolveMessageText(data);
+            const messageText = normalizeText(resolveMessageText(data));
             const messageParts = resolveMessageParts(data);
+            if (!messageText && messageParts.length === 0 && !isMissingField('message')) {
+                throw new Error('YouTube chat message event requires message text');
+            }
             const badgeImages = normalizeBadgeImages(data.badgeImages);
-            const message = { text: messageText };
+            const message = {
+                text: messageText || (isMissingField('message') ? UNKNOWN_CHAT_MESSAGE : '')
+            };
             if (messageParts.length > 0) {
                 message.parts = messageParts;
             }
 
+            const metadata = mergeMissingFieldsMetadata(buildEventMetadata({
+                videoId: data.videoId,
+                isMod: data.isMod || false,
+                isOwner: data.isOwner || false,
+                isVerified: data.isVerified || false
+            }), missingFields, {
+                ...(missingFields.length > 0 && timestamp ? { sourceTimestamp: timestamp } : {})
+            });
+
             const eventData = {
                 type: PlatformEvents.CHAT_MESSAGE,
                 platform: platformName,
-                username: identity.username,
-                userId: identity.userId,
+                username: identity.username || UNKNOWN_CHAT_USERNAME,
+                ...(identity.userId ? { userId: identity.userId } : {}),
                 avatarUrl,
                 message,
-                timestamp,
+                ...(timestamp ? { timestamp } : {}),
                 isMod: !!data.isMod,
                 isPaypiggy: data.isPaypiggy === true,
                 isBroadcaster: !!data.isBroadcaster,
-                metadata: buildEventMetadata({
-                    videoId: data.videoId,
-                    isMod: data.isMod || false,
-                    isOwner: data.isOwner || false,
-                    isVerified: data.isVerified || false
-                })
+                metadata
             };
 
             if (badgeImages.length > 0) {

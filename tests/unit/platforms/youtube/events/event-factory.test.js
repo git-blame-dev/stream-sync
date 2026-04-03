@@ -265,6 +265,49 @@ describe('YouTube event factory behavior', () => {
         })).toThrow('YouTube event payload requires userId and username');
     });
 
+    it('allows degraded chat events when metadata.missingFields marks missing identity and timestamp', () => {
+        const { createYouTubeEventFactory } = require('../../../../../src/platforms/youtube/events/event-factory');
+
+        const eventFactory = createYouTubeEventFactory({
+            generateCorrelationId: () => 'corr-youtube-missing-identity'
+        });
+
+        const event = eventFactory.createChatMessageEvent({
+            message: {
+                text: 'partial youtube chat message'
+            },
+            metadata: {
+                missingFields: ['userId', 'username', 'timestamp']
+            }
+        });
+
+        expect(event.username).toBe('Unknown Username');
+        expect(event.userId).toBeUndefined();
+        expect(event.timestamp).toBeUndefined();
+        expect(event.message).toEqual({ text: 'partial youtube chat message' });
+        expect(event.metadata.missingFields).toEqual(['userId', 'username', 'timestamp']);
+    });
+
+    it('allows degraded chat events with unknown-message placeholder when message is marked missing', () => {
+        const { createYouTubeEventFactory } = require('../../../../../src/platforms/youtube/events/event-factory');
+
+        const eventFactory = createYouTubeEventFactory({
+            generateCorrelationId: () => 'corr-youtube-missing-message'
+        });
+
+        const event = eventFactory.createChatMessageEvent({
+            metadata: {
+                missingFields: ['message', 'userId', 'username', 'timestamp']
+            }
+        });
+
+        expect(event.username).toBe('Unknown Username');
+        expect(event.userId).toBeUndefined();
+        expect(event.timestamp).toBeUndefined();
+        expect(event.message).toEqual({ text: 'Unknown Message' });
+        expect(event.metadata.missingFields).toEqual(['message', 'userId', 'username', 'timestamp']);
+    });
+
     it('builds viewer-count events matching the current YouTube payload shape', () => {
         const { createYouTubeEventFactory } = require('../../../../../src/platforms/youtube/events/event-factory');
 

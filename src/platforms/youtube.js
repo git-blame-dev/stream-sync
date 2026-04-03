@@ -23,7 +23,11 @@ const { createYouTubeEventFactory } = require('./youtube/events/event-factory');
 const { createYouTubeMonetizationParser } = require('./youtube/monetization/monetization-parser');
 const { createYouTubeConnectionFactory } = require('./youtube/connections/youtube-connection-factory');
 const { createYouTubeMultiStreamManager } = require('./youtube/streams/youtube-multistream-manager');
+const { UNKNOWN_CHAT_MESSAGE, UNKNOWN_CHAT_USERNAME } = require('../constants/degraded-chat');
 const { getValidMessageParts } = require('../utils/message-parts');
+const { extractMessageText } = require('./youtube/youtube-message-extractor');
+const { resolveYouTubeTimestampISO } = require('../utils/platform-timestamp');
+const { collectMissingFields, getMissingFields, mergeMissingFieldsMetadata } = require('../utils/missing-fields');
 
 // Timeout and limit constants
 const INNERTUBE_CREATION_TIMEOUT_MS = 3000; // 3 seconds for Innertube instance creation
@@ -530,14 +534,7 @@ class YouTubePlatform extends EventEmitter {
             this.logger.warn('Skipping chat message: missing chat item payload', 'youtube');
             return;
         }
-        const authorName = this._resolveChatItemAuthorName(chatItem);
-        if (!authorName) {
-            this.logger.warn('Skipping chat message: missing author name', 'youtube', {
-                eventType: chatItem.item.type || null
-            });
-            return;
-        }
-        this._processRegularChatMessage(chatItem, authorName);
+        this._processRegularChatMessage(chatItem);
     }
 
     async handleMembership(chatItem) {
@@ -578,40 +575,39 @@ class YouTubePlatform extends EventEmitter {
                chatItem.type === 'MarkChatItemsByAuthorAsDeletedAction';
     }
 
-    _processRegularChatMessage(chatItem, authorName) {
-        
+    _processRegularChatMessage(chatItem) {
+
         // Normalize message
         const { normalizeYouTubeMessage } = require('../utils/message-normalization');
         let normalizedData;
         try {
             normalizedData = normalizeYouTubeMessage(chatItem, 'youtube', this.timestampService);
         } catch (error) {
-            if (error instanceof Error && error.message === 'Missing YouTube message text') {
-                this.logger.debug('Skipping empty message', 'youtube', {
-                    author: this._resolveChatItemAuthorNameForLog(chatItem)
-                });
+            if (!this._isRecoverableYouTubeChatNormalizationError(error)) {
+                this._handleProcessingError(
+                    `Error normalizing chat message: ${error.message}`,
+                    error,
+                    'chat-normalization',
+                    chatItem
+                );
                 return;
             }
 
-            this._handleProcessingError(
-                `Error normalizing chat message: ${error.message}`,
-                error,
-                'chat-normalization',
-                chatItem
-            );
-            return;
+            normalizedData = this._buildDegradedYouTubeChatData(chatItem);
         }
 
         const messageParts = getValidMessageParts({ message: normalizedData.message }, { allowWhitespaceText: true });
         const hasMessageParts = messageParts.length > 0;
-        
-        
+        const missingFields = getMissingFields(normalizedData?.metadata);
+        const isMessageMarkedMissing = missingFields.includes('message');
+
+
         // Skip empty messages
         const messageText = typeof normalizedData.message?.text === 'string'
             ? normalizedData.message.text
             : '';
 
-        if (!messageText && !hasMessageParts) {
+        if (!messageText && !hasMessageParts && !isMessageMarkedMissing) {
             this.logger.debug('Skipping empty message', 'youtube', {
                 author: this._resolveChatItemAuthorNameForLog(chatItem),
                 extractedMessage: messageText
@@ -632,6 +628,76 @@ class YouTubePlatform extends EventEmitter {
         } catch (eventError) {
             this._handleProcessingError(`Error emitting chat message event: ${eventError.message}`, eventError, 'chat-message', normalizedData);
         }
+    }
+
+    _isRecoverableYouTubeChatNormalizationError(error) {
+        const message = error instanceof Error ? error.message : '';
+        return message === 'Missing YouTube author data'
+            || message === 'Missing YouTube userId'
+            || message === 'Missing YouTube username'
+            || message === 'Missing YouTube message text'
+            || message === 'Missing YouTube timestamp';
+    }
+
+    _buildDegradedYouTubeChatData(chatItem = {}) {
+        const messageData = chatItem?.item && typeof chatItem.item === 'object'
+            ? chatItem.item
+            : {};
+        const author = messageData?.author && typeof messageData.author === 'object'
+            ? messageData.author
+            : {};
+        const userId = typeof author.id === 'string' ? author.id.trim() : '';
+        const username = this._resolveChatItemAuthorName(chatItem);
+        const messageText = extractMessageText(messageData.message).trim();
+        const messageParts = getValidMessageParts({ message: messageData.message }, { allowWhitespaceText: true });
+        const timestamp = resolveYouTubeTimestampISO(chatItem);
+
+        const hasBadgeTooltip = (fragment) => {
+            if (typeof fragment !== 'string') {
+                return false;
+            }
+            return fragment.toLowerCase().includes('member');
+        };
+
+        const authorBadges = Array.isArray(author.badges) ? author.badges : [];
+        const isBroadcaster = authorBadges.some((badge) => badge?.icon_type === 'OWNER');
+        const isPaypiggy = authorBadges.some((badge) => hasBadgeTooltip(badge?.tooltip));
+        const missingFields = collectMissingFields({
+            userId: !!userId,
+            username: !!username,
+            message: !!messageText || messageParts.length > 0,
+            timestamp: typeof timestamp === 'string' && timestamp.trim().length > 0
+        });
+
+        const degradedMessage = {
+            text: messageText || (messageParts.length > 0 ? '' : UNKNOWN_CHAT_MESSAGE)
+        };
+        if (messageParts.length > 0) {
+            degradedMessage.parts = messageParts;
+        }
+
+        return {
+            platform: 'youtube',
+            ...(userId ? { userId } : {}),
+            username: username || UNKNOWN_CHAT_USERNAME,
+            avatarUrl: typeof author?.thumbnails?.[0]?.url === 'string'
+                ? author.thumbnails[0].url.trim()
+                : '',
+            message: degradedMessage,
+            ...(typeof timestamp === 'string' && timestamp.trim().length > 0 ? { timestamp } : {}),
+            isMod: author.is_moderator === true,
+            isPaypiggy,
+            isBroadcaster,
+            metadata: mergeMissingFieldsMetadata({
+                uniqueId: messageData.id || null,
+                isSuperChat: !!messageData.superchat,
+                isSuperSticker: !!messageData.supersticker,
+                isMembership: !!messageData.isMembership,
+                authorPhoto: author?.thumbnails?.[0]?.url || null
+            }, missingFields, {
+                ...(typeof timestamp === 'string' && timestamp.trim().length > 0 ? { sourceTimestamp: timestamp } : {})
+            })
+        };
     }
 
     _resolveMonetizationAuthor(chatItem) {
