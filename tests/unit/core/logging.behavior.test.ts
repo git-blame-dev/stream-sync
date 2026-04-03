@@ -1,11 +1,11 @@
-const { describe, it, expect, beforeEach, afterEach } = require('bun:test');
-const { restoreAllMocks } = require('../../helpers/bun-mock-utils');
-const { captureStdout, captureStderr } = require('../../helpers/output-capture');
-const fs = require('fs');
-const os = require('os');
-const path = require('path');
+import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
+import { restoreAllMocks } from '../../helpers/bun-mock-utils';
+import { captureStdout, captureStderr } from '../../helpers/output-capture';
+import fs from 'fs';
+import os from 'os';
+import path from 'path';
 
-const logging = require('../../../src/core/logging');
+const logging = require('../../../src/core/logging.ts');
 
 describe('core/logging behavior', () => {
     beforeEach(() => {

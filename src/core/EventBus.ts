@@ -1,0 +1,242 @@
+
+const EventEmitter = require('events');
+const { logger } = require('./logging');
+const { createPlatformErrorHandler } = require('../utils/platform-error-handler');
+
+const eventBusErrorHandler = createPlatformErrorHandler(logger, 'event-bus');
+
+type EventName = string;
+type EventPayload = unknown;
+type EventHandler = (...args: unknown[]) => unknown;
+type SubscriptionOptions = { once?: boolean; context?: unknown };
+type EventStats = { emitted: number; success: number; error: number; totalDuration: number; avgDuration: number };
+type WrappedEventHandler = EventHandler & { _originalHandler?: EventHandler; _context?: unknown };
+
+function logEventBusError(message: string, error: unknown, eventType = 'event-bus', payload: EventPayload = null) {
+    if (error instanceof Error) {
+        eventBusErrorHandler.handleEventProcessingError(error, eventType, payload, message);
+    } else {
+        eventBusErrorHandler.logOperationalError(message, 'event-bus', payload || error);
+    }
+}
+
+class EventBus extends EventEmitter {
+    debugEnabled: boolean;
+    maxListeners: number;
+    eventStats: Map<EventName, EventStats>;
+
+    constructor(options: { debugEnabled?: boolean; maxListeners?: number } = {}) {
+        super();
+
+        this.debugEnabled = options.debugEnabled || false;
+        this.maxListeners = options.maxListeners || 50;
+        this.eventStats = new Map();
+
+        // Set max listeners to prevent memory leak warnings
+        this.setMaxListeners(this.maxListeners);
+        
+        // Bind methods to preserve context
+        this.emit = this.emit.bind(this);
+        this.subscribe = this.subscribe.bind(this);
+        this.unsubscribe = this.unsubscribe.bind(this);
+        
+        if (this.debugEnabled) {
+            logger?.debug?.('[EventBus] Initialized with debug logging enabled', 'event-bus');
+        }
+    }
+
+    subscribe(eventName: EventName, handler: EventHandler, options: SubscriptionOptions = {}) {
+        if (typeof handler !== 'function') {
+            throw new Error(`Handler for event '${eventName}' must be a function`);
+        }
+
+        const { once = false, context = null } = options;
+
+        // Wrap handler with error isolation and debugging
+        const wrappedHandler: WrappedEventHandler = async (...args: unknown[]) => {
+            const startTime = Date.now();
+
+            try {
+                if (this.debugEnabled) {
+                    logger?.debug?.(`[EventBus] Executing handler for '${eventName}'`, 'event-bus', {
+                        argsCount: args.length,
+                        context: context?.constructor?.name || 'unknown'
+                    });
+                }
+
+                // Execute handler with proper context binding
+                const result = context ? handler.apply(context, args) : handler(...args);
+
+                if (result && typeof result.then === 'function') {
+                    await result;
+                }
+
+                const executionTime = Math.max(0, Date.now() - startTime);
+
+                // Update stats
+                this._updateEventStats(eventName, 'success', executionTime);
+
+                if (this.debugEnabled) {
+                    logger?.debug?.(`[EventBus] Handler completed for '${eventName}' in ${executionTime}ms`, 'event-bus');
+                }
+
+            } catch (error) {
+                const executionTime = Math.max(0, Date.now() - startTime);
+                this._updateEventStats(eventName, 'error', executionTime);
+
+                const errorMessage = error instanceof Error ? error.message : String(error);
+                logEventBusError(`[EventBus] Handler error for '${eventName}': ${errorMessage}`, error, 'event-handler-error', {
+                    eventName
+                });
+
+                if (eventName !== 'handler-error') {
+                    // Emit error event but don't throw to prevent cascading failures
+                    this.emit('handler-error', {
+                        eventName,
+                        error,
+                        context: context?.constructor?.name || 'unknown',
+                        args: args.map((arg) => {
+                            if (typeof arg === 'object' && arg !== null) {
+                                try {
+                                    return JSON.stringify(arg).substring(0, 100);
+                                } catch (_circularError) {
+                                    return '[Circular Object]';
+                                }
+                            }
+                            return arg;
+                        })
+                    });
+                }
+            }
+        };
+
+        // Store original handler reference for unsubscription
+        wrappedHandler._originalHandler = handler;
+        wrappedHandler._context = context;
+
+        if (once) {
+            this.once(eventName, wrappedHandler);
+        } else {
+            this.on(eventName, wrappedHandler);
+        }
+
+        if (this.debugEnabled) {
+            logger?.debug?.(`[EventBus] Subscribed to '${eventName}'`, 'event-bus', {
+                once,
+                context: context?.constructor?.name || 'unknown',
+                totalListeners: this.listenerCount(eventName)
+            });
+        }
+
+        // Return unsubscribe function
+        return () => this.unsubscribe(eventName, handler, context);
+    }
+
+    unsubscribe(eventName: EventName, handler: EventHandler, context: unknown = null) {
+        const listeners = this.listeners(eventName);
+        
+        for (const wrappedHandler of listeners as WrappedEventHandler[]) {
+            if (wrappedHandler._originalHandler === handler && wrappedHandler._context === context) {
+                this.removeListener(eventName, wrappedHandler);
+                
+                if (this.debugEnabled) {
+                    logger?.debug?.(`[EventBus] Unsubscribed from '${eventName}'`, 'event-bus', {
+                        context: context?.constructor?.name || 'unknown',
+                        remainingListeners: this.listenerCount(eventName)
+                    });
+                }
+                
+                return true;
+            }
+        }
+        
+        logger?.warn?.(`[EventBus] Handler not found for unsubscription from '${eventName}'`, 'event-bus');
+        return false;
+    }
+
+    emit(eventName: EventName, ...args: unknown[]) {
+        const startTime = Date.now();
+
+        if (this.debugEnabled) {
+            logger?.debug?.(`[EventBus] Emitting '${eventName}'`, 'event-bus', {
+                argsCount: args.length,
+                listenerCount: this.listenerCount(eventName)
+            });
+        }
+
+        const hadListeners = super.emit(eventName, ...args);
+        const emissionTime = Math.max(0, Date.now() - startTime);
+
+        this._updateEventStats(eventName, 'emitted', emissionTime);
+
+        if (!hadListeners && this.debugEnabled) {
+            logger?.debug?.(`[EventBus] No listeners for '${eventName}'`, 'event-bus');
+        }
+
+        return hadListeners;
+    }
+
+    getListenerSummary() {
+        const summary: Record<string, number> = {};
+        for (const eventName of this.eventNames()) {
+            summary[eventName] = this.listenerCount(eventName);
+        }
+        return summary;
+    }
+
+    getEventStats() {
+        const stats: Record<string, EventStats> = {};
+        for (const [eventName, eventStat] of this.eventStats) {
+            stats[eventName] = { ...eventStat };
+        }
+        return stats;
+    }
+
+    reset() {
+        this.removeAllListeners();
+        this.eventStats.clear();
+
+        if (this.debugEnabled) {
+            logger?.debug?.('[EventBus] Reset - all listeners and stats cleared', 'event-bus');
+        }
+    }
+
+    setDebugEnabled(enabled: unknown) {
+        this.debugEnabled = !!enabled;
+        logger?.debug?.(`[EventBus] Debug logging ${enabled ? 'enabled' : 'disabled'}`, 'event-bus');
+    }
+
+    _updateEventStats(eventName: EventName, type: keyof Pick<EventStats, 'emitted' | 'success' | 'error'>, duration: number) {
+        if (!this.eventStats.has(eventName)) {
+            this.eventStats.set(eventName, {
+                emitted: 0,
+                success: 0,
+                error: 0,
+                totalDuration: 0,
+                avgDuration: 0
+            });
+        }
+        
+        const stats = this.eventStats.get(eventName);
+        if (!stats) {
+            return;
+        }
+        stats[type]++;
+        stats.totalDuration += duration;
+        
+        if (type === 'success' || type === 'error') {
+            stats.avgDuration = stats.totalDuration / (stats.success + stats.error);
+        }
+    }
+}
+
+function createEventBus(options = {}) {
+    
+    return new EventBus(options);
+}
+
+// Export the class and utilities
+module.exports = {
+    EventBus,
+    createEventBus
+};

@@ -1,4 +1,6 @@
-const { buildLoggingConfig } = require('../../../src/core/config-builders');
+import { describe, it, expect } from 'bun:test';
+
+const { buildLoggingConfig } = require('../../../src/core/config-builders.ts');
 
 describe('logging config behavior', () => {
     it('forces log directories and chat logging when file logging enabled', () => {

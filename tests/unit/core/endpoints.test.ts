@@ -1,10 +1,11 @@
-const { describe, test, expect } = require('bun:test');
+import { describe, test, expect } from 'bun:test';
+
 const { initializeTestLogging } = require('../../helpers/test-setup');
 
 initializeTestLogging();
 
 describe('Centralized Endpoints Configuration', () => {
-    const endpoints = require('../../../src/core/endpoints');
+    const endpoints = require('../../../src/core/endpoints.ts');
     const { TWITCH, YOUTUBE, STREAMELEMENTS } = endpoints;
 
     describe('Twitch Endpoints', () => {
@@ -132,4 +133,3 @@ describe('Centralized Endpoints Configuration', () => {
 
     });
 });
-

@@ -1,4 +1,4 @@
-const { describe, it, expect, beforeEach, afterEach } = require('bun:test');
+import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
 
 const envKeys = [
     'TWITCH_CLIENT_SECRET',
@@ -8,7 +8,7 @@ const envKeys = [
     'STREAMELEMENTS_JWT_TOKEN'
 ];
 
-const { secrets, initializeStaticSecrets, _resetForTesting } = require('../../../src/core/secrets');
+const { secrets, initializeStaticSecrets, _resetForTesting } = require('../../../src/core/secrets.ts');
 
 describe('secrets', () => {
     const originalEnv = {};
