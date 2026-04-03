@@ -104,35 +104,14 @@ function createYouTubeConnectionFactory(options = {}) {
 
         const validationResult = platform._validateVideoForConnection(videoId, info);
         if (!validationResult.shouldConnect) {
-            let liveChat = null;
-            try {
-                liveChat = await withTimeout(
-                    info.getLiveChat(),
-                    timeoutMs,
-                    'YouTube getLiveChat call'
-                );
-            } catch (error) {
-                const errorMessage = error instanceof Error && typeof error.message === 'string'
-                    ? error.message
-                    : String(error);
-                platform.logger.debug(
-                    `Live chat probe failed for ${videoId}: ${errorMessage}`,
-                    'youtube'
-                );
-            }
-
-            if (liveChat) {
-                platform.logger.warn(
-                    `Live chat available despite validation failure for ${videoId}; bypassing live validation.`,
-                    'youtube'
-                );
-                return liveChat;
-            }
-
             throw new Error(`Stream validation failed: ${validationResult.reason}`);
         }
 
-        return await info.getLiveChat();
+        return await withTimeout(
+            info.getLiveChat(),
+            timeoutMs,
+            'YouTube getLiveChat call'
+        );
     };
 
     const setupConnectionEventListeners = async (connection, videoId) => {

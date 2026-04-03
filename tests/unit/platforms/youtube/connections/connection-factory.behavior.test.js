@@ -4,7 +4,7 @@ const { noOpLogger } = require('../../../../helpers/mock-factories');
 
 const { createYouTubeConnectionFactory } = require('../../../../../src/platforms/youtube/connections/youtube-connection-factory');
 
-const createFactory = ({ validationResult, liveChatBehavior, platformOverrides } = {}) => {
+const createFactory = ({ validationResult, liveChatBehavior, platformOverrides, withTimeoutImplementation } = {}) => {
     const platform = {
         logger: noOpLogger,
         _validateVideoForConnection: createMockFn().mockReturnValue(validationResult),
@@ -32,7 +32,7 @@ const createFactory = ({ validationResult, liveChatBehavior, platformOverrides }
         getInstance: createMockFn().mockReturnValue(manager)
     };
 
-    const withTimeout = (promise) => promise;
+    const withTimeout = createMockFn(withTimeoutImplementation || ((promise) => promise));
 
     const factory = createYouTubeConnectionFactory({
         platform,
@@ -43,26 +43,29 @@ const createFactory = ({ validationResult, liveChatBehavior, platformOverrides }
 
     return {
         factory,
-        liveChat
+        liveChat,
+        getLiveChat,
+        withTimeout
     };
 };
 
 describe('YouTube connection factory', () => {
-    test('returns live chat when validation fails but live chat is available', async () => {
+    test('throws immediately when stream validation says not to connect', async () => {
         const liveChat = { id: 'live-chat', on: createMockFn() };
         const validationResult = {
             shouldConnect: false,
             reason: 'Video is not live content (replay/VOD)'
         };
 
-        const { factory } = createFactory({
+        const { factory, getLiveChat } = createFactory({
             validationResult,
             liveChatBehavior: { value: liveChat }
         });
 
-        const connection = await factory.createConnection('video-1');
-
-        expect(connection).toBe(liveChat);
+        await expect(factory.createConnection('video-1')).rejects.toThrow(
+            'Stream validation failed: Video is not live content (replay/VOD)'
+        );
+        expect(getLiveChat).toHaveBeenCalledTimes(0);
     });
 
     test('throws when validation fails and live chat is unavailable', async () => {
@@ -78,6 +81,52 @@ describe('YouTube connection factory', () => {
 
         await expect(factory.createConnection('video-2')).rejects.toThrow(
             'Stream validation failed: Video is not live content (replay/VOD)'
+        );
+    });
+
+    test('uses timeout wrapper for getLiveChat on valid streams', async () => {
+        const liveChat = { id: 'live-chat', on: createMockFn() };
+
+        const { factory, withTimeout } = createFactory({
+            validationResult: {
+                shouldConnect: true,
+                reason: 'Stream is live'
+            },
+            liveChatBehavior: { value: liveChat }
+        });
+
+        await factory.createConnection('video-3');
+
+        expect(withTimeout).toHaveBeenCalledTimes(2);
+        expect(withTimeout.mock.calls[1][1]).toBe(1000);
+        expect(withTimeout.mock.calls[1][2]).toBe('YouTube getLiveChat call');
+    });
+
+    test('surfaces timeout-wrapper rejections from getLiveChat on valid streams', async () => {
+        const getLiveChatTimeoutError = new Error('YouTube getLiveChat call timeout after 1000ms');
+        const withTimeoutImplementation = (promise, _timeoutMs, operationName) => {
+            if (operationName === 'YouTube getInfo stream info call') {
+                return promise;
+            }
+
+            if (operationName === 'YouTube getLiveChat call') {
+                return Promise.reject(getLiveChatTimeoutError);
+            }
+
+            return promise;
+        };
+
+        const { factory } = createFactory({
+            validationResult: {
+                shouldConnect: true,
+                reason: 'Stream is live'
+            },
+            liveChatBehavior: { value: { id: 'unused-live-chat' } },
+            withTimeoutImplementation
+        });
+
+        await expect(factory.createConnection('video-4')).rejects.toThrow(
+            'YouTube getLiveChat call timeout after 1000ms'
         );
     });
 
