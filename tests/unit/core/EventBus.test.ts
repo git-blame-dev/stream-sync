@@ -1,14 +1,14 @@
 
-const { describe, test, expect, beforeEach, afterEach } = require('bun:test');
+import { describe, test, expect, beforeEach, afterEach } from 'bun:test';
 const { createMockFn, clearAllMocks } = require('../../helpers/bun-mock-utils');
 const testClock = require('../../helpers/test-clock');
 const { waitForDelay } = require('../../helpers/time-utils');
 
-const { EventBus, createEventBus } = require('../../../src/core/EventBus');
-const { PlatformEvents } = require('../../../src/interfaces/PlatformEvents');
+const { EventBus, createEventBus } = require('../../../src/core/EventBus.ts');
+const { PlatformEvents } = require('../../../src/interfaces/PlatformEvents.ts');
 
 describe('EventBus', () => {
-    let eventBus;
+    let eventBus: any;
     
     beforeEach(() => {
         clearAllMocks();
@@ -417,6 +417,7 @@ describe('EventBus', () => {
 
         test('should handle context constructor name correctly', () => {
             class TestClass {
+                value: number;
                 constructor() {
                     this.value = 42;
                 }
@@ -684,7 +685,7 @@ describe('EventBus', () => {
             });
             const errorEventHandler = createMockFn();
 
-            const obj = { name: 'test' };
+            const obj: { name: string; self?: unknown } = { name: 'test' };
             obj.self = obj;
             
             eventBus.subscribe('test-event', handler);
