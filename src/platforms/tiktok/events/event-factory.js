@@ -3,7 +3,9 @@ const { normalizeTikTokMessage } = require('../../../utils/message-normalization
 const { extractTikTokUserData } = require('../../../utils/tiktok-data-extraction');
 const { getSystemTimestampISO } = require('../../../utils/timestamp');
 const { DEFAULT_AVATAR_URL } = require('../../../constants/avatar');
+const { UNKNOWN_CHAT_MESSAGE, UNKNOWN_CHAT_USERNAME } = require('../../../constants/degraded-chat');
 const { getValidMessageParts, normalizeBadgeImages } = require('../../../utils/message-parts');
+const { getMissingFields, mergeMissingFieldsMetadata } = require('../../../utils/missing-fields');
 
 function createTikTokEventFactory(options = {}) {
     const platformName = options.platformName || 'tiktok';
@@ -86,30 +88,60 @@ function createTikTokEventFactory(options = {}) {
     return {
         createChatMessage: (data = {}, eventOptions = {}) => {
             const normalized = eventOptions.normalizedData || normalizeChatEvent(data);
-            const identity = normalizeUserData({
-                userId: normalized?.userId,
-                username: normalized?.username
-            });
+            const normalizedMetadata = normalized?.metadata && typeof normalized.metadata === 'object'
+                ? { ...normalized.metadata }
+                : {};
+            delete normalizedMetadata.messageParts;
+
+            const missingFields = getMissingFields(normalizedMetadata);
+            const isMissingField = (fieldName) => missingFields.includes(fieldName);
+
+            const rawTimestamp = typeof normalized?.timestamp === 'string' ? normalized.timestamp.trim() : '';
+            const timestamp = rawTimestamp || undefined;
+            if (!timestamp && !isMissingField('timestamp')) {
+                throw new Error('Missing TikTok message timestamp');
+            }
+
+            const normalizedUserId = normalized?.userId === undefined || normalized?.userId === null
+                ? ''
+                : String(normalized.userId).trim();
+            const normalizedUsername = normalized?.username === undefined || normalized?.username === null
+                ? ''
+                : String(normalized.username).trim();
+
+            let identity = {
+                userId: normalizedUserId || undefined,
+                username: normalizedUsername || undefined
+            };
+
+            if (normalizedUserId && normalizedUsername) {
+                identity = normalizeUserData({
+                    userId: normalizedUserId,
+                    username: normalizedUsername
+                });
+            }
+
+            if (!identity.userId && !isMissingField('userId')) {
+                throw new Error('Missing TikTok userId (uniqueId)');
+            }
+            if (!identity.username && !isMissingField('username')) {
+                throw new Error('Missing TikTok username (nickname)');
+            }
+
             const avatarUrl = resolveAvatarUrl(data, normalized || {});
             const messageText = resolveMessageText(normalized);
             const messageParts = resolveMessageParts(normalized);
             const badgeImages = normalizeBadgeImages(normalized?.badgeImages);
 
-            if (!messageText && messageParts.length === 0) {
+            if (!messageText && messageParts.length === 0 && !isMissingField('message')) {
                 throw new Error('Missing TikTok message text');
             }
-            if (!normalized?.timestamp) {
-                throw new Error('Missing TikTok message timestamp');
-            }
-
-            const normalizedMetadata = normalized?.metadata && typeof normalized.metadata === 'object'
-                ? { ...normalized.metadata }
-                : {};
-            delete normalizedMetadata.messageParts;
-            const eventMetadata = buildEventMetadata(normalizedMetadata);
+            const eventMetadata = mergeMissingFieldsMetadata(buildEventMetadata(normalizedMetadata), missingFields, {
+                ...(missingFields.length > 0 && timestamp ? { sourceTimestamp: timestamp } : {})
+            });
 
             const messagePayload = {
-                text: messageText
+                text: messageText || (isMissingField('message') ? UNKNOWN_CHAT_MESSAGE : '')
             };
 
             if (messageParts.length > 0) {
@@ -119,11 +151,11 @@ function createTikTokEventFactory(options = {}) {
             const eventData = {
                 type: PlatformEvents.CHAT_MESSAGE,
                 platform: platformName,
-                username: identity.username,
-                userId: identity.userId,
+                username: identity.username || UNKNOWN_CHAT_USERNAME,
+                ...(identity.userId ? { userId: identity.userId } : {}),
                 avatarUrl,
                 message: messagePayload,
-                timestamp: normalized.timestamp,
+                ...(timestamp ? { timestamp } : {}),
                 isMod: !!normalized.isMod,
                 isPaypiggy: normalized.isPaypiggy === true,
                 isBroadcaster: !!normalized.isBroadcaster,

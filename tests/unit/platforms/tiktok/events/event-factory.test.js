@@ -251,6 +251,55 @@ describe('TikTok event factory behavior', () => {
         })).toThrow('Missing TikTok message text');
     });
 
+    it('allows degraded chat events when metadata.missingFields marks missing identity and timestamp', () => {
+        const { createTikTokEventFactory } = require('../../../../../src/platforms/tiktok/events/event-factory');
+
+        const eventFactory = createTikTokEventFactory({
+            platformName: 'tiktok',
+            generateCorrelationId: () => 'corr-tiktok-missing-identity'
+        });
+
+        const event = eventFactory.createChatMessage({}, {
+            normalizedData: {
+                message: {
+                    text: 'partial tiktok chat message'
+                },
+                metadata: {
+                    missingFields: ['userId', 'username', 'timestamp']
+                }
+            }
+        });
+
+        expect(event.username).toBe('Unknown Username');
+        expect(event.userId).toBeUndefined();
+        expect(event.timestamp).toBeUndefined();
+        expect(event.message).toEqual({ text: 'partial tiktok chat message' });
+        expect(event.metadata.missingFields).toEqual(['userId', 'username', 'timestamp']);
+    });
+
+    it('allows degraded chat events with unknown-message placeholder when message is marked missing', () => {
+        const { createTikTokEventFactory } = require('../../../../../src/platforms/tiktok/events/event-factory');
+
+        const eventFactory = createTikTokEventFactory({
+            platformName: 'tiktok',
+            generateCorrelationId: () => 'corr-tiktok-missing-message'
+        });
+
+        const event = eventFactory.createChatMessage({}, {
+            normalizedData: {
+                metadata: {
+                    missingFields: ['message', 'userId', 'username', 'timestamp']
+                }
+            }
+        });
+
+        expect(event.username).toBe('Unknown Username');
+        expect(event.userId).toBeUndefined();
+        expect(event.timestamp).toBeUndefined();
+        expect(event.message).toEqual({ text: 'Unknown Message' });
+        expect(event.metadata.missingFields).toEqual(['message', 'userId', 'username', 'timestamp']);
+    });
+
     it('emits canonical message.parts for emote-only chat payloads', () => {
         const { createTikTokEventFactory } = require('../../../../../src/platforms/tiktok/events/event-factory');
 

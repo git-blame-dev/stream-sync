@@ -1,7 +1,9 @@
 const { validateNormalizedMessage } = require('../../../utils/message-normalization');
 const { normalizeTikTokChatEvent } = require('./event-normalizer');
 const { PlatformEvents } = require('../../../interfaces/PlatformEvents');
+const { UNKNOWN_CHAT_MESSAGE, UNKNOWN_CHAT_USERNAME } = require('../../../constants/degraded-chat');
 const { getValidMessageParts } = require('../../../utils/message-parts');
+const { collectMissingFields, getMissingFields, mergeMissingFieldsMetadata } = require('../../../utils/missing-fields');
 
 const DEFAULT_CHAT_DEDUP_TTL_MS = 90 * 60 * 1000;
 const DEFAULT_CHAT_MAX_CACHE_SIZE = 10_000;
@@ -9,6 +11,61 @@ const DEFAULT_CHAT_MAX_AGE_MS = 20 * 60 * 1000;
 
 function hasCanonicalMessageParts(normalizedData) {
     return getValidMessageParts({ message: normalizedData?.message }).length > 0;
+}
+
+function isRecoverableTikTokChatNormalizationError(error) {
+    const message = error instanceof Error ? error.message : '';
+    return message === 'Missing TikTok message data'
+        || message === 'Missing TikTok userId (uniqueId)'
+        || message === 'Missing TikTok username (nickname)'
+        || message === 'Missing TikTok message text'
+        || message === 'Missing TikTok timestamp';
+}
+
+function buildDegradedTikTokChatEvent(platform, data = {}) {
+    const userData = data?.user && typeof data.user === 'object' ? data.user : {};
+    const userId = typeof userData.uniqueId === 'string' ? userData.uniqueId.trim() : '';
+    const username = typeof userData.nickname === 'string' ? userData.nickname.trim() : '';
+    const rawComment = typeof data.comment === 'string' ? data.comment : '';
+    const message = rawComment.trim();
+    const timestamp = typeof platform?._getTimestamp === 'function' ? platform._getTimestamp(data) : null;
+    const resolveEventTimestampMs = platform?.constructor?.resolveEventTimestampMs;
+    const resolvedCreateTimeMs = typeof resolveEventTimestampMs === 'function'
+        ? resolveEventTimestampMs(data)
+        : null;
+    const profilePicture = userData.profilePictureUrl
+        || (Array.isArray(userData.profilePicture?.url) ? userData.profilePicture.url[0] : null)
+        || null;
+
+    const missingFields = collectMissingFields({
+        userId: !!userId,
+        username: !!username,
+        message: !!message,
+        timestamp: typeof timestamp === 'string' && timestamp.trim().length > 0
+    });
+
+    return {
+        platform: platform?.platformName || 'tiktok',
+        ...(userId ? { userId } : {}),
+        username: username || UNKNOWN_CHAT_USERNAME,
+        message: {
+            text: message || UNKNOWN_CHAT_MESSAGE
+        },
+        ...(typeof timestamp === 'string' && timestamp.trim().length > 0 ? { timestamp } : {}),
+        isMod: !!data?.isModerator,
+        isPaypiggy: data?.userIdentity?.isSubscriberOfAnchor === true,
+        isBroadcaster: !!data?.isOwner,
+        metadata: mergeMissingFieldsMetadata({
+            profilePicture,
+            followRole: userData.followRole ?? null,
+            userBadges: Array.isArray(userData.userBadges) ? userData.userBadges : null,
+            createTime: resolvedCreateTimeMs || null,
+            numericId: typeof userData.userId === 'string' ? userData.userId.trim() : null
+        }, missingFields, {
+            ...(typeof timestamp === 'string' && timestamp.trim().length > 0 ? { sourceTimestamp: timestamp } : {})
+        }),
+        rawData: { data }
+    };
 }
 
 function getChatReplayConfig(platform) {
@@ -201,7 +258,6 @@ function setupTikTokEventListeners(platform) {
                     commentType: typeof data.comment,
                     data
                 });
-                return;
             }
 
             const resolveEventTimestampMs = platform?.constructor?.resolveEventTimestampMs;
@@ -234,10 +290,18 @@ function setupTikTokEventListeners(platform) {
                 return;
             }
 
-            const normalizedData = normalizeTikTokChatEvent(data, {
-                platformName: platform.platformName,
-                timestampService: platform.timestampService
-            });
+            let normalizedData;
+            try {
+                normalizedData = normalizeTikTokChatEvent(data, {
+                    platformName: platform.platformName,
+                    timestampService: platform.timestampService
+                });
+            } catch (error) {
+                if (!isRecoverableTikTokChatNormalizationError(error)) {
+                    throw error;
+                }
+                normalizedData = buildDegradedTikTokChatEvent(platform, data);
+            }
             const validation = validateNormalizedMessage(normalizedData);
 
             if (!validation.isValid) {
@@ -263,7 +327,9 @@ function setupTikTokEventListeners(platform) {
             const messageText = typeof normalizedData?.message === 'string'
                 ? normalizedData.message
                 : (typeof normalizedData?.message?.text === 'string' ? normalizedData.message.text : '');
-            if ((!messageText || messageText.trim() === '') && !hasCanonicalMessageParts(normalizedData)) {
+            const missingFields = getMissingFields(normalizedData?.metadata);
+            const isMessageMarkedMissing = missingFields.includes('message');
+            if ((!messageText || messageText.trim() === '') && !hasCanonicalMessageParts(normalizedData) && !isMessageMarkedMissing) {
                 platform.logger.debug('Skipping empty message after normalization', 'tiktok', {
                     originalComment: data.comment,
                     normalizedMessage: messageText,
