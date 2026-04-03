@@ -1,0 +1,17 @@
+{
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "module": "CommonJS",
+    "moduleDetection": "force",
+    "moduleResolution": "Node",
+    "allowJs": true,
+    "checkJs": false,
+    "noEmit": true,
+    "types": ["node", "bun"],
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "jsx": "react-jsx",
+    "composite": true
+  },
+  "include": ["src/**/*.js", "src/**/*.ts", "src/types/**/*.d.ts"],
+  "exclude": ["node_modules", "gui/dist", "gui/**/*"]
+}
