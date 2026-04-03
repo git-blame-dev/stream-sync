@@ -210,7 +210,20 @@ module.exports = [
     rules: scriptJsRules
   },
   {
+    files: ['tools/**/*.js'],
+    languageOptions: nodeLanguageOptions,
+    rules: scriptJsRules
+  },
+  {
     files: ['scripts/**/*.ts'],
+    languageOptions: nodeTsLanguageOptions,
+    plugins: {
+      '@typescript-eslint': tsPlugin
+    },
+    rules: scriptTsRules
+  },
+  {
+    files: ['tools/**/*.ts'],
     languageOptions: nodeTsLanguageOptions,
     plugins: {
       '@typescript-eslint': tsPlugin

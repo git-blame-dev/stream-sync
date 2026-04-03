@@ -11,9 +11,14 @@
     "start": "tsx src/bootstrap.js",
     "start:debug": "tsx src/bootstrap.js --debug",
     "start:debug:build": "npm run build && tsx src/bootstrap.js --debug",
-    "lint": "bun scripts/lint/no-raw-timeouts.js && bun scripts/lint/no-mock-timers-in-tests.js && bun scripts/lint/no-implementation-test-patterns.js && bun scripts/lint/no-implicit-test-defaults.js && bun scripts/lint/prefer-double-bang.js && eslint \"src/**/*.{js,ts}\" \"tests/**/*.{js,ts}\" \"scripts/**/*.{js,ts}\" \"gui/**/*.{ts,tsx}\" && knip --config knip.json --include files,unlisted,exports",
+    "lint": "bun scripts/lint/no-raw-timeouts.js && bun scripts/lint/no-mock-timers-in-tests.js && bun scripts/lint/no-implementation-test-patterns.js && bun scripts/lint/no-implicit-test-defaults.js && bun scripts/lint/prefer-double-bang.js && eslint \"src/**/*.{js,ts}\" \"tests/**/*.{js,ts}\" \"scripts/**/*.{js,ts}\" \"tools/**/*.{js,ts}\" \"gui/**/*.{ts,tsx}\" && knip --config knip.json --include files,unlisted,exports",
     "typecheck:gui": "tsc --noEmit -p gui/tsconfig.json",
     "typecheck:gui-node": "tsc --noEmit -p tsconfig.json",
+    "typecheck:src": "tsc --noEmit -p tsconfig.src.json",
+    "typecheck:tests": "tsc --noEmit -p tsconfig.tests.json",
+    "typecheck:scripts": "tsc --noEmit -p tsconfig.scripts.json",
+    "typecheck:tools": "tsc --noEmit -p tsconfig.tools.json",
+    "typecheck:all": "tsc --noEmit -p tsconfig.all.json",
     "test": "NODE_ENV=test bun test"
   },
   "devDependencies": {
