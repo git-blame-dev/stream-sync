@@ -1,6 +1,7 @@
 const { describe, it, expect, beforeEach, afterEach } = require('bun:test');
 const fs = require('fs');
 const https = require('https');
+const net = require('net');
 const os = require('os');
 const path = require('path');
 const selfsigned = require('selfsigned');
@@ -11,7 +12,6 @@ const { TWITCH } = require('../../../src/core/endpoints');
 const { safeSetTimeout } = require('../../../src/utils/timeout-validator');
 const {
     generateSelfSignedCert,
-    findAvailablePort,
     buildAuthUrl,
     startCallbackServer,
     renderCallbackHtml,
@@ -46,6 +46,37 @@ describe('oauth-flow behavior', () => {
         req.end();
     });
 
+    const listenInPortRange = async (server, startPort, endPort) => {
+        let candidatePort = startPort;
+        while (candidatePort <= endPort) {
+            try {
+                await new Promise((resolve, reject) => {
+                    const onError = (error) => {
+                        server.off('listening', onListening);
+                        reject(error);
+                    };
+                    const onListening = () => {
+                        server.off('error', onError);
+                        resolve();
+                    };
+
+                    server.once('error', onError);
+                    server.once('listening', onListening);
+                    server.listen(candidatePort);
+                });
+                return candidatePort;
+            } catch (error) {
+                if (error.code === 'EADDRINUSE') {
+                    candidatePort += 1;
+                    continue;
+                }
+                throw error;
+            }
+        }
+
+        throw new Error(`No available test port found in range ${startPort}-${endPort}`);
+    };
+
     beforeEach(async () => {
         _resetForTesting();
         secrets.twitch.clientSecret = 'test-client-secret';
@@ -64,7 +95,6 @@ describe('oauth-flow behavior', () => {
 
     it('exports oauth-flow helpers', () => {
         expect(typeof generateSelfSignedCert).toBe('function');
-        expect(typeof findAvailablePort).toBe('function');
         expect(typeof buildAuthUrl).toBe('function');
         expect(typeof startCallbackServer).toBe('function');
         expect(typeof renderCallbackHtml).toBe('function');
@@ -105,36 +135,42 @@ describe('oauth-flow behavior', () => {
 
     it('startCallbackServer resolves authorization code', async () => {
         const { server, waitForCode, port, redirectUri } = await startCallbackServer({
-            port: 3000,
-            autoFindPort: true,
+            port: 0,
+            autoFindPort: false,
             logger: noOpLogger
         });
+        const boundPort = server.address().port;
 
-        await fetchLocal({
-            hostname: 'localhost',
-            port,
-            path: '/?code=test-auth-code',
-            method: 'GET'
-        });
+        try {
+            await fetchLocal({
+                hostname: 'localhost',
+                port: boundPort,
+                path: '/?code=test-auth-code',
+                method: 'GET'
+            });
 
-        const code = await waitForCode;
+            const code = await waitForCode;
 
-        expect(code).toBe('test-auth-code');
-        expect(redirectUri).toBe(`https://localhost:${port}`);
-        server.close();
+            expect(code).toBe('test-auth-code');
+            expect(port).toBe(boundPort);
+            expect(redirectUri).toBe(`https://localhost:${boundPort}`);
+        } finally {
+            server.close();
+        }
     });
 
     it('startCallbackServer rejects OAuth errors', async () => {
-        const { server, waitForCode, port } = await startCallbackServer({
-            port: 3000,
-            autoFindPort: true,
+        const { server, waitForCode } = await startCallbackServer({
+            port: 0,
+            autoFindPort: false,
             logger: noOpLogger
         });
+        const boundPort = server.address().port;
 
         const errorPromise = waitForCode.catch((error) => error);
         await fetchLocal({
             hostname: 'localhost',
-            port,
+            port: boundPort,
             path: '/?error=access_denied&error_description=test-error',
             method: 'GET'
         });
@@ -145,16 +181,17 @@ describe('oauth-flow behavior', () => {
     });
 
     it('startCallbackServer rejects invalid callbacks', async () => {
-        const { server, waitForCode, port } = await startCallbackServer({
-            port: 3000,
-            autoFindPort: true,
+        const { server, waitForCode } = await startCallbackServer({
+            port: 0,
+            autoFindPort: false,
             logger: noOpLogger
         });
+        const boundPort = server.address().port;
 
         const errorPromise = waitForCode.catch((error) => error);
         await fetchLocal({
             hostname: 'localhost',
-            port,
+            port: boundPort,
             path: '/',
             method: 'GET'
         });
@@ -162,6 +199,43 @@ describe('oauth-flow behavior', () => {
         const error = await errorPromise;
         expect(error.message).toContain('Invalid callback');
         server.close();
+    });
+
+    it('startCallbackServer returns callback metadata using the actual bound port', async () => {
+        const { server, port, redirectUri } = await startCallbackServer({
+            port: 0,
+            autoFindPort: false,
+            logger: noOpLogger
+        });
+
+        try {
+            expect(port).toBeGreaterThan(0);
+            expect(redirectUri).toBe(`https://localhost:${port}`);
+        } finally {
+            server.close();
+        }
+    });
+
+    it('startCallbackServer retries to another port when preferred port is unavailable', async () => {
+        const blocker = net.createServer();
+        const blockedPort = await listenInPortRange(blocker, 3000, 3100);
+
+        let callbackServer;
+        try {
+            const result = await startCallbackServer({
+                port: blockedPort,
+                autoFindPort: true,
+                logger: noOpLogger
+            });
+            callbackServer = result.server;
+            expect(result.port).not.toBe(blockedPort);
+            expect(result.redirectUri).toBe(`https://localhost:${result.port}`);
+        } finally {
+            if (callbackServer) {
+                callbackServer.close();
+            }
+            await new Promise((resolve) => blocker.close(resolve));
+        }
     });
 
     it('exchangeCodeForTokens parses Twitch response', async () => {
