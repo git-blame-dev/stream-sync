@@ -546,6 +546,42 @@ describe('Platform Events Interface', () => {
             });
         });
 
+        it('accepts optional giftImageUrl for platform:gift events', () => {
+            const baseTimestamp = new Date(testClock.now()).toISOString();
+            const twitchGift = {
+                type: 'platform:gift',
+                platform: 'twitch',
+                username: 'test-twitch-user',
+                userId: 'test-twitch-user-id',
+                avatarUrl: 'https://example.invalid/test-twitch-avatar.png',
+                id: 'test-twitch-gift-id',
+                giftType: 'bits',
+                giftCount: 1,
+                amount: 100,
+                currency: 'bits',
+                giftImageUrl: 'https://example.invalid/twitch/cheer-100-dark-animated-3.gif',
+                timestamp: baseTimestamp
+            };
+
+            const youtubeGift = {
+                type: 'platform:gift',
+                platform: 'youtube',
+                username: 'test-youtube-user',
+                userId: 'test-youtube-user-id',
+                avatarUrl: 'https://example.invalid/test-youtube-avatar.png',
+                id: 'test-youtube-gift-id',
+                giftType: 'Super Sticker',
+                giftCount: 1,
+                amount: 7.99,
+                currency: 'AUD',
+                giftImageUrl: 'https://lh3.googleusercontent.com/test-supersticker=s176-rwa',
+                timestamp: baseTimestamp
+            };
+
+            expect(PlatformEvents.validateEvent(twitchGift)).toBe(true);
+            expect(PlatformEvents.validateEvent(youtubeGift)).toBe(true);
+        });
+
         it('should handle Unicode and emoji content properly', () => {
             const unicodeMessages = [
                 '你好世界 🌍',

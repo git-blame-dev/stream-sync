@@ -598,6 +598,124 @@ describe('GUI transport routes and SSE integration', () => {
         }
     });
 
+    it('delivers notification parts over SSE for Twitch gift rows', async () => {
+        const port = 0;
+        const eventBus = new TestEventBus();
+        const config = buildConfig({
+            enableDock: true,
+            enableOverlay: false,
+            port,
+            messageCharacterLimit: 0
+        });
+        const service = createGuiTransportService({ config, eventBus, logger: null });
+        await service.start();
+
+        const baseUrl = getBaseUrl(service);
+        const abort = new AbortController();
+        try {
+            const response = await fetch(`${baseUrl}/gui/events`, {
+                signal: abort.signal
+            });
+            expect(response.status).toBe(200);
+
+            const reader = createSseReader(response);
+            eventBus.emit('display:row', {
+                type: 'platform:gift',
+                platform: 'twitch',
+                data: {
+                    username: 'test-twitch-user',
+                    userId: 'test-twitch-user-id',
+                    avatarUrl: 'https://example.invalid/twitch-avatar.png',
+                    displayMessage: 'test-twitch-user sent 100 bits',
+                    parts: [
+                        { type: 'text', text: 'sent 100 ' },
+                        {
+                            type: 'emote',
+                            platform: 'twitch',
+                            emoteId: 'Cheer-100',
+                            imageUrl: 'https://example.invalid/twitch/cheer-100-dark-animated-3.gif'
+                        }
+                    ],
+                    timestamp: '2024-01-01T00:00:00.000Z'
+                }
+            });
+
+            const event = await reader.readEvent();
+            expect(event.type).toBe('platform:gift');
+            expect(event.parts).toEqual([
+                { type: 'text', text: 'sent 100 ' },
+                {
+                    type: 'emote',
+                    platform: 'twitch',
+                    emoteId: 'Cheer-100',
+                    imageUrl: 'https://example.invalid/twitch/cheer-100-dark-animated-3.gif'
+                }
+            ]);
+        } finally {
+            abort.abort();
+            await service.stop();
+        }
+    });
+
+    it('delivers notification parts over SSE for YouTube Super Sticker rows', async () => {
+        const port = 0;
+        const eventBus = new TestEventBus();
+        const config = buildConfig({
+            enableDock: true,
+            enableOverlay: false,
+            port,
+            messageCharacterLimit: 0
+        });
+        const service = createGuiTransportService({ config, eventBus, logger: null });
+        await service.start();
+
+        const baseUrl = getBaseUrl(service);
+        const abort = new AbortController();
+        try {
+            const response = await fetch(`${baseUrl}/gui/events`, {
+                signal: abort.signal
+            });
+            expect(response.status).toBe(200);
+
+            const reader = createSseReader(response);
+            eventBus.emit('display:row', {
+                type: 'platform:gift',
+                platform: 'youtube',
+                data: {
+                    username: 'test-youtube-user',
+                    userId: 'test-youtube-user-id',
+                    avatarUrl: 'https://example.invalid/youtube-avatar.png',
+                    displayMessage: 'test-youtube-user sent a A$7.99 Super Sticker',
+                    parts: [
+                        {
+                            type: 'emote',
+                            platform: 'youtube',
+                            emoteId: 'supersticker',
+                            imageUrl: 'https://lh3.googleusercontent.com/test-supersticker=s176-rwa'
+                        },
+                        { type: 'text', text: ' Test sticker description' }
+                    ],
+                    timestamp: '2024-01-01T00:00:00.000Z'
+                }
+            });
+
+            const event = await reader.readEvent();
+            expect(event.type).toBe('platform:gift');
+            expect(event.parts).toEqual([
+                {
+                    type: 'emote',
+                    platform: 'youtube',
+                    emoteId: 'supersticker',
+                    imageUrl: 'https://lh3.googleusercontent.com/test-supersticker=s176-rwa'
+                },
+                { type: 'text', text: ' Test sticker description' }
+            ]);
+        } finally {
+            abort.abort();
+            await service.stop();
+        }
+    });
+
     it('delivers canonical badgeImages over SSE for chat rows', async () => {
         const port = 0;
         const eventBus = new TestEventBus();

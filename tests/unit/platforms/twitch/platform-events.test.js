@@ -172,6 +172,187 @@ describe('TwitchPlatform event behaviors', () => {
         expect(received[0].timestamp).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/);
     });
 
+    it('enriches Twitch bits gifts with Helix cheermote image URL when single-type cheer metadata exists', async () => {
+        const getCheermotes = createMockFn().mockImplementation(async (broadcasterId) => {
+            if (broadcasterId !== 'test-broadcaster-id') {
+                return [];
+            }
+
+            return [
+                {
+                    prefix: 'Cheer',
+                    tiers: [
+                        {
+                            id: '100',
+                            images: {
+                                dark: {
+                                    animated: {
+                                        '3': 'https://example.invalid/twitch/cheer-100-dark-animated-3.gif'
+                                    }
+                                }
+                            }
+                        }
+                    ]
+                }
+            ];
+        });
+
+        const platform = new TwitchPlatform(baseConfig, {
+            twitchAuth: createTwitchAuth({ userId: TEST_USER_ID }),
+            logger: noOpLogger
+        });
+        platform.apiClient = { getCheermotes };
+        platform.broadcasterId = 'test-broadcaster-id';
+
+        const received = [];
+        platform.handlers = { onGift: (payload) => received.push(payload) };
+
+        await platform.handleGiftEvent({
+            username: 'test-cheerer',
+            userId: 'test-cheerer-id',
+            giftType: 'bits',
+            giftCount: 1,
+            amount: 100,
+            currency: 'bits',
+            id: 'test-cheer-id',
+            timestamp: '2024-01-01T00:00:00Z',
+            cheermoteInfo: {
+                cleanPrefix: 'Cheer',
+                tier: 100,
+                isMixed: false
+            }
+        });
+
+        expect(received).toHaveLength(1);
+        expect(received[0].giftImageUrl).toBe('https://example.invalid/twitch/cheer-100-dark-animated-3.gif');
+    });
+
+    it('skips Twitch cheermote image enrichment for mixed bits gifts', async () => {
+        const getCheermotes = createMockFn().mockImplementation(async () => ([
+            {
+                prefix: 'Cheer',
+                tiers: [
+                    {
+                        id: '100',
+                        images: {
+                            dark: {
+                                animated: {
+                                    '3': 'https://example.invalid/twitch/cheer-100-dark-animated-3.gif'
+                                }
+                            }
+                        }
+                    }
+                ]
+            }
+        ]));
+        const platform = new TwitchPlatform(baseConfig, {
+            twitchAuth: createTwitchAuth({ userId: TEST_USER_ID }),
+            logger: noOpLogger
+        });
+        platform.apiClient = { getCheermotes };
+        platform.broadcasterId = 'test-broadcaster-id';
+
+        const received = [];
+        platform.handlers = { onGift: (payload) => received.push(payload) };
+
+        await platform.handleGiftEvent({
+            username: 'test-cheerer',
+            userId: 'test-cheerer-id',
+            giftType: 'mixed bits',
+            giftCount: 1,
+            amount: 201,
+            currency: 'bits',
+            id: 'test-cheer-id-mixed',
+            timestamp: '2024-01-01T00:00:00Z',
+            cheermoteInfo: {
+                cleanPrefix: 'Cheer',
+                tier: 100,
+                isMixed: true,
+                types: [
+                    { prefix: 'Cheer', count: 1 },
+                    { prefix: 'Uni', count: 1 }
+                ]
+            }
+        });
+
+        expect(received).toHaveLength(1);
+        expect(received[0].giftImageUrl).toBeUndefined();
+    });
+
+    it('reuses cached Twitch cheermote catalog across repeated bits gifts', async () => {
+        let requestCount = 0;
+        const getCheermotes = createMockFn().mockImplementation(async () => {
+            requestCount += 1;
+            if (requestCount === 1) {
+                return [
+                    {
+                        prefix: 'Cheer',
+                        tiers: [
+                            {
+                                id: '100',
+                                images: {
+                                    dark: {
+                                        animated: {
+                                            '3': 'https://example.invalid/twitch/cheer-100-dark-animated-3.gif'
+                                        }
+                                    }
+                                }
+                            }
+                        ]
+                    }
+                ];
+            }
+
+            return [];
+        });
+
+        const platform = new TwitchPlatform(baseConfig, {
+            twitchAuth: createTwitchAuth({ userId: TEST_USER_ID }),
+            logger: noOpLogger
+        });
+        platform.apiClient = { getCheermotes };
+        platform.broadcasterId = 'test-broadcaster-id';
+
+        const received = [];
+        platform.handlers = { onGift: (payload) => received.push(payload) };
+
+        await platform.handleGiftEvent({
+            username: 'test-cheerer',
+            userId: 'test-cheerer-id',
+            giftType: 'bits',
+            giftCount: 1,
+            amount: 100,
+            currency: 'bits',
+            id: 'test-cheer-id-1',
+            timestamp: '2024-01-01T00:00:00Z',
+            cheermoteInfo: {
+                cleanPrefix: 'Cheer',
+                tier: 100,
+                isMixed: false
+            }
+        });
+
+        await platform.handleGiftEvent({
+            username: 'test-cheerer',
+            userId: 'test-cheerer-id',
+            giftType: 'bits',
+            giftCount: 1,
+            amount: 100,
+            currency: 'bits',
+            id: 'test-cheer-id-2',
+            timestamp: '2024-01-01T00:00:01Z',
+            cheermoteInfo: {
+                cleanPrefix: 'Cheer',
+                tier: 100,
+                isMixed: false
+            }
+        });
+
+        expect(received).toHaveLength(2);
+        expect(received[0].giftImageUrl).toBe('https://example.invalid/twitch/cheer-100-dark-animated-3.gif');
+        expect(received[1].giftImageUrl).toBe('https://example.invalid/twitch/cheer-100-dark-animated-3.gif');
+    });
+
     it('emits giftpaypiggy error payloads when timestamps are missing', async () => {
         const platform = new TwitchPlatform(baseConfig, {
             twitchAuth: createTwitchAuth({ userId: TEST_USER_ID }),

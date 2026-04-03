@@ -68,4 +68,12 @@ describe('TwitchApiClient error handler integration', () => {
 
         expect(result).toBeNull();
     });
+
+    it('routes getCheermotes API error through error handler', async () => {
+        mockHttpClient.get.mockRejectedValue(new Error('cheermotes unavailable'));
+
+        const result = await apiClient.getCheermotes('test-broadcaster-id');
+
+        expect(result).toEqual([]);
+    });
 });

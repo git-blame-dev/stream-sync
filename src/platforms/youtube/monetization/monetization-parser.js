@@ -122,6 +122,57 @@ function createYouTubeMonetizationParser(options = {}) {
         return avatarUrl.trim();
     };
 
+    const normalizeStickerImageUrl = (url) => {
+        if (typeof url !== 'string') {
+            return '';
+        }
+        const trimmed = url.trim();
+        if (!trimmed) {
+            return '';
+        }
+        if (trimmed.startsWith('//')) {
+            return `https:${trimmed}`;
+        }
+        return trimmed;
+    };
+
+    const resolveStickerImageUrl = (stickerField) => {
+        const rawCandidates = Array.isArray(stickerField)
+            ? stickerField
+            : (stickerField && typeof stickerField === 'object' ? [stickerField] : []);
+
+        const candidates = rawCandidates
+            .map((candidate) => {
+                const imageUrl = normalizeStickerImageUrl(candidate?.url);
+                const width = Number(candidate?.width);
+                const height = Number(candidate?.height);
+                return {
+                    imageUrl,
+                    width: Number.isFinite(width) && width > 0 ? width : 0,
+                    height: Number.isFinite(height) && height > 0 ? height : 0
+                };
+            })
+            .filter((candidate) => !!candidate.imageUrl);
+
+        if (candidates.length === 0) {
+            return '';
+        }
+
+        candidates.sort((left, right) => {
+            const leftArea = left.width * left.height;
+            const rightArea = right.width * right.height;
+            if (rightArea !== leftArea) {
+                return rightArea - leftArea;
+            }
+            if (right.width !== left.width) {
+                return right.width - left.width;
+            }
+            return right.height - left.height;
+        });
+
+        return candidates[0].imageUrl;
+    };
+
     const parseSuperChat = (chatItem) => {
         const { amount, currency } = parsePurchaseAmount(chatItem, 'YouTube Super Chat');
         return {
@@ -139,11 +190,17 @@ function createYouTubeMonetizationParser(options = {}) {
     const parseSuperSticker = (chatItem) => {
         const { amount, currency } = parsePurchaseAmount(chatItem, 'YouTube Super Sticker');
         const sticker = chatItem?.item?.sticker;
-        const stickerMessage = sticker
-            ? (sticker.name || sticker.altText || extractStructuredText(sticker.label))
+        const stickerAccessibilityLabel = typeof chatItem?.item?.sticker_accessibility_label === 'string'
+            ? chatItem.item.sticker_accessibility_label.trim()
             : '';
+        const stickerMessage = stickerAccessibilityLabel || (
+            sticker && !Array.isArray(sticker)
+                ? (sticker.name || sticker.altText || extractStructuredText(sticker.label))
+                : ''
+        );
+        const giftImageUrl = resolveStickerImageUrl(sticker);
 
-        return {
+        const payload = {
             id: resolveId(chatItem, 'YouTube Super Sticker'),
             timestamp: resolveTimestamp(chatItem, 'YouTube Super Sticker'),
             giftType: 'Super Sticker',
@@ -153,6 +210,12 @@ function createYouTubeMonetizationParser(options = {}) {
             avatarUrl: resolveAuthorAvatarUrl(chatItem),
             message: stickerMessage || ''
         };
+
+        if (giftImageUrl) {
+            payload.giftImageUrl = giftImageUrl;
+        }
+
+        return payload;
     };
 
     const parseGiftPurchase = (chatItem) => {

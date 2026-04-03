@@ -177,7 +177,7 @@ const EVENT_SCHEMAS = {
     },
     'platform:gift': {
         required: ['type', 'platform', 'username', 'userId', 'avatarUrl', 'id', 'giftType', 'giftCount', 'amount', 'currency', 'timestamp'],
-        optional: ['repeatCount', 'message', 'cheermoteInfo', 'isError', 'isAnonymous', 'isAggregated', 'aggregatedCount', 'enhancedGiftData', 'sourceType'],
+        optional: ['repeatCount', 'message', 'cheermoteInfo', 'giftImageUrl', 'isError', 'isAnonymous', 'isAggregated', 'aggregatedCount', 'enhancedGiftData', 'sourceType'],
         properties: {
             type: { type: 'string', enum: ['platform:gift'] },
             platform: { type: 'string', enum: VALID_PLATFORMS },
@@ -193,6 +193,7 @@ const EVENT_SCHEMAS = {
             timestamp: { type: 'string' },
             message: { type: 'string' },
             cheermoteInfo: { type: 'object' },
+            giftImageUrl: { type: 'string' },
             isError: { type: 'boolean' },
             isAnonymous: { type: 'boolean' },
             isAggregated: { type: 'boolean' },
@@ -591,6 +592,9 @@ class PlatformEventBuilder {
         };
         if (params.repeatCount !== undefined) {
             result.repeatCount = params.repeatCount;
+        }
+        if (typeof params.giftImageUrl === 'string' && params.giftImageUrl.trim()) {
+            result.giftImageUrl = params.giftImageUrl.trim();
         }
 
         const validation = this.validator.validate(result);

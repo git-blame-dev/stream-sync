@@ -208,6 +208,7 @@ function createTwitchEventFactory(options = {}) {
                 : normalizePositiveInteger(data.amount);
             const currency = typeof data.currency === 'string' ? data.currency.trim() : '';
             const repeatCount = normalizePositiveInteger(data.repeatCount);
+            const giftImageUrl = typeof data.giftImageUrl === 'string' ? data.giftImageUrl.trim() : '';
             if (!giftType) {
                 throw new Error('Twitch gift payload requires giftType');
             }
@@ -249,6 +250,9 @@ function createTwitchEventFactory(options = {}) {
             }
             if (data.cheermoteInfo && typeof data.cheermoteInfo === 'object') {
                 result.cheermoteInfo = data.cheermoteInfo;
+            }
+            if (giftImageUrl) {
+                result.giftImageUrl = giftImageUrl;
             }
             if (isError) {
                 result.isError = true;

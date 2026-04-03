@@ -179,12 +179,23 @@ class NotificationBuilder {
         if (normalizedUserId !== undefined) {
             notification.userId = normalizedUserId;
         }
+        const explicitParts = Array.isArray(effectiveInput.parts)
+            ? effectiveInput.parts
+            : [];
+        if (explicitParts.length > 0) {
+            notification.parts = explicitParts;
+        } else {
+            const derivedGiftParts = this.resolveGiftInlineParts(effectiveInput);
+            if (derivedGiftParts.length > 0) {
+                notification.parts = derivedGiftParts;
+            }
+        }
         if (effectiveInput.amount !== undefined) notification.amount = effectiveInput.amount;
         if (currency !== undefined) notification.currency = currency;
         if (vfxConfig !== undefined) notification.vfxConfig = vfxConfig;
         // Include any extra fields (e.g., tier, details) - optimized for performance
         // Use direct property access instead of Object.keys() for better performance
-        const excludedKeys = new Set(['amount','currency','vfxConfig','template','platform','type','username','userId','message', 'id', 'displayMessage', 'ttsMessage', 'logMessage', 'processedAt', 'timestamp']);
+        const excludedKeys = new Set(['amount','currency','vfxConfig','template','platform','type','username','userId','message', 'parts', 'id', 'displayMessage', 'ttsMessage', 'logMessage', 'processedAt', 'timestamp']);
         for (const key in effectiveInput) {
             if (Object.prototype.hasOwnProperty.call(effectiveInput, key) && !excludedKeys.has(key)) {
                 notification[key] = effectiveInput[key];
@@ -774,6 +785,87 @@ class NotificationBuilder {
     static formatBitsAmount(amount) {
         if (!amount && amount !== 0) amount = 0;
         return amount.toLocaleString(); // Adds commas for thousands
+    }
+
+    static resolveGiftInlineParts(input) {
+        if (!input || typeof input !== 'object') {
+            return [];
+        }
+
+        if (input.type !== 'platform:gift') {
+            return [];
+        }
+
+        const platform = typeof input.platform === 'string' ? input.platform.trim().toLowerCase() : '';
+        const giftImageUrl = typeof input.giftImageUrl === 'string' ? input.giftImageUrl.trim() : '';
+        if (!giftImageUrl) {
+            return [];
+        }
+
+        if (platform === 'twitch') {
+            const currency = typeof input.currency === 'string' ? input.currency.trim().toLowerCase() : '';
+            if (currency !== 'bits' || this.hasMixedCheermotes(input)) {
+                return [];
+            }
+
+            const bitsAmount = Number(this.resolveBitsAmount(input));
+            if (!Number.isFinite(bitsAmount) || bitsAmount <= 0) {
+                return [];
+            }
+            const formattedBitsAmount = this.formatBitsAmount(bitsAmount);
+            const cheermoteInfo = input.cheermoteInfo && typeof input.cheermoteInfo === 'object'
+                ? input.cheermoteInfo
+                : {};
+            const prefix = typeof cheermoteInfo.cleanPrefix === 'string' && cheermoteInfo.cleanPrefix.trim()
+                ? cheermoteInfo.cleanPrefix.trim()
+                : (typeof cheermoteInfo.prefix === 'string' ? cheermoteInfo.prefix.trim() : 'bits');
+            const parsedTier = Number(cheermoteInfo.tier);
+            const emoteId = Number.isFinite(parsedTier) && parsedTier > 0
+                ? `${prefix}-${parsedTier}`
+                : prefix;
+
+            const parts = [
+                { type: 'text', text: `sent ${formattedBitsAmount} ` },
+                {
+                    type: 'emote',
+                    platform: 'twitch',
+                    emoteId,
+                    imageUrl: giftImageUrl
+                }
+            ];
+
+            const messageText = typeof input.message === 'string' ? input.message.trim() : '';
+            if (messageText) {
+                parts.push({ type: 'text', text: `: ${messageText}` });
+            }
+
+            return parts;
+        }
+
+        if (platform === 'youtube') {
+            const giftType = typeof input.giftType === 'string' ? input.giftType.trim().toLowerCase() : '';
+            if (giftType !== 'super sticker') {
+                return [];
+            }
+
+            const parts = [
+                {
+                    type: 'emote',
+                    platform: 'youtube',
+                    emoteId: 'supersticker',
+                    imageUrl: giftImageUrl
+                }
+            ];
+
+            const messageText = typeof input.message === 'string' ? input.message.trim() : '';
+            if (messageText) {
+                parts.push({ type: 'text', text: ` ${messageText}` });
+            }
+
+            return parts;
+        }
+
+        return [];
     }
 
     static resolveBitsAmount(input) {

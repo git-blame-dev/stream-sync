@@ -112,4 +112,34 @@ describe('YouTube monetization parser', () => {
 
         expect(result.message).toBe('Nice sticker');
     });
+
+    test('prefers top-level sticker accessibility label and normalizes protocol-relative sticker URL', () => {
+        const parser = createYouTubeMonetizationParser({ logger: noOpLogger });
+        const chatItem = {
+            item: {
+                type: 'LiveChatPaidSticker',
+                id: 'LCC.test-supersticker-002',
+                timestamp_usec: '1704067200000000',
+                purchase_amount: 'A$7.99',
+                sticker_accessibility_label: "Pear character lifting some weights saying 'Keep it up'",
+                sticker: [
+                    {
+                        url: '//lh3.googleusercontent.com/hxUGRWjxbKaI8Gk6earRTJW5Vub52yvfvorXXkfi-4fqpB7VJzu4K6pbBO4UIsDstah8zLKeUz6FQ9W0qnY=s176-rwa',
+                        width: 176,
+                        height: 176
+                    },
+                    {
+                        url: '//lh3.googleusercontent.com/hxUGRWjxbKaI8Gk6earRTJW5Vub52yvfvorXXkfi-4fqpB7VJzu4K6pbBO4UIsDstah8zLKeUz6FQ9W0qnY=s88-rwa',
+                        width: 88,
+                        height: 88
+                    }
+                ]
+            }
+        };
+
+        const result = parser.parseSuperSticker(chatItem);
+
+        expect(result.message).toBe("Pear character lifting some weights saying 'Keep it up'");
+        expect(result.giftImageUrl).toBe('https://lh3.googleusercontent.com/hxUGRWjxbKaI8Gk6earRTJW5Vub52yvfvorXXkfi-4fqpB7VJzu4K6pbBO4UIsDstah8zLKeUz6FQ9W0qnY=s176-rwa');
+    });
 });

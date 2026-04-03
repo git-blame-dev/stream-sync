@@ -167,13 +167,14 @@ describe('YouTube gift platform flow (smoke)', () => {
         class MockYouTubePlatform {
             async initialize(handlers) {
                 handlers.onGift({
-                    username: 'StickerHero',
+                    username: 'test-sticker-hero',
                     userId: 'yt-sticker-1',
                     giftType: 'Super Sticker',
                     giftCount: 1,
                     amount: 3,
                     currency: 'USD',
                     message: 'Nice sticker',
+                    giftImageUrl: 'https://lh3.googleusercontent.com/test-supersticker=s176-rwa',
                     id: 'yt-supersticker-1',
                     timestamp: '2024-01-01T00:00:00.000Z'
                 });
@@ -197,8 +198,17 @@ describe('YouTube gift platform flow (smoke)', () => {
             expect(queued.data.giftType).toBe('Super Sticker');
             expect(queued.data.message).toBe('Nice sticker');
             expect(queued.data.displayMessage).toContain('Super Sticker');
+            expect(queued.data.parts).toEqual([
+                {
+                    type: 'emote',
+                    platform: 'youtube',
+                    emoteId: 'supersticker',
+                    imageUrl: 'https://lh3.googleusercontent.com/test-supersticker=s176-rwa'
+                },
+                { type: 'text', text: ' Nice sticker' }
+            ]);
             assertUserFacingOutput(queued.data, {
-                username: 'StickerHero',
+                username: 'test-sticker-hero',
                 keyword: 'Super Sticker'
             });
         } finally {
