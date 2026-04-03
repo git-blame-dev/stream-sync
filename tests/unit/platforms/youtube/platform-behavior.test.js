@@ -194,7 +194,7 @@ describe('YouTubePlatform modern architecture', () => {
             videoId: 'vid-1'
         };
 
-        platform._processRegularChatMessage(chatItem, 'TestUser');
+        platform._processRegularChatMessage(chatItem);
 
         const payload = await received;
         expect(payload.platform).toBe('youtube');
@@ -231,7 +231,7 @@ describe('YouTubePlatform modern architecture', () => {
                 }
             },
             videoId: 'test-video-id'
-        }), 'test-youtube-user');
+        }));
 
         expect(emitted).toHaveLength(1);
         expect(emitted[0].message).toEqual({
@@ -247,7 +247,7 @@ describe('YouTubePlatform modern architecture', () => {
         });
     });
 
-    it('skips chat with empty text and no valid message parts', () => {
+    it('emits degraded chat when text and canonical message parts are both missing', () => {
         const { platform } = createPlatform();
         const emitted = [];
         platform.on('platform:event', (payload) => {
@@ -269,9 +269,11 @@ describe('YouTubePlatform modern architecture', () => {
                     ]
                 }
             }
-        }), 'test-youtube-user');
+        }));
 
-        expect(emitted).toHaveLength(0);
+        expect(emitted).toHaveLength(1);
+        expect(emitted[0].message).toEqual({ text: 'Unknown Message' });
+        expect(emitted[0].metadata.missingFields).toContain('message');
     });
 
     it('emits chat with non-empty text even when message parts are missing', () => {
@@ -290,7 +292,7 @@ describe('YouTubePlatform modern architecture', () => {
                     runs: []
                 }
             }
-        }), 'test-youtube-user');
+        }));
 
         expect(emitted).toHaveLength(1);
         expect(emitted[0].message).toEqual({ text: 'plain text only' });
@@ -985,7 +987,7 @@ describe('YouTubePlatform modern architecture', () => {
         expect(chatEvents).toHaveLength(0);
     });
 
-    it('handleChatTextMessage returns early when author name is missing', () => {
+    it('handleChatTextMessage emits degraded chat payload when author identity is missing', () => {
         const { platform } = createPlatform();
         const events = [];
         platform.on('platform:event', (e) => events.push(e));
@@ -993,7 +995,12 @@ describe('YouTubePlatform modern architecture', () => {
         platform.handleChatTextMessage({ item: { type: 'test' } });
 
         const chatEvents = events.filter(e => e.type === 'platform:chat-message');
-        expect(chatEvents).toHaveLength(0);
+        expect(chatEvents).toHaveLength(1);
+        expect(chatEvents[0].data.username).toBe('Unknown Username');
+        expect(chatEvents[0].data.userId).toBeUndefined();
+        expect(chatEvents[0].data.timestamp).toBeUndefined();
+        expect(chatEvents[0].data.message).toEqual({ text: 'Unknown Message' });
+        expect(chatEvents[0].data.metadata.missingFields).toEqual(['userId', 'username', 'message', 'timestamp']);
     });
 
     it('_handleError emits error event and triggers cleanup when shouldDisconnect', async () => {

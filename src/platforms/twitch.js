@@ -13,11 +13,9 @@ const { getSystemTimestampISO } = require('../utils/timestamp');
 const { createTwitchEventFactory } = require('./twitch/events/event-factory');
 const { createTwitchEventSubWiring } = require('./twitch/connections/wiring');
 const { DEFAULT_AVATAR_URL } = require('../constants/avatar');
+const { UNKNOWN_CHAT_MESSAGE, UNKNOWN_CHAT_USERNAME } = require('../constants/degraded-chat');
 const { normalizeBadgeImages } = require('../utils/message-parts');
 const { collectMissingFields, mergeMissingFieldsMetadata } = require('../utils/missing-fields');
-
-const UNKNOWN_TWITCH_USERNAME = 'Unknown Username';
-const UNKNOWN_TWITCH_MESSAGE = 'Unknown Message';
 
 class TwitchPlatform extends EventEmitter {
     constructor(config, dependencies = {}) {
@@ -316,8 +314,8 @@ class TwitchPlatform extends EventEmitter {
             const normalizedData = {
                 platform: this.platformName,
                 ...(userId ? { userId } : {}),
-                username: username || UNKNOWN_TWITCH_USERNAME,
-                message: normalizedMessage || (messageParts.length > 0 ? '' : UNKNOWN_TWITCH_MESSAGE),
+                username: username || UNKNOWN_CHAT_USERNAME,
+                message: normalizedMessage || (messageParts.length > 0 ? '' : UNKNOWN_CHAT_MESSAGE),
                 ...(typeof timestamp === 'string' && timestamp.trim().length > 0 ? { timestamp } : {}),
                 isMod,
                 isPaypiggy,
