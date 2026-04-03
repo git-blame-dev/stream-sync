@@ -2,8 +2,16 @@ const { describe, it, expect } = require('bun:test');
 
 const { createGuiTransportService } = require('../../src/services/gui/gui-transport-service');
 const { safeSetTimeout } = require('../../src/utils/timeout-validator');
-const { TestEventBus, getAvailablePort } = require('../helpers/gui-transport-test-utils');
+const { TestEventBus } = require('../helpers/gui-transport-test-utils');
 const { createConfigFixture } = require('../helpers/config-fixture');
+
+function getBaseUrl(service: any) {
+    const address = service.getAddress();
+    if (!address || typeof address !== 'object' || typeof address.port !== 'number') {
+        throw new Error('Expected GUI transport service to expose a bound address');
+    }
+    return `http://127.0.0.1:${address.port}`;
+}
 
 function createSseReader(response: any) {
     const reader = response.body.getReader();
@@ -66,13 +74,12 @@ describe('gui transport smoke', () => {
         ];
 
         for (const testCase of cases) {
-            const port = await getAvailablePort();
             const config = createConfigFixture({
                 gui: {
                     enableDock: testCase.enableDock,
                     enableOverlay: testCase.enableOverlay,
                     host: '127.0.0.1',
-                    port
+                    port: 0
                 }
             });
 
@@ -88,8 +95,9 @@ describe('gui transport smoke', () => {
                 if (!testCase.expectServiceActive) {
                     continue;
                 }
+                const baseUrl = getBaseUrl(service);
 
-                const dockResponse = await fetch(`http://127.0.0.1:${port}/dock`);
+                const dockResponse = await fetch(`${baseUrl}/dock`);
                 const dockBody = await dockResponse.text();
                 expect(dockResponse.status).toBe(200);
                 if (testCase.expectDockEnabled) {
@@ -101,7 +109,7 @@ describe('gui transport smoke', () => {
                     expect(dockBody).not.toContain('/gui/events');
                 }
 
-                const overlayResponse = await fetch(`http://127.0.0.1:${port}/overlay`);
+                const overlayResponse = await fetch(`${baseUrl}/overlay`);
                 const overlayBody = await overlayResponse.text();
                 expect(overlayResponse.status).toBe(200);
                 if (testCase.expectOverlayEnabled) {
@@ -119,14 +127,13 @@ describe('gui transport smoke', () => {
     });
 
     it('delivers badgeImages in chat SSE payloads', async () => {
-        const port = await getAvailablePort();
         const eventBus = new TestEventBus();
         const config = createConfigFixture({
             gui: {
                 enableDock: true,
                 enableOverlay: false,
                 host: '127.0.0.1',
-                port,
+                port: 0,
                 messageCharacterLimit: 0
             }
         });
@@ -140,7 +147,7 @@ describe('gui transport smoke', () => {
         await service.start();
         const abortController = new AbortController();
         try {
-            const response = await fetch(`http://127.0.0.1:${port}/gui/events`, {
+            const response = await fetch(`${getBaseUrl(service)}/gui/events`, {
                 signal: abortController.signal
             });
             expect(response.status).toBe(200);

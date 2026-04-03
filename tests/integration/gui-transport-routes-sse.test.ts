@@ -5,7 +5,7 @@ const path = require('path');
 
 const { createGuiTransportService } = require('../../src/services/gui/gui-transport-service');
 const { safeSetTimeout } = require('../../src/utils/timeout-validator');
-const { TestEventBus, getAvailablePort } = require('../helpers/gui-transport-test-utils');
+const { TestEventBus } = require('../helpers/gui-transport-test-utils');
 const { createConfigFixture } = require('../helpers/config-fixture');
 
 function buildConfig(guiOverrides = {}) {
@@ -72,13 +72,21 @@ function createSseReader(response: any) {
     };
 }
 
+function getBaseUrl(service: any) {
+    const address = service.getAddress();
+    if (!address || typeof address !== 'object' || typeof address.port !== 'number') {
+        throw new Error('Expected GUI transport service to expose a bound address');
+    }
+    return `http://127.0.0.1:${address.port}`;
+}
+
 describe('GUI transport routes and SSE integration', () => {
     it('fails to start when host is missing', async () => {
         const config = buildConfig({
             enableDock: true,
             enableOverlay: false,
             host: '   ',
-            port: await getAvailablePort()
+            port: 0
         });
         const service = createGuiTransportService({
             config,
@@ -90,7 +98,7 @@ describe('GUI transport routes and SSE integration', () => {
     });
 
     it('delivers mapped rows over SSE and supports reconnect delivery', async () => {
-        const port = await getAvailablePort();
+        const port = 0;
         const eventBus = new TestEventBus();
         const config = buildConfig({
             enableDock: true,
@@ -101,7 +109,7 @@ describe('GUI transport routes and SSE integration', () => {
         const service = createGuiTransportService({ config, eventBus, logger: null });
         await service.start();
 
-        const baseUrl = `http://127.0.0.1:${port}`;
+        const baseUrl = getBaseUrl(service);
         const firstAbort = new AbortController();
 
         try {
@@ -168,7 +176,7 @@ describe('GUI transport routes and SSE integration', () => {
     });
 
     it('delivers gift animation effect envelopes after display rows and serves runtime media', async () => {
-        const port = await getAvailablePort();
+        const port = 0;
         const eventBus = new TestEventBus();
         const config = buildConfig({
             enableDock: true,
@@ -188,7 +196,7 @@ describe('GUI transport routes and SSE integration', () => {
         });
         await service.start();
 
-        const baseUrl = `http://127.0.0.1:${port}`;
+        const baseUrl = getBaseUrl(service);
         const abort = new AbortController();
 
         try {
@@ -263,7 +271,7 @@ describe('GUI transport routes and SSE integration', () => {
     });
 
     it('returns 416 for malformed or unsatisfiable runtime asset ranges', async () => {
-        const port = await getAvailablePort();
+        const port = 0;
         const eventBus = new TestEventBus();
         const config = buildConfig({
             enableDock: true,
@@ -283,7 +291,7 @@ describe('GUI transport routes and SSE integration', () => {
         });
         await service.start();
 
-        const baseUrl = `http://127.0.0.1:${port}`;
+        const baseUrl = getBaseUrl(service);
         const abort = new AbortController();
         try {
             const response = await fetch(`${baseUrl}/gui/events`, { signal: abort.signal });
@@ -333,7 +341,7 @@ describe('GUI transport routes and SSE integration', () => {
     });
 
     it('serves zero-byte runtime assets with correct headers and rejects ranged reads', async () => {
-        const port = await getAvailablePort();
+        const port = 0;
         const eventBus = new TestEventBus();
         const config = buildConfig({
             enableDock: true,
@@ -353,7 +361,7 @@ describe('GUI transport routes and SSE integration', () => {
         });
         await service.start();
 
-        const baseUrl = `http://127.0.0.1:${port}`;
+        const baseUrl = getBaseUrl(service);
         const abort = new AbortController();
         try {
             const response = await fetch(`${baseUrl}/gui/events`, { signal: abort.signal });
@@ -397,7 +405,7 @@ describe('GUI transport routes and SSE integration', () => {
     });
 
     it('rejects runtime assets that resolve outside allowed roots', async () => {
-        const port = await getAvailablePort();
+        const port = 0;
         const eventBus = new TestEventBus();
         const allowedRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'gui-transport-allowed-'));
         const blockedRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'gui-transport-blocked-'));
@@ -419,7 +427,7 @@ describe('GUI transport routes and SSE integration', () => {
         });
         await service.start();
 
-        const baseUrl = `http://127.0.0.1:${port}`;
+        const baseUrl = getBaseUrl(service);
         const abort = new AbortController();
 
         try {
@@ -466,7 +474,7 @@ describe('GUI transport routes and SSE integration', () => {
     });
 
     it('enforces runtime asset max entries without exceeding cap', async () => {
-        const port = await getAvailablePort();
+        const port = 0;
         const eventBus = new TestEventBus();
         const config = buildConfig({
             enableDock: true,
@@ -486,7 +494,7 @@ describe('GUI transport routes and SSE integration', () => {
         });
         await service.start();
 
-        const baseUrl = `http://127.0.0.1:${port}`;
+        const baseUrl = getBaseUrl(service);
         const abort = new AbortController();
 
         try {
@@ -532,7 +540,7 @@ describe('GUI transport routes and SSE integration', () => {
     });
 
     it('delivers chat parts over SSE when canonical message.parts is provided', async () => {
-        const port = await getAvailablePort();
+        const port = 0;
         const eventBus = new TestEventBus();
         const config = buildConfig({
             enableDock: true,
@@ -543,7 +551,7 @@ describe('GUI transport routes and SSE integration', () => {
         const service = createGuiTransportService({ config, eventBus, logger: null });
         await service.start();
 
-        const baseUrl = `http://127.0.0.1:${port}`;
+        const baseUrl = getBaseUrl(service);
         const abort = new AbortController();
         try {
             const response = await fetch(`${baseUrl}/gui/events`, {
@@ -591,7 +599,7 @@ describe('GUI transport routes and SSE integration', () => {
     });
 
     it('delivers canonical badgeImages over SSE for chat rows', async () => {
-        const port = await getAvailablePort();
+        const port = 0;
         const eventBus = new TestEventBus();
         const config = buildConfig({
             enableDock: true,
@@ -602,7 +610,7 @@ describe('GUI transport routes and SSE integration', () => {
         const service = createGuiTransportService({ config, eventBus, logger: null });
         await service.start();
 
-        const baseUrl = `http://127.0.0.1:${port}`;
+        const baseUrl = getBaseUrl(service);
         const abort = new AbortController();
         try {
             const response = await fetch(`${baseUrl}/gui/events`, {
@@ -638,7 +646,7 @@ describe('GUI transport routes and SSE integration', () => {
     });
 
     it('returns disabled dock shell and enabled overlay shell', async () => {
-        const port = await getAvailablePort();
+        const port = 0;
         const eventBus = new TestEventBus();
         const config = buildConfig({
             enableDock: false,
@@ -648,7 +656,7 @@ describe('GUI transport routes and SSE integration', () => {
         const service = createGuiTransportService({ config, eventBus, logger: null });
         await service.start();
 
-        const baseUrl = `http://127.0.0.1:${port}`;
+        const baseUrl = getBaseUrl(service);
         try {
             const dockResponse = await fetch(`${baseUrl}/dock`);
             const dockHtml = await dockResponse.text();
@@ -678,7 +686,7 @@ describe('GUI transport routes and SSE integration', () => {
     });
 
     it('returns enabled dock shell and disabled overlay shell', async () => {
-        const port = await getAvailablePort();
+        const port = 0;
         const eventBus = new TestEventBus();
         const config = buildConfig({
             enableDock: true,
@@ -688,7 +696,7 @@ describe('GUI transport routes and SSE integration', () => {
         const service = createGuiTransportService({ config, eventBus, logger: null });
         await service.start();
 
-        const baseUrl = `http://127.0.0.1:${port}`;
+        const baseUrl = getBaseUrl(service);
         try {
             const dockResponse = await fetch(`${baseUrl}/dock`);
             const dockHtml = await dockResponse.text();
@@ -718,7 +726,7 @@ describe('GUI transport routes and SSE integration', () => {
     });
 
     it('embeds overlay queue and line-clamp config into enabled overlay page', async () => {
-        const port = await getAvailablePort();
+        const port = 0;
         const eventBus = new TestEventBus();
         const config = buildConfig({
             enableDock: false,
@@ -730,7 +738,7 @@ describe('GUI transport routes and SSE integration', () => {
         const service = createGuiTransportService({ config, eventBus, logger: null });
         await service.start();
 
-        const baseUrl = `http://127.0.0.1:${port}`;
+        const baseUrl = getBaseUrl(service);
         try {
             const response = await fetch(`${baseUrl}/overlay`);
             const html = await response.text();
@@ -745,7 +753,7 @@ describe('GUI transport routes and SSE integration', () => {
     });
 
     it('embeds ui compare mode into dock runtime config when enabled', async () => {
-        const port = await getAvailablePort();
+        const port = 0;
         const eventBus = new TestEventBus();
         const config = buildConfig({
             enableDock: true,
@@ -756,7 +764,7 @@ describe('GUI transport routes and SSE integration', () => {
         const service = createGuiTransportService({ config, eventBus, logger: null });
         await service.start();
 
-        const baseUrl = `http://127.0.0.1:${port}`;
+        const baseUrl = getBaseUrl(service);
         try {
             const response = await fetch(`${baseUrl}/dock`);
             const html = await response.text();
@@ -769,7 +777,7 @@ describe('GUI transport routes and SSE integration', () => {
     });
 
     it('serves enabled dock, overlay, and tiktok animations pages with built GUI asset entry paths', async () => {
-        const port = await getAvailablePort();
+        const port = 0;
         const eventBus = new TestEventBus();
         const config = buildConfig({
             enableDock: true,
@@ -781,7 +789,7 @@ describe('GUI transport routes and SSE integration', () => {
         const service = createGuiTransportService({ config, eventBus, logger: null });
         await service.start();
 
-        const baseUrl = `http://127.0.0.1:${port}`;
+        const baseUrl = getBaseUrl(service);
         try {
             const dockResponse = await fetch(`${baseUrl}/dock`);
             const dockHtml = await dockResponse.text();
@@ -823,7 +831,7 @@ describe('GUI transport routes and SSE integration', () => {
         fs.writeFileSync(path.join(platformIconsDir, 'youtube-icon.png'), 'test-youtube-icon');
         fs.writeFileSync(path.join(siblingDir, 'secret.js'), 'console.log("secret");');
 
-        const port = await getAvailablePort();
+        const port = 0;
         const eventBus = new TestEventBus();
         const config = buildConfig({
             enableDock: true,
@@ -839,7 +847,7 @@ describe('GUI transport routes and SSE integration', () => {
 
         await service.start();
 
-        const baseUrl = `http://127.0.0.1:${port}`;
+        const baseUrl = getBaseUrl(service);
         try {
             const presentResponse = await fetch(`${baseUrl}/gui/assets/dock.js`);
             const presentBody = await presentResponse.text();
@@ -885,7 +893,7 @@ describe('GUI transport routes and SSE integration', () => {
     });
 
     it('does not deliver stale queued row dispatches after stop/start', async () => {
-        const port = await getAvailablePort();
+        const port = 0;
         const eventBus = new TestEventBus();
         const config = buildConfig({
             enableDock: true,
@@ -926,7 +934,7 @@ describe('GUI transport routes and SSE integration', () => {
             await service.stop();
             await service.start();
 
-            const baseUrl = `http://127.0.0.1:${port}`;
+            const baseUrl = getBaseUrl(service);
             const abortController = new AbortController();
             try {
                 const response = await fetch(`${baseUrl}/gui/events`, { signal: abortController.signal });
@@ -957,7 +965,7 @@ describe('GUI transport routes and SSE integration', () => {
     });
 
     it('activates only when dock or overlay is enabled', async () => {
-        const inactiveConfig = buildConfig({ enableDock: false, enableOverlay: false, port: await getAvailablePort() });
+        const inactiveConfig = buildConfig({ enableDock: false, enableOverlay: false, port: 0 });
         const inactiveService = createGuiTransportService({ config: inactiveConfig, eventBus: new TestEventBus(), logger: null });
         await inactiveService.start();
         try {
@@ -967,7 +975,7 @@ describe('GUI transport routes and SSE integration', () => {
             await inactiveService.stop();
         }
 
-        const dockConfig = buildConfig({ enableDock: true, enableOverlay: false, port: await getAvailablePort() });
+        const dockConfig = buildConfig({ enableDock: true, enableOverlay: false, port: 0 });
         const dockService = createGuiTransportService({ config: dockConfig, eventBus: new TestEventBus(), logger: null });
         await dockService.start();
         try {
@@ -977,7 +985,7 @@ describe('GUI transport routes and SSE integration', () => {
             await dockService.stop();
         }
 
-        const overlayConfig = buildConfig({ enableDock: false, enableOverlay: true, port: await getAvailablePort() });
+        const overlayConfig = buildConfig({ enableDock: false, enableOverlay: true, port: 0 });
         const overlayService = createGuiTransportService({ config: overlayConfig, eventBus: new TestEventBus(), logger: null });
         await overlayService.start();
         try {
@@ -1027,7 +1035,7 @@ describe('GUI transport routes and SSE integration', () => {
         for (let index = 0; index < toggleCases.length; index += 1) {
             const toggleCase = toggleCases[index];
             const controlType = toggleCase.blockedType === 'platform:follow' ? 'platform:share' : 'platform:follow';
-            const port = await getAvailablePort();
+            const port = 0;
             const eventBus = new TestEventBus();
             const config = buildConfig({
                 enableDock: true,
@@ -1038,7 +1046,7 @@ describe('GUI transport routes and SSE integration', () => {
             const service = createGuiTransportService({ config, eventBus, logger: null });
             await service.start();
 
-            const baseUrl = `http://127.0.0.1:${port}`;
+            const baseUrl = getBaseUrl(service);
             const abortController = new AbortController();
             try {
                 const response = await fetch(`${baseUrl}/gui/events`, { signal: abortController.signal });
