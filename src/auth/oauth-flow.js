@@ -45,30 +45,6 @@ function generateSelfSignedCert() {
     return cachedCerts;
 }
 
-function findAvailablePort(startPort = OAUTH_SERVER_CONFIG.DEFAULT_PORT) {
-    return new Promise((resolve, reject) => {
-        const net = require('net');
-        const server = net.createServer();
-
-        server.on('error', (err) => {
-            if (err.code === 'EADDRINUSE') {
-                if (startPort < OAUTH_SERVER_CONFIG.PORT_RANGE.END) {
-                    findAvailablePort(startPort + 1).then(resolve).catch(reject);
-                } else {
-                    reject(new Error(`No available ports found in range ${OAUTH_SERVER_CONFIG.PORT_RANGE.START}-${OAUTH_SERVER_CONFIG.PORT_RANGE.END}`));
-                }
-            } else {
-                reject(err);
-            }
-        });
-
-        server.listen(startPort, () => {
-            const port = server.address().port;
-            server.close(() => resolve(port));
-        });
-    });
-}
-
 function buildAuthUrl(clientId, redirectUri, scopes = TWITCH_OAUTH_SCOPES) {
     const params = new URLSearchParams({
         client_id: clientId,
@@ -134,8 +110,6 @@ function renderCallbackHtml(status, details = {}) {
 async function startCallbackServer({ port = OAUTH_SERVER_CONFIG.DEFAULT_PORT, autoFindPort = false, logger }) {
     const resolvedLogger = resolveLogger(logger, 'oauth-flow');
     const handler = createOAuthFlowErrorHandler(resolvedLogger);
-    const actualPort = autoFindPort ? await findAvailablePort(port) : port;
-    const redirectUri = `https://localhost:${actualPort}`;
 
     let resolveCode;
     let rejectCode;
@@ -145,6 +119,7 @@ async function startCallbackServer({ port = OAUTH_SERVER_CONFIG.DEFAULT_PORT, au
     });
 
     let server;
+    let boundPort = null;
     const timeoutId = safeSetTimeout(() => {
         safeCloseServer(server);
         rejectCode(new Error(`OAuth flow timed out after ${TOKEN_REFRESH_CONFIG.OAUTH_TIMEOUT_MS / 60000} minutes`));
@@ -189,24 +164,70 @@ async function startCallbackServer({ port = OAUTH_SERVER_CONFIG.DEFAULT_PORT, au
         res.end('Not Found');
     });
 
+    const listenOnPort = async (candidatePort) => {
+        await new Promise((resolve, reject) => {
+            const onError = (error) => {
+                server.off('listening', onListening);
+                reject(error);
+            };
+            const onListening = () => {
+                server.off('error', onError);
+                resolve();
+            };
+
+            server.once('error', onError);
+            server.once('listening', onListening);
+
+            try {
+                server.listen(candidatePort);
+            } catch (error) {
+                server.off('error', onError);
+                server.off('listening', onListening);
+                reject(error);
+            }
+        });
+    };
+
+    try {
+        if (autoFindPort) {
+            if (port === 0) {
+                await listenOnPort(0);
+            } else {
+                let candidatePort = port;
+                while (true) {
+                    try {
+                        await listenOnPort(candidatePort);
+                        break;
+                    } catch (error) {
+                        if (error.code === 'EADDRINUSE' && candidatePort < OAUTH_SERVER_CONFIG.PORT_RANGE.END) {
+                            candidatePort += 1;
+                            continue;
+                        }
+                        throw error;
+                    }
+                }
+            }
+        } else {
+            await listenOnPort(port);
+        }
+    } catch (error) {
+        clearTimeout(timeoutId);
+        safeCloseServer(server);
+        throw error;
+    }
+
+    const serverAddress = server.address();
+    boundPort = serverAddress && typeof serverAddress === 'object' ? serverAddress.port : port;
+    const redirectUri = `https://localhost:${boundPort}`;
+    resolvedLogger.info(`OAuth callback server started on port ${boundPort}`, 'oauth-flow');
+
     server.on('error', (error) => {
         clearTimeout(timeoutId);
-        handler.handleEventProcessingError(error, 'oauth-flow', { port: actualPort }, 'OAuth callback server error');
+        handler.handleEventProcessingError(error, 'oauth-flow', { port: boundPort }, 'OAuth callback server error');
         rejectCode(error);
     });
 
-    await new Promise((resolve, reject) => {
-        server.listen(actualPort, (err) => {
-            if (err) {
-                reject(err);
-                return;
-            }
-            resolvedLogger.info(`OAuth callback server started on port ${actualPort}`, 'oauth-flow');
-            resolve();
-        });
-    });
-
-    return { server, waitForCode, port: actualPort, redirectUri };
+    return { server, waitForCode, port: boundPort, redirectUri };
 }
 
 async function exchangeCodeForTokens(code, { clientId, clientSecret, redirectUri, logger, httpsRequest }) {
@@ -422,7 +443,6 @@ async function runOAuthFlow(
 
 module.exports = {
     generateSelfSignedCert,
-    findAvailablePort,
     buildAuthUrl,
     startCallbackServer,
     renderCallbackHtml,
