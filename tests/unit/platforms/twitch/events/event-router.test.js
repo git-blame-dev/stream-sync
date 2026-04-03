@@ -143,7 +143,7 @@ describe('Twitch EventSub event router', () => {
         expect(followEvent).toBeDefined();
         expect(followEvent.payload).toMatchObject({
             username: 'Follower',
-            userId: 'follower',
+            userId: 'follower-2',
             timestamp: '2024-02-01T00:00:00.000Z'
         });
     });
@@ -238,7 +238,7 @@ describe('Twitch EventSub event router', () => {
         expect(paypiggyEvent).toBeDefined();
         expect(paypiggyEvent.payload).toMatchObject({
             username: 'Subscriber',
-            userId: 'subscriber',
+            userId: 'sub-1',
             tier: '1000',
             months: 6,
             timestamp: '2024-03-01T00:00:00.111Z'
@@ -270,7 +270,7 @@ describe('Twitch EventSub event router', () => {
         expect(messageEvent).toBeDefined();
         expect(messageEvent.payload).toMatchObject({
             username: 'Resubber',
-            userId: 'resubber',
+            userId: 'resub-1',
             tier: '1000',
             months: 12,
             message: 'Still here!',
@@ -307,6 +307,7 @@ describe('Twitch EventSub event router', () => {
         const giftEvent = emitted.find((evt) => evt.type === 'gift');
         expect(giftEvent).toBeDefined();
         expect(giftEvent.payload.username).toBe('Cheerer');
+        expect(giftEvent.payload.userId).toBe('777');
         expect(giftEvent.payload.amount).toBe(50);
         expect(giftEvent.payload.currency).toBe('bits');
         expect(giftEvent.payload.giftCount).toBe(1);
@@ -400,7 +401,39 @@ describe('Twitch EventSub event router', () => {
         const giftEvent = emitted.find((evt) => evt.type === 'gift');
         expect(giftEvent).toBeDefined();
         expect(giftEvent.payload.id).toBe('eventsub-bits-id-1');
+        expect(giftEvent.payload.userId).toBe('777');
         expect(giftEvent.payload.timestamp).toBe('2024-01-01T00:00:00.123Z');
+    });
+
+    test('preserves routed bits event ids when metadata message_id is unavailable', () => {
+        const emitted = [];
+        const router = createTwitchEventSubEventRouter({
+            config: { dataLoggingEnabled: false },
+            logger: noOpLogger,
+            emit: (type, payload) => emitted.push({ type, payload }),
+            logRawPlatformData: async () => {},
+            logError: () => {}
+        });
+
+        router.handleNotificationEvent('channel.bits.use', {
+            user_name: 'Cheerer',
+            user_id: '777',
+            user_login: 'cheerer',
+            bits: 50,
+            id: 'bits-evt-from-event',
+            message: {
+                fragments: [
+                    { type: 'cheermote', text: 'Cheer50', cheermote: { prefix: 'Cheer', bits: 50 } },
+                    { type: 'text', text: 'hello world' }
+                ]
+            }
+        }, {
+            message_timestamp: '2024-01-01T00:00:00.123456789Z'
+        });
+
+        const giftEvent = emitted.find((evt) => evt.type === 'gift');
+        expect(giftEvent).toBeDefined();
+        expect(giftEvent.payload.id).toBe('bits-evt-from-event');
     });
 
     test('does not emit bits gifts when only event body message_id is provided', () => {
@@ -445,11 +478,11 @@ describe('Twitch EventSub event router', () => {
 
         router.handleNotificationEvent('channel.subscription.gift', {
             user_name: 'GiftPilot',
+            user_id: 'giftpilot-1',
             user_login: 'giftpilot',
             tier: '1000',
             total: 3,
-            cumulative_total: 12,
-            is_anonymous: true
+            cumulative_total: 12
         }, {
             message_timestamp: '2024-01-01T00:00:00.444555666Z'
         });
@@ -458,11 +491,10 @@ describe('Twitch EventSub event router', () => {
         expect(giftEvent).toBeDefined();
         expect(giftEvent.payload).toMatchObject({
             username: 'GiftPilot',
-            userId: 'giftpilot',
+            userId: 'giftpilot-1',
             tier: '1000',
             giftCount: 3,
             cumulativeTotal: 12,
-            isAnonymous: true,
             timestamp: '2024-01-01T00:00:00.444Z'
         });
     });
@@ -537,6 +569,7 @@ describe('Twitch EventSub event router', () => {
 
         router.handleNotificationEvent('channel.raid', {
             from_broadcaster_user_name: 'Raider',
+            from_broadcaster_user_id: 'raider-1',
             from_broadcaster_user_login: 'raider',
             viewers: 8
         }, {
@@ -545,6 +578,7 @@ describe('Twitch EventSub event router', () => {
 
         router.handleNotificationEvent('channel.subscription.gift', {
             user_name: 'Gifter',
+            user_id: 'gifter-1',
             user_login: 'gifter',
             tier: '1000',
             total: 2

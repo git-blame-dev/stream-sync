@@ -248,6 +248,134 @@ describe('YouTube connection factory', () => {
         expect(handleChatMessageCalls).toHaveLength(0);
     });
 
+    test('forwards complex YouTube gift purchase announcements so header author hydration can run', async () => {
+        const handleChatMessage = createMockFn();
+        const extractMessagesFromChatItem = createMockFn().mockReturnValue([
+            {
+                type: 'AddChatItemAction',
+                item: {
+                    type: 'LiveChatSponsorshipsGiftPurchaseAnnouncement',
+                    id: 'LCC.test-gift-purchase-connection-001',
+                    timestamp_usec: '1704067200000000',
+                    author_external_channel_id: 'UC_TEST_GIFTER_001',
+                    header: {
+                        type: 'LiveChatSponsorshipsHeader',
+                        author_name: {
+                            text: '@GiftGiver',
+                            rtl: false
+                        },
+                        author_photo: [
+                            {
+                                url: 'https://example.invalid/yt-gift-giver.png',
+                                width: 64,
+                                height: 64
+                            }
+                        ],
+                        author_badges: []
+                    },
+                    giftMembershipsCount: 5,
+                    message: { text: '' }
+                }
+            }
+        ]);
+        const chatUpdateHandlers = {};
+
+        const { factory } = createFactory({
+            validationResult: { shouldConnect: true },
+            platformOverrides: {
+                handleChatMessage,
+                _processRegularChatMessage: createMockFn(),
+                _extractMessagesFromChatItem: extractMessagesFromChatItem,
+                _shouldSkipMessage: createMockFn().mockReturnValue(false),
+                logRawPlatformData: createMockFn().mockResolvedValue(),
+                setYouTubeConnectionReady: createMockFn(),
+                _resolveChatItemAuthorName: createMockFn().mockReturnValue(''),
+                config: { dataLoggingEnabled: false }
+            }
+        });
+
+        const connection = {
+            on: createMockFn((event, handler) => {
+                chatUpdateHandlers[event] = handler;
+            }),
+            start: createMockFn(),
+            removeAllListeners: createMockFn()
+        };
+
+        await factory.setupConnectionEventListeners(connection, 'video-1');
+
+        chatUpdateHandlers['chat-update']({
+            type: 'AddChatItemAction',
+            item: {
+                type: 'LiveChatSponsorshipsGiftPurchaseAnnouncement'
+            }
+        });
+
+        expect(handleChatMessage).toHaveBeenCalledTimes(1);
+        expect(handleChatMessage.mock.calls[0][0]).toMatchObject({
+            videoId: 'video-1',
+            item: {
+                type: 'LiveChatSponsorshipsGiftPurchaseAnnouncement',
+                author_external_channel_id: 'UC_TEST_GIFTER_001',
+                header: {
+                    author_name: {
+                        text: '@GiftGiver'
+                    }
+                },
+                giftMembershipsCount: 5
+            }
+        });
+    });
+
+    test('still skips non-gift complex chat updates when author is missing', async () => {
+        const handleChatMessage = createMockFn();
+        const extractMessagesFromChatItem = createMockFn().mockReturnValue([
+            {
+                type: 'AddChatItemAction',
+                item: {
+                    type: 'LiveChatTickerSponsorItem',
+                    id: 'LCC.test-non-gift-missing-author-001',
+                    timestamp_usec: '1704067200000000',
+                    message: { text: '' }
+                }
+            }
+        ]);
+        const chatUpdateHandlers = {};
+
+        const { factory } = createFactory({
+            validationResult: { shouldConnect: true },
+            platformOverrides: {
+                handleChatMessage,
+                _processRegularChatMessage: createMockFn(),
+                _extractMessagesFromChatItem: extractMessagesFromChatItem,
+                _shouldSkipMessage: createMockFn().mockReturnValue(false),
+                logRawPlatformData: createMockFn().mockResolvedValue(),
+                setYouTubeConnectionReady: createMockFn(),
+                _resolveChatItemAuthorName: createMockFn().mockReturnValue(''),
+                config: { dataLoggingEnabled: false }
+            }
+        });
+
+        const connection = {
+            on: createMockFn((event, handler) => {
+                chatUpdateHandlers[event] = handler;
+            }),
+            start: createMockFn(),
+            removeAllListeners: createMockFn()
+        };
+
+        await factory.setupConnectionEventListeners(connection, 'video-1');
+
+        chatUpdateHandlers['chat-update']({
+            type: 'AddChatItemAction',
+            item: {
+                type: 'LiveChatTickerSponsorItem'
+            }
+        });
+
+        expect(handleChatMessage).not.toHaveBeenCalled();
+    });
+
     test('marks connection ready on start events, logs initial batches, and applies live chat mode', async () => {
         const connectionReadyCalls = [];
         const startHandlers = {};

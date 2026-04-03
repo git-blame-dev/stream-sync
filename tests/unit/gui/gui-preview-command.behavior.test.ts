@@ -496,6 +496,7 @@ describe('GUI local preview command behavior', () => {
             subscriptionType: 'channel.follow',
             event: {
                 user_name: 'test-user',
+                user_id: 'test-user-id',
                 user_login: 'test-user-id',
                 followed_at: new Date(Date.UTC(2024, 0, 1, 0, 0, 0)).toISOString(),
                 timestamp: new Date(Date.UTC(2024, 0, 1, 0, 0, 0)).toISOString()
@@ -534,6 +535,45 @@ describe('GUI local preview command behavior', () => {
         expect(emitted.some((event) => event.type === 'platform:follow' && event.platform === 'twitch')).toBe(true);
         expect(emitted.some((event) => event.type === 'platform:chat-message' && event.platform === 'youtube')).toBe(true);
         expect(emitted.some((event) => event.type === 'platform:share' && event.platform === 'tiktok')).toBe(true);
+    });
+
+    it('does not heal twitch preview notifications that omit canonical ids', async () => {
+        const emitted: UnknownRecord[] = [];
+        const adapters = createPreviewIngestAdapters({
+            config: buildPreviewConfig(),
+            logger: {
+                debug: () => {},
+                info: () => {},
+                warn: () => {},
+                error: () => {}
+            },
+            emitPlatformEvent: (event: UnknownRecord) => emitted.push(event)
+        });
+
+        const timestamp = new Date(Date.UTC(2024, 0, 1, 0, 0, 0)).toISOString();
+
+        await adapters.twitch.ingest({
+            subscriptionType: 'channel.follow',
+            event: {
+                user_name: 'test-user',
+                user_login: 'test-user-id',
+                followed_at: timestamp,
+                timestamp
+            }
+        });
+
+        await adapters.twitch.ingest({
+            subscriptionType: 'channel.raid',
+            event: {
+                from_broadcaster_user_name: 'test-raider',
+                from_broadcaster_user_login: 'test-raider-id',
+                viewers: 10,
+                timestamp
+            }
+        });
+
+        expect(emitted.some((event) => event.type === 'platform:follow' && event.platform === 'twitch')).toBe(false);
+        expect(emitted.some((event) => event.type === 'platform:raid' && event.platform === 'twitch')).toBe(false);
     });
 
     it('falls back to default avatar when ingest payload omits avatarUrl', async () => {
@@ -584,8 +624,12 @@ describe('GUI local preview command behavior', () => {
 
         await adapters.twitch.ingest({
             subscriptionType: 'channel.raid',
+            metadata: {
+                message_timestamp: timestamp
+            },
             event: {
                 from_broadcaster_user_name: 'test-raider',
+                from_broadcaster_user_id: 'test-raider-id',
                 from_broadcaster_user_login: 'test-raider-id',
                 viewers: 10,
                 timestamp
@@ -594,8 +638,12 @@ describe('GUI local preview command behavior', () => {
 
         await adapters.twitch.ingest({
             subscriptionType: 'channel.subscription.gift',
+            metadata: {
+                message_timestamp: timestamp
+            },
             event: {
                 user_name: 'test-gifter',
+                user_id: 'test-gifter-id',
                 user_login: 'test-gifter-id',
                 tier: '1000',
                 total: 2,

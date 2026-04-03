@@ -208,6 +208,33 @@ describe('Paypiggy platform flows (smoke)', () => {
         });
     });
 
+    test('routes YouTube membership renewals with renewal copy', async () => {
+        await runPaypiggySmoke({
+            platformKey: 'youtube',
+            handlerName: 'onPaypiggy',
+            payload: {
+                username: 'MilestoneUser',
+                userId: 'yt-member-10',
+                membershipLevel: 'Member',
+                months: 10,
+                message: 'Thanks for the membership!',
+                timestamp: '2024-01-01T00:00:00.000Z'
+            },
+            copyExpectations: {
+                username: 'MilestoneUser',
+                keyword: 'renewed membership',
+                logKeyword: 'member renewal',
+                count: 10
+            },
+            assertFn: (queued) => {
+                expect(queued.data.displayMessage).toContain('renewed membership');
+                expect(queued.data.ttsMessage).toContain('renewed membership');
+                expect(queued.data.months).toBe(10);
+                expect(queued.data.message).toBe('Thanks for the membership!');
+            }
+        });
+    });
+
     test('routes TikTok subscriptions through lifecycle, router, and runtime', async () => {
         await runPaypiggySmoke({
             platformKey: 'tiktok',

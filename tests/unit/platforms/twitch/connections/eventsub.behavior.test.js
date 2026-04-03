@@ -47,12 +47,13 @@ describe('TwitchEventSub behavior', () => {
 
         instance.handleNotificationEvent('channel.follow', {
             user_name: 'testFollower',
+            user_id: 'test-follower-id',
             user_login: 'testfollower',
             followed_at: '2024-01-01T00:00:00Z'
         });
 
         expect(followEvents.length).toBe(1);
-        expect(followEvents[0].userId).toBe('testfollower');
+        expect(followEvents[0].userId).toBe('test-follower-id');
         expect(followEvents[0].username).toBe('testFollower');
         expect(followEvents[0].timestamp).toBe('2024-01-01T00:00:00.000Z');
     });
@@ -95,7 +96,12 @@ describe('TwitchEventSub behavior', () => {
             },
             payload: {
                 subscription: { type: 'channel.follow' },
-                event: { user_name: 'testUser', user_login: 'testuser', followed_at: '2024-01-01T00:00:00Z' }
+                event: {
+                    user_name: 'testUser',
+                    user_id: 'test-user-id',
+                    user_login: 'testuser',
+                    followed_at: '2024-01-01T00:00:00Z'
+                }
             }
         };
 

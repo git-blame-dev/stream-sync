@@ -60,16 +60,16 @@ function createTwitchEventSubEventRouter(options = {}) {
     const handleFollowEvent = (event, rawEvent = event) => {
         logRawIfEnabled('follow', rawEvent, 'follow-data-log', 'Error logging raw follow data');
 
-        if (!event?.user_name || !event?.user_login || !event?.followed_at || !event?.timestamp) {
+        if (!event?.user_name || !event?.user_id || !event?.followed_at || !event?.timestamp) {
             errorHandler.handleEventProcessingError(
-                new Error('Follow event requires user_name, user_login, followed_at, and a valid timestamp'),
+                new Error('Follow event requires user_name, user_id, followed_at, and a valid timestamp'),
                 'follow',
                 event
             );
             return;
         }
 
-        const identity = normalizeUserIdentity(event.user_name, event.user_login);
+        const identity = normalizeUserIdentity(event.user_name, event.user_id);
         safeEmit('follow', {
             ...identity,
             timestamp: event.timestamp
@@ -87,9 +87,9 @@ function createTwitchEventSubEventRouter(options = {}) {
             return;
         }
 
-        if (!event?.user_name || !event?.user_login || !event?.tier || typeof event?.is_gift !== 'boolean' || !event?.timestamp) {
+        if (!event?.user_name || !event?.user_id || !event?.tier || typeof event?.is_gift !== 'boolean' || !event?.timestamp) {
             errorHandler.handleEventProcessingError(
-                new Error('Subscription event requires user_name, user_login, tier, timestamp, and is_gift'),
+                new Error('Subscription event requires user_name, user_id, tier, timestamp, and is_gift'),
                 'paypiggy',
                 event
             );
@@ -97,7 +97,7 @@ function createTwitchEventSubEventRouter(options = {}) {
         }
 
         const months = normalizeMonths(event.cumulative_months);
-        const identity = normalizeUserIdentity(event.user_name, event.user_login);
+        const identity = normalizeUserIdentity(event.user_name, event.user_id);
         const payload = {
             type: 'paypiggy',
             ...identity,
@@ -114,16 +114,16 @@ function createTwitchEventSubEventRouter(options = {}) {
     const handleRaidEvent = (event, rawEvent = event) => {
         logRawIfEnabled('raid', rawEvent, 'raid-data-log', 'Error logging raw raid data');
 
-        if (!event?.from_broadcaster_user_name || !event?.from_broadcaster_user_login || typeof event?.viewers !== 'number' || !event?.timestamp) {
+        if (!event?.from_broadcaster_user_name || !event?.from_broadcaster_user_id || typeof event?.viewers !== 'number' || !event?.timestamp) {
             errorHandler.handleEventProcessingError(
-                new Error('Raid event requires from_broadcaster_user_name, from_broadcaster_user_login, viewers, and timestamp'),
+                new Error('Raid event requires from_broadcaster_user_name, from_broadcaster_user_id, viewers, and timestamp'),
                 'raid',
                 event
             );
             return;
         }
 
-        const identity = normalizeUserIdentity(event.from_broadcaster_user_name, event.from_broadcaster_user_login);
+        const identity = normalizeUserIdentity(event.from_broadcaster_user_name, event.from_broadcaster_user_id);
         safeEmit('raid', {
             platform: 'twitch',
             ...identity,
@@ -145,9 +145,9 @@ function createTwitchEventSubEventRouter(options = {}) {
         const eventId = event?.id;
         const isAnonymous = event?.is_anonymous === true;
         const rawUsername = typeof event?.user_name === 'string' ? event.user_name.trim() : '';
-        const rawUserLogin = typeof event?.user_login === 'string' ? event.user_login.trim() : '';
-        const hasIdentity = rawUsername && rawUserLogin;
-        const hasPartialIdentity = (rawUsername && !rawUserLogin) || (!rawUsername && rawUserLogin);
+        const rawUserId = typeof event?.user_id === 'string' ? event.user_id.trim() : '';
+        const hasIdentity = rawUsername && rawUserId;
+        const hasPartialIdentity = (rawUsername && !rawUserId) || (!rawUsername && rawUserId);
 
         if (!eventId || typeof event?.bits !== 'number' || (!isAnonymous && !hasIdentity) || hasPartialIdentity || !event?.timestamp) {
             errorHandler.handleEventProcessingError(
@@ -163,7 +163,7 @@ function createTwitchEventSubEventRouter(options = {}) {
         const messageText = messageData.textContent || fallbackText;
         const giftType = resolveBitsGiftType(messageData.cheermoteInfo || {});
 
-        const identity = hasIdentity ? normalizeUserIdentity(event.user_name, event.user_login) : {};
+        const identity = hasIdentity ? normalizeUserIdentity(event.user_name, event.user_id) : {};
         safeEmit('gift', {
             platform: 'twitch',
             ...identity,
@@ -186,9 +186,9 @@ function createTwitchEventSubEventRouter(options = {}) {
 
         const isAnonymous = event?.is_anonymous === true;
         const rawUsername = typeof event?.user_name === 'string' ? event.user_name.trim() : '';
-        const rawUserLogin = typeof event?.user_login === 'string' ? event.user_login.trim() : '';
-        const hasIdentity = rawUsername && rawUserLogin;
-        const hasPartialIdentity = (rawUsername && !rawUserLogin) || (!rawUsername && rawUserLogin);
+        const rawUserId = typeof event?.user_id === 'string' ? event.user_id.trim() : '';
+        const hasIdentity = rawUsername && rawUserId;
+        const hasPartialIdentity = (rawUsername && !rawUserId) || (!rawUsername && rawUserId);
 
         if (!event?.tier || typeof event?.total !== 'number' || (!isAnonymous && !hasIdentity) || hasPartialIdentity || !event?.timestamp) {
             errorHandler.handleEventProcessingError(
@@ -199,7 +199,7 @@ function createTwitchEventSubEventRouter(options = {}) {
             return;
         }
 
-        const identity = hasIdentity ? normalizeUserIdentity(event.user_name, event.user_login) : {};
+        const identity = hasIdentity ? normalizeUserIdentity(event.user_name, event.user_id) : {};
         safeEmit('paypiggyGift', {
             ...identity,
             tier: event.tier,
@@ -218,9 +218,9 @@ function createTwitchEventSubEventRouter(options = {}) {
             'twitch'
         );
 
-        if (!event?.user_name || !event?.user_login || !event?.tier || !event?.timestamp) {
+        if (!event?.user_name || !event?.user_id || !event?.tier || !event?.timestamp) {
             errorHandler.handleEventProcessingError(
-                new Error('Subscription message event requires user_name, user_login, tier, and timestamp'),
+                new Error('Subscription message event requires user_name, user_id, tier, and timestamp'),
                 'paypiggy-message',
                 event
             );
@@ -228,7 +228,7 @@ function createTwitchEventSubEventRouter(options = {}) {
         }
 
         const months = normalizeMonths(event.cumulative_months);
-        const identity = normalizeUserIdentity(event.user_name, event.user_login);
+        const identity = normalizeUserIdentity(event.user_name, event.user_id);
         const payload = {
             type: 'paypiggy',
             ...identity,
