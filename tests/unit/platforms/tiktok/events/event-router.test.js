@@ -363,14 +363,16 @@ describe('TikTok event router', () => {
         expect(platform.cachedViewerCount).toBe(12);
     });
 
-    test('skips chat event when comment is invalid', async () => {
+    test('processes degraded chat event when comment is invalid', async () => {
         const { platform, listeners, handledChatMessages } = createPlatformHarness();
 
         setupTikTokEventListeners(platform);
 
         await listeners[platform.WebcastEvent.CHAT]({ comment: 123 });
 
-        expect(handledChatMessages).toHaveLength(0);
+        expect(handledChatMessages).toHaveLength(1);
+        expect(handledChatMessages[0].normalizedData.message).toEqual({ text: 'Unknown Message' });
+        expect(handledChatMessages[0].normalizedData.metadata.missingFields).toContain('message');
     });
 
     test('processes emote-only chat payloads when comment is whitespace and emotes are present', async () => {
@@ -398,7 +400,7 @@ describe('TikTok event router', () => {
         expect(handledChatMessages).toHaveLength(1);
     });
 
-    test('skips chat event when comment is missing even if emotes are present', async () => {
+    test('processes emote-only chat payloads when comment is missing and emotes are present', async () => {
         const { platform, listeners, handledChatMessages } = createPlatformHarness();
 
         setupTikTokEventListeners(platform);
@@ -419,7 +421,22 @@ describe('TikTok event router', () => {
             common: { createTime: '1700000000' }
         });
 
-        expect(handledChatMessages).toHaveLength(0);
+        expect(handledChatMessages).toHaveLength(1);
+    });
+
+    test('processes degraded chat payload when comment and emotes are both missing', async () => {
+        const { platform, listeners, handledChatMessages } = createPlatformHarness();
+
+        setupTikTokEventListeners(platform);
+
+        await listeners[platform.WebcastEvent.CHAT]({
+            user: { userId: 'test-user-missing-message', uniqueId: 'missing-message-user', nickname: 'MissingMessageUser' },
+            common: { createTime: '1700000000' }
+        });
+
+        expect(handledChatMessages).toHaveLength(1);
+        expect(handledChatMessages[0].normalizedData.message).toEqual({ text: 'Unknown Message' });
+        expect(handledChatMessages[0].normalizedData.metadata.missingFields).toContain('message');
     });
 
     test('registers listeners only for supported events', () => {
