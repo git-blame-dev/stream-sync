@@ -101,4 +101,63 @@ describe('YouTube monetized event pipeline', () => {
         expect(membershipEvents[0].timestamp).toBe(new Date(1704067200000).toISOString());
     });
 
+    test('emits renewal paypiggy events for real snake_case YouTube membership milestone payloads', async () => {
+        const youtubePlatform = createPlatform();
+        const membershipEvents = [];
+        youtubePlatform.handlers = {
+            ...youtubePlatform.handlers,
+            onPaypiggy: (event) => membershipEvents.push(event)
+        };
+
+        const membershipItem = {
+            item: {
+                type: 'LiveChatMembershipItem',
+                id: 'LCC.test-membership-snake-001',
+                timestamp_usec: '1773660646737554',
+                author: {
+                    id: 'UC_TEST_CHANNEL_01000',
+                    name: '@MilestoneUser',
+                    thumbnails: [
+                        {
+                            url: 'https://example.invalid/youtube-membership-avatar.png',
+                            width: 64,
+                            height: 64
+                        }
+                    ]
+                },
+                header_primary_text: {
+                    text: 'Member for 10 months',
+                    runs: [
+                        { text: 'Member for ' },
+                        { text: '10' },
+                        { text: ' months' }
+                    ]
+                },
+                header_subtext: {
+                    text: 'Member',
+                    rtl: false
+                },
+                message: {
+                    text: 'Thanks for the membership!',
+                    runs: [{ text: 'Thanks for the membership!' }]
+                }
+            }
+        };
+
+        await youtubePlatform.handleChatMessage(membershipItem);
+        await new Promise((resolve) => setImmediate(resolve));
+
+        expect(membershipEvents).toHaveLength(1);
+        expect(membershipEvents[0]).toMatchObject({
+            platform: 'youtube',
+            type: 'platform:paypiggy',
+            username: 'MilestoneUser',
+            userId: 'UC_TEST_CHANNEL_01000',
+            avatarUrl: 'https://example.invalid/youtube-membership-avatar.png',
+            months: 10,
+            message: 'Thanks for the membership!'
+        });
+        expect(membershipEvents[0].timestamp).toBe(new Date(1773660646737).toISOString());
+    });
+
 });

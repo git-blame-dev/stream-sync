@@ -283,14 +283,16 @@ function createYouTubeConnectionFactory(options = {}) {
                 };
 
                 const authorName = platform._resolveChatItemAuthorName(enhancedMessage);
-                if (!authorName) {
+                const eventType = enhancedMessage && enhancedMessage.item
+                    ? enhancedMessage.item.type || null
+                    : (enhancedMessage && enhancedMessage.type ? enhancedMessage.type : null);
+                const shouldAllowMissingAuthor = eventType === 'LiveChatSponsorshipsGiftPurchaseAnnouncement';
+                if (!authorName && !shouldAllowMissingAuthor) {
                     platform.logger.debug(
                         `Skipping chat-update for ${videoId}: missing author`,
                         'youtube',
                         {
-                            eventType: enhancedMessage && enhancedMessage.item
-                                ? enhancedMessage.item.type || null
-                                : (enhancedMessage && enhancedMessage.type ? enhancedMessage.type : null),
+                            eventType,
                             author: getFallbackUsername()
                         }
                     );
@@ -301,7 +303,7 @@ function createYouTubeConnectionFactory(options = {}) {
                     : 'No text';
 
                 platform.logger.debug(
-                    `Single chat-update event received for ${videoId}: ${authorName} - ${messageText}`,
+                    `Single chat-update event received for ${videoId}: ${authorName || getFallbackUsername()} - ${messageText}`,
                     'youtube'
                 );
 

@@ -557,6 +557,7 @@ function buildPreviewScenarioEvents(
                         event: {
                             ...base,
                             user_name: username,
+                            user_id: userId,
                             user_login: userId,
                             isPaypiggy: scenarioType === 'chat',
                             badgeImages: includePreviewBadges ? media.badges : undefined,
@@ -622,9 +623,11 @@ function buildPreviewScenarioEvents(
                         ...base,
                         id: `test-${scenarioType}-${index}`,
                         user_name: username,
+                        user_id: userId,
                         user_login: userId,
                         followed_at: timestamp,
                         from_broadcaster_user_name: username,
+                        from_broadcaster_user_id: userId,
                         from_broadcaster_user_login: userId,
                         viewers: 42,
                         tier: '1000',
@@ -872,7 +875,7 @@ function createPreviewIngestAdapters(
                     : [];
                 emitChatEvent('twitch', {
                     username: payload?.username || payload?.user_name,
-                    userId: payload?.userId || payload?.user_login,
+                    userId: payload?.userId || payload?.user_id,
                     timestamp: payload?.timestamp,
                     isPaypiggy: payload?.isPaypiggy === true || payload?.metadata?.previewPaypiggy === true,
                     isMod: payload?.isMod === true || payload?.is_mod === true,
@@ -937,11 +940,11 @@ function createPreviewIngestAdapters(
                 platform: 'youtube',
                 data: {
                     ...source,
-                    id: source.id || `yt-gift-${source.timestamp}`,
+                    id: source.id,
                     giftType: 'SuperSticker',
                     giftCount: 1,
-                    amount: source.amount || 5,
-                    currency: source.currency || 'USD'
+                    amount: source.amount,
+                    currency: source.currency
                 }
             });
         },
@@ -956,8 +959,8 @@ function createPreviewIngestAdapters(
                 platform: 'youtube',
                 data: {
                     ...source,
-                    giftCount: source.giftCount || 1,
-                    tier: source.tier || '1'
+                    giftCount: source.giftCount,
+                    tier: source.tier
                 }
             });
         }
@@ -1097,10 +1100,7 @@ function createPreviewIngestAdapters(
     return {
         twitch: {
             async ingest(rawEvent: UnknownRecord) {
-                const metadata = rawEvent.metadata || (rawEvent?.event?.timestamp
-                    ? { message_timestamp: rawEvent.event.timestamp }
-                    : {});
-                twitchRouter.handleNotificationEvent(rawEvent.subscriptionType, rawEvent.event, metadata);
+                twitchRouter.handleNotificationEvent(rawEvent.subscriptionType, rawEvent.event || {}, rawEvent.metadata || {});
             }
         },
         youtube: {

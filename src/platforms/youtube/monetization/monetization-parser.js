@@ -114,6 +114,56 @@ function createYouTubeMonetizationParser(options = {}) {
         return typeof raw === 'string' ? raw.trim() : '';
     };
 
+    const extractFirstStructuredText = (...fields) => {
+        for (const field of fields) {
+            const extracted = extractStructuredText(field);
+            if (extracted) {
+                return extracted;
+            }
+        }
+
+        return '';
+    };
+
+    const parseMembershipMonthsFromHeaderText = (text) => {
+        if (typeof text !== 'string') {
+            return undefined;
+        }
+
+        const match = text.match(/\bmember\s+for\s+(\d+)\s+months?\b/i);
+        if (!match) {
+            return undefined;
+        }
+
+        const months = Number(match[1]);
+        return Number.isFinite(months) && months > 0 ? months : undefined;
+    };
+
+    const resolveMembershipLevel = ({ headerPrimaryText, headerSubtext, months }) => {
+        const normalizedPrimary = typeof headerPrimaryText === 'string' ? headerPrimaryText.trim() : '';
+        const normalizedSubtext = typeof headerSubtext === 'string' ? headerSubtext.trim() : '';
+        const milestoneMonthsFromPrimary = parseMembershipMonthsFromHeaderText(normalizedPrimary);
+
+        if (normalizedPrimary && milestoneMonthsFromPrimary === undefined) {
+            return normalizedPrimary;
+        }
+
+        if (!normalizedSubtext) {
+            return '';
+        }
+
+        const welcomeMatch = normalizedSubtext.match(/^Welcome to\s+(.+?)!?$/i);
+        if (welcomeMatch) {
+            const level = welcomeMatch[1].trim();
+            if (!level || /^the\s+membership$/i.test(level)) {
+                return '';
+            }
+            return level;
+        }
+
+        return normalizedSubtext;
+    };
+
     const resolveAuthorAvatarUrl = (chatItem) => {
         const avatarUrl = chatItem?.item?.author?.thumbnails?.[0]?.url;
         if (typeof avatarUrl !== 'string') {
@@ -238,14 +288,29 @@ function createYouTubeMonetizationParser(options = {}) {
     };
 
     const parseMembership = (chatItem) => {
+        const headerPrimaryText = extractFirstStructuredText(
+            chatItem?.item?.headerPrimaryText,
+            chatItem?.item?.header_primary_text
+        );
+        const headerSubtext = extractFirstStructuredText(
+            chatItem?.item?.headerSubtext,
+            chatItem?.item?.header_subtext
+        );
+        const explicitMonths = Number.isFinite(Number(chatItem?.item?.memberMilestoneDurationInMonths))
+            ? Number(chatItem.item.memberMilestoneDurationInMonths)
+            : undefined;
+        const months = explicitMonths ?? parseMembershipMonthsFromHeaderText(headerPrimaryText);
+
         const payload = {
             timestamp: resolveTimestamp(chatItem, 'YouTube membership'),
             avatarUrl: resolveAuthorAvatarUrl(chatItem),
-            membershipLevel: extractStructuredText(chatItem?.item?.headerPrimaryText),
-            message: extractStructuredText(chatItem?.item?.headerSubtext) || extractMessageText(chatItem?.item?.message),
-            months: Number.isFinite(Number(chatItem?.item?.memberMilestoneDurationInMonths))
-                ? Number(chatItem?.item?.memberMilestoneDurationInMonths)
-                : undefined
+            membershipLevel: resolveMembershipLevel({
+                headerPrimaryText,
+                headerSubtext,
+                months
+            }),
+            message: extractMessageText(chatItem?.item?.message) || headerSubtext,
+            months
         };
         const id = resolveOptionalId(chatItem);
         if (id) {

@@ -300,6 +300,24 @@ describe('AppRuntime behavior', () => {
         expect(calls[0][2].avatarUrl).toBe('https://example.invalid/runtime-giftpaypiggy-avatar.png');
     });
 
+    it('preserves explicit avatarUrl for paypiggy notifications', async () => {
+        const calls = [];
+        const notificationManager = createRecordingNotificationManager(calls);
+        const runtime = createRuntime({ notificationManager });
+
+        await runtime.handlePaypiggyNotification('twitch', 'test-user', {
+            userId: 'test-user-id',
+            timestamp: '2024-01-01T00:00:00.000Z',
+            tier: '1000',
+            months: 10,
+            avatarUrl: 'https://example.invalid/runtime-paypiggy-avatar.png'
+        });
+
+        expect(calls.length).toBe(1);
+        expect(calls[0][0]).toBe('platform:paypiggy');
+        expect(calls[0][2].avatarUrl).toBe('https://example.invalid/runtime-paypiggy-avatar.png');
+    });
+
     it('validates resub events require tier, months, and message', async () => {
         const runtime = createRuntime();
 

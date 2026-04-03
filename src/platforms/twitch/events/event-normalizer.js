@@ -102,7 +102,9 @@ const applyIdFallback = (event, metadata, subscriptionType) => {
         return event;
     }
 
-    const canonicalBitsId = normalizeCanonicalIdValue(metadata?.message_id);
+    const metadataBitsId = normalizeCanonicalIdValue(metadata?.message_id);
+    const rawBitsId = normalizeCanonicalIdValue(event.id);
+    const canonicalBitsId = metadataBitsId || rawBitsId;
     const { id: _dropRawId, message_id: _dropRawMessageId, ...eventWithoutRawIds } = event;
     if (!canonicalBitsId) {
         return eventWithoutRawIds;
