@@ -184,4 +184,101 @@ describe('NotificationBuilder', () => {
         expect(notification.logMessage).toMatch(/error/i);
         expect(notification.logMessage.toLowerCase()).not.toContain('from ');
     });
+
+    test('builds Twitch bits inline parts when giftImageUrl is available', () => {
+        const notification = NotificationBuilder.build({
+            platform: 'twitch',
+            type: 'platform:gift',
+            username: 'test-twitch-user',
+            userId: 'test-twitch-user-id',
+            giftType: 'bits',
+            giftCount: 1,
+            amount: 234,
+            currency: 'bits',
+            message: 'keep going',
+            giftImageUrl: 'https://example.invalid/twitch/cheer-234-dark-animated-3.gif',
+            cheermoteInfo: {
+                cleanPrefix: 'Cheer',
+                tier: 100,
+                isMixed: false
+            }
+        });
+
+        expect(notification.parts).toEqual([
+            { type: 'text', text: 'sent 234 ' },
+            {
+                type: 'emote',
+                platform: 'twitch',
+                emoteId: 'Cheer-100',
+                imageUrl: 'https://example.invalid/twitch/cheer-234-dark-animated-3.gif'
+            },
+            { type: 'text', text: ': keep going' }
+        ]);
+        expect(notification.displayMessage).toBe('test-twitch-user sent 234 bits: keep going');
+    });
+
+    test('skips Twitch bits inline parts when cheermotes are mixed', () => {
+        const notification = NotificationBuilder.build({
+            platform: 'twitch',
+            type: 'platform:gift',
+            username: 'test-twitch-user',
+            userId: 'test-twitch-user-id',
+            giftType: 'mixed bits',
+            giftCount: 1,
+            amount: 234,
+            currency: 'bits',
+            giftImageUrl: 'https://example.invalid/twitch/cheer-234-dark-animated-3.gif',
+            cheermoteInfo: {
+                isMixed: true,
+                types: [
+                    { prefix: 'Cheer', count: 1 },
+                    { prefix: 'Uni', count: 1 }
+                ]
+            }
+        });
+
+        expect(notification.parts).toBeUndefined();
+    });
+
+    test('builds YouTube Super Sticker inline parts with image first', () => {
+        const notification = NotificationBuilder.build({
+            platform: 'youtube',
+            type: 'platform:gift',
+            username: 'test-youtube-user',
+            userId: 'test-youtube-user-id',
+            giftType: 'Super Sticker',
+            giftCount: 1,
+            amount: 7.99,
+            currency: 'AUD',
+            message: "Pear character lifting some weights saying 'Keep it up'",
+            giftImageUrl: 'https://lh3.googleusercontent.com/hxUGRWjxbKaI8Gk6earRTJW5Vub52yvfvorXXkfi-4fqpB7VJzu4K6pbBO4UIsDstah8zLKeUz6FQ9W0qnY=s176-rwa'
+        });
+
+        expect(notification.parts).toEqual([
+            {
+                type: 'emote',
+                platform: 'youtube',
+                emoteId: 'supersticker',
+                imageUrl: 'https://lh3.googleusercontent.com/hxUGRWjxbKaI8Gk6earRTJW5Vub52yvfvorXXkfi-4fqpB7VJzu4K6pbBO4UIsDstah8zLKeUz6FQ9W0qnY=s176-rwa'
+            },
+            { type: 'text', text: " Pear character lifting some weights saying 'Keep it up'" }
+        ]);
+    });
+
+    test('keeps YouTube Super Sticker notifications text-only when giftImageUrl is missing', () => {
+        const notification = NotificationBuilder.build({
+            platform: 'youtube',
+            type: 'platform:gift',
+            username: 'test-youtube-user',
+            userId: 'test-youtube-user-id',
+            giftType: 'Super Sticker',
+            giftCount: 1,
+            amount: 7.99,
+            currency: 'AUD',
+            message: "Pear character lifting some weights saying 'Keep it up'"
+        });
+
+        expect(notification.parts).toBeUndefined();
+        expect(notification.displayMessage).toContain('Super Sticker');
+    });
 });

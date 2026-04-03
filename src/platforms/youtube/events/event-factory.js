@@ -199,6 +199,7 @@ function createYouTubeEventFactory(options = {}) {
                 : normalizePositiveNumber(data.amount);
             const currency = normalizeText(data.currency);
             const message = typeof data.message === 'string' ? data.message : undefined;
+            const giftImageUrl = normalizeText(data.giftImageUrl);
 
             if (!isError) {
                 if (!giftType) {
@@ -234,6 +235,9 @@ function createYouTubeEventFactory(options = {}) {
 
             if (message) {
                 result.message = message;
+            }
+            if (giftImageUrl) {
+                result.giftImageUrl = giftImageUrl;
             }
             if (isError) {
                 result.isError = true;

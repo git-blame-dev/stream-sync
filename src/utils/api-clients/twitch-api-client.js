@@ -165,6 +165,21 @@ class TwitchApiClient {
         }
     }
 
+    async getCheermotes(broadcasterId) {
+        const normalizedBroadcasterId = typeof broadcasterId === 'string' ? broadcasterId.trim() : '';
+        const endpoint = normalizedBroadcasterId
+            ? `/bits/cheermotes?broadcaster_id=${encodeURIComponent(normalizedBroadcasterId)}`
+            : '/bits/cheermotes';
+
+        try {
+            const data = await this.makeRequest(endpoint);
+            return Array.isArray(data?.data) ? data.data : [];
+        } catch (error) {
+            this._handleApiError(`Failed to get cheermotes: ${error.message}`, error, 'getCheermotes');
+            return [];
+        }
+    }
+
     _handleApiError(message, error, context) {
         if (this.errorHandler && error instanceof Error) {
             this.errorHandler.handleConnectionError(error, context, message);

@@ -268,6 +268,74 @@ describe('Event-to-GUI contract mapper behavior', () => {
         ]);
     });
 
+    it('maps Twitch gift notification-level parts without platform-specific mutation', async () => {
+        const mapper = createMapper({ messageCharacterLimit: 0 });
+
+        const mapped = await mapper.mapDisplayRow({
+            type: 'platform:gift',
+            platform: 'twitch',
+            data: {
+                username: 'test-twitch-user',
+                userId: 'test-twitch-user-id',
+                avatarUrl: 'https://example.invalid/twitch-avatar.png',
+                displayMessage: 'test-twitch-user sent 100 bits',
+                parts: [
+                    { type: 'text', text: 'sent 100 ' },
+                    {
+                        type: 'emote',
+                        platform: 'twitch',
+                        emoteId: 'Cheer-100',
+                        imageUrl: 'https://example.invalid/twitch/cheer-100-dark-animated-3.gif'
+                    }
+                ]
+            }
+        });
+
+        expect(mapped.parts).toEqual([
+            { type: 'text', text: 'sent 100 ' },
+            {
+                type: 'emote',
+                platform: 'twitch',
+                emoteId: 'Cheer-100',
+                imageUrl: 'https://example.invalid/twitch/cheer-100-dark-animated-3.gif'
+            }
+        ]);
+    });
+
+    it('maps YouTube gift notification-level parts with image before text', async () => {
+        const mapper = createMapper({ messageCharacterLimit: 0 });
+
+        const mapped = await mapper.mapDisplayRow({
+            type: 'platform:gift',
+            platform: 'youtube',
+            data: {
+                username: 'test-youtube-user',
+                userId: 'test-youtube-user-id',
+                avatarUrl: 'https://example.invalid/youtube-avatar.png',
+                displayMessage: 'test-youtube-user sent a A$7.99 Super Sticker',
+                parts: [
+                    {
+                        type: 'emote',
+                        platform: 'youtube',
+                        emoteId: 'supersticker',
+                        imageUrl: 'https://lh3.googleusercontent.com/test-supersticker=s176-rwa'
+                    },
+                    { type: 'text', text: ' Test sticker description' }
+                ]
+            }
+        });
+
+        expect(mapped.parts).toEqual([
+            {
+                type: 'emote',
+                platform: 'youtube',
+                emoteId: 'supersticker',
+                imageUrl: 'https://lh3.googleusercontent.com/test-supersticker=s176-rwa'
+            },
+            { type: 'text', text: ' Test sticker description' }
+        ]);
+    });
+
     it('derives TikTok gift parts from giftImageUrl when notification parts are missing', async () => {
         const mapper = createMapper({ messageCharacterLimit: 0 });
 

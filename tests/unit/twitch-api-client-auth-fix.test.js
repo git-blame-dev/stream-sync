@@ -231,4 +231,62 @@ describe('TwitchApiClient authentication', () => {
             );
         });
     });
+
+    describe('getCheermotes', () => {
+        it('requests broadcaster-aware cheermotes and returns catalog rows', async () => {
+            mockHttpClient.get.mockImplementation(async (url) => {
+                if (typeof url === 'string' && url.includes('/bits/cheermotes?broadcaster_id=test-broadcaster-id')) {
+                    return {
+                        status: 200,
+                        data: {
+                            data: [
+                                {
+                                    prefix: 'Cheer',
+                                    tiers: [
+                                        {
+                                            id: '100',
+                                            images: {
+                                                dark: {
+                                                    animated: {
+                                                        '3': 'https://example.invalid/cheer-100-dark-animated-3.gif'
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    ]
+                                }
+                            ]
+                        }
+                    };
+                }
+
+                return {
+                    status: 200,
+                    data: {
+                        data: []
+                    }
+                };
+            });
+
+            const cheermotes = await apiClient.getCheermotes('test-broadcaster-id');
+
+            expect(cheermotes).toEqual([
+                {
+                    prefix: 'Cheer',
+                    tiers: [
+                        {
+                            id: '100',
+                            images: {
+                                dark: {
+                                    animated: {
+                                        '3': 'https://example.invalid/cheer-100-dark-animated-3.gif'
+                                    }
+                                }
+                            }
+                        }
+                    ]
+                }
+            ]);
+        });
+    });
 });

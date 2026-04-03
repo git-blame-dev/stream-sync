@@ -537,6 +537,10 @@ function extractTwitchMessageData(messageObj) {
             // Use unified cheermote processor for consistent processing
             const { CheermoteProcessor } = require('./cheermote-processor');
             const processedData = CheermoteProcessor.processEventSubFragments(messageObj.fragments);
+            const parsedTier = Number(primaryCheermote.cheermote.tier);
+            const tier = Number.isFinite(parsedTier) && parsedTier > 0
+                ? parsedTier
+                : undefined;
             
             cheermoteInfo = {
                 prefix: primaryCheermote.cheermote.prefix,
@@ -546,7 +550,8 @@ function extractTwitchMessageData(messageObj) {
                 totalBits: processedData.totalBits,
                 count: cheermoteFragments.length,
                 types: processedData.types,
-                isMixed: processedData.mixedTypes
+                isMixed: processedData.mixedTypes,
+                ...(tier !== undefined ? { tier } : {})
             };
         }
     }

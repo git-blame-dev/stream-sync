@@ -74,6 +74,12 @@ class TwitchPlatform extends EventEmitter {
             channel: [],
             loaded: false
         };
+        this.broadcasterId = '';
+        this.cheermoteCatalogCache = {
+            broadcasterId: '',
+            catalog: [],
+            loaded: false
+        };
         this.avatarCacheMaxSize = Number.isFinite(Number(dependencies.avatarCacheMaxSize)) && Number(dependencies.avatarCacheMaxSize) > 0
             ? Number(dependencies.avatarCacheMaxSize)
             : 2000;
@@ -157,6 +163,7 @@ class TwitchPlatform extends EventEmitter {
             this.logger.debug('Modular components initialized', 'twitch');
 
             const broadcasterId = await this.apiClient.getBroadcasterId(this.config.channel);
+            this.broadcasterId = broadcasterId;
 
             this.logger.debug('Initializing EventSub with centralized auth...', 'twitch');
             await this.initializeEventSub(broadcasterId);
@@ -429,6 +436,139 @@ class TwitchPlatform extends EventEmitter {
             : [];
         this.badgeCatalogCache.broadcasterId = broadcasterId;
         this.badgeCatalogCache.loaded = true;
+    }
+
+    async _ensureCheermoteCatalog(forceReload = false) {
+        if (!this.apiClient || typeof this.apiClient.getCheermotes !== 'function') {
+            return;
+        }
+
+        const broadcasterId = typeof this.broadcasterId === 'string' ? this.broadcasterId.trim() : '';
+        if (!forceReload
+            && this.cheermoteCatalogCache.loaded
+            && this.cheermoteCatalogCache.broadcasterId === broadcasterId) {
+            return;
+        }
+
+        this.cheermoteCatalogCache.catalog = await this.apiClient.getCheermotes(broadcasterId);
+        this.cheermoteCatalogCache.broadcasterId = broadcasterId;
+        this.cheermoteCatalogCache.loaded = true;
+    }
+
+    _hasMixedCheermotes(cheermoteInfo = {}) {
+        if (!cheermoteInfo || typeof cheermoteInfo !== 'object') {
+            return false;
+        }
+        if (cheermoteInfo.isMixed === true) {
+            return true;
+        }
+        if (Array.isArray(cheermoteInfo.types) && cheermoteInfo.types.length > 1) {
+            return true;
+        }
+        return false;
+    }
+
+    _resolveCheermoteTierImageUrl(tierData = {}) {
+        const imageUrl = typeof tierData?.images?.dark?.animated?.['3'] === 'string'
+            ? tierData.images.dark.animated['3'].trim()
+            : '';
+        return imageUrl;
+    }
+
+    _resolveCheermoteImageFromCatalog(cheermoteInfo = {}) {
+        const prefixValue = typeof cheermoteInfo.cleanPrefix === 'string' && cheermoteInfo.cleanPrefix.trim()
+            ? cheermoteInfo.cleanPrefix.trim()
+            : (typeof cheermoteInfo.prefix === 'string' ? cheermoteInfo.prefix.trim() : '');
+        const normalizedPrefix = prefixValue.toLowerCase();
+        if (!normalizedPrefix) {
+            return '';
+        }
+
+        const parsedTier = Number(cheermoteInfo.tier);
+        if (!Number.isFinite(parsedTier) || parsedTier <= 0) {
+            return '';
+        }
+        const normalizedTier = String(parsedTier);
+
+        const catalog = Array.isArray(this.cheermoteCatalogCache.catalog)
+            ? this.cheermoteCatalogCache.catalog
+            : [];
+        const cheermoteEntry = catalog.find((entry) => {
+            const entryPrefix = typeof entry?.prefix === 'string' ? entry.prefix.trim().toLowerCase() : '';
+            return entryPrefix === normalizedPrefix;
+        });
+        if (!cheermoteEntry || !Array.isArray(cheermoteEntry.tiers)) {
+            return '';
+        }
+
+        const tierEntry = cheermoteEntry.tiers.find((tierEntryCandidate) => {
+            const tierId = tierEntryCandidate?.id === undefined || tierEntryCandidate?.id === null
+                ? ''
+                : String(tierEntryCandidate.id).trim();
+            return tierId === normalizedTier;
+        });
+        if (!tierEntry) {
+            return '';
+        }
+
+        return this._resolveCheermoteTierImageUrl(tierEntry);
+    }
+
+    async _resolveGiftCheermoteImageUrl(giftData = {}) {
+        if (!giftData || typeof giftData !== 'object') {
+            return '';
+        }
+
+        const existingGiftImageUrl = typeof giftData.giftImageUrl === 'string'
+            ? giftData.giftImageUrl.trim()
+            : '';
+        if (existingGiftImageUrl) {
+            return existingGiftImageUrl;
+        }
+
+        const currency = typeof giftData.currency === 'string' ? giftData.currency.trim().toLowerCase() : '';
+        if (currency !== 'bits') {
+            return '';
+        }
+
+        const cheermoteInfo = giftData.cheermoteInfo;
+        if (!cheermoteInfo || typeof cheermoteInfo !== 'object' || this._hasMixedCheermotes(cheermoteInfo)) {
+            return '';
+        }
+
+        try {
+            await this._ensureCheermoteCatalog(false);
+            let imageUrl = this._resolveCheermoteImageFromCatalog(cheermoteInfo);
+            if (!imageUrl) {
+                await this._ensureCheermoteCatalog(true);
+                imageUrl = this._resolveCheermoteImageFromCatalog(cheermoteInfo);
+            }
+            return imageUrl;
+        } catch (error) {
+            this.errorHandler.handleEventProcessingError(
+                error,
+                'cheermote-image-resolution',
+                giftData,
+                'Failed to resolve Twitch cheermote image URL, continuing without inline image'
+            );
+            return '';
+        }
+    }
+
+    async _enrichGiftPayload(giftData = {}) {
+        if (!giftData || typeof giftData !== 'object') {
+            return giftData;
+        }
+
+        const giftImageUrl = await this._resolveGiftCheermoteImageUrl(giftData);
+        if (!giftImageUrl) {
+            return giftData;
+        }
+
+        return {
+            ...giftData,
+            giftImageUrl
+        };
     }
 
     _findBadgeVersion(catalog = [], setId = '', version = '') {
@@ -739,7 +879,8 @@ class TwitchPlatform extends EventEmitter {
     }
 
     async handleGiftEvent(giftData) {
-        return this._handleStandardEvent('gift', giftData, {
+        const enrichedGiftData = await this._enrichGiftPayload(giftData);
+        return this._handleStandardEvent('gift', enrichedGiftData, {
             validateUser: true,
             emitEventType: PlatformEvents.GIFT
         });
@@ -889,6 +1030,18 @@ class TwitchPlatform extends EventEmitter {
             }
             this.avatarUrlCache.clear();
             this.avatarLookupMissCache.clear();
+            this.broadcasterId = '';
+            this.badgeCatalogCache = {
+                broadcasterId: '',
+                global: [],
+                channel: [],
+                loaded: false
+            };
+            this.cheermoteCatalogCache = {
+                broadcasterId: '',
+                catalog: [],
+                loaded: false
+            };
             this.isConnected = false;
             this.handlers = {};
             this.logger.info('Twitch platform cleanup completed', 'twitch');

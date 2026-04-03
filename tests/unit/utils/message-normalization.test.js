@@ -1127,7 +1127,7 @@ describe('Message Normalization', () => {
             const messageObj = {
                 text: 'Cheer100 hello',
                 fragments: [
-                    { type: 'cheermote', text: 'Cheer100', cheermote: { prefix: 'Cheer', bits: 100 } },
+                    { type: 'cheermote', text: 'Cheer100', cheermote: { prefix: 'Cheer', bits: 100, tier: 100 } },
                     { type: 'text', text: ' hello' }
                 ]
             };
@@ -1138,6 +1138,7 @@ describe('Message Normalization', () => {
             expect(extracted.cheermoteInfo).toMatchObject({
                 prefix: 'Cheer',
                 text: 'Cheer100',
+                tier: 100,
                 totalBits: 100
             });
         });

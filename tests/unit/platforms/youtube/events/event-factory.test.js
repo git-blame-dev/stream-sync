@@ -390,6 +390,7 @@ describe('YouTube event factory behavior', () => {
             amount: 10,
             currency: 'USD',
             message: 'Thanks!',
+            giftImageUrl: 'https://lh3.googleusercontent.com/test-supersticker=s176-rwa',
             timestamp: '2024-01-01T00:00:00.000Z'
         });
 
@@ -405,6 +406,7 @@ describe('YouTube event factory behavior', () => {
             amount: 10,
             currency: 'USD',
             message: 'Thanks!',
+            giftImageUrl: 'https://lh3.googleusercontent.com/test-supersticker=s176-rwa',
             timestamp: '2024-01-01T00:00:00.000Z'
         });
     });
