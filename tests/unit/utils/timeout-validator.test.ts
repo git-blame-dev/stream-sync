@@ -47,6 +47,12 @@ describe('Timeout Validator', () => {
             expect(validateTimeout(undefined, 10000)).toBe(10000);
             expect(validateTimeout(NaN, 1500)).toBe(1500);
         });
+
+        test('should fall back to default when custom fallback is invalid', () => {
+            expect(validateTimeout(undefined, NaN)).toBe(5000);
+            expect(validateTimeout(undefined, 0)).toBe(5000);
+            expect(validateTimeout(undefined, -100)).toBe(5000);
+        });
     });
 
     describe('validateExponentialBackoff', () => {
