@@ -2,7 +2,7 @@ const { describe, test, expect } = require('bun:test');
 const { createMockFn } = require('../../../../helpers/bun-mock-utils');
 const { noOpLogger } = require('../../../../helpers/mock-factories');
 
-const { createYouTubeConnectionFactory } = require('../../../../../src/platforms/youtube/connections/youtube-connection-factory');
+const { createYouTubeConnectionFactory } = require('../../../../../src/platforms/youtube/connections/youtube-connection-factory.ts');
 
 const createFactory = ({ validationResult, liveChatBehavior, platformOverrides, withTimeoutImplementation } = {}) => {
     const platform = {

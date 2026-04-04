@@ -2,7 +2,7 @@ const { describe, test, expect, afterEach } = require('bun:test');
 const { restoreAllMocks } = require('../../../../helpers/bun-mock-utils');
 const { noOpLogger } = require('../../../../helpers/mock-factories');
 const { PlatformEvents } = require('../../../../../src/interfaces/PlatformEvents');
-const { createYouTubeEventRouter } = require('../../../../../src/platforms/youtube/events/event-router');
+const { createYouTubeEventRouter } = require('../../../../../src/platforms/youtube/events/event-router.ts');
 
 describe('YouTube event router', () => {
     afterEach(() => {

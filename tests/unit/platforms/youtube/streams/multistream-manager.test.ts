@@ -5,7 +5,7 @@ const { useFakeTimers, useRealTimers, setSystemTime, advanceTimersByTime } = req
 const testClock = require('../../../../helpers/test-clock');
 const { safeSetInterval, validateTimeout } = require('../../../../../src/utils/timeout-validator');
 
-const { createYouTubeMultiStreamManager } = require('../../../../../src/platforms/youtube/streams/youtube-multistream-manager');
+const { createYouTubeMultiStreamManager } = require('../../../../../src/platforms/youtube/streams/youtube-multistream-manager.ts');
 
 describe('YouTube multi-stream manager', () => {
     beforeEach(() => {
