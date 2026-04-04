@@ -374,6 +374,38 @@ describe('YouTube event factory behavior', () => {
         });
     });
 
+    it('normalizes non-object error context to empty object', () => {
+        const { createYouTubeEventFactory } = require('../../../../../src/platforms/youtube/events/event-factory.ts');
+
+        const eventFactory = createYouTubeEventFactory({
+            generateCorrelationId: () => 'corr-error-context'
+        });
+
+        const event = eventFactory.createErrorEvent({
+            error: new Error('Boom'),
+            context: 'invalid-context',
+            timestamp: '2024-01-01T00:00:00.000Z'
+        });
+
+        expect(event.context).toEqual({});
+    });
+
+    it('defaults recoverable to true when provided value is not boolean', () => {
+        const { createYouTubeEventFactory } = require('../../../../../src/platforms/youtube/events/event-factory.ts');
+
+        const eventFactory = createYouTubeEventFactory({
+            generateCorrelationId: () => 'corr-error-recoverable'
+        });
+
+        const event = eventFactory.createErrorEvent({
+            error: new Error('Boom'),
+            recoverable: 'nope',
+            timestamp: '2024-01-01T00:00:00.000Z'
+        });
+
+        expect(event.recoverable).toBe(true);
+    });
+
     it('builds gift events with monetization fields', () => {
         const { createYouTubeEventFactory } = require('../../../../../src/platforms/youtube/events/event-factory.ts');
 
