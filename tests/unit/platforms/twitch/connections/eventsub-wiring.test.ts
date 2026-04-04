@@ -69,4 +69,25 @@ describe('Twitch EventSub wiring', () => {
         expect(eventSub.listeners.follow).toHaveLength(0);
         expect(eventSubListeners).toEqual([]);
     });
+
+    test('tracks listeners internally when eventSubListeners is not provided', () => {
+        const eventSub = createEventSub({ useOff: true });
+        const wiring = createTwitchEventSubWiring({
+            eventSub,
+            logger: noOpLogger
+        });
+
+        wiring.bindAll({
+            message: () => {},
+            follow: () => {}
+        });
+
+        expect(eventSub.listeners.message).toHaveLength(1);
+        expect(eventSub.listeners.follow).toHaveLength(1);
+
+        wiring.unbindAll();
+
+        expect(eventSub.listeners.message).toHaveLength(0);
+        expect(eventSub.listeners.follow).toHaveLength(0);
+    });
 });

@@ -6,6 +6,7 @@ function createTwitchEventSubWiring(options = {}) {
         eventSubListeners,
         logger
     } = options;
+    const listenerStore = Array.isArray(eventSubListeners) ? eventSubListeners : [];
 
     const errorHandler = createPlatformErrorHandler(logger, 'twitch-eventsub-wiring');
 
@@ -14,7 +15,7 @@ function createTwitchEventSubWiring(options = {}) {
             return;
         }
 
-        const alreadyBound = (eventSubListeners || []).some(
+        const alreadyBound = listenerStore.some(
             (entry) => entry.eventName === eventName && entry.handler === handler
         );
         if (alreadyBound) {
@@ -22,7 +23,7 @@ function createTwitchEventSubWiring(options = {}) {
         }
 
         eventSub.on(eventName, handler);
-        eventSubListeners.push({ eventName, handler });
+        listenerStore.push({ eventName, handler });
     };
 
     const bindAll = (handlersByEventName = {}) => {
@@ -35,14 +36,12 @@ function createTwitchEventSubWiring(options = {}) {
     };
 
     const unbindAll = () => {
-        if (!eventSubListeners?.length || !eventSub) {
-            if (eventSubListeners) {
-                eventSubListeners.length = 0;
-            }
+        if (!listenerStore.length || !eventSub) {
+            listenerStore.length = 0;
             return;
         }
 
-        eventSubListeners.forEach(({ eventName, handler }) => {
+        listenerStore.forEach(({ eventName, handler }) => {
             try {
                 if (typeof eventSub.off === 'function') {
                     eventSub.off(eventName, handler);
@@ -54,7 +53,7 @@ function createTwitchEventSubWiring(options = {}) {
             }
         });
 
-        eventSubListeners.length = 0;
+        listenerStore.length = 0;
     };
 
     return {
