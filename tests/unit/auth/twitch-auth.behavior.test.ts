@@ -154,6 +154,38 @@ describe('TwitchAuth behavior', () => {
         await expect(auth.initialize()).rejects.toThrow('OAuth flow must return camelCase token fields');
     });
 
+    it('throws when token store accessToken is not a string', async () => {
+        await writeTokenStore({
+            twitch: {
+                accessToken: 12345,
+                refreshToken: 'test-refresh-token'
+            }
+        });
+
+        const httpClient = { get: createMockFn(), post: createMockFn() };
+        const oauthFlow = { runOAuthFlow: createMockFn() };
+        const auth = createAuth({ httpClient, oauthFlow });
+
+        await expect(auth.initialize()).rejects.toThrow('Token store must provide string accessToken');
+    });
+
+    it('throws when OAuth flow returns non-string accessToken', async () => {
+        const httpClient = {
+            get: createMockFn().mockResolvedValue(buildValidationResponse()),
+            post: createMockFn()
+        };
+        const oauthFlow = {
+            runOAuthFlow: createMockFn().mockResolvedValue({
+                accessToken: 12345,
+                refreshToken: 'test-oauth-refresh-token',
+                expiresIn: 3600
+            })
+        };
+        const auth = createAuth({ httpClient, oauthFlow });
+
+        await expect(auth.initialize()).rejects.toThrow('OAuth flow must provide string accessToken');
+    });
+
     it('re-authenticates when scopes are missing', async () => {
         await writeTokenStore({
             twitch: {
