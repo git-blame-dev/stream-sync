@@ -18,7 +18,7 @@ const {
     exchangeCodeForTokens,
     openBrowser,
     runOAuthFlow
-} = require('../../../src/auth/oauth-flow');
+} = require('../../../src/auth/oauth-flow.ts');
 
 describe('oauth-flow behavior', () => {
     let tempDir;

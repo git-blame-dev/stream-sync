@@ -1,7 +1,7 @@
 const { describe, it, expect, beforeEach } = require('bun:test');
 const { createMockFn } = require('../../helpers/bun-mock-utils');
 const { noOpLogger } = require('../../helpers/mock-factories');
-const { loadTokens, saveTokens } = require('../../../src/utils/token-store');
+const { loadTokens, saveTokens } = require('../../../src/utils/token-store.ts');
 
 const createMockFs = (fileStore) => {
     const permissions = {};
@@ -10,7 +10,7 @@ const createMockFs = (fileStore) => {
         promises: {
             readFile: createMockFn(async (path) => {
                 if (path in fileStore) return fileStore[path];
-                const error = new Error(`ENOENT: no such file or directory, open '${path}'`);
+                const error = new Error(`ENOENT: no such file or directory, open '${path}'`) as Error & { code?: string };
                 error.code = 'ENOENT';
                 throw error;
             }),
@@ -42,7 +42,7 @@ const createMockFs = (fileStore) => {
                 if (path in fileStore) {
                     return { mode: (permissions[path] || 0o644) | 0o100000 };
                 }
-                const error = new Error(`ENOENT: no such file or directory, stat '${path}'`);
+                const error = new Error(`ENOENT: no such file or directory, stat '${path}'`) as Error & { code?: string };
                 error.code = 'ENOENT';
                 throw error;
             })
@@ -63,7 +63,11 @@ describe('token-store', () => {
     });
 
     it('throws when tokenStorePath is missing', async () => {
-        await expect(loadTokens({})).rejects.toThrow(/tokenStorePath/i);
+        await expect(loadTokens({} as any)).rejects.toThrow(/tokenStorePath/i);
+    });
+
+    it('throws when logger is missing', async () => {
+        await expect(loadTokens({ tokenStorePath: storePath, fs: mockFs } as any)).rejects.toThrow(/logger is required/i);
     });
 
     it('returns null when token store file does not exist', async () => {
@@ -120,7 +124,7 @@ describe('token-store', () => {
 
         await saveTokens(
             { tokenStorePath: storePath, fs: mockFs, logger: noOpLogger },
-            { accessToken: 'updated-access', refreshToken: 'updated-refresh' }
+            { accessToken: 'updated-access', refreshToken: 'updated-refresh' } as any
         );
 
         const updated = JSON.parse(fileStore[storePath]);
@@ -133,5 +137,41 @@ describe('token-store', () => {
         fileStore[storePath] = '{invalid-json';
 
         await expect(loadTokens({ tokenStorePath: storePath, fs: mockFs, logger: noOpLogger })).rejects.toThrow(/invalid token store/i);
+    });
+
+    it('preserves existing refresh token when saving access token updates', async () => {
+        fileStore[storePath] = JSON.stringify({
+            twitch: { accessToken: 'old-access', refreshToken: 'persist-me', expiresAt: 100 }
+        });
+
+        await saveTokens(
+            { tokenStorePath: storePath, fs: mockFs, logger: noOpLogger },
+            { accessToken: 'new-access', expiresAt: 200 } as any
+        );
+
+        const updated = JSON.parse(fileStore[storePath]);
+        expect(updated.twitch.accessToken).toBe('new-access');
+        expect(updated.twitch.refreshToken).toBe('persist-me');
+        expect(updated.twitch.expiresAt).toBe(200);
+    });
+
+    it('throws when saving without accessToken', async () => {
+        await expect(
+            saveTokens(
+                { tokenStorePath: storePath, fs: mockFs, logger: noOpLogger },
+                { refreshToken: 'new-refresh' } as any
+            )
+        ).rejects.toThrow(/accessToken is required/i);
+    });
+
+    it('saves access token when no refresh token is available', async () => {
+        await saveTokens(
+            { tokenStorePath: storePath, fs: mockFs, logger: noOpLogger },
+            { accessToken: 'access-only' } as any
+        );
+
+        const saved = JSON.parse(fileStore[storePath]);
+        expect(saved.twitch.accessToken).toBe('access-only');
+        expect(saved.twitch.refreshToken).toBeUndefined();
     });
 });

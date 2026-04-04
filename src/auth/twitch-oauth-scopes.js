@@ -1,11 +1,1 @@
-const TWITCH_OAUTH_SCOPES = [
-    'user:read:chat',
-    'chat:edit',
-    'channel:read:subscriptions',
-    'bits:read',
-    'moderator:read:followers'
-];
-
-module.exports = {
-    TWITCH_OAUTH_SCOPES
-};
+module.exports = require('./twitch-oauth-scopes.ts');

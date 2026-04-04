@@ -5,7 +5,7 @@ const path = require('path');
 const { createMockFn, restoreAllMocks } = require('../../helpers/bun-mock-utils');
 const { noOpLogger } = require('../../helpers/mock-factories');
 const { secrets, _resetForTesting, initializeStaticSecrets } = require('../../../src/core/secrets');
-const TwitchAuth = require('../../../src/auth/TwitchAuth');
+const TwitchAuth = require('../../../src/auth/TwitchAuth.ts');
 
 const requiredScopes = [
     'user:read:chat',
