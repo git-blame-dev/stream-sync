@@ -1,6 +1,6 @@
 const { describe, test, expect } = require('bun:test');
 const { noOpLogger } = require('../../../../helpers/mock-factories');
-const { createTwitchEventSubEventRouter } = require('../../../../../src/platforms/twitch/events/event-router');
+const { createTwitchEventSubEventRouter } = require('../../../../../src/platforms/twitch/events/event-router.ts');
 
 describe('Twitch EventSub event router', () => {
     test('emits chat message payloads with metadata timestamp', () => {

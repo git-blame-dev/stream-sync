@@ -3,7 +3,7 @@ const { createMockFn } = require('../../../../helpers/bun-mock-utils');
 const { noOpLogger } = require('../../../../helpers/mock-factories');
 const { secrets, _resetForTesting, initializeStaticSecrets } = require('../../../../../src/core/secrets');
 
-const TwitchEventSub = require('../../../../../src/platforms/twitch-eventsub');
+const TwitchEventSub = require('../../../../../src/platforms/twitch-eventsub.ts');
 
 class MockChatFileLoggingService {
     logRawPlatformData() {}
