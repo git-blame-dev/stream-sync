@@ -212,4 +212,24 @@ describe('main startup behavior', () => {
         expect(getCapturedDisplayQueueConfig()).toBeDefined();
         expect(getCapturedDisplayQueueConfig().gui).toEqual(config.gui);
     });
+
+    it('rejects non-function startup override dependencies', async () => {
+        const { overrides } = buildOverrides({ cliArgs: { chat: 1 } });
+
+        await expect(main({
+            ...overrides,
+            createEventBus: 'not-a-function',
+            config: buildMainConfig()
+        })).rejects.toThrow('main override createEventBus must be a function when provided');
+    });
+
+    it('rejects invalid cliArgs chat override values', async () => {
+        const { overrides } = buildOverrides({});
+
+        await expect(main({
+            ...overrides,
+            cliArgs: { chat: 'invalid-chat-count' },
+            config: buildMainConfig()
+        })).rejects.toThrow('main override cliArgs.chat must be null or a positive integer');
+    });
 });

@@ -75,6 +75,28 @@ describe('AppRuntime behavior', () => {
             .toThrow('AppRuntime missing required dependencies');
     });
 
+    it('rejects construction when event bus contract is invalid', () => {
+        expect(() => createRuntime({
+            eventBus: {
+                subscribe: null,
+                emit: createMockFn(),
+                unsubscribe: createMockFn()
+            }
+        })).toThrow('AppRuntime requires eventBus.subscribe function');
+    });
+
+    it('rejects construction when platform lifecycle contract is invalid', () => {
+        expect(() => createRuntime({
+            platformLifecycleService: {
+                getAllPlatforms: null,
+                getStatus: createMockFn().mockReturnValue({ platformHealth: {} }),
+                recordPlatformConnection: createMockFn(),
+                initializeAllPlatforms: createMockFn().mockResolvedValue(),
+                disconnectAll: createMockFn().mockResolvedValue()
+            }
+        })).toThrow('AppRuntime requires platformLifecycleService.getAllPlatforms function');
+    });
+
     it('does not require a command parser dependency', () => {
         expect(() => createRuntime({ commandParser: null })).not.toThrow();
     });

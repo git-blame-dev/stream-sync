@@ -143,6 +143,52 @@ const { getGiftAnimationDependencyStatus } = require('./services/tiktok-gift-ani
 
 let app;
 
+const MAIN_FUNCTION_OVERRIDE_KEYS = [
+    'ensureSecrets',
+    'TwitchAuth',
+    'createEventBus',
+    'initializeDisplayQueue',
+    'getOBSConnectionManager',
+    'createVFXCommandService',
+    'createUserTrackingService',
+    'createOBSEventService',
+    'createSceneManagementService',
+    'NotificationManager',
+    'createSpamDetectionConfig',
+    'createDonationSpamDetection',
+    'createGracefulExitService',
+    'createProductionDependencies'
+];
+
+function validateMainOverrideContracts(overrides) {
+    if (!overrides || typeof overrides !== 'object') {
+        throw new Error('main overrides must be an object when provided');
+    }
+
+    for (const key of MAIN_FUNCTION_OVERRIDE_KEYS) {
+        const overrideValue = overrides[key];
+        if (overrideValue !== undefined && typeof overrideValue !== 'function') {
+            throw new Error(`main override ${key} must be a function when provided`);
+        }
+    }
+
+    if (overrides.cliArgs !== undefined && (overrides.cliArgs === null || typeof overrides.cliArgs !== 'object')) {
+        throw new Error('main override cliArgs must be an object when provided');
+    }
+}
+
+function validateRuntimeCliArgs(cliArgsCandidate) {
+    if (!cliArgsCandidate || typeof cliArgsCandidate !== 'object') {
+        throw new Error('main runtime cliArgs must be an object');
+    }
+
+    if (cliArgsCandidate.chat !== undefined && cliArgsCandidate.chat !== null) {
+        if (!Number.isInteger(cliArgsCandidate.chat) || cliArgsCandidate.chat <= 0) {
+            throw new Error('main override cliArgs.chat must be null or a positive integer');
+        }
+    }
+}
+
 function createProductionDependencies(overrides = {}) {
     const { validateLoggerInterface } = require('./utils/dependency-validator');
     const { DependencyFactory } = require('./utils/dependency-factory');
@@ -194,11 +240,19 @@ function createAppRuntime(config, dependencies) {
 }
 
 async function main(overrides = {}) {
-    if (overrides?.innertubeImporter) {
-        innertubeInstanceManager.setInnertubeImporter(overrides.innertubeImporter);
+    const runtimeOverrides = overrides || {};
+    validateMainOverrideContracts(runtimeOverrides);
+
+    if (runtimeOverrides.innertubeImporter !== undefined && typeof runtimeOverrides.innertubeImporter !== 'function') {
+        throw new Error('main override innertubeImporter must be a function when provided');
     }
-    const runtimeCliArgs = overrides.cliArgs || cliArgs;
-    const runtimeConfig = overrides.config || config;
+
+    if (runtimeOverrides.innertubeImporter) {
+        innertubeInstanceManager.setInnertubeImporter(runtimeOverrides.innertubeImporter);
+    }
+    const runtimeCliArgs = runtimeOverrides.cliArgs || cliArgs;
+    validateRuntimeCliArgs(runtimeCliArgs);
+    const runtimeConfig = runtimeOverrides.config || config;
     if (runtimeConfig !== config) {
         config = runtimeConfig;
     }
@@ -211,20 +265,20 @@ async function main(overrides = {}) {
     if (config.general.debugEnabled) {
         logger.debug('Raw twitch config:', 'system', config.twitch);
     }
-    const ensureSecretsFn = overrides.ensureSecrets || ensureSecrets;
-    const TwitchAuthCtor = overrides.TwitchAuth || TwitchAuth;
-    const createEventBusFn = overrides.createEventBus || createEventBus;
-    const initializeDisplayQueueFn = overrides.initializeDisplayQueue || initializeDisplayQueue;
-    const getOBSConnectionManagerFn = overrides.getOBSConnectionManager || getOBSConnectionManager;
-    const createVFXCommandServiceFn = overrides.createVFXCommandService || createVFXCommandService;
-    const createUserTrackingServiceFn = overrides.createUserTrackingService || createUserTrackingService;
-    const createOBSEventServiceFn = overrides.createOBSEventService || createOBSEventService;
-    const createSceneManagementServiceFn = overrides.createSceneManagementService || createSceneManagementService;
-    const NotificationManagerCtor = overrides.NotificationManager || NotificationManager;
-    const createSpamDetectionConfigFn = overrides.createSpamDetectionConfig || createSpamDetectionConfig;
-    const createDonationSpamDetectionFn = overrides.createDonationSpamDetection || createDonationSpamDetection;
-    const createGracefulExitServiceFn = overrides.createGracefulExitService || createGracefulExitService;
-    const createProductionDependenciesFn = overrides.createProductionDependencies || createProductionDependencies;
+    const ensureSecretsFn = runtimeOverrides.ensureSecrets || ensureSecrets;
+    const TwitchAuthCtor = runtimeOverrides.TwitchAuth || TwitchAuth;
+    const createEventBusFn = runtimeOverrides.createEventBus || createEventBus;
+    const initializeDisplayQueueFn = runtimeOverrides.initializeDisplayQueue || initializeDisplayQueue;
+    const getOBSConnectionManagerFn = runtimeOverrides.getOBSConnectionManager || getOBSConnectionManager;
+    const createVFXCommandServiceFn = runtimeOverrides.createVFXCommandService || createVFXCommandService;
+    const createUserTrackingServiceFn = runtimeOverrides.createUserTrackingService || createUserTrackingService;
+    const createOBSEventServiceFn = runtimeOverrides.createOBSEventService || createOBSEventService;
+    const createSceneManagementServiceFn = runtimeOverrides.createSceneManagementService || createSceneManagementService;
+    const NotificationManagerCtor = runtimeOverrides.NotificationManager || NotificationManager;
+    const createSpamDetectionConfigFn = runtimeOverrides.createSpamDetectionConfig || createSpamDetectionConfig;
+    const createDonationSpamDetectionFn = runtimeOverrides.createDonationSpamDetection || createDonationSpamDetection;
+    const createGracefulExitServiceFn = runtimeOverrides.createGracefulExitService || createGracefulExitService;
+    const createProductionDependenciesFn = runtimeOverrides.createProductionDependencies || createProductionDependencies;
     try {
         logger.console('Starting main application...', 'main');
         logger.info('Main application started, beginning initialization...', 'Main');
@@ -256,7 +310,7 @@ async function main(overrides = {}) {
                 clientId: config.twitch.clientId,
                 expectedUsername: config.twitch.username,
                 logger,
-                httpClient: overrides?.axios
+                httpClient: runtimeOverrides?.axios
             });
             try {
                 await twitchAuth.initialize();
@@ -417,7 +471,7 @@ async function main(overrides = {}) {
             }
         }
         
-        const dependencies = createProductionDependenciesFn(overrides);
+        const dependencies = createProductionDependenciesFn(runtimeOverrides);
         dependencies.displayQueue = displayQueue;
         dependencies.notificationManager = notificationManager;
         dependencies.twitchAuth = twitchAuth;

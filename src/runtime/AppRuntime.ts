@@ -158,6 +158,9 @@ class AppRuntime {
         if (!this.commandCooldownService || !this.platformLifecycleService) {
             throw new Error('AppRuntime requires commandCooldownService and platformLifecycleService');
         }
+        if (typeof this.platformLifecycleService.getAllPlatforms !== 'function') {
+            throw new Error('AppRuntime requires platformLifecycleService.getAllPlatforms function');
+        }
         const requiredDependencies = [
             'displayQueue',
             'notificationManager',
@@ -172,6 +175,9 @@ class AppRuntime {
         const missingDeps = requiredDependencies.filter((dep) => !this[dep]);
         if (missingDeps.length > 0) {
             throw new Error(`AppRuntime missing required dependencies: ${missingDeps.join(', ')}`);
+        }
+        if (typeof this.eventBus.subscribe !== 'function') {
+            throw new Error('AppRuntime requires eventBus.subscribe function');
         }
         this.gracefulExitService = null;
 
