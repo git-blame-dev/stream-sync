@@ -7,12 +7,16 @@ let activeSetTimeout = createCurrentSetTimeout();
 let activeSetInterval = createCurrentSetInterval();
 
 function validateTimeout(value, fallback = 5000, context = 'timeout') {
+    const safeFallback = (typeof fallback === 'number' && !isNaN(fallback) && fallback > 0 && isFinite(fallback))
+        ? fallback
+        : 5000;
+
     // Check if value is a valid positive number
     if (typeof value === 'number' && !isNaN(value) && value > 0 && isFinite(value)) {
         return value;
     }
     
-    return fallback;
+    return safeFallback;
 }
 
 function validateExponentialBackoff(baseDelay, multiplier = 2, attemptNumber = 0, maxDelay = 300000) {
