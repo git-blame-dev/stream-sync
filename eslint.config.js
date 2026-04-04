@@ -187,7 +187,7 @@ module.exports = [
     rules: srcTsRules
   },
   {
-    files: ['src/bootstrap.js', 'src/core/logging.js'],
+    files: ['src/core/logging.js'],
     languageOptions: nodeLanguageOptions,
     rules: {
       'no-console': 'off'

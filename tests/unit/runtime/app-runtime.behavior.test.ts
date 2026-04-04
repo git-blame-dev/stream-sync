@@ -47,7 +47,7 @@ const createDeps = (overrides = {}) => ({
 });
 
 const createRuntime = (depsOverrides = {}, configOverrides = {}) => {
-    const { AppRuntime } = require('../../../src/runtime/AppRuntime');
+    const { AppRuntime } = require('../../../src/runtime/AppRuntime.ts');
     const config = createConfigFixture(configOverrides);
     const deps = createDeps(depsOverrides);
     return new AppRuntime(config, deps);

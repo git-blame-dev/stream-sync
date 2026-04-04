@@ -1,6 +1,6 @@
 const { describe, it, beforeEach, afterEach, expect } = require('bun:test');
 
-const { main } = require('../../src/main');
+const { main } = require('../../src/main.ts');
 const { createDonationSpamDetection } = require('../../src/utils/spam-detection');
 const { createConfigFixture } = require('../helpers/config-fixture');
 const { useFakeTimers, useRealTimers, clearAllTimers } = require('../helpers/bun-timers');

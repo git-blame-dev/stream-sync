@@ -20,7 +20,11 @@
   "ignore": [
     "src/interfaces/PlatformEvents.ts",
     "src/core/types/config-types.ts",
-    "src/types/external-modules.d.ts"
+    "src/types/external-modules.d.ts",
+    "src/auth/oauth-flow.js",
+    "src/auth/twitch-oauth-scopes.js",
+    "src/auth/twitch-oauth-scopes.ts",
+    "src/utils/token-store.js"
   ],
   "ignoreIssues": {
     "tests/helpers/**/*.js": [
