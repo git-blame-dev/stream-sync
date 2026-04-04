@@ -9,7 +9,7 @@ setupAutomatedCleanup({
     logPerformanceMetrics: true
 });
 
-const { CommandParser } = require('../../src/chat/commands');
+const { CommandParser, runCommand } = require('../../src/chat/commands');
 
 describe('Command Integration System', () => {
     let commandParser;
@@ -405,6 +405,80 @@ describe('Command Integration System', () => {
             
             expect(result).toBeTruthy();
             expect(endTime - startTime).toBeLessThan(10);
+        });
+    });
+
+    describe('Configuration and execution behavior', () => {
+        test('updates parser config and returns stats snapshot', () => {
+            commandParser.updateConfig({
+                commands: {
+                    'test-command': '!test, test-source, keyword'
+                },
+                farewell: {
+                    command: '!bye'
+                },
+                vfx: {
+                    filePath: '/test/vfx'
+                },
+                general: {
+                    keywordParsingEnabled: false
+                }
+            });
+
+            const stats = commandParser.getStats();
+
+            expect(stats.keywordParsingEnabled).toBe(false);
+            expect(stats.vfxFilePath).toBe('/test/vfx');
+            expect(stats.totalCommands).toBe(1);
+            expect(stats.totalTriggers).toBeGreaterThan(0);
+            expect(stats.commands).toEqual({
+                'test-command': '!test, test-source, keyword'
+            });
+        });
+
+        test('runs command payloads through effects manager with defaults', async () => {
+            const calls = [];
+            const effectsManager = {
+                playMediaInOBS: async (...args) => calls.push(args)
+            };
+
+            await runCommand({
+                vfx: {
+                    mediaSource: 'test-source',
+                    filename: 'test-file'
+                }
+            }, '/fallback/vfx', effectsManager);
+
+            expect(calls).toHaveLength(1);
+            expect(calls[0][0]).toEqual({
+                mediaSource: 'test-source',
+                filename: 'test-file',
+                vfxFilePath: '/fallback/vfx',
+                duration: 5000
+            });
+            expect(calls[0][1]).toBe(true);
+        });
+
+        test('skips invalid command payloads and surfaces execution failures', async () => {
+            const calls = [];
+            const effectsManager = {
+                playMediaInOBS: async (...args) => calls.push(args)
+            };
+
+            await runCommand({}, '/fallback/vfx', effectsManager);
+            await runCommand({ vfx: {} }, '/fallback/vfx', effectsManager);
+
+            expect(calls).toHaveLength(0);
+
+            const failingEffectsManager = {
+                playMediaInOBS: async () => {
+                    throw new Error('test-run-command-failure');
+                }
+            };
+
+            await expect(runCommand({
+                mediaSource: 'test-source'
+            }, '/fallback/vfx', failingEffectsManager)).rejects.toThrow('test-run-command-failure');
         });
     });
 });

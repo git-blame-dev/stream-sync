@@ -113,7 +113,7 @@ describe('Startup wiring smoke', () => {
     });
 
     test('bootstrap file exists', () => {
-        const bootstrapPath = path.join(__dirname, '../../src/bootstrap.js');
+        const bootstrapPath = path.join(__dirname, '../../src/bootstrap.ts');
 
         expect(fs.existsSync(bootstrapPath)).toBe(true);
     });

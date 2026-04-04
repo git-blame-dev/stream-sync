@@ -43,7 +43,7 @@ describe('main.js event handler wiring', () => {
     const baseConfig = { general: {} };
 
     it('rejects construction when EventBus is unavailable', () => {
-        const { AppRuntime } = require('../../src/main.js');
+        const { AppRuntime } = require('../../src/main.ts');
         expect(() => new AppRuntime(baseConfig, createDeps({ eventBus: null })))
             .toThrow('AppRuntime missing required dependencies');
     });
