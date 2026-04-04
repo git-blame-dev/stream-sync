@@ -2,7 +2,7 @@ const { describe, test, expect } = require('bun:test');
 const { noOpLogger } = require('../../../../helpers/mock-factories');
 const {
     createTikTokConnectionOrchestrator
-} = require('../../../../../src/platforms/tiktok/connections/tiktok-connection-orchestrator');
+} = require('../../../../../src/platforms/tiktok/connections/tiktok-connection-orchestrator.ts');
 
 describe('TikTok connection orchestrator', () => {
     const buildPlatform = (overrides = {}) => ({

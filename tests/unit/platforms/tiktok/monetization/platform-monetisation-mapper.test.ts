@@ -3,9 +3,9 @@ const { restoreAllMocks } = require('../../../../helpers/bun-mock-utils');
 const { noOpLogger } = require('../../../../helpers/mock-factories');
 
 const EventEmitter = require('events');
-const { TikTokPlatform } = require('../../../../../src/platforms/tiktok');
+const { TikTokPlatform } = require('../../../../../src/platforms/tiktok.ts');
 const { PlatformEvents } = require('../../../../../src/interfaces/PlatformEvents');
-const { createTikTokEventFactory } = require('../../../../../src/platforms/tiktok/events/event-factory');
+const { createTikTokEventFactory } = require('../../../../../src/platforms/tiktok/events/event-factory.ts');
 
 describe('TikTokPlatform monetisation mapping', () => {
     let platform;

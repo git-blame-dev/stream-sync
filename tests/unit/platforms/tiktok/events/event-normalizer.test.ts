@@ -1,6 +1,6 @@
 const { describe, test, expect } = require('bun:test');
 
-const { normalizeTikTokGiftEvent } = require('../../../../../src/platforms/tiktok/events/event-normalizer');
+const { normalizeTikTokGiftEvent } = require('../../../../../src/platforms/tiktok/events/event-normalizer.ts');
 
 const baseGiftPayload = {
     user: {

@@ -1,7 +1,7 @@
 const { describe, it, beforeEach, afterEach, expect } = require('bun:test');
 const { createMockFn, restoreAllMocks } = require('../helpers/bun-mock-utils');
 const { noOpLogger } = require('../helpers/mock-factories');
-const { TikTokPlatform } = require('../../src/platforms/tiktok');
+const { TikTokPlatform } = require('../../src/platforms/tiktok.ts');
 
 describe('TikTok Platform Validation', () => {
     let mockDependencies;

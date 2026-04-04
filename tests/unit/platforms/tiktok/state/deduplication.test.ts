@@ -7,7 +7,7 @@ const {
     setSystemTime,
     advanceTimersByTime
 } = require('../../../../helpers/bun-timers');
-const { TikTokPlatform } = require('../../../../../src/platforms/tiktok');
+const { TikTokPlatform } = require('../../../../../src/platforms/tiktok.ts');
 
 const createPlatform = (configOverrides = {}, dependencyOverrides = {}) => {
     const logger = dependencyOverrides.logger || noOpLogger;

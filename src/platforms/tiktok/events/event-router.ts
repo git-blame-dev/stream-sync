@@ -1,0 +1,513 @@
+const { validateNormalizedMessage } = require('../../../utils/message-normalization');
+const { normalizeTikTokChatEvent } = require('./event-normalizer');
+const { PlatformEvents } = require('../../../interfaces/PlatformEvents');
+const { UNKNOWN_CHAT_MESSAGE, UNKNOWN_CHAT_USERNAME } = require('../../../constants/degraded-chat');
+const { getValidMessageParts } = require('../../../utils/message-parts');
+const { collectMissingFields, getMissingFields, mergeMissingFieldsMetadata } = require('../../../utils/missing-fields');
+
+const DEFAULT_CHAT_DEDUP_TTL_MS = 90 * 60 * 1000;
+const DEFAULT_CHAT_MAX_CACHE_SIZE = 10_000;
+const DEFAULT_CHAT_MAX_AGE_MS = 20 * 60 * 1000;
+
+function hasCanonicalMessageParts(normalizedData) {
+    return getValidMessageParts({ message: normalizedData?.message }).length > 0;
+}
+
+function isRecoverableTikTokChatNormalizationError(error) {
+    const message = error instanceof Error ? error.message : '';
+    return message === 'Missing TikTok message data'
+        || message === 'Missing TikTok userId (uniqueId)'
+        || message === 'Missing TikTok username (nickname)'
+        || message === 'Missing TikTok message text'
+        || message === 'Missing TikTok timestamp';
+}
+
+function buildDegradedTikTokChatEvent(platform, data = {}) {
+    const userData = data?.user && typeof data.user === 'object' ? data.user : {};
+    const userId = typeof userData.uniqueId === 'string' ? userData.uniqueId.trim() : '';
+    const username = typeof userData.nickname === 'string' ? userData.nickname.trim() : '';
+    const rawComment = typeof data.comment === 'string' ? data.comment : '';
+    const message = rawComment.trim();
+    const timestamp = typeof platform?._getTimestamp === 'function' ? platform._getTimestamp(data) : null;
+    const resolveEventTimestampMs = platform?.constructor?.resolveEventTimestampMs;
+    const resolvedCreateTimeMs = typeof resolveEventTimestampMs === 'function'
+        ? resolveEventTimestampMs(data)
+        : null;
+    const profilePicture = userData.profilePictureUrl
+        || (Array.isArray(userData.profilePicture?.url) ? userData.profilePicture.url[0] : null)
+        || null;
+
+    const missingFields = collectMissingFields({
+        userId: !!userId,
+        username: !!username,
+        message: !!message,
+        timestamp: typeof timestamp === 'string' && timestamp.trim().length > 0
+    });
+
+    return {
+        platform: platform?.platformName || 'tiktok',
+        ...(userId ? { userId } : {}),
+        username: username || UNKNOWN_CHAT_USERNAME,
+        message: {
+            text: message || UNKNOWN_CHAT_MESSAGE
+        },
+        ...(typeof timestamp === 'string' && timestamp.trim().length > 0 ? { timestamp } : {}),
+        isMod: !!data?.isModerator,
+        isPaypiggy: data?.userIdentity?.isSubscriberOfAnchor === true,
+        isBroadcaster: !!data?.isOwner,
+        metadata: mergeMissingFieldsMetadata({
+            profilePicture,
+            followRole: userData.followRole ?? null,
+            userBadges: Array.isArray(userData.userBadges) ? userData.userBadges : null,
+            createTime: resolvedCreateTimeMs || null,
+            numericId: typeof userData.userId === 'string' ? userData.userId.trim() : null
+        }, missingFields, {
+            ...(typeof timestamp === 'string' && timestamp.trim().length > 0 ? { sourceTimestamp: timestamp } : {})
+        }),
+        rawData: { data }
+    };
+}
+
+function getChatReplayConfig(platform) {
+    const provided = platform?.chatReplayProtectionConfig;
+    const ttlMs = Number.isFinite(provided?.ttlMs) && provided.ttlMs > 0
+        ? provided.ttlMs
+        : DEFAULT_CHAT_DEDUP_TTL_MS;
+    const maxCacheSize = Number.isFinite(provided?.maxCacheSize) && provided.maxCacheSize > 0
+        ? provided.maxCacheSize
+        : DEFAULT_CHAT_MAX_CACHE_SIZE;
+    const maxAgeMs = Number.isFinite(provided?.maxAgeMs) && provided.maxAgeMs > 0
+        ? provided.maxAgeMs
+        : DEFAULT_CHAT_MAX_AGE_MS;
+
+    return {
+        ttlMs,
+        maxCacheSize,
+        maxAgeMs
+    };
+}
+
+function getChatReplayState(platform) {
+    if (!platform._chatReplayIngressState || typeof platform._chatReplayIngressState !== 'object') {
+        platform._chatReplayIngressState = {
+            recentMessageIds: new Map()
+        };
+    }
+
+    if (!(platform._chatReplayIngressState.recentMessageIds instanceof Map)) {
+        platform._chatReplayIngressState.recentMessageIds = new Map();
+    }
+
+    return platform._chatReplayIngressState;
+}
+
+function getPlatformMessageId(platform, data) {
+    if (typeof platform?._getPlatformMessageId !== 'function') {
+        return null;
+    }
+
+    return platform._getPlatformMessageId(data);
+}
+
+function checkDuplicateChatMessage(platform, data) {
+    const messageId = getPlatformMessageId(platform, data);
+    if (!messageId) {
+        return { isDuplicate: false, messageId: null };
+    }
+
+    const { ttlMs, maxCacheSize } = getChatReplayConfig(platform);
+    const state = getChatReplayState(platform);
+    const now = Date.now();
+    const lastSeen = state.recentMessageIds.get(messageId);
+
+    if (lastSeen && (now - lastSeen) < ttlMs) {
+        return { isDuplicate: true, messageId };
+    }
+
+    state.recentMessageIds.set(messageId, now);
+
+    if (state.recentMessageIds.size > maxCacheSize) {
+        const cutoff = now - ttlMs;
+        for (const [id, seenAt] of state.recentMessageIds.entries()) {
+            if (seenAt < cutoff) {
+                state.recentMessageIds.delete(id);
+            }
+        }
+
+        while (state.recentMessageIds.size > maxCacheSize) {
+            const oldestKey = state.recentMessageIds.keys().next().value;
+            if (!oldestKey) {
+                break;
+            }
+            state.recentMessageIds.delete(oldestKey);
+        }
+    }
+
+    return { isDuplicate: false, messageId };
+}
+
+function isStaleChatReplay(platform, data, eventTimestampMs) {
+    if (eventTimestampMs === null) {
+        return false;
+    }
+
+    const { maxAgeMs } = getChatReplayConfig(platform);
+    return (Date.now() - eventTimestampMs) > maxAgeMs;
+}
+
+function cleanupTikTokEventListeners(platform) {
+    if (!platform?.connection) {
+        return;
+    }
+
+    const removeAllListeners = platform.connection.removeAllListeners;
+    if (typeof removeAllListeners !== 'function') {
+        platform.listenersConfigured = false;
+        return;
+    }
+
+    if (platform.WebcastEvent) {
+        const eventTypes = [
+            platform.WebcastEvent.CHAT,
+            platform.WebcastEvent.GIFT,
+            platform.WebcastEvent.FOLLOW,
+            platform.WebcastEvent.ROOM_USER,
+            platform.WebcastEvent.ENVELOPE,
+            platform.WebcastEvent.SUBSCRIBE,
+            platform.WebcastEvent.SUPER_FAN,
+            platform.WebcastEvent.SOCIAL,
+            platform.WebcastEvent.ERROR,
+            platform.WebcastEvent.DISCONNECT,
+            platform.WebcastEvent.STREAM_END
+        ];
+
+        eventTypes.forEach((eventType) => {
+            if (!eventType) {
+                return;
+            }
+
+            try {
+                removeAllListeners.call(platform.connection, eventType);
+            } catch (error) {
+                platform.errorHandler?.handleCleanupError(error, 'tiktok event listener cleanup');
+            }
+        });
+    }
+
+    const connectedEvent = platform.ControlEvent?.CONNECTED || 'connected';
+    const disconnectedEvent = platform.ControlEvent?.DISCONNECTED || 'disconnected';
+    const errorEvent = platform.ControlEvent?.ERROR || 'error';
+
+    // Remove rawData listener to prevent duplicate logging on reconnect
+    try {
+        removeAllListeners.call(platform.connection, 'rawData');
+    } catch (error) {
+        platform.errorHandler?.handleCleanupError(error, 'tiktok rawData listener cleanup');
+    }
+
+    [connectedEvent, disconnectedEvent, errorEvent].forEach((eventType) => {
+        if (!eventType) {
+            return;
+        }
+
+        try {
+            removeAllListeners.call(platform.connection, eventType);
+        } catch (error) {
+            platform.errorHandler?.handleCleanupError(error, 'tiktok event listener cleanup');
+        }
+    });
+
+    platform.listenersConfigured = false;
+}
+
+function setupTikTokEventListeners(platform) {
+    if (platform.listenersConfigured) {
+        return;
+    }
+
+    if (!platform.connection) {
+        const error = new Error('TikTok connection missing connection object');
+        platform.errorHandler?.handleConnectionError(error, 'connection', error.message);
+        throw error;
+    }
+
+    if (typeof platform.connection.on !== 'function') {
+        const error = new Error('TikTok connection missing event emitter interface (on/removeAllListeners)');
+        platform.errorHandler?.handleConnectionError(
+            error,
+            'connection',
+            'TikTok connection is missing required event emitter methods'
+        );
+        throw error;
+    }
+
+    cleanupTikTokEventListeners(platform);
+
+    platform.connection.on(platform.WebcastEvent.CHAT, async (data) => {
+        await platform._logIncomingEvent('chat', data);
+
+        try {
+            if (!data || typeof data !== 'object') {
+                platform.logger.warn('Received invalid chat data:', 'tiktok', { dataType: typeof data, data });
+                return;
+            }
+
+            if (typeof data.comment !== 'string') {
+                platform.logger.warn('Received chat data with invalid comment:', 'tiktok', {
+                    comment: data.comment,
+                    commentType: typeof data.comment,
+                    data
+                });
+            }
+
+            const resolveEventTimestampMs = platform?.constructor?.resolveEventTimestampMs;
+            const eventTimestampMs = (typeof resolveEventTimestampMs === 'function')
+                ? resolveEventTimestampMs(data)
+                : null;
+
+            if (platform.connectionTime > 0 && eventTimestampMs !== null && eventTimestampMs < platform.connectionTime) {
+                platform.logger.debug(`Filtering historical message (pre-connection): "${data.comment}"`, 'tiktok', {
+                    eventTimestamp: eventTimestampMs,
+                    connectionRecordedAt: platform.connectionTime
+                });
+                return;
+            }
+
+            const duplicateCheck = checkDuplicateChatMessage(platform, data);
+            if (duplicateCheck.isDuplicate) {
+                platform.logger.debug('Skipping duplicate TikTok chat message at ingress', 'tiktok', {
+                    messageId: duplicateCheck.messageId
+                });
+                return;
+            }
+
+            const isStaleReplay = isStaleChatReplay(platform, data, eventTimestampMs);
+            if (isStaleReplay) {
+                platform.logger.debug('Skipping stale TikTok chat replay at ingress', 'tiktok', {
+                    messageId: duplicateCheck.messageId,
+                    createTime: data?.common?.createTime ?? null
+                });
+                return;
+            }
+
+            let normalizedData;
+            try {
+                normalizedData = normalizeTikTokChatEvent(data, {
+                    platformName: platform.platformName,
+                    timestampService: platform.timestampService
+                });
+            } catch (error) {
+                if (!isRecoverableTikTokChatNormalizationError(error)) {
+                    throw error;
+                }
+                normalizedData = buildDegradedTikTokChatEvent(platform, data);
+            }
+            const validation = validateNormalizedMessage(normalizedData);
+
+            if (!validation.isValid) {
+                platform.logger.warn('Message normalization validation failed', 'tiktok', {
+                    issues: validation.errors,
+                    originalData: data
+                });
+            }
+
+            if (platform.selfMessageDetectionService) {
+                const messageData = {
+                    username: normalizedData.username,
+                    userId: normalizedData.userId,
+                    isBroadcaster: normalizedData.isBroadcaster
+                };
+
+                if (platform.selfMessageDetectionService.shouldFilterMessage('tiktok', messageData, platform.config)) {
+                    platform.logger.debug(`Filtering self-message from ${messageData.username}`, 'tiktok');
+                    return;
+                }
+            }
+
+            const messageText = typeof normalizedData?.message === 'string'
+                ? normalizedData.message
+                : (typeof normalizedData?.message?.text === 'string' ? normalizedData.message.text : '');
+            const missingFields = getMissingFields(normalizedData?.metadata);
+            const isMessageMarkedMissing = missingFields.includes('message');
+            if ((!messageText || messageText.trim() === '') && !hasCanonicalMessageParts(normalizedData) && !isMessageMarkedMissing) {
+                platform.logger.debug('Skipping empty message after normalization', 'tiktok', {
+                    originalComment: data.comment,
+                    normalizedMessage: messageText,
+                    messageParts: normalizedData?.message?.parts || []
+                });
+                return;
+            }
+
+            await platform._handleChatMessage(data, normalizedData);
+        } catch (error) {
+            platform.errorHandler.handleEventProcessingError(
+                error,
+                'chat-message',
+                data,
+                `Error processing chat message: ${error?.message || error}`
+            );
+        }
+    });
+
+    platform.connection.on(platform.WebcastEvent.GIFT, async (data) => {
+        await platform._logIncomingEvent('gift', data);
+
+        try {
+            await platform.handleTikTokGift(data);
+        } catch (error) {
+            platform.errorHandler.handleEventProcessingError(error, 'gift', data, 'Error processing gift');
+        }
+    });
+
+    platform.connection.on(platform.WebcastEvent.FOLLOW, async (data) => {
+        await platform._logIncomingEvent('follow', data);
+
+        try {
+            await platform.handleTikTokFollow(data);
+        } catch (error) {
+            platform.errorHandler.handleEventProcessingError(
+                error,
+                'follow',
+                data,
+                `Error processing follow: ${error?.message || error}`
+            );
+        }
+    });
+
+    if (typeof platform.WebcastEvent.ENVELOPE !== 'undefined') {
+        platform.connection.on(platform.WebcastEvent.ENVELOPE, async (data) => {
+            try {
+                await platform._logIncomingEvent('envelope', data);
+                await platform._handleStandardEvent('envelope', data, {
+                    factoryMethod: 'createEnvelope',
+                    emitType: PlatformEvents.ENVELOPE
+                });
+            } catch (error) {
+                platform.errorHandler.handleEventProcessingError(error, 'envelope', data, 'Error in handleEnvelopeNotification');
+            }
+        });
+    }
+
+    if (typeof platform.WebcastEvent.SUBSCRIBE !== 'undefined') {
+        platform.connection.on(platform.WebcastEvent.SUBSCRIBE, async (data) => {
+            await platform._logIncomingEvent('subscribe', data);
+
+            try {
+                await platform._handleStandardEvent('paypiggy', data, {
+                    factoryMethod: 'createSubscription',
+                    emitType: PlatformEvents.PAYPIGGY
+                });
+            } catch (error) {
+                platform.errorHandler.handleEventProcessingError(error, 'subscribe', data, 'Error in handleSubscriptionNotification');
+            }
+        });
+    }
+
+    if (typeof platform.WebcastEvent.SUPER_FAN !== 'undefined') {
+        platform.connection.on(platform.WebcastEvent.SUPER_FAN, async (data) => {
+            await platform._logIncomingEvent('superfan', data);
+
+            try {
+                await platform._handleStandardEvent('paypiggy', data, {
+                    factoryMethod: 'createSuperfan',
+                    emitType: PlatformEvents.PAYPIGGY
+                });
+            } catch (error) {
+                platform.errorHandler.handleEventProcessingError(error, 'superfan', data, 'Error in handleSuperfanNotification');
+            }
+        });
+    }
+
+    if (typeof platform.WebcastEvent.SOCIAL !== 'undefined') {
+        platform.connection.on(platform.WebcastEvent.SOCIAL, async (data) => {
+            await platform._logIncomingEvent('social', data);
+
+            try {
+                await platform.handleTikTokSocial(data);
+            } catch (error) {
+                platform.errorHandler.handleEventProcessingError(error, 'social', data, 'Error processing social event');
+            }
+        });
+    }
+
+    platform.connection.on(platform.WebcastEvent.ROOM_USER, (data) => {
+        platform._logIncomingEvent('roomUser', data);
+        platform.cachedViewerCount = data.viewerCount;
+
+        const timestamp = typeof platform._getTimestamp === 'function'
+            ? platform._getTimestamp(data)
+            : null;
+        if (!timestamp) {
+            platform.logger.warn('[TikTok Viewer Count] Missing timestamp in room user payload', 'tiktok', { data });
+            return;
+        }
+
+        platform._emitPlatformEvent(PlatformEvents.VIEWER_COUNT, {
+            platform: 'tiktok',
+            count: data.viewerCount,
+            timestamp
+        });
+    });
+
+    const disconnectedEvent = platform.ControlEvent?.DISCONNECTED || 'disconnected';
+    const errorEvent = platform.ControlEvent?.ERROR || 'error';
+
+    platform.connection.on(disconnectedEvent, async (reason) => {
+        await platform._logIncomingEvent('disconnected', reason);
+        try {
+            await platform.handleConnectionIssue(reason, false);
+        } catch (error) {
+            platform.errorHandler.handleEventProcessingError(
+                error,
+                'disconnected',
+                reason,
+                'Error handling disconnected control event'
+            );
+        }
+    });
+
+    platform.connection.on(errorEvent, (err) => {
+        platform._logIncomingEvent('control-error', err);
+        platform.handleConnectionError(err);
+    });
+
+    platform.connection.on(platform.WebcastEvent.ERROR, (err) => {
+        platform._logIncomingEvent('error', err);
+        platform.errorHandler.handleConnectionError(
+            err,
+            'webcast connection',
+            `Webcast Connection Error: ${err.message}`
+        );
+
+        if (platform.connectionActive) {
+            platform.handleRetry(err);
+        }
+    });
+
+    platform.connection.on(platform.WebcastEvent.DISCONNECT, async () => {
+        platform._logIncomingEvent('disconnect', {});
+        platform.logger.info('Disconnected from webcast', 'tiktok');
+        platform.connectionActive = false;
+        platform.listenersConfigured = false;
+        await platform.handleConnectionIssue({ message: 'WebSocket disconnected' }, false);
+    });
+
+    if (typeof platform.WebcastEvent.STREAM_END !== 'undefined') {
+        platform.connection.on(platform.WebcastEvent.STREAM_END, async (data) => {
+            await platform._logIncomingEvent('streamEnd', data);
+            await platform._handleStreamEnd();
+        });
+    }
+
+    platform.connection.on('rawData', async (payload) => {
+        const eventType = payload?.type || 'unknown';
+        await platform._logIncomingEvent(eventType, payload);
+    });
+
+    platform.listenersConfigured = true;
+}
+
+module.exports = {
+    cleanupTikTokEventListeners,
+    setupTikTokEventListeners
+};

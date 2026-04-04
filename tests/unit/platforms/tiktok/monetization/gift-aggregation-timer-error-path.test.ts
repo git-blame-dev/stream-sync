@@ -2,7 +2,7 @@ const { describe, it, expect, beforeEach, afterEach } = require('bun:test');
 const { createMockFn, restoreAllMocks } = require('../../../../helpers/bun-mock-utils');
 const { noOpLogger } = require('../../../../helpers/mock-factories');
 
-const { TikTokPlatform } = require('../../../../../src/platforms/tiktok');
+const { TikTokPlatform } = require('../../../../../src/platforms/tiktok.ts');
 
 describe('TikTok gift processing', () => {
     let originalNodeEnv;

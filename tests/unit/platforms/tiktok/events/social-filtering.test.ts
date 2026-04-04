@@ -4,7 +4,7 @@ const { initializeTestLogging } = require('../../../../helpers/test-setup');
 
 initializeTestLogging();
 
-const { TikTokPlatform } = require('../../../../../src/platforms/tiktok');
+const { TikTokPlatform } = require('../../../../../src/platforms/tiktok.ts');
 const isPreloadMocked = !TikTokPlatform || !TikTokPlatform.prototype || !TikTokPlatform.prototype.handleTikTokSocial;
 const { createMockTikTokPlatformDependencies, noOpLogger } = require('../../../../helpers/mock-factories');
 const testClock = require('../../../../helpers/test-clock');

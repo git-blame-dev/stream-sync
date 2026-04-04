@@ -5,7 +5,7 @@ const { createConfigFixture } = require('../../../../helpers/config-fixture');
 
 const PlatformEventRouter = require('../../../../../src/services/PlatformEventRouter');
 const { PlatformEvents } = require('../../../../../src/interfaces/PlatformEvents');
-const { TikTokPlatform } = require('../../../../../src/platforms/tiktok');
+const { TikTokPlatform } = require('../../../../../src/platforms/tiktok.ts');
 const testClock = require('../../../../helpers/test-clock');
 
 describe('TikTokPlatform unified event contract (expected behavior)', () => {

@@ -3,7 +3,7 @@ const { DEFAULT_AVATAR_URL } = require('../../../../../src/constants/avatar');
 
 describe('TikTok event factory behavior', () => {
     it('includes boolean fields in chat message events', () => {
-        const { createTikTokEventFactory } = require('../../../../../src/platforms/tiktok/events/event-factory');
+        const { createTikTokEventFactory } = require('../../../../../src/platforms/tiktok/events/event-factory.ts');
 
         const eventFactory = createTikTokEventFactory({
             platformName: 'tiktok',
@@ -32,7 +32,7 @@ describe('TikTok event factory behavior', () => {
     });
 
     it('accepts canonical message object text for chat message events', () => {
-        const { createTikTokEventFactory } = require('../../../../../src/platforms/tiktok/events/event-factory');
+        const { createTikTokEventFactory } = require('../../../../../src/platforms/tiktok/events/event-factory.ts');
 
         const eventFactory = createTikTokEventFactory({
             platformName: 'tiktok',
@@ -56,7 +56,7 @@ describe('TikTok event factory behavior', () => {
     });
 
     it('emits canonical badgeImages for chat message events', () => {
-        const { createTikTokEventFactory } = require('../../../../../src/platforms/tiktok/events/event-factory');
+        const { createTikTokEventFactory } = require('../../../../../src/platforms/tiktok/events/event-factory.ts');
 
         const eventFactory = createTikTokEventFactory({
             platformName: 'tiktok',
@@ -87,7 +87,7 @@ describe('TikTok event factory behavior', () => {
     });
 
     it('preserves avatarUrl on gift events', () => {
-        const { createTikTokEventFactory } = require('../../../../../src/platforms/tiktok/events/event-factory');
+        const { createTikTokEventFactory } = require('../../../../../src/platforms/tiktok/events/event-factory.ts');
 
         const eventFactory = createTikTokEventFactory({
             platformName: 'tiktok',
@@ -112,7 +112,7 @@ describe('TikTok event factory behavior', () => {
     });
 
     it('preserves avatarUrl on follow events', () => {
-        const { createTikTokEventFactory } = require('../../../../../src/platforms/tiktok/events/event-factory');
+        const { createTikTokEventFactory } = require('../../../../../src/platforms/tiktok/events/event-factory.ts');
 
         const eventFactory = createTikTokEventFactory({
             platformName: 'tiktok'
@@ -129,7 +129,7 @@ describe('TikTok event factory behavior', () => {
     });
 
     it('emits fallback avatarUrl for follow events when payload avatar is missing', () => {
-        const { createTikTokEventFactory } = require('../../../../../src/platforms/tiktok/events/event-factory');
+        const { createTikTokEventFactory } = require('../../../../../src/platforms/tiktok/events/event-factory.ts');
 
         const eventFactory = createTikTokEventFactory({
             platformName: 'tiktok'
@@ -145,7 +145,7 @@ describe('TikTok event factory behavior', () => {
     });
 
     it('emits fallback avatarUrl for gift events when payload avatar is missing', () => {
-        const { createTikTokEventFactory } = require('../../../../../src/platforms/tiktok/events/event-factory');
+        const { createTikTokEventFactory } = require('../../../../../src/platforms/tiktok/events/event-factory.ts');
 
         const eventFactory = createTikTokEventFactory({
             platformName: 'tiktok',
@@ -167,7 +167,7 @@ describe('TikTok event factory behavior', () => {
     });
 
     it('defaults boolean fields to false when not provided', () => {
-        const { createTikTokEventFactory } = require('../../../../../src/platforms/tiktok/events/event-factory');
+        const { createTikTokEventFactory } = require('../../../../../src/platforms/tiktok/events/event-factory.ts');
 
         const eventFactory = createTikTokEventFactory({
             platformName: 'tiktok',
@@ -189,7 +189,7 @@ describe('TikTok event factory behavior', () => {
     });
 
     it('builds error events with top-level timestamp', () => {
-        const { createTikTokEventFactory } = require('../../../../../src/platforms/tiktok/events/event-factory');
+        const { createTikTokEventFactory } = require('../../../../../src/platforms/tiktok/events/event-factory.ts');
 
         const eventFactory = createTikTokEventFactory({
             platformName: 'tiktok',
@@ -218,7 +218,7 @@ describe('TikTok event factory behavior', () => {
     });
 
     it('produces connection lifecycle events that satisfy platform schemas', () => {
-        const { createTikTokEventFactory } = require('../../../../../src/platforms/tiktok/events/event-factory');
+        const { createTikTokEventFactory } = require('../../../../../src/platforms/tiktok/events/event-factory.ts');
 
         const eventFactory = createTikTokEventFactory({
             platformName: 'tiktok',
@@ -234,7 +234,7 @@ describe('TikTok event factory behavior', () => {
     });
 
     it('rejects chat events when text is empty and message parts are missing', () => {
-        const { createTikTokEventFactory } = require('../../../../../src/platforms/tiktok/events/event-factory');
+        const { createTikTokEventFactory } = require('../../../../../src/platforms/tiktok/events/event-factory.ts');
 
         const eventFactory = createTikTokEventFactory({
             platformName: 'tiktok',
@@ -252,7 +252,7 @@ describe('TikTok event factory behavior', () => {
     });
 
     it('allows degraded chat events when metadata.missingFields marks missing identity and timestamp', () => {
-        const { createTikTokEventFactory } = require('../../../../../src/platforms/tiktok/events/event-factory');
+        const { createTikTokEventFactory } = require('../../../../../src/platforms/tiktok/events/event-factory.ts');
 
         const eventFactory = createTikTokEventFactory({
             platformName: 'tiktok',
@@ -278,7 +278,7 @@ describe('TikTok event factory behavior', () => {
     });
 
     it('allows degraded chat events with unknown-message placeholder when message is marked missing', () => {
-        const { createTikTokEventFactory } = require('../../../../../src/platforms/tiktok/events/event-factory');
+        const { createTikTokEventFactory } = require('../../../../../src/platforms/tiktok/events/event-factory.ts');
 
         const eventFactory = createTikTokEventFactory({
             platformName: 'tiktok',
@@ -301,7 +301,7 @@ describe('TikTok event factory behavior', () => {
     });
 
     it('emits canonical message.parts for emote-only chat payloads', () => {
-        const { createTikTokEventFactory } = require('../../../../../src/platforms/tiktok/events/event-factory');
+        const { createTikTokEventFactory } = require('../../../../../src/platforms/tiktok/events/event-factory.ts');
 
         const eventFactory = createTikTokEventFactory({
             platformName: 'tiktok',
@@ -341,7 +341,7 @@ describe('TikTok event factory behavior', () => {
     });
 
     it('creates subscription paypiggy event with canonical payload fields', () => {
-        const { createTikTokEventFactory } = require('../../../../../src/platforms/tiktok/events/event-factory');
+        const { createTikTokEventFactory } = require('../../../../../src/platforms/tiktok/events/event-factory.ts');
 
         const eventFactory = createTikTokEventFactory({
             platformName: 'tiktok'
@@ -375,7 +375,7 @@ describe('TikTok event factory behavior', () => {
     });
 
     it('creates superfan paypiggy event with superfan tier', () => {
-        const { createTikTokEventFactory } = require('../../../../../src/platforms/tiktok/events/event-factory');
+        const { createTikTokEventFactory } = require('../../../../../src/platforms/tiktok/events/event-factory.ts');
 
         const eventFactory = createTikTokEventFactory({
             platformName: 'tiktok'

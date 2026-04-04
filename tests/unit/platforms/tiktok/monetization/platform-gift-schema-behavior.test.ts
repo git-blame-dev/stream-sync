@@ -2,7 +2,7 @@ const { describe, it, expect, beforeEach, afterEach } = require('bun:test');
 const { createMockFn, restoreAllMocks } = require('../../../../helpers/bun-mock-utils');
 const { useFakeTimers, useRealTimers, runOnlyPendingTimers } = require('../../../../helpers/bun-timers');
 
-const { TikTokPlatform } = require('../../../../../src/platforms/tiktok');
+const { TikTokPlatform } = require('../../../../../src/platforms/tiktok.ts');
 const { createMockTikTokPlatformDependencies } = require('../../../../helpers/mock-factories');
 const testClock = require('../../../../helpers/test-clock');
 

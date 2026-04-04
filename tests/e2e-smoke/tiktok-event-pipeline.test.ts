@@ -3,7 +3,7 @@ const EventEmitter = require('events');
 
 const NotificationManager = require('../../src/notifications/NotificationManager');
 const PlatformEventRouter = require('../../src/services/PlatformEventRouter');
-const { TikTokPlatform } = require('../../src/platforms/tiktok');
+const { TikTokPlatform } = require('../../src/platforms/tiktok.ts');
 const { createTextProcessingManager } = require('../../src/utils/text-processing');
 const { createConfigFixture } = require('../helpers/config-fixture');
 const { createMockDisplayQueue, noOpLogger } = require('../helpers/mock-factories');
@@ -15,7 +15,7 @@ const {
     advanceTimersByTime,
     clearAllTimers
 } = require('../helpers/bun-timers');
-const { setupTikTokEventListeners, cleanupTikTokEventListeners } = require('../../src/platforms/tiktok/events/event-router');
+const { setupTikTokEventListeners, cleanupTikTokEventListeners } = require('../../src/platforms/tiktok/events/event-router.ts');
 const { expectNoTechnicalArtifacts } = require('../helpers/assertion-helpers');
 
 const createEventBus = () => {
