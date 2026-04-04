@@ -2,7 +2,7 @@ const { describe, expect, it, beforeEach, afterEach } = require('bun:test');
 const { createMockFn, restoreAllMocks } = require('../helpers/bun-mock-utils');
 const { noOpLogger } = require('../helpers/mock-factories');
 const { secrets, _resetForTesting, initializeStaticSecrets } = require('../../src/core/secrets');
-const { TwitchApiClient } = require('../../src/utils/api-clients/twitch-api-client');
+const { TwitchApiClient } = require('../../src/utils/api-clients/twitch-api-client.ts');
 
 describe('TwitchApiClient authentication', () => {
     let mockLogger;

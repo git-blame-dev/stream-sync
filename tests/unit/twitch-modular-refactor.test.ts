@@ -12,7 +12,7 @@ setupAutomatedCleanup({
 });
 
 const { ConnectionState, ConnectionStateFactory } = require('../../src/utils/platform-connection-state');
-const { TwitchApiClient } = require('../../src/utils/api-clients/twitch-api-client');
+const { TwitchApiClient } = require('../../src/utils/api-clients/twitch-api-client.ts');
 const { TwitchViewerCountProvider } = require('../../src/utils/viewer-count-providers');
 
 class TwitchPlatform {

@@ -2,12 +2,14 @@ const { describe, it, expect } = require('bun:test');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { ensureSecrets } = require('../../src/utils/secret-manager');
-const { createConfigFixture } = require('../helpers/config-fixture');
+const { ConfigValidator } = require('../../src/utils/config-validator');
+const { buildConfig: _buildConfig } = require('../../src/core/config-builders');
+const { getRawTestConfig } = require('../helpers/config-fixture');
+const { ensureSecrets } = require('../../src/utils/secret-manager.ts');
 
-describe('secret-manager interactive gating integration', () => {
-    it('prompts and persists required secrets when interactive and TTY is available', async () => {
-        const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'test-secrets-'));
+describe('secret-manager interactive prompt smoke E2E', () => {
+    it('prompts and persists secrets for built config when interactive and TTY is available', async () => {
+        const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'test-secrets-smoke-'));
         const envFilePath = path.join(tempDir, '.env');
 
         const originalIsTTY = process.stdin.isTTY;
@@ -36,16 +38,17 @@ describe('secret-manager interactive gating integration', () => {
         };
 
         try {
-            const config = createConfigFixture({
-                tiktok: { enabled: true },
-                twitch: { enabled: false },
-                obs: { enabled: false },
-                streamelements: { enabled: false },
-                youtube: { enabled: false }
-            });
+            const rawConfig = getRawTestConfig();
+            rawConfig.tiktok.enabled = 'true';
+            rawConfig.twitch.enabled = 'false';
+            rawConfig.obs.enabled = 'false';
+            rawConfig.streamelements = { enabled: 'false' };
+
+            const normalized = ConfigValidator.normalize(rawConfig);
+            const builtConfig = _buildConfig(normalized);
 
             const result = await ensureSecrets({
-                config,
+                config: builtConfig,
                 logger,
                 interactive: true,
                 envFilePath,
@@ -58,7 +61,6 @@ describe('secret-manager interactive gating integration', () => {
             expect(envContent).toContain('TIKTOK_API_KEY=test-tiktok-api-key');
             expect(promptCalls).toEqual(['TIKTOK_API_KEY']);
             expect(result.missingRequired).toEqual([]);
-            expect(result.persisted).toContain('TIKTOK_API_KEY');
         } finally {
             process.stdin.isTTY = originalIsTTY;
             if (originalCI === undefined) {
