@@ -9,7 +9,7 @@ const DEFAULT_HTTP_USER_AGENTS = [
     'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36 OPR/106.0.0.0'
 ];
 
-const parseUserAgentList = (value: unknown): string[] => {
+const parseUserAgentList = (value) => {
     if (Array.isArray(value)) {
         return value
             .map((entry) => (entry === undefined || entry === null ? '' : String(entry).trim()))

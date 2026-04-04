@@ -7,7 +7,9 @@ const {
     validateExponentialBackoff,
     safeSetTimeout,
     safeSetInterval
-} = require('../../../src/utils/timeout-validator');
+} = require('../../../src/utils/timeout-validator.ts');
+
+export {};
 
 describe('Timeout Validator', () => {
     let timeoutSpy;

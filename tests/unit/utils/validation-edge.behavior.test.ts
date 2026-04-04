@@ -2,7 +2,9 @@ const { describe, expect, it } = require('bun:test');
 const {
     sanitizeForDisplay,
     formatUsername12
-} = require('../../../src/utils/validation');
+} = require('../../../src/utils/validation.ts');
+
+export {};
 
 describe('validation utilities', () => {
     describe('sanitizeForDisplay', () => {

@@ -5,13 +5,15 @@ initializeTestLogging();
 
 const {
     handleUserFacingError
-} = require('../../../src/utils/user-friendly-errors');
+} = require('../../../src/utils/user-friendly-errors.ts');
 const {
     expectNoTechnicalArtifacts,
     expectContentReadabilityForAudience
 } = require('../../helpers/assertion-helpers');
 const { setupAutomatedCleanup } = require('../../helpers/mock-lifecycle');
 const { noOpLogger } = require('../../helpers/mock-factories');
+
+export {};
 
 setupAutomatedCleanup({
     clearCallsBeforeEach: true,

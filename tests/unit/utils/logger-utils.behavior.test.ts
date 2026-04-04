@@ -5,7 +5,9 @@ const {
     getLazyLogger,
     getLazyUnifiedLogger,
     safeObjectStringify
-} = require('../../../src/utils/logger-utils');
+} = require('../../../src/utils/logger-utils.ts');
+
+export {};
 
 describe('logger-utils behavior', () => {
     const originalArgv = [...process.argv];
@@ -41,7 +43,8 @@ describe('logger-utils behavior', () => {
         expect(safeObjectStringify(42)).toBe('42');
         expect(safeObjectStringify(true)).toBe('true');
 
-        const circ = {}; circ.self = circ;
+        const circ: { self?: unknown } = {};
+        circ.self = circ;
         expect(safeObjectStringify(circ, 1)).toContain('stringify failed');
     });
 
