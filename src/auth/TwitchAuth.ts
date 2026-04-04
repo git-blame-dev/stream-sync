@@ -30,6 +30,31 @@ const ensureCamelTokenPayload = (payload, sourceLabel) => {
         throw new Error(`${sourceLabel} must include accessToken`);
     }
 
+    if (typeof payload.accessToken !== 'string' || payload.accessToken.trim() === '') {
+        throw new Error(`${sourceLabel} must provide string accessToken`);
+    }
+
+    if (Object.prototype.hasOwnProperty.call(payload, 'refreshToken')
+        && payload.refreshToken !== null
+        && payload.refreshToken !== undefined
+        && typeof payload.refreshToken !== 'string') {
+        throw new Error(`${sourceLabel} must provide string refreshToken when present`);
+    }
+
+    if (Object.prototype.hasOwnProperty.call(payload, 'expiresIn')
+        && payload.expiresIn !== null
+        && payload.expiresIn !== undefined
+        && !Number.isFinite(payload.expiresIn)) {
+        throw new Error(`${sourceLabel} must provide numeric expiresIn when present`);
+    }
+
+    if (Object.prototype.hasOwnProperty.call(payload, 'expiresAt')
+        && payload.expiresAt !== null
+        && payload.expiresAt !== undefined
+        && !Number.isFinite(payload.expiresAt)) {
+        throw new Error(`${sourceLabel} must provide numeric expiresAt when present`);
+    }
+
     return {
         accessToken: payload.accessToken,
         refreshToken: payload.refreshToken,
