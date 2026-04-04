@@ -25,7 +25,18 @@ describe('TypeScript toolchain migration gates behavior', () => {
     it('keeps Bun test preload contracts explicit', () => {
         const bunfig = readFileSync(join(repoRoot, 'bunfig.toml'), 'utf8');
 
-        expect(bunfig).toContain('./tests/setup/bun.prerun.js');
-        expect(bunfig).toContain('./tests/setup/bun.setup.js');
+        expect(bunfig).toContain('./tests/setup/bun.prerun.ts');
+        expect(bunfig).toContain('./tests/setup/bun.setup.ts');
+    });
+
+    it('keeps lint script contracts on TypeScript tooling paths', () => {
+        const lintScript = packageJson.scripts.lint;
+
+        expect(lintScript).toContain('bun scripts/lint/no-raw-timeouts.ts');
+        expect(lintScript).toContain('bun scripts/lint/no-mock-timers-in-tests.ts');
+        expect(lintScript).toContain('bun scripts/lint/no-implementation-test-patterns.ts');
+        expect(lintScript).toContain('bun scripts/lint/no-implicit-test-defaults.ts');
+        expect(lintScript).toContain('bun scripts/lint/prefer-double-bang.ts');
+        expect(lintScript).toContain('bun x eslint');
     });
 });
