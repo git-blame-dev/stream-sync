@@ -36,7 +36,7 @@ const PROMISE_RACE_ALLOWLIST = new Set([
 ]);
 const RAW_TIMER_ALLOWLIST = new Set([
   'src/utils/timeout-validator.ts',
-  'tests/setup/bun.setup.js'
+  'tests/setup/bun.setup.ts'
 ]);
 
 function normalizePath(filePath) {
