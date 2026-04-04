@@ -43,6 +43,20 @@ describe('core/logging behavior', () => {
         expect(logging.getLoggingConfig()).toBe(loggingConfig);
     });
 
+    it('parses string and numeric debug mode values predictably', () => {
+        logging.setDebugMode('false');
+        expect(logging.getDebugMode()).toBe(false);
+
+        logging.setDebugMode('true');
+        expect(logging.getDebugMode()).toBe(true);
+
+        logging.setDebugMode(0);
+        expect(logging.getDebugMode()).toBe(false);
+
+        logging.setDebugMode(1);
+        expect(logging.getDebugMode()).toBe(true);
+    });
+
     it('writes console and file outputs through unified logger', () => {
         const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'test-logs-'));
         const stdoutCapture = captureStdout();

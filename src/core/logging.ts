@@ -33,6 +33,28 @@ function getDebugMode() {
 }
 
 function setDebugMode(enabled: unknown) {
+    if (typeof enabled === 'boolean') {
+        debugMode = enabled;
+        return;
+    }
+
+    if (typeof enabled === 'number') {
+        debugMode = enabled !== 0;
+        return;
+    }
+
+    if (typeof enabled === 'string') {
+        const normalized = enabled.trim().toLowerCase();
+        if (normalized === 'true' || normalized === '1' || normalized === 'yes' || normalized === 'on') {
+            debugMode = true;
+            return;
+        }
+        if (normalized === 'false' || normalized === '0' || normalized === 'no' || normalized === 'off' || normalized === '') {
+            debugMode = false;
+            return;
+        }
+    }
+
     debugMode = !!enabled;
 }
 
