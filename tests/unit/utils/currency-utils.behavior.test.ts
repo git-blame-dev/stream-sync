@@ -1,6 +1,8 @@
 const { describe, expect, it } = require('bun:test');
 const { noOpLogger } = require('../../helpers/mock-factories');
-const { normalizeCurrency } = require('../../../src/utils/currency-utils');
+const { normalizeCurrency } = require('../../../src/utils/currency-utils.ts');
+
+export {};
 
 describe('currency-utils behavior', () => {
     it('normalizes unknown currency to XXX', () => {

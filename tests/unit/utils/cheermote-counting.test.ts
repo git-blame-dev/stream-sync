@@ -1,5 +1,7 @@
-const { CheermoteProcessor } = require('../../../src/utils/cheermote-processor');
-const { extractTwitchMessageData } = require('../../../src/utils/message-normalization');
+const { CheermoteProcessor } = require('../../../src/utils/cheermote-processor.ts');
+const { extractTwitchMessageData } = require('../../../src/utils/message-normalization.ts');
+
+export {};
 
 describe('Cheermote counting', () => {
     it('counts cheermotes and totals bits from EventSub fragments', () => {
@@ -47,5 +49,32 @@ describe('Cheermote counting', () => {
             totalBits: 200,
             prefix: 'uni'
         }));
+    });
+
+    it('returns an empty result when no cheermote fragments are present', () => {
+        const result = CheermoteProcessor.processEventSubFragments([
+            { type: 'text', text: 'hello world' }
+        ]);
+
+        expect(result).toEqual({
+            totalBits: 0,
+            primaryType: null,
+            cleanPrimaryType: null,
+            textContent: '',
+            mixedTypes: false,
+            otherTypesCount: 0,
+            types: []
+        });
+    });
+
+    it('returns mixed type metadata when multiple cheermote prefixes are present', () => {
+        const result = CheermoteProcessor.processEventSubFragments([
+            { type: 'cheermote', text: 'Cheer100', cheermote: { prefix: 'Cheer100', bits: 100 } },
+            { type: 'cheermote', text: 'Party50', cheermote: { prefix: 'Party50', bits: 50 } }
+        ]);
+
+        expect(result.mixedTypes).toBe(true);
+        expect(result.otherTypesCount).toBe(1);
+        expect(result.types).toHaveLength(2);
     });
 });

@@ -1,6 +1,8 @@
 const { describe, test, expect } = require('bun:test');
-const NotificationBuilder = require('../../../src/utils/notification-builder');
-const { getAnonymousUsername } = require('../../../src/utils/validation');
+const NotificationBuilder = require('../../../src/utils/notification-builder.ts');
+const { getAnonymousUsername } = require('../../../src/utils/validation.ts');
+
+export {};
 
 describe('NotificationBuilder', () => {
     test('builds a basic notification object from minimal input', () => {
@@ -48,6 +50,17 @@ describe('NotificationBuilder', () => {
 
         expect(result1).toBeNull();
         expect(result2).toBeNull();
+    });
+
+    test('returns null for legacy paid alias notification types', () => {
+        const notification = NotificationBuilder.build({
+            platform: 'youtube',
+            type: 'member',
+            username: 'test-member-user',
+            userId: 'test-member-user-id'
+        });
+
+        expect(notification).toBeNull();
     });
 
     test('supports YouTube, Twitch, and TikTok platforms', () => {
@@ -99,6 +112,33 @@ describe('NotificationBuilder', () => {
         expect(notification.displayMessage).toContain('Test Member Plus');
         expect(notification.logMessage).toContain('Member');
         expect(notification.logMessage).toContain('Test Member Plus');
+    });
+
+    test('formats gifted Twitch subscriptions with tier suffix in user-facing copy', () => {
+        const notification = NotificationBuilder.build({
+            platform: 'twitch',
+            type: 'platform:giftpaypiggy',
+            username: 'test-tier-user',
+            userId: 'test-tier-user-id',
+            giftCount: 3,
+            tier: '2000'
+        });
+
+        expect(notification.displayMessage).toContain('gifted 3 subscriptions');
+        expect(notification.displayMessage).toContain('(Tier 2)');
+        expect(notification.logMessage).toContain('(Tier 2)');
+    });
+
+    test('uses singular viewer wording for raid tts output', () => {
+        const notification = NotificationBuilder.build({
+            platform: 'youtube',
+            type: 'platform:raid',
+            username: 'test-raid-lead',
+            userId: 'test-raid-lead-id',
+            viewerCount: 1
+        });
+
+        expect(notification.ttsMessage).toContain('1 viewer');
     });
 
     test('renders explicit error copy for monetization error payloads', () => {

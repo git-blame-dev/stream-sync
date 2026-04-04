@@ -1,6 +1,6 @@
 describe('monetization error payload no-fallback behavior', () => {
     it('omits username when not provided', () => {
-        const { createMonetizationErrorPayload } = require('../../../src/utils/monetization-error-utils');
+        const { createMonetizationErrorPayload } = require('../../../src/utils/monetization-error-utils.ts');
 
         const payload = createMonetizationErrorPayload({
             notificationType: 'platform:gift',
@@ -18,7 +18,7 @@ describe('monetization error payload no-fallback behavior', () => {
     });
 
     it('includes username when provided', () => {
-        const { createMonetizationErrorPayload } = require('../../../src/utils/monetization-error-utils');
+        const { createMonetizationErrorPayload } = require('../../../src/utils/monetization-error-utils.ts');
 
         const payload = createMonetizationErrorPayload({
             notificationType: 'platform:gift',
@@ -38,7 +38,7 @@ describe('monetization error payload no-fallback behavior', () => {
     });
 
     it('includes avatarUrl when provided', () => {
-        const { createMonetizationErrorPayload } = require('../../../src/utils/monetization-error-utils');
+        const { createMonetizationErrorPayload } = require('../../../src/utils/monetization-error-utils.ts');
 
         const payload = createMonetizationErrorPayload({
             notificationType: 'platform:gift',
@@ -51,7 +51,7 @@ describe('monetization error payload no-fallback behavior', () => {
     });
 
     it('normalizes shorthand notificationType to canonical platform:* type', () => {
-        const { createMonetizationErrorPayload } = require('../../../src/utils/monetization-error-utils');
+        const { createMonetizationErrorPayload } = require('../../../src/utils/monetization-error-utils.ts');
 
         const payload = createMonetizationErrorPayload({
             notificationType: 'gift',
@@ -63,7 +63,7 @@ describe('monetization error payload no-fallback behavior', () => {
     });
 
     it('normalizes platform casing to canonical lowercase value', () => {
-        const { createMonetizationErrorPayload } = require('../../../src/utils/monetization-error-utils');
+        const { createMonetizationErrorPayload } = require('../../../src/utils/monetization-error-utils.ts');
 
         const payload = createMonetizationErrorPayload({
             notificationType: 'gift',
@@ -75,7 +75,7 @@ describe('monetization error payload no-fallback behavior', () => {
     });
 
     it('omits gift fields when not provided', () => {
-        const { createMonetizationErrorPayload } = require('../../../src/utils/monetization-error-utils');
+        const { createMonetizationErrorPayload } = require('../../../src/utils/monetization-error-utils.ts');
 
         const payload = createMonetizationErrorPayload({
             notificationType: 'platform:gift',
@@ -90,7 +90,7 @@ describe('monetization error payload no-fallback behavior', () => {
     });
 
     it('requires a timestamp when building error payloads', () => {
-        const { createMonetizationErrorPayload } = require('../../../src/utils/monetization-error-utils');
+        const { createMonetizationErrorPayload } = require('../../../src/utils/monetization-error-utils.ts');
 
         expect(() => createMonetizationErrorPayload({
             notificationType: 'platform:gift',
@@ -99,7 +99,7 @@ describe('monetization error payload no-fallback behavior', () => {
     });
 
     it('includes timestamp when provided', () => {
-        const { createMonetizationErrorPayload } = require('../../../src/utils/monetization-error-utils');
+        const { createMonetizationErrorPayload } = require('../../../src/utils/monetization-error-utils.ts');
 
         const payload = createMonetizationErrorPayload({
             notificationType: 'platform:gift',
@@ -111,7 +111,7 @@ describe('monetization error payload no-fallback behavior', () => {
     });
 
     it('omits zero gift values for gift error payloads', () => {
-        const { createMonetizationErrorPayload } = require('../../../src/utils/monetization-error-utils');
+        const { createMonetizationErrorPayload } = require('../../../src/utils/monetization-error-utils.ts');
 
         const payload = createMonetizationErrorPayload({
             notificationType: 'platform:gift',
@@ -130,7 +130,7 @@ describe('monetization error payload no-fallback behavior', () => {
     });
 
     it('omits zero giftCount for giftpaypiggy error payloads', () => {
-        const { createMonetizationErrorPayload } = require('../../../src/utils/monetization-error-utils');
+        const { createMonetizationErrorPayload } = require('../../../src/utils/monetization-error-utils.ts');
 
         const payload = createMonetizationErrorPayload({
             notificationType: 'platform:giftpaypiggy',
@@ -144,7 +144,7 @@ describe('monetization error payload no-fallback behavior', () => {
     });
 
     it('omits zero months for paypiggy error payloads', () => {
-        const { createMonetizationErrorPayload } = require('../../../src/utils/monetization-error-utils');
+        const { createMonetizationErrorPayload } = require('../../../src/utils/monetization-error-utils.ts');
 
         const payload = createMonetizationErrorPayload({
             notificationType: 'platform:paypiggy',
@@ -157,7 +157,7 @@ describe('monetization error payload no-fallback behavior', () => {
     });
 
     it('rejects object userIds instead of stringifying to [object Object]', () => {
-        const { createMonetizationErrorPayload } = require('../../../src/utils/monetization-error-utils');
+        const { createMonetizationErrorPayload } = require('../../../src/utils/monetization-error-utils.ts');
 
         const payload = createMonetizationErrorPayload({
             notificationType: 'platform:gift',
@@ -170,7 +170,7 @@ describe('monetization error payload no-fallback behavior', () => {
     });
 
     it('rejects boolean values for numeric fields', () => {
-        const { createMonetizationErrorPayload } = require('../../../src/utils/monetization-error-utils');
+        const { createMonetizationErrorPayload } = require('../../../src/utils/monetization-error-utils.ts');
 
         const payload = createMonetizationErrorPayload({
             notificationType: 'platform:gift',
@@ -185,7 +185,7 @@ describe('monetization error payload no-fallback behavior', () => {
     });
 
     it('throws for whitespace-only platform', () => {
-        const { createMonetizationErrorPayload } = require('../../../src/utils/monetization-error-utils');
+        const { createMonetizationErrorPayload } = require('../../../src/utils/monetization-error-utils.ts');
 
         expect(() => createMonetizationErrorPayload({
             notificationType: 'platform:gift',
@@ -195,7 +195,7 @@ describe('monetization error payload no-fallback behavior', () => {
     });
 
     it('includes tier for Twitch regardless of casing', () => {
-        const { createMonetizationErrorPayload } = require('../../../src/utils/monetization-error-utils');
+        const { createMonetizationErrorPayload } = require('../../../src/utils/monetization-error-utils.ts');
 
         const payload = createMonetizationErrorPayload({
             notificationType: 'platform:giftpaypiggy',
@@ -208,7 +208,7 @@ describe('monetization error payload no-fallback behavior', () => {
     });
 
     it('handles gift fields for notification type regardless of casing', () => {
-        const { createMonetizationErrorPayload } = require('../../../src/utils/monetization-error-utils');
+        const { createMonetizationErrorPayload } = require('../../../src/utils/monetization-error-utils.ts');
 
         const payload = createMonetizationErrorPayload({
             notificationType: 'PLATFORM:GIFT',
@@ -223,7 +223,7 @@ describe('monetization error payload no-fallback behavior', () => {
     });
 
     it('includes metadata.missingFields using normalized unique field names', () => {
-        const { createMonetizationErrorPayload } = require('../../../src/utils/monetization-error-utils');
+        const { createMonetizationErrorPayload } = require('../../../src/utils/monetization-error-utils.ts');
 
         const payload = createMonetizationErrorPayload({
             notificationType: 'platform:gift',
@@ -236,7 +236,7 @@ describe('monetization error payload no-fallback behavior', () => {
     });
 
     it('includes metadata.sourceTimestamp when provided as ISO timestamp', () => {
-        const { createMonetizationErrorPayload } = require('../../../src/utils/monetization-error-utils');
+        const { createMonetizationErrorPayload } = require('../../../src/utils/monetization-error-utils.ts');
 
         const payload = createMonetizationErrorPayload({
             notificationType: 'platform:gift',
@@ -249,7 +249,7 @@ describe('monetization error payload no-fallback behavior', () => {
     });
 
     it('omits metadata when neither missingFields nor sourceTimestamp are provided', () => {
-        const { createMonetizationErrorPayload } = require('../../../src/utils/monetization-error-utils');
+        const { createMonetizationErrorPayload } = require('../../../src/utils/monetization-error-utils.ts');
 
         const payload = createMonetizationErrorPayload({
             notificationType: 'platform:gift',
@@ -260,3 +260,5 @@ describe('monetization error payload no-fallback behavior', () => {
         expect(payload).not.toHaveProperty('metadata');
     });
 });
+
+export {};

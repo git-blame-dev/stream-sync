@@ -5,7 +5,9 @@ const {
     isValidMessagePart,
     getValidMessageParts,
     normalizeBadgeImages
-} = require('../../../src/utils/message-parts');
+} = require('../../../src/utils/message-parts.ts');
+
+export {};
 
 describe('message parts utility', () => {
     it('reads canonical message.parts only', () => {
