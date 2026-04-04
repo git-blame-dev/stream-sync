@@ -39,4 +39,34 @@ describe('TypeScript toolchain migration gates behavior', () => {
         expect(lintScript).toContain('bun scripts/lint/prefer-double-bang.ts');
         expect(lintScript).toContain('bun x eslint');
     });
+
+    it('keeps foundational test helper modules on TypeScript file paths', () => {
+        const helperTsPaths = [
+            'tests/helpers/config-fixture.ts',
+            'tests/helpers/test-clock.ts',
+            'tests/helpers/test-id.ts',
+            'tests/helpers/time-utils.ts',
+            'tests/helpers/output-capture.ts',
+            'tests/helpers/bun-timers.ts',
+            'tests/helpers/runtime-test-harness.ts',
+            'tests/helpers/farewell-routing-harness.ts'
+        ];
+        const helperJsPaths = [
+            'tests/helpers/config-fixture.js',
+            'tests/helpers/test-clock.js',
+            'tests/helpers/test-id.js',
+            'tests/helpers/time-utils.js',
+            'tests/helpers/output-capture.js',
+            'tests/helpers/bun-timers.js',
+            'tests/helpers/runtime-test-harness.js',
+            'tests/helpers/farewell-routing-harness.js'
+        ];
+
+        for (const helperPath of helperTsPaths) {
+            expect(existsSync(join(repoRoot, helperPath))).toBe(true);
+        }
+        for (const helperPath of helperJsPaths) {
+            expect(existsSync(join(repoRoot, helperPath))).toBe(false);
+        }
+    });
 });
