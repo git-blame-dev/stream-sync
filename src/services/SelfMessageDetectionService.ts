@@ -1,0 +1,103 @@
+
+const { logger: defaultLogger } = require('../core/logging');
+const { createPlatformErrorHandler } = require('../utils/platform-error-handler');
+
+class SelfMessageDetectionService {
+    constructor(config, dependencies = {}) {
+        this.config = config;
+        this.logger = dependencies.logger || defaultLogger;
+        this.errorHandler = createPlatformErrorHandler(this.logger, 'self-message-detection');
+    }
+
+    isFilteringEnabled(platform) {
+        return !!this.config[platform].ignoreSelfMessages;
+    }
+
+    isSelfMessage(platform, messageData, platformConfig) {
+        if (!messageData) {
+            return false;
+        }
+
+        switch (platform.toLowerCase()) {
+            case 'twitch':
+                return this._isTwitchSelfMessage(messageData, platformConfig);
+            case 'youtube':
+                return this._isYouTubeSelfMessage(messageData, platformConfig);
+            case 'tiktok':
+                return this._isTikTokSelfMessage(messageData, platformConfig);
+            default:
+                this._handleDetectionError(`Unknown platform for self-message detection: ${platform}`);
+                return false;
+        }
+    }
+
+    shouldFilterMessage(platform, messageData, platformConfig) {
+        if (!this.isFilteringEnabled(platform)) {
+            return false;
+        }
+
+        return this.isSelfMessage(platform, messageData, platformConfig);
+    }
+
+    _isTwitchSelfMessage(messageData, platformConfig) {
+        if (messageData.self !== undefined) {
+            return !!messageData.self;
+        }
+
+        if (messageData.username && platformConfig?.username) {
+            return messageData.username.toLowerCase() === platformConfig.username.toLowerCase();
+        }
+
+        if (messageData.context?.username && platformConfig?.username) {
+            return messageData.context.username.toLowerCase() === platformConfig.username.toLowerCase();
+        }
+
+        return false;
+    }
+
+    _isYouTubeSelfMessage(messageData, platformConfig) {
+        if (messageData.username && platformConfig?.username) {
+            return messageData.username.toLowerCase() === platformConfig.username.toLowerCase();
+        }
+
+        if (messageData.author?.isChatOwner || messageData.isBroadcaster) {
+            return true;
+        }
+
+        if (messageData.badges) {
+            const badges = Array.isArray(messageData.badges) ? messageData.badges : [];
+            return badges.some(badge => 
+                badge.toLowerCase().includes('owner') || 
+                badge.toLowerCase().includes('broadcaster')
+            );
+        }
+
+        return false;
+    }
+
+    _isTikTokSelfMessage(messageData, platformConfig) {
+        if (messageData.username && platformConfig?.username) {
+            return messageData.username.toLowerCase() === platformConfig.username.toLowerCase();
+        }
+
+        if (messageData.userId && platformConfig?.userId) {
+            return messageData.userId === platformConfig.userId;
+        }
+
+        if (messageData.isBroadcaster) {
+            return true;
+        }
+
+        return false;
+    }
+
+    _handleDetectionError(message, error = null) {
+        if (this.errorHandler && error instanceof Error) {
+            this.errorHandler.handleEventProcessingError(error, 'self-message-detection', null, message);
+        } else {
+            this.errorHandler?.logOperationalError(message, 'self-message-detection');
+        }
+    }
+}
+
+module.exports = SelfMessageDetectionService;
