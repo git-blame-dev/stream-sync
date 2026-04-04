@@ -18,6 +18,16 @@ function createTikTokEventFactory(options = {}) {
         correlationId: generateCorrelationId(),
         ...additionalMetadata
     }));
+
+    const normalizeContext = (context) => {
+        if (!context || typeof context !== 'object' || Array.isArray(context)) {
+            return {};
+        }
+
+        return context;
+    };
+
+    const normalizeRecoverable = (recoverable) => (typeof recoverable === 'boolean' ? recoverable : true);
     const normalizeChatEvent = options.normalizeChatEvent || ((data) => normalizeTikTokMessage(data, platformName, options.timestampService));
 
     const normalizeIdentityFromPayload = (data) => normalizeUserData(extractTikTokUserData(data));
@@ -390,6 +400,7 @@ function createTikTokEventFactory(options = {}) {
         createError: (error, context) => {
             const correlationId = generateCorrelationId();
             const timestamp = getSystemTimestampISO();
+            const normalizedContext = normalizeContext(context);
             return {
                 type: PlatformEvents.ERROR,
                 platform: platformName,
@@ -398,10 +409,10 @@ function createTikTokEventFactory(options = {}) {
                     name: error.name
                 },
                 context: {
-                    ...(context || {}),
+                    ...normalizedContext,
                     correlationId
                 },
-                recoverable: context?.recoverable !== undefined ? context.recoverable : true,
+                recoverable: normalizeRecoverable(normalizedContext.recoverable),
                 timestamp,
                 metadata: {
                     platform: platformName,

@@ -217,6 +217,44 @@ describe('TikTok event factory behavior', () => {
         expect(event.metadata.timestamp).toBeUndefined();
     });
 
+    it('normalizes non-object error context to canonical object', () => {
+        const { createTikTokEventFactory } = require('../../../../../src/platforms/tiktok/events/event-factory.ts');
+
+        const eventFactory = createTikTokEventFactory({
+            platformName: 'tiktok',
+            generateCorrelationId: () => 'corr-error-context-123'
+        });
+
+        const error = new Error('Connection failed');
+        const event = eventFactory.createError(error, 'invalid-context');
+
+        expect(event.context).toEqual({
+            correlationId: 'corr-error-context-123'
+        });
+    });
+
+    it('normalizes non-boolean recoverable to default true', () => {
+        const { createTikTokEventFactory } = require('../../../../../src/platforms/tiktok/events/event-factory.ts');
+
+        const eventFactory = createTikTokEventFactory({
+            platformName: 'tiktok',
+            generateCorrelationId: () => 'corr-error-recoverable-123'
+        });
+
+        const error = new Error('Connection failed');
+        const event = eventFactory.createError(error, {
+            operation: 'connect',
+            recoverable: 'sometimes'
+        });
+
+        expect(event.context).toEqual({
+            operation: 'connect',
+            recoverable: 'sometimes',
+            correlationId: 'corr-error-recoverable-123'
+        });
+        expect(event.recoverable).toBe(true);
+    });
+
     it('produces connection lifecycle events that satisfy platform schemas', () => {
         const { createTikTokEventFactory } = require('../../../../../src/platforms/tiktok/events/event-factory.ts');
 
