@@ -3,7 +3,7 @@ const { createMockFn } = require('../../../helpers/bun-mock-utils');
 const { noOpLogger } = require('../../../helpers/mock-factories');
 
 const { PlatformEvents } = require('../../../../src/interfaces/PlatformEvents');
-const { TwitchPlatform } = require('../../../../src/platforms/twitch');
+const { TwitchPlatform } = require('../../../../src/platforms/twitch.ts');
 
 const createReadyTwitchAuth = () => ({
     isReady: () => true,

@@ -6,7 +6,7 @@ const testClock = require('../../../../helpers/test-clock');
 const { safeSetTimeout, safeDelay, validateTimeout } = require('../../../../../src/utils/timeout-validator');
 const { EventEmitter } = require('events');
 
-const { createTwitchEventSubWsLifecycle } = require('../../../../../src/platforms/twitch/connections/ws-lifecycle');
+const { createTwitchEventSubWsLifecycle } = require('../../../../../src/platforms/twitch/connections/ws-lifecycle.ts');
 
 class MockWebSocket extends EventEmitter {
     constructor(url) {

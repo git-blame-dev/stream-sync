@@ -5,7 +5,7 @@ const { expectNoTechnicalArtifacts } = require('../../../helpers/assertion-helpe
 const { createTwitchFollowEvent } = require('../../../helpers/twitch-test-data');
 const { createConfigFixture } = require('../../../helpers/config-fixture');
 
-const { TwitchPlatform } = require('../../../../src/platforms/twitch');
+const { TwitchPlatform } = require('../../../../src/platforms/twitch.ts');
 const PlatformEventRouter = require('../../../../src/services/PlatformEventRouter');
 const { EventBus } = require('../../../../src/core/EventBus');
 

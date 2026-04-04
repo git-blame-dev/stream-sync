@@ -3,7 +3,7 @@ const { createMockFn } = require('../../../helpers/bun-mock-utils');
 const { noOpLogger } = require('../../../helpers/mock-factories');
 const { createTwitchEventSubChatMessageEvent } = require('../../../helpers/twitch-test-data');
 
-const { TwitchPlatform } = require('../../../../src/platforms/twitch');
+const { TwitchPlatform } = require('../../../../src/platforms/twitch.ts');
 const { DEFAULT_AVATAR_URL } = require('../../../../src/constants/avatar');
 
 const createReadyTwitchAuth = () => ({

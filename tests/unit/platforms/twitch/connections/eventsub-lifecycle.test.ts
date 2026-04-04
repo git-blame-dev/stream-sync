@@ -5,7 +5,7 @@ const testClock = require('../../../../helpers/test-clock');
 const { safeSetTimeout, safeDelay } = require('../../../../../src/utils/timeout-validator');
 const { secrets, _resetForTesting, initializeStaticSecrets } = require('../../../../../src/core/secrets');
 
-const TwitchEventSub = require('../../../../../src/platforms/twitch-eventsub');
+const TwitchEventSub = require('../../../../../src/platforms/twitch-eventsub.ts');
 
 class MockWebSocket {
     constructor() {

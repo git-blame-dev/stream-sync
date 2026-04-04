@@ -1,5 +1,5 @@
 const { describe, test, expect } = require('bun:test');
-const { createTwitchEventFactory } = require('../../../../../src/platforms/twitch/events/event-factory');
+const { createTwitchEventFactory } = require('../../../../../src/platforms/twitch/events/event-factory.ts');
 const { PlatformEvents } = require('../../../../../src/interfaces/PlatformEvents');
 const { DEFAULT_AVATAR_URL } = require('../../../../../src/constants/avatar');
 

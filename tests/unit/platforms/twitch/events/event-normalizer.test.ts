@@ -2,7 +2,7 @@ const { describe, test, expect } = require('bun:test');
 const {
     applyNotificationMetadataFallback,
     applyTimestampFallback
-} = require('../../../../../src/platforms/twitch/events/event-normalizer');
+} = require('../../../../../src/platforms/twitch/events/event-normalizer.ts');
 
 describe('twitch event timestamp normalization', () => {
     test('uses metadata message timestamp for chat notifications', () => {

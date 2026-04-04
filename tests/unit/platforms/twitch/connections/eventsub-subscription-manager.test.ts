@@ -1,6 +1,6 @@
 const { describe, test, expect } = require('bun:test');
 const { noOpLogger } = require('../../../../helpers/mock-factories');
-const { createTwitchEventSubSubscriptionManager } = require('../../../../../src/platforms/twitch/connections/eventsub-subscription-manager');
+const { createTwitchEventSubSubscriptionManager } = require('../../../../../src/platforms/twitch/connections/eventsub-subscription-manager.ts');
 const { secrets, _resetForTesting, initializeStaticSecrets } = require('../../../../../src/core/secrets');
 
 const createTwitchAuth = (overrides = {}) => ({
