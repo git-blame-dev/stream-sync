@@ -4,7 +4,7 @@ const { createConfigFixture } = require('../helpers/config-fixture');
 
 const { EventEmitter } = require('events');
 const { DependencyFactory } = require('../../src/utils/dependency-factory');
-const { TikTokPlatform } = require('../../src/platforms/tiktok');
+const { TikTokPlatform } = require('../../src/platforms/tiktok.ts');
 
 const mockRetrySystem = {
     resetRetryCount: () => {},

@@ -1,7 +1,7 @@
 const { describe, expect, it, afterEach } = require('bun:test');
 const { createMockFn, restoreAllMocks } = require('../../../../helpers/bun-mock-utils');
 
-const { TikTokPlatform } = require('../../../../../src/platforms/tiktok');
+const { TikTokPlatform } = require('../../../../../src/platforms/tiktok.ts');
 const { PlatformEvents } = require('../../../../../src/interfaces/PlatformEvents');
 const { createMockTikTokPlatformDependencies } = require('../../../../helpers/mock-factories');
 const { DEFAULT_AVATAR_URL } = require('../../../../../src/constants/avatar');

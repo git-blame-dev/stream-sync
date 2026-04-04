@@ -4,7 +4,7 @@ const { noOpLogger } = require('../../../../helpers/mock-factories');
 const {
     cleanupTikTokEventListeners,
     setupTikTokEventListeners
-} = require('../../../../../src/platforms/tiktok/events/event-router');
+} = require('../../../../../src/platforms/tiktok/events/event-router.ts');
 
 describe('TikTok event router', () => {
     afterEach(() => {

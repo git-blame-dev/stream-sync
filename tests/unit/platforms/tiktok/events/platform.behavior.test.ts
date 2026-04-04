@@ -3,7 +3,7 @@ const { createMockFn, restoreAllMocks } = require('../../../../helpers/bun-mock-
 const { noOpLogger } = require('../../../../helpers/mock-factories');
 const { useFakeTimers, useRealTimers, setSystemTime } = require('../../../../helpers/bun-timers');
 
-const { TikTokPlatform } = require('../../../../../src/platforms/tiktok');
+const { TikTokPlatform } = require('../../../../../src/platforms/tiktok.ts');
 const { PlatformEvents } = require('../../../../../src/interfaces/PlatformEvents');
 
 const createPlatform = (configOverrides = {}, dependencyOverrides = {}) => {

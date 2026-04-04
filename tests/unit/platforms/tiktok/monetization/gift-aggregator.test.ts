@@ -9,7 +9,7 @@ const {
 } = require('../../../../helpers/bun-timers');
 const {
     createTikTokGiftAggregator
-} = require('../../../../../src/platforms/tiktok/monetization/gift-aggregator');
+} = require('../../../../../src/platforms/tiktok/monetization/gift-aggregator.ts');
 
 describe('TikTok gift aggregator', () => {
     beforeEach(() => {
