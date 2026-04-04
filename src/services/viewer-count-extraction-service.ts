@@ -1,6 +1,22 @@
 
 const { createPlatformErrorHandler } = require('../utils/platform-error-handler');
 
+function resolvePositiveNumber(value, fallback) {
+    return typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : fallback;
+}
+
+function resolveNonEmptyArray(value, fallback) {
+    return Array.isArray(value) && value.length > 0 ? value : fallback;
+}
+
+function resolveBoolean(value, fallback = false) {
+    return typeof value === 'boolean' ? value : fallback;
+}
+
+function resolveNonNegativeInteger(value, fallback = 0) {
+    return Number.isInteger(value) && value >= 0 ? value : fallback;
+}
+
 class ViewerCountExtractionService {
     constructor(innertubeService, dependencies = {}) {
         this.innertubeService = innertubeService;
@@ -13,10 +29,10 @@ class ViewerCountExtractionService {
         
         // Configuration
         this.config = {
-            timeout: dependencies.timeout || 8000,
-            strategies: dependencies.strategies || ['view_text', 'video_details', 'basic_info'],
-            debug: dependencies.debug || false,
-            retries: dependencies.retries || 0
+            timeout: resolvePositiveNumber(dependencies.timeout, 8000),
+            strategies: resolveNonEmptyArray(dependencies.strategies, ['view_text', 'video_details', 'basic_info']),
+            debug: resolveBoolean(dependencies.debug, false),
+            retries: resolveNonNegativeInteger(dependencies.retries, 0)
         };
         
         // Statistics for monitoring
@@ -39,14 +55,14 @@ class ViewerCountExtractionService {
             
             // Get video info through service layer
             const info = await this.innertubeService.getVideoInfo(videoId, {
-                timeout: options.timeout || this.config.timeout,
+                timeout: resolvePositiveNumber(options.timeout, this.config.timeout),
                 instanceKey: options.instanceKey
             });
             
             // Extract viewer count using dedicated extractor
             const extractionResult = this.YouTubeViewerExtractor.extractConcurrentViewers(info, {
-                debug: options.debug !== undefined ? options.debug : this.config.debug,
-                strategies: options.strategies || this.config.strategies
+                debug: resolveBoolean(options.debug, this.config.debug),
+                strategies: resolveNonEmptyArray(options.strategies, this.config.strategies)
             });
             
             // Update statistics
