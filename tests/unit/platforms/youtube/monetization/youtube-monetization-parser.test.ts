@@ -1,7 +1,7 @@
 const { describe, test, expect } = require('bun:test');
 const { noOpLogger } = require('../../../../helpers/mock-factories');
 const { getSyntheticFixture } = require('../../../../helpers/platform-test-data');
-const { createYouTubeMonetizationParser } = require('../../../../../src/platforms/youtube/monetization/monetization-parser');
+const { createYouTubeMonetizationParser } = require('../../../../../src/platforms/youtube/monetization/monetization-parser.ts');
 
 describe('YouTube monetization parser', () => {
     test('parses numeric purchase_amount with explicit currency', () => {

@@ -5,7 +5,7 @@ const FALLBACK_AVATAR_URL = DEFAULT_AVATAR_URL;
 
 describe('YouTube event factory behavior', () => {
     it('builds chat-connected events with deterministic timestamp', () => {
-        const { createYouTubeEventFactory } = require('../../../../../src/platforms/youtube/events/event-factory');
+        const { createYouTubeEventFactory } = require('../../../../../src/platforms/youtube/events/event-factory.ts');
 
         const eventFactory = createYouTubeEventFactory({
             nowIso: () => '2024-01-01T00:00:00.000Z',
@@ -28,7 +28,7 @@ describe('YouTube event factory behavior', () => {
     });
 
     it('builds chat-message events matching the platform contract', () => {
-        const { createYouTubeEventFactory } = require('../../../../../src/platforms/youtube/events/event-factory');
+        const { createYouTubeEventFactory } = require('../../../../../src/platforms/youtube/events/event-factory.ts');
 
         const eventFactory = createYouTubeEventFactory({
             nowIso: () => '2024-01-01T00:00:00.000Z',
@@ -69,7 +69,7 @@ describe('YouTube event factory behavior', () => {
     });
 
     it('uses canonical message.parts from message object', () => {
-        const { createYouTubeEventFactory } = require('../../../../../src/platforms/youtube/events/event-factory');
+        const { createYouTubeEventFactory } = require('../../../../../src/platforms/youtube/events/event-factory.ts');
 
         const eventFactory = createYouTubeEventFactory({
             generateCorrelationId: () => 'corr-parts-1'
@@ -119,7 +119,7 @@ describe('YouTube event factory behavior', () => {
     });
 
     it('emits text-only message when canonical message.parts is unavailable', () => {
-        const { createYouTubeEventFactory } = require('../../../../../src/platforms/youtube/events/event-factory');
+        const { createYouTubeEventFactory } = require('../../../../../src/platforms/youtube/events/event-factory.ts');
 
         const eventFactory = createYouTubeEventFactory({
             generateCorrelationId: () => 'corr-parts-2'
@@ -138,7 +138,7 @@ describe('YouTube event factory behavior', () => {
     });
 
     it('filters invalid message parts and preserves no-parts shape when all are invalid', () => {
-        const { createYouTubeEventFactory } = require('../../../../../src/platforms/youtube/events/event-factory');
+        const { createYouTubeEventFactory } = require('../../../../../src/platforms/youtube/events/event-factory.ts');
 
         const eventFactory = createYouTubeEventFactory({
             generateCorrelationId: () => 'corr-parts-3'
@@ -161,7 +161,7 @@ describe('YouTube event factory behavior', () => {
     });
 
     it('supports text sources from string message and object message.text', () => {
-        const { createYouTubeEventFactory } = require('../../../../../src/platforms/youtube/events/event-factory');
+        const { createYouTubeEventFactory } = require('../../../../../src/platforms/youtube/events/event-factory.ts');
 
         const eventFactory = createYouTubeEventFactory({
             generateCorrelationId: () => 'corr-parts-4'
@@ -185,7 +185,7 @@ describe('YouTube event factory behavior', () => {
     });
 
     it('preserves avatarUrl on chat-message events', () => {
-        const { createYouTubeEventFactory } = require('../../../../../src/platforms/youtube/events/event-factory');
+        const { createYouTubeEventFactory } = require('../../../../../src/platforms/youtube/events/event-factory.ts');
 
         const eventFactory = createYouTubeEventFactory({
             generateCorrelationId: () => 'corr-avatar-chat'
@@ -203,7 +203,7 @@ describe('YouTube event factory behavior', () => {
     });
 
     it('emits canonical badgeImages on chat-message events', () => {
-        const { createYouTubeEventFactory } = require('../../../../../src/platforms/youtube/events/event-factory');
+        const { createYouTubeEventFactory } = require('../../../../../src/platforms/youtube/events/event-factory.ts');
 
         const eventFactory = createYouTubeEventFactory({
             generateCorrelationId: () => 'corr-badges-chat'
@@ -229,7 +229,7 @@ describe('YouTube event factory behavior', () => {
     });
 
     it('rejects chat-message events missing timestamp', () => {
-        const { createYouTubeEventFactory } = require('../../../../../src/platforms/youtube/events/event-factory');
+        const { createYouTubeEventFactory } = require('../../../../../src/platforms/youtube/events/event-factory.ts');
 
         const eventFactory = createYouTubeEventFactory({
             nowIso: () => '2024-01-01T00:00:00.000Z',
@@ -251,7 +251,7 @@ describe('YouTube event factory behavior', () => {
     });
 
     it('rejects chat-message events missing canonical identity fields', () => {
-        const { createYouTubeEventFactory } = require('../../../../../src/platforms/youtube/events/event-factory');
+        const { createYouTubeEventFactory } = require('../../../../../src/platforms/youtube/events/event-factory.ts');
 
         const eventFactory = createYouTubeEventFactory({
             generateCorrelationId: () => 'corr-identity'
@@ -266,7 +266,7 @@ describe('YouTube event factory behavior', () => {
     });
 
     it('allows degraded chat events when metadata.missingFields marks missing identity and timestamp', () => {
-        const { createYouTubeEventFactory } = require('../../../../../src/platforms/youtube/events/event-factory');
+        const { createYouTubeEventFactory } = require('../../../../../src/platforms/youtube/events/event-factory.ts');
 
         const eventFactory = createYouTubeEventFactory({
             generateCorrelationId: () => 'corr-youtube-missing-identity'
@@ -289,7 +289,7 @@ describe('YouTube event factory behavior', () => {
     });
 
     it('allows degraded chat events with unknown-message placeholder when message is marked missing', () => {
-        const { createYouTubeEventFactory } = require('../../../../../src/platforms/youtube/events/event-factory');
+        const { createYouTubeEventFactory } = require('../../../../../src/platforms/youtube/events/event-factory.ts');
 
         const eventFactory = createYouTubeEventFactory({
             generateCorrelationId: () => 'corr-youtube-missing-message'
@@ -309,7 +309,7 @@ describe('YouTube event factory behavior', () => {
     });
 
     it('builds viewer-count events matching the current YouTube payload shape', () => {
-        const { createYouTubeEventFactory } = require('../../../../../src/platforms/youtube/events/event-factory');
+        const { createYouTubeEventFactory } = require('../../../../../src/platforms/youtube/events/event-factory.ts');
 
         const eventFactory = createYouTubeEventFactory({
             nowIso: () => '2024-01-01T00:00:00.000Z',
@@ -338,7 +338,7 @@ describe('YouTube event factory behavior', () => {
     });
 
     it('builds error events with metadata and context', () => {
-        const { createYouTubeEventFactory } = require('../../../../../src/platforms/youtube/events/event-factory');
+        const { createYouTubeEventFactory } = require('../../../../../src/platforms/youtube/events/event-factory.ts');
 
         const eventFactory = createYouTubeEventFactory({
             nowIso: () => '2024-01-01T00:00:00.000Z',
@@ -375,7 +375,7 @@ describe('YouTube event factory behavior', () => {
     });
 
     it('builds gift events with monetization fields', () => {
-        const { createYouTubeEventFactory } = require('../../../../../src/platforms/youtube/events/event-factory');
+        const { createYouTubeEventFactory } = require('../../../../../src/platforms/youtube/events/event-factory.ts');
 
         const eventFactory = createYouTubeEventFactory({
             generateCorrelationId: () => 'corr-ignored'
@@ -412,7 +412,7 @@ describe('YouTube event factory behavior', () => {
     });
 
     it('preserves avatarUrl on gift events', () => {
-        const { createYouTubeEventFactory } = require('../../../../../src/platforms/youtube/events/event-factory');
+        const { createYouTubeEventFactory } = require('../../../../../src/platforms/youtube/events/event-factory.ts');
 
         const eventFactory = createYouTubeEventFactory();
 
@@ -432,7 +432,7 @@ describe('YouTube event factory behavior', () => {
     });
 
     it('builds giftpaypiggy events with optional id', () => {
-        const { createYouTubeEventFactory } = require('../../../../../src/platforms/youtube/events/event-factory');
+        const { createYouTubeEventFactory } = require('../../../../../src/platforms/youtube/events/event-factory.ts');
 
         const eventFactory = createYouTubeEventFactory({
             generateCorrelationId: () => 'corr-ignored'
@@ -459,7 +459,7 @@ describe('YouTube event factory behavior', () => {
     });
 
     it('preserves avatarUrl on giftpaypiggy events', () => {
-        const { createYouTubeEventFactory } = require('../../../../../src/platforms/youtube/events/event-factory');
+        const { createYouTubeEventFactory } = require('../../../../../src/platforms/youtube/events/event-factory.ts');
 
         const eventFactory = createYouTubeEventFactory();
 
@@ -475,7 +475,7 @@ describe('YouTube event factory behavior', () => {
     });
 
     it('builds paypiggy events with membership metadata', () => {
-        const { createYouTubeEventFactory } = require('../../../../../src/platforms/youtube/events/event-factory');
+        const { createYouTubeEventFactory } = require('../../../../../src/platforms/youtube/events/event-factory.ts');
 
         const eventFactory = createYouTubeEventFactory({
             generateCorrelationId: () => 'corr-ignored'
@@ -502,7 +502,7 @@ describe('YouTube event factory behavior', () => {
     });
 
     it('preserves avatarUrl on paypiggy events', () => {
-        const { createYouTubeEventFactory } = require('../../../../../src/platforms/youtube/events/event-factory');
+        const { createYouTubeEventFactory } = require('../../../../../src/platforms/youtube/events/event-factory.ts');
 
         const eventFactory = createYouTubeEventFactory();
 
@@ -518,7 +518,7 @@ describe('YouTube event factory behavior', () => {
 
     describe('createViewerCountEvent validation', () => {
         it('rejects non-numeric count values', () => {
-            const { createYouTubeEventFactory } = require('../../../../../src/platforms/youtube/events/event-factory');
+            const { createYouTubeEventFactory } = require('../../../../../src/platforms/youtube/events/event-factory.ts');
 
             const eventFactory = createYouTubeEventFactory({
                 generateCorrelationId: () => 'corr-ignored'
@@ -532,7 +532,7 @@ describe('YouTube event factory behavior', () => {
         });
 
         it('rejects NaN count values', () => {
-            const { createYouTubeEventFactory } = require('../../../../../src/platforms/youtube/events/event-factory');
+            const { createYouTubeEventFactory } = require('../../../../../src/platforms/youtube/events/event-factory.ts');
 
             const eventFactory = createYouTubeEventFactory({
                 generateCorrelationId: () => 'corr-ignored'
@@ -546,7 +546,7 @@ describe('YouTube event factory behavior', () => {
         });
 
         it('rejects Infinity count values', () => {
-            const { createYouTubeEventFactory } = require('../../../../../src/platforms/youtube/events/event-factory');
+            const { createYouTubeEventFactory } = require('../../../../../src/platforms/youtube/events/event-factory.ts');
 
             const eventFactory = createYouTubeEventFactory({
                 generateCorrelationId: () => 'corr-ignored'
@@ -560,7 +560,7 @@ describe('YouTube event factory behavior', () => {
         });
 
         it('accepts numeric string count values via coercion', () => {
-            const { createYouTubeEventFactory } = require('../../../../../src/platforms/youtube/events/event-factory');
+            const { createYouTubeEventFactory } = require('../../../../../src/platforms/youtube/events/event-factory.ts');
 
             const eventFactory = createYouTubeEventFactory({
                 generateCorrelationId: () => 'corr-999'
@@ -576,7 +576,7 @@ describe('YouTube event factory behavior', () => {
         });
 
         it('accepts zero count', () => {
-            const { createYouTubeEventFactory } = require('../../../../../src/platforms/youtube/events/event-factory');
+            const { createYouTubeEventFactory } = require('../../../../../src/platforms/youtube/events/event-factory.ts');
 
             const eventFactory = createYouTubeEventFactory({
                 generateCorrelationId: () => 'corr-999'

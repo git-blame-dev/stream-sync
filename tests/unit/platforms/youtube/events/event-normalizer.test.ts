@@ -1,6 +1,6 @@
 const { describe, test, expect } = require('bun:test');
 
-const { normalizeYouTubeEvent } = require('../../../../../src/platforms/youtube/events/event-normalizer');
+const { normalizeYouTubeEvent } = require('../../../../../src/platforms/youtube/events/event-normalizer.ts');
 const { getSyntheticFixture } = require('../../../../helpers/platform-test-data');
 
 describe('normalizeYouTubeEvent', () => {
