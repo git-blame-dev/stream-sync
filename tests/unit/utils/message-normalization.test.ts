@@ -11,7 +11,9 @@ const {
     validateNormalizedMessage,
     extractYouTubeBadgeImages,
     extractTikTokBadgeImages
-} = require('../../../src/utils/message-normalization');
+} = require('../../../src/utils/message-normalization.ts');
+
+export {};
 
 beforeEach(() => {
     testClock.reset();
