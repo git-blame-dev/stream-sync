@@ -91,6 +91,16 @@ function createYouTubeEventFactory(options = {}) {
         correlationId: generateCorrelationId()
     });
 
+    const normalizeContext = (context) => {
+        if (!context || typeof context !== 'object' || Array.isArray(context)) {
+            return {};
+        }
+
+        return context;
+    };
+
+    const normalizeRecoverable = (recoverable) => (typeof recoverable === 'boolean' ? recoverable : true);
+
     return {
         createChatConnectedEvent: (data = {}) => {
             const timestamp = getTimestamp(data, 'YouTube chat connected event requires timestamp');
@@ -331,8 +341,8 @@ function createYouTubeEventFactory(options = {}) {
                     message: typeof error.message === 'string' ? error.message : undefined,
                     name: typeof error.name === 'string' ? error.name : undefined
                 },
-                context: data.context || {},
-                recoverable: data.recoverable ?? true,
+                context: normalizeContext(data.context),
+                recoverable: normalizeRecoverable(data.recoverable),
                 timestamp,
                 metadata: buildEventMetadata({
                     videoId: data.videoId
