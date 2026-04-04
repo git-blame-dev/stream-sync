@@ -151,4 +151,25 @@ describe('ViewerCountExtractionService', () => {
         expect(stats.successRate).toBe('0%');
         expect(typeof stats.uptime).toBe('number');
     });
+
+    it('normalizes non-boolean debug config to false before extraction', async () => {
+        mockInnertube.getVideoInfo.mockResolvedValue({ info: true });
+        mockExtractor.extractConcurrentViewers.mockImplementation((_info, options) => ({
+            success: true,
+            count: options.debug === false ? 1 : 2,
+            strategy: 'view_text',
+            metadata: {}
+        }));
+
+        const service = new ViewerCountExtractionService(mockInnertube, {
+            logger: noOpLogger,
+            debug: 'false',
+            YouTubeViewerExtractor: mockExtractor
+        });
+
+        const result = await service.extractViewerCount('vid-debug');
+
+        expect(result.success).toBe(true);
+        expect(result.count).toBe(1);
+    });
 });
