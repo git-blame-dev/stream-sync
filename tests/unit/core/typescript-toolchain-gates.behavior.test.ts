@@ -52,6 +52,7 @@ describe('TypeScript toolchain migration gates behavior', () => {
             'tests/helpers/bun-module-mocks.ts',
             'tests/helpers/display-queue-test-factory.ts',
             'tests/helpers/notification-test-utils.ts',
+            'tests/helpers/test-logger.ts',
             'tests/helpers/runtime-test-harness.ts',
             'tests/helpers/farewell-routing-harness.ts'
         ];
@@ -66,6 +67,7 @@ describe('TypeScript toolchain migration gates behavior', () => {
             'tests/helpers/bun-module-mocks.js',
             'tests/helpers/display-queue-test-factory.js',
             'tests/helpers/notification-test-utils.js',
+            'tests/helpers/test-logger.js',
             'tests/helpers/runtime-test-harness.js',
             'tests/helpers/farewell-routing-harness.js'
         ];
