@@ -1,6 +1,8 @@
 const { describe, test, expect, beforeEach } = require('bun:test');
 const { noOpLogger } = require('../../helpers/mock-factories');
-const { PlatformErrorHandler, createPlatformErrorHandler } = require('../../../src/utils/platform-error-handler');
+const { PlatformErrorHandler, createPlatformErrorHandler } = require('../../../src/utils/platform-error-handler.ts');
+
+export {};
 
 describe('Platform Error Handler - User Experience Behavior', () => {
     let errorHandler;
@@ -116,11 +118,11 @@ describe('Platform Error Handler - User Experience Behavior', () => {
         test('produces clean error contexts without technical artifacts', () => {
             const testError = new Error('User-facing error occurred');
 
-            const contexts = [];
+            const contexts: string[] = [];
             try {
                 errorHandler.handleInitializationError(testError, 'user session startup');
-            } catch (error) {
-                contexts.push(error.message);
+            } catch (error: unknown) {
+                contexts.push((error as Error).message);
             }
 
             contexts.forEach(context => {

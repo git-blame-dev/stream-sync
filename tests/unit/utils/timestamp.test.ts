@@ -1,6 +1,8 @@
 const { describe, it, expect } = require('bun:test');
 const testClock = require('../../helpers/test-clock');
-const { isIsoTimestamp, getSystemTimestampISO } = require('../../../src/utils/timestamp');
+const { isIsoTimestamp, getSystemTimestampISO } = require('../../../src/utils/timestamp.ts');
+
+export {};
 
 describe('Timestamp utilities', () => {
     describe('isIsoTimestamp', () => {

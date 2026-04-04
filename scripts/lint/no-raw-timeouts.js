@@ -28,14 +28,14 @@ const SAFE_PREFIX = 'safe';
 const ALLOWED_PREFIXES = [];
 const PROMISE_TIMEOUT_PATTERN = /new\s+Promise\s*\([^)]*=>\s*(?:safeSetTimeout|setTimeout)\s*\(/;
 const PROMISE_TIMEOUT_ALLOWLIST = new Set([
-  'src/utils/timeout-validator.js'
+  'src/utils/timeout-validator.ts'
 ]);
 const PROMISE_RACE_TIMEOUT_PATTERN = /Promise\.race\([\s\S]*?new\s+Promise\s*\([^)]*=>\s*(?:safeSetTimeout|setTimeout)/g;
 const PROMISE_RACE_ALLOWLIST = new Set([
-  'src/utils/timeout-validator.js'
+  'src/utils/timeout-validator.ts'
 ]);
 const RAW_TIMER_ALLOWLIST = new Set([
-  'src/utils/timeout-validator.js',
+  'src/utils/timeout-validator.ts',
   'tests/setup/bun.setup.js'
 ]);
 

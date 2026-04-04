@@ -64,7 +64,7 @@ const srcJsRules = {
     'error',
     {
       selector: 'CallExpression[callee.property.name="toISOString"][callee.object.type="NewExpression"][callee.object.callee.name="Date"][callee.object.arguments.length=0]',
-      message: 'Use getSystemTimestampISO() from src/utils/timestamp.js instead of new Date().toISOString().'
+      message: 'Use getSystemTimestampISO() from src/utils/timestamp.ts instead of new Date().toISOString().'
     }
   ]
 };
@@ -81,7 +81,7 @@ const srcTsRules = {
     'error',
     {
       selector: 'CallExpression[callee.property.name="toISOString"][callee.object.type="NewExpression"][callee.object.callee.name="Date"][callee.object.arguments.length=0]',
-      message: 'Use getSystemTimestampISO() from src/utils/timestamp.js instead of new Date().toISOString().'
+      message: 'Use getSystemTimestampISO() from src/utils/timestamp.ts instead of new Date().toISOString().'
     }
   ]
 };
@@ -162,7 +162,6 @@ const guiTsRules = {
 module.exports = [
   {
     files: ['src/**/*.js'],
-    ignores: ['src/utils/platform-error-handler.js'],
     languageOptions: nodeLanguageOptions,
     plugins: {
       chatbot: {

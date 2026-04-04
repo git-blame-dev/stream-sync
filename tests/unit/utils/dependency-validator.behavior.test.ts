@@ -3,10 +3,14 @@ const { noOpLogger } = require('../../helpers/mock-factories');
 const {
     validateLoggerInterface,
     validateNotificationManagerInterface,
+    validateConnectionFactoryInterface,
     validateYouTubePlatformDependencies,
+    validateConnectionStateManagerDependencies,
     validateFactoryCanCreateConnections,
     createStandardDependencies
-} = require('../../../src/utils/dependency-validator');
+} = require('../../../src/utils/dependency-validator.ts');
+
+export {};
 
 describe('dependency-validator behavior', () => {
     it('validates logger interfaces and surfaces missing method guidance', () => {
@@ -27,6 +31,24 @@ describe('dependency-validator behavior', () => {
 
         const invalidViewerProvider = { ...deps, viewerCountProvider: {} };
         expect(() => validateYouTubePlatformDependencies(invalidViewerProvider)).toThrow(/viewerCountProvider must implement getViewerCount/);
+
+        expect(() => validateYouTubePlatformDependencies({ logger: 'invalid', streamDetectionService: { detectLiveStreams: () => {} } }))
+            .toThrow(/Logger expected object/);
+    });
+
+    it('validates connection factory and state manager dependency contracts', () => {
+        expect(() => validateConnectionFactoryInterface(null)).toThrow(/Connection factory is required/);
+        expect(() => validateConnectionFactoryInterface({})).toThrow(/missing createConnection method/);
+        expect(() => validateConnectionFactoryInterface({ createConnection: () => ({}) })).not.toThrow();
+
+        expect(() => validateConnectionStateManagerDependencies(null, { logger: noOpLogger }))
+            .toThrow(/missing required configuration/);
+        expect(() => validateConnectionStateManagerDependencies({}, null))
+            .toThrow(/missing required dependencies/);
+        expect(() => validateConnectionStateManagerDependencies({}, {}))
+            .toThrow(/missing required dependencies \(logger\)/);
+        expect(() => validateConnectionStateManagerDependencies({}, { logger: noOpLogger }))
+            .not.toThrow();
     });
 
     it('wraps connection factory errors with platform context', () => {
@@ -40,6 +62,10 @@ describe('dependency-validator behavior', () => {
         const nullFactory = { createConnection: () => null };
         expect(() => validateFactoryCanCreateConnections(nullFactory, 'tiktok', {}, {}))
             .toThrow(/Factory returned null\/undefined connection for tiktok/);
+
+        const invalidTypeFactory = { createConnection: () => 'bad-connection' };
+        expect(() => validateFactoryCanCreateConnections(invalidTypeFactory, 'twitch', {}, {}))
+            .toThrow(/Factory returned invalid connection type for twitch/);
     });
 
     it('creates standard dependencies structure once logger validates', () => {
