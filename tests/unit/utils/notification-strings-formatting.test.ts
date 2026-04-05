@@ -1,4 +1,5 @@
 const { describe, it, expect } = require('bun:test');
+export {};
 const { interpolateTemplate } = require('../../../src/utils/notification-template-interpolator');
 
 describe('interpolateTemplate', () => {
