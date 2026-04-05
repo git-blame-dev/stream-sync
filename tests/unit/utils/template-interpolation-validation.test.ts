@@ -1,5 +1,6 @@
 
 const { describe, test, expect } = require('bun:test');
+export {};
 
 const { TEST_TIMEOUTS } = require('../../helpers/test-setup');
 

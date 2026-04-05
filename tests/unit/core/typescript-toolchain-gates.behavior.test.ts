@@ -183,4 +183,9 @@ describe('TypeScript toolchain migration gates behavior', () => {
         expect(existsSync(join(repoRoot, 'tests/unit/utils/notification-template-sanitization.test.ts'))).toBe(true);
         expect(existsSync(join(repoRoot, 'tests/unit/utils/notification-template-sanitization.test.js'))).toBe(false);
     });
+
+    it('keeps template interpolation validation unit test on TypeScript path', () => {
+        expect(existsSync(join(repoRoot, 'tests/unit/utils/template-interpolation-validation.test.ts'))).toBe(true);
+        expect(existsSync(join(repoRoot, 'tests/unit/utils/template-interpolation-validation.test.js'))).toBe(false);
+    });
 });
