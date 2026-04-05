@@ -113,4 +113,24 @@ describe('TypeScript toolchain migration gates behavior', () => {
         expect(content).not.toContain(' as any');
         expect(content).not.toContain(': any');
     });
+
+    it('keeps helper test specs on TypeScript paths for migrated helper batch', () => {
+        const helperTestTsPaths = [
+            'tests/helpers/test-clock.test.ts',
+            'tests/helpers/test-database.test.ts',
+            'tests/helpers/event-driven-testing.test.ts'
+        ];
+        const helperTestJsPaths = [
+            'tests/helpers/test-clock.test.js',
+            'tests/helpers/test-database.test.js',
+            'tests/helpers/event-driven-testing.test.js'
+        ];
+
+        for (const helperPath of helperTestTsPaths) {
+            expect(existsSync(join(repoRoot, helperPath))).toBe(true);
+        }
+        for (const helperPath of helperTestJsPaths) {
+            expect(existsSync(join(repoRoot, helperPath))).toBe(false);
+        }
+    });
 });
