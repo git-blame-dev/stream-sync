@@ -56,6 +56,10 @@ describe('TypeScript toolchain migration gates behavior', () => {
             'tests/helpers/test-database.ts',
             'tests/helpers/event-driven-testing.ts',
             'tests/helpers/e2e-testing-infrastructure.ts',
+            'tests/helpers/tiktok-test-data.ts',
+            'tests/helpers/twitch-test-data.ts',
+            'tests/helpers/youtube-test-data.ts',
+            'tests/helpers/platform-test-data.ts',
             'tests/helpers/runtime-test-harness.ts',
             'tests/helpers/farewell-routing-harness.ts'
         ];
@@ -74,6 +78,10 @@ describe('TypeScript toolchain migration gates behavior', () => {
             'tests/helpers/test-database.js',
             'tests/helpers/event-driven-testing.js',
             'tests/helpers/e2e-testing-infrastructure.js',
+            'tests/helpers/tiktok-test-data.js',
+            'tests/helpers/twitch-test-data.js',
+            'tests/helpers/youtube-test-data.js',
+            'tests/helpers/platform-test-data.js',
             'tests/helpers/runtime-test-harness.js',
             'tests/helpers/farewell-routing-harness.js'
         ];
