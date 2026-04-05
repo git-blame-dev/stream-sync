@@ -1,4 +1,5 @@
 const { describe, test, expect } = require('bun:test');
+export {};
 const { extractTikTokGiftData } = require('../../../src/utils/tiktok-data-extraction');
 
 describe('extractTikTokGiftData', () => {
