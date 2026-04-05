@@ -1,4 +1,5 @@
 const { describe, it, beforeEach, expect } = require('bun:test');
+export {};
 const { createMockFn, clearAllMocks } = require('../../helpers/bun-mock-utils');
 
 const {
