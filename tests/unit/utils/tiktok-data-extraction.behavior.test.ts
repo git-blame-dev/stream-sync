@@ -1,4 +1,5 @@
 const { describe, expect, it } = require('bun:test');
+export {};
 const {
     extractTikTokUserData,
     extractTikTokAvatarUrl,
