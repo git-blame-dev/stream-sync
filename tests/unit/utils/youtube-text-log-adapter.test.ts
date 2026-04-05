@@ -1,4 +1,5 @@
 const { describe, it, beforeEach, afterEach, expect } = require('bun:test');
+export {};
 const { createMockFn, clearAllMocks } = require('../../helpers/bun-mock-utils');
 
 const {
@@ -142,7 +143,7 @@ describe('youtube text log adapter', () => {
             error: createMockFn()
         };
 
-        const fakeConsole = {};
+        const fakeConsole: Pick<Console, 'warn'> = {} as Pick<Console, 'warn'>;
         Object.defineProperty(fakeConsole, 'warn', {
             enumerable: true,
             configurable: true,
@@ -156,7 +157,7 @@ describe('youtube text log adapter', () => {
 
         let installResult;
         try {
-            globalThis.console = fakeConsole;
+            globalThis.console = fakeConsole as Console;
             installResult = installYouTubeTextLogAdapter({ logger: loggerWithErrors });
         } finally {
             globalThis.console = originalConsole;

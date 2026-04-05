@@ -148,4 +148,9 @@ describe('TypeScript toolchain migration gates behavior', () => {
         expect(existsSync(join(repoRoot, 'tests/unit/utils/config-field-presence.test.ts'))).toBe(true);
         expect(existsSync(join(repoRoot, 'tests/unit/utils/config-field-presence.test.js'))).toBe(false);
     });
+
+    it('keeps youtube text log adapter unit test on TypeScript path', () => {
+        expect(existsSync(join(repoRoot, 'tests/unit/utils/youtube-text-log-adapter.test.ts'))).toBe(true);
+        expect(existsSync(join(repoRoot, 'tests/unit/utils/youtube-text-log-adapter.test.js'))).toBe(false);
+    });
 });
