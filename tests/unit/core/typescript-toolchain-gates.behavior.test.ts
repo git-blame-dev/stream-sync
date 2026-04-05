@@ -1,4 +1,5 @@
 const { describe, it, expect } = require('bun:test');
+export {};
 const { existsSync, readFileSync } = require('node:fs');
 const { join } = require('node:path');
 
@@ -104,5 +105,12 @@ describe('TypeScript toolchain migration gates behavior', () => {
         for (const helperPath of helperJsPaths) {
             expect(existsSync(join(repoRoot, helperPath))).toBe(false);
         }
+    });
+
+    it('keeps mock-factories behavior helper free of broad any casts', () => {
+        const content = readFileSync(join(repoRoot, 'tests/helpers/mock-factories.behavior.test.ts'), 'utf8');
+
+        expect(content).not.toContain(' as any');
+        expect(content).not.toContain(': any');
     });
 });
