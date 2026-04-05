@@ -133,4 +133,9 @@ describe('TypeScript toolchain migration gates behavior', () => {
             expect(existsSync(join(repoRoot, helperPath))).toBe(false);
         }
     });
+
+    it('keeps env-file-parser unit test on TypeScript path', () => {
+        expect(existsSync(join(repoRoot, 'tests/unit/utils/env-file-parser.test.ts'))).toBe(true);
+        expect(existsSync(join(repoRoot, 'tests/unit/utils/env-file-parser.test.js'))).toBe(false);
+    });
 });
