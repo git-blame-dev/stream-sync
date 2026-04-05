@@ -1,4 +1,5 @@
 const { describe, it, expect } = require('bun:test');
+export {};
 const {
     sanitizeDataForInterpolation,
     convertValueToString
@@ -99,7 +100,7 @@ describe('notification-template-interpolator sanitization', () => {
         });
 
         it('handles circular references without throwing', () => {
-            const obj = { a: {} };
+            const obj: { a: { self?: unknown } } = { a: {} };
             obj.a.self = obj.a;
             expect(() => convertValueToString(obj)).not.toThrow();
         });
@@ -144,7 +145,7 @@ describe('notification-template-interpolator sanitization', () => {
         });
 
         it('handles circular references gracefully', () => {
-            const data = { a: {} };
+            const data: { a: { self?: unknown } } = { a: {} };
             data.a.self = data.a;
             expect(() => sanitizeDataForInterpolation(data)).not.toThrow();
             expect(data.a).toBeDefined();
