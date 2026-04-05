@@ -1,4 +1,5 @@
 const { describe, test, expect } = require('bun:test');
+export {};
 const { createNotificationData } = require('../../helpers/notification-test-utils');
 
 describe('NotificationStrings Resubscription Formatting', () => {

@@ -173,4 +173,9 @@ describe('TypeScript toolchain migration gates behavior', () => {
         expect(existsSync(join(repoRoot, 'tests/unit/utils/notification-strings-formatting.test.ts'))).toBe(true);
         expect(existsSync(join(repoRoot, 'tests/unit/utils/notification-strings-formatting.test.js'))).toBe(false);
     });
+
+    it('keeps notification strings resubscription unit test on TypeScript path', () => {
+        expect(existsSync(join(repoRoot, 'tests/unit/utils/notification-strings-resubscription.test.ts'))).toBe(true);
+        expect(existsSync(join(repoRoot, 'tests/unit/utils/notification-strings-resubscription.test.js'))).toBe(false);
+    });
 });
