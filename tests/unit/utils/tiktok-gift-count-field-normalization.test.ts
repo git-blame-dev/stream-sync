@@ -1,3 +1,5 @@
+const { describe, it, expect } = require('bun:test');
+export {};
 const { extractTikTokGiftData } = require('../../../src/utils/tiktok-data-extraction');
 const testClock = require('../../helpers/test-clock');
 

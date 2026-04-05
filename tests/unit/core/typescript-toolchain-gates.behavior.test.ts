@@ -208,4 +208,9 @@ describe('TypeScript toolchain migration gates behavior', () => {
         expect(existsSync(join(repoRoot, 'tests/unit/utils/platform-timestamp.test.ts'))).toBe(true);
         expect(existsSync(join(repoRoot, 'tests/unit/utils/platform-timestamp.test.js'))).toBe(false);
     });
+
+    it('keeps tiktok gift count normalization unit test on TypeScript path', () => {
+        expect(existsSync(join(repoRoot, 'tests/unit/utils/tiktok-gift-count-field-normalization.test.ts'))).toBe(true);
+        expect(existsSync(join(repoRoot, 'tests/unit/utils/tiktok-gift-count-field-normalization.test.js'))).toBe(false);
+    });
 });
