@@ -223,4 +223,9 @@ describe('TypeScript toolchain migration gates behavior', () => {
         expect(existsSync(join(repoRoot, 'tests/unit/utils/tiktok-data-extraction-webcast-gift.test.ts'))).toBe(true);
         expect(existsSync(join(repoRoot, 'tests/unit/utils/tiktok-data-extraction-webcast-gift.test.js'))).toBe(false);
     });
+
+    it('keeps tiktok unknown user structure unit test on TypeScript path', () => {
+        expect(existsSync(join(repoRoot, 'tests/unit/utils/tiktok-unknown-user-data-structure-mismatch.test.ts'))).toBe(true);
+        expect(existsSync(join(repoRoot, 'tests/unit/utils/tiktok-unknown-user-data-structure-mismatch.test.js'))).toBe(false);
+    });
 });
