@@ -203,4 +203,9 @@ describe('TypeScript toolchain migration gates behavior', () => {
         expect(existsSync(join(repoRoot, 'tests/unit/utils/sanitize-for-obs.test.ts'))).toBe(true);
         expect(existsSync(join(repoRoot, 'tests/unit/utils/sanitize-for-obs.test.js'))).toBe(false);
     });
+
+    it('keeps platform timestamp unit test on TypeScript path', () => {
+        expect(existsSync(join(repoRoot, 'tests/unit/utils/platform-timestamp.test.ts'))).toBe(true);
+        expect(existsSync(join(repoRoot, 'tests/unit/utils/platform-timestamp.test.js'))).toBe(false);
+    });
 });
