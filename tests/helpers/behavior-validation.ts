@@ -1,11 +1,12 @@
 
 // Import necessary mock factories for re-export
-const { 
+const {
     createMockPlatform,
     createMockNotificationManager,
     setupAutomatedCleanup
 } = require('./mock-factories');
 const testClock = require('./test-clock');
+const { waitForDelay } = require('./time-utils');
 
 // ================================================================================================
 // USER WORKFLOW VALIDATION
