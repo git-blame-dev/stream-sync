@@ -188,4 +188,9 @@ describe('TypeScript toolchain migration gates behavior', () => {
         expect(existsSync(join(repoRoot, 'tests/unit/utils/template-interpolation-validation.test.ts'))).toBe(true);
         expect(existsSync(join(repoRoot, 'tests/unit/utils/template-interpolation-validation.test.js'))).toBe(false);
     });
+
+    it('keeps superchat notification format unit test on TypeScript path', () => {
+        expect(existsSync(join(repoRoot, 'tests/unit/utils/superchat-notification-format.test.ts'))).toBe(true);
+        expect(existsSync(join(repoRoot, 'tests/unit/utils/superchat-notification-format.test.js'))).toBe(false);
+    });
 });
