@@ -1,4 +1,5 @@
 const { describe, expect, beforeEach, it, afterEach } = require('bun:test');
+export {};
 const { restoreAllMocks } = require('../../helpers/bun-mock-utils');
 const { noOpLogger } = require('../../helpers/mock-factories');
 const { initializeTestLogging } = require('../../helpers/test-setup');
@@ -150,10 +151,10 @@ describe('YouTube User-Agent Utility', () => {
         });
 
         it('should handle concurrent access safely', () => {
-            const promises = [];
+            const promises: Array<Promise<string>> = [];
 
             for (let i = 0; i < 10; i++) {
-                promises.push(Promise.resolve(userAgentManager.getNextUserAgent()));
+                promises.push(Promise.resolve(String(userAgentManager.getNextUserAgent())));
             }
 
             return Promise.all(promises).then(agents => {
