@@ -1,4 +1,5 @@
 const { describe, test, expect, beforeEach, afterEach } = require('bun:test');
+export {};
 const { createMockFn, restoreAllMocks } = require('../../helpers/bun-mock-utils');
 
 describe('Timeout NaN Warning Fix', () => {
@@ -17,10 +18,10 @@ describe('Timeout NaN Warning Fix', () => {
 
         timeoutCalls = [];
         originalSetTimeout = global.setTimeout;
-        global.setTimeout = (callback, delay, ...args) => {
+        global.setTimeout = ((callback, delay, ...args) => {
             timeoutCalls.push({ callback, delay, args });
             return originalSetTimeout(callback, delay, ...args);
-        };
+        }) as typeof global.setTimeout;
     });
 
     afterEach(() => {
@@ -113,7 +114,7 @@ describe('Timeout NaN Warning Fix', () => {
 
             invalidInputs.forEach(input => {
                 expect(() => {
-                    const result = input * Math.pow(2, 1);
+                    const result = Number(input) * Math.pow(2, 1);
                     if (isNaN(result)) {
                         const fallback = 5000;
                         expect(typeof fallback).toBe('number');

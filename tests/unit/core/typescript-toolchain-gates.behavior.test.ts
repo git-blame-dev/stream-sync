@@ -193,4 +193,9 @@ describe('TypeScript toolchain migration gates behavior', () => {
         expect(existsSync(join(repoRoot, 'tests/unit/utils/superchat-notification-format.test.ts'))).toBe(true);
         expect(existsSync(join(repoRoot, 'tests/unit/utils/superchat-notification-format.test.js'))).toBe(false);
     });
+
+    it('keeps timeout nan fix unit test on TypeScript path', () => {
+        expect(existsSync(join(repoRoot, 'tests/unit/utils/timeout-nan-fix.test.ts'))).toBe(true);
+        expect(existsSync(join(repoRoot, 'tests/unit/utils/timeout-nan-fix.test.js'))).toBe(false);
+    });
 });
