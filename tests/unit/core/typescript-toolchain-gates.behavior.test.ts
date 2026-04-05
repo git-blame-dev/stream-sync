@@ -198,4 +198,9 @@ describe('TypeScript toolchain migration gates behavior', () => {
         expect(existsSync(join(repoRoot, 'tests/unit/utils/timeout-nan-fix.test.ts'))).toBe(true);
         expect(existsSync(join(repoRoot, 'tests/unit/utils/timeout-nan-fix.test.js'))).toBe(false);
     });
+
+    it('keeps sanitize for obs unit test on TypeScript path', () => {
+        expect(existsSync(join(repoRoot, 'tests/unit/utils/sanitize-for-obs.test.ts'))).toBe(true);
+        expect(existsSync(join(repoRoot, 'tests/unit/utils/sanitize-for-obs.test.js'))).toBe(false);
+    });
 });
