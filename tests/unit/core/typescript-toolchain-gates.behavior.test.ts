@@ -233,4 +233,9 @@ describe('TypeScript toolchain migration gates behavior', () => {
         expect(existsSync(join(repoRoot, 'tests/unit/utils/tiktok-data-extraction.behavior.test.ts'))).toBe(true);
         expect(existsSync(join(repoRoot, 'tests/unit/utils/tiktok-data-extraction.behavior.test.js'))).toBe(false);
     });
+
+    it('keeps youtube currency parsing modern unit test on TypeScript path', () => {
+        expect(existsSync(join(repoRoot, 'tests/unit/utils/youtube-currency-parsing-modern.test.ts'))).toBe(true);
+        expect(existsSync(join(repoRoot, 'tests/unit/utils/youtube-currency-parsing-modern.test.js'))).toBe(false);
+    });
 });

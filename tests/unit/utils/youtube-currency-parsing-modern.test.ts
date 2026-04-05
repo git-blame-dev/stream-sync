@@ -1,5 +1,6 @@
 
 const { describe, expect, it, beforeEach } = require('bun:test');
+export {};
 const { noOpLogger } = require('../../helpers/mock-factories');
 
 const { getSyntheticFixture } = require('../../helpers/platform-test-data');
