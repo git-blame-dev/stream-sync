@@ -1,4 +1,5 @@
 const { describe, expect, it } = require('bun:test');
+export {};
 const { normalizeGreetingIdentityKey } = require('../../../src/utils/greeting-identity-key-normalizer');
 
 describe('normalizeGreetingIdentityKey', () => {
