@@ -1,4 +1,5 @@
-
+const { describe, test, expect } = require('bun:test');
+export {};
 const { 
     normalizeYouTubeUsername
 } = require('../../../src/platforms/youtube/youtube-username-normalizer');
@@ -100,7 +101,7 @@ describe('YouTube Username Normalization', () => {
             const internationalUsernames = Object.values(INTERNATIONAL_USERNAMES);
             const startTime = testClock.now();
 
-            const results = [];
+            const results: Array<string | null> = [];
             for (let i = 0; i < 1000; i++) {
                 const username = `@${internationalUsernames[i % internationalUsernames.length]}${i}`;
                 results.push(normalizeYouTubeUsername(username));

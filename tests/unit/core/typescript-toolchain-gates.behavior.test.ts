@@ -163,4 +163,9 @@ describe('TypeScript toolchain migration gates behavior', () => {
         expect(existsSync(join(repoRoot, 'tests/unit/utils/youtube-user-agent-utility.test.ts'))).toBe(true);
         expect(existsSync(join(repoRoot, 'tests/unit/utils/youtube-user-agent-utility.test.js'))).toBe(false);
     });
+
+    it('keeps youtube username normalizer unit test on TypeScript path', () => {
+        expect(existsSync(join(repoRoot, 'tests/unit/utils/youtube-username-normalizer.test.ts'))).toBe(true);
+        expect(existsSync(join(repoRoot, 'tests/unit/utils/youtube-username-normalizer.test.js'))).toBe(false);
+    });
 });
