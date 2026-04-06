@@ -79,8 +79,8 @@ describe('EnhancedHttpClient behavior', () => {
     });
 
     it('encodes urlencoded post bodies', async () => {
-        let postedBody;
-        let postedConfig;
+        let postedBody!: string;
+        let postedConfig!: { headers: Record<string, string> };
         const axios = {
             post: createMockFn(async (_url, body, config) => {
                 postedBody = body;

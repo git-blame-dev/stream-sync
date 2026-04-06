@@ -5,10 +5,10 @@ const { noOpLogger } = require('../../helpers/mock-factories');
 
 const { RetrySystem, ADAPTIVE_RETRY_CONFIG } = require('../../../src/utils/retry-system');
 
-let mockSafeSetTimeout;
-let mockSafeDelay;
-let mockValidateTimeout;
-let mockValidateExponentialBackoff;
+let mockSafeSetTimeout: ReturnType<typeof createMockFn>;
+let mockSafeDelay: ReturnType<typeof createMockFn>;
+let mockValidateTimeout: ReturnType<typeof createMockFn>;
+let mockValidateExponentialBackoff: ReturnType<typeof createMockFn>;
 
 const createTimeoutMocks = () => {
     mockSafeSetTimeout = createMockFn().mockImplementation((fn) => {
