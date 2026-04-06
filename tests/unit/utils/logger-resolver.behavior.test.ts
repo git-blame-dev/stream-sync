@@ -1,4 +1,6 @@
+const { describe, it, expect } = require('bun:test');
 const { resolveLogger } = require('../../../src/utils/logger-resolver');
+export {};
 
 describe('logger-resolver behavior', () => {
     it('preserves prototype methods like console on class-based loggers', () => {

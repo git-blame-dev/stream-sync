@@ -1,6 +1,8 @@
+const { describe, test, expect } = require('bun:test');
 const {
     assertPlatformInterface
 } = require('../../../src/utils/platform-interface-validator');
+export {};
 
 describe('platform-interface-validator behavior', () => {
     test('assertPlatformInterface throws a user-friendly error for invalid platforms', () => {

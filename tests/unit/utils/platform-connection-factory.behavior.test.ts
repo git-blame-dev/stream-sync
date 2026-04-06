@@ -1,4 +1,5 @@
 const { describe, test, expect, afterEach } = require('bun:test');
+export {};
 const { noOpLogger } = require('../../helpers/mock-factories');
 const { PlatformConnectionFactory } = require('../../../src/utils/platform-connection-factory');
 const { secrets, _resetForTesting, initializeStaticSecrets } = require('../../../src/core/secrets');

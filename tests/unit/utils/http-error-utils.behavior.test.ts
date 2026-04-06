@@ -1,4 +1,6 @@
+const { describe, test, expect } = require('bun:test');
 const { extractHttpErrorDetails } = require('../../../src/utils/http-error-utils');
+export {};
 
 describe('http-error-utils behavior', () => {
     test('extractHttpErrorDetails returns safe defaults for non-HTTP errors', () => {
@@ -75,4 +77,3 @@ describe('http-error-utils behavior', () => {
         expect(details.url).toBe('https://api.example.com/v1/large');
     });
 });
-
