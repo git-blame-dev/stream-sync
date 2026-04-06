@@ -1077,4 +1077,22 @@ describe('TypeScript toolchain migration gates behavior', () => {
             expect(existsSync(join(repoRoot, testPath))).toBe(false);
         }
     });
+
+    it('keeps remaining unit root runtime tiktok main twitch cohort d tests free of untyped mutable declarations', () => {
+        const cohortPaths = [
+            'tests/unit/runtime-system-ready.test.ts',
+            'tests/unit/twitch-resubscription-notification-fix.test.ts',
+            'tests/unit/tiktok-official-gift-pattern.test.ts',
+            'tests/unit/tiktok-connection-refactor.test.ts',
+            'tests/unit/tiktok-connection-fix-validation.test.ts',
+            'tests/unit/main-updateviewercount-obs-fix.test.ts',
+            'tests/unit/main-supersticker-handler-missing.test.ts'
+        ];
+
+        for (const testPath of cohortPaths) {
+            const content = readFileSync(join(repoRoot, testPath), 'utf8');
+            expect(content).not.toMatch(/\blet\s+[A-Za-z_$][\w$]*\s*;/);
+            expect(content).not.toMatch(/\blet\s+[A-Za-z_$][\w$]*\s*,/);
+        }
+    });
 });

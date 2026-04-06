@@ -7,7 +7,7 @@ const { noOpLogger } = require('../helpers/mock-factories');
 const { secrets, _resetForTesting, initializeStaticSecrets } = require('../../src/core/secrets');
 
 describe('TwitchEventSub Resubscription Notification Fix', () => {
-    let eventSub;
+    let eventSub: InstanceType<typeof TwitchEventSub>;
 
     beforeEach(() => {
         _resetForTesting();
