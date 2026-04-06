@@ -1,5 +1,6 @@
 
 const { describe, expect, afterEach, it } = require('bun:test');
+export {};
 const { createMockFn, clearAllMocks, restoreAllMocks } = require('../../helpers/bun-mock-utils');
 
 const { setupAutomatedCleanup } = require('../../helpers/mock-lifecycle');

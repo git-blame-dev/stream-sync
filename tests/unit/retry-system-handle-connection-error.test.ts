@@ -1,4 +1,5 @@
 const { describe, test, expect, afterEach } = require('bun:test');
+export {};
 
 const { RetrySystem } = require('../../src/utils/retry-system');
 const { safeDelay } = require('../../src/utils/timeout-validator');
@@ -9,7 +10,8 @@ describe('RetrySystem.handleConnectionError', () => {
 
     afterEach(() => {
         if (retrySystem && retrySystem.retryTimers) {
-            Object.values(retrySystem.retryTimers).forEach(timer => clearTimeout(timer));
+            const timers = Object.values(retrySystem.retryTimers) as Array<ReturnType<typeof setTimeout>>;
+            timers.forEach(timer => clearTimeout(timer));
         }
     });
 
