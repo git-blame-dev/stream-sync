@@ -1113,4 +1113,27 @@ describe('TypeScript toolchain migration gates behavior', () => {
             expect(content).not.toContain('export {};');
         }
     });
+
+    it('keeps cohort d test modules free of commonjs module syntax', () => {
+        const cohortPaths = [
+            'tests/unit/runtime-system-ready.test.ts',
+            'tests/unit/twitch-resubscription-notification-fix.test.ts',
+            'tests/unit/tiktok-official-gift-pattern.test.ts',
+            'tests/unit/tiktok-connection-refactor.test.ts',
+            'tests/unit/tiktok-connection-fix-validation.test.ts',
+            'tests/unit/main-updateviewercount-obs-fix.test.ts',
+            'tests/unit/main-supersticker-handler-missing.test.ts'
+        ];
+
+        for (const testPath of cohortPaths) {
+            const content = readFileSync(join(repoRoot, testPath), 'utf8');
+            const contentWithoutAllowedShim = testPath === 'tests/unit/runtime-system-ready.test.ts'
+                ? content.replace("const { AppRuntime } = require('../../src/runtime/AppRuntime');", '')
+                : content;
+
+            expect(contentWithoutAllowedShim).not.toMatch(/\brequire\s*\(/);
+            expect(content).not.toContain('module.exports');
+            expect(content).not.toMatch(/\bexports\./);
+        }
+    });
 });

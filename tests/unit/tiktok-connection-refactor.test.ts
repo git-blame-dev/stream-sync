@@ -1,7 +1,10 @@
 import { describe, test, expect, afterEach } from 'bun:test';
-const EventEmitter = require('events');
-const { noOpLogger } = require('../helpers/mock-factories');
-const { TikTokPlatform } = require('../../src/platforms/tiktok');
+import { createRequire } from 'node:module';
+
+const load = createRequire(__filename);
+const { EventEmitter } = load('events');
+const { noOpLogger } = load('../helpers/mock-factories');
+const { TikTokPlatform } = load('../../src/platforms/tiktok');
 
 describe('TikTokPlatform connection state', () => {
     let platform: InstanceType<typeof TikTokPlatform>;

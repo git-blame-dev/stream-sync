@@ -1,7 +1,10 @@
 import { describe, test, expect, afterEach } from 'bun:test';
-const { createMockFn, restoreAllMocks } = require('../helpers/bun-mock-utils');
-const { createMockNotificationManager } = require('../helpers/mock-factories');
-const { createTestAppRuntime } = require('../helpers/runtime-test-harness');
+import { createRequire } from 'node:module';
+
+const load = createRequire(__filename);
+const { createMockFn, restoreAllMocks } = load('../helpers/bun-mock-utils');
+const { createMockNotificationManager } = load('../helpers/mock-factories');
+const { createTestAppRuntime } = load('../helpers/runtime-test-harness');
 
 describe('SuperSticker Notification Handling', () => {
     afterEach(() => {

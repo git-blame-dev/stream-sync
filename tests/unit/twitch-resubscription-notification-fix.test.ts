@@ -1,9 +1,12 @@
 import { describe, test, expect, beforeEach, afterEach } from 'bun:test';
-const { EventEmitter } = require('events');
+import { createRequire } from 'node:module';
 
-const TwitchEventSub = require('../../src/platforms/twitch-eventsub');
-const { noOpLogger } = require('../helpers/mock-factories');
-const { secrets, _resetForTesting, initializeStaticSecrets } = require('../../src/core/secrets');
+const load = createRequire(__filename);
+const { EventEmitter } = load('events');
+
+const TwitchEventSub = load('../../src/platforms/twitch-eventsub');
+const { noOpLogger } = load('../helpers/mock-factories');
+const { secrets, _resetForTesting, initializeStaticSecrets } = load('../../src/core/secrets');
 
 describe('TwitchEventSub Resubscription Notification Fix', () => {
     let eventSub: InstanceType<typeof TwitchEventSub>;
