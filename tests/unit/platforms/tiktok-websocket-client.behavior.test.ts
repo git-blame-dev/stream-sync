@@ -23,9 +23,9 @@ class MockWebSocket extends EventEmitter {
 }
 
 describe('TikTokWebSocketClient (behavior)', () => {
-    let TikTokWebSocketClient;
-    let mockWs;
-    let client;
+    let TikTokWebSocketClient: any;
+    let mockWs: MockWebSocket | null;
+    let client: any;
 
     beforeEach(() => {
         useFakeTimers();

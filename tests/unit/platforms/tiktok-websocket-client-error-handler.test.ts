@@ -24,10 +24,15 @@ class MockWebSocket extends EventEmitter {
 }
 
 describe('TikTokWebSocketClient error handler integration', () => {
-    let TikTokWebSocketClient;
-    let mockWs;
-    let client;
-    let mockLogger;
+    let TikTokWebSocketClient: any;
+    let mockWs: any;
+    let client: any;
+    let mockLogger: {
+        debug: ReturnType<typeof createMockFn>;
+        info: ReturnType<typeof createMockFn>;
+        warn: ReturnType<typeof createMockFn>;
+        error: ReturnType<typeof createMockFn>;
+    };
 
     beforeEach(() => {
         useFakeTimers();
