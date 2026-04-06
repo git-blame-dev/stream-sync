@@ -1,4 +1,5 @@
 const { describe, expect, beforeEach, it, afterEach } = require('bun:test');
+export {};
 const { createMockFn, clearAllMocks, restoreAllMocks } = require('../../helpers/bun-mock-utils');
 const { noOpLogger } = require('../../helpers/mock-factories');
 const {
@@ -7,7 +8,7 @@ const {
     UserJourneyValidator
 } = require('../../helpers/e2e-testing-infrastructure');
 
-const fakePlatform = (result = 'ok') => ({
+const fakePlatform = (result: unknown = 'ok') => ({
     handleWebSocketMessage: createMockFn(async () => result)
 });
 
