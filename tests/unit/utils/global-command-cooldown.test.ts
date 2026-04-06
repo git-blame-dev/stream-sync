@@ -17,6 +17,19 @@ const {
 } = require('../../helpers/mock-lifecycle');
 const testClock = require('../../helpers/test-clock');
 
+type CooldownStats = {
+  totalTrackedCommands: number;
+  commandsOnCooldown: number;
+  oldestCommandTimestamp: number;
+};
+
+type GlobalCommandCooldownManagerLike = {
+  isCommandOnCooldown: (command: unknown, cooldownMs: number) => boolean;
+  updateCommandTimestamp: (command: string) => void;
+  getStats: () => CooldownStats;
+  clearExpiredCooldowns: (cooldownMs: number) => number;
+};
+
 initializeTestLogging();
 
 setupAutomatedCleanup({
@@ -26,8 +39,8 @@ setupAutomatedCleanup({
 });
 
 describe('GlobalCommandCooldownManager', () => {
-  let cooldownManager;
-  let mockLogger;
+  let cooldownManager: GlobalCommandCooldownManagerLike;
+  let mockLogger: typeof noOpLogger;
 
   beforeEach(() => {
     mockLogger = noOpLogger;
