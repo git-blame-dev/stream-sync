@@ -9,6 +9,19 @@ const path = require('path');
 const { safeDelay } = require('../../src/utils/timeout-validator');
 const { PlatformEvents } = require('../../src/interfaces/PlatformEvents');
 
+type RuntimeConfig = {
+    general: {
+        greetingsEnabled: boolean;
+        commandsEnabled?: boolean;
+    };
+    vfx: {
+        filePath: string;
+    };
+    commands: Record<string, string>;
+};
+
+type RuntimeUnderTest = InstanceType<typeof AppRuntime>;
+
 setupAutomatedCleanup({
     clearCallsBeforeEach: true,
     validateAfterCleanup: true,
@@ -16,8 +29,8 @@ setupAutomatedCleanup({
 });
 
 describe('AppRuntime VFXCommandService Lifecycle Management', () => {
-    let runtime;
-    let config;
+    let runtime!: RuntimeUnderTest;
+    let config!: RuntimeConfig;
 
     beforeEach(() => {
         clearAllMocks();

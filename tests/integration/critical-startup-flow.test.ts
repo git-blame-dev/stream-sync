@@ -17,8 +17,8 @@ function loadFreshConfig() {
 }
 
 describe('Critical Startup Flow', () => {
-    let tempDir;
-    let originalEnv;
+    let tempDir: string;
+    let originalEnv: NodeJS.ProcessEnv;
 
     beforeEach(() => {
         originalEnv = { ...process.env };
