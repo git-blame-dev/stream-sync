@@ -1,6 +1,5 @@
 
-const { describe, expect, beforeEach, it, afterEach } = require('bun:test');
-export {};
+import { describe, expect, beforeEach, it, afterEach } from 'bun:test';
 const { createMockFn, restoreAllMocks } = require('../helpers/bun-mock-utils');
 
 const { DependencyFactory } = require('../../src/utils/dependency-factory');

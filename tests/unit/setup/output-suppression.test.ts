@@ -1,5 +1,4 @@
-const { describe, it, expect } = require('bun:test');
-export {};
+import { describe, it, expect } from 'bun:test';
 const { captureStdout, captureStderr } = require('../../helpers/output-capture');
 
 describe('test output suppression', () => {
