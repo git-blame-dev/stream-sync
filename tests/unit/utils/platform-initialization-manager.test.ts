@@ -5,7 +5,10 @@ const { noOpLogger } = require('../../helpers/mock-factories');
 const { PlatformInitializationManager } = require('../../../src/utils/platform-initialization-manager');
 
 describe('PlatformInitializationManager', () => {
-    let mockHandler;
+    let mockHandler: {
+        handleEventProcessingError: ReturnType<typeof createMockFn>;
+        logOperationalError: ReturnType<typeof createMockFn>;
+    };
 
     beforeEach(() => {
         mockHandler = {

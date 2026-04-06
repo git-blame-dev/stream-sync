@@ -5,8 +5,11 @@ const { noOpLogger } = require('../../helpers/mock-factories');
 const { PlatformInitializationManager } = require('../../../src/utils/platform-initialization-manager');
 
 describe('PlatformInitializationManager behavior edges', () => {
-    let sharedHandler;
-    let mockCreateErrorHandler;
+    let sharedHandler: {
+        handleEventProcessingError: ReturnType<typeof createMockFn>;
+        logOperationalError: ReturnType<typeof createMockFn>;
+    };
+    let mockCreateErrorHandler: ReturnType<typeof createMockFn>;
 
     beforeEach(() => {
         sharedHandler = {

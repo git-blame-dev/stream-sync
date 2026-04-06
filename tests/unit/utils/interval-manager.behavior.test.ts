@@ -6,9 +6,9 @@ const { IntervalManager } = require('../../../src/utils/interval-manager');
 const testClock = require('../../helpers/test-clock');
 
 describe('IntervalManager behavior', () => {
-    let intervalIdCounter;
-    let mockSafeSetInterval;
-    let clearIntervalSpy;
+    let intervalIdCounter: number;
+    let mockSafeSetInterval: ReturnType<typeof createMockFn>;
+    let clearIntervalSpy: ReturnType<typeof spyOn>;
 
     beforeEach(() => {
         clearIntervalSpy = spyOn(global, 'clearInterval').mockImplementation(() => {});

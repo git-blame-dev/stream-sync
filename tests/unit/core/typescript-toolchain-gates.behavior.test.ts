@@ -622,4 +622,24 @@ describe('TypeScript toolchain migration gates behavior', () => {
             expect(existsSync(join(repoRoot, testPath))).toBe(false);
         }
     });
+
+    it('keeps utils cohort a tests free of untyped mutable declarations', () => {
+        const cohortPaths = [
+            'tests/unit/utils/platform-connection-factory.behavior.test.ts',
+            'tests/unit/utils/platform-interface-validator.behavior.test.ts',
+            'tests/unit/utils/dependency-factory.behavior.test.ts',
+            'tests/unit/utils/platform-initialization-manager.test.ts',
+            'tests/unit/utils/platform-initialization-manager.behavior.test.ts',
+            'tests/unit/utils/connection-state-manager.behavior.test.ts',
+            'tests/unit/utils/interval-manager.behavior.test.ts',
+            'tests/unit/utils/initialization-statistics.behavior.test.ts',
+            'tests/unit/utils/logger-resolver.behavior.test.ts',
+            'tests/unit/utils/http-error-utils.behavior.test.ts'
+        ];
+
+        for (const testPath of cohortPaths) {
+            const content = readFileSync(join(repoRoot, testPath), 'utf8');
+            expect(content).not.toMatch(/\blet\s+[A-Za-z_$][\w$]*\s*;/);
+        }
+    });
 });

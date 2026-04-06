@@ -6,8 +6,13 @@ const { DependencyFactory } = require('../../../src/utils/dependency-factory');
 const { _resetForTesting, initializeStaticSecrets } = require('../../../src/core/secrets');
 
 describe('DependencyFactory behavior', () => {
-    let factory;
-    let configFixture;
+    let factory: InstanceType<typeof DependencyFactory>;
+    let configFixture: {
+        general: { ignoreSelfMessages: boolean };
+        twitch: { ignoreSelfMessages: boolean };
+        youtube: { ignoreSelfMessages: boolean };
+        tiktok: { ignoreSelfMessages: boolean };
+    };
 
     beforeEach(() => {
         factory = new DependencyFactory();
