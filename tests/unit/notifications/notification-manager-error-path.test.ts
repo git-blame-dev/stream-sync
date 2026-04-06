@@ -7,11 +7,22 @@ const { createConfigFixture } = require('../../helpers/config-fixture');
 const NotificationManager = require('../../../src/notifications/NotificationManager');
 const constants = require('../../../src/core/constants');
 
+type ErrorQueueItem = {
+    data?: {
+        isError?: boolean;
+        displayMessage?: string;
+        ttsMessage?: string;
+        logMessage?: string;
+        [key: string]: unknown;
+    };
+    [key: string]: unknown;
+};
+
 const createDisplayQueueStub = () => {
-    const items = [];
+    const items: ErrorQueueItem[] = [];
     return {
         items,
-        addItem: (item) => items.push(item),
+        addItem: (item: ErrorQueueItem) => items.push(item),
         getQueueLength: () => items.length
     };
 };
@@ -49,9 +60,9 @@ describe('NotificationManager monetization error path', () => {
         expect(result).toEqual(expect.objectContaining({ success: true }));
         expect(displayQueue.items).toHaveLength(1);
         const queued = displayQueue.items[0];
-        expect(queued.data.isError).toBe(true);
-        expect(queued.data.displayMessage).toMatch(/error/i);
-        expect(queued.data.ttsMessage).toMatch(/error/i);
-        expect(queued.data.logMessage).toMatch(/error/i);
+        expect(queued.data?.isError).toBe(true);
+        expect(queued.data?.displayMessage).toMatch(/error/i);
+        expect(queued.data?.ttsMessage).toMatch(/error/i);
+        expect(queued.data?.logMessage).toMatch(/error/i);
     });
 });
