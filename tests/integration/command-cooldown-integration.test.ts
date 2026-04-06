@@ -16,10 +16,14 @@ setupAutomatedCleanup({
 
 const testWithTimeout = (name, fn) => test(name, fn, { timeout: TEST_TIMEOUTS.INTEGRATION });
 
+type CheckGlobalCommandCooldown = (commandName: string | null | undefined, globalCooldownMs?: number) => boolean;
+type UpdateGlobalCommandCooldown = (commandName: string | null | undefined) => void;
+type ClearExpiredGlobalCooldowns = (maxAgeMs?: number) => number;
+
 describe('Command Cooldown Integration', () => {
-  let checkGlobalCommandCooldown;
-  let updateGlobalCommandCooldown;
-  let clearExpiredGlobalCooldowns;
+  let checkGlobalCommandCooldown: CheckGlobalCommandCooldown;
+  let updateGlobalCommandCooldown: UpdateGlobalCommandCooldown;
+  let clearExpiredGlobalCooldowns: ClearExpiredGlobalCooldowns;
 
   beforeEach(() => {
     testClock.reset();
@@ -76,7 +80,7 @@ describe('Command Cooldown Integration', () => {
 
   describe('when handling rapid command succession', () => {
     testWithTimeout('should handle multiple rapid cooldown checks correctly', () => {
-      const results = [];
+      const results: boolean[] = [];
 
       results.push(checkGlobalCommandCooldown('!spam', 2000));
       updateGlobalCommandCooldown('!spam');
@@ -127,7 +131,7 @@ describe('Command Cooldown Integration', () => {
     testWithTimeout('should handle concurrent cooldown operations safely', () => {
       const commandName = '!concurrent';
 
-      const operations = [];
+      const operations: Array<() => boolean> = [];
       for (let i = 0; i < 10; i++) {
         operations.push(() => {
           const blocked = checkGlobalCommandCooldown(commandName, 1000);
@@ -144,7 +148,7 @@ describe('Command Cooldown Integration', () => {
     });
 
     testWithTimeout('should handle malformed command names gracefully', () => {
-      const malformedCommands = [null, undefined, '', '   ', '!', 'normal_text'];
+      const malformedCommands: Array<string | null | undefined> = [null, undefined, '', '   ', '!', 'normal_text'];
 
       malformedCommands.forEach(cmd => {
         expect(() => {

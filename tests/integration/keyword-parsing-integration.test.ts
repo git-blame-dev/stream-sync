@@ -6,9 +6,33 @@ const { restoreAllMocks } = require('../helpers/bun-mock-utils');
 const { CommandParser } = require('../../src/chat/commands');
 const testClock = require('../helpers/test-clock');
 
+type KeywordConfigFixture = {
+    commands: Record<string, string>;
+    farewell: {
+        command: string;
+    };
+    vfx: {
+        filePath: string;
+    };
+    general: {
+        keywordParsingEnabled: boolean;
+    };
+};
+
+type VfxConfigResult = {
+    filename: string;
+    command: string;
+    keyword: string | null;
+};
+
+type CommandParserUnderTest = {
+    getVFXConfig: (command: string | null | undefined, message: string | null | undefined) => VfxConfigResult;
+    getMatchingFarewell: (input: string, token: string) => string;
+};
+
 describe('Keyword Parsing Integration', () => {
-    let commandParser;
-    let configFixture;
+    let commandParser: CommandParserUnderTest;
+    let configFixture: KeywordConfigFixture;
 
     beforeEach(() => {
         testClock.reset();
