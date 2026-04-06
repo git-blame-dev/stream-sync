@@ -829,4 +829,24 @@ describe('TypeScript toolchain migration gates behavior', () => {
             expect(existsSync(join(repoRoot, testPath))).toBe(false);
         }
     });
+
+    it('keeps unit root core config cohort b tests free of untyped mutable declarations', () => {
+        const cohortPaths = [
+            'tests/unit/old-message-filter.test.ts',
+            'tests/unit/greeting-system-diagnosis.test.ts',
+            'tests/unit/bits-goal-counter-fix.test.ts',
+            'tests/unit/tiktok-event-factory-behavior.test.ts',
+            'tests/unit/startup-clearing-simple.test.ts',
+            'tests/unit/startup-clearing-focused.test.ts',
+            'tests/unit/debug-mode-command-line.test.ts',
+            'tests/unit/template-interpolation-fallbacks.test.ts',
+            'tests/unit/main-greeting-fix-validation.test.ts',
+            'tests/unit/twitch-gift-sub-notification.test.ts'
+        ];
+
+        for (const testPath of cohortPaths) {
+            const content = readFileSync(join(repoRoot, testPath), 'utf8');
+            expect(content).not.toMatch(/\blet\s+[A-Za-z_$][\w$]*\s*;/);
+        }
+    });
 });

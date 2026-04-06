@@ -7,6 +7,28 @@ const { setupAutomatedCleanup } = require('../helpers/mock-lifecycle');
 const { createConfigFixture } = require('../helpers/config-fixture');
 const PlatformEventRouter = require('../../src/services/PlatformEventRouter');
 
+type MockFn = ReturnType<typeof createMockFn>;
+
+type EventPayload = {
+    platform: string;
+    type: string;
+    data: Record<string, unknown>;
+};
+
+type EventHandlers = Record<string, Array<(payload: unknown) => Promise<void> | void>>;
+
+type EmitGiftInput = {
+    bits?: number;
+    username?: string;
+    userId?: string;
+    message?: string;
+    id?: string;
+};
+
+type RouterInstance = {
+    dispose?: () => void;
+};
+
 setupAutomatedCleanup({
     clearCallsBeforeEach: true,
     validateAfterCleanup: true,
@@ -14,11 +36,14 @@ setupAutomatedCleanup({
 });
 
 describe('Bits Goal Counter Fix', () => {
-    let mockLogger;
-    let mockNotificationManager;
-    let mockAppRuntime;
-    let mockEventBus;
-    let router;
+    let mockLogger: typeof noOpLogger;
+    let mockNotificationManager: ReturnType<typeof createMockNotificationManager>;
+    let mockAppRuntime: { handleGiftNotification: MockFn };
+    let mockEventBus: {
+        subscribe: MockFn;
+        emit: (event: string, payload: EventPayload) => Promise<void>;
+    };
+    let router: RouterInstance | null;
 
     beforeEach(() => {
         mockLogger = noOpLogger;
@@ -30,7 +55,12 @@ describe('Bits Goal Counter Fix', () => {
         });
 
         mockAppRuntime = {
-            handleGiftNotification: createMockFn((platform, username, options = {}) => {
+            handleGiftNotification: createMockFn((platform, username, options: {
+                giftType?: string;
+                giftCount?: number;
+                amount?: number;
+                currency?: string;
+            } = {}) => {
                 const giftType = options.giftType;
                 const giftCount = Number(options.giftCount);
                 const amount = Number(options.amount);
@@ -42,9 +72,9 @@ describe('Bits Goal Counter Fix', () => {
             })
         };
 
-        const handlers = {};
+        const handlers: EventHandlers = {};
         mockEventBus = {
-            subscribe: createMockFn((event, handler) => {
+            subscribe: createMockFn((event: string, handler: (payload: unknown) => Promise<void> | void) => {
                 if (!handlers[event]) {
                     handlers[event] = [];
                 }
@@ -53,7 +83,7 @@ describe('Bits Goal Counter Fix', () => {
                     handlers[event] = handlers[event].filter((h) => h !== handler);
                 };
             }),
-            emit: async (event, payload) => {
+            emit: async (event: string, payload: EventPayload) => {
                 if (!handlers[event]) {
                     return;
                 }
@@ -74,11 +104,18 @@ describe('Bits Goal Counter Fix', () => {
 
     afterEach(() => {
         restoreAllMocks();
-        router?.dispose();
+        router?.dispose?.();
     });
 
-    const emitGift = async ({ bits, username, userId, message = '', id = 'cheer-evt-1' } = {}) => {
-        const data = {
+    const emitGift = async ({ bits, username, userId, message = '', id = 'cheer-evt-1' }: EmitGiftInput = {}) => {
+        const data: Record<string, unknown> & {
+            cheermoteInfo: {
+                prefix: string;
+                isMixed: boolean;
+                bits?: number;
+            };
+            bits?: number;
+        } = {
             username,
             userId,
             message,

@@ -10,15 +10,18 @@ setupAutomatedCleanup({
     logPerformanceMetrics: true
 });
 
+type InterpolateTemplate = (template: string, data: Record<string, unknown>) => string;
+type CreateNotificationData = (...args: unknown[]) => unknown;
+
 describe('Template Interpolation Fallbacks', () => {
-    let interpolateTemplate;
-    let createNotificationData;
+    let interpolateTemplate: InterpolateTemplate;
+    let createNotificationData: CreateNotificationData;
 
     beforeEach(() => {
         const interpolatorModule = require('../../src/utils/notification-template-interpolator');
         const testUtils = require('../helpers/notification-test-utils');
-        interpolateTemplate = interpolatorModule.interpolateTemplate;
-        createNotificationData = testUtils.createNotificationData;
+        interpolateTemplate = interpolatorModule.interpolateTemplate as InterpolateTemplate;
+        createNotificationData = testUtils.createNotificationData as CreateNotificationData;
     });
 
     describe('when template data is missing required fields', () => {

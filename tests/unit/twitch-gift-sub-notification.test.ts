@@ -9,6 +9,10 @@ const { createConfigFixture } = require('../helpers/config-fixture');
 const NotificationManager = require('../../src/notifications/NotificationManager');
 const { createTextProcessingManager } = require('../../src/utils/text-processing');
 
+type NotificationManagerInstance = {
+    handleNotification: (type: string, platform: string, data: Record<string, unknown>) => Promise<unknown>;
+};
+
 setupAutomatedCleanup({
     clearCallsBeforeEach: true,
     validateAfterCleanup: true,
@@ -20,9 +24,9 @@ describe('Twitch gift subscriptions', () => {
         restoreAllMocks();
     });
 
-    let mockLogger;
-    let mockDisplayQueue;
-    let notificationManager;
+    let mockLogger: typeof noOpLogger;
+    let mockDisplayQueue: ReturnType<typeof createMockDisplayQueue>;
+    let notificationManager: NotificationManagerInstance;
 
     const createManager = () => {
         const mockEventBus = { emit: createMockFn(), on: createMockFn(), off: createMockFn() };
