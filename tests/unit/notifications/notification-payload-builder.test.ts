@@ -1,4 +1,5 @@
 const { describe, expect, it } = require('bun:test');
+export {};
 const NotificationBuilder = require('../../../src/utils/notification-builder');
 
 const { NotificationPayloadBuilder } = require('../../../src/notifications/notification-payload-builder');

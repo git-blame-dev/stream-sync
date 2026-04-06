@@ -1,4 +1,5 @@
 const { describe, expect, it } = require('bun:test');
+export {};
 
 const { NotificationInputValidator } = require('../../../src/notifications/notification-input-validator');
 

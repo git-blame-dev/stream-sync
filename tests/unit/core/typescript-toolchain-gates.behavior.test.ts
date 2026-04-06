@@ -278,4 +278,44 @@ describe('TypeScript toolchain migration gates behavior', () => {
         expect(existsSync(join(repoRoot, 'tests/unit/youtube-viewer-count-behavior.test.ts'))).toBe(true);
         expect(existsSync(join(repoRoot, 'tests/unit/youtube-viewer-count-behavior.test.js'))).toBe(false);
     });
+
+    it('keeps notification duration removal behavior test on TypeScript path', () => {
+        expect(existsSync(join(repoRoot, 'tests/unit/notifications/notification-duration-removal.behavior.test.ts'))).toBe(true);
+        expect(existsSync(join(repoRoot, 'tests/unit/notifications/notification-duration-removal.behavior.test.js'))).toBe(false);
+    });
+
+    it('keeps notification input validator test on TypeScript path', () => {
+        expect(existsSync(join(repoRoot, 'tests/unit/notifications/notification-input-validator.test.ts'))).toBe(true);
+        expect(existsSync(join(repoRoot, 'tests/unit/notifications/notification-input-validator.test.js'))).toBe(false);
+    });
+
+    it('keeps notification payload builder test on TypeScript path', () => {
+        expect(existsSync(join(repoRoot, 'tests/unit/notifications/notification-payload-builder.test.ts'))).toBe(true);
+        expect(existsSync(join(repoRoot, 'tests/unit/notifications/notification-payload-builder.test.js'))).toBe(false);
+    });
+
+    it('keeps notification gate test on TypeScript path', () => {
+        expect(existsSync(join(repoRoot, 'tests/unit/notifications/notification-gate.test.ts'))).toBe(true);
+        expect(existsSync(join(repoRoot, 'tests/unit/notifications/notification-gate.test.js'))).toBe(false);
+    });
+
+    it('keeps notification type normalization test on TypeScript path', () => {
+        expect(existsSync(join(repoRoot, 'tests/unit/notifications/notification-type-normalization.test.ts'))).toBe(true);
+        expect(existsSync(join(repoRoot, 'tests/unit/notifications/notification-type-normalization.test.js'))).toBe(false);
+    });
+
+    it('keeps notification manager input validation test on TypeScript path', () => {
+        expect(existsSync(join(repoRoot, 'tests/unit/notifications/notification-manager-input-validation.test.ts'))).toBe(true);
+        expect(existsSync(join(repoRoot, 'tests/unit/notifications/notification-manager-input-validation.test.js'))).toBe(false);
+    });
+
+    it('keeps notification manager logger args test on TypeScript path', () => {
+        expect(existsSync(join(repoRoot, 'tests/unit/notifications/notification-manager-logger-args.test.ts'))).toBe(true);
+        expect(existsSync(join(repoRoot, 'tests/unit/notifications/notification-manager-logger-args.test.js'))).toBe(false);
+    });
+
+    it('keeps notification manager app dependency test on TypeScript path', () => {
+        expect(existsSync(join(repoRoot, 'tests/unit/notifications/notification-manager-app-dependency.test.ts'))).toBe(true);
+        expect(existsSync(join(repoRoot, 'tests/unit/notifications/notification-manager-app-dependency.test.js'))).toBe(false);
+    });
 });

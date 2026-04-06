@@ -1,4 +1,5 @@
 const { describe, expect, it } = require('bun:test');
+export {};
 
 const { NotificationGate } = require('../../../src/notifications/notification-gate');
 
