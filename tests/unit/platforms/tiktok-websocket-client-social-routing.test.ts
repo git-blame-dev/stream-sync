@@ -1,4 +1,5 @@
 const { describe, it, expect } = require('bun:test');
+export {};
 const { TikTokWebSocketClient } = require('../../../src/platforms/tiktok-websocket-client');
 
 describe('TikTokWebSocketClient social routing', () => {
