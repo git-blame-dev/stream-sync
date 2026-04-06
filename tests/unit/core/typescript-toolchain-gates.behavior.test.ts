@@ -319,6 +319,46 @@ describe('TypeScript toolchain migration gates behavior', () => {
         expect(existsSync(join(repoRoot, 'tests/unit/notifications/notification-manager-app-dependency.test.js'))).toBe(false);
     });
 
+    it('keeps notification manager behavior test on TypeScript path', () => {
+        expect(existsSync(join(repoRoot, 'tests/unit/notifications/notification-manager.behavior.test.ts'))).toBe(true);
+        expect(existsSync(join(repoRoot, 'tests/unit/notifications/notification-manager.behavior.test.js'))).toBe(false);
+    });
+
+    it('keeps notification manager follow raid share behavior test on TypeScript path', () => {
+        expect(existsSync(join(repoRoot, 'tests/unit/notifications/notification-manager-follow-raid-share-behavior.test.ts'))).toBe(true);
+        expect(existsSync(join(repoRoot, 'tests/unit/notifications/notification-manager-follow-raid-share-behavior.test.js'))).toBe(false);
+    });
+
+    it('keeps notification manager youtube monetisation behavior test on TypeScript path', () => {
+        expect(existsSync(join(repoRoot, 'tests/unit/notifications/notification-manager-youtube-monetisation.behavior.test.ts'))).toBe(true);
+        expect(existsSync(join(repoRoot, 'tests/unit/notifications/notification-manager-youtube-monetisation.behavior.test.js'))).toBe(false);
+    });
+
+    it('keeps notification manager twitch monetisation behavior test on TypeScript path', () => {
+        expect(existsSync(join(repoRoot, 'tests/unit/notifications/notification-manager-twitch-monetisation.behavior.test.ts'))).toBe(true);
+        expect(existsSync(join(repoRoot, 'tests/unit/notifications/notification-manager-twitch-monetisation.behavior.test.js'))).toBe(false);
+    });
+
+    it('keeps notification manager tiktok monetisation behavior test on TypeScript path', () => {
+        expect(existsSync(join(repoRoot, 'tests/unit/notifications/notification-manager-tiktok-monetisation.behavior.test.ts'))).toBe(true);
+        expect(existsSync(join(repoRoot, 'tests/unit/notifications/notification-manager-tiktok-monetisation.behavior.test.js'))).toBe(false);
+    });
+
+    it('keeps notification manager paypiggy normalization test on TypeScript path', () => {
+        expect(existsSync(join(repoRoot, 'tests/unit/notifications/notification-manager-paypiggy-normalization.test.ts'))).toBe(true);
+        expect(existsSync(join(repoRoot, 'tests/unit/notifications/notification-manager-paypiggy-normalization.test.js'))).toBe(false);
+    });
+
+    it('keeps notification manager spam config access test on TypeScript path', () => {
+        expect(existsSync(join(repoRoot, 'tests/unit/notifications/notification-manager-spam-config-access.test.ts'))).toBe(true);
+        expect(existsSync(join(repoRoot, 'tests/unit/notifications/notification-manager-spam-config-access.test.js'))).toBe(false);
+    });
+
+    it('keeps notification manager raid viewer count test on TypeScript path', () => {
+        expect(existsSync(join(repoRoot, 'tests/unit/notifications/notification-manager-raid-viewer-count.test.ts'))).toBe(true);
+        expect(existsSync(join(repoRoot, 'tests/unit/notifications/notification-manager-raid-viewer-count.test.js'))).toBe(false);
+    });
+
     it('keeps notifications cohort a tests free of untyped mutable declarations', () => {
         const cohortPaths = [
             'tests/unit/notifications/notification-duration-removal.behavior.test.ts',

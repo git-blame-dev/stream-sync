@@ -1,4 +1,5 @@
 const { describe, expect, beforeEach, it, afterEach } = require('bun:test');
+export {};
 const { createMockFn, restoreAllMocks } = require('../../helpers/bun-mock-utils');
 const { noOpLogger } = require('../../helpers/mock-factories');
 const { createConfigFixture } = require('../../helpers/config-fixture');
@@ -6,7 +7,7 @@ const { createConfigFixture } = require('../../helpers/config-fixture');
 const EventEmitter = require('events');
 const NotificationManager = require('../../../src/notifications/NotificationManager');
 
-describe('NotificationManager YouTube monetisation behavior', () => {
+describe('NotificationManager Twitch monetisation behavior', () => {
     afterEach(() => {
         restoreAllMocks();
     });
@@ -38,78 +39,57 @@ describe('NotificationManager YouTube monetisation behavior', () => {
         notificationManager = new NotificationManager(baseDependencies());
     });
 
-    it('enqueues paypiggy with paypiggy priority and renewal copy fields', async () => {
-        await notificationManager.handleNotification('platform:paypiggy', 'youtube', {
-            username: 'MemberHero',
-            userId: 'yt-user-1',
-            membershipLevel: 'Member',
-            months: 6,
-            id: 'paypiggy-yt-1',
-            timestamp: '2025-01-01T00:00:00.000Z'
+    it('enqueues paypiggy with paypiggy priority and sanitized payload', async () => {
+        await notificationManager.handleNotification('platform:paypiggy', 'twitch', {
+            username: 'SubHero',
+            userId: 'user-1',
+            tier: '1000',
+            months: 3
         });
 
         expect(displayQueue.addItem).toHaveBeenCalledTimes(1);
         const item = displayQueue.addItem.mock.calls[0][0];
         expect(item.type).toBe('platform:paypiggy');
-        expect(item.platform).toBe('youtube');
+        expect(item.platform).toBe('twitch');
         expect(item.priority).toBe(notificationManager.PRIORITY_LEVELS.PAYPIGGY);
-        expect(item.data.username).toBe('MemberHero');
-        expect(item.data.userId).toBe('yt-user-1');
+        expect(item.data.username).toBe('SubHero');
+        expect(item.data.userId).toBe('user-1');
     });
 
-    it('enqueues YouTube paid messages as gift with gift priority', async () => {
-        await notificationManager.handleNotification('platform:gift', 'youtube', {
-            username: 'ChatHero',
-            userId: 'yt-user-2',
-            giftType: 'Super Chat',
-            giftCount: 1,
-            amount: 10,
-            currency: 'USD',
-            id: 'gift-yt-1',
-            timestamp: '2025-01-01T00:00:00.000Z'
-        });
-
-        expect(displayQueue.addItem).toHaveBeenCalledTimes(1);
-        const item = displayQueue.addItem.mock.calls[0][0];
-        expect(item.type).toBe('platform:gift');
-        expect(item.platform).toBe('youtube');
-        expect(item.priority).toBe(notificationManager.PRIORITY_LEVELS.GIFT);
-    });
-
-    it('enqueues Super Sticker as gift with gift priority', async () => {
-        await notificationManager.handleNotification('platform:gift', 'youtube', {
-            username: 'StickerHero',
-            userId: 'yt-user-3',
-            giftType: 'Super Sticker',
-            giftCount: 1,
-            amount: 4.99,
-            currency: 'USD',
-            message: 'CoolSticker',
-            id: 'gift-yt-2',
-            timestamp: '2025-01-01T00:00:00.000Z'
-        });
-
-        expect(displayQueue.addItem).toHaveBeenCalledTimes(1);
-        const item = displayQueue.addItem.mock.calls[0][0];
-        expect(item.type).toBe('platform:gift');
-        expect(item.platform).toBe('youtube');
-        expect(item.priority).toBe(notificationManager.PRIORITY_LEVELS.GIFT);
-    });
-
-    it('enqueues gift memberships with giftpaypiggy priority', async () => {
-        await notificationManager.handleNotification('platform:giftpaypiggy', 'youtube', {
-            username: 'Gifter',
-            userId: 'yt-user-4',
-            giftCount: 3,
-            id: 'giftpaypiggy-yt-1',
-            timestamp: '2025-01-01T00:00:00.000Z'
+    it('enqueues gift subs with giftpaypiggy priority', async () => {
+        await notificationManager.handleNotification('platform:giftpaypiggy', 'twitch', {
+            username: 'GiftHero',
+            userId: 'user-2',
+            tier: '1000',
+            giftCount: 5
         });
 
         expect(displayQueue.addItem).toHaveBeenCalledTimes(1);
         const item = displayQueue.addItem.mock.calls[0][0];
         expect(item.type).toBe('platform:giftpaypiggy');
-        expect(item.platform).toBe('youtube');
+        expect(item.platform).toBe('twitch');
         expect(item.priority).toBe(notificationManager.PRIORITY_LEVELS.GIFTPAYPIGGY);
+        expect(item.data.username).toBe('GiftHero');
+    });
+
+    it('enqueues bits as gifts with gift priority', async () => {
+        await notificationManager.handleNotification('platform:gift', 'twitch', {
+            username: 'BitsHero',
+            userId: 'user-3',
+            bits: 500,
+            giftType: 'bits',
+            giftCount: 1,
+            amount: 500,
+            currency: 'bits',
+            repeatCount: 1
+        });
+
+        expect(displayQueue.addItem).toHaveBeenCalledTimes(1);
+        const item = displayQueue.addItem.mock.calls[0][0];
+        expect(item.type).toBe('platform:gift');
+        expect(item.platform).toBe('twitch');
+        expect(item.priority).toBe(notificationManager.PRIORITY_LEVELS.GIFT);
+        expect(item.data.username).toBe('BitsHero');
     });
 
     it('respects config gating and skips when notifications are disabled', async () => {
@@ -128,7 +108,7 @@ describe('NotificationManager YouTube monetisation behavior', () => {
             userTrackingService: { isFirstMessage: createMockFn().mockResolvedValue(false) }
         });
 
-        await disabledManager.handleNotification('platform:paypiggy', 'youtube', {
+        await disabledManager.handleNotification('platform:paypiggy', 'twitch', {
             username: 'GatedUser'
         });
 
