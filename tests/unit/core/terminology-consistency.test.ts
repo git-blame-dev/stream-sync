@@ -9,6 +9,7 @@ const PlatformEventRouter = require('../../../src/services/PlatformEventRouter')
 const { generateLogMessage } = require('../../helpers/notification-test-utils');
 const { PlatformEvents } = require('../../../src/interfaces/PlatformEvents');
 const constants = require('../../../src/core/constants');
+export {};
 
 setupAutomatedCleanup({
     clearCallsBeforeEach: true,

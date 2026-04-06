@@ -741,4 +741,38 @@ describe('TypeScript toolchain migration gates behavior', () => {
             expect(content).not.toMatch(/\blet\s+[A-Za-z_$][\w$]*\s*;/);
         }
     });
+
+    it('keeps unit core config cohort a tests on TypeScript paths', () => {
+        const cohortTsPaths = [
+            'tests/unit/core/terminology-consistency.test.ts',
+            'tests/unit/core/config-example-gui-template.behavior.test.ts',
+            'tests/unit/core/config-path-override.test.ts',
+            'tests/unit/core/spam-configuration-missing-fix.test.ts',
+            'tests/unit/core/spam-config-notification-manager-integration.test.ts',
+            'tests/unit/core/spam-config-integration.test.ts',
+            'tests/unit/core/spam-config-export-missing.test.ts',
+            'tests/unit/configuration-system.test.ts',
+            'tests/unit/config-undefined-handling.test.ts',
+            'tests/unit/helpers/config-fixture.test.ts'
+        ];
+        const cohortJsPaths = [
+            'tests/unit/core/terminology-consistency.test.js',
+            'tests/unit/core/config-example-gui-template.behavior.test.js',
+            'tests/unit/core/config-path-override.test.js',
+            'tests/unit/core/spam-configuration-missing-fix.test.js',
+            'tests/unit/core/spam-config-notification-manager-integration.test.js',
+            'tests/unit/core/spam-config-integration.test.js',
+            'tests/unit/core/spam-config-export-missing.test.js',
+            'tests/unit/configuration-system.test.js',
+            'tests/unit/config-undefined-handling.test.js',
+            'tests/unit/helpers/config-fixture.test.js'
+        ];
+
+        for (const testPath of cohortTsPaths) {
+            expect(existsSync(join(repoRoot, testPath))).toBe(true);
+        }
+        for (const testPath of cohortJsPaths) {
+            expect(existsSync(join(repoRoot, testPath))).toBe(false);
+        }
+    });
 });

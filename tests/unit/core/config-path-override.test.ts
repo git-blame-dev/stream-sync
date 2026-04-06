@@ -1,5 +1,6 @@
 const { describe, expect, it, beforeEach, afterEach } = require('bun:test');
 const { createMockFn, restoreAllMocks } = require('../../helpers/bun-mock-utils');
+export {};
 
 const fs = require('fs');
 

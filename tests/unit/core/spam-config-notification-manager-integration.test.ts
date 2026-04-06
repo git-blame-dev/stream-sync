@@ -4,6 +4,7 @@ const { createMockFn, restoreAllMocks } = require('../../helpers/bun-mock-utils'
 const { noOpLogger } = require('../../helpers/mock-factories');
 const { createConfigFixture } = require('../../helpers/config-fixture');
 const { PRIORITY_LEVELS } = require('../../../src/core/constants');
+export {};
 
 const { config } = require('../../../src/core/config');
 const NotificationManager = require('../../../src/notifications/NotificationManager');

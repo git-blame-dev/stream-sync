@@ -2,6 +2,7 @@ const { describe, it, expect } = require('bun:test');
 const fs = require('fs');
 const path = require('path');
 const ini = require('ini');
+export {};
 
 const { DEFAULTS } = require('../../../src/core/config-schema');
 const { ConfigValidator } = require('../../../src/utils/config-validator');

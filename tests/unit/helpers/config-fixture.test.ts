@@ -9,6 +9,7 @@ const {
     createConfigFixture,
     getRawTestConfig
 } = require('../../helpers/config-fixture');
+export {};
 
 describe('config fixtures', () => {
     it('returns raw test config sections', () => {
