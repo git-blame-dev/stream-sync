@@ -1,4 +1,5 @@
 const { describe, test, expect, afterEach } = require('bun:test');
+export {};
 const { createMockFn, restoreAllMocks } = require('../../../helpers/bun-mock-utils');
 
 const { YouTubePlatform } = require('../../../../src/platforms/youtube');
