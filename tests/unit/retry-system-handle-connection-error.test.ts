@@ -1,5 +1,4 @@
-const { describe, test, expect, afterEach } = require('bun:test');
-export {};
+import { describe, test, expect, afterEach } from 'bun:test';
 
 const { RetrySystem } = require('../../src/utils/retry-system');
 const { safeDelay } = require('../../src/utils/timeout-validator');

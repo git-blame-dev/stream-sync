@@ -1,5 +1,4 @@
-const { describe, test, expect, beforeEach, afterEach } = require('bun:test');
-export {};
+import { describe, test, expect, beforeEach, afterEach } from 'bun:test';
 
 const { InnertubeFactory } = require('../../../src/factories/innertube-factory');
 
