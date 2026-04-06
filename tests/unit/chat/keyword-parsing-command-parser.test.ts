@@ -6,13 +6,27 @@ const { restoreAllMocks } = require('../../helpers/bun-mock-utils');
 const { CommandParser } = require('../../../src/chat/commands');
 const testClock = require('../../helpers/test-clock');
 
+type CommandParserConfig = {
+    commands: Record<string, string>;
+    farewell: {
+        command: string;
+        timeout?: string;
+    };
+    vfx: {
+        filePath: string;
+    };
+    general: {
+        keywordParsingEnabled: boolean;
+    };
+};
+
 describe('CommandParser Keyword Parsing', () => {
     afterEach(() => {
         restoreAllMocks();
     });
 
-    let commandParser;
-    let configFixture;
+    let commandParser: InstanceType<typeof CommandParser>;
+    let configFixture: CommandParserConfig;
 
     beforeEach(() => {
         configFixture = {

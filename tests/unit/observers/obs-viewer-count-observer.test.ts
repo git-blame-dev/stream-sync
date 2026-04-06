@@ -8,8 +8,15 @@ const { expectNoTechnicalArtifacts } = require('../../helpers/behavior-validatio
 
 const defaultPlatforms = ['twitch', 'youtube', 'tiktok'];
 
-function createConfigFixture(overrides = {}) {
-    const config = {};
+type PlatformViewerConfig = {
+    viewerCountEnabled: boolean;
+    viewerCountSource: string;
+};
+
+type ViewerConfigMap = Record<string, PlatformViewerConfig>;
+
+function createConfigFixture(overrides: Record<string, Partial<PlatformViewerConfig>> = {}): ViewerConfigMap {
+    const config: ViewerConfigMap = {};
     for (const platform of defaultPlatforms) {
         config[platform] = {
             viewerCountEnabled: true,
@@ -21,10 +28,10 @@ function createConfigFixture(overrides = {}) {
 }
 
 describe('OBSViewerCountObserver - Behavior-Focused Testing', () => {
-    let obsManager;
-    let observer;
-    let logger;
-    let configFixture;
+    let obsManager: ReturnType<typeof createMockOBSManager>;
+    let observer: InstanceType<typeof OBSViewerCountObserver>;
+    let logger: typeof noOpLogger;
+    let configFixture: ViewerConfigMap;
 
     beforeEach(() => {
         configFixture = createConfigFixture();
