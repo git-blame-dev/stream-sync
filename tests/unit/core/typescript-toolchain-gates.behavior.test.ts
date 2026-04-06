@@ -1049,4 +1049,32 @@ describe('TypeScript toolchain migration gates behavior', () => {
             expect(content).not.toMatch(/\blet\s+[A-Za-z_$][\w$]*\s*,/);
         }
     });
+
+    it('keeps remaining unit root runtime tiktok main twitch cohort d tests on TypeScript paths', () => {
+        const cohortTsPaths = [
+            'tests/unit/runtime-system-ready.test.ts',
+            'tests/unit/twitch-resubscription-notification-fix.test.ts',
+            'tests/unit/tiktok-official-gift-pattern.test.ts',
+            'tests/unit/tiktok-connection-refactor.test.ts',
+            'tests/unit/tiktok-connection-fix-validation.test.ts',
+            'tests/unit/main-updateviewercount-obs-fix.test.ts',
+            'tests/unit/main-supersticker-handler-missing.test.ts'
+        ];
+        const cohortJsPaths = [
+            'tests/unit/runtime-system-ready.test.js',
+            'tests/unit/twitch-resubscription-notification-fix.test.js',
+            'tests/unit/tiktok-official-gift-pattern.test.js',
+            'tests/unit/tiktok-connection-refactor.test.js',
+            'tests/unit/tiktok-connection-fix-validation.test.js',
+            'tests/unit/main-updateviewercount-obs-fix.test.js',
+            'tests/unit/main-supersticker-handler-missing.test.js'
+        ];
+
+        for (const testPath of cohortTsPaths) {
+            expect(existsSync(join(repoRoot, testPath))).toBe(true);
+        }
+        for (const testPath of cohortJsPaths) {
+            expect(existsSync(join(repoRoot, testPath))).toBe(false);
+        }
+    });
 });
