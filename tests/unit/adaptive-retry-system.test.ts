@@ -13,8 +13,8 @@ setupAutomatedCleanup({
 const { RetrySystem, ADAPTIVE_RETRY_CONFIG } = require('../../src/utils/retry-system.js');
 
 describe('Unified Adaptive Retry System', () => {
-    let retrySystem;
-    let platformRetryCount;
+    let retrySystem: InstanceType<typeof RetrySystem>;
+    let platformRetryCount: Record<string, number>;
 
     beforeEach(() => {
         retrySystem = new RetrySystem({ logger: noOpLogger });

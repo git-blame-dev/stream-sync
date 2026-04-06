@@ -6,7 +6,7 @@ const { RetrySystem, ADAPTIVE_RETRY_CONFIG } = require('../../src/utils/retry-sy
 
 describe('Core Utility Functions', () => {
     describe('Adaptive Retry System', () => {
-        let retrySystem;
+        let retrySystem: InstanceType<typeof RetrySystem>;
 
         beforeEach(() => {
             retrySystem = new RetrySystem({ logger: noOpLogger });

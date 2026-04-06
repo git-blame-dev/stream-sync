@@ -14,8 +14,28 @@ describe('DependencyFactory', () => {
         initializeStaticSecrets();
     });
 
-    let factory;
-    let configFixture;
+    let factory: InstanceType<typeof DependencyFactory>;
+    let configFixture: {
+        general: { ignoreSelfMessages: boolean };
+        youtube: {
+            username: string;
+            enabled: boolean;
+            ignoreSelfMessages: boolean;
+        };
+        tiktok: {
+            username: string;
+            enabled: boolean;
+            ignoreSelfMessages: boolean;
+        };
+        twitch: {
+            channel?: string;
+            clientId: string;
+            accessToken: string;
+            refreshToken: string;
+            enabled: boolean;
+            ignoreSelfMessages: boolean;
+        };
+    };
 
     beforeEach(() => {
         factory = new DependencyFactory();

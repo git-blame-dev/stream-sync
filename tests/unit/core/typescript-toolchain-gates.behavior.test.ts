@@ -1030,4 +1030,23 @@ describe('TypeScript toolchain migration gates behavior', () => {
             expect(existsSync(join(repoRoot, testPath))).toBe(false);
         }
     });
+
+    it('keeps unit core dependency retry setup factory cohort c tests free of untyped mutable declarations', () => {
+        const cohortPaths = [
+            'tests/unit/dependency-factory.test.ts',
+            'tests/unit/dependency-injection-validation.test.ts',
+            'tests/unit/core-utility-functions.test.ts',
+            'tests/unit/adaptive-retry-system.test.ts',
+            'tests/unit/retry-system-handle-connection-error.test.ts',
+            'tests/unit/core/tts-boolean-parsing.test.ts',
+            'tests/unit/factories/innertube-factory.behavior.test.ts',
+            'tests/unit/setup/output-suppression.test.ts'
+        ];
+
+        for (const testPath of cohortPaths) {
+            const content = readFileSync(join(repoRoot, testPath), 'utf8');
+            expect(content).not.toMatch(/\blet\s+[A-Za-z_$][\w$]*\s*;/);
+            expect(content).not.toMatch(/\blet\s+[A-Za-z_$][\w$]*\s*,/);
+        }
+    });
 });
