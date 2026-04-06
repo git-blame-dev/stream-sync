@@ -534,4 +534,38 @@ describe('TypeScript toolchain migration gates behavior', () => {
             expect(content).not.toMatch(/\blet\s+[A-Za-z_$][\w$]*\s*;/);
         }
     });
+
+    it('keeps platforms cohort c unit tests on TypeScript paths', () => {
+        const cohortTsPaths = [
+            'tests/unit/platforms/youtube/platform-behavior.test.ts',
+            'tests/unit/platforms/youtube/platform-core.behavior.test.ts',
+            'tests/unit/platforms/youtube/youtube-configuration-validation.test.ts',
+            'tests/unit/platforms/youtube/platform-event-routing.test.ts',
+            'tests/unit/platforms/youtube/youtube-live-validation.test.ts',
+            'tests/unit/twitch-viewer-count-invalid-auth.test.ts',
+            'tests/unit/viewer-count-system-twitch-debug.test.ts',
+            'tests/unit/viewer-count-polling-fix.test.ts',
+            'tests/unit/utils/viewer-count-system.test.ts',
+            'tests/unit/utils/viewer-count-providers-error-handler.test.ts'
+        ];
+        const cohortJsPaths = [
+            'tests/unit/platforms/youtube/platform-behavior.test.js',
+            'tests/unit/platforms/youtube/platform-core.behavior.test.js',
+            'tests/unit/platforms/youtube/youtube-configuration-validation.test.js',
+            'tests/unit/platforms/youtube/platform-event-routing.test.js',
+            'tests/unit/platforms/youtube/youtube-live-validation.test.js',
+            'tests/unit/twitch-viewer-count-invalid-auth.test.js',
+            'tests/unit/viewer-count-system-twitch-debug.test.js',
+            'tests/unit/viewer-count-polling-fix.test.js',
+            'tests/unit/utils/viewer-count-system.test.js',
+            'tests/unit/utils/viewer-count-providers-error-handler.test.js'
+        ];
+
+        for (const testPath of cohortTsPaths) {
+            expect(existsSync(join(repoRoot, testPath))).toBe(true);
+        }
+        for (const testPath of cohortJsPaths) {
+            expect(existsSync(join(repoRoot, testPath))).toBe(false);
+        }
+    });
 });

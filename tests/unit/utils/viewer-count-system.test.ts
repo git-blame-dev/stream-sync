@@ -1,5 +1,6 @@
 
 const { describe, test, expect, beforeEach, afterEach, afterAll } = require('bun:test');
+export {};
 const { restoreAllMocks } = require('../../helpers/bun-mock-utils');
 const { useFakeTimers, useRealTimers, advanceTimersByTime } = require('../../helpers/bun-timers');
 

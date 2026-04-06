@@ -1,5 +1,6 @@
 
 const { describe, test, expect, beforeEach, afterEach } = require('bun:test');
+export {};
 const { createMockFn, spyOn, restoreAllMocks } = require('../../../helpers/bun-mock-utils');
 const { noOpLogger } = require('../../../helpers/mock-factories');
 const { initializeTestLogging, createMockPlatformDependencies } = require('../../../helpers/test-setup');

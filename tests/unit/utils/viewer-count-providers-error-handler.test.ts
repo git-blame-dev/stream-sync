@@ -1,4 +1,5 @@
 const { describe, it, expect } = require('bun:test');
+export {};
 const { createMockFn } = require('../../helpers/bun-mock-utils');
 const { TwitchViewerCountProvider, TikTokViewerCountProvider } = require('../../../src/utils/viewer-count-providers');
 
