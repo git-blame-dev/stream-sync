@@ -480,4 +480,38 @@ describe('TypeScript toolchain migration gates behavior', () => {
             expect(content).not.toMatch(/:\s*unknown\[\](?:\[\])?/);
         }
     });
+
+    it('keeps platforms cohort b unit tests on TypeScript paths', () => {
+        const cohortTsPaths = [
+            'tests/unit/platforms/streamelements-platform.behavior.test.ts',
+            'tests/unit/platforms/tiktok-connection-lifecycle.test.ts',
+            'tests/unit/platforms/tiktok-connection-retry-cleanup.test.ts',
+            'tests/unit/platforms/tiktok-envelope-notification.test.ts',
+            'tests/unit/platforms/tiktok-error-handling.test.ts',
+            'tests/unit/platforms/tiktok-websocket-client-error-handler.test.ts',
+            'tests/unit/platforms/tiktok-websocket-client-social-routing.test.ts',
+            'tests/unit/platforms/tiktok-websocket-client.behavior.test.ts',
+            'tests/unit/platforms/tiktok-websocket-client.coverage.test.ts',
+            'tests/unit/platforms/twitch-platform-paypiggy-and-gift-mapper.test.ts'
+        ];
+        const cohortJsPaths = [
+            'tests/unit/platforms/streamelements-platform.behavior.test.js',
+            'tests/unit/platforms/tiktok-connection-lifecycle.test.js',
+            'tests/unit/platforms/tiktok-connection-retry-cleanup.test.js',
+            'tests/unit/platforms/tiktok-envelope-notification.test.js',
+            'tests/unit/platforms/tiktok-error-handling.test.js',
+            'tests/unit/platforms/tiktok-websocket-client-error-handler.test.js',
+            'tests/unit/platforms/tiktok-websocket-client-social-routing.test.js',
+            'tests/unit/platforms/tiktok-websocket-client.behavior.test.js',
+            'tests/unit/platforms/tiktok-websocket-client.coverage.test.js',
+            'tests/unit/platforms/twitch-platform-paypiggy-and-gift-mapper.test.js'
+        ];
+
+        for (const testPath of cohortTsPaths) {
+            expect(existsSync(join(repoRoot, testPath))).toBe(true);
+        }
+        for (const testPath of cohortJsPaths) {
+            expect(existsSync(join(repoRoot, testPath))).toBe(false);
+        }
+    });
 });

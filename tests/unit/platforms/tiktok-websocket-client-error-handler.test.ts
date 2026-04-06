@@ -1,4 +1,5 @@
 const { describe, it, beforeEach, afterEach, expect } = require('bun:test');
+export {};
 const { EventEmitter } = require('events');
 const { createMockFn } = require('../../helpers/bun-mock-utils');
 const { useFakeTimers, useRealTimers, advanceTimersByTime } = require('../../helpers/bun-timers');

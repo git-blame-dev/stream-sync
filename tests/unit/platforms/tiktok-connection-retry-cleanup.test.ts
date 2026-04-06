@@ -1,4 +1,5 @@
 const { describe, it, expect, afterEach } = require('bun:test');
+export {};
 const { createMockFn, restoreAllMocks } = require('../../helpers/bun-mock-utils');
 
 const { EventEmitter } = require('events');
