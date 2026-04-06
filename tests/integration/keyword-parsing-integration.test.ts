@@ -1,5 +1,6 @@
 
 const { describe, test, beforeEach, afterEach, expect } = require('bun:test');
+export {};
 const { restoreAllMocks } = require('../helpers/bun-mock-utils');
 
 const { CommandParser } = require('../../src/chat/commands');

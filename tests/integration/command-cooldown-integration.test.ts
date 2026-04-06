@@ -1,5 +1,6 @@
 
 const { describe, test, expect, beforeEach, afterEach } = require('bun:test');
+export {};
 
 const { TEST_TIMEOUTS } = require('../helpers/test-setup');
 const { createConfigFixture } = require('../helpers/config-fixture');

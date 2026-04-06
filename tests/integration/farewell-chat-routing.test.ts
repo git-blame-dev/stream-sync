@@ -1,4 +1,5 @@
 const { describe, it, expect } = require('bun:test');
+export {};
 const { createFarewellRoutingHarness } = require('../helpers/farewell-routing-harness');
 
 describe('farewell chat routing integration', () => {

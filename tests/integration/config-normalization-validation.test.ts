@@ -1,4 +1,5 @@
 const { describe, expect, it } = require('bun:test');
+export {};
 const { ConfigValidator } = require('../../src/utils/config-validator');
 
 describe('ConfigValidator normalize + validate integration', () => {

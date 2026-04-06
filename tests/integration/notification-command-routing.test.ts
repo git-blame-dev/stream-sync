@@ -1,4 +1,5 @@
 const { describe, expect, it } = require('bun:test');
+export {};
 const { NOTIFICATION_CONFIGS } = require('../../src/core/constants');
 const { ConfigValidator } = require('../../src/utils/config-validator');
 
