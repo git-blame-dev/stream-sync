@@ -1,4 +1,5 @@
 const { describe, expect, it, afterEach } = require('bun:test');
+export {};
 const { createMockFn, restoreAllMocks } = require('../../helpers/bun-mock-utils');
 const { noOpLogger } = require('../../helpers/mock-factories');
 const { createConfigFixture } = require('../../helpers/config-fixture');
@@ -6,11 +7,25 @@ const { createConfigFixture } = require('../../helpers/config-fixture');
 const NotificationManager = require('../../../src/notifications/NotificationManager');
 const constants = require('../../../src/core/constants');
 
+type PaypiggyQueueItem = {
+    priority?: number;
+    vfxConfig?: { commandKey?: string } | null;
+    type?: string;
+    data?: {
+        type?: string;
+        displayMessage?: string;
+        username?: string;
+        tier?: string;
+        [key: string]: unknown;
+    };
+    [key: string]: unknown;
+};
+
 const createDisplayQueueStub = () => {
-    const items = [];
+    const items: PaypiggyQueueItem[] = [];
     return {
         items,
-        addItem: (item) => items.push(item),
+        addItem: (item: PaypiggyQueueItem) => items.push(item),
         getQueueLength: () => items.length
     };
 };
@@ -46,8 +61,8 @@ describe('NotificationManager paypiggy normalization', () => {
         expect(queued.priority).toBe(constants.PRIORITY_LEVELS.PAYPIGGY);
         expect(queued.vfxConfig?.commandKey).toBe('paypiggies');
         expect(queued.type).toBe('platform:paypiggy');
-        expect(queued.data.type).toBe('platform:paypiggy');
-        expect(queued.data.displayMessage).toContain('subscribed');
+        expect(queued.data?.type).toBe('platform:paypiggy');
+        expect(queued.data?.displayMessage).toContain('subscribed');
     });
 
     it('handles paypiggy notifications through canonical path', async () => {
@@ -71,8 +86,8 @@ describe('NotificationManager paypiggy normalization', () => {
         expect(displayQueue.items).toHaveLength(1);
         const queued = displayQueue.items[0];
         expect(queued.type).toBe('platform:paypiggy');
-        expect(queued.data.type).toBe('platform:paypiggy');
-        expect(queued.data.username).toBe('AliasFreeSub');
+        expect(queued.data?.type).toBe('platform:paypiggy');
+        expect(queued.data?.username).toBe('AliasFreeSub');
     });
 
     it('rejects subscription alias inputs instead of auto-normalizing', async () => {
@@ -191,8 +206,8 @@ describe('NotificationManager paypiggy normalization', () => {
         });
 
         expect(displayQueue.items).toHaveLength(1);
-        expect(displayQueue.items[0].data.type).toBe('platform:paypiggy');
-        expect(displayQueue.items[0].data.tier).toBe('superfan');
+        expect(displayQueue.items[0]?.data?.type).toBe('platform:paypiggy');
+        expect(displayQueue.items[0]?.data?.tier).toBe('superfan');
     });
 
     it('fails when config is missing (fail-fast)', async () => {
