@@ -1,4 +1,5 @@
 const { describe, test, expect, beforeEach, afterEach } = require('bun:test');
+export {};
 const fs = require('fs');
 const path = require('path');
 const os = require('os');

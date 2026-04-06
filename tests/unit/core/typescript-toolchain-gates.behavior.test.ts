@@ -903,4 +903,34 @@ describe('TypeScript toolchain migration gates behavior', () => {
             expect(content).not.toMatch(/\blet\s+[A-Za-z_$][\w$]*\s*;/);
         }
     });
+
+    it('keeps integration cohort a tests on TypeScript paths', () => {
+        const cohortTsPaths = [
+            'tests/integration/platform-status-interface.test.ts',
+            'tests/integration/farewell-chat-routing.test.ts',
+            'tests/integration/config-normalization-validation.test.ts',
+            'tests/integration/command-cooldown-integration.test.ts',
+            'tests/integration/critical-startup-flow.test.ts',
+            'tests/integration/runtime-vfx-lifecycle-management.test.ts',
+            'tests/integration/keyword-parsing-integration.test.ts',
+            'tests/integration/notification-command-routing.test.ts'
+        ];
+        const cohortJsPaths = [
+            'tests/integration/platform-status-interface.test.js',
+            'tests/integration/farewell-chat-routing.test.js',
+            'tests/integration/config-normalization-validation.test.js',
+            'tests/integration/command-cooldown-integration.test.js',
+            'tests/integration/critical-startup-flow.test.js',
+            'tests/integration/runtime-vfx-lifecycle-management.test.js',
+            'tests/integration/keyword-parsing-integration.test.js',
+            'tests/integration/notification-command-routing.test.js'
+        ];
+
+        for (const testPath of cohortTsPaths) {
+            expect(existsSync(join(repoRoot, testPath))).toBe(true);
+        }
+        for (const testPath of cohortJsPaths) {
+            expect(existsSync(join(repoRoot, testPath))).toBe(false);
+        }
+    });
 });
