@@ -15,8 +15,8 @@ describe('TikTok connection creation', () => {
       { logger: noOpLogger, TikTokWebSocketClient }
     );
 
-    const handlerCalls: unknown[] = [];
-    connection.on('connected', (payload: unknown) => handlerCalls.push(payload));
+    const handlerCalls: string[] = [];
+    connection.on('connected', (payload: string) => handlerCalls.push(payload));
     connection.emit('connected', 'payload');
 
     expect(typeof connection.on).toBe('function');

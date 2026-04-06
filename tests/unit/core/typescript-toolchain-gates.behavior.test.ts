@@ -460,4 +460,24 @@ describe('TypeScript toolchain migration gates behavior', () => {
             expect(existsSync(join(repoRoot, testPath))).toBe(false);
         }
     });
+
+    it('keeps platforms cohort a tests free of broad unknown array captures', () => {
+        const cohortPaths = [
+            'tests/unit/platforms/platform-config-parsing.behavior.test.ts',
+            'tests/unit/platforms/streamelements-connection-error-handling.test.ts',
+            'tests/unit/platforms/streamelements-message-parse-error-path.test.ts',
+            'tests/unit/platforms/tiktok-connection-validation.test.ts',
+            'tests/unit/platforms/tiktok-follow-share-routing.test.ts',
+            'tests/unit/platforms/tiktok-initialize-propagates-failure.test.ts',
+            'tests/unit/platforms/tiktok-raw-event-logging.test.ts',
+            'tests/unit/platforms/tiktok-retry-dedup.test.ts',
+            'tests/unit/platforms/tiktok-undefined-error.test.ts',
+            'tests/unit/platforms/twitch-handler-naming-mismatches.test.ts'
+        ];
+
+        for (const testPath of cohortPaths) {
+            const content = readFileSync(join(repoRoot, testPath), 'utf8');
+            expect(content).not.toMatch(/:\s*unknown\[\](?:\[\])?/);
+        }
+    });
 });

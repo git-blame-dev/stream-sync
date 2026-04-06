@@ -7,9 +7,11 @@ const { createMockTikTokPlatformDependencies, noOpLogger } = require('../../help
 
 type RetryCall = {
     platformName: string;
-    err: unknown;
-    reconnectFn: () => Promise<unknown> | unknown;
+    err: Error;
+    reconnectFn: () => Promise<boolean> | boolean;
 };
+
+type RetryHandleArgs = [string, Error, () => Promise<boolean> | boolean, (() => void)?];
 
 describe('TikTokPlatform retry deduplication', () => {
     const baseConfig = { enabled: true, username: 'retry_tester' };
@@ -19,8 +21,8 @@ describe('TikTokPlatform retry deduplication', () => {
     });
 
     it('only schedules one retry when queueRetry is invoked multiple times before a reconnect starts', () => {
-        const retryCalls: unknown[][] = [];
-        const retrySystem = { handleConnectionError: (...args: unknown[]) => retryCalls.push(args) };
+        const retryCalls: RetryHandleArgs[] = [];
+        const retrySystem = { handleConnectionError: (...args: RetryHandleArgs) => retryCalls.push(args) };
         const dependencies = createMockTikTokPlatformDependencies();
         dependencies.retrySystem = retrySystem;
         dependencies.logger = noOpLogger;
@@ -39,7 +41,7 @@ describe('TikTokPlatform retry deduplication', () => {
     it('requeues a retry when the reconnect attempt fails, without double scheduling', async () => {
         const retryCalls: RetryCall[] = [];
         const retrySystem = {
-            handleConnectionError: (platformName: string, err: unknown, reconnectFn: () => Promise<unknown> | unknown) => {
+            handleConnectionError: (platformName: string, err: Error, reconnectFn: () => Promise<boolean> | boolean) => {
                 retryCalls.push({ platformName, err, reconnectFn });
                 reconnectFn();
             }
