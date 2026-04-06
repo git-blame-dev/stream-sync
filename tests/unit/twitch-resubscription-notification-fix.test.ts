@@ -1,5 +1,4 @@
-const { describe, test, expect, beforeEach, afterEach } = require('bun:test');
-export {};
+import { describe, test, expect, beforeEach, afterEach } from 'bun:test';
 const { EventEmitter } = require('events');
 
 const TwitchEventSub = require('../../src/platforms/twitch-eventsub');

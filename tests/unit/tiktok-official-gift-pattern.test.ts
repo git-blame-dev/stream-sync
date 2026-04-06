@@ -1,5 +1,5 @@
+import { describe, test, expect } from 'bun:test';
 const { extractTikTokGiftData } = require('../../src/utils/tiktok-data-extraction');
-export {};
 
 describe('TikTok Official Gift Pattern', () => {
     describe('Gift Type Detection', () => {
