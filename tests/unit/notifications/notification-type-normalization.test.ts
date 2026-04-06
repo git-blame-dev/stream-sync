@@ -6,19 +6,35 @@ const { createConfigFixture } = require('../../helpers/config-fixture');
 
 const NotificationManager = require('../../../src/notifications/NotificationManager');
 
+type QueueItem = {
+    type?: string;
+    [key: string]: unknown;
+};
+
+type NotificationResult = {
+    success?: boolean;
+    error?: string;
+    notificationType?: string;
+    platform?: string;
+};
+
+type NotificationManagerLike = {
+    handleNotification: (type: string, platform: string, data: Record<string, unknown>) => Promise<NotificationResult>;
+};
+
 describe('Notification type normalization', () => {
     afterEach(() => {
         restoreAllMocks();
     });
 
-    let items;
-    let notificationManager;
+    let items: QueueItem[];
+    let notificationManager: NotificationManagerLike;
 
     beforeEach(() => {
         items = [];
 
         const displayQueue = {
-            addItem: async (item) => {
+            addItem: async (item: QueueItem) => {
                 items.push(item);
                 return true;
             }

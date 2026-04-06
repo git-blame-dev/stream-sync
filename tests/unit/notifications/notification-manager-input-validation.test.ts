@@ -8,7 +8,7 @@ const { PRIORITY_LEVELS } = require('../../../src/core/constants');
 const NotificationManager = require('../../../src/notifications/NotificationManager');
 
 describe('NotificationManager input validation', () => {
-    let originalNodeEnv;
+    let originalNodeEnv: string | undefined;
 
     beforeEach(() => {
         originalNodeEnv = process.env.NODE_ENV;

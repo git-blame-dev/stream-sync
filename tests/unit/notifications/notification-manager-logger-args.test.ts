@@ -5,6 +5,30 @@ const { createConfigFixture } = require('../../helpers/config-fixture');
 const { PRIORITY_LEVELS } = require('../../../src/core/constants');
 const { setupAutomatedCleanup } = require('../../helpers/mock-lifecycle');
 
+type NotificationManagerLike = {
+    handleNotificationInternal: (...args: unknown[]) => Promise<unknown>;
+};
+
+type NotificationManagerCtor = new (deps: Record<string, unknown>) => NotificationManagerLike;
+
+type LoggerSpy = {
+    debug: ReturnType<typeof createMockFn>;
+    info: ReturnType<typeof createMockFn>;
+    warn: ReturnType<typeof createMockFn>;
+    error: ReturnType<typeof createMockFn>;
+    console: ReturnType<typeof createMockFn>;
+};
+
+type NotificationConstants = {
+    PRIORITY_LEVELS: typeof PRIORITY_LEVELS;
+    NOTIFICATION_CONFIGS: Record<string, { priority: number; duration: number; settingKey: string; commandKey: string }>;
+};
+
+type DisplayQueueMock = {
+    addItem: ReturnType<typeof createMockFn>;
+    processQueue: ReturnType<typeof createMockFn>;
+};
+
 setupAutomatedCleanup({
     clearCallsBeforeEach: true,
     logPerformanceMetrics: true
@@ -15,11 +39,11 @@ describe('NotificationManager logger argument order', () => {
         restoreAllMocks();
     });
 
-    let NotificationManager;
-    let spyLogger;
-    let mockConstants;
-    let mockDisplayQueue;
-    let config;
+    let NotificationManager: NotificationManagerCtor;
+    let spyLogger: LoggerSpy;
+    let mockConstants: NotificationConstants;
+    let mockDisplayQueue: DisplayQueueMock;
+    let config: ReturnType<typeof createConfigFixture>;
 
     beforeEach(() => {
         spyLogger = {
@@ -54,10 +78,10 @@ describe('NotificationManager logger argument order', () => {
             }
         });
 
-        NotificationManager = require('../../../src/notifications/NotificationManager');
+        NotificationManager = require('../../../src/notifications/NotificationManager') as NotificationManagerCtor;
     });
 
-    function createManager(overrides = {}) {
+    function createManager(overrides: Record<string, unknown> = {}): NotificationManagerLike {
         const mockEventBus = { emit: createMockFn(), on: createMockFn(), off: createMockFn() };
         return new NotificationManager({
             displayQueue: mockDisplayQueue,
