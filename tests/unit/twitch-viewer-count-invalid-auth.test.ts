@@ -12,11 +12,11 @@ describe('Twitch Viewer Count with Invalid Authentication', () => {
         restoreAllMocks();
     });
 
-  let mockApiClient;
-  let mockConnectionStateFactory;
-  let configFixture;
-  let viewerCountProvider;
-  let mockLogger;
+  let mockApiClient: { getStreamInfo: ReturnType<typeof createMockFn> };
+  let mockConnectionStateFactory: { createTwitchState: ReturnType<typeof createMockFn> };
+  let configFixture: { channel: string; username: string; accessToken: string };
+  let viewerCountProvider: InstanceType<typeof TwitchViewerCountProvider>;
+  let mockLogger: typeof noOpLogger;
   
   beforeEach(() => {
     mockApiClient = {

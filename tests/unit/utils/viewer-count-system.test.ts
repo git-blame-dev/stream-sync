@@ -152,7 +152,7 @@ const expectValidStreamStatusChange = (statusUpdate) => {
 };
 
 describe('ViewerCountSystem - Comprehensive Behavior Tests', () => {
-    let cleanupFunctions;
+    let cleanupFunctions: ReturnType<typeof setupAutomatedCleanup> | null;
     
     beforeEach(() => {
         cleanupFunctions = setupAutomatedCleanup();

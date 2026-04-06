@@ -4,14 +4,38 @@ const { createMockFn, restoreAllMocks } = require('../helpers/bun-mock-utils');
 const { createConfigFixture } = require('../helpers/config-fixture');
 const { noOpLogger } = require('../helpers/mock-factories');
 
+type ViewerCountPlatform = { getViewerCount: ReturnType<typeof createMockFn> };
+
+type ViewerCountSystemInstance = {
+    isPolling: boolean;
+    pollingInterval: number | null;
+    pollingHandles: Record<string, unknown>;
+    counts: Record<string, number>;
+    addObserver: (observer: {
+        getObserverId: () => string;
+        onViewerCountUpdate: (...args: unknown[]) => Promise<void>;
+        onStreamStatusChange: (...args: unknown[]) => Promise<void>;
+    }) => void;
+    updateStreamStatus: (platform: string, isLive: boolean) => Promise<void>;
+    startPolling: () => void;
+    stopPolling: () => void;
+    isStreamLive: (platform: string) => boolean;
+};
+
+type ViewerCountSystemConstructor = new (args: {
+    platformProvider: () => Record<string, ViewerCountPlatform>;
+    logger: unknown;
+    config: unknown;
+}) => ViewerCountSystemInstance;
+
 describe('Viewer Count Polling System Fix', () => {
-    let ViewerCountSystem;
-    let viewerCountSystem;
-    let mockYoutubePlatform;
-    let mockTwitchPlatform;
-    let mockTiktokPlatform;
-    let platforms;
-    let testConfig;
+    let ViewerCountSystem: ViewerCountSystemConstructor;
+    let viewerCountSystem: ViewerCountSystemInstance;
+    let mockYoutubePlatform: ViewerCountPlatform;
+    let mockTwitchPlatform: ViewerCountPlatform;
+    let mockTiktokPlatform: ViewerCountPlatform;
+    let platforms: Record<string, ViewerCountPlatform>;
+    let testConfig: ReturnType<typeof createConfigFixture>;
 
     beforeEach(async () => {
         ({ ViewerCountSystem } = require('../../src/utils/viewer-count'));
