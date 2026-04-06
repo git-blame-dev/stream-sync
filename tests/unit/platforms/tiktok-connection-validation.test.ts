@@ -1,4 +1,5 @@
 const { describe, it, expect } = require('bun:test');
+export {};
 const { createMockFn } = require('../../helpers/bun-mock-utils');
 const { noOpLogger } = require('../../helpers/mock-factories');
 const { PlatformConnectionFactory } = require('../../../src/utils/platform-connection-factory');
@@ -14,8 +15,8 @@ describe('TikTok connection creation', () => {
       { logger: noOpLogger, TikTokWebSocketClient }
     );
 
-    const handlerCalls = [];
-    connection.on('connected', (payload) => handlerCalls.push(payload));
+    const handlerCalls: unknown[] = [];
+    connection.on('connected', (payload: unknown) => handlerCalls.push(payload));
     connection.emit('connected', 'payload');
 
     expect(typeof connection.on).toBe('function');

@@ -426,4 +426,38 @@ describe('TypeScript toolchain migration gates behavior', () => {
             expect(content).not.toMatch(/\blet\s+[A-Za-z_$][\w$]*\s*;/);
         }
     });
+
+    it('keeps platforms cohort a unit tests on TypeScript paths', () => {
+        const cohortTsPaths = [
+            'tests/unit/platforms/platform-config-parsing.behavior.test.ts',
+            'tests/unit/platforms/streamelements-connection-error-handling.test.ts',
+            'tests/unit/platforms/streamelements-message-parse-error-path.test.ts',
+            'tests/unit/platforms/tiktok-connection-validation.test.ts',
+            'tests/unit/platforms/tiktok-follow-share-routing.test.ts',
+            'tests/unit/platforms/tiktok-initialize-propagates-failure.test.ts',
+            'tests/unit/platforms/tiktok-raw-event-logging.test.ts',
+            'tests/unit/platforms/tiktok-retry-dedup.test.ts',
+            'tests/unit/platforms/tiktok-undefined-error.test.ts',
+            'tests/unit/platforms/twitch-handler-naming-mismatches.test.ts'
+        ];
+        const cohortJsPaths = [
+            'tests/unit/platforms/platform-config-parsing.behavior.test.js',
+            'tests/unit/platforms/streamelements-connection-error-handling.test.js',
+            'tests/unit/platforms/streamelements-message-parse-error-path.test.js',
+            'tests/unit/platforms/tiktok-connection-validation.test.js',
+            'tests/unit/platforms/tiktok-follow-share-routing.test.js',
+            'tests/unit/platforms/tiktok-initialize-propagates-failure.test.js',
+            'tests/unit/platforms/tiktok-raw-event-logging.test.js',
+            'tests/unit/platforms/tiktok-retry-dedup.test.js',
+            'tests/unit/platforms/tiktok-undefined-error.test.js',
+            'tests/unit/platforms/twitch-handler-naming-mismatches.test.js'
+        ];
+
+        for (const testPath of cohortTsPaths) {
+            expect(existsSync(join(repoRoot, testPath))).toBe(true);
+        }
+        for (const testPath of cohortJsPaths) {
+            expect(existsSync(join(repoRoot, testPath))).toBe(false);
+        }
+    });
 });

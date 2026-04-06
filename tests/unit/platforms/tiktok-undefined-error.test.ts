@@ -1,10 +1,15 @@
 const { describe, it, expect } = require('bun:test');
+export {};
 const { createMockFn } = require('../../helpers/bun-mock-utils');
 const { noOpLogger } = require('../../helpers/mock-factories');
 
+type MessageError = {
+    message?: string;
+};
+
 describe('TikTok Error Message Handling', () => {
     it('handles undefined error.message without crashing', () => {
-        const error = {};
+        const error: MessageError = {};
         const errorMessage = error.message;
 
         expect(() => {
@@ -42,7 +47,7 @@ describe('TikTok Error Message Handling', () => {
             }
         );
 
-        const errorWithoutMessage = {};
+        const errorWithoutMessage: MessageError = {};
 
         const handleConnectionError = Object.getPrototypeOf(platform)._handleConnectionError;
 

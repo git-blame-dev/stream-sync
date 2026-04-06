@@ -1,19 +1,38 @@
 const { describe, it, expect } = require('bun:test');
+export {};
 const { createMockFn } = require('../../helpers/bun-mock-utils');
 const { noOpLogger } = require('../../helpers/mock-factories');
 const { createConfigFixture } = require('../../helpers/config-fixture');
 const EventEmitter = require('events');
 const PlatformEventRouter = require('../../../src/services/PlatformEventRouter');
 
+type RoutedNotification = {
+    type: string;
+    platform: string;
+    username: string;
+    payload: unknown;
+};
+
+type PlatformEventPayload = {
+    type: string;
+    platform: string;
+    data: {
+        username: string;
+        userId: string;
+        timestamp: string;
+        metadata: Record<string, unknown>;
+    };
+};
+
 function createAppRuntimeMocks() {
-    const handled = [];
+    const handled: RoutedNotification[] = [];
     return {
         handled,
         runtime: {
-            handleFollowNotification: (platform, username, payload) => {
+            handleFollowNotification: (platform: string, username: string, payload: unknown) => {
                 handled.push({ type: 'platform:follow', platform, username, payload });
             },
-            handleShareNotification: (platform, username, payload) => {
+            handleShareNotification: (platform: string, username: string, payload: unknown) => {
                 handled.push({ type: 'platform:share', platform, username, payload });
             }
         }
@@ -62,8 +81,8 @@ describe('TikTok follow/share routing', () => {
             config: createConfigFixture({ general: { followsEnabled: true, giftsEnabled: true, messagesEnabled: true, sharesEnabled: true } }),
             logger: noOpLogger
         });
-        const emitted = [];
-        eventBus.subscribe('platform:event', (payload) => emitted.push(payload));
+        const emitted: PlatformEventPayload[] = [];
+        eventBus.subscribe('platform:event', (payload: PlatformEventPayload) => emitted.push(payload));
 
         eventBus.emit('platform:event', {
             type: 'platform:share',

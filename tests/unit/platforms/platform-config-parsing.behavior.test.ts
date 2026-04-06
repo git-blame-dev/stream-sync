@@ -1,4 +1,5 @@
 const { describe, test, expect, afterEach } = require('bun:test');
+export {};
 const { noOpLogger } = require('../../helpers/mock-factories');
 const { createStreamElementsConfigFixture } = require('../../helpers/config-fixture');
 const { secrets, _resetForTesting, initializeStaticSecrets } = require('../../../src/core/secrets');
@@ -13,6 +14,8 @@ describe('platform config parsing behavior', () => {
     });
 
     class MockWebSocket {
+        readyState: number;
+
         constructor() {
             this.readyState = 0;
         }

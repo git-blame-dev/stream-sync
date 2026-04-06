@@ -1,8 +1,15 @@
 const { describe, it, expect, afterEach } = require('bun:test');
+export {};
 const { createMockFn, restoreAllMocks } = require('../../helpers/bun-mock-utils');
 
 const { TikTokPlatform } = require('../../../src/platforms/tiktok');
 const { createMockTikTokPlatformDependencies, noOpLogger } = require('../../helpers/mock-factories');
+
+type RetryCall = {
+    platformName: string;
+    err: unknown;
+    reconnectFn: () => Promise<unknown> | unknown;
+};
 
 describe('TikTokPlatform retry deduplication', () => {
     const baseConfig = { enabled: true, username: 'retry_tester' };
@@ -12,8 +19,8 @@ describe('TikTokPlatform retry deduplication', () => {
     });
 
     it('only schedules one retry when queueRetry is invoked multiple times before a reconnect starts', () => {
-        const retryCalls = [];
-        const retrySystem = { handleConnectionError: (...args) => retryCalls.push(args) };
+        const retryCalls: unknown[][] = [];
+        const retrySystem = { handleConnectionError: (...args: unknown[]) => retryCalls.push(args) };
         const dependencies = createMockTikTokPlatformDependencies();
         dependencies.retrySystem = retrySystem;
         dependencies.logger = noOpLogger;
@@ -30,9 +37,9 @@ describe('TikTokPlatform retry deduplication', () => {
     });
 
     it('requeues a retry when the reconnect attempt fails, without double scheduling', async () => {
-        const retryCalls = [];
+        const retryCalls: RetryCall[] = [];
         const retrySystem = {
-            handleConnectionError: (platformName, err, reconnectFn) => {
+            handleConnectionError: (platformName: string, err: unknown, reconnectFn: () => Promise<unknown> | unknown) => {
                 retryCalls.push({ platformName, err, reconnectFn });
                 reconnectFn();
             }
@@ -46,7 +53,7 @@ describe('TikTokPlatform retry deduplication', () => {
 
         const platform = new TikTokPlatform(baseConfig, dependencies);
 
-        const connectCalls = [];
+        const connectCalls: boolean[] = [];
         platform._connect = async () => {
             connectCalls.push(true);
             if (connectCalls.length === 1) {
