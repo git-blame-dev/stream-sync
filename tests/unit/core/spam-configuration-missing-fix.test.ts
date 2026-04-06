@@ -8,6 +8,7 @@ const { expectNoTechnicalArtifacts } = require('../../helpers/assertion-helpers'
 const { createConfigFixture } = require('../../helpers/config-fixture');
 const { createTextProcessingManager } = require('../../../src/utils/text-processing');
 const { PRIORITY_LEVELS } = require('../../../src/core/constants');
+export {};
 
 initializeTestLogging();
 

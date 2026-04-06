@@ -2,6 +2,7 @@ const { describe, it, expect, beforeEach, afterEach } = require('bun:test');
 const { createMockFn, restoreAllMocks } = require('../helpers/bun-mock-utils');
 const { expectNoTechnicalArtifacts } = require('../helpers/assertion-helpers');
 const { captureStderr } = require('../helpers/output-capture');
+export {};
 
 const fs = require('fs');
 const CONFIG_MODULE_PATH = require.resolve('../../src/core/config');

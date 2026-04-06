@@ -1,5 +1,7 @@
 
+const { describe, it, expect } = require('bun:test');
 const { config } = require('../../../src/core/config');
+export {};
 
 describe('Spam Configuration Integration', () => {
     describe('when accessing spam configuration', () => {

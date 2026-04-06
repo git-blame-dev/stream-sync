@@ -3,6 +3,7 @@ const { createMockFn, restoreAllMocks } = require('../helpers/bun-mock-utils');
 const { noOpLogger, createMockNotificationManager } = require('../helpers/mock-factories');
 const { setupAutomatedCleanup } = require('../helpers/mock-lifecycle');
 const { createTestAppRuntime } = require('../helpers/runtime-test-harness');
+export {};
 
 setupAutomatedCleanup({
     clearCallsBeforeEach: true,

@@ -1,6 +1,8 @@
 
+const { describe, it, expect } = require('bun:test');
 const { initializeTestLogging } = require('../../helpers/test-setup');
 const { setupAutomatedCleanup } = require('../../helpers/mock-lifecycle');
+export {};
 
 initializeTestLogging();
 
