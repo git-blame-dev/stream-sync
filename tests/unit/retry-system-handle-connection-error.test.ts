@@ -6,7 +6,7 @@ const { safeDelay } = require('../../src/utils/timeout-validator');
 const { noOpLogger } = require('../helpers/mock-factories');
 
 describe('RetrySystem.handleConnectionError', () => {
-    let retrySystem;
+    let retrySystem: InstanceType<typeof RetrySystem>;
 
     afterEach(() => {
         if (retrySystem && retrySystem.retryTimers) {
