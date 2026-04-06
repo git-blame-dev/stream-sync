@@ -15,7 +15,7 @@ describe('YouTube Platform Configuration Validation', () => {
         restoreAllMocks();
     });
 
-    let mockDependencies;
+    let mockDependencies: ReturnType<typeof createMockPlatformDependencies>;
     
     beforeEach(() => {
         mockDependencies = createMockPlatformDependencies('youtube');
@@ -133,7 +133,7 @@ describe('YouTube Platform Configuration Validation', () => {
             });
 
             const platform = new YouTubePlatform(baseConfig, dependencies);
-            const errorCalls = [];
+            const errorCalls: unknown[][] = [];
             platform.errorHandler = {
                 handleDataLoggingError: (...args) => errorCalls.push(args)
             };

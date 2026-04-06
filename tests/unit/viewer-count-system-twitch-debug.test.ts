@@ -4,11 +4,34 @@ const { createMockFn, spyOn, restoreAllMocks } = require('../helpers/bun-mock-ut
 const { createConfigFixture } = require('../helpers/config-fixture');
 const { noOpLogger } = require('../helpers/mock-factories');
 
+type ViewerCountSystemInstance = {
+    streamStatus: Record<string, boolean>;
+    counts: Record<string, number>;
+    startPolling: () => void;
+    pollPlatform: (platform: string) => Promise<void>;
+    addObserver: (observer: {
+        getObserverId: () => string;
+        onViewerCountUpdate: (...args: unknown[]) => Promise<void>;
+    }) => void;
+    pollingInterval: number | null;
+    isPolling: boolean;
+};
+
+type ViewerCountSystemConstructor = new (args: {
+    platforms: unknown;
+    logger: unknown;
+    config: unknown;
+}) => ViewerCountSystemInstance;
+
 describe('Twitch Viewer Count System Debug', () => {
-    let ViewerCountSystem;
-    let mockTwitchPlatform;
-    let mockPlatforms;
-    let testConfig;
+    let ViewerCountSystem: ViewerCountSystemConstructor;
+    let mockTwitchPlatform: { getViewerCount: ReturnType<typeof createMockFn> };
+    let mockPlatforms: {
+        twitch: { getViewerCount: ReturnType<typeof createMockFn> };
+        youtube: { getViewerCount: ReturnType<typeof createMockFn> };
+        tiktok: { getViewerCount: ReturnType<typeof createMockFn> };
+    };
+    let testConfig: ReturnType<typeof createConfigFixture>;
 
     beforeEach(() => {
         ({ ViewerCountSystem } = require('../../src/utils/viewer-count'));
