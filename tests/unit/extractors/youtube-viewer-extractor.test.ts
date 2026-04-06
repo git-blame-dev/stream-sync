@@ -1,4 +1,5 @@
 const { describe, test, expect } = require('bun:test');
+export {};
 const { YouTubeViewerExtractor } = require('../../../src/extractors/youtube-viewer-extractor');
 
 describe('YouTubeViewerExtractor', () => {

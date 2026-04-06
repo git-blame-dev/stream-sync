@@ -1,3 +1,5 @@
+const { describe, it, expect } = require('bun:test');
+export {};
 const NotificationBuilder = require('../../src/utils/notification-builder');
 
 describe('NotificationBuilder SuperFan notifications', () => {

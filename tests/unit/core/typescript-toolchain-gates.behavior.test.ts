@@ -849,4 +849,38 @@ describe('TypeScript toolchain migration gates behavior', () => {
             expect(content).not.toMatch(/\blet\s+[A-Za-z_$][\w$]*\s*;/);
         }
     });
+
+    it('keeps unit chat observer extractor helper cohort tests on TypeScript paths', () => {
+        const cohortTsPaths = [
+            'tests/unit/chat/keyword-parsing-command-parser.test.ts',
+            'tests/unit/chat/keyword-command-display-fix.test.ts',
+            'tests/unit/observers/viewer-count-observer.behavior.test.ts',
+            'tests/unit/observers/obs-viewer-count-observer.test.ts',
+            'tests/unit/extractors/youtube-viewer-extractor.test.ts',
+            'tests/unit/message-tts-handler.test.ts',
+            'tests/unit/greeting-console-output.test.ts',
+            'tests/unit/greeting-display-username-fix.test.ts',
+            'tests/unit/gift-display-details-fix.test.ts',
+            'tests/unit/notification-builder-superfan.test.ts'
+        ];
+        const cohortJsPaths = [
+            'tests/unit/chat/keyword-parsing-command-parser.test.js',
+            'tests/unit/chat/keyword-command-display-fix.test.js',
+            'tests/unit/observers/viewer-count-observer.behavior.test.js',
+            'tests/unit/observers/obs-viewer-count-observer.test.js',
+            'tests/unit/extractors/youtube-viewer-extractor.test.js',
+            'tests/unit/message-tts-handler.test.js',
+            'tests/unit/greeting-console-output.test.js',
+            'tests/unit/greeting-display-username-fix.test.js',
+            'tests/unit/gift-display-details-fix.test.js',
+            'tests/unit/notification-builder-superfan.test.js'
+        ];
+
+        for (const testPath of cohortTsPaths) {
+            expect(existsSync(join(repoRoot, testPath))).toBe(true);
+        }
+        for (const testPath of cohortJsPaths) {
+            expect(existsSync(join(repoRoot, testPath))).toBe(false);
+        }
+    });
 });

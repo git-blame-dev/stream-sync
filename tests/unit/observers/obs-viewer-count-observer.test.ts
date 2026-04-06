@@ -1,4 +1,5 @@
 const { describe, test, expect, beforeEach } = require('bun:test');
+export {};
 const { createMockFn } = require('../../helpers/bun-mock-utils');
 const { OBSViewerCountObserver } = require('../../../src/observers/obs-viewer-count-observer');
 const { ViewerCountObserver } = require('../../../src/observers/viewer-count-observer');

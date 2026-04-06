@@ -1,4 +1,6 @@
 
+const { describe, beforeEach, it, expect } = require('bun:test');
+export {};
 const { initializeTestLogging, createTestUser, TEST_TIMEOUTS } = require('../../helpers/test-setup');
 const { noOpLogger } = require('../../helpers/mock-factories');
 const { createConfigFixture } = require('../../helpers/config-fixture');
