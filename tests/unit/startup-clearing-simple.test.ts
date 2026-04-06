@@ -4,12 +4,46 @@ const { createMockFn } = require('../helpers/bun-mock-utils');
 const { noOpLogger } = require('../helpers/mock-factories');
 const { clearStartupDisplays } = require('../../src/obs/startup');
 
+type MockFn = ReturnType<typeof createMockFn>;
+
+type ObsManager = {
+    isConnected: MockFn;
+    connected: boolean;
+};
+
+type StartupConfig = {
+    obs: {
+        chatMsgScene: string;
+        chatMsgTxt?: string;
+        chatMsgGroup: string;
+        notificationScene: string;
+        notificationTxt: string;
+        ttsTxt: string;
+        notificationMsgGroup: string;
+        chatPlatformLogos: Record<string, string>;
+        notificationPlatformLogos: Record<string, string>;
+    };
+    timing: {
+        fadeDuration: number;
+    };
+    general?: Record<string, unknown>;
+};
+
+type StartupDeps = {
+    logger: typeof noOpLogger;
+    getOBSConnectionManager: () => ObsManager | null;
+    getDefaultSourcesManager: () => {
+        hideAllDisplays: MockFn;
+        clearTextSource: MockFn;
+    };
+};
+
 describe('OBS Startup Display Clearing - Regression Tests', () => {
-    let mockOBSManager;
-    let hideAllDisplays;
-    let clearTextSource;
-    let configFixture;
-    let deps;
+    let mockOBSManager: ObsManager;
+    let hideAllDisplays: MockFn;
+    let clearTextSource: MockFn;
+    let configFixture: StartupConfig;
+    let deps: StartupDeps;
 
     beforeEach(() => {
         mockOBSManager = {
@@ -85,7 +119,7 @@ describe('OBS Startup Display Clearing - Regression Tests', () => {
             const incompleteConfig = {
                 general: {},
                 obs: {}
-            };
+            } as unknown as StartupConfig;
 
             await clearStartupDisplays(incompleteConfig, deps);
 
@@ -106,7 +140,7 @@ describe('OBS Startup Display Clearing - Regression Tests', () => {
 
     describe('Configuration-Driven Behavior', () => {
         it('should use custom source names from config', async () => {
-            const customConfig = {
+            const customConfig: StartupConfig = {
                 obs: {
                     chatMsgScene: 'custom chat scene',
                     chatMsgGroup: 'custom-chat-group',

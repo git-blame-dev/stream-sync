@@ -5,12 +5,19 @@ const { noOpLogger } = require('../helpers/mock-factories');
 const { createConfigFixture } = require('../helpers/config-fixture');
 const ChatNotificationRouter = require('../../src/services/ChatNotificationRouter');
 
+type MockFn = ReturnType<typeof createMockFn>;
+
+type RouterOverrides = {
+    displayQueue?: { addItem: MockFn } | null;
+    vfxCommandService?: { getVFXConfig: MockFn } | null;
+};
+
 describe('Greeting System Diagnosis', () => {
     afterEach(() => {
         restoreAllMocks();
     });
 
-    const buildRouter = (overrides = {}) => {
+    const buildRouter = (overrides: RouterOverrides = {}) => {
         const logger = noOpLogger;
         const displayQueue = overrides.displayQueue || { addItem: createMockFn() };
         const runtime = {

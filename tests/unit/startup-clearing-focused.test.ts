@@ -4,12 +4,45 @@ const { createMockFn } = require('../helpers/bun-mock-utils');
 const { noOpLogger } = require('../helpers/mock-factories');
 const { clearStartupDisplays } = require('../../src/obs/startup');
 
+type MockFn = ReturnType<typeof createMockFn>;
+
+type ObsManager = {
+    isConnected: MockFn;
+    connected: boolean;
+};
+
+type StartupConfig = {
+    obs: {
+        chatMsgScene: string;
+        chatMsgTxt?: string;
+        chatMsgGroup: string;
+        notificationScene: string;
+        notificationTxt: string;
+        ttsTxt: string;
+        notificationMsgGroup: string;
+        chatPlatformLogos: Record<string, string>;
+        notificationPlatformLogos: Record<string, string>;
+    };
+    timing: {
+        fadeDuration: number;
+    };
+};
+
+type StartupDeps = {
+    logger: typeof noOpLogger;
+    getOBSConnectionManager: () => ObsManager | null;
+    getDefaultSourcesManager: () => {
+        hideAllDisplays: MockFn;
+        clearTextSource: MockFn;
+    };
+};
+
 describe('OBS Startup Display Clearing - Detailed Behavior', () => {
-    let mockOBSManager;
-    let hideAllDisplays;
-    let clearTextSource;
-    let configFixture;
-    let deps;
+    let mockOBSManager: ObsManager;
+    let hideAllDisplays: MockFn;
+    let clearTextSource: MockFn;
+    let configFixture: StartupConfig;
+    let deps: StartupDeps;
 
     beforeEach(() => {
         mockOBSManager = {
@@ -92,7 +125,7 @@ describe('OBS Startup Display Clearing - Detailed Behavior', () => {
             const missingFieldsConfig = {
                 obs: { chatMsgScene: 'stream pkmn switch', chatMsgGroup: 'test', notificationScene: 'stream pkmn switch', notificationMsgGroup: 'test' },
                 timing: { fadeDuration: 750 }
-            };
+            } as unknown as StartupConfig;
 
             await clearStartupDisplays(missingFieldsConfig, deps);
 
@@ -115,7 +148,7 @@ describe('OBS Startup Display Clearing - Detailed Behavior', () => {
         });
 
         it('should use provided config for platform logos', async () => {
-            const customConfig = {
+            const customConfig: StartupConfig = {
                 obs: {
                     chatMsgScene: 'stream pkmn switch',
                     chatMsgGroup: 'test-group',

@@ -6,21 +6,62 @@ const { noOpLogger } = require('../helpers/mock-factories');
 const { createConfigFixture } = require('../helpers/config-fixture');
 const testClock = require('../helpers/test-clock');
 
+type MockFn = ReturnType<typeof createMockFn>;
+
+type RouterRuntime = {
+    config: {
+        general: {
+            filterOldMessages: boolean;
+        };
+        twitch: {
+            messagesEnabled: boolean;
+            greetingsEnabled: boolean;
+        };
+    };
+    platformLifecycleService: {
+        getPlatformConnectionTime: MockFn;
+    };
+    gracefulExitService: unknown;
+};
+
+type RouterInstance = {
+    runtime: RouterRuntime;
+    handleChatMessage: (platform: string, message: unknown) => Promise<void>;
+    shouldSkipForConnection: (platform: string, timestamp: string) => boolean;
+    enqueueChatMessage: MockFn;
+    detectCommand: MockFn;
+    processCommand: MockFn;
+    isFirstMessage: MockFn;
+    isGreetingEnabled: MockFn;
+};
+
+type RouterConstructor = new (deps: {
+    runtime: RouterRuntime;
+    logger: typeof noOpLogger;
+    config: ReturnType<typeof createConfigFixture>;
+}) => RouterInstance;
+
+type RouterOverrides = {
+    general?: Partial<RouterRuntime['config']['general']>;
+    connectionTime?: number | null;
+    gracefulExitService?: unknown;
+};
+
 initializeTestLogging();
 
 describe('Old Message Filter', () => {
-    let ChatNotificationRouter;
+    let ChatNotificationRouter: RouterConstructor;
 
     beforeEach(() => {
-        ChatNotificationRouter = require('../../src/services/ChatNotificationRouter');
+        ChatNotificationRouter = require('../../src/services/ChatNotificationRouter') as RouterConstructor;
     });
 
     afterEach(() => {
         restoreAllMocks();
     });
 
-    const buildRouter = (overrides = {}) => {
-        const runtime = {
+    const buildRouter = (overrides: RouterOverrides = {}) => {
+        const runtime: RouterRuntime = {
             config: {
                 general: {
                     filterOldMessages: true,
@@ -34,7 +75,7 @@ describe('Old Message Filter', () => {
             gracefulExitService: overrides.gracefulExitService || null
         };
 
-        const router = new ChatNotificationRouter({
+        const router: RouterInstance = new ChatNotificationRouter({
             runtime,
             logger: noOpLogger,
             config: createConfigFixture()

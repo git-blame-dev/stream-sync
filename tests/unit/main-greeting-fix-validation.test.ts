@@ -3,14 +3,32 @@ export {};
 const { createMockFn, restoreAllMocks } = require('../helpers/bun-mock-utils');
 const NotificationBuilder = require('../../src/utils/notification-builder');
 
+type MockFn = ReturnType<typeof createMockFn>;
+
+type ConsoleNotificationData = {
+    username?: string;
+    viewerCount?: number;
+    giftCount?: number;
+    giftType?: string;
+    amount?: number;
+    currency?: string;
+    [key: string]: unknown;
+};
+
 describe('Main.js Greeting Username Extraction Fix', () => {
     afterEach(() => {
         restoreAllMocks();
     });
 
-    let extractUsernameFromNotificationData;
-    let logNotificationToConsole;
-    let mockLogger;
+    let extractUsernameFromNotificationData: (data: ConsoleNotificationData | null | undefined) => string | null;
+    let logNotificationToConsole: (type: string, platform: string, data: ConsoleNotificationData) => void;
+    let mockLogger: {
+        console: MockFn;
+        debug: MockFn;
+        info: MockFn;
+        warn: MockFn;
+        error: MockFn;
+    };
 
     beforeEach(() => {
         mockLogger = {
