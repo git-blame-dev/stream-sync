@@ -10,13 +10,43 @@ initializeTestLogging();
 
 const NotificationManager = require('../../../src/notifications/NotificationManager');
 
+type DisplayQueueMock = {
+    addItem: ReturnType<typeof createMockFn>;
+    getQueueLength: ReturnType<typeof createMockFn>;
+};
+
+type VfxCommandServiceMock = {
+    executeCommand: ReturnType<typeof createMockFn>;
+    getVFXConfig: ReturnType<typeof createMockFn>;
+};
+
+type UserTrackingServiceMock = {
+    isFirstMessage: ReturnType<typeof createMockFn>;
+    trackUser: ReturnType<typeof createMockFn>;
+};
+
+type EventBusMock = {
+    emit: ReturnType<typeof createMockFn>;
+    on: ReturnType<typeof createMockFn>;
+    off: ReturnType<typeof createMockFn>;
+};
+
+type NotificationManagerLike = {
+    handleNotification: (...args: unknown[]) => Promise<{ success?: boolean }>;
+    donationSpamDetector?: { destroy?: () => void };
+    eventBus?: unknown;
+    config?: unknown;
+    vfxCommandService?: unknown;
+    userTrackingService?: unknown;
+};
+
 describe('NotificationManager Service Dependency Injection - Modernized', () => {
-    let mockDisplayQueue;
-    let mockConfig;
-    let mockVFXCommandService;
-    let mockUserTrackingService;
-    let mockEventBus;
-    let notificationManager;
+    let mockDisplayQueue: DisplayQueueMock;
+    let mockConfig: ReturnType<typeof createConfigFixture>;
+    let mockVFXCommandService: VfxCommandServiceMock;
+    let mockUserTrackingService: UserTrackingServiceMock;
+    let mockEventBus: EventBusMock;
+    let notificationManager!: NotificationManagerLike;
 
     beforeEach(() => {
         mockDisplayQueue = {

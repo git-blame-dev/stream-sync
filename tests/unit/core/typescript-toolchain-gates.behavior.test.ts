@@ -318,4 +318,22 @@ describe('TypeScript toolchain migration gates behavior', () => {
         expect(existsSync(join(repoRoot, 'tests/unit/notifications/notification-manager-app-dependency.test.ts'))).toBe(true);
         expect(existsSync(join(repoRoot, 'tests/unit/notifications/notification-manager-app-dependency.test.js'))).toBe(false);
     });
+
+    it('keeps notifications cohort a tests free of untyped mutable declarations', () => {
+        const cohortPaths = [
+            'tests/unit/notifications/notification-duration-removal.behavior.test.ts',
+            'tests/unit/notifications/notification-input-validator.test.ts',
+            'tests/unit/notifications/notification-payload-builder.test.ts',
+            'tests/unit/notifications/notification-gate.test.ts',
+            'tests/unit/notifications/notification-type-normalization.test.ts',
+            'tests/unit/notifications/notification-manager-input-validation.test.ts',
+            'tests/unit/notifications/notification-manager-logger-args.test.ts',
+            'tests/unit/notifications/notification-manager-app-dependency.test.ts'
+        ];
+
+        for (const testPath of cohortPaths) {
+            const content = readFileSync(join(repoRoot, testPath), 'utf8');
+            expect(content).not.toMatch(/\blet\s+[A-Za-z_$][\w$]*\s*;/);
+        }
+    });
 });
