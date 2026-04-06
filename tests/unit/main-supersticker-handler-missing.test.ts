@@ -1,4 +1,5 @@
 const { describe, test, expect, afterEach } = require('bun:test');
+export {};
 const { createMockFn, restoreAllMocks } = require('../helpers/bun-mock-utils');
 const { createMockNotificationManager } = require('../helpers/mock-factories');
 const { createTestAppRuntime } = require('../helpers/runtime-test-harness');

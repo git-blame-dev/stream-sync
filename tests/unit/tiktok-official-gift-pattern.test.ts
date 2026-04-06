@@ -1,4 +1,5 @@
 const { extractTikTokGiftData } = require('../../src/utils/tiktok-data-extraction');
+export {};
 
 describe('TikTok Official Gift Pattern', () => {
     describe('Gift Type Detection', () => {

@@ -1,4 +1,5 @@
 const { describe, expect, it, afterEach } = require('bun:test');
+export {};
 const { createMockFn, restoreAllMocks } = require('../helpers/bun-mock-utils');
 const { useFakeTimers, useRealTimers, runOnlyPendingTimers } = require('../helpers/bun-timers');
 const { noOpLogger } = require('../helpers/mock-factories');

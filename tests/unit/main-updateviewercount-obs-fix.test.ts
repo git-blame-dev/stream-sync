@@ -1,4 +1,5 @@
 const { describe, expect, beforeEach, afterEach, it } = require('bun:test');
+export {};
 const { createMockFn, clearAllMocks, restoreAllMocks } = require('../helpers/bun-mock-utils');
 
 describe('Main App updateViewerCount OBS Integration', () => {
