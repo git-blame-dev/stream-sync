@@ -1,4 +1,5 @@
 const { describe, test, expect } = require('bun:test');
+export {};
 const { TEST_TIMEOUTS } = require('../../helpers/test-setup');
 const { setupAutomatedCleanup } = require('../../helpers/mock-lifecycle');
 const { expectNoTechnicalArtifacts } = require('../../helpers/behavior-validation');
