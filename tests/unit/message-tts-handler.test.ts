@@ -1,4 +1,6 @@
 
+const { describe, test, expect } = require('bun:test');
+export {};
 const MessageTTSHandler = require('../../src/utils/message-tts-handler');
 
 describe('MessageTTSHandler', () => {

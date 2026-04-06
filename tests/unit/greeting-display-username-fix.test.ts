@@ -1,4 +1,5 @@
 const { describe, expect, beforeEach, it, afterEach } = require('bun:test');
+export {};
 const { restoreAllMocks } = require('../helpers/bun-mock-utils');
 const { expectNoTechnicalArtifacts } = require('../helpers/assertion-helpers');
 

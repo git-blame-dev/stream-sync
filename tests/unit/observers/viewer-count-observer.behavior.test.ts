@@ -1,3 +1,5 @@
+const { describe, it, expect } = require('bun:test');
+export {};
 const { ViewerCountObserver } = require('../../../src/observers/viewer-count-observer');
 
 describe('ViewerCountObserver behavior', () => {

@@ -1,4 +1,5 @@
 const { describe, test, expect } = require('bun:test');
+export {};
 const NotificationBuilder = require('../../src/utils/notification-builder');
 const { generateLogMessage } = require('../helpers/notification-test-utils');
 
