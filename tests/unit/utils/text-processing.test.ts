@@ -1,4 +1,7 @@
 
+const { describe, it, expect, beforeEach } = require('bun:test');
+export {};
+
 const { initializeTestLogging } = require('../../helpers/test-setup');
 const { noOpLogger } = require('../../helpers/mock-factories');
 const { setupAutomatedCleanup } = require('../../helpers/mock-lifecycle');

@@ -1,5 +1,6 @@
 
 const { describe, expect, beforeEach, afterEach, it } = require('bun:test');
+export {};
 const { restoreAllMocks } = require('../../helpers/bun-mock-utils');
 
 const { initializeTestLogging } = require('../../helpers/test-setup');

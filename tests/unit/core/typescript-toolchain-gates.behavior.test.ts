@@ -642,4 +642,38 @@ describe('TypeScript toolchain migration gates behavior', () => {
             expect(content).not.toMatch(/\blet\s+[A-Za-z_$][\w$]*\s*;/);
         }
     });
+
+    it('keeps utils cohort b unit tests on TypeScript paths', () => {
+        const cohortTsPaths = [
+            'tests/unit/utils/config-validator.behavior.test.ts',
+            'tests/unit/utils/retry-system.behavior.test.ts',
+            'tests/unit/utils/enhanced-http-client.behavior.test.ts',
+            'tests/unit/utils/enhanced-http-client.test.ts',
+            'tests/unit/utils/text-processing.test.ts',
+            'tests/unit/utils/goal-tracker.test.ts',
+            'tests/unit/utils/spam-detection.test.ts',
+            'tests/unit/utils/spam-detection.behavior.test.ts',
+            'tests/unit/utils/user-facing-content-validation.test.ts',
+            'tests/unit/utils/file-logger.behavior.test.ts'
+        ];
+        const cohortJsPaths = [
+            'tests/unit/utils/config-validator.behavior.test.js',
+            'tests/unit/utils/retry-system.behavior.test.js',
+            'tests/unit/utils/enhanced-http-client.behavior.test.js',
+            'tests/unit/utils/enhanced-http-client.test.js',
+            'tests/unit/utils/text-processing.test.js',
+            'tests/unit/utils/goal-tracker.test.js',
+            'tests/unit/utils/spam-detection.test.js',
+            'tests/unit/utils/spam-detection.behavior.test.js',
+            'tests/unit/utils/user-facing-content-validation.test.js',
+            'tests/unit/utils/file-logger.behavior.test.js'
+        ];
+
+        for (const testPath of cohortTsPaths) {
+            expect(existsSync(join(repoRoot, testPath))).toBe(true);
+        }
+        for (const testPath of cohortJsPaths) {
+            expect(existsSync(join(repoRoot, testPath))).toBe(false);
+        }
+    });
 });

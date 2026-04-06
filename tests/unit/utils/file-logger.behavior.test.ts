@@ -1,4 +1,5 @@
 const { describe, expect, it, afterEach } = require('bun:test');
+export {};
 const { createMockFn, spyOn, restoreAllMocks } = require('../../helpers/bun-mock-utils');
 
 const { FileLogger } = require('../../../src/utils/file-logger');
