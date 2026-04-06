@@ -1,4 +1,5 @@
 const { describe, expect, it } = require('bun:test');
+export {};
 
 const { YouTubeiCurrencyParser } = require('../../../src/platforms/youtube/youtubei-currency-parser');
 const { noOpLogger } = require('../../helpers/mock-factories');

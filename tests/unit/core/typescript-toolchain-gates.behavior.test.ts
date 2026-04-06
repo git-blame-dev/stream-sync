@@ -248,4 +248,34 @@ describe('TypeScript toolchain migration gates behavior', () => {
         expect(existsSync(join(repoRoot, 'tests/unit/utils/youtube-message-extraction-modern.test.ts'))).toBe(true);
         expect(existsSync(join(repoRoot, 'tests/unit/utils/youtube-message-extraction-modern.test.js'))).toBe(false);
     });
+
+    it('keeps youtubei currency parser behavior test on TypeScript path', () => {
+        expect(existsSync(join(repoRoot, 'tests/unit/utils/youtubei-currency-parser.behavior.test.ts'))).toBe(true);
+        expect(existsSync(join(repoRoot, 'tests/unit/utils/youtubei-currency-parser.behavior.test.js'))).toBe(false);
+    });
+
+    it('keeps youtube turkish lira parsing fix test on TypeScript path', () => {
+        expect(existsSync(join(repoRoot, 'tests/unit/utils/youtube-turkish-lira-parsing-fix.test.ts'))).toBe(true);
+        expect(existsSync(join(repoRoot, 'tests/unit/utils/youtube-turkish-lira-parsing-fix.test.js'))).toBe(false);
+    });
+
+    it('keeps youtube connection management test on TypeScript path', () => {
+        expect(existsSync(join(repoRoot, 'tests/unit/utils/youtube-connection-management.test.ts'))).toBe(true);
+        expect(existsSync(join(repoRoot, 'tests/unit/utils/youtube-connection-management.test.js'))).toBe(false);
+    });
+
+    it('keeps youtube connection manager test on TypeScript path', () => {
+        expect(existsSync(join(repoRoot, 'tests/unit/utils/youtube-connection-manager.test.ts'))).toBe(true);
+        expect(existsSync(join(repoRoot, 'tests/unit/utils/youtube-connection-manager.test.js'))).toBe(false);
+    });
+
+    it('keeps youtube connection manager missing methods test on TypeScript path', () => {
+        expect(existsSync(join(repoRoot, 'tests/unit/utils/youtube-connection-manager-missing-methods.test.ts'))).toBe(true);
+        expect(existsSync(join(repoRoot, 'tests/unit/utils/youtube-connection-manager-missing-methods.test.js'))).toBe(false);
+    });
+
+    it('keeps youtube viewer count behavior test on TypeScript path', () => {
+        expect(existsSync(join(repoRoot, 'tests/unit/youtube-viewer-count-behavior.test.ts'))).toBe(true);
+        expect(existsSync(join(repoRoot, 'tests/unit/youtube-viewer-count-behavior.test.js'))).toBe(false);
+    });
 });

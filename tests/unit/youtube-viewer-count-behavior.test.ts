@@ -1,11 +1,16 @@
 
 const { describe, expect, it, afterEach } = require('bun:test');
+export {};
 const { createMockFn, restoreAllMocks } = require('../helpers/bun-mock-utils');
 const { noOpLogger, createMockNotificationManager } = require('../helpers/mock-factories');
 
 const { YouTubePlatform } = require('../../src/platforms/youtube');
 
-const createPlatform = (provider = null) => {
+type ViewerCountProvider = {
+    getViewerCountForVideo?: (videoId: string) => Promise<number>;
+};
+
+const createPlatform = (provider: ViewerCountProvider | null = null) => {
     const notificationManager = createMockNotificationManager();
     const platform = new YouTubePlatform(
         {
