@@ -359,6 +359,26 @@ describe('TypeScript toolchain migration gates behavior', () => {
         expect(existsSync(join(repoRoot, 'tests/unit/notifications/notification-manager-raid-viewer-count.test.js'))).toBe(false);
     });
 
+    it('keeps notification manager coverage test on TypeScript path', () => {
+        expect(existsSync(join(repoRoot, 'tests/unit/notifications/notification-manager-coverage.test.ts'))).toBe(true);
+        expect(existsSync(join(repoRoot, 'tests/unit/notifications/notification-manager-coverage.test.js'))).toBe(false);
+    });
+
+    it('keeps notification manager error path test on TypeScript path', () => {
+        expect(existsSync(join(repoRoot, 'tests/unit/notifications/notification-manager-error-path.test.ts'))).toBe(true);
+        expect(existsSync(join(repoRoot, 'tests/unit/notifications/notification-manager-error-path.test.js'))).toBe(false);
+    });
+
+    it('keeps notification manager error handler test on TypeScript path', () => {
+        expect(existsSync(join(repoRoot, 'tests/unit/notifications/notification-manager-error-handler.test.ts'))).toBe(true);
+        expect(existsSync(join(repoRoot, 'tests/unit/notifications/notification-manager-error-handler.test.js'))).toBe(false);
+    });
+
+    it('keeps aggregated donation transformer test on TypeScript path', () => {
+        expect(existsSync(join(repoRoot, 'tests/unit/notifications/aggregated-donation-transformer.test.ts'))).toBe(true);
+        expect(existsSync(join(repoRoot, 'tests/unit/notifications/aggregated-donation-transformer.test.js'))).toBe(false);
+    });
+
     it('keeps notifications cohort a tests free of untyped mutable declarations', () => {
         const cohortPaths = [
             'tests/unit/notifications/notification-duration-removal.behavior.test.ts',

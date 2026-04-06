@@ -1,4 +1,5 @@
 const { describe, it, expect } = require('bun:test');
+export {};
 const { createSyntheticGiftFromAggregated } = require('../../../src/notifications/aggregated-donation-transformer');
 
 describe('createSyntheticGiftFromAggregated', () => {
