@@ -1,5 +1,4 @@
-const { describe, expect, it, afterEach } = require('bun:test');
-export {};
+import { describe, expect, it, afterEach } from 'bun:test';
 const { createMockFn, restoreAllMocks } = require('../helpers/bun-mock-utils');
 const { useFakeTimers, useRealTimers, runOnlyPendingTimers } = require('../helpers/bun-timers');
 const { noOpLogger } = require('../helpers/mock-factories');
@@ -64,11 +63,11 @@ describe('AppRuntime shutdown lifecycle', () => {
 
     it('does not emit telemetry events when restart is requested', () => {
         const runtime = createAppRuntimeDouble();
-        const emitCalls = [];
+        const emitCalls: unknown[][] = [];
         runtime.eventBus.emit = (...args) => emitCalls.push(args);
         useFakeTimers();
         const originalExit = process.exit;
-        process.exit = () => {};
+        process.exit = (() => undefined as never) as typeof process.exit;
         try {
             runtime.emitSystemShutdown({ reason: 'test', restartRequested: true });
 
@@ -82,7 +81,7 @@ describe('AppRuntime shutdown lifecycle', () => {
 
     it('invokes viewer count status cleanup during shutdown', async () => {
         const runtime = createAppRuntimeDouble();
-        const cleanupCalls = [];
+        const cleanupCalls: string[] = [];
         runtime.platformLifecycleService = { disconnectAll: createMockFn().mockResolvedValue() };
         runtime.obsEventService = { disconnect: createMockFn().mockResolvedValue() };
         runtime.platformEventRouter = { dispose: createMockFn() };
@@ -90,7 +89,7 @@ describe('AppRuntime shutdown lifecycle', () => {
         runtime.notificationManager = { stopSuppressionCleanup: createMockFn() };
         runtime.viewerCountStatusCleanup = () => cleanupCalls.push('cleanup');
         const originalExit = process.exit;
-        process.exit = () => {};
+        process.exit = (() => undefined as never) as typeof process.exit;
 
         try {
             await runtime.shutdown();

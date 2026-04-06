@@ -1095,4 +1095,22 @@ describe('TypeScript toolchain migration gates behavior', () => {
             expect(content).not.toMatch(/\blet\s+[A-Za-z_$][\w$]*\s*,/);
         }
     });
+
+    it('keeps cohort d test modules free of bun test require and transitional empty exports', () => {
+        const cohortPaths = [
+            'tests/unit/runtime-system-ready.test.ts',
+            'tests/unit/twitch-resubscription-notification-fix.test.ts',
+            'tests/unit/tiktok-official-gift-pattern.test.ts',
+            'tests/unit/tiktok-connection-refactor.test.ts',
+            'tests/unit/tiktok-connection-fix-validation.test.ts',
+            'tests/unit/main-updateviewercount-obs-fix.test.ts',
+            'tests/unit/main-supersticker-handler-missing.test.ts'
+        ];
+
+        for (const testPath of cohortPaths) {
+            const content = readFileSync(join(repoRoot, testPath), 'utf8');
+            expect(content).not.toContain("require('bun:test')");
+            expect(content).not.toContain('export {};');
+        }
+    });
 });

@@ -1,5 +1,4 @@
-const { describe, expect, beforeEach, afterEach, it } = require('bun:test');
-export {};
+import { describe, expect, beforeEach, afterEach, it } from 'bun:test';
 const { createMockFn, clearAllMocks, restoreAllMocks } = require('../helpers/bun-mock-utils');
 
 describe('Main App updateViewerCount OBS Integration', () => {
