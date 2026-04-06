@@ -1,5 +1,8 @@
 import { describe, expect, beforeEach, afterEach, it } from 'bun:test';
-const { createMockFn, clearAllMocks, restoreAllMocks } = require('../helpers/bun-mock-utils');
+import { createRequire } from 'node:module';
+
+const load = createRequire(__filename);
+const { createMockFn, clearAllMocks, restoreAllMocks } = load('../helpers/bun-mock-utils');
 
 describe('Main App updateViewerCount OBS Integration', () => {
     let mockViewerCountSystem: {
