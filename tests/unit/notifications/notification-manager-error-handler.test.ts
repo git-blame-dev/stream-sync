@@ -7,10 +7,28 @@ const { createConfigFixture } = require('../../helpers/config-fixture');
 const NotificationManager = require('../../../src/notifications/NotificationManager');
 const constants = require('../../../src/core/constants');
 
+type NotificationManagerLike = {
+    handleNotification: (type: string, platform: string, data: Record<string, unknown>) => Promise<{ success?: boolean; error?: string; details?: string }>;
+};
+
+type DisplayQueueMock = {
+    addItem: ReturnType<typeof createMockFn>;
+    addToQueue: ReturnType<typeof createMockFn>;
+    processQueue: ReturnType<typeof createMockFn>;
+    isQueueEmpty: ReturnType<typeof createMockFn>;
+    clearQueue: ReturnType<typeof createMockFn>;
+};
+
+type EventBusMock = {
+    emit: ReturnType<typeof createMockFn>;
+    on: ReturnType<typeof createMockFn>;
+    off: ReturnType<typeof createMockFn>;
+};
+
 describe('NotificationManager error handling', () => {
-    let manager;
-    let mockDisplayQueue;
-    let mockEventBus;
+    let manager: NotificationManagerLike;
+    let mockDisplayQueue: DisplayQueueMock;
+    let mockEventBus: EventBusMock;
 
     beforeEach(() => {
         mockDisplayQueue = {

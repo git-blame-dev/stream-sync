@@ -7,8 +7,13 @@ const { PRIORITY_LEVELS } = require('../../../src/core/constants');
 
 const NotificationManager = require('../../../src/notifications/NotificationManager');
 
+type VfxExecution = {
+    cmd: unknown;
+    ctx: unknown;
+};
+
 describe('NotificationManager coverage', () => {
-    let originalNodeEnv;
+    let originalNodeEnv: string | undefined;
 
     beforeEach(() => {
         originalNodeEnv = process.env.NODE_ENV;
@@ -77,7 +82,7 @@ describe('NotificationManager coverage', () => {
 
     describe('processVFXForNotification', () => {
         it('executes VFX command when service available', async () => {
-            const executedCommands = [];
+            const executedCommands: VfxExecution[] = [];
             const deps = createDeps({
                 vfxCommandService: {
                     executeCommand: (cmd, ctx) => executedCommands.push({ cmd, ctx })
@@ -97,7 +102,7 @@ describe('NotificationManager coverage', () => {
         });
 
         it('skips when no VFX command specified', async () => {
-            const executedCommands = [];
+            const executedCommands: VfxExecution[] = [];
             const deps = createDeps({
                 vfxCommandService: {
                     executeCommand: (cmd, ctx) => executedCommands.push({ cmd, ctx })

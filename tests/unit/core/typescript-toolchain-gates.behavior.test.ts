@@ -412,4 +412,18 @@ describe('TypeScript toolchain migration gates behavior', () => {
             expect(content).not.toMatch(/\blet\s+[A-Za-z_$][\w$]*\s*;/);
         }
     });
+
+    it('keeps notifications cohort c tests free of untyped mutable declarations', () => {
+        const cohortPaths = [
+            'tests/unit/notifications/notification-manager-coverage.test.ts',
+            'tests/unit/notifications/notification-manager-error-path.test.ts',
+            'tests/unit/notifications/notification-manager-error-handler.test.ts',
+            'tests/unit/notifications/aggregated-donation-transformer.test.ts'
+        ];
+
+        for (const testPath of cohortPaths) {
+            const content = readFileSync(join(repoRoot, testPath), 'utf8');
+            expect(content).not.toMatch(/\blet\s+[A-Za-z_$][\w$]*\s*;/);
+        }
+    });
 });
