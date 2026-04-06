@@ -795,4 +795,38 @@ describe('TypeScript toolchain migration gates behavior', () => {
             expect(content).not.toMatch(/\blet\s+[A-Za-z_$][\w$]*\s*;/);
         }
     });
+
+    it('keeps unit root core config cohort b tests on TypeScript paths', () => {
+        const cohortTsPaths = [
+            'tests/unit/old-message-filter.test.ts',
+            'tests/unit/greeting-system-diagnosis.test.ts',
+            'tests/unit/bits-goal-counter-fix.test.ts',
+            'tests/unit/tiktok-event-factory-behavior.test.ts',
+            'tests/unit/startup-clearing-simple.test.ts',
+            'tests/unit/startup-clearing-focused.test.ts',
+            'tests/unit/debug-mode-command-line.test.ts',
+            'tests/unit/template-interpolation-fallbacks.test.ts',
+            'tests/unit/main-greeting-fix-validation.test.ts',
+            'tests/unit/twitch-gift-sub-notification.test.ts'
+        ];
+        const cohortJsPaths = [
+            'tests/unit/old-message-filter.test.js',
+            'tests/unit/greeting-system-diagnosis.test.js',
+            'tests/unit/bits-goal-counter-fix.test.js',
+            'tests/unit/tiktok-event-factory-behavior.test.js',
+            'tests/unit/startup-clearing-simple.test.js',
+            'tests/unit/startup-clearing-focused.test.js',
+            'tests/unit/debug-mode-command-line.test.js',
+            'tests/unit/template-interpolation-fallbacks.test.js',
+            'tests/unit/main-greeting-fix-validation.test.js',
+            'tests/unit/twitch-gift-sub-notification.test.js'
+        ];
+
+        for (const testPath of cohortTsPaths) {
+            expect(existsSync(join(repoRoot, testPath))).toBe(true);
+        }
+        for (const testPath of cohortJsPaths) {
+            expect(existsSync(join(repoRoot, testPath))).toBe(false);
+        }
+    });
 });
