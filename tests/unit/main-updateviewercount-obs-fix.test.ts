@@ -3,8 +3,15 @@ export {};
 const { createMockFn, clearAllMocks, restoreAllMocks } = require('../helpers/bun-mock-utils');
 
 describe('Main App updateViewerCount OBS Integration', () => {
-    let mockViewerCountSystem;
-    let updateViewerCountMethod;
+    let mockViewerCountSystem: {
+        counts: {
+            tiktok: number;
+            twitch: number;
+            youtube: number;
+        };
+        notifyObservers: ReturnType<typeof createMockFn>;
+    };
+    let updateViewerCountMethod: (platform: string, count: number) => void;
 
     beforeEach(() => {
         mockViewerCountSystem = {
@@ -76,7 +83,7 @@ describe('Main App updateViewerCount OBS Integration', () => {
         });
 
         describe('and ViewerCountSystem is missing', () => {
-            let updateViewerCountMethodWithoutSystem;
+            let updateViewerCountMethodWithoutSystem: (platform: string, count: number) => void;
 
             beforeEach(() => {
                 const testAppRuntimeWithoutSystem = {

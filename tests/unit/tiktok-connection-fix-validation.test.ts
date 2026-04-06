@@ -5,7 +5,7 @@ const { noOpLogger } = require('../helpers/mock-factories');
 const { TikTokPlatform } = require('../../src/platforms/tiktok');
 
 describe('TikTok Connection State Management', () => {
-    let platform;
+    let platform: InstanceType<typeof TikTokPlatform>;
 
     afterEach(() => {
         if (platform) {
