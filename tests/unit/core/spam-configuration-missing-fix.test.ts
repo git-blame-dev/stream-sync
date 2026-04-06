@@ -10,6 +10,21 @@ const { createTextProcessingManager } = require('../../../src/utils/text-process
 const { PRIORITY_LEVELS } = require('../../../src/core/constants');
 export {};
 
+type MockFn = ReturnType<typeof createMockFn>;
+
+type NotificationManagerInstance = {
+    donationSpamDetector?: unknown;
+    handleNotification: (type: string, platform: string, data: Record<string, unknown>) => Promise<unknown>;
+    handleNotificationInternal: (
+        type: string,
+        platform: string,
+        data: Record<string, unknown>,
+        suppressQueue: boolean
+    ) => Promise<{ suppressed?: boolean; reason?: string }>;
+};
+
+type NotificationManagerConstructor = new (deps: Record<string, unknown>) => NotificationManagerInstance;
+
 initializeTestLogging();
 
 setupAutomatedCleanup({
@@ -22,15 +37,34 @@ describe('Spam Detection Service Integration Tests', () => {
         restoreAllMocks();
     });
 
-    let mockLogger;
-    let mockConstants;
-    let mockDisplayQueue;
-    let mockSpamDetector;
-    let mockConfig;
-    let mockTextProcessing;
-    let mockObsGoals;
-    let mockVfxCommandService;
-    let NotificationManager;
+    let mockLogger: typeof noOpLogger;
+    let mockConstants: {
+        PRIORITY_LEVELS: typeof PRIORITY_LEVELS;
+        NOTIFICATION_CONFIGS: {
+            'platform:gift': {
+                priority: number;
+                duration: number;
+                settingKey: string;
+                commandKey: string;
+            };
+        };
+    };
+    let mockDisplayQueue: {
+        addItem: MockFn;
+        processQueue: MockFn;
+    };
+    let mockSpamDetector: {
+        handleDonationSpam: MockFn;
+    };
+    let mockConfig: ReturnType<typeof createConfigFixture>;
+    let mockTextProcessing: ReturnType<typeof createTextProcessingManager>;
+    let mockObsGoals: {
+        processDonationGoal: MockFn;
+    };
+    let mockVfxCommandService: {
+        getVFXConfig: MockFn;
+    };
+    let NotificationManager: NotificationManagerConstructor;
 
     beforeEach(() => {
         mockLogger = noOpLogger;
@@ -62,7 +96,7 @@ describe('Spam Detection Service Integration Tests', () => {
         mockObsGoals = { processDonationGoal: createMockFn() };
         mockVfxCommandService = { getVFXConfig: createMockFn().mockResolvedValue(null) };
 
-        NotificationManager = require('../../../src/notifications/NotificationManager');
+        NotificationManager = require('../../../src/notifications/NotificationManager') as NotificationManagerConstructor;
     });
 
     describe('when spam detection configuration is available', () => {
