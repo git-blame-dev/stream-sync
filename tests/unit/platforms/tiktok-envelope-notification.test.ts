@@ -63,10 +63,10 @@ const createEnvelopeNotificationHandler = (mockLogger, mockGiftHandler) => {
 };
 
 describe('TikTok Envelope Notification - Behavior Testing', () => {
-    let mockLogger;
-    let handleEnvelopeNotification;
-    let mockGiftHandler;
-    let capturedGiftCalls;
+    let mockLogger: typeof noOpLogger;
+    let handleEnvelopeNotification: (platform: string, data: any) => Promise<void>;
+    let mockGiftHandler: ReturnType<typeof createMockFn>;
+    let capturedGiftCalls: Array<{ platform: string; username: string; giftData: any; timestamp: number }>;
 
     setupAutomatedCleanup();
 

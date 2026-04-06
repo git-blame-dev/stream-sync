@@ -22,8 +22,8 @@ describe('TwitchPlatform monetisation mapping', () => {
         restoreAllMocks();
     });
 
-    let twitch;
-    let emitted;
+    let twitch: any;
+    let emitted: Array<{ evt: string; payload: any }>;
 
     beforeEach(() => {
         emitted = [];

@@ -4,11 +4,11 @@ const { createMockFn, restoreAllMocks } = require('../../helpers/bun-mock-utils'
 const { noOpLogger } = require('../../helpers/mock-factories');
 
 describe('TikTokPlatform Error Handling', () => {
-    let TikTokPlatform;
-    let mockConnection;
-    let mockRetrySystem;
-    let baseConfig;
-    let baseDependencies;
+    let TikTokPlatform: any;
+    let mockConnection: Record<string, unknown>;
+    let mockRetrySystem: any;
+    let baseConfig: { enabled: boolean; username: string; dataLoggingEnabled: boolean };
+    let baseDependencies: any;
 
     beforeEach(() => {
         ({ TikTokPlatform } = require('../../../src/platforms/tiktok'));
