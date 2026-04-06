@@ -1,4 +1,5 @@
 const { describe, expect, beforeEach, afterEach, it } = require('bun:test');
+export {};
 const { createMockFn, spyOn, restoreAllMocks } = require('../../helpers/bun-mock-utils');
 const { noOpLogger } = require('../../helpers/mock-factories');
 const { IntervalManager } = require('../../../src/utils/interval-manager');

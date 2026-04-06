@@ -1,4 +1,5 @@
 const { describe, expect, beforeEach, it, afterEach } = require('bun:test');
+export {};
 const { restoreAllMocks } = require('../../helpers/bun-mock-utils');
 const { noOpLogger } = require('../../helpers/mock-factories');
 const { DependencyFactory } = require('../../../src/utils/dependency-factory');

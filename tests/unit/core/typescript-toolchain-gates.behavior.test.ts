@@ -588,4 +588,38 @@ describe('TypeScript toolchain migration gates behavior', () => {
             expect(content).not.toMatch(/\blet\s+[A-Za-z_$][\w$]*\s*;/);
         }
     });
+
+    it('keeps utils cohort a unit tests on TypeScript paths', () => {
+        const cohortTsPaths = [
+            'tests/unit/utils/platform-connection-factory.behavior.test.ts',
+            'tests/unit/utils/platform-interface-validator.behavior.test.ts',
+            'tests/unit/utils/dependency-factory.behavior.test.ts',
+            'tests/unit/utils/platform-initialization-manager.test.ts',
+            'tests/unit/utils/platform-initialization-manager.behavior.test.ts',
+            'tests/unit/utils/connection-state-manager.behavior.test.ts',
+            'tests/unit/utils/interval-manager.behavior.test.ts',
+            'tests/unit/utils/initialization-statistics.behavior.test.ts',
+            'tests/unit/utils/logger-resolver.behavior.test.ts',
+            'tests/unit/utils/http-error-utils.behavior.test.ts'
+        ];
+        const cohortJsPaths = [
+            'tests/unit/utils/platform-connection-factory.behavior.test.js',
+            'tests/unit/utils/platform-interface-validator.behavior.test.js',
+            'tests/unit/utils/dependency-factory.behavior.test.js',
+            'tests/unit/utils/platform-initialization-manager.test.js',
+            'tests/unit/utils/platform-initialization-manager.behavior.test.js',
+            'tests/unit/utils/connection-state-manager.behavior.test.js',
+            'tests/unit/utils/interval-manager.behavior.test.js',
+            'tests/unit/utils/initialization-statistics.behavior.test.js',
+            'tests/unit/utils/logger-resolver.behavior.test.js',
+            'tests/unit/utils/http-error-utils.behavior.test.js'
+        ];
+
+        for (const testPath of cohortTsPaths) {
+            expect(existsSync(join(repoRoot, testPath))).toBe(true);
+        }
+        for (const testPath of cohortJsPaths) {
+            expect(existsSync(join(repoRoot, testPath))).toBe(false);
+        }
+    });
 });

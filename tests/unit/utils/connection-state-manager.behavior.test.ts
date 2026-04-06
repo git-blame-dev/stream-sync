@@ -1,4 +1,5 @@
 const { describe, it, expect } = require('bun:test');
+export {};
 const { ConnectionStateManager } = require('../../../src/utils/connection-state-manager');
 const { noOpLogger } = require('../../helpers/mock-factories');
 
