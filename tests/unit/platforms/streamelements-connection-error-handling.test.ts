@@ -5,8 +5,8 @@ const { noOpLogger } = require('../../helpers/mock-factories');
 const { createStreamElementsConfigFixture } = require('../../helpers/config-fixture');
 const { StreamElementsPlatform } = require('../../../src/platforms/streamelements');
 
-type ConnectionErrorHandlerCall = [unknown, string, string?];
-type RetryConnectionCall = [string, unknown, unknown, unknown];
+type ConnectionErrorHandlerCall = [Error, string, string?];
+type RetryConnectionCall = [string, Error, () => void, () => void];
 
 afterEach(() => {
     restoreAllMocks();
