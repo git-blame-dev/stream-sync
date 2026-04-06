@@ -15,8 +15,12 @@ setupAutomatedCleanup({
 
 const { CommandParser } = require('../../../src/chat/commands');
 
+type CommandParserConfig = ReturnType<typeof createConfigFixture>;
+
 describe('CommandParser Keyword vs Command Display Fix', () => {
-    let commandParser, mockLogger, mockConfig;
+    let commandParser: InstanceType<typeof CommandParser>;
+    let mockLogger: typeof noOpLogger;
+    let mockConfig: CommandParserConfig;
 
     beforeEach(() => {
         mockLogger = noOpLogger;

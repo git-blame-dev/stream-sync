@@ -3,8 +3,18 @@ export {};
 const NotificationBuilder = require('../../src/utils/notification-builder');
 const { generateLogMessage } = require('../helpers/notification-test-utils');
 
+type GiftOverrides = {
+    platform?: string;
+    username?: string;
+    giftType?: string;
+    giftCount?: number;
+    amount?: number;
+    currency?: string;
+    repeatCount?: number;
+};
+
 describe('Gift Display Details', () => {
-    const buildGift = (overrides = {}) => NotificationBuilder.build({
+    const buildGift = (overrides: GiftOverrides = {}) => NotificationBuilder.build({
         type: 'platform:gift',
         platform: overrides.platform || 'tiktok',
         username: overrides.username || 'GiftUser',

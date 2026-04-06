@@ -3,19 +3,34 @@ export {};
 const { restoreAllMocks } = require('../helpers/bun-mock-utils');
 const { expectNoTechnicalArtifacts } = require('../helpers/assertion-helpers');
 
+type NotificationResult = {
+    type: string;
+    displayMessage: string;
+    ttsMessage: string;
+};
+
+type CreateNotificationData = (
+    type: string,
+    platform: string,
+    userData: Record<string, unknown>,
+    eventData: Record<string, unknown>
+) => NotificationResult;
+
+type FormatUsername12 = (username: string, isTts: boolean) => string;
+
 describe('Greeting Display Username Fix', () => {
     afterEach(() => {
         restoreAllMocks();
     });
 
-    let createNotificationData;
-    let formatUsername12;
+    let createNotificationData: CreateNotificationData;
+    let formatUsername12: FormatUsername12;
 
     beforeEach(() => {
         const testUtils = require('../helpers/notification-test-utils');
         const validation = require('../../src/utils/validation');
-        createNotificationData = testUtils.createNotificationData;
-        formatUsername12 = validation.formatUsername12;
+        createNotificationData = testUtils.createNotificationData as CreateNotificationData;
+        formatUsername12 = validation.formatUsername12 as FormatUsername12;
     });
 
     describe('when greeting notification is generated', () => {
