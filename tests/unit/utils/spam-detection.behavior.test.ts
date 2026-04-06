@@ -9,8 +9,10 @@ const {
     createDonationSpamDetection
 } = require('../../../src/utils/spam-detection');
 
+type DonationSpamDetection = ReturnType<typeof createDonationSpamDetection>;
+
 describe('SpamDetection behavior', () => {
-    let detection;
+    let detection: DonationSpamDetection | null = null;
 
     afterEach(() => {
         restoreAllMocks();

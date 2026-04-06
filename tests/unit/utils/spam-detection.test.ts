@@ -13,6 +13,9 @@ const {
 } = require('../../../src/utils/spam-detection');
 const testClock = require('../../helpers/test-clock');
 
+type DonationSpamDetection = ReturnType<typeof createDonationSpamDetection>;
+type SpamDetectionConfigInstance = InstanceType<typeof SpamDetectionConfig>;
+
 initializeTestLogging();
 
 setupAutomatedCleanup({
@@ -22,8 +25,8 @@ setupAutomatedCleanup({
 });
 
 describe('Spam Detection', () => {
-    let mockLogger;
-    let config;
+    let mockLogger: typeof noOpLogger;
+    let config: SpamDetectionConfigInstance;
 
     beforeEach(() => {
         mockLogger = noOpLogger;
@@ -146,7 +149,7 @@ describe('Spam Detection', () => {
     });
 
     describe('when handling donation spam', () => {
-        let detection;
+        let detection: DonationSpamDetection;
 
         beforeEach(() => {
             detection = createDonationSpamDetection(config, {
@@ -208,7 +211,7 @@ describe('Spam Detection', () => {
     });
 
     describe('when getting statistics', () => {
-        let detection;
+        let detection: DonationSpamDetection;
 
         beforeEach(() => {
             detection = createDonationSpamDetection(config, {
@@ -245,7 +248,7 @@ describe('Spam Detection', () => {
     });
 
     describe('when resetting tracking', () => {
-        let detection;
+        let detection: DonationSpamDetection;
 
         beforeEach(() => {
             detection = createDonationSpamDetection(config, {
@@ -283,7 +286,7 @@ describe('Spam Detection', () => {
     });
 
     describe('when handling edge cases', () => {
-        let detection;
+        let detection: DonationSpamDetection;
 
         beforeEach(() => {
             detection = createDonationSpamDetection(config, {
@@ -341,7 +344,7 @@ describe('Spam Detection', () => {
     });
 
     describe('when managing cleanup scheduling', () => {
-        let detection;
+        let detection: DonationSpamDetection;
 
         beforeEach(() => {
             detection = createDonationSpamDetection(config, {
@@ -366,7 +369,7 @@ describe('Spam Detection', () => {
     });
 
     describe('when destroying spam detection', () => {
-        let detection;
+        let detection: DonationSpamDetection;
 
         beforeEach(() => {
             detection = createDonationSpamDetection(config, {

@@ -5,14 +5,49 @@ const { TEST_TIMEOUTS } = require('../../helpers/test-setup');
 const { noOpLogger, createMockFileSystem } = require('../../helpers/mock-factories');
 const testClock = require('../../helpers/test-clock');
 
+type GoalResult = {
+    success: boolean;
+    newTotal?: number;
+    target?: number;
+    percentage?: number;
+    goalCompleted?: boolean;
+    formatted?: string;
+    paypiggyValue?: number;
+    error?: string;
+};
+
+type GoalStateEntry = {
+    current: number;
+    target: number;
+    currency: string;
+};
+
+type GoalTrackerLike = {
+    initializeGoalTracker: () => Promise<void>;
+    getAllGoalStates: () => {
+        tiktok: GoalStateEntry;
+        youtube: GoalStateEntry;
+        twitch: GoalStateEntry;
+    };
+    addDonationToGoal: (platform: unknown, amount: unknown) => Promise<GoalResult>;
+    addPaypiggyToGoal: (platform: unknown) => Promise<GoalResult>;
+    formatGoalDisplay: (platform: unknown, current: unknown, target: unknown) => string;
+    getGoalState: (platform: string) => GoalStateEntry;
+    goalState: {
+        tiktok: {
+            target: number;
+        };
+    };
+};
+
 describe('Goal Tracker - Core Functionality', () => {
     afterEach(() => {
         restoreAllMocks();
     });
 
-    let goalTracker;
-    let configFixture;
-    let mockFileSystem;
+    let goalTracker: GoalTrackerLike;
+    let configFixture: Record<string, unknown>;
+    let mockFileSystem: ReturnType<typeof createMockFileSystem>;
 
     beforeEach(() => {
         mockFileSystem = createMockFileSystem();
@@ -297,7 +332,7 @@ describe('Goal Tracker - Core Functionality', () => {
         });
 
         test('should handle multiple rapid donations', async () => {
-            const promises = [];
+            const promises: Array<Promise<GoalResult>> = [];
             for (let i = 1; i <= 10; i++) {
                 promises.push(goalTracker.addDonationToGoal('tiktok', 10));
             }

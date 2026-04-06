@@ -11,6 +11,8 @@ const {
     formatTimestampCompact
 } = require('../../../src/utils/text-processing');
 
+type TextProcessingManagerInstance = InstanceType<typeof TextProcessingManager>;
+
 initializeTestLogging();
 
 setupAutomatedCleanup({
@@ -20,8 +22,8 @@ setupAutomatedCleanup({
 });
 
 describe('Text Processing', () => {
-    let textProcessing;
-    let mockLogger;
+    let textProcessing: TextProcessingManagerInstance;
+    let mockLogger: typeof noOpLogger;
 
     beforeEach(() => {
         mockLogger = noOpLogger;
@@ -165,7 +167,7 @@ describe('Text Processing', () => {
     });
 
     describe('determineGiftName behavior', () => {
-        let manager;
+        let manager: TextProcessingManagerInstance;
 
         beforeEach(() => {
             manager = new TextProcessingManager({ logger: mockLogger });

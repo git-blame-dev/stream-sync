@@ -4,11 +4,20 @@ const { createMockFn, clearAllMocks, restoreAllMocks } = require('../../helpers/
 const { noOpLogger } = require('../../helpers/mock-factories');
 const { createTestRetrySystem } = require('../../helpers/test-setup');
 
+type EnhancedHttpClientConstructor = typeof import('../../../src/utils/enhanced-http-client').EnhancedHttpClient;
+type MockFunction = ReturnType<typeof createMockFn>;
+type MockAxios = {
+    get: MockFunction;
+    post: MockFunction;
+    put: MockFunction;
+    delete: MockFunction;
+};
+
 describe('Enhanced HTTP Client', () => {
-    let mockAxios;
-    let mockRetrySystem;
-    let EnhancedHttpClient;
-    let client;
+    let mockAxios: MockAxios;
+    let mockRetrySystem: ReturnType<typeof createTestRetrySystem>;
+    let EnhancedHttpClient: EnhancedHttpClientConstructor;
+    let client: InstanceType<EnhancedHttpClientConstructor>;
 
     beforeEach(() => {
         mockAxios = {
