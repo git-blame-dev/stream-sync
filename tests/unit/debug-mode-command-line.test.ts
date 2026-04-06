@@ -1,4 +1,5 @@
 const { describe, test, expect, beforeEach } = require('bun:test');
+export {};
 
 const { setDebugMode, getDebugMode } = require('../../src/core/logging');
 
