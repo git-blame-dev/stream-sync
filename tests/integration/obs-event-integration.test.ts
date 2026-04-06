@@ -1,5 +1,6 @@
 
 const { describe, test, beforeEach, afterEach, expect } = require('bun:test');
+export {};
 const { createMockFn, clearAllMocks, restoreAllMocks } = require('../helpers/bun-mock-utils');
 const { noOpLogger } = require('../helpers/mock-factories');
 const { createEventBus } = require('../../src/core/EventBus');
@@ -164,7 +165,7 @@ describe('OBS Event-Driven Integration', () => {
         });
 
         test('maintains event latency under load', async () => {
-            const latencies = [];
+            const latencies: number[] = [];
 
             for (let i = 0; i < 50; i++) {
                 const startTime = testClock.now();

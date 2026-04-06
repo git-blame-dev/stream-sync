@@ -1,5 +1,6 @@
 
 const { describe, test, beforeEach, afterEach, expect } = require('bun:test');
+export {};
 const { createMockFn, clearAllMocks, restoreAllMocks } = require('../helpers/bun-mock-utils');
 const { ViewerCountSystem } = require('../../src/utils/viewer-count');
 const { OBSViewerCountObserver } = require('../../src/observers/obs-viewer-count-observer');
@@ -364,7 +365,7 @@ describe('Observer Pattern Integration', () => {
 
     describe('Performance and Scalability', () => {
         test('should handle large numbers of observers with all receiving valid updates', async () => {
-            const observers = [];
+            const observers: Array<ReturnType<typeof createTestObserver>> = [];
             for (let i = 0; i < 50; i++) {
                 observers.push(createTestObserver(`observer-${i}`));
             }
@@ -390,7 +391,7 @@ describe('Observer Pattern Integration', () => {
         });
 
         test('should handle concurrent observer notifications with all observers receiving updates', async () => {
-            const asyncObservers = [];
+            const asyncObservers: Array<ReturnType<typeof createTestObserver>> = [];
             for (let i = 0; i < 10; i++) {
                 const observer = createTestObserver(`async-observer-${i}`);
                 observer.onViewerCountUpdate.mockImplementation(async () => {

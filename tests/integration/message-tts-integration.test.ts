@@ -1,5 +1,6 @@
 
 const { describe, test, expect } = require('bun:test');
+export {};
 
 const { createNotificationData } = require('../helpers/notification-test-utils');
 const MessageTTSHandler = require('../../src/utils/message-tts-handler');

@@ -1,4 +1,5 @@
 const { describe, test, beforeEach, afterEach, expect } = require('bun:test');
+export {};
 const { clearAllMocks, restoreAllMocks } = require('../helpers/bun-mock-utils');
 const { YouTubeViewerExtractor } = require('../../src/extractors/youtube-viewer-extractor');
 const { expectNoTechnicalArtifacts } = require('../helpers/behavior-validation');
@@ -474,7 +475,7 @@ describe('Extractor Service Integration', () => {
             };
 
             const startTime = testClock.now();
-            const results = [];
+            const results: Array<ReturnType<typeof YouTubeViewerExtractor.extractConcurrentViewers>> = [];
             const iterations = 100;
 
             for (let i = 0; i < iterations; i++) {

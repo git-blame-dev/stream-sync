@@ -1,4 +1,5 @@
 const { describe, test, expect } = require('bun:test');
+export {};
 const { createFarewellRoutingHarness } = require('../helpers/farewell-routing-harness');
 
 describe('farewell routing smoke E2E', () => {

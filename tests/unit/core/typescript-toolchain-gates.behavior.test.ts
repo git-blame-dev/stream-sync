@@ -951,4 +951,34 @@ describe('TypeScript toolchain migration gates behavior', () => {
             expect(content).not.toMatch(/\blet\s+[A-Za-z_$][\w$]*\s*;/);
         }
     });
+
+    it('keeps integration smoke cohort b tests on TypeScript paths', () => {
+        const cohortTsPaths = [
+            'tests/integration/obs-connection-lifecycle.test.ts',
+            'tests/integration/message-tts-integration.test.ts',
+            'tests/integration/extractor-service-integration.test.ts',
+            'tests/integration/observer-pattern-integration.test.ts',
+            'tests/integration/obs-event-integration.test.ts',
+            'tests/integration/production-spam-config-error-reproduction.test.ts',
+            'tests/e2e-smoke/farewell-routing-smoke.test.ts',
+            'tests/e2e-smoke/vfx-gift-resolution.test.ts'
+        ];
+        const cohortJsPaths = [
+            'tests/integration/obs-connection-lifecycle.test.js',
+            'tests/integration/message-tts-integration.test.js',
+            'tests/integration/extractor-service-integration.test.js',
+            'tests/integration/observer-pattern-integration.test.js',
+            'tests/integration/obs-event-integration.test.js',
+            'tests/integration/production-spam-config-error-reproduction.test.js',
+            'tests/e2e-smoke/farewell-routing-smoke.test.js',
+            'tests/e2e-smoke/vfx-gift-resolution.test.js'
+        ];
+
+        for (const testPath of cohortTsPaths) {
+            expect(existsSync(join(repoRoot, testPath))).toBe(true);
+        }
+        for (const testPath of cohortJsPaths) {
+            expect(existsSync(join(repoRoot, testPath))).toBe(false);
+        }
+    });
 });
