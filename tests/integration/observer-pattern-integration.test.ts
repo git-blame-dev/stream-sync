@@ -16,10 +16,19 @@ const createTimeProvider = () => ({
 });
 
 describe('Observer Pattern Integration', () => {
-    let viewerCountSystem;
-    let platforms;
-    let logger;
-    let testConfig;
+    let viewerCountSystem: InstanceType<typeof ViewerCountSystem>;
+    let platforms: {
+        youtube: {
+            getViewerCount: ReturnType<typeof createMockFn>;
+            isEnabled: () => boolean;
+        };
+        twitch: {
+            getViewerCount: ReturnType<typeof createMockFn>;
+            isEnabled: () => boolean;
+        };
+    };
+    let logger: ReturnType<typeof createSilentLogger>;
+    let testConfig: ReturnType<typeof createConfigFixture>;
 
     beforeEach(async () => {
         testClock.reset();

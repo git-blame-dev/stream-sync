@@ -9,34 +9,18 @@ const { createSceneManagementService } = require('../../src/obs/scene-management
 const testClock = require('../helpers/test-clock');
 
 describe('OBS Event-Driven Integration', () => {
-    let eventBus;
-    let obsEventService;
-    let sceneManagementService;
-    let mockOBSConnection;
-    let mockObsSources;
+    let eventBus: ReturnType<typeof createEventBus>;
+    let obsEventService: ReturnType<typeof createOBSEventService>;
+    let sceneManagementService: ReturnType<typeof createSceneManagementService>;
+    let mockOBSConnection: ReturnType<typeof createMockOBSConnection>;
+    let mockObsSources: ReturnType<typeof createMockObsSources>;
 
     beforeEach(() => {
         eventBus = createEventBus({ debugEnabled: false });
 
-        mockOBSConnection = {
-            connect: createMockFn().mockResolvedValue(true),
-            disconnect: createMockFn().mockResolvedValue(undefined),
-            isConnected: createMockFn(() => true),
-            isReady: createMockFn().mockResolvedValue(true),
-            call: createMockFn().mockResolvedValue({}),
-            addEventListener: createMockFn(),
-            removeEventListener: createMockFn(),
-            getConnectionState: createMockFn(() => ({
-                isConnected: true,
-                isConnecting: false
-            }))
-        };
+        mockOBSConnection = createMockOBSConnection();
 
-        mockObsSources = {
-            updateTextSource: createMockFn().mockResolvedValue(undefined),
-            setSourceVisibility: createMockFn().mockResolvedValue(undefined),
-            clearTextSource: createMockFn().mockResolvedValue(undefined)
-        };
+        mockObsSources = createMockObsSources();
 
         obsEventService = createOBSEventService({
             eventBus,
@@ -244,3 +228,27 @@ describe('OBS Event-Driven Integration', () => {
         });
     });
 });
+
+function createMockOBSConnection() {
+    return {
+        connect: createMockFn().mockResolvedValue(true),
+        disconnect: createMockFn().mockResolvedValue(undefined),
+        isConnected: createMockFn(() => true),
+        isReady: createMockFn().mockResolvedValue(true),
+        call: createMockFn().mockResolvedValue({}),
+        addEventListener: createMockFn(),
+        removeEventListener: createMockFn(),
+        getConnectionState: createMockFn(() => ({
+            isConnected: true,
+            isConnecting: false
+        }))
+    };
+}
+
+function createMockObsSources() {
+    return {
+        updateTextSource: createMockFn().mockResolvedValue(undefined),
+        setSourceVisibility: createMockFn().mockResolvedValue(undefined),
+        clearTextSource: createMockFn().mockResolvedValue(undefined)
+    };
+}
