@@ -696,4 +696,32 @@ describe('TypeScript toolchain migration gates behavior', () => {
             expect(content).not.toMatch(/\blet\s+[A-Za-z_$][\w$]*\s*;/);
         }
     });
+
+    it('keeps utils cohort c unit tests on TypeScript paths', () => {
+        const cohortTsPaths = [
+            'tests/unit/utils/viewer-count-providers.test.ts',
+            'tests/unit/utils/viewer-count-providers.behavior.test.ts',
+            'tests/unit/utils/notification-builder-fallback-username.behavior.test.ts',
+            'tests/unit/utils/notification-builder-edge-cases.test.ts',
+            'tests/unit/utils/global-command-cooldown.test.ts',
+            'tests/unit/utils/global-command-cooldown.behavior.test.ts',
+            'tests/unit/utils/e2e-testing-infrastructure.behavior.test.ts'
+        ];
+        const cohortJsPaths = [
+            'tests/unit/utils/viewer-count-providers.test.js',
+            'tests/unit/utils/viewer-count-providers.behavior.test.js',
+            'tests/unit/utils/notification-builder-fallback-username.behavior.test.js',
+            'tests/unit/utils/notification-builder-edge-cases.test.js',
+            'tests/unit/utils/global-command-cooldown.test.js',
+            'tests/unit/utils/global-command-cooldown.behavior.test.js',
+            'tests/unit/utils/e2e-testing-infrastructure.behavior.test.js'
+        ];
+
+        for (const testPath of cohortTsPaths) {
+            expect(existsSync(join(repoRoot, testPath))).toBe(true);
+        }
+        for (const testPath of cohortJsPaths) {
+            expect(existsSync(join(repoRoot, testPath))).toBe(false);
+        }
+    });
 });

@@ -1,4 +1,5 @@
 const { describe, expect, it } = require('bun:test');
+export {};
 const { createMockFn } = require('../../helpers/bun-mock-utils');
 const { noOpLogger } = require('../../helpers/mock-factories');
 const { GlobalCommandCooldownManager } = require('../../../src/utils/global-command-cooldown');
