@@ -243,4 +243,9 @@ describe('TypeScript toolchain migration gates behavior', () => {
         expect(existsSync(join(repoRoot, 'tests/unit/utils/youtube-author-extraction-modern.test.ts'))).toBe(true);
         expect(existsSync(join(repoRoot, 'tests/unit/utils/youtube-author-extraction-modern.test.js'))).toBe(false);
     });
+
+    it('keeps youtube message extraction modern unit test on TypeScript path', () => {
+        expect(existsSync(join(repoRoot, 'tests/unit/utils/youtube-message-extraction-modern.test.ts'))).toBe(true);
+        expect(existsSync(join(repoRoot, 'tests/unit/utils/youtube-message-extraction-modern.test.js'))).toBe(false);
+    });
 });
