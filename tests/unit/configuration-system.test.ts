@@ -17,10 +17,12 @@ function loadFreshConfig() {
     return { config };
 }
 
-let originalReadFileSync;
-let originalExistsSync;
-let originalWriteFileSync;
-let originalConfigPath;
+type LoadedConfig = ReturnType<typeof loadFreshConfig>['config'];
+
+let originalReadFileSync: typeof fs.readFileSync;
+let originalExistsSync: typeof fs.existsSync;
+let originalWriteFileSync: typeof fs.writeFileSync;
+let originalConfigPath: string | undefined;
 
 const testConfigContent = `
 [general]
@@ -92,7 +94,7 @@ maxEntries = 1000
 `;
 
 describe('Configuration System Behavior Tests', () => {
-    let currentConfig;
+    let currentConfig: LoadedConfig;
     const testConfigPath = '/test/config.ini';
 
     const setupConfigMocks = (content, configPath = testConfigPath) => {

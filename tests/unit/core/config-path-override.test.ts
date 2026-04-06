@@ -4,9 +4,9 @@ export {};
 
 const fs = require('fs');
 
-let originalReadFileSync;
-let originalExistsSync;
-let originalConfigPath;
+let originalReadFileSync: typeof fs.readFileSync;
+let originalExistsSync: typeof fs.existsSync;
+let originalConfigPath: string | undefined;
 
 const CONFIG_MODULE_PATH = require.resolve('../../../src/core/config');
 

@@ -6,8 +6,23 @@ const { createConfigFixture } = require('../../helpers/config-fixture');
 const { PRIORITY_LEVELS } = require('../../../src/core/constants');
 export {};
 
+type MockFn = ReturnType<typeof createMockFn>;
+
+type NotificationManagerInstance = {
+    donationSpamDetector?: unknown;
+    handleNotification: (type: string, platform: string, data: Record<string, unknown>) => Promise<unknown>;
+    handleNotificationInternal: (
+        type: string,
+        platform: string,
+        data: Record<string, unknown>,
+        suppressQueue: boolean
+    ) => Promise<{ suppressed?: boolean; reason?: string }>;
+};
+
 const { config } = require('../../../src/core/config');
-const NotificationManager = require('../../../src/notifications/NotificationManager');
+const NotificationManager = require('../../../src/notifications/NotificationManager') as new (
+    deps: Record<string, unknown>
+) => NotificationManagerInstance;
 const { createTextProcessingManager } = require('../../../src/utils/text-processing');
 
 const mockConstants = {
@@ -27,10 +42,15 @@ describe('Spam Detection Service Integration Tests - Modernized', () => {
         restoreAllMocks();
     });
 
-    let notificationManager;
-    let mockDisplayQueue;
-    let mockSpamDetector;
-    let testConfig;
+    let notificationManager: NotificationManagerInstance;
+    let mockDisplayQueue: {
+        addItem: MockFn;
+        processQueue: MockFn;
+    };
+    let mockSpamDetector: {
+        handleDonationSpam: MockFn;
+    };
+    let testConfig: ReturnType<typeof createConfigFixture>;
 
     beforeEach(() => {
         mockDisplayQueue = {
