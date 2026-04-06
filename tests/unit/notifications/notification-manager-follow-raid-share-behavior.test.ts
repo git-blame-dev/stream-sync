@@ -7,22 +7,59 @@ const NotificationManager = require('../../../src/notifications/NotificationMana
 const constants = require('../../../src/core/constants');
 const { noOpLogger } = require('../../helpers/mock-factories');
 
+type QueuedItem = {
+    priority?: number;
+    vfxConfig?: { commandKey?: string; filename?: string };
+    data?: { displayMessage?: string; ttsMessage?: string };
+    type?: string;
+    [key: string]: unknown;
+};
+
+type DisplayQueueMock = {
+    addItem: ReturnType<typeof createMockFn>;
+    getQueueLength: ReturnType<typeof createMockFn>;
+};
+
+type EventBusMock = {
+    emit: ReturnType<typeof createMockFn>;
+    on: ReturnType<typeof createMockFn>;
+    off: ReturnType<typeof createMockFn>;
+};
+
+type VfxCommandServiceMock = {
+    getVFXConfig: ReturnType<typeof createMockFn>;
+    executeCommand: ReturnType<typeof createMockFn>;
+    executeCommandForKey: ReturnType<typeof createMockFn>;
+};
+
+type NotificationResult = {
+    success?: boolean;
+    disabled?: boolean;
+    notificationType?: string;
+    platform?: string;
+    error?: string;
+};
+
+type NotificationManagerLike = {
+    handleNotification: (type: string, platform: string, data: Record<string, unknown>) => Promise<NotificationResult>;
+};
+
 describe('NotificationManager follow/raid/share behavior', () => {
     afterEach(() => {
         restoreAllMocks();
     });
 
-    let queuedItems;
-    let displayQueue;
-    let config;
-    let eventBus;
-    let vfxCommandService;
-    let manager;
+    let queuedItems: QueuedItem[];
+    let displayQueue: DisplayQueueMock;
+    let config: ReturnType<typeof createConfigFixture>;
+    let eventBus: EventBusMock;
+    let vfxCommandService: VfxCommandServiceMock;
+    let manager: NotificationManagerLike;
 
     beforeEach(() => {
         queuedItems = [];
         displayQueue = {
-            addItem: createMockFn((item) => queuedItems.push(item)),
+            addItem: createMockFn((item: QueuedItem) => queuedItems.push(item)),
             getQueueLength: createMockFn(() => queuedItems.length)
         };
 
@@ -77,7 +114,7 @@ describe('NotificationManager follow/raid/share behavior', () => {
             commandKey: 'shares',
             filename: 'shares.mp4'
         }));
-        expect(queued.data.displayMessage).toBe('StreamSharer shared the stream');
+        expect(queued.data?.displayMessage).toBe('StreamSharer shared the stream');
         expect(queued.type).toBe('platform:share');
     });
 
@@ -196,8 +233,8 @@ describe('NotificationManager follow/raid/share behavior', () => {
 
         expect(result.success).toBe(true);
         const raidItem = queuedItems[0];
-        expect(raidItem.data.displayMessage).toBe('Incoming raid from ZeroRaider with 0 viewers!');
-        expect(raidItem.data.ttsMessage).toBe('Incoming raid from ZeroRaider with 0 viewers');
+        expect(raidItem.data?.displayMessage).toBe('Incoming raid from ZeroRaider with 0 viewers!');
+        expect(raidItem.data?.ttsMessage).toBe('Incoming raid from ZeroRaider with 0 viewers');
     });
 
     test('raid notifications carry raid VFX command mapping', async () => {
