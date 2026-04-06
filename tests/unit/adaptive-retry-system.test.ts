@@ -1,4 +1,5 @@
 const { describe, test, expect, beforeEach } = require('bun:test');
+export {};
 const { noOpLogger } = require('../helpers/mock-factories');
 const { setupAutomatedCleanup } = require('../helpers/mock-lifecycle');
 const testClock = require('../helpers/test-clock');
@@ -141,7 +142,7 @@ describe('Unified Adaptive Retry System', () => {
 
     describe('Real-world Connection Scenarios', () => {
         test('should simulate TikTok connection failures with proper backoff', () => {
-            const delays = [];
+            const delays: number[] = [];
 
             for (let i = 0; i < 5; i++) {
                 delays.push(retrySystem.incrementRetryCount('TikTok'));

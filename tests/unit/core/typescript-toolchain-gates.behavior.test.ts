@@ -1000,4 +1000,34 @@ describe('TypeScript toolchain migration gates behavior', () => {
             expect(content).not.toMatch(/\blet\s+[A-Za-z_$][\w$]*\s*,/);
         }
     });
+
+    it('keeps unit core dependency retry setup factory cohort c tests on TypeScript paths', () => {
+        const cohortTsPaths = [
+            'tests/unit/dependency-factory.test.ts',
+            'tests/unit/dependency-injection-validation.test.ts',
+            'tests/unit/core-utility-functions.test.ts',
+            'tests/unit/adaptive-retry-system.test.ts',
+            'tests/unit/retry-system-handle-connection-error.test.ts',
+            'tests/unit/core/tts-boolean-parsing.test.ts',
+            'tests/unit/factories/innertube-factory.behavior.test.ts',
+            'tests/unit/setup/output-suppression.test.ts'
+        ];
+        const cohortJsPaths = [
+            'tests/unit/dependency-factory.test.js',
+            'tests/unit/dependency-injection-validation.test.js',
+            'tests/unit/core-utility-functions.test.js',
+            'tests/unit/adaptive-retry-system.test.js',
+            'tests/unit/retry-system-handle-connection-error.test.js',
+            'tests/unit/core/tts-boolean-parsing.test.js',
+            'tests/unit/factories/innertube-factory.behavior.test.js',
+            'tests/unit/setup/output-suppression.test.js'
+        ];
+
+        for (const testPath of cohortTsPaths) {
+            expect(existsSync(join(repoRoot, testPath))).toBe(true);
+        }
+        for (const testPath of cohortJsPaths) {
+            expect(existsSync(join(repoRoot, testPath))).toBe(false);
+        }
+    });
 });
