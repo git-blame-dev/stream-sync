@@ -8,10 +8,16 @@ const { noOpLogger } = require('../helpers/mock-factories');
 const { createConfigFixture } = require('../helpers/config-fixture');
 
 describe('OBS Connection Lifecycle Integration', () => {
-    let viewerCountSystem, obsManager, obsObserver;
-    let mockPlatforms;
-    let mockOBSWebSocket;
-    let testConfig;
+    let viewerCountSystem: InstanceType<typeof ViewerCountSystem>;
+    let obsManager: ReturnType<typeof createOBSConnectionManager>;
+    let obsObserver: InstanceType<typeof OBSViewerCountObserver>;
+    let mockPlatforms: {
+        youtube: ReturnType<typeof createStreamingPlatformMock>;
+        twitch: ReturnType<typeof createStreamingPlatformMock>;
+        tiktok: ReturnType<typeof createStreamingPlatformMock>;
+    };
+    let mockOBSWebSocket: ReturnType<typeof createMockOBSWebSocket>;
+    let testConfig: ReturnType<typeof createConfigFixture>;
 
     beforeEach(async () => {
         testConfig = createConfigFixture();
@@ -77,13 +83,13 @@ function createMockOBSWebSocket() {
         once: createMockFn(),
         addEventListener: createMockFn(),
         removeEventListener: createMockFn(),
-        setConnected(connected) {
+        setConnected(connected: boolean) {
             this.connected = connected;
         }
     };
 }
 
-function createStreamingPlatformMock(platformName, initialViewerCount) {
+function createStreamingPlatformMock(platformName: string, initialViewerCount: number) {
     return {
         getViewerCount: createMockFn().mockResolvedValue(initialViewerCount),
         isEnabled: createMockFn(() => true),
