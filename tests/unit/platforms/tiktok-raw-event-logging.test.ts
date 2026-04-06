@@ -1,4 +1,5 @@
 const { describe, it, expect, afterEach } = require('bun:test');
+export {};
 const { restoreAllMocks } = require('../../helpers/bun-mock-utils');
 const { createMockTikTokPlatformDependencies } = require('../../helpers/mock-factories');
 

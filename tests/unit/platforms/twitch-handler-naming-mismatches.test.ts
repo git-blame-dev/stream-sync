@@ -1,8 +1,28 @@
 const { describe, it, expect, beforeEach } = require('bun:test');
+export {};
+
+type HandlerPayload = {
+    username: string;
+    displayName: string;
+    userId: string;
+    timestamp: Date;
+    tier?: string;
+    viewerCount?: number;
+    giftType?: string;
+    giftCount?: number;
+    amount?: number;
+    currency?: string;
+    message?: string;
+};
+
+type HandlerName = 'onFollow' | 'onPaypiggy' | 'onRaid' | 'onGift';
+
+type HandlerCalls = Record<HandlerName, HandlerPayload[]>;
+type TwitchHandlers = Record<HandlerName, (data: HandlerPayload) => Promise<void>>;
 
 describe('Twitch Handler Integration', () => {
-    let handlers;
-    let handlerCalls;
+    let handlers: TwitchHandlers;
+    let handlerCalls: HandlerCalls;
 
     beforeEach(() => {
         handlerCalls = {
@@ -21,9 +41,9 @@ describe('Twitch Handler Integration', () => {
 
     describe('Handler Naming Validation', () => {
         it('verifies expected handler names match Twitch event types', () => {
-            const expectedHandlerNames = ['onFollow', 'onPaypiggy', 'onRaid', 'onGift'];
+            const expectedHandlerNames: HandlerName[] = ['onFollow', 'onPaypiggy', 'onRaid', 'onGift'];
 
-            expectedHandlerNames.forEach(handlerName => {
+            expectedHandlerNames.forEach((handlerName: HandlerName) => {
                 expect(handlers[handlerName]).toBeDefined();
                 expect(typeof handlers[handlerName]).toBe('function');
             });
@@ -95,9 +115,9 @@ describe('Twitch Handler Integration', () => {
 
     describe('Handler Integration Status', () => {
         it('confirms all handler names are properly defined', () => {
-            const workingHandlerNames = ['onFollow', 'onPaypiggy', 'onRaid', 'onGift'];
+            const workingHandlerNames: HandlerName[] = ['onFollow', 'onPaypiggy', 'onRaid', 'onGift'];
 
-            workingHandlerNames.forEach(handlerName => {
+            workingHandlerNames.forEach((handlerName: HandlerName) => {
                 expect(handlers[handlerName]).toBeDefined();
                 expect(typeof handlers[handlerName]).toBe('function');
             });

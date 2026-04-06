@@ -1,8 +1,11 @@
 const { describe, it, expect, afterEach } = require('bun:test');
+export {};
 const { restoreAllMocks } = require('../../helpers/bun-mock-utils');
 const { noOpLogger } = require('../../helpers/mock-factories');
 const { createStreamElementsConfigFixture } = require('../../helpers/config-fixture');
 const { StreamElementsPlatform } = require('../../../src/platforms/streamelements');
+
+type EventProcessingCall = [Error, string];
 
 afterEach(() => {
     restoreAllMocks();
@@ -13,9 +16,9 @@ describe('StreamElementsPlatform message parsing', () => {
 
         const platform = new StreamElementsPlatform(createStreamElementsConfigFixture(), { logger: noOpLogger });
 
-        const errorHandlerCalls = [];
+        const errorHandlerCalls: EventProcessingCall[] = [];
         const errorHandler = {
-            handleEventProcessingError: (...args) => errorHandlerCalls.push(args)
+            handleEventProcessingError: (...args: EventProcessingCall) => errorHandlerCalls.push(args)
         };
         platform.errorHandler = errorHandler;
 
@@ -27,4 +30,3 @@ describe('StreamElementsPlatform message parsing', () => {
         expect(eventType).toBe('message');
     });
 });
-

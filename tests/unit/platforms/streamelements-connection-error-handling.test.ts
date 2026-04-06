@@ -1,8 +1,12 @@
 const { describe, it, expect, afterEach } = require('bun:test');
+export {};
 const { restoreAllMocks } = require('../../helpers/bun-mock-utils');
 const { noOpLogger } = require('../../helpers/mock-factories');
 const { createStreamElementsConfigFixture } = require('../../helpers/config-fixture');
 const { StreamElementsPlatform } = require('../../../src/platforms/streamelements');
+
+type ConnectionErrorHandlerCall = [unknown, string, string?];
+type RetryConnectionCall = [string, unknown, unknown, unknown];
 
 afterEach(() => {
     restoreAllMocks();
@@ -12,11 +16,11 @@ describe('StreamElementsPlatform connection error handling', () => {
     it('routes connection errors through error handler and retry handler', () => {
 
         const platform = new StreamElementsPlatform(createStreamElementsConfigFixture(), { logger: noOpLogger });
-        const errorHandlerCalls = [];
-        const errorHandler = { handleConnectionError: (...args) => errorHandlerCalls.push(args) };
+        const errorHandlerCalls: ConnectionErrorHandlerCall[] = [];
+        const errorHandler = { handleConnectionError: (...args: ConnectionErrorHandlerCall) => errorHandlerCalls.push(args) };
         platform.errorHandler = errorHandler;
-        const retryCalls = [];
-        platform.retryHandleConnectionError = (...args) => retryCalls.push(args);
+        const retryCalls: RetryConnectionCall[] = [];
+        platform.retryHandleConnectionError = (...args: RetryConnectionCall) => retryCalls.push(args);
 
         const error = new Error('connection lost');
         platform.handleConnectionError(error);
