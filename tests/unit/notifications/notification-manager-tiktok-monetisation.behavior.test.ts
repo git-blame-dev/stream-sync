@@ -7,14 +7,26 @@ const { createConfigFixture } = require('../../helpers/config-fixture');
 const EventEmitter = require('events');
 const NotificationManager = require('../../../src/notifications/NotificationManager');
 
+type DisplayQueueMock = {
+    addItem: ReturnType<typeof createMockFn>;
+};
+
+type NotificationManagerLike = {
+    handleNotification: (type: string, platform: string, data: Record<string, unknown>) => Promise<unknown>;
+    PRIORITY_LEVELS: {
+        PAYPIGGY: number;
+        GIFT: number;
+    };
+};
+
 describe('NotificationManager TikTok monetisation behavior', () => {
     afterEach(() => {
         restoreAllMocks();
     });
 
-    let displayQueue;
-    let notificationManager;
-    let config;
+    let displayQueue: DisplayQueueMock;
+    let notificationManager: NotificationManagerLike;
+    let config: ReturnType<typeof createConfigFixture>;
 
     const baseDependencies = () => ({
         logger: noOpLogger,

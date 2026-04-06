@@ -7,6 +7,28 @@ const { PRIORITY_LEVELS } = require('../../../src/core/constants');
 
 const { setupAutomatedCleanup } = require('../../helpers/mock-lifecycle');
 
+type NotificationManagerLike = {
+    handleNotification: (type: string, platform: string, data: Record<string, unknown>) => Promise<unknown>;
+    handleNotificationInternal: (type: string, platform: string, data: Record<string, unknown>, isTextOnly: boolean) => Promise<{ suppressed?: boolean; reason?: string }>;
+    donationSpamDetector?: unknown;
+};
+
+type NotificationManagerCtor = new (deps: Record<string, unknown>) => NotificationManagerLike;
+
+type NotificationConstants = {
+    PRIORITY_LEVELS: typeof PRIORITY_LEVELS;
+    NOTIFICATION_CONFIGS: Record<string, { priority: number; duration: number; settingKey: string; commandKey: string }>;
+};
+
+type DisplayQueueMock = {
+    addItem: ReturnType<typeof createMockFn>;
+    processQueue: ReturnType<typeof createMockFn>;
+};
+
+type SpamDetectorMock = {
+    handleDonationSpam: ReturnType<typeof createMockFn>;
+};
+
 setupAutomatedCleanup({
     clearCallsBeforeEach: true,
     logPerformanceMetrics: true
@@ -17,12 +39,12 @@ describe('NotificationManager Spam Protection Behavior - Modernized', () => {
         restoreAllMocks();
     });
 
-    let NotificationManager;
-    let mockLogger;
-    let mockConstants;
-    let mockDisplayQueue;
-    let mockSpamDetector;
-    let config;
+    let NotificationManager: NotificationManagerCtor;
+    let mockLogger: typeof noOpLogger;
+    let mockConstants: NotificationConstants;
+    let mockDisplayQueue: DisplayQueueMock;
+    let mockSpamDetector: SpamDetectorMock;
+    let config: ReturnType<typeof createConfigFixture>;
 
     beforeEach(() => {
         mockLogger = noOpLogger;
@@ -54,7 +76,7 @@ describe('NotificationManager Spam Protection Behavior - Modernized', () => {
             }
         });
 
-        NotificationManager = require('../../../src/notifications/NotificationManager');
+        NotificationManager = require('../../../src/notifications/NotificationManager') as NotificationManagerCtor;
     });
 
     describe('when spam protection is properly configured', () => {
