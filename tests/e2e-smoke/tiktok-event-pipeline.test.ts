@@ -1,4 +1,4 @@
-const { describe, test, afterEach, expect } = require('bun:test');
+import { describe, test, afterEach, expect } from 'bun:test';
 const EventEmitter = require('events');
 
 const NotificationManager = require('../../src/notifications/NotificationManager');
@@ -34,6 +34,17 @@ const assertNonEmptyString = (value) => {
     expect(value.trim()).not.toBe('');
 };
 
+type ChatRuntimeCall = {
+    platform: string;
+    message: {
+        message: {
+            text: string;
+            parts?: unknown[];
+        };
+        username: string;
+    };
+};
+
 describe('TikTok event pipeline (smoke E2E)', () => {
     afterEach(() => {
         restoreAllMocks();
@@ -65,7 +76,7 @@ describe('TikTok event pipeline (smoke E2E)', () => {
             vfxCommandService: { getVFXConfig: createMockFn().mockResolvedValue(null) },
             userTrackingService: { isFirstMessage: createMockFn().mockResolvedValue(false) }
         });
-        const runtimeCalls = { chat: [] };
+        const runtimeCalls: { chat: ChatRuntimeCall[] } = { chat: [] };
         const runtime = {
             handleChatMessage: (platform, message) => runtimeCalls.chat.push({ platform, message }),
             handleGiftNotification: async (platform, username, payload) =>
@@ -135,8 +146,9 @@ describe('TikTok event pipeline (smoke E2E)', () => {
             await new Promise(setImmediate);
 
             expect(runtimeCalls.chat).toHaveLength(1);
-            expect(runtimeCalls.chat[0].message.message.text).toBe('hello from tiktok');
-            expect(runtimeCalls.chat[0].message.username).toBe('test-user-one');
+            const firstChatCall = runtimeCalls.chat[0]!;
+            expect(firstChatCall.message.message.text).toBe('hello from tiktok');
+            expect(firstChatCall.message.username).toBe('test-user-one');
 
             expect(displayQueue.addItem).toHaveBeenCalledTimes(1);
             const queued = displayQueue.addItem.mock.calls[0][0];
@@ -180,7 +192,7 @@ describe('TikTok event pipeline (smoke E2E)', () => {
             vfxCommandService: { getVFXConfig: createMockFn().mockResolvedValue(null) },
             userTrackingService: { isFirstMessage: createMockFn().mockResolvedValue(false) }
         });
-        const runtimeCalls = { chat: [] };
+        const runtimeCalls: { chat: ChatRuntimeCall[] } = { chat: [] };
         const runtime = {
             handleChatMessage: (platform, message) => runtimeCalls.chat.push({ platform, message })
         };
@@ -245,7 +257,8 @@ describe('TikTok event pipeline (smoke E2E)', () => {
             await new Promise(setImmediate);
 
             expect(runtimeCalls.chat).toHaveLength(1);
-            expect(runtimeCalls.chat[0].message.message).toEqual({
+            const firstChatCall = runtimeCalls.chat[0]!;
+            expect(firstChatCall.message.message).toEqual({
                 text: '',
                 parts: [
                     {
@@ -291,7 +304,7 @@ describe('TikTok event pipeline (smoke E2E)', () => {
             vfxCommandService: { getVFXConfig: createMockFn().mockResolvedValue(null) },
             userTrackingService: { isFirstMessage: createMockFn().mockResolvedValue(false) }
         });
-        const runtimeCalls = { chat: [] };
+        const runtimeCalls: { chat: ChatRuntimeCall[] } = { chat: [] };
         const runtime = {
             handleChatMessage: (platform, message) => runtimeCalls.chat.push({ platform, message })
         };

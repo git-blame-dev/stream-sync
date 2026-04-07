@@ -1,9 +1,21 @@
-const { describe, test, expect } = require('bun:test');
+import { describe, test, expect } from 'bun:test';
 const EventEmitter = require('events');
 
 const { DisplayQueue } = require('../../src/obs/display-queue.ts');
 const { PRIORITY_LEVELS } = require('../../src/core/constants');
 const { PlatformEvents } = require('../../src/interfaces/PlatformEvents');
+
+type QueueAction = {
+    type: string;
+    source?: string;
+    username?: string;
+    message?: string;
+    text?: string;
+    group?: string;
+    visible?: boolean;
+    scene?: string;
+    platform?: string;
+};
 
 describe('DisplayQueue gift flow (smoke E2E)', () => {
     test('processes a gift notification end-to-end', async () => {
@@ -16,10 +28,10 @@ describe('DisplayQueue gift flow (smoke E2E)', () => {
             }
         };
 
-        const vfxEvents = [];
+        const vfxEvents: unknown[] = [];
         emitter.on(PlatformEvents.VFX_COMMAND_RECEIVED, (payload) => vfxEvents.push(payload));
 
-        const actions = [];
+        const actions: QueueAction[] = [];
         const sourcesManager = {
             updateChatMsgText: async (source, username, message) => {
                 actions.push({ type: 'chatText', source, username, message });
@@ -47,7 +59,7 @@ describe('DisplayQueue gift flow (smoke E2E)', () => {
             }
         };
 
-        const obsCalls = [];
+        const obsCalls: Array<{ method: string; payload: unknown }> = [];
         const obsManager = {
             isReady: async () => true,
             call: async (method, payload) => {
@@ -56,7 +68,7 @@ describe('DisplayQueue gift flow (smoke E2E)', () => {
             }
         };
 
-        const goalCalls = [];
+        const goalCalls: Array<{ platform: string; amount: number }> = [];
         const goalsManager = {
             processDonationGoal: async (platform, amount) => {
                 goalCalls.push({ platform, amount });
