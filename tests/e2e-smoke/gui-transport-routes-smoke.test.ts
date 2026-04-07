@@ -1,4 +1,4 @@
-const { describe, it, expect } = require('bun:test');
+import { describe, it, expect } from 'bun:test';
 
 const { createGuiTransportService } = require('../../src/services/gui/gui-transport-service');
 const { safeSetTimeout } = require('../../src/utils/timeout-validator');

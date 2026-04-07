@@ -1,4 +1,4 @@
-const { describe, it, expect } = require('bun:test');
+import { describe, it, expect } from 'bun:test';
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
@@ -24,7 +24,7 @@ describe('secret-manager interactive prompt smoke E2E', () => {
         process.env.NODE_ENV = 'test';
         delete process.env.TIKTOK_API_KEY;
 
-        const promptCalls = [];
+        const promptCalls: string[] = [];
         const promptFor = async (secretId) => {
             promptCalls.push(secretId);
             return 'test-tiktok-api-key';

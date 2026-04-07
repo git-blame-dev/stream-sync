@@ -1,4 +1,4 @@
-const { describe, test, expect } = require('bun:test');
+import { describe, test, expect } from 'bun:test';
 const EventEmitter = require('events');
 
 const PlatformEventRouter = require('../../src/services/PlatformEventRouter');
@@ -38,7 +38,7 @@ describe('Twitch emote chat parts pipeline (smoke E2E)', () => {
         const runtime = {
             config,
             displayQueue,
-            handleChatMessage: async () => {}
+            handleChatMessage: async (_platform, _normalizedData) => {}
         };
         const chatRouter = new ChatNotificationRouter({ runtime, logger: noOpLogger, config });
         runtime.handleChatMessage = (platform, normalizedData) => chatRouter.handleChatMessage(platform, normalizedData);

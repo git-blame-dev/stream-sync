@@ -1,4 +1,4 @@
-const { describe, it, beforeEach, afterEach, expect } = require('bun:test');
+import { describe, it, beforeEach, afterEach, expect } from 'bun:test';
 
 const { main } = require('../../src/main.ts');
 const { createDonationSpamDetection } = require('../../src/utils/spam-detection');
