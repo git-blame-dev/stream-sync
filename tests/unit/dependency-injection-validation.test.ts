@@ -1,6 +1,9 @@
 import { describe, expect, it, afterEach } from 'bun:test';
-const { createMockFn, restoreAllMocks } = require('../helpers/bun-mock-utils');
-const { noOpLogger } = require('../helpers/mock-factories');
+import { createRequire } from 'node:module';
+
+const load = createRequire(__filename);
+const { createMockFn, restoreAllMocks } = load('../helpers/bun-mock-utils');
+const { noOpLogger } = load('../helpers/mock-factories');
 
 describe('Dependency Injection Validation', () => {
     afterEach(() => {
@@ -14,7 +17,7 @@ describe('Dependency Injection Validation', () => {
             };
 
             const createPlatform = () => {
-                const { ConnectionStateManager } = require('../../src/utils/connection-state-manager');
+                const { ConnectionStateManager } = load('../../src/utils/connection-state-manager');
                 const manager = new ConnectionStateManager('youtube', null);
                 manager.initialize({}, { logger: incompleteLogger });
             };
@@ -32,7 +35,7 @@ describe('Dependency Injection Validation', () => {
             };
 
             const initializeWithInvalidLogger = () => {
-                const { ConnectionStateManager } = require('../../src/utils/connection-state-manager');
+                const { ConnectionStateManager } = load('../../src/utils/connection-state-manager');
                 const manager = new ConnectionStateManager('youtube', null);
                 manager.initialize({}, { logger: invalidLogger });
             };
@@ -50,7 +53,7 @@ describe('Dependency Injection Validation', () => {
             };
 
             const initializeWithValidLogger = () => {
-                const { ConnectionStateManager } = require('../../src/utils/connection-state-manager');
+                const { ConnectionStateManager } = load('../../src/utils/connection-state-manager');
                 const manager = new ConnectionStateManager('youtube', null);
                 manager.initialize({}, { logger: validLogger });
                 return manager;
@@ -70,7 +73,7 @@ describe('Dependency Injection Validation', () => {
 
             const createYouTubePlatform = () => {
                 const config = { youtube: { enabled: true, username: 'test-user' } };
-                const { YouTubePlatform } = require('../../src/platforms/youtube');
+                const { YouTubePlatform } = load('../../src/platforms/youtube');
                 return new YouTubePlatform(config, incompleteDependencies);
             };
 
@@ -83,7 +86,7 @@ describe('Dependency Injection Validation', () => {
 
             const createPlatformWithNullDeps = () => {
                 const config = { youtube: { enabled: true, username: 'test-user' } };
-                const { YouTubePlatform } = require('../../src/platforms/youtube');
+                const { YouTubePlatform } = load('../../src/platforms/youtube');
                 return new YouTubePlatform(config, nullDependencies);
             };
 
@@ -102,7 +105,7 @@ describe('Dependency Injection Validation', () => {
 
             const createPlatformWithInvalidTypes = () => {
                 const config = { youtube: { enabled: true, username: 'test-user' } };
-                const { YouTubePlatform } = require('../../src/platforms/youtube');
+                const { YouTubePlatform } = load('../../src/platforms/youtube');
                 return new YouTubePlatform(config, invalidTypeDependencies);
             };
 
@@ -113,7 +116,7 @@ describe('Dependency Injection Validation', () => {
 
     describe('ConnectionStateManager Dependency Validation', () => {
         it('should fail fast when initialized without required dependencies', () => {
-            const manager = new (require('../../src/utils/connection-state-manager').ConnectionStateManager)('youtube', null);
+            const manager = new (load('../../src/utils/connection-state-manager').ConnectionStateManager)('youtube', null);
 
             const initializeWithoutDeps = () => {
                 manager.initialize({}, {});
@@ -129,7 +132,7 @@ describe('Dependency Injection Validation', () => {
             };
 
             const createManagerWithInvalidFactory = () => {
-                const { ConnectionStateManager } = require('../../src/utils/connection-state-manager');
+                const { ConnectionStateManager } = load('../../src/utils/connection-state-manager');
                 return new ConnectionStateManager('youtube', invalidFactory);
             };
 
@@ -143,7 +146,7 @@ describe('Dependency Injection Validation', () => {
             };
 
             const useManagerWithNullFactory = () => {
-                const { ConnectionStateManager } = require('../../src/utils/connection-state-manager');
+                const { ConnectionStateManager } = load('../../src/utils/connection-state-manager');
                 const manager = new ConnectionStateManager('youtube', factoryReturningNull);
                 manager.initialize({}, { logger: noOpLogger });
                 return manager.ensureConnection();
@@ -157,7 +160,7 @@ describe('Dependency Injection Validation', () => {
     describe('Platform Factory Dependency Validation', () => {
         it('should validate factory dependencies before creating platform instances', () => {
             const createPlatformViaFactory = () => {
-                const { PlatformConnectionFactory } = require('../../src/utils/platform-connection-factory');
+                const { PlatformConnectionFactory } = load('../../src/utils/platform-connection-factory');
                 new PlatformConnectionFactory();
             };
 
@@ -166,7 +169,7 @@ describe('Dependency Injection Validation', () => {
         });
 
         it('should ensure factory creates consistent dependency interfaces', () => {
-            const factory = new (require('../../src/utils/platform-connection-factory').PlatformConnectionFactory)(noOpLogger);
+            const factory = new (load('../../src/utils/platform-connection-factory').PlatformConnectionFactory)(noOpLogger);
 
             const createYouTubeDeps = () => {
                 return factory.createStandardDependencies('youtube', noOpLogger);
@@ -190,7 +193,7 @@ describe('Dependency Injection Validation', () => {
             };
 
             const validateLogger = () => {
-                const { validateLoggerInterface } = require('../../src/utils/dependency-validator');
+                const { validateLoggerInterface } = load('../../src/utils/dependency-validator');
                 validateLoggerInterface(partialLogger);
             };
 
@@ -201,7 +204,7 @@ describe('Dependency Injection Validation', () => {
         it('should suggest fixes when dependencies are completely missing', () => {
             const initializeWithoutDeps = () => {
                 const config = { youtube: { enabled: true, username: 'test-user' } };
-                const { YouTubePlatform } = require('../../src/platforms/youtube');
+                const { YouTubePlatform } = load('../../src/platforms/youtube');
                 return new YouTubePlatform(config, undefined);
             };
 
@@ -212,7 +215,7 @@ describe('Dependency Injection Validation', () => {
         it('should help users understand dependency injection patterns', () => {
             const attemptIncorrectInjection = () => {
                 const config = { youtube: { enabled: true, username: 'test-user' } };
-                const { YouTubePlatform } = require('../../src/platforms/youtube');
+                const { YouTubePlatform } = load('../../src/platforms/youtube');
                 return new YouTubePlatform(config, 'invalid_dependencies_string');
             };
 
@@ -234,7 +237,7 @@ describe('Dependency Injection Validation', () => {
                 };
 
                 const config = { youtube: { enabled: true, username: 'test-user' } };
-                const { YouTubePlatform } = require('../../src/platforms/youtube');
+                const { YouTubePlatform } = load('../../src/platforms/youtube');
                 return new YouTubePlatform(config, dependencies);
             };
 
@@ -257,7 +260,7 @@ describe('Dependency Injection Validation', () => {
                     tiktok: { enabled: true, username: 'test-user' }
                 };
 
-                const { YouTubePlatform } = require('../../src/platforms/youtube');
+                const { YouTubePlatform } = load('../../src/platforms/youtube');
                 const youtubeOk = new YouTubePlatform(config, universalDependencies);
                 return { youtubeOk };
             };

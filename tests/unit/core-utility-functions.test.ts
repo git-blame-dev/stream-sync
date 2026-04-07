@@ -1,7 +1,10 @@
 import { describe, test, expect, beforeEach } from 'bun:test';
-const { TEST_TIMEOUTS } = require('../helpers/test-setup');
-const { noOpLogger } = require('../helpers/mock-factories');
-const { RetrySystem, ADAPTIVE_RETRY_CONFIG } = require('../../src/utils/retry-system');
+import { createRequire } from 'node:module';
+
+const load = createRequire(__filename);
+const { TEST_TIMEOUTS } = load('../helpers/test-setup');
+const { noOpLogger } = load('../helpers/mock-factories');
+const { RetrySystem, ADAPTIVE_RETRY_CONFIG } = load('../../src/utils/retry-system');
 
 describe('Core Utility Functions', () => {
     describe('Adaptive Retry System', () => {

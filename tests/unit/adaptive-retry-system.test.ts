@@ -1,7 +1,10 @@
 import { describe, test, expect, beforeEach } from 'bun:test';
-const { noOpLogger } = require('../helpers/mock-factories');
-const { setupAutomatedCleanup } = require('../helpers/mock-lifecycle');
-const testClock = require('../helpers/test-clock');
+import { createRequire } from 'node:module';
+
+const load = createRequire(__filename);
+const { noOpLogger } = load('../helpers/mock-factories');
+const { setupAutomatedCleanup } = load('../helpers/mock-lifecycle');
+const testClock = load('../helpers/test-clock');
 
 setupAutomatedCleanup({
     clearCallsBeforeEach: true,
@@ -9,7 +12,7 @@ setupAutomatedCleanup({
     logPerformanceMetrics: true
 });
 
-const { RetrySystem, ADAPTIVE_RETRY_CONFIG } = require('../../src/utils/retry-system.js');
+const { RetrySystem, ADAPTIVE_RETRY_CONFIG } = load('../../src/utils/retry-system.js');
 
 describe('Unified Adaptive Retry System', () => {
     let retrySystem: InstanceType<typeof RetrySystem>;
