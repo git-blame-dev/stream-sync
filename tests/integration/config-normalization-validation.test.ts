@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'bun:test';
-const { ConfigValidator } = require('../../src/utils/config-validator');
+import { createRequire } from 'node:module';
+
+const load = createRequire(__filename);
+const { ConfigValidator } = load('../../src/utils/config-validator');
 
 describe('ConfigValidator normalize + validate integration', () => {
     it('full config normalization and validation flow', () => {
@@ -350,7 +353,7 @@ describe('ConfigValidator normalize + validate integration', () => {
         const originalTwitchClientId = process.env.TWITCH_CLIENT_ID;
         try {
             delete process.env.TWITCH_CLIENT_ID;
-            const { getRawTestConfig } = require('../helpers/config-fixture');
+            const { getRawTestConfig } = load('../helpers/config-fixture');
             const baseRaw = getRawTestConfig();
             const rawConfig = {
                 ...baseRaw,
@@ -381,7 +384,7 @@ describe('ConfigValidator normalize + validate integration', () => {
         const originalTwitchClientId = process.env.TWITCH_CLIENT_ID;
         try {
             process.env.TWITCH_CLIENT_ID = 'test-env-client-id';
-            const { getRawTestConfig } = require('../helpers/config-fixture');
+            const { getRawTestConfig } = load('../helpers/config-fixture');
             const baseRaw = getRawTestConfig();
             const rawConfig = {
                 ...baseRaw,

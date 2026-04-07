@@ -971,6 +971,26 @@ describe('TypeScript toolchain migration gates behavior', () => {
         }
     });
 
+    it('keeps integration cohort a test modules free of commonjs module syntax', () => {
+        const cohortPaths = [
+            'tests/integration/platform-status-interface.test.ts',
+            'tests/integration/farewell-chat-routing.test.ts',
+            'tests/integration/config-normalization-validation.test.ts',
+            'tests/integration/command-cooldown-integration.test.ts',
+            'tests/integration/critical-startup-flow.test.ts',
+            'tests/integration/runtime-vfx-lifecycle-management.test.ts',
+            'tests/integration/keyword-parsing-integration.test.ts',
+            'tests/integration/notification-command-routing.test.ts'
+        ];
+
+        for (const testPath of cohortPaths) {
+            const content = readFileSync(join(repoRoot, testPath), 'utf8');
+            expect(content).not.toMatch(/\brequire\s*\(/);
+            expect(content).not.toContain('module.exports');
+            expect(content).not.toMatch(/\bexports\./);
+        }
+    });
+
     it('keeps integration smoke cohort b tests on TypeScript paths', () => {
         const cohortTsPaths = [
             'tests/integration/obs-connection-lifecycle.test.ts',

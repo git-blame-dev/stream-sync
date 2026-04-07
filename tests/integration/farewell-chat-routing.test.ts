@@ -1,5 +1,8 @@
 import { describe, it, expect } from 'bun:test';
-const { createFarewellRoutingHarness } = require('../helpers/farewell-routing-harness');
+import { createRequire } from 'node:module';
+
+const load = createRequire(__filename);
+const { createFarewellRoutingHarness } = load('../helpers/farewell-routing-harness');
 
 describe('farewell chat routing integration', () => {
     it('routes farewell notification rows even when messages are disabled', async () => {

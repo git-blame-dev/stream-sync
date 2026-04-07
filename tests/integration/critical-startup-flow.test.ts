@@ -1,17 +1,20 @@
 import { describe, test, expect, beforeEach, afterEach } from 'bun:test';
-const fs = require('fs');
-const path = require('path');
-const os = require('os');
+import { createRequire } from 'node:module';
 
-const CONFIG_MODULE_PATH = require.resolve('../../src/core/config');
+const load = createRequire(__filename);
+const fs = load('fs');
+const path = load('path');
+const os = load('os');
+
+const CONFIG_MODULE_PATH = load.resolve('../../src/core/config');
 
 function resetConfigModule() {
-    delete require.cache[CONFIG_MODULE_PATH];
+    delete load.cache[CONFIG_MODULE_PATH];
 }
 
 function loadFreshConfig() {
     resetConfigModule();
-    const { config } = require('../../src/core/config');
+    const { config } = load('../../src/core/config');
     return { config };
 }
 
@@ -70,7 +73,7 @@ describe('Critical Startup Flow', () => {
     });
 
     test('logging system exports required initialization functions', () => {
-        const logging = require('../../src/core/logging');
+        const logging = load('../../src/core/logging');
 
         expect(typeof logging.setDebugMode).toBe('function');
         expect(typeof logging.initializeLoggingConfig).toBe('function');
@@ -78,7 +81,7 @@ describe('Critical Startup Flow', () => {
     });
 
     test('config-builders exports buildLoggingConfig', () => {
-        const { buildLoggingConfig } = require('../../src/core/config-builders');
+        const { buildLoggingConfig } = load('../../src/core/config-builders');
 
         expect(typeof buildLoggingConfig).toBe('function');
     });
