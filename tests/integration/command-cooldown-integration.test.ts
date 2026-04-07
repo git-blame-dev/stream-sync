@@ -1,6 +1,4 @@
-
-const { describe, test, expect, beforeEach, afterEach } = require('bun:test');
-export {};
+import { describe, test, expect, beforeEach, afterEach } from 'bun:test';
 
 const { TEST_TIMEOUTS } = require('../helpers/test-setup');
 const { createConfigFixture } = require('../helpers/config-fixture');

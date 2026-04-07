@@ -952,6 +952,25 @@ describe('TypeScript toolchain migration gates behavior', () => {
         }
     });
 
+    it('keeps integration cohort a test modules free of bun test require and transitional empty exports', () => {
+        const cohortPaths = [
+            'tests/integration/platform-status-interface.test.ts',
+            'tests/integration/farewell-chat-routing.test.ts',
+            'tests/integration/config-normalization-validation.test.ts',
+            'tests/integration/command-cooldown-integration.test.ts',
+            'tests/integration/critical-startup-flow.test.ts',
+            'tests/integration/runtime-vfx-lifecycle-management.test.ts',
+            'tests/integration/keyword-parsing-integration.test.ts',
+            'tests/integration/notification-command-routing.test.ts'
+        ];
+
+        for (const testPath of cohortPaths) {
+            const content = readFileSync(join(repoRoot, testPath), 'utf8');
+            expect(content).not.toContain("require('bun:test')");
+            expect(content).not.toContain('export {};');
+        }
+    });
+
     it('keeps integration smoke cohort b tests on TypeScript paths', () => {
         const cohortTsPaths = [
             'tests/integration/obs-connection-lifecycle.test.ts',
