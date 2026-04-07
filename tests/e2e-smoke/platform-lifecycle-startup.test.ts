@@ -1,7 +1,10 @@
 import { describe, it, expect } from 'bun:test';
-const { createMockFn } = require('../helpers/bun-mock-utils');
-const { noOpLogger } = require('../helpers/mock-factories');
-const PlatformLifecycleService = require('../../src/services/PlatformLifecycleService');
+import { createRequire } from 'node:module';
+
+const load = createRequire(__filename);
+const { createMockFn } = load('../helpers/bun-mock-utils');
+const { noOpLogger } = load('../helpers/mock-factories');
+const PlatformLifecycleService = load('../../src/services/PlatformLifecycleService.ts');
 
 describe('Platform lifecycle startup smoke E2E', () => {
     it('initializes and disconnects an enabled platform without stream detection', async () => {

@@ -1,11 +1,13 @@
 import { describe, it, beforeEach, afterEach, expect } from 'bun:test';
+import { createRequire } from 'node:module';
 
-const { main } = require('../../src/main.ts');
-const { createDonationSpamDetection } = require('../../src/utils/spam-detection');
-const { createConfigFixture } = require('../helpers/config-fixture');
-const { useFakeTimers, useRealTimers, clearAllTimers } = require('../helpers/bun-timers');
-const { createMockDisplayQueue } = require('../helpers/mock-factories');
-const { captureStdout, captureStderr } = require('../helpers/output-capture');
+const load = createRequire(__filename);
+const { main } = load('../../src/main.ts');
+const { createDonationSpamDetection } = load('../../src/utils/spam-detection');
+const { createConfigFixture } = load('../helpers/config-fixture');
+const { useFakeTimers, useRealTimers, clearAllTimers } = load('../helpers/bun-timers');
+const { createMockDisplayQueue } = load('../helpers/mock-factories');
+const { captureStdout, captureStderr } = load('../helpers/output-capture');
 
 const buildSmokeConfig = () => createConfigFixture({
     general: {

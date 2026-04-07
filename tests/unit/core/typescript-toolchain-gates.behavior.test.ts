@@ -1010,6 +1010,26 @@ describe('TypeScript toolchain migration gates behavior', () => {
         }
     });
 
+    it('keeps e2e smoke cohort c test modules free of commonjs module syntax', () => {
+        const cohortPaths = [
+            'tests/e2e-smoke/platform-lifecycle-startup.test.ts',
+            'tests/e2e-smoke/gui-transport-routes-smoke.test.ts',
+            'tests/e2e-smoke/main-startup.test.ts',
+            'tests/e2e-smoke/tiktok-event-pipeline.test.ts',
+            'tests/e2e-smoke/twitch-chat-emote-parts-pipeline.test.ts',
+            'tests/e2e-smoke/display-queue-gift-flow.test.ts',
+            'tests/e2e-smoke/secret-manager-interactive-prompt.test.ts',
+            'tests/e2e-smoke/youtube-chat-emote-parts-pipeline.test.ts'
+        ];
+
+        for (const testPath of cohortPaths) {
+            const content = readFileSync(join(repoRoot, testPath), 'utf8');
+            expect(content).not.toMatch(/\brequire\s*\(/);
+            expect(content).not.toContain('module.exports');
+            expect(content).not.toMatch(/\bexports\./);
+        }
+    });
+
     it('keeps integration smoke cohort b tests on TypeScript paths', () => {
         const cohortTsPaths = [
             'tests/integration/obs-connection-lifecycle.test.ts',

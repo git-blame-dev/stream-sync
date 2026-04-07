@@ -1,22 +1,25 @@
 import { describe, test, afterEach, expect } from 'bun:test';
-const EventEmitter = require('events');
+import { createRequire } from 'node:module';
 
-const NotificationManager = require('../../src/notifications/NotificationManager');
-const PlatformEventRouter = require('../../src/services/PlatformEventRouter');
-const { TikTokPlatform } = require('../../src/platforms/tiktok.ts');
-const { createTextProcessingManager } = require('../../src/utils/text-processing');
-const { createConfigFixture } = require('../helpers/config-fixture');
-const { createMockDisplayQueue, noOpLogger } = require('../helpers/mock-factories');
-const { createMockFn, restoreAllMocks } = require('../helpers/bun-mock-utils');
+const load = createRequire(__filename);
+const EventEmitter = load('events');
+const NotificationManager = load('../../src/notifications/NotificationManager');
+const PlatformEventRouter = load('../../src/services/PlatformEventRouter');
+const { TikTokPlatform } = load('../../src/platforms/tiktok.ts');
+const { createTextProcessingManager } = load('../../src/utils/text-processing');
+const { createConfigFixture } = load('../helpers/config-fixture');
+const { createMockDisplayQueue, noOpLogger } = load('../helpers/mock-factories');
+const { createMockFn, restoreAllMocks } = load('../helpers/bun-mock-utils');
 const {
     useFakeTimers,
     useRealTimers,
     setSystemTime,
     advanceTimersByTime,
     clearAllTimers
-} = require('../helpers/bun-timers');
-const { setupTikTokEventListeners, cleanupTikTokEventListeners } = require('../../src/platforms/tiktok/events/event-router.ts');
-const { expectNoTechnicalArtifacts } = require('../helpers/assertion-helpers');
+} = load('../helpers/bun-timers');
+const { setupTikTokEventListeners, cleanupTikTokEventListeners } = load('../../src/platforms/tiktok/events/event-router.ts');
+const { expectNoTechnicalArtifacts } = load('../helpers/assertion-helpers');
+const coreConstants = load('../../src/core/constants');
 
 const createEventBus = () => {
     const emitter = new EventEmitter();
@@ -70,7 +73,7 @@ describe('TikTok event pipeline (smoke E2E)', () => {
             logger,
             eventBus,
             config,
-            constants: require('../../src/core/constants'),
+            constants: coreConstants,
             textProcessing,
             obsGoals: { processDonationGoal: createMockFn() },
             vfxCommandService: { getVFXConfig: createMockFn().mockResolvedValue(null) },
@@ -186,7 +189,7 @@ describe('TikTok event pipeline (smoke E2E)', () => {
             logger,
             eventBus,
             config,
-            constants: require('../../src/core/constants'),
+            constants: coreConstants,
             textProcessing,
             obsGoals: { processDonationGoal: createMockFn() },
             vfxCommandService: { getVFXConfig: createMockFn().mockResolvedValue(null) },
@@ -298,7 +301,7 @@ describe('TikTok event pipeline (smoke E2E)', () => {
             logger,
             eventBus,
             config,
-            constants: require('../../src/core/constants'),
+            constants: coreConstants,
             textProcessing,
             obsGoals: { processDonationGoal: createMockFn() },
             vfxCommandService: { getVFXConfig: createMockFn().mockResolvedValue(null) },
@@ -392,7 +395,7 @@ describe('TikTok event pipeline (smoke E2E)', () => {
             logger,
             eventBus,
             config,
-            constants: require('../../src/core/constants'),
+            constants: coreConstants,
             textProcessing,
             obsGoals: { processDonationGoal: createMockFn() },
             vfxCommandService: { getVFXConfig: createMockFn().mockResolvedValue(null) },

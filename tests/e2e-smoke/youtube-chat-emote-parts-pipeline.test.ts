@@ -1,14 +1,16 @@
 import { describe, test, expect } from 'bun:test';
-const EventEmitter = require('events');
+import { createRequire } from 'node:module';
 
-const PlatformEventRouter = require('../../src/services/PlatformEventRouter');
-const ChatNotificationRouter = require('../../src/services/ChatNotificationRouter');
-const { PlatformEvents } = require('../../src/interfaces/PlatformEvents');
-const { YouTubePlatform } = require('../../src/platforms/youtube');
-const { createConfigFixture } = require('../helpers/config-fixture');
-const { createMockDisplayQueue, noOpLogger } = require('../helpers/mock-factories');
-const { createMockFn } = require('../helpers/bun-mock-utils');
-const { createYouTubeRunsMessageChatItem } = require('../helpers/youtube-test-data');
+const load = createRequire(__filename);
+const EventEmitter = load('events');
+const PlatformEventRouter = load('../../src/services/PlatformEventRouter');
+const ChatNotificationRouter = load('../../src/services/ChatNotificationRouter');
+const { PlatformEvents } = load('../../src/interfaces/PlatformEvents');
+const { YouTubePlatform } = load('../../src/platforms/youtube');
+const { createConfigFixture } = load('../helpers/config-fixture');
+const { createMockDisplayQueue, noOpLogger } = load('../helpers/mock-factories');
+const { createMockFn } = load('../helpers/bun-mock-utils');
+const { createYouTubeRunsMessageChatItem } = load('../helpers/youtube-test-data');
 
 const createEventBus = () => {
     const emitter = new EventEmitter();
