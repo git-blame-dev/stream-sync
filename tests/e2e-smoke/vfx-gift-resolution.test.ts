@@ -1,5 +1,4 @@
-const { describe, expect, it } = require('bun:test');
-export {};
+import { describe, expect, it } from 'bun:test';
 const { ConfigValidator } = require('../../src/utils/config-validator');
 const { CommandParser } = require('../../src/chat/commands');
 const { VFXCommandService } = require('../../src/services/VFXCommandService');

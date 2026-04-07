@@ -1,6 +1,5 @@
 
-const { describe, test, beforeEach, afterEach, expect } = require('bun:test');
-export {};
+import { describe, test, beforeEach, afterEach, expect } from 'bun:test';
 const { createMockFn, clearAllMocks, restoreAllMocks } = require('../helpers/bun-mock-utils');
 const { noOpLogger } = require('../helpers/mock-factories');
 const { createEventBus } = require('../../src/core/EventBus');
