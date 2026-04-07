@@ -1,9 +1,11 @@
 import { describe, test, expect } from 'bun:test';
-const EventEmitter = require('events');
+import { createRequire } from 'node:module';
 
-const { DisplayQueue } = require('../../src/obs/display-queue.ts');
-const { PRIORITY_LEVELS } = require('../../src/core/constants');
-const { PlatformEvents } = require('../../src/interfaces/PlatformEvents');
+const load = createRequire(__filename);
+const EventEmitter = load('events');
+const { DisplayQueue } = load('../../src/obs/display-queue.ts');
+const { PRIORITY_LEVELS } = load('../../src/core/constants');
+const { PlatformEvents } = load('../../src/interfaces/PlatformEvents');
 
 type QueueAction = {
     type: string;

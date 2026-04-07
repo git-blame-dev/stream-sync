@@ -1,9 +1,11 @@
 import { describe, it, expect } from 'bun:test';
+import { createRequire } from 'node:module';
 
-const { createGuiTransportService } = require('../../src/services/gui/gui-transport-service');
-const { safeSetTimeout } = require('../../src/utils/timeout-validator');
-const { TestEventBus } = require('../helpers/gui-transport-test-utils');
-const { createConfigFixture } = require('../helpers/config-fixture');
+const load = createRequire(__filename);
+const { createGuiTransportService } = load('../../src/services/gui/gui-transport-service');
+const { safeSetTimeout } = load('../../src/utils/timeout-validator');
+const { TestEventBus } = load('../helpers/gui-transport-test-utils');
+const { createConfigFixture } = load('../helpers/config-fixture');
 
 function getBaseUrl(service: any) {
     const address = service.getAddress();

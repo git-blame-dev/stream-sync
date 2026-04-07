@@ -1,11 +1,14 @@
 import { describe, it, expect } from 'bun:test';
-const fs = require('fs');
-const os = require('os');
-const path = require('path');
-const { ConfigValidator } = require('../../src/utils/config-validator');
-const { buildConfig: _buildConfig } = require('../../src/core/config-builders');
-const { getRawTestConfig } = require('../helpers/config-fixture');
-const { ensureSecrets } = require('../../src/utils/secret-manager.ts');
+import { createRequire } from 'node:module';
+
+const load = createRequire(__filename);
+const fs = load('fs');
+const os = load('os');
+const path = load('path');
+const { ConfigValidator } = load('../../src/utils/config-validator');
+const { buildConfig: _buildConfig } = load('../../src/core/config-builders');
+const { getRawTestConfig } = load('../helpers/config-fixture');
+const { ensureSecrets } = load('../../src/utils/secret-manager.ts');
 
 describe('secret-manager interactive prompt smoke E2E', () => {
     it('prompts and persists secrets for built config when interactive and TTY is available', async () => {
