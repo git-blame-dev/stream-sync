@@ -1,12 +1,15 @@
 
 import { describe, expect, afterEach, it } from 'bun:test';
-const { createMockFn, clearAllMocks, restoreAllMocks } = require('../../helpers/bun-mock-utils');
+import { createRequire } from 'node:module';
 
-const { setupAutomatedCleanup } = require('../../helpers/mock-lifecycle');
-const { createSourcesConfigFixture } = require('../../helpers/config-fixture');
-const { noOpLogger } = require('../../helpers/mock-factories');
-const { createOBSSourcesManager } = require('../../../src/obs/sources');
-const { PRIORITY_LEVELS } = require('../../../src/core/constants');
+const load = createRequire(__filename);
+const { createMockFn, clearAllMocks, restoreAllMocks } = load('../../helpers/bun-mock-utils');
+
+const { setupAutomatedCleanup } = load('../../helpers/mock-lifecycle');
+const { createSourcesConfigFixture } = load('../../helpers/config-fixture');
+const { noOpLogger } = load('../../helpers/mock-factories');
+const { createOBSSourcesManager } = load('../../../src/obs/sources');
+const { PRIORITY_LEVELS } = load('../../../src/core/constants');
 
 setupAutomatedCleanup({
     clearCallsBeforeEach: true,
@@ -14,7 +17,7 @@ setupAutomatedCleanup({
     logPerformanceMetrics: true
 });
 
-const { DisplayQueue } = require('../../../src/obs/display-queue');
+const { DisplayQueue } = load('../../../src/obs/display-queue');
 
 describe('TTS Configuration Boolean Parsing', () => {
     afterEach(() => {

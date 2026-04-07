@@ -1,10 +1,13 @@
 
 import { describe, expect, beforeEach, it, afterEach } from 'bun:test';
-const { createMockFn, restoreAllMocks } = require('../helpers/bun-mock-utils');
+import { createRequire } from 'node:module';
 
-const { DependencyFactory } = require('../../src/utils/dependency-factory');
-const { PlatformConnectionFactory } = require('../../src/utils/platform-connection-factory');
-const { secrets, _resetForTesting, initializeStaticSecrets } = require('../../src/core/secrets');
+const load = createRequire(__filename);
+const { createMockFn, restoreAllMocks } = load('../helpers/bun-mock-utils');
+
+const { DependencyFactory } = load('../../src/utils/dependency-factory');
+const { PlatformConnectionFactory } = load('../../src/utils/platform-connection-factory');
+const { secrets, _resetForTesting, initializeStaticSecrets } = load('../../src/core/secrets');
 
 describe('DependencyFactory', () => {
     afterEach(() => {

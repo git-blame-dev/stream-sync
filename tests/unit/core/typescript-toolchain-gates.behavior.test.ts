@@ -1155,4 +1155,24 @@ describe('TypeScript toolchain migration gates behavior', () => {
             expect(content).not.toContain('export {};');
         }
     });
+
+    it('keeps cohort c test modules free of commonjs module syntax', () => {
+        const cohortPaths = [
+            'tests/unit/dependency-factory.test.ts',
+            'tests/unit/dependency-injection-validation.test.ts',
+            'tests/unit/core-utility-functions.test.ts',
+            'tests/unit/adaptive-retry-system.test.ts',
+            'tests/unit/retry-system-handle-connection-error.test.ts',
+            'tests/unit/core/tts-boolean-parsing.test.ts',
+            'tests/unit/factories/innertube-factory.behavior.test.ts',
+            'tests/unit/setup/output-suppression.test.ts'
+        ];
+
+        for (const testPath of cohortPaths) {
+            const content = readFileSync(join(repoRoot, testPath), 'utf8');
+            expect(content).not.toMatch(/\brequire\s*\(/);
+            expect(content).not.toContain('module.exports');
+            expect(content).not.toMatch(/\bexports\./);
+        }
+    });
 });

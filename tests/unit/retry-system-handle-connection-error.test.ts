@@ -1,8 +1,10 @@
 import { describe, test, expect, afterEach } from 'bun:test';
+import { createRequire } from 'node:module';
 
-const { RetrySystem } = require('../../src/utils/retry-system');
-const { safeDelay } = require('../../src/utils/timeout-validator');
-const { noOpLogger } = require('../helpers/mock-factories');
+const load = createRequire(__filename);
+const { RetrySystem } = load('../../src/utils/retry-system');
+const { safeDelay } = load('../../src/utils/timeout-validator');
+const { noOpLogger } = load('../helpers/mock-factories');
 
 describe('RetrySystem.handleConnectionError', () => {
     let retrySystem: InstanceType<typeof RetrySystem>;

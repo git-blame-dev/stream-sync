@@ -1,6 +1,8 @@
 import { describe, test, expect, beforeEach, afterEach } from 'bun:test';
+import { createRequire } from 'node:module';
 
-const { InnertubeFactory } = require('../../../src/factories/innertube-factory');
+const load = createRequire(__filename);
+const { InnertubeFactory } = load('../../../src/factories/innertube-factory');
 
 describe('InnertubeFactory behavior', () => {
     const restoreCache = () => {
@@ -40,7 +42,7 @@ describe('InnertubeFactory behavior', () => {
     });
 
     test('createWithConfig passes configuration to Innertube.create', async () => {
-        let receivedConfig = null;
+        let receivedConfig: unknown = null;
         const mockInstance = { id: 'configured-instance' };
         const mockInnertube = {
             create: async (config) => {
@@ -105,7 +107,7 @@ describe('InnertubeFactory behavior', () => {
     });
 
     test('createForTesting uses test-safe Innertube config', async () => {
-        let receivedConfig = null;
+        let receivedConfig: unknown = null;
         const mockInnertube = {
             create: async (config) => {
                 receivedConfig = config;
@@ -124,7 +126,7 @@ describe('InnertubeFactory behavior', () => {
     });
 
     test('createWithTimeout uses configured path when config provided', async () => {
-        let receivedConfig = null;
+        let receivedConfig: unknown = null;
         const mockInnertube = {
             create: async (config) => {
                 receivedConfig = config;

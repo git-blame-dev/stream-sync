@@ -1,5 +1,8 @@
 import { describe, it, expect } from 'bun:test';
-const { captureStdout, captureStderr } = require('../../helpers/output-capture');
+import { createRequire } from 'node:module';
+
+const load = createRequire(__filename);
+const { captureStdout, captureStderr } = load('../../helpers/output-capture');
 
 describe('test output suppression', () => {
     it('suppresses stdout and stderr by default with opt-in local capture', () => {
