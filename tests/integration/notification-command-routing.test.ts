@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'bun:test';
-const { NOTIFICATION_CONFIGS } = require('../../src/core/constants');
-const { ConfigValidator } = require('../../src/utils/config-validator');
+import { createRequire } from 'node:module';
+
+const load = createRequire(__filename);
+const { NOTIFICATION_CONFIGS } = load('../../src/core/constants');
+const { ConfigValidator } = load('../../src/utils/config-validator');
 
 type NotificationConfigContract = {
     commandKey: string;

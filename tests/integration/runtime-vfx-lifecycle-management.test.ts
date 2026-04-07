@@ -1,12 +1,15 @@
 import { describe, test, beforeEach, afterEach, expect } from 'bun:test';
-const { clearAllMocks, createMockFn, restoreAllMocks } = require('../helpers/bun-mock-utils');
-const { TEST_TIMEOUTS } = require('../helpers/test-setup');
-const { setupAutomatedCleanup } = require('../helpers/mock-lifecycle');
-const { AppRuntime } = require('../../src/main');
-const { createAppRuntimeTestDependencies } = require('../helpers/runtime-test-harness');
-const path = require('path');
-const { safeDelay } = require('../../src/utils/timeout-validator');
-const { PlatformEvents } = require('../../src/interfaces/PlatformEvents');
+import { createRequire } from 'node:module';
+
+const load = createRequire(__filename);
+const { clearAllMocks, createMockFn, restoreAllMocks } = load('../helpers/bun-mock-utils');
+const { TEST_TIMEOUTS } = load('../helpers/test-setup');
+const { setupAutomatedCleanup } = load('../helpers/mock-lifecycle');
+const { AppRuntime } = load('../../src/main');
+const { createAppRuntimeTestDependencies } = load('../helpers/runtime-test-harness');
+const path = load('path');
+const { safeDelay } = load('../../src/utils/timeout-validator');
+const { PlatformEvents } = load('../../src/interfaces/PlatformEvents');
 
 type RuntimeConfig = {
     general: {

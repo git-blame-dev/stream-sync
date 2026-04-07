@@ -1,15 +1,18 @@
 import { describe, test, expect, afterEach } from 'bun:test';
-const { createMockFn, restoreAllMocks } = require('../helpers/bun-mock-utils');
-const { noOpLogger } = require('../helpers/mock-factories');
+import { createRequire } from 'node:module';
+
+const load = createRequire(__filename);
+const { createMockFn, restoreAllMocks } = load('../helpers/bun-mock-utils');
+const { noOpLogger } = load('../helpers/mock-factories');
 const {
     createTikTokConfigFixture,
     createTwitchConfigFixture,
     createYouTubeConfigFixture
-} = require('../helpers/config-fixture');
+} = load('../helpers/config-fixture');
 
-const { TikTokPlatform } = require('../../src/platforms/tiktok');
-const { TwitchPlatform } = require('../../src/platforms/twitch');
-const { YouTubePlatform } = require('../../src/platforms/youtube');
+const { TikTokPlatform } = load('../../src/platforms/tiktok');
+const { TwitchPlatform } = load('../../src/platforms/twitch');
+const { YouTubePlatform } = load('../../src/platforms/youtube');
 
 const createTikTokPlatform = (configOverrides = {}) => {
     const config = createTikTokConfigFixture(configOverrides);

@@ -1,8 +1,11 @@
 import { describe, test, beforeEach, afterEach, expect } from 'bun:test';
-const { restoreAllMocks } = require('../helpers/bun-mock-utils');
+import { createRequire } from 'node:module';
 
-const { CommandParser } = require('../../src/chat/commands');
-const testClock = require('../helpers/test-clock');
+const load = createRequire(__filename);
+const { restoreAllMocks } = load('../helpers/bun-mock-utils');
+
+const { CommandParser } = load('../../src/chat/commands');
+const testClock = load('../helpers/test-clock');
 
 type KeywordConfigFixture = {
     commands: Record<string, string>;

@@ -1,10 +1,13 @@
 import { describe, test, expect, beforeEach, afterEach } from 'bun:test';
+import { createRequire } from 'node:module';
 
-const { TEST_TIMEOUTS } = require('../helpers/test-setup');
-const { createConfigFixture } = require('../helpers/config-fixture');
-const { setupAutomatedCleanup } = require('../helpers/mock-lifecycle');
-const testClock = require('../helpers/test-clock');
-const { restoreAllMocks } = require('../helpers/bun-mock-utils');
+const load = createRequire(__filename);
+
+const { TEST_TIMEOUTS } = load('../helpers/test-setup');
+const { createConfigFixture } = load('../helpers/config-fixture');
+const { setupAutomatedCleanup } = load('../helpers/mock-lifecycle');
+const testClock = load('../helpers/test-clock');
+const { restoreAllMocks } = load('../helpers/bun-mock-utils');
 
 setupAutomatedCleanup({
   clearCallsBeforeEach: true,
@@ -36,8 +39,8 @@ describe('Command Cooldown Integration', () => {
       }
     });
 
-    delete require.cache[require.resolve('../../src/utils/global-command-cooldown')];
-    const commandParserModule = require('../../src/utils/global-command-cooldown');
+    delete load.cache[load.resolve('../../src/utils/global-command-cooldown')];
+    const commandParserModule = load('../../src/utils/global-command-cooldown');
 
     checkGlobalCommandCooldown = commandParserModule.checkGlobalCommandCooldown;
     updateGlobalCommandCooldown = commandParserModule.updateGlobalCommandCooldown;
