@@ -1,4 +1,4 @@
-const { describe, test, expect, beforeEach, afterEach } = require('bun:test');
+import { describe, test, expect, beforeEach, afterEach } from 'bun:test';
 const { restoreAllMocks } = require('../../helpers/bun-mock-utils');
 const { noOpLogger } = require('../../helpers/mock-factories');
 const { createConfigFixture } = require('../../helpers/config-fixture');

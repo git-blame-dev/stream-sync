@@ -1,4 +1,4 @@
-const { describe, expect, afterEach, it } = require('bun:test');
+import { describe, expect, afterEach, it } from 'bun:test';
 const { createMockFn, restoreAllMocks } = require('../../helpers/bun-mock-utils');
 const { noOpLogger } = require('../../helpers/mock-factories');
 const { createConfigFixture } = require('../../helpers/config-fixture');
@@ -35,7 +35,7 @@ describe('ViewerCountSystem polling observer notifications', () => {
     it('notifies observers on polling updates with previousCount context', async () => {
         const { system } = createSystemWithPlatform([10, 4]);
 
-        const updates = [];
+        const updates: unknown[] = [];
         system.addObserver({
             getObserverId: () => 'obs-poll',
             onViewerCountUpdate: (payload) => updates.push(payload)
@@ -63,7 +63,7 @@ describe('ViewerCountSystem polling observer notifications', () => {
         const { system } = createSystemWithPlatform();
         system.streamStatus.youtube = false;
 
-        const updates = [];
+        const updates: unknown[] = [];
         system.addObserver({
             getObserverId: () => 'obs-offline',
             onViewerCountUpdate: (payload) => updates.push(payload)

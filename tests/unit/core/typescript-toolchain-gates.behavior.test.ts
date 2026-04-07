@@ -1030,6 +1030,24 @@ describe('TypeScript toolchain migration gates behavior', () => {
         }
     });
 
+    it('keeps unit viewer count cohort e test modules free of bun test require and transitional empty exports', () => {
+        const cohortPaths = [
+            'tests/unit/viewer-count/viewer-count-cleanup-resilience.test.ts',
+            'tests/unit/viewer-count/viewer-count-error-handler.test.ts',
+            'tests/unit/viewer-count/viewer-count-observer-notify.test.ts',
+            'tests/unit/viewer-count/viewer-count-polling-error-resilience.test.ts',
+            'tests/unit/viewer-count/viewer-count-polling-interval.test.ts',
+            'tests/unit/viewer-count/viewer-count-polling-malformed.test.ts',
+            'tests/unit/viewer-count/viewer-count-polling-observer.test.ts'
+        ];
+
+        for (const testPath of cohortPaths) {
+            const content = readFileSync(join(repoRoot, testPath), 'utf8');
+            expect(content).not.toContain("require('bun:test')");
+            expect(content).not.toContain('export {};');
+        }
+    });
+
     it('keeps integration smoke cohort b tests on TypeScript paths', () => {
         const cohortTsPaths = [
             'tests/integration/obs-connection-lifecycle.test.ts',

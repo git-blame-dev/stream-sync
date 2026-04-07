@@ -1,4 +1,4 @@
-const { describe, test, expect, beforeEach, afterEach } = require('bun:test');
+import { describe, test, expect, beforeEach, afterEach } from 'bun:test';
 const { createMockFn, restoreAllMocks } = require('../../helpers/bun-mock-utils');
 const { noOpLogger } = require('../../helpers/mock-factories');
 const { createConfigFixture } = require('../../helpers/config-fixture');
@@ -24,10 +24,10 @@ describe('ViewerCountSystem stream status observer notifications', () => {
 
     test('notifies observers on stream status change for known platform', async () => {
         const system = createSystem();
-        const statusEvents = [];
+        const statusEvents: Array<{ platform: string; isLive: boolean; wasLive: boolean }> = [];
         const observer = {
             getObserverId: () => 'testObserver1',
-            onStreamStatusChange: createMockFn((payload) => statusEvents.push(payload))
+            onStreamStatusChange: createMockFn((payload: { platform: string; isLive: boolean; wasLive: boolean }) => statusEvents.push(payload))
         };
 
         system.addObserver(observer);
@@ -56,12 +56,12 @@ describe('ViewerCountSystem stream status observer notifications', () => {
 
     test('resets counts and notifies observers when stream goes offline', async () => {
         const system = createSystem();
-        const statusEvents = [];
-        const countEvents = [];
+        const statusEvents: Array<{ platform: string; isLive: boolean; wasLive: boolean }> = [];
+        const countEvents: Array<{ platform: string; count: number }> = [];
         const observer = {
             getObserverId: () => 'testObserver3',
-            onStreamStatusChange: createMockFn((payload) => statusEvents.push(payload)),
-            onViewerCountUpdate: createMockFn((payload) => countEvents.push(payload))
+            onStreamStatusChange: createMockFn((payload: { platform: string; isLive: boolean; wasLive: boolean }) => statusEvents.push(payload)),
+            onViewerCountUpdate: createMockFn((payload: { platform: string; count: number }) => countEvents.push(payload))
         };
 
         system.addObserver(observer);
