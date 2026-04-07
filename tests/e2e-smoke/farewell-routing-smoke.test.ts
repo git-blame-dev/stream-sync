@@ -1,5 +1,8 @@
 import { describe, test, expect } from 'bun:test';
-const { createFarewellRoutingHarness } = require('../helpers/farewell-routing-harness');
+import { createRequire } from 'node:module';
+
+const load = createRequire(__filename);
+const { createFarewellRoutingHarness } = load('../helpers/farewell-routing-harness');
 
 describe('farewell routing smoke E2E', () => {
     test('suppresses repeated same-platform farewell and keeps cross-platform farewell + VFX mapping', async () => {

@@ -1,10 +1,13 @@
 import { describe, test, beforeEach, afterEach, expect } from 'bun:test';
-const { createMockFn, clearAllMocks, restoreAllMocks } = require('../helpers/bun-mock-utils');
-const { ViewerCountSystem } = require('../../src/utils/viewer-count');
-const { OBSViewerCountObserver } = require('../../src/observers/obs-viewer-count-observer');
-const { createOBSConnectionManager } = require('../../src/obs/connection');
-const { noOpLogger } = require('../helpers/mock-factories');
-const { createConfigFixture } = require('../helpers/config-fixture');
+import { createRequire } from 'node:module';
+
+const load = createRequire(__filename);
+const { createMockFn, clearAllMocks, restoreAllMocks } = load('../helpers/bun-mock-utils');
+const { ViewerCountSystem } = load('../../src/utils/viewer-count');
+const { OBSViewerCountObserver } = load('../../src/observers/obs-viewer-count-observer');
+const { createOBSConnectionManager } = load('../../src/obs/connection');
+const { noOpLogger } = load('../helpers/mock-factories');
+const { createConfigFixture } = load('../helpers/config-fixture');
 
 describe('OBS Connection Lifecycle Integration', () => {
     let viewerCountSystem: InstanceType<typeof ViewerCountSystem>;

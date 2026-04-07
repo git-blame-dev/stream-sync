@@ -1,8 +1,11 @@
 import { describe, test, beforeEach, afterEach, expect } from 'bun:test';
-const { clearAllMocks, restoreAllMocks } = require('../helpers/bun-mock-utils');
-const { YouTubeViewerExtractor } = require('../../src/extractors/youtube-viewer-extractor');
-const { expectNoTechnicalArtifacts } = require('../helpers/behavior-validation');
-const testClock = require('../helpers/test-clock');
+import { createRequire } from 'node:module';
+
+const load = createRequire(__filename);
+const { clearAllMocks, restoreAllMocks } = load('../helpers/bun-mock-utils');
+const { YouTubeViewerExtractor } = load('../../src/extractors/youtube-viewer-extractor');
+const { expectNoTechnicalArtifacts } = load('../helpers/behavior-validation');
+const testClock = load('../helpers/test-clock');
 
 describe('Extractor Service Integration', () => {
     beforeEach(async () => {
