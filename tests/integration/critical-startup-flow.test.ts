@@ -1,5 +1,4 @@
-const { describe, test, expect, beforeEach, afterEach } = require('bun:test');
-export {};
+import { describe, test, expect, beforeEach, afterEach } from 'bun:test';
 const fs = require('fs');
 const path = require('path');
 const os = require('os');

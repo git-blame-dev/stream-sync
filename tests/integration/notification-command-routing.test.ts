@@ -1,7 +1,13 @@
-const { describe, expect, it } = require('bun:test');
-export {};
+import { describe, expect, it } from 'bun:test';
 const { NOTIFICATION_CONFIGS } = require('../../src/core/constants');
 const { ConfigValidator } = require('../../src/utils/config-validator');
+
+type NotificationConfigContract = {
+    commandKey: string;
+    settingKey: string;
+};
+
+const notificationConfigs = NOTIFICATION_CONFIGS as Record<string, NotificationConfigContract>;
 
 describe('notification command routing integration', () => {
     const EXPECTED_COMMAND_KEYS = {
@@ -33,7 +39,7 @@ describe('notification command routing integration', () => {
     };
 
     it('all notification types have valid command keys', () => {
-        for (const [, config] of Object.entries(NOTIFICATION_CONFIGS)) {
+        for (const [, config] of Object.entries(notificationConfigs)) {
             expect(config.commandKey).toBeDefined();
             expect(typeof config.commandKey).toBe('string');
             expect(config.commandKey.length).toBeGreaterThan(0);
@@ -41,7 +47,7 @@ describe('notification command routing integration', () => {
     });
 
     it('all notification types have valid setting keys', () => {
-        for (const [, config] of Object.entries(NOTIFICATION_CONFIGS)) {
+        for (const [, config] of Object.entries(notificationConfigs)) {
             expect(config.settingKey).toBeDefined();
             expect(typeof config.settingKey).toBe('string');
             expect(config.settingKey.length).toBeGreaterThan(0);
@@ -50,7 +56,7 @@ describe('notification command routing integration', () => {
 
     it('notification types route to expected command keys', () => {
         for (const [notificationType, expectedCommandKey] of Object.entries(EXPECTED_COMMAND_KEYS)) {
-            const config = NOTIFICATION_CONFIGS[notificationType];
+            const config = notificationConfigs[notificationType];
             expect(config).toBeDefined();
             expect(config.commandKey).toBe(expectedCommandKey);
         }
@@ -58,7 +64,7 @@ describe('notification command routing integration', () => {
 
     it('notification types route to expected setting keys', () => {
         for (const [notificationType, expectedSettingKey] of Object.entries(EXPECTED_SETTING_KEYS)) {
-            const config = NOTIFICATION_CONFIGS[notificationType];
+            const config = notificationConfigs[notificationType];
             expect(config).toBeDefined();
             expect(config.settingKey).toBe(expectedSettingKey);
         }
@@ -78,7 +84,7 @@ describe('notification command routing integration', () => {
         const normalized = ConfigValidator.normalize({ general: {}, obs: {}, commands: {} });
 
         for (const notificationType of vfxNotificationTypes) {
-            const settingKey = NOTIFICATION_CONFIGS[notificationType].settingKey;
+            const settingKey = notificationConfigs[notificationType].settingKey;
             expect(normalized.general[settingKey]).toBeDefined();
         }
     });

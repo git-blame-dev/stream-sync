@@ -1,5 +1,4 @@
-const { describe, expect, it } = require('bun:test');
-export {};
+import { describe, expect, it } from 'bun:test';
 const { ConfigValidator } = require('../../src/utils/config-validator');
 
 describe('ConfigValidator normalize + validate integration', () => {
@@ -361,7 +360,7 @@ describe('ConfigValidator normalize + validate integration', () => {
             };
 
             const normalized = ConfigValidator.normalize(rawConfig);
-            const errors = [];
+            const errors: string[] = [];
             ConfigValidator.validateRequiredFields(normalized, errors);
 
             expect(errors.length).toBe(4);
@@ -392,7 +391,7 @@ describe('ConfigValidator normalize + validate integration', () => {
             };
 
             const normalized = ConfigValidator.normalize(rawConfig);
-            const errors = [];
+            const errors: string[] = [];
             ConfigValidator.validateRequiredFields(normalized, errors);
 
             expect(errors).toEqual([]);
