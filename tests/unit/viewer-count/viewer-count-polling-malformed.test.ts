@@ -1,4 +1,4 @@
-const { describe, test, expect, beforeEach, afterEach } = require('bun:test');
+import { describe, test, expect, beforeEach, afterEach } from 'bun:test';
 const { createMockFn, restoreAllMocks } = require('../../helpers/bun-mock-utils');
 const { noOpLogger } = require('../../helpers/mock-factories');
 const { createConfigFixture } = require('../../helpers/config-fixture');
@@ -32,7 +32,7 @@ describe('ViewerCountSystem polling with malformed payloads', () => {
 
     test('preserves previous count when platform returns non-numeric value', async () => {
         const { system } = createSystemWithPlatformReturning('not-a-number');
-        const observerUpdates = [];
+        const observerUpdates: unknown[] = [];
         const observer = {
             getObserverId: () => 'testObserver1',
             onViewerCountUpdate: (payload) => observerUpdates.push(payload)
@@ -47,7 +47,7 @@ describe('ViewerCountSystem polling with malformed payloads', () => {
 
     test('skips update when platform returns object payload without numeric count', async () => {
         const { system } = createSystemWithPlatformReturning({ count: 'unknown' });
-        const observerUpdates = [];
+        const observerUpdates: unknown[] = [];
         const observer = {
             getObserverId: () => 'testObserver2',
             onViewerCountUpdate: (payload) => observerUpdates.push(payload)
