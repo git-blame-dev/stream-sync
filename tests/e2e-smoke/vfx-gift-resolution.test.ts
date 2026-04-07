@@ -1,7 +1,10 @@
 import { describe, expect, it } from 'bun:test';
-const { ConfigValidator } = require('../../src/utils/config-validator');
-const { CommandParser } = require('../../src/chat/commands');
-const { VFXCommandService } = require('../../src/services/VFXCommandService');
+import { createRequire } from 'node:module';
+
+const load = createRequire(__filename);
+const { ConfigValidator } = load('../../src/utils/config-validator');
+const { CommandParser } = load('../../src/chat/commands');
+const { VFXCommandService } = load('../../src/services/VFXCommandService');
 
 describe('VFX chat command resolution smoke E2E', () => {
     const createRawConfig = () => ({

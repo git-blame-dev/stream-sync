@@ -1,13 +1,15 @@
-
 import { describe, test, beforeEach, afterEach, expect } from 'bun:test';
-const { createMockFn, clearAllMocks, restoreAllMocks } = require('../helpers/bun-mock-utils');
-const { ViewerCountSystem } = require('../../src/utils/viewer-count');
-const { OBSViewerCountObserver } = require('../../src/observers/obs-viewer-count-observer');
-const { createMockOBSManager } = require('../helpers/mock-factories');
-const { expectNoTechnicalArtifacts } = require('../helpers/behavior-validation');
-const { createSilentLogger } = require('../helpers/test-logger');
-const testClock = require('../helpers/test-clock');
-const { createConfigFixture } = require('../helpers/config-fixture');
+import { createRequire } from 'node:module';
+
+const load = createRequire(__filename);
+const { createMockFn, clearAllMocks, restoreAllMocks } = load('../helpers/bun-mock-utils');
+const { ViewerCountSystem } = load('../../src/utils/viewer-count');
+const { OBSViewerCountObserver } = load('../../src/observers/obs-viewer-count-observer');
+const { createMockOBSManager } = load('../helpers/mock-factories');
+const { expectNoTechnicalArtifacts } = load('../helpers/behavior-validation');
+const { createSilentLogger } = load('../helpers/test-logger');
+const testClock = load('../helpers/test-clock');
+const { createConfigFixture } = load('../helpers/config-fixture');
 
 const createTimeProvider = () => ({
     now: () => testClock.now(),

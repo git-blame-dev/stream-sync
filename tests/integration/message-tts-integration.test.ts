@@ -1,8 +1,9 @@
-
 import { describe, test, expect } from 'bun:test';
+import { createRequire } from 'node:module';
 
-const { createNotificationData } = require('../helpers/notification-test-utils');
-const MessageTTSHandler = require('../../src/utils/message-tts-handler');
+const load = createRequire(__filename);
+const { createNotificationData } = load('../helpers/notification-test-utils');
+const MessageTTSHandler = load('../../src/utils/message-tts-handler');
 
 describe('MessageTTS Integration', () => {
     describe('YouTube SuperChat Integration', () => {

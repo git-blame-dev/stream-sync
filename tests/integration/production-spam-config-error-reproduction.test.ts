@@ -1,5 +1,8 @@
 import { describe, it, expect } from 'bun:test';
-const { config } = require('../../src/core/config');
+import { createRequire } from 'node:module';
+
+const load = createRequire(__filename);
+const { config } = load('../../src/core/config');
 
 describe('Production Spam Config Error Reproduction - Modernized', () => {
     describe('when reproducing the exact production error scenario', () => {
@@ -22,9 +25,9 @@ describe('Production Spam Config Error Reproduction - Modernized', () => {
 
         describe('and checking for potential configuration loading race conditions', () => {
             it('should FAIL if config loading order causes spam config to be missing', () => {
-                delete require.cache[require.resolve('../../src/core/config')];
+                delete load.cache[load.resolve('../../src/core/config')];
 
-                const { config: freshConfig } = require('../../src/core/config');
+                const { config: freshConfig } = load('../../src/core/config');
 
                 expect(freshConfig.spam).toBeDefined();
                 expect(freshConfig.spam.enabled).toBeDefined();

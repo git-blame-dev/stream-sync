@@ -1,11 +1,13 @@
-
 import { describe, test, beforeEach, afterEach, expect } from 'bun:test';
-const { createMockFn, clearAllMocks, restoreAllMocks } = require('../helpers/bun-mock-utils');
-const { noOpLogger } = require('../helpers/mock-factories');
-const { createEventBus } = require('../../src/core/EventBus');
-const { createOBSEventService } = require('../../src/obs/obs-event-service');
-const { createSceneManagementService } = require('../../src/obs/scene-management-service');
-const testClock = require('../helpers/test-clock');
+import { createRequire } from 'node:module';
+
+const load = createRequire(__filename);
+const { createMockFn, clearAllMocks, restoreAllMocks } = load('../helpers/bun-mock-utils');
+const { noOpLogger } = load('../helpers/mock-factories');
+const { createEventBus } = load('../../src/core/EventBus');
+const { createOBSEventService } = load('../../src/obs/obs-event-service');
+const { createSceneManagementService } = load('../../src/obs/scene-management-service');
+const testClock = load('../helpers/test-clock');
 
 describe('OBS Event-Driven Integration', () => {
     let eventBus: ReturnType<typeof createEventBus>;
