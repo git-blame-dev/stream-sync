@@ -1,5 +1,4 @@
-const { describe, it, expect } = require('bun:test');
-export {};
+import { describe, it, expect } from 'bun:test';
 const { config } = require('../../src/core/config');
 
 describe('Production Spam Config Error Reproduction - Modernized', () => {

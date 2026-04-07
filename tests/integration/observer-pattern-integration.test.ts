@@ -1,6 +1,5 @@
 
-const { describe, test, beforeEach, afterEach, expect } = require('bun:test');
-export {};
+import { describe, test, beforeEach, afterEach, expect } from 'bun:test';
 const { createMockFn, clearAllMocks, restoreAllMocks } = require('../helpers/bun-mock-utils');
 const { ViewerCountSystem } = require('../../src/utils/viewer-count');
 const { OBSViewerCountObserver } = require('../../src/observers/obs-viewer-count-observer');

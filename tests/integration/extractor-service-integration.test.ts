@@ -1,5 +1,4 @@
-const { describe, test, beforeEach, afterEach, expect } = require('bun:test');
-export {};
+import { describe, test, beforeEach, afterEach, expect } from 'bun:test';
 const { clearAllMocks, restoreAllMocks } = require('../helpers/bun-mock-utils');
 const { YouTubeViewerExtractor } = require('../../src/extractors/youtube-viewer-extractor');
 const { expectNoTechnicalArtifacts } = require('../helpers/behavior-validation');
