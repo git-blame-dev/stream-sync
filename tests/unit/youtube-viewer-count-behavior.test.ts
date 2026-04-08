@@ -1,8 +1,11 @@
 import { describe, expect, it, afterEach } from 'bun:test';
-const { createMockFn, restoreAllMocks } = require('../helpers/bun-mock-utils');
-const { noOpLogger, createMockNotificationManager } = require('../helpers/mock-factories');
+import { createRequire } from 'node:module';
 
-const { YouTubePlatform } = require('../../src/platforms/youtube');
+const load = createRequire(__filename);
+const { createMockFn, restoreAllMocks } = load('../helpers/bun-mock-utils');
+const { noOpLogger, createMockNotificationManager } = load('../helpers/mock-factories');
+
+const { YouTubePlatform } = load('../../src/platforms/youtube');
 
 type ViewerCountProvider = {
     getViewerCountForVideo?: (videoId: string) => Promise<number>;
