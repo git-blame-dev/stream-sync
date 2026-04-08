@@ -1,4 +1,4 @@
-const { describe, test, expect, beforeEach, afterEach } = require('bun:test');
+import { describe, test, expect, beforeEach, afterEach } from 'bun:test';
 const { createMockFn, restoreAllMocks } = require('../../helpers/bun-mock-utils');
 const { useFakeTimers, useRealTimers, setSystemTime } = require('../../helpers/bun-timers');
 
