@@ -17,8 +17,8 @@
  * - Use advanceTimersByTime() to trigger timers
  */
 
-const fs = require('fs');
-const path = require('path');
+import fs from 'node:fs';
+import path from 'node:path';
 
 const PROJECT_ROOT = path.resolve(__dirname, '../..');
 const TARGET_DIRECTORIES = ['tests'];
@@ -32,7 +32,7 @@ const IGNORE_DIRECTORIES = new Set([
 
 // Allowlist for existing files that need refactoring (technical debt)
 // New test files should use fake timers, not mock injection
-const ALLOWLIST = new Set([]);
+const ALLOWLIST = new Set<string>([]);
 
 const MOCK_TIMER_PATTERNS = [
     {
@@ -67,13 +67,21 @@ const MOCK_TIMER_PATTERNS = [
     }
 ];
 
+type MockTimerViolation = {
+    file: string;
+    line: number;
+    snippet: string;
+    message: string;
+    hint: string;
+};
+
 function normalizePath(filePath) {
     return filePath.replace(/\\/g, '/');
 }
 
 function collectFiles(dir) {
     const entries = fs.readdirSync(dir, { withFileTypes: true });
-    const files = [];
+    const files: string[] = [];
 
     for (const entry of entries) {
         const fullPath = path.join(dir, entry.name);
@@ -103,7 +111,7 @@ function scanFile(relativePath) {
     const absolutePath = path.join(PROJECT_ROOT, relativePath);
     const fileText = fs.readFileSync(absolutePath, 'utf8');
     const lines = fileText.split('\n');
-    const violations = [];
+    const violations: MockTimerViolation[] = [];
 
     lines.forEach((line, lineIndex) => {
         const trimmed = line.trim();
@@ -129,7 +137,7 @@ function scanFile(relativePath) {
 }
 
 function main() {
-    const issues = [];
+    const issues: MockTimerViolation[] = [];
 
     for (const dir of TARGET_DIRECTORIES) {
         const absoluteDir = path.join(PROJECT_ROOT, dir);

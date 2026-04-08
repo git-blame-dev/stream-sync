@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
-const fs = require('fs');
-const path = require('path');
+import fs from 'node:fs';
+import path from 'node:path';
 
 const REQUIRED_DEPS = ['twitchAuth', 'authManager'];
 
@@ -12,8 +12,14 @@ const PATTERN = new RegExp(
 
 const TEST_DIRS = ['tests/helpers', 'tests/unit', 'tests/integration', 'tests/e2e-smoke'];
 
+type ImplicitDefaultViolation = {
+    line: number;
+    content: string;
+    matches: RegExpMatchArray;
+};
+
 function findTestFiles(dir) {
-    const files = [];
+    const files: string[] = [];
     if (!fs.existsSync(dir)) return files;
     
     const entries = fs.readdirSync(dir, { withFileTypes: true });
@@ -31,7 +37,7 @@ function findTestFiles(dir) {
 function checkFile(filePath) {
     const content = fs.readFileSync(filePath, 'utf-8');
     const lines = content.split('\n');
-    const violations = [];
+    const violations: ImplicitDefaultViolation[] = [];
     
     lines.forEach((line, index) => {
         const matches = line.match(PATTERN);

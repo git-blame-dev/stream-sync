@@ -1,7 +1,8 @@
 const tsParser = require('@typescript-eslint/parser');
 const tsPlugin = require('@typescript-eslint/eslint-plugin');
 const globals = require('globals');
-const noLoggerErrorRule = require('./tools/eslint-rules/no-logger-error.ts');
+const noLoggerErrorRuleModule = require('./tools/eslint-rules/no-logger-error.ts');
+const noLoggerErrorRule = noLoggerErrorRuleModule.default || noLoggerErrorRuleModule;
 
 const nodeLanguageOptions = {
   sourceType: 'commonjs',

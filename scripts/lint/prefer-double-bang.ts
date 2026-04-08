@@ -1,14 +1,20 @@
 #!/usr/bin/env node
 
-const fs = require('fs');
-const path = require('path');
+import fs from 'node:fs';
+import path from 'node:path';
 
 const BOOLEAN_PATTERN = /(?<![a-zA-Z_.])Boolean\(([^)]+)\)/g;
 
 const SOURCE_DIRS = ['src', 'tests', 'scripts'];
 
+type BooleanViolation = {
+    line: number;
+    content: string;
+    suggestion: string;
+};
+
 function findSourceFiles(dir) {
-    const files = [];
+    const files: string[] = [];
     if (!fs.existsSync(dir)) return files;
     
     const entries = fs.readdirSync(dir, { withFileTypes: true });
@@ -26,7 +32,7 @@ function findSourceFiles(dir) {
 function checkFile(filePath) {
     const content = fs.readFileSync(filePath, 'utf-8');
     const lines = content.split('\n');
-    const violations = [];
+    const violations: BooleanViolation[] = [];
     
     let match;
     while ((match = BOOLEAN_PATTERN.exec(content)) !== null) {

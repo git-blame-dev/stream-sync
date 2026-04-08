@@ -1,10 +1,65 @@
 const { describe, it, expect } = require('bun:test');
 export {};
-const { existsSync, readFileSync } = require('node:fs');
+const { existsSync, readFileSync, readdirSync } = require('node:fs');
 const { join } = require('node:path');
 
 const repoRoot = join(__dirname, '..', '..', '..');
 const packageJson = require('../../../package.json');
+
+const EXECUTABLE_TS_ROOTS = ['scripts/lint', 'tools'];
+const EXCLUDED_SCAN_DIRECTORIES = new Set([
+    'node_modules',
+    '.git',
+    'coverage',
+    'dist',
+    'tasks'
+]);
+
+function collectExecutableTypeScriptFiles(directoryPath: string, output: string[] = []) {
+    const entries = readdirSync(directoryPath, { withFileTypes: true });
+
+    for (const entry of entries) {
+        if (EXCLUDED_SCAN_DIRECTORIES.has(entry.name)) {
+            continue;
+        }
+
+        const fullPath = join(directoryPath, entry.name);
+        if (entry.isDirectory()) {
+            collectExecutableTypeScriptFiles(fullPath, output);
+            continue;
+        }
+
+        if (!entry.isFile()) {
+            continue;
+        }
+
+        const isExecutableTypeScript = (entry.name.endsWith('.ts') || entry.name.endsWith('.tsx')) && !entry.name.endsWith('.d.ts');
+        if (isExecutableTypeScript) {
+            output.push(fullPath);
+        }
+    }
+
+    return output;
+}
+
+function findCommonJsModuleSyntax(content) {
+    const lines = content.split(/\r?\n/);
+    const syntaxPatterns = [
+        /^\s*(?:const|let|var)\s+.+?=\s*require\s*\(/,
+        /^\s*\(\s*\{.+?\}\s*=\s*require\s*\(/,
+        /^\s*module\.exports\b/,
+        /^\s*exports\./
+    ];
+
+    for (let index = 0; index < lines.length; index += 1) {
+        const line = lines[index];
+        if (syntaxPatterns.some(pattern => pattern.test(line))) {
+            return index + 1;
+        }
+    }
+
+    return null;
+}
 
 describe('TypeScript toolchain migration gates behavior', () => {
     it('defines repo-wide typecheck script lanes', () => {
@@ -1384,5 +1439,23 @@ describe('TypeScript toolchain migration gates behavior', () => {
             expect(content).not.toContain('module.exports');
             expect(content).not.toMatch(/\bexports\./);
         }
+    });
+
+    it('fails when executable lint/tools TypeScript files use commonjs module syntax outside approved shims', () => {
+        const executableTypeScriptFiles = EXECUTABLE_TS_ROOTS
+            .map(relativeRoot => join(repoRoot, relativeRoot))
+            .filter(rootPath => existsSync(rootPath))
+            .flatMap(rootPath => collectExecutableTypeScriptFiles(rootPath));
+
+        const offenders: string[] = [];
+        for (const filePath of executableTypeScriptFiles) {
+            const content = readFileSync(filePath, 'utf8');
+            const firstOffenseLine = findCommonJsModuleSyntax(content);
+            if (firstOffenseLine !== null) {
+                offenders.push(`${filePath.replace(`${repoRoot}/`, '')}:${firstOffenseLine}`);
+            }
+        }
+
+        expect(offenders).toEqual([]);
     });
 });

@@ -8,8 +8,8 @@
  * utilities even without a full ESLint toolchain.
  */
 
-const fs = require('fs');
-const path = require('path');
+import fs from 'node:fs';
+import path from 'node:path';
 
 const PROJECT_ROOT = path.resolve(__dirname, '../..');
 const TARGET_DIRECTORIES = ['src', 'tests', 'scripts'];
@@ -39,6 +39,13 @@ const RAW_TIMER_ALLOWLIST = new Set([
   'tests/setup/bun.setup.ts'
 ]);
 
+type TimeoutViolation = {
+  file: string;
+  line: number;
+  snippet: string;
+  hint?: string;
+};
+
 function normalizePath(filePath) {
   return filePath.replace(/\\/g, '/');
 }
@@ -48,7 +55,7 @@ function normalizePath(filePath) {
  */
 function collectFiles(dir) {
   const entries = fs.readdirSync(dir, { withFileTypes: true });
-  const files = [];
+  const files: string[] = [];
 
   for (const entry of entries) {
     const fullPath = path.join(dir, entry.name);
@@ -95,7 +102,7 @@ function scanFile(relativePath) {
   const absolutePath = path.join(PROJECT_ROOT, relativePath);
   const fileText = fs.readFileSync(absolutePath, 'utf8');
   const contents = fileText.split('\n');
-  const violations = [];
+  const violations: TimeoutViolation[] = [];
   const normalizedPath = normalizePath(relativePath);
   const enforcePromiseTimeoutRule =
     normalizedPath.startsWith('src/') &&
@@ -156,7 +163,7 @@ function scanFile(relativePath) {
 }
 
 function main() {
-  const issues = [];
+  const issues: TimeoutViolation[] = [];
   for (const dir of TARGET_DIRECTORIES) {
     const absoluteDir = path.join(PROJECT_ROOT, dir);
     if (!fs.existsSync(absoluteDir)) continue;
