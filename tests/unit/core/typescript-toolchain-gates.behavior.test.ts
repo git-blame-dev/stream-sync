@@ -1,10 +1,15 @@
-const { describe, it, expect } = require('bun:test');
-export {};
-const { existsSync, readFileSync, readdirSync } = require('node:fs');
-const { join } = require('node:path');
+import { describe, it, expect } from 'bun:test';
+import { existsSync, readFileSync, readdirSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
 
 const repoRoot = join(__dirname, '..', '..', '..');
-const packageJson = require('../../../package.json');
+const packageJson = JSON.parse(readFileSync(join(repoRoot, 'package.json'), 'utf8')) as {
+    scripts: Record<string, string>;
+};
 
 const EXECUTABLE_TS_ROOTS = ['scripts/lint', 'tools'];
 const EXCLUDED_SCAN_DIRECTORIES = new Set([
@@ -62,6 +67,13 @@ function findCommonJsModuleSyntax(content: string) {
 }
 
 describe('TypeScript toolchain migration gates behavior', () => {
+    it('keeps this toolchain gates module free of top-level commonjs declarations', () => {
+        const content = readFileSync(__filename, 'utf8');
+
+        expect(findCommonJsModuleSyntax(content)).toBeNull();
+        expect(content).not.toMatch(/^\s*export\s*\{\};\s*$/m);
+    });
+
     it('defines repo-wide typecheck script lanes', () => {
         expect(packageJson.scripts['typecheck:src']).toBe('tsc --noEmit -p tsconfig.src.json');
         expect(packageJson.scripts['typecheck:tests']).toBe('tsc --noEmit -p tsconfig.tests.json');
