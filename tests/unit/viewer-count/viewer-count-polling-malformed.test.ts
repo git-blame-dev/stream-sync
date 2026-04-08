@@ -1,13 +1,24 @@
 import { describe, test, expect, beforeEach, afterEach } from 'bun:test';
-const { createMockFn, restoreAllMocks } = require('../../helpers/bun-mock-utils');
-const { noOpLogger } = require('../../helpers/mock-factories');
-const { createConfigFixture } = require('../../helpers/config-fixture');
+import { createRequire } from 'node:module';
+
+const load = createRequire(__filename);
+const { createMockFn, restoreAllMocks } = load('../../helpers/bun-mock-utils');
+const { noOpLogger } = load('../../helpers/mock-factories');
+const { createConfigFixture } = load('../../helpers/config-fixture');
+
+type ViewerCountUpdatePayload = {
+    platform: string;
+    count: number;
+    previousCount: number;
+    isStreamLive: boolean;
+    timestamp: Date;
+};
 
 describe('ViewerCountSystem polling with malformed payloads', () => {
     let ViewerCountSystem;
 
     beforeEach(() => {
-        ({ ViewerCountSystem } = require('../../../src/utils/viewer-count.ts'));
+        ({ ViewerCountSystem } = load('../../../src/utils/viewer-count.ts'));
     });
 
     afterEach(() => {
@@ -32,10 +43,10 @@ describe('ViewerCountSystem polling with malformed payloads', () => {
 
     test('preserves previous count when platform returns non-numeric value', async () => {
         const { system } = createSystemWithPlatformReturning('not-a-number');
-        const observerUpdates: unknown[] = [];
+        const observerUpdates: ViewerCountUpdatePayload[] = [];
         const observer = {
             getObserverId: () => 'testObserver1',
-            onViewerCountUpdate: (payload) => observerUpdates.push(payload)
+            onViewerCountUpdate: (payload: ViewerCountUpdatePayload) => observerUpdates.push(payload)
         };
         system.addObserver(observer);
 
@@ -47,10 +58,10 @@ describe('ViewerCountSystem polling with malformed payloads', () => {
 
     test('skips update when platform returns object payload without numeric count', async () => {
         const { system } = createSystemWithPlatformReturning({ count: 'unknown' });
-        const observerUpdates: unknown[] = [];
+        const observerUpdates: ViewerCountUpdatePayload[] = [];
         const observer = {
             getObserverId: () => 'testObserver2',
-            onViewerCountUpdate: (payload) => observerUpdates.push(payload)
+            onViewerCountUpdate: (payload: ViewerCountUpdatePayload) => observerUpdates.push(payload)
         };
         system.addObserver(observer);
 

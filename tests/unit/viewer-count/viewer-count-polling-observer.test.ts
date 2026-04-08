@@ -1,7 +1,18 @@
 import { describe, expect, afterEach, it } from 'bun:test';
-const { createMockFn, restoreAllMocks } = require('../../helpers/bun-mock-utils');
-const { noOpLogger } = require('../../helpers/mock-factories');
-const { createConfigFixture } = require('../../helpers/config-fixture');
+import { createRequire } from 'node:module';
+
+const load = createRequire(__filename);
+const { createMockFn, restoreAllMocks } = load('../../helpers/bun-mock-utils');
+const { noOpLogger } = load('../../helpers/mock-factories');
+const { createConfigFixture } = load('../../helpers/config-fixture');
+
+type ViewerCountUpdatePayload = {
+    platform: string;
+    count: number;
+    previousCount: number;
+    isStreamLive: boolean;
+    timestamp: Date;
+};
 
 describe('ViewerCountSystem polling observer notifications', () => {
     const originalEnv = process.env.NODE_ENV;
@@ -20,7 +31,7 @@ describe('ViewerCountSystem polling observer notifications', () => {
                 .mockResolvedValueOnce(counts[1])
         };
 
-        const { ViewerCountSystem } = require('../../../src/utils/viewer-count.ts');
+        const { ViewerCountSystem } = load('../../../src/utils/viewer-count.ts');
         const system = new ViewerCountSystem({
             platforms: { youtube: platform },
             logger: noOpLogger,
@@ -35,10 +46,10 @@ describe('ViewerCountSystem polling observer notifications', () => {
     it('notifies observers on polling updates with previousCount context', async () => {
         const { system } = createSystemWithPlatform([10, 4]);
 
-        const updates: unknown[] = [];
+        const updates: ViewerCountUpdatePayload[] = [];
         system.addObserver({
             getObserverId: () => 'obs-poll',
-            onViewerCountUpdate: (payload) => updates.push(payload)
+            onViewerCountUpdate: (payload: ViewerCountUpdatePayload) => updates.push(payload)
         });
 
         await system.pollPlatform('youtube');
@@ -63,10 +74,10 @@ describe('ViewerCountSystem polling observer notifications', () => {
         const { system } = createSystemWithPlatform();
         system.streamStatus.youtube = false;
 
-        const updates: unknown[] = [];
+        const updates: ViewerCountUpdatePayload[] = [];
         system.addObserver({
             getObserverId: () => 'obs-offline',
-            onViewerCountUpdate: (payload) => updates.push(payload)
+            onViewerCountUpdate: (payload: ViewerCountUpdatePayload) => updates.push(payload)
         });
 
         await system.pollPlatform('youtube');
@@ -85,7 +96,7 @@ describe('ViewerCountSystem polling observer notifications', () => {
 
     it('preserves count when platform lacks getViewerCount', async () => {
         process.env.NODE_ENV = 'test';
-        const { ViewerCountSystem } = require('../../../src/utils/viewer-count.ts');
+        const { ViewerCountSystem } = load('../../../src/utils/viewer-count.ts');
         const system = new ViewerCountSystem({
             platforms: { twitch: { notAGetter: true } },
             logger: noOpLogger,
@@ -101,7 +112,7 @@ describe('ViewerCountSystem polling observer notifications', () => {
     it('preserves count when platform returns null viewer count', async () => {
         process.env.NODE_ENV = 'test';
         const platform = { getViewerCount: createMockFn().mockResolvedValue(null) };
-        const { ViewerCountSystem } = require('../../../src/utils/viewer-count.ts');
+        const { ViewerCountSystem } = load('../../../src/utils/viewer-count.ts');
         const system = new ViewerCountSystem({
             platforms: { youtube: platform },
             logger: noOpLogger,
@@ -117,7 +128,7 @@ describe('ViewerCountSystem polling observer notifications', () => {
     it('continues when polling throws', async () => {
         process.env.NODE_ENV = 'test';
         const platform = { getViewerCount: createMockFn().mockRejectedValue(new Error('boom')) };
-        const { ViewerCountSystem } = require('../../../src/utils/viewer-count.ts');
+        const { ViewerCountSystem } = load('../../../src/utils/viewer-count.ts');
         const system = new ViewerCountSystem({
             platforms: { youtube: platform },
             logger: noOpLogger,
