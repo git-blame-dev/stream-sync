@@ -1,7 +1,7 @@
 import { createRequire } from 'node:module';
+import { extractMessageText } from '../youtube-message-extractor';
 
 const nodeRequire = createRequire(__filename);
-const { extractMessageText } = nodeRequire('../youtube-message-extractor');
 const { YouTubeiCurrencyParser } = nodeRequire('../youtubei-currency-parser');
 
 type UnknownRecord = Record<string, unknown>;

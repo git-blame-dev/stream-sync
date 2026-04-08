@@ -1,5 +1,6 @@
+type QueryParam = string | number | boolean;
 
-function buildUrl(baseUrl: string, path = '', params: Record<string, string | number | boolean> = {}) {
+function buildUrl(baseUrl: string, path = '', params: Record<string, QueryParam> = {}): string {
     // Clean base URL and path
     const cleanBase = baseUrl.replace(/\/$/, '');
     const cleanPath = path.replace(/^\//, '');
@@ -30,7 +31,7 @@ const TWITCH = {
     EVENTSUB_WS: 'wss://eventsub.wss.twitch.tv/ws',
     GRAPHQL: 'https://gql.twitch.tv/gql',
     
-    buildApiUrl(endpoint: string, params: Record<string, string | number | boolean> = {}) {
+    buildApiUrl(endpoint: string, params: Record<string, QueryParam> = {}) {
         return buildUrl(this.API_BASE, endpoint, params);
     }
 };
@@ -55,7 +56,7 @@ const YOUTUBE = {
         return `${this.BASE}/@${username}/live`;
     },
     
-    buildApiUrl(endpoint: string, params: Record<string, string | number | boolean> = {}) {
+    buildApiUrl(endpoint: string, params: Record<string, QueryParam> = {}) {
         return buildUrl(this.API_BASE, endpoint, params);
     }
 };
@@ -64,13 +65,9 @@ const STREAMELEMENTS = {
     WEBSOCKET: 'wss://astro.streamelements.com',
     API_BASE: 'https://api.streamelements.com/kappa/v2',
     
-    buildApiUrl(endpoint: string, params: Record<string, string | number | boolean> = {}) {
+    buildApiUrl(endpoint: string, params: Record<string, QueryParam> = {}) {
         return buildUrl(this.API_BASE, endpoint, params);
     }
 };
 
-module.exports = {
-    TWITCH,
-    YOUTUBE,
-    STREAMELEMENTS
-};
+export { TWITCH, YOUTUBE, STREAMELEMENTS };

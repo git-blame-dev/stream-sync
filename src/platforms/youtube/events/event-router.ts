@@ -1,9 +1,9 @@
 import { createRequire } from 'node:module';
+import { getSystemTimestampISO } from '../../../utils/timestamp';
 
 const nodeRequire = createRequire(__filename);
 const { createPlatformErrorHandler } = nodeRequire('../../../utils/platform-error-handler');
 const { PlatformEvents } = nodeRequire('../../../interfaces/PlatformEvents');
-const { getSystemTimestampISO } = nodeRequire('../../../utils/timestamp');
 const { validateLoggerInterface } = nodeRequire('../../../utils/dependency-validator');
 
 type UnknownRecord = Record<string, unknown>;

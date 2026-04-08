@@ -1,55 +1,75 @@
-function getMessagePartsFromPayload(data = {}) {
-    if (Array.isArray(data?.message?.parts)) {
-        return data.message.parts;
+type UnknownRecord = Record<string, unknown>;
+
+type MessagePart =
+    | { type: 'emote'; emoteId: string; imageUrl: string; platform?: string }
+    | { type: 'text'; text: string };
+
+interface MessagePartValidationOptions {
+    allowWhitespaceText?: boolean;
+}
+
+interface NormalizedBadgeImage {
+    imageUrl: string;
+    source: string;
+    label: string;
+}
+
+function getMessagePartsFromPayload(data: UnknownRecord = {}): unknown[] {
+    const message = data.message;
+    if (message && typeof message === 'object' && Array.isArray((message as UnknownRecord).parts)) {
+        return (message as UnknownRecord).parts as unknown[];
     }
 
     return [];
 }
 
-function isValidMessagePart(part, options = {}) {
+function isValidMessagePart(part: unknown, options: MessagePartValidationOptions = {}): part is MessagePart {
     const { allowWhitespaceText = false } = options;
 
     if (!part || typeof part !== 'object') {
         return false;
     }
 
-    if (part.type === 'emote') {
-        return typeof part.emoteId === 'string' && part.emoteId.trim().length > 0
-            && typeof part.imageUrl === 'string' && part.imageUrl.trim().length > 0;
+    const partRecord = part as UnknownRecord;
+
+    if (partRecord.type === 'emote') {
+        return typeof partRecord.emoteId === 'string' && partRecord.emoteId.trim().length > 0
+            && typeof partRecord.imageUrl === 'string' && partRecord.imageUrl.trim().length > 0;
     }
 
-    if (part.type === 'text') {
-        if (typeof part.text !== 'string') {
+    if (partRecord.type === 'text') {
+        if (typeof partRecord.text !== 'string') {
             return false;
         }
 
         return allowWhitespaceText
-            ? part.text.length > 0
-            : part.text.trim().length > 0;
+            ? partRecord.text.length > 0
+            : partRecord.text.trim().length > 0;
     }
 
     return false;
 }
 
-function getValidMessageParts(data = {}, options = {}) {
+function getValidMessageParts(data: UnknownRecord = {}, options: MessagePartValidationOptions = {}): MessagePart[] {
     return getMessagePartsFromPayload(data)
-        .filter((part) => isValidMessagePart(part, options));
+        .filter((part): part is MessagePart => isValidMessagePart(part, options));
 }
 
-function normalizeBadgeImages(value) {
+function normalizeBadgeImages(value: unknown): NormalizedBadgeImage[] {
     if (!Array.isArray(value) || value.length === 0) {
         return [];
     }
 
-    const seen = new Set();
-    const result = [];
+    const seen = new Set<string>();
+    const result: NormalizedBadgeImage[] = [];
 
     for (const badge of value) {
         if (!badge || typeof badge !== 'object') {
             continue;
         }
 
-        const imageUrl = typeof badge.imageUrl === 'string' ? badge.imageUrl.trim() : '';
+        const badgeRecord = badge as UnknownRecord;
+        const imageUrl = typeof badgeRecord.imageUrl === 'string' ? badgeRecord.imageUrl.trim() : '';
         if (!imageUrl || seen.has(imageUrl)) {
             continue;
         }
@@ -57,17 +77,12 @@ function normalizeBadgeImages(value) {
         seen.add(imageUrl);
         result.push({
             imageUrl,
-            source: typeof badge.source === 'string' ? badge.source.trim() : '',
-            label: typeof badge.label === 'string' ? badge.label : ''
+            source: typeof badgeRecord.source === 'string' ? badgeRecord.source.trim() : '',
+            label: typeof badgeRecord.label === 'string' ? badgeRecord.label : ''
         });
     }
 
     return result;
 }
 
-module.exports = {
-    getMessagePartsFromPayload,
-    isValidMessagePart,
-    getValidMessageParts,
-    normalizeBadgeImages
-};
+export { getMessagePartsFromPayload, isValidMessagePart, getValidMessageParts, normalizeBadgeImages };
