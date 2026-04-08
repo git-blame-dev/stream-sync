@@ -1,5 +1,5 @@
 
-function isIsoTimestamp(value) {
+function isIsoTimestamp(value: unknown): boolean {
     if (typeof value !== 'string') {
         return false;
     }
@@ -11,12 +11,9 @@ function isIsoTimestamp(value) {
     return !Number.isNaN(parsed);
 }
 
-function getSystemTimestampISO() {
+function getSystemTimestampISO(): string {
     // eslint-disable-next-line no-restricted-syntax -- canonical implementation
     return new Date().toISOString();
 }
 
-module.exports = {
-    isIsoTimestamp,
-    getSystemTimestampISO
-};
+export { isIsoTimestamp, getSystemTimestampISO };

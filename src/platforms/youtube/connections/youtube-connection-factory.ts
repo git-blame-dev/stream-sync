@@ -1,7 +1,7 @@
 import { createRequire } from 'node:module';
+import { YOUTUBE } from '../../../core/endpoints';
 
 const nodeRequire = createRequire(__filename);
-const { YOUTUBE } = nodeRequire('../../../core/endpoints');
 const { getFallbackUsername } = nodeRequire('../../../utils/validation');
 const { normalizeYouTubeUsername } = nodeRequire('../youtube-username-normalizer');
 const { InnertubeFactory } = nodeRequire('../../../factories/innertube-factory');

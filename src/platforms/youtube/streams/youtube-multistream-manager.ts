@@ -1,8 +1,8 @@
 import { createRequire } from 'node:module';
+import { YOUTUBE } from '../../../core/endpoints';
 
 const nodeRequire = createRequire(__filename);
 const { PlatformEvents } = nodeRequire('../../../interfaces/PlatformEvents');
-const { YOUTUBE } = nodeRequire('../../../core/endpoints');
 
 type UnknownRecord = Record<string, unknown>;
 

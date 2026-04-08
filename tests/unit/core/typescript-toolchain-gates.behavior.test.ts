@@ -1544,4 +1544,61 @@ describe('TypeScript toolchain migration gates behavior', () => {
             expect(content).not.toMatch(/\brequire\s*\(/);
         }
     });
+
+    it('keeps shared ts dependency modules free of commonjs exports syntax', () => {
+        const sharedModulePaths = [
+            'src/utils/timestamp.ts',
+            'src/core/endpoints.ts',
+            'src/utils/message-parts.ts'
+        ];
+
+        for (const modulePath of sharedModulePaths) {
+            const content = readFileSync(join(repoRoot, modulePath), 'utf8');
+            expect(content).not.toContain('module.exports');
+            expect(content).not.toMatch(/^\s*exports\./m);
+        }
+    });
+
+    it('keeps migrated youtube modules free of nodeRequire for shared ts dependencies', () => {
+        const assertions = [
+            {
+                path: 'src/platforms/youtube/events/event-router.ts',
+                forbidden: [
+                    "nodeRequire('../../../utils/timestamp')"
+                ]
+            },
+            {
+                path: 'src/platforms/youtube/events/event-factory.ts',
+                forbidden: [
+                    "nodeRequire('../../../utils/timestamp')",
+                    "nodeRequire('../../../utils/message-parts')"
+                ]
+            },
+            {
+                path: 'src/platforms/youtube/connections/youtube-connection-factory.ts',
+                forbidden: [
+                    "nodeRequire('../../../core/endpoints')"
+                ]
+            },
+            {
+                path: 'src/platforms/youtube/monetization/monetization-parser.ts',
+                forbidden: [
+                    "nodeRequire('../youtube-message-extractor')"
+                ]
+            },
+            {
+                path: 'src/platforms/youtube/streams/youtube-multistream-manager.ts',
+                forbidden: [
+                    "nodeRequire('../../../core/endpoints')"
+                ]
+            }
+        ];
+
+        for (const assertion of assertions) {
+            const content = readFileSync(join(repoRoot, assertion.path), 'utf8');
+            for (const forbiddenPattern of assertion.forbidden) {
+                expect(content).not.toContain(forbiddenPattern);
+            }
+        }
+    });
 });
