@@ -1528,6 +1528,12 @@ describe('TypeScript toolchain migration gates behavior', () => {
         expect(existsSync(join(repoRoot, 'src/platforms/youtube/youtubei-currency-parser.js'))).toBe(false);
     });
 
+    it('keeps youtube currency parser free of raw require syntax', () => {
+        const content = readFileSync(join(repoRoot, 'src/platforms/youtube/youtubei-currency-parser.ts'), 'utf8');
+
+        expect(content).not.toMatch(/\brequire\s*\(/);
+    });
+
     it('keeps youtube multistream manager module free of commonjs exports syntax', () => {
         const content = readFileSync(join(repoRoot, 'src/platforms/youtube/streams/youtube-multistream-manager.ts'), 'utf8');
 
