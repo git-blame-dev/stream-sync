@@ -2,7 +2,57 @@ const { YOUTUBE } = require('../../../core/endpoints');
 const { getFallbackUsername } = require('../../../utils/validation');
 const { normalizeYouTubeUsername } = require('../youtube-username-normalizer');
 
-function createYouTubeConnectionFactory(options = {}) {
+type UnknownRecord = Record<string, unknown>;
+
+interface LoggerLike {
+    debug: (...args: unknown[]) => void;
+    info: (...args: unknown[]) => void;
+    warn: (...args: unknown[]) => void;
+}
+
+interface YouTubePlatform {
+    logger: LoggerLike;
+    config: UnknownRecord;
+    viewerService?: {
+        setActiveStream?: (videoId: string) => Promise<void>;
+    };
+    setYouTubeConnectionReady: (videoId: string) => void;
+    disconnectFromYouTubeStream: (videoId: string, reason: string) => void;
+    handleChatMessage: (message: UnknownRecord) => void;
+    logRawPlatformData: (channel: string, payload: unknown) => Promise<void>;
+    _validateVideoForConnection: (videoId: string, info: unknown) => { shouldConnect: boolean; reason?: string };
+    _handleProcessingError: (message: string, error: unknown, category: string, metadata?: UnknownRecord) => void;
+    _extractMessagesFromChatItem: (chatItem: UnknownRecord) => UnknownRecord[];
+    _shouldSkipMessage: (message: UnknownRecord) => boolean;
+    _resolveChatItemAuthorName: (message: UnknownRecord) => string;
+}
+
+interface YouTubeConnectionFactoryOptions {
+    platform?: YouTubePlatform;
+    innertubeInstanceManager?: {
+        getInstance: (options: { logger: LoggerLike }) => {
+            getInstance: (key: string, factory: () => Promise<unknown>) => Promise<unknown>;
+        };
+    };
+    withTimeout?: <T>(promise: Promise<T>, timeoutMs: number, operationName: string) => Promise<T>;
+    innertubeCreationTimeoutMs?: number;
+}
+
+interface YouTubeConnection {
+    on: (event: string, handler: (payload?: unknown) => void) => void;
+    start: () => void;
+    applyFilter?: (filterName: string) => void;
+}
+
+interface YouTubeInfo {
+    getLiveChat: () => Promise<unknown>;
+}
+
+interface YouTubeClient {
+    getInfo: (videoId: string, options: { client: string }) => Promise<YouTubeInfo>;
+}
+
+function createYouTubeConnectionFactory(options: YouTubeConnectionFactoryOptions = {}) {
     const {
         platform,
         innertubeInstanceManager,
@@ -27,7 +77,7 @@ function createYouTubeConnectionFactory(options = {}) {
         throw new Error('YouTube connection factory requires positive innertubeCreationTimeoutMs');
     }
 
-    const applyConfiguredChatMode = (connection, videoId, startData) => {
+    const applyConfiguredChatMode = (connection: YouTubeConnection, videoId: string, startData: unknown) => {
         const chatMode = platform.config.chatMode;
         const isTopChatMode = chatMode === 'top';
         const filterName = isTopChatMode ? 'TOP_CHAT' : 'LIVE_CHAT';
@@ -42,7 +92,16 @@ function createYouTubeConnectionFactory(options = {}) {
             return;
         }
 
-        const menuItems = startData?.header?.view_selector?.sub_menu_items;
+        const startDataRecord = startData && typeof startData === 'object' ? startData as UnknownRecord : null;
+        const header = startDataRecord?.header && typeof startDataRecord.header === 'object'
+            ? startDataRecord.header as UnknownRecord
+            : null;
+        const viewSelector = header?.view_selector && typeof header.view_selector === 'object'
+            ? header.view_selector as UnknownRecord
+            : null;
+        const menuItems = Array.isArray(viewSelector?.sub_menu_items)
+            ? viewSelector.sub_menu_items
+            : null;
         if (!Array.isArray(menuItems) || menuItems.length === 0) {
             platform.logger.warn(
                 `Cannot apply YouTube chat mode for ${videoId}: selector unavailable`,
@@ -77,9 +136,10 @@ function createYouTubeConnectionFactory(options = {}) {
         try {
             connection.applyFilter(filterName);
             platform.logger.info(`Applied YouTube chat mode for ${videoId}: ${chatMode}`, 'youtube');
-        } catch (error) {
+        } catch (error: unknown) {
+            const errorMessage = error instanceof Error ? error.message : String(error);
             platform._handleProcessingError(
-                `Failed to apply YouTube chat mode for ${videoId}: ${error.message}`,
+                `Failed to apply YouTube chat mode for ${videoId}: ${errorMessage}`,
                 error,
                 'chat-mode',
                 { videoId, chatMode }
@@ -87,20 +147,20 @@ function createYouTubeConnectionFactory(options = {}) {
         }
     };
 
-    const createConnection = async (videoId) => {
-        const manager = innertubeInstanceManager.getInstance({ logger: platform.logger || platform.logger });
+    const createConnection = async (videoId: string) => {
+        const manager = innertubeInstanceManager.getInstance({ logger: platform.logger });
 
         const { InnertubeFactory } = require('../../../factories/innertube-factory');
 
         const yt = await manager.getInstance('shared-youtube-instance',
             () => InnertubeFactory.createWithTimeout(timeoutMs)
-        );
+        ) as YouTubeClient;
 
         const info = await withTimeout(
             yt.getInfo(videoId, { client: 'WEB' }),
             timeoutMs,
             'YouTube getInfo stream info call'
-        );
+        ) as YouTubeInfo;
 
         const validationResult = platform._validateVideoForConnection(videoId, info);
         if (!validationResult.shouldConnect) {
@@ -114,12 +174,12 @@ function createYouTubeConnectionFactory(options = {}) {
         );
     };
 
-    const setupConnectionEventListeners = async (connection, videoId) => {
+    const setupConnectionEventListeners = async (connection: YouTubeConnection, videoId: string) => {
         if (!connection || typeof connection.on !== 'function') {
             throw new Error('YouTube connection missing event emitter interface (on/removeAllListeners)');
         }
 
-        connection.on('start', (data) => {
+        connection.on('start', (data: unknown) => {
             platform.logger.debug(`LiveChat 'start' event for: ${videoId}`, 'youtube');
             platform.logger.info(`Chat listener started for stream: ${videoId}`, 'youtube');
             platform.setYouTubeConnectionReady(videoId);
@@ -129,18 +189,20 @@ function createYouTubeConnectionFactory(options = {}) {
             );
             applyConfiguredChatMode(connection, videoId, data);
 
-            if (data && typeof data === 'object' && data.actions && Array.isArray(data.actions)) {
+            const dataRecord = data && typeof data === 'object' ? data as UnknownRecord : null;
+            if (dataRecord && Array.isArray(dataRecord.actions)) {
                 platform.logger.debug(
-                    `Initial batch from 'start' event for ${videoId}: ${data.actions.length} actions - skipping all initial messages`,
+                    `Initial batch from 'start' event for ${videoId}: ${dataRecord.actions.length} actions - skipping all initial messages`,
                     'youtube'
                 );
-                platform.logger.debug(`Skipped ${data.actions.length} initial messages from stream ${videoId}`, 'youtube');
+                platform.logger.debug(`Skipped ${dataRecord.actions.length} initial messages from stream ${videoId}`, 'youtube');
             }
         });
 
-        connection.on('error', (error) => {
+        connection.on('error', (error: unknown) => {
+            const debugErrorMessage = error instanceof Error ? error.message : String(error);
             platform.logger.debug(
-                `LiveChat 'error' event for: ${videoId} - ${error && error.message ? error.message : error}`,
+                `LiveChat 'error' event for: ${videoId} - ${debugErrorMessage}`,
                 'youtube'
             );
 
@@ -168,11 +230,12 @@ function createYouTubeConnectionFactory(options = {}) {
             platform.disconnectFromYouTubeStream(videoId, `Error: ${errorMessage}`);
         });
 
-        connection.on('chat-update', (chatItem) => {
+        connection.on('chat-update', (chatItem: unknown) => {
             if (platform.config.dataLoggingEnabled && chatItem !== undefined) {
-                platform.logRawPlatformData('chat', chatItem).catch((logError) => {
+                platform.logRawPlatformData('chat', chatItem).catch((logError: unknown) => {
+                    const logErrorMessage = logError instanceof Error ? logError.message : String(logError);
                     platform._handleProcessingError(
-                        `Error logging raw chat data: ${logError.message}`,
+                        `Error logging raw chat data: ${logErrorMessage}`,
                         logError,
                         'data-logging'
                     );
@@ -184,13 +247,18 @@ function createYouTubeConnectionFactory(options = {}) {
                 return;
             }
 
-            if (chatItem.author && chatItem.text) {
-                const rawAuthorName = typeof chatItem.author === 'object' && typeof chatItem.author.name === 'string'
-                    ? chatItem.author.name
-                    : (typeof chatItem.author === 'string' ? chatItem.author : '');
+            const chatItemRecord = chatItem as UnknownRecord;
+
+            if (chatItemRecord.author && chatItemRecord.text) {
+                const authorRecord = chatItemRecord.author && typeof chatItemRecord.author === 'object'
+                    ? chatItemRecord.author as UnknownRecord
+                    : null;
+                const rawAuthorName = authorRecord && typeof authorRecord.name === 'string'
+                    ? authorRecord.name
+                    : (typeof chatItemRecord.author === 'string' ? chatItemRecord.author : '');
                 const authorName = normalizeYouTubeUsername(rawAuthorName);
-                const authorId = typeof chatItem.author === 'object' && typeof chatItem.author.id === 'string'
-                    ? chatItem.author.id.trim()
+                const authorId = authorRecord && typeof authorRecord.id === 'string'
+                    ? authorRecord.id.trim()
                     : '';
 
                 if (!authorName || !authorId) {
@@ -198,14 +266,14 @@ function createYouTubeConnectionFactory(options = {}) {
                         `Skipping chat-update for ${videoId}: missing author`,
                         'youtube',
                         {
-                            eventType: typeof chatItem.type === 'string' ? chatItem.type : null,
+                            eventType: typeof chatItemRecord.type === 'string' ? chatItemRecord.type : null,
                             author: authorName || getFallbackUsername()
                         }
                     );
                     return;
                 }
 
-                const messageText = typeof chatItem.text === 'string' ? chatItem.text.trim() : '';
+                const messageText = typeof chatItemRecord.text === 'string' ? chatItemRecord.text.trim() : '';
                 if (!messageText) {
                     platform.logger.debug(
                         `Skipping chat-update for ${videoId}: missing message`,
@@ -215,17 +283,17 @@ function createYouTubeConnectionFactory(options = {}) {
                     return;
                 }
 
-                const rawUsec = chatItem.timestamp_usec;
+                const rawUsec = chatItemRecord.timestamp_usec;
                 const rawTimestamp = rawUsec !== undefined && rawUsec !== null
                     ? rawUsec
-                    : chatItem.timestamp;
+                    : chatItemRecord.timestamp;
                 const timestampField = rawUsec !== undefined && rawUsec !== null
                     ? { timestamp_usec: rawUsec }
                     : (rawTimestamp !== undefined && rawTimestamp !== null ? { timestamp: rawTimestamp } : {});
                 const normalizedChatItem = {
                     item: {
                         type: 'LiveChatTextMessage',
-                        ...(chatItem.id ? { id: chatItem.id } : {}),
+                        ...(chatItemRecord.id ? { id: chatItemRecord.id } : {}),
                         ...timestampField,
                         author: {
                             id: authorId,
@@ -248,7 +316,7 @@ function createYouTubeConnectionFactory(options = {}) {
 
             platform.logger.debug(`Processing complex chatItem structure for ${videoId}`, 'youtube');
 
-            const messages = platform._extractMessagesFromChatItem(chatItem);
+            const messages = platform._extractMessagesFromChatItem(chatItemRecord);
 
             for (const message of messages) {
                 if (platform._shouldSkipMessage(message)) {
@@ -256,15 +324,18 @@ function createYouTubeConnectionFactory(options = {}) {
                     continue;
                 }
 
-                const enhancedMessage = {
+                const enhancedMessage: UnknownRecord = {
                     ...message,
                     videoId
                 };
 
                 const authorName = platform._resolveChatItemAuthorName(enhancedMessage);
-                const eventType = enhancedMessage && enhancedMessage.item
-                    ? enhancedMessage.item.type || null
-                    : (enhancedMessage && enhancedMessage.type ? enhancedMessage.type : null);
+                const enhancedItem = enhancedMessage.item && typeof enhancedMessage.item === 'object'
+                    ? enhancedMessage.item as UnknownRecord
+                    : null;
+                const eventType = enhancedItem
+                    ? enhancedItem.type || null
+                    : (enhancedMessage.type || null);
                 const shouldAllowMissingAuthor = eventType === 'LiveChatSponsorshipsGiftPurchaseAnnouncement';
                 if (!authorName && !shouldAllowMissingAuthor) {
                     platform.logger.debug(
@@ -277,8 +348,11 @@ function createYouTubeConnectionFactory(options = {}) {
                     );
                     continue;
                 }
-                const messageText = enhancedMessage && enhancedMessage.item && enhancedMessage.item.message
-                    ? enhancedMessage.item.message.text || 'No text'
+                const itemMessage = enhancedItem && enhancedItem.message && typeof enhancedItem.message === 'object'
+                    ? enhancedItem.message as UnknownRecord
+                    : null;
+                const messageText = itemMessage && typeof itemMessage.text === 'string'
+                    ? itemMessage.text
                     : 'No text';
 
                 platform.logger.debug(
@@ -307,8 +381,9 @@ function createYouTubeConnectionFactory(options = {}) {
             try {
                 await platform.viewerService.setActiveStream(videoId);
                 platform.logger.debug(`Set active stream in viewer service: ${videoId}`, 'youtube');
-            } catch (serviceError) {
-                platform.logger.warn(`Failed to set active stream in viewer service: ${serviceError.message}`, 'youtube');
+            } catch (serviceError: unknown) {
+                const serviceErrorMessage = serviceError instanceof Error ? serviceError.message : String(serviceError);
+                platform.logger.warn(`Failed to set active stream in viewer service: ${serviceErrorMessage}`, 'youtube');
             }
         }
     };
@@ -319,6 +394,4 @@ function createYouTubeConnectionFactory(options = {}) {
     };
 }
 
-module.exports = {
-    createYouTubeConnectionFactory
-};
+export { createYouTubeConnectionFactory };

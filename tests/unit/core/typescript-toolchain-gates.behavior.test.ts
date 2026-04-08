@@ -1508,4 +1508,11 @@ describe('TypeScript toolchain migration gates behavior', () => {
         expect(content).not.toContain('module.exports');
         expect(content).not.toMatch(/^\s*exports\./m);
     });
+
+    it('keeps youtube connection factory module free of commonjs exports syntax', () => {
+        const content = readFileSync(join(repoRoot, 'src/platforms/youtube/connections/youtube-connection-factory.ts'), 'utf8');
+
+        expect(content).not.toContain('module.exports');
+        expect(content).not.toMatch(/^\s*exports\./m);
+    });
 });
