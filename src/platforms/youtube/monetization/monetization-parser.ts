@@ -1,5 +1,8 @@
-const { extractMessageText } = require('../youtube-message-extractor');
-const { YouTubeiCurrencyParser } = require('../youtubei-currency-parser');
+import { createRequire } from 'node:module';
+
+const nodeRequire = createRequire(__filename);
+const { extractMessageText } = nodeRequire('../youtube-message-extractor');
+const { YouTubeiCurrencyParser } = nodeRequire('../youtubei-currency-parser');
 
 type UnknownRecord = Record<string, unknown>;
 

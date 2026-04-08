@@ -1,5 +1,8 @@
-const { PlatformEvents } = require('../../../interfaces/PlatformEvents');
-const { YOUTUBE } = require('../../../core/endpoints');
+import { createRequire } from 'node:module';
+
+const nodeRequire = createRequire(__filename);
+const { PlatformEvents } = nodeRequire('../../../interfaces/PlatformEvents');
+const { YOUTUBE } = nodeRequire('../../../core/endpoints');
 
 type UnknownRecord = Record<string, unknown>;
 

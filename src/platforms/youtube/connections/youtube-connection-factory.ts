@@ -1,6 +1,10 @@
-const { YOUTUBE } = require('../../../core/endpoints');
-const { getFallbackUsername } = require('../../../utils/validation');
-const { normalizeYouTubeUsername } = require('../youtube-username-normalizer');
+import { createRequire } from 'node:module';
+
+const nodeRequire = createRequire(__filename);
+const { YOUTUBE } = nodeRequire('../../../core/endpoints');
+const { getFallbackUsername } = nodeRequire('../../../utils/validation');
+const { normalizeYouTubeUsername } = nodeRequire('../youtube-username-normalizer');
+const { InnertubeFactory } = nodeRequire('../../../factories/innertube-factory');
 
 type UnknownRecord = Record<string, unknown>;
 
@@ -149,8 +153,6 @@ function createYouTubeConnectionFactory(options: YouTubeConnectionFactoryOptions
 
     const createConnection = async (videoId: string) => {
         const manager = innertubeInstanceManager.getInstance({ logger: platform.logger });
-
-        const { InnertubeFactory } = require('../../../factories/innertube-factory');
 
         const yt = await manager.getInstance('shared-youtube-instance',
             () => InnertubeFactory.createWithTimeout(timeoutMs)

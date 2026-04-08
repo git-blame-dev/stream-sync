@@ -1,9 +1,12 @@
-const { PlatformEvents } = require('../../../interfaces/PlatformEvents');
-const { isIsoTimestamp } = require('../../../utils/timestamp');
-const { DEFAULT_AVATAR_URL } = require('../../../constants/avatar');
-const { UNKNOWN_CHAT_MESSAGE, UNKNOWN_CHAT_USERNAME } = require('../../../constants/degraded-chat');
-const { getValidMessageParts, normalizeBadgeImages } = require('../../../utils/message-parts');
-const { getMissingFields, mergeMissingFieldsMetadata } = require('../../../utils/missing-fields');
+import { createRequire } from 'node:module';
+
+const nodeRequire = createRequire(__filename);
+const { PlatformEvents } = nodeRequire('../../../interfaces/PlatformEvents');
+const { isIsoTimestamp } = nodeRequire('../../../utils/timestamp');
+const { DEFAULT_AVATAR_URL } = nodeRequire('../../../constants/avatar');
+const { UNKNOWN_CHAT_MESSAGE, UNKNOWN_CHAT_USERNAME } = nodeRequire('../../../constants/degraded-chat');
+const { getValidMessageParts, normalizeBadgeImages } = nodeRequire('../../../utils/message-parts');
+const { getMissingFields, mergeMissingFieldsMetadata } = nodeRequire('../../../utils/missing-fields');
 
 type UnknownRecord = Record<string, unknown>;
 
