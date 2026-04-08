@@ -42,7 +42,7 @@ function collectExecutableTypeScriptFiles(directoryPath: string, output: string[
     return output;
 }
 
-function findCommonJsModuleSyntax(content) {
+function findCommonJsModuleSyntax(content: string) {
     const lines = content.split(/\r?\n/);
     const syntaxPatterns = [
         /^\s*(?:const|let|var)\s+.+?=\s*require\s*\(/,
@@ -1473,5 +1473,19 @@ describe('TypeScript toolchain migration gates behavior', () => {
         expect(content).not.toMatch(/^\s*(?:const|let|var)\s+.+?=\s*require\s*\(/m);
         expect(content).not.toContain('module.exports');
         expect(content).not.toMatch(/^\s*exports\./m);
+    });
+
+    it('keeps youtube extractor helper modules free of commonjs exports syntax', () => {
+        const helperPaths = [
+            'src/platforms/youtube/youtube-author-extractor.ts',
+            'src/platforms/youtube/youtube-message-extractor.ts',
+            'src/platforms/youtube/youtube-username-normalizer.ts'
+        ];
+
+        for (const helperPath of helperPaths) {
+            const content = readFileSync(join(repoRoot, helperPath), 'utf8');
+            expect(content).not.toContain('module.exports');
+            expect(content).not.toMatch(/^\s*exports\./m);
+        }
     });
 });

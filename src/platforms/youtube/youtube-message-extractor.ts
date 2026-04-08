@@ -1,21 +1,31 @@
-function extractMessageText(messageObject) {
+function extractMessageText(messageObject: unknown): string {
     if (!messageObject || typeof messageObject !== 'object') {
         return '';
     }
 
-    if (typeof messageObject.text === 'string' && messageObject.text.trim()) {
-        return messageObject.text;
+    const typedMessageObject = messageObject as {
+        text?: unknown;
+        runs?: unknown;
+    };
+
+    if (typeof typedMessageObject.text === 'string' && typedMessageObject.text.trim()) {
+        return typedMessageObject.text;
     }
 
-    if (messageObject.runs && Array.isArray(messageObject.runs)) {
-        return messageObject.runs
-            .map(run => run.text || '')
+    if (typedMessageObject.runs && Array.isArray(typedMessageObject.runs)) {
+        return typedMessageObject.runs
+            .map((run) => {
+                if (!run || typeof run !== 'object') {
+                    return '';
+                }
+
+                const text = (run as { text?: unknown }).text;
+                return typeof text === 'string' ? text : '';
+            })
             .join('');
     }
 
     return '';
 }
 
-module.exports = {
-    extractMessageText
-};
+export { extractMessageText };

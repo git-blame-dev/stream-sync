@@ -1,13 +1,32 @@
-function extractAuthor(chatItem) {
+interface AuthorRecord {
+    id?: unknown;
+    name?: unknown;
+    thumbnails?: unknown;
+    badges?: unknown;
+    is_moderator?: unknown;
+    is_verified?: unknown;
+}
+
+interface ExtractedAuthor {
+    id: unknown;
+    name: string;
+    thumbnailUrl: string;
+    badges: unknown[];
+    isModerator: boolean;
+    isVerified: boolean;
+}
+
+function extractAuthor(chatItem: unknown): ExtractedAuthor | null {
     if (!chatItem || typeof chatItem !== 'object') {
         return null;
     }
 
-    if (!chatItem.item || typeof chatItem.item !== 'object') {
+    const item = (chatItem as { item?: unknown }).item;
+    if (!item || typeof item !== 'object') {
         return null;
     }
 
-    const author = chatItem.item.author;
+    const author = (item as { author?: unknown }).author as AuthorRecord | undefined;
     if (!author || typeof author !== 'object') {
         return null;
     }
@@ -19,7 +38,7 @@ function extractAuthor(chatItem) {
     }
     const name = stripAtPrefix(rawName);
     const thumbnailUrl = extractThumbnailUrl(author.thumbnails);
-    const badges = author.badges || [];
+    const badges = Array.isArray(author.badges) ? author.badges : [];
     const isModerator = author.is_moderator === true;
     const isVerified = author.is_verified === true;
 
@@ -33,18 +52,19 @@ function extractAuthor(chatItem) {
     };
 }
 
-function stripAtPrefix(name) {
-    if (name && name.startsWith('@')) {
+function stripAtPrefix(name: string): string {
+    if (name.startsWith('@')) {
         return name.slice(1);
     }
     return name;
 }
 
-function extractThumbnailUrl(thumbnails) {
+function extractThumbnailUrl(thumbnails: unknown): string {
     if (!thumbnails || !Array.isArray(thumbnails) || thumbnails.length === 0) {
         return '';
     }
-    return thumbnails[0].url || '';
+    const firstThumbnail = thumbnails[0] as { url?: unknown } | undefined;
+    return typeof firstThumbnail?.url === 'string' ? firstThumbnail.url : '';
 }
 
-module.exports = { extractAuthor };
+export { extractAuthor };
