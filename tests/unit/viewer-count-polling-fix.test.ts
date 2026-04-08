@@ -1,7 +1,10 @@
 import { describe, test, expect, beforeEach, afterEach } from 'bun:test';
-const { createMockFn, restoreAllMocks } = require('../helpers/bun-mock-utils');
-const { createConfigFixture } = require('../helpers/config-fixture');
-const { noOpLogger } = require('../helpers/mock-factories');
+import { createRequire } from 'node:module';
+
+const load = createRequire(__filename);
+const { createMockFn, restoreAllMocks } = load('../helpers/bun-mock-utils');
+const { createConfigFixture } = load('../helpers/config-fixture');
+const { noOpLogger } = load('../helpers/mock-factories');
 
 type ViewerCountPlatform = { getViewerCount: ReturnType<typeof createMockFn> };
 
@@ -37,7 +40,7 @@ describe('Viewer Count Polling System Fix', () => {
     let testConfig: ReturnType<typeof createConfigFixture>;
 
     beforeEach(async () => {
-        ({ ViewerCountSystem } = require('../../src/utils/viewer-count'));
+        ({ ViewerCountSystem } = load('../../src/utils/viewer-count'));
 
         testConfig = createConfigFixture({
             general: { viewerCountPollingIntervalMs: 60 }
