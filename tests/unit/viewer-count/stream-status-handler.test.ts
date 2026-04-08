@@ -1,4 +1,4 @@
-const { describe, it, expect } = require('bun:test');
+import { describe, it, expect } from 'bun:test';
 const wireStreamStatusHandlers = require('../../../src/viewer-count/stream-status-handler.ts');
 
 function createEventBus() {
