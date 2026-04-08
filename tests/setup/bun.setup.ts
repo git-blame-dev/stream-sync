@@ -1,8 +1,23 @@
-const { beforeAll, beforeEach, afterEach, afterAll, expect } = require('bun:test');
-const { waitForDelay, scheduleTimeout, scheduleInterval } = require('../helpers/time-utils');
-const testClock = require('../helpers/test-clock');
-const { initializeTestLogging } = require('../helpers/test-setup');
-const { initializeStaticSecrets, _resetForTesting } = require('../../src/core/secrets');
+import { afterAll, afterEach, beforeAll, beforeEach, expect } from 'bun:test';
+import { createRequire } from 'node:module';
+
+const nodeRequire = createRequire(import.meta.url);
+const { waitForDelay, scheduleTimeout, scheduleInterval } = nodeRequire('../helpers/time-utils') as {
+    waitForDelay: (delay?: number) => Promise<void>;
+    scheduleTimeout: typeof setTimeout;
+    scheduleInterval: typeof setInterval;
+};
+const testClock = nodeRequire('../helpers/test-clock') as {
+    reset: () => number;
+    useRealTime: () => void;
+};
+const { initializeTestLogging } = nodeRequire('../helpers/test-setup') as {
+    initializeTestLogging: () => void;
+};
+const { initializeStaticSecrets, _resetForTesting } = nodeRequire('../../src/core/secrets') as {
+    initializeStaticSecrets: () => void;
+    _resetForTesting: () => void;
+};
 
 // Initialize logging FIRST at module load time, before any test files import modules
 // This ensures getUnifiedLogger() works when production code falls back to it
@@ -11,26 +26,40 @@ const {
     createMockFn,
     clearAllMocks,
     restoreAllMocks
-} = require('../helpers/bun-mock-utils');
-const { mockModule } = require('../helpers/bun-module-mocks');
+} = nodeRequire('../helpers/bun-mock-utils');
+const { mockModule } = nodeRequire('../helpers/bun-module-mocks');
 const {
     installTimerTracking,
     clearTrackedTimers,
     restoreTimerTracking
-} = require('../helpers/bun-timers');
+} = nodeRequire('../helpers/bun-timers');
 
-const originalProcessExit = global.__ORIGINAL_PROCESS_EXIT__ || process.exit;
-const noopProcessExit = global.__NOOP_PROCESS_EXIT__ || (() => {});
-const originalConsole = global.console;
+type SetupGlobalState = typeof globalThis & {
+    __ORIGINAL_PROCESS_EXIT__?: typeof process.exit;
+    __NOOP_PROCESS_EXIT__?: (code?: string | number | null) => void;
+    waitForDelay: typeof waitForDelay;
+    scheduleTestTimeout: typeof scheduleTimeout;
+    scheduleTestInterval: typeof scheduleInterval;
+    expectNoAuthentication: () => void;
+    restoreConsole: () => void;
+    createLoggerMock: () => Record<string, unknown>;
+    __TEST_LOGGER__: Record<string, unknown>;
+    originalConsole: Console;
+};
 
-global.waitForDelay = waitForDelay;
-global.scheduleTestTimeout = scheduleTimeout;
-global.scheduleTestInterval = scheduleInterval;
+const setupGlobal = global as SetupGlobalState;
+const originalProcessExit = setupGlobal.__ORIGINAL_PROCESS_EXIT__ || process.exit;
+const noopProcessExit = setupGlobal.__NOOP_PROCESS_EXIT__ || (() => {});
+const originalConsole = setupGlobal.console;
 
-global.expectNoAuthentication = () => {};
+setupGlobal.waitForDelay = waitForDelay;
+setupGlobal.scheduleTestTimeout = scheduleTimeout;
+setupGlobal.scheduleTestInterval = scheduleInterval;
 
-global.restoreConsole = () => {
-    global.console = originalConsole;
+setupGlobal.expectNoAuthentication = () => {};
+
+setupGlobal.restoreConsole = () => {
+    setupGlobal.console = originalConsole;
 };
 
 // Helper for tests that need a mock logger - inject via DI, don't mock globally
@@ -43,7 +72,7 @@ const createLoggerMock = () => ({
 });
 
 // Make available globally for tests that need it
-global.createLoggerMock = createLoggerMock;
+setupGlobal.createLoggerMock = createLoggerMock;
 
 const createWebSocketMock = () => {
     const webSocketMock = createMockFn().mockImplementation(() => ({
@@ -129,17 +158,21 @@ const createYoutubeiMock = () => ({
     }
 });
 
-const toHaveLengthGreaterThan = (received, expected) => {
-    const pass = received.length > expected;
+const toHaveLengthGreaterThan = (received: unknown, expected: number) => {
+    const receivedArray = Array.isArray(received) ? received : [];
+    const pass = receivedArray.length > expected;
     return {
-        message: () => `expected array to have length greater than ${expected}, but got ${received.length}`,
+        message: () => `expected array to have length greater than ${expected}, but got ${receivedArray.length}`,
         pass
     };
 };
 
-const toBeValidNotification = (received) => {
+const toBeValidNotification = (received: unknown) => {
+    const notification = received && typeof received === 'object'
+        ? received as Record<string, unknown>
+        : {};
     const requiredProps = ['id', 'type', 'username', 'platform', 'displayMessage', 'ttsMessage'];
-    const missingProps = requiredProps.filter((prop) => !received.hasOwnProperty(prop));
+    const missingProps = requiredProps.filter((prop) => !Object.prototype.hasOwnProperty.call(notification, prop));
     if (missingProps.length === 0) {
         return { message: () => 'expected notification to be valid', pass: true };
     }
@@ -149,9 +182,12 @@ const toBeValidNotification = (received) => {
     };
 };
 
-const toBeValidUser = (received) => {
+const toBeValidUser = (received: unknown) => {
+    const user = received && typeof received === 'object'
+        ? received as Record<string, unknown>
+        : {};
     const requiredProps = ['username'];
-    const missingProps = requiredProps.filter((prop) => !received.hasOwnProperty(prop));
+    const missingProps = requiredProps.filter((prop) => !Object.prototype.hasOwnProperty.call(user, prop));
     if (missingProps.length === 0) {
         return { message: () => 'expected user to be valid', pass: true };
     }
@@ -193,18 +229,18 @@ beforeAll(() => {
     _resetForTesting();
     initializeStaticSecrets();
 
-    global.__TEST_LOGGER__ = createLoggerMock();
+    setupGlobal.__TEST_LOGGER__ = createLoggerMock();
 
     process.exit = createMockFn((code = 0) => noopProcessExit(code));
 
-    global.originalConsole = originalConsole;
-    global.console = {
+    setupGlobal.originalConsole = originalConsole;
+    setupGlobal.console = {
         log: createMockFn(),
         info: createMockFn(),
         warn: createMockFn(),
         error: createMockFn(),
         debug: createMockFn()
-    };
+    } as unknown as Console;
 
     installTimerTracking();
 });
@@ -220,12 +256,12 @@ afterEach(() => {
 
 afterAll(() => {
     process.exit = originalProcessExit;
-    global.console = originalConsole;
+    setupGlobal.console = originalConsole;
     restoreTimerTracking();
     restoreAllMocks();
 });
 
-module.exports = {
+export {
     createLoggerMock,
     registerModuleMocks,
     createWebSocketMock,

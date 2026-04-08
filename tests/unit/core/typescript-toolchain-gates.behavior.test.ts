@@ -1493,6 +1493,13 @@ describe('TypeScript toolchain migration gates behavior', () => {
         expect(content).not.toMatch(/^\s*(?:const|let|var)\s+.+?=\s*require\s*\(/m);
     });
 
+    it('keeps bun setup bootstrap free of top-level commonjs declarations and exports', () => {
+        const content = readFileSync(join(repoRoot, 'tests/setup/bun.setup.ts'), 'utf8');
+
+        expect(content).not.toMatch(/^\s*(?:const|let|var)\s+.+?=\s*require\s*\(/m);
+        expect(content).not.toContain('module.exports');
+    });
+
     it('keeps youtube extractor helper modules free of commonjs exports syntax', () => {
         const helperPaths = [
             'src/platforms/youtube/youtube-author-extractor.ts',
