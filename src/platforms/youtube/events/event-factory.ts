@@ -5,21 +5,32 @@ const { UNKNOWN_CHAT_MESSAGE, UNKNOWN_CHAT_USERNAME } = require('../../../consta
 const { getValidMessageParts, normalizeBadgeImages } = require('../../../utils/message-parts');
 const { getMissingFields, mergeMissingFieldsMetadata } = require('../../../utils/missing-fields');
 
-function createYouTubeEventFactory(options = {}) {
+type UnknownRecord = Record<string, unknown>;
+
+type ValidMessagePart =
+    | { type: 'text'; text: string }
+    | { type: 'emote'; platform?: string; emoteId: string; imageUrl: string };
+
+interface YouTubeEventFactoryOptions {
+    platformName?: string;
+    generateCorrelationId?: () => string;
+}
+
+function createYouTubeEventFactory(options: YouTubeEventFactoryOptions = {}) {
     const platformName = options.platformName || 'youtube';
     const generateCorrelationId = options.generateCorrelationId || (() => PlatformEvents._generateCorrelationId());
 
-    const ensureIsoTimestamp = (value, errorMessage) => {
+    const ensureIsoTimestamp = (value: unknown, errorMessage: string): string => {
         if (!value) {
             throw new Error(errorMessage);
         }
-        if (!isIsoTimestamp(value)) {
+        if (typeof value !== 'string' || !isIsoTimestamp(value)) {
             throw new Error(`${errorMessage} (ISO required)`);
         }
         return value;
     };
 
-    const normalizeIdentity = (data, { allowMissing } = {}) => {
+    const normalizeIdentity = (data: UnknownRecord, { allowMissing }: { allowMissing?: boolean } = {}) => {
         const username = typeof data.username === 'string' ? data.username.trim() : '';
         const userId = data.userId === undefined || data.userId === null ? '' : String(data.userId).trim();
 
@@ -33,33 +44,33 @@ function createYouTubeEventFactory(options = {}) {
         };
     };
 
-    const normalizePositiveNumber = (value) => {
+    const normalizePositiveNumber = (value: unknown) => {
         const numericValue = Number(value);
         return Number.isFinite(numericValue) && numericValue > 0 ? numericValue : undefined;
     };
 
-    const normalizeNonNegativeNumber = (value) => {
+    const normalizeNonNegativeNumber = (value: unknown) => {
         const numericValue = Number(value);
         return Number.isFinite(numericValue) && numericValue >= 0 ? numericValue : undefined;
     };
 
-    const normalizeText = (value) => (typeof value === 'string' ? value.trim() : '');
+    const normalizeText = (value: unknown) => (typeof value === 'string' ? value.trim() : '');
 
-    const resolveMessageText = (data = {}) => {
+    const resolveMessageText = (data: UnknownRecord = {}) => {
         if (typeof data.message === 'string') {
             return data.message;
         }
 
-        if (data.message && typeof data.message === 'object' && typeof data.message.text === 'string') {
-            return data.message.text;
+        if (data.message && typeof data.message === 'object' && typeof (data.message as UnknownRecord).text === 'string') {
+            return (data.message as UnknownRecord).text as string;
         }
 
         return '';
     };
 
-    const resolveMessageParts = (data = {}) => {
+    const resolveMessageParts = (data: UnknownRecord = {}) => {
         return getValidMessageParts({ message: data?.message }, { allowWhitespaceText: true })
-            .map((part) => {
+            .map((part: ValidMessagePart) => {
                 if (part.type === 'text') {
                     return {
                         type: 'text',
@@ -76,8 +87,8 @@ function createYouTubeEventFactory(options = {}) {
             });
     };
 
-    const getTimestamp = (data, errorMessage) => ensureIsoTimestamp(data.timestamp, errorMessage);
-    const resolveAvatarUrl = (data) => {
+    const getTimestamp = (data: UnknownRecord, errorMessage: string) => ensureIsoTimestamp(data.timestamp, errorMessage);
+    const resolveAvatarUrl = (data: UnknownRecord) => {
         const avatarUrl = normalizeText(data.avatarUrl);
         if (avatarUrl) {
             return avatarUrl;
@@ -85,24 +96,24 @@ function createYouTubeEventFactory(options = {}) {
         return DEFAULT_AVATAR_URL;
     };
 
-    const buildEventMetadata = (additionalMetadata = {}) => ({
+    const buildEventMetadata = (additionalMetadata: UnknownRecord = {}): UnknownRecord => ({
         platform: platformName,
         ...additionalMetadata,
         correlationId: generateCorrelationId()
     });
 
-    const normalizeContext = (context) => {
+    const normalizeContext = (context: unknown): UnknownRecord => {
         if (!context || typeof context !== 'object' || Array.isArray(context)) {
             return {};
         }
 
-        return context;
+        return context as UnknownRecord;
     };
 
-    const normalizeRecoverable = (recoverable) => (typeof recoverable === 'boolean' ? recoverable : true);
+    const normalizeRecoverable = (recoverable: unknown): boolean => (typeof recoverable === 'boolean' ? recoverable : true);
 
     return {
-        createChatConnectedEvent: (data = {}) => {
+        createChatConnectedEvent: (data: UnknownRecord = {}) => {
             const timestamp = getTimestamp(data, 'YouTube chat connected event requires timestamp');
             return {
                 type: PlatformEvents.CHAT_CONNECTED,
@@ -113,12 +124,12 @@ function createYouTubeEventFactory(options = {}) {
             };
         },
 
-        createChatMessageEvent: (data = {}) => {
+        createChatMessageEvent: (data: UnknownRecord = {}) => {
             const dataMetadata = data?.metadata && typeof data.metadata === 'object'
                 ? data.metadata
                 : {};
             const missingFields = getMissingFields(dataMetadata);
-            const isMissingField = (fieldName) => missingFields.includes(fieldName);
+            const isMissingField = (fieldName: string) => missingFields.includes(fieldName);
             const rawTimestamp = normalizeText(data.timestamp);
             const timestamp = rawTimestamp && isIsoTimestamp(rawTimestamp)
                 ? rawTimestamp
@@ -142,7 +153,7 @@ function createYouTubeEventFactory(options = {}) {
                 throw new Error('YouTube chat message event requires message text');
             }
             const badgeImages = normalizeBadgeImages(data.badgeImages);
-            const message = {
+            const message: UnknownRecord = {
                 text: messageText || (isMissingField('message') ? UNKNOWN_CHAT_MESSAGE : '')
             };
             if (messageParts.length > 0) {
@@ -158,7 +169,7 @@ function createYouTubeEventFactory(options = {}) {
                 ...(missingFields.length > 0 && timestamp ? { sourceTimestamp: timestamp } : {})
             });
 
-            const eventData = {
+            const eventData: UnknownRecord = {
                 type: PlatformEvents.CHAT_MESSAGE,
                 platform: platformName,
                 username: identity.username || UNKNOWN_CHAT_USERNAME,
@@ -179,7 +190,7 @@ function createYouTubeEventFactory(options = {}) {
             return eventData;
         },
 
-        createViewerCountEvent: (data = {}) => {
+        createViewerCountEvent: (data: UnknownRecord = {}) => {
             const timestamp = getTimestamp(data, 'YouTube viewer count event requires timestamp');
             const count = Number(data.count);
             if (!Number.isFinite(count)) {
@@ -196,7 +207,7 @@ function createYouTubeEventFactory(options = {}) {
             };
         },
 
-        createGiftEvent: (data = {}) => {
+        createGiftEvent: (data: UnknownRecord = {}) => {
             const isError = data.isError === true;
             const identity = normalizeIdentity(data, { allowMissing: isError });
             const avatarUrl = resolveAvatarUrl(data);
@@ -229,7 +240,7 @@ function createYouTubeEventFactory(options = {}) {
                 }
             }
 
-            const result = {
+            const result: UnknownRecord = {
                 type: PlatformEvents.GIFT,
                 platform: platformName,
                 ...(identity.username ? { username: identity.username } : {}),
@@ -255,7 +266,7 @@ function createYouTubeEventFactory(options = {}) {
             return result;
         },
 
-        createGiftPaypiggyEvent: (data = {}) => {
+        createGiftPaypiggyEvent: (data: UnknownRecord = {}) => {
             const isError = data.isError === true;
             const identity = normalizeIdentity(data, { allowMissing: isError });
             const avatarUrl = resolveAvatarUrl(data);
@@ -268,7 +279,7 @@ function createYouTubeEventFactory(options = {}) {
                 throw new Error('YouTube giftpaypiggy payload requires giftCount');
             }
 
-            const result = {
+            const result: UnknownRecord = {
                 type: PlatformEvents.GIFTPAYPIGGY,
                 platform: platformName,
                 ...(identity.username ? { username: identity.username } : {}),
@@ -294,7 +305,7 @@ function createYouTubeEventFactory(options = {}) {
             return result;
         },
 
-        createPaypiggyEvent: (data = {}) => {
+        createPaypiggyEvent: (data: UnknownRecord = {}) => {
             const isError = data.isError === true;
             const identity = normalizeIdentity(data, { allowMissing: isError });
             const avatarUrl = resolveAvatarUrl(data);
@@ -303,7 +314,7 @@ function createYouTubeEventFactory(options = {}) {
             const membershipLevel = normalizeText(data.membershipLevel);
             const id = data.id === undefined || data.id === null ? '' : String(data.id).trim();
 
-            const result = {
+            const result: UnknownRecord = {
                 type: PlatformEvents.PAYPIGGY,
                 platform: platformName,
                 ...(identity.username ? { username: identity.username } : {}),
@@ -331,9 +342,9 @@ function createYouTubeEventFactory(options = {}) {
             return result;
         },
 
-        createErrorEvent: (data = {}) => {
+        createErrorEvent: (data: UnknownRecord = {}) => {
             const timestamp = getTimestamp(data, 'YouTube error event requires timestamp');
-            const error = data.error && typeof data.error === 'object' ? data.error : {};
+            const error = data.error && typeof data.error === 'object' ? data.error as UnknownRecord : {};
             return {
                 type: PlatformEvents.ERROR,
                 platform: platformName,
@@ -352,6 +363,4 @@ function createYouTubeEventFactory(options = {}) {
     };
 }
 
-module.exports = {
-    createYouTubeEventFactory
-};
+export { createYouTubeEventFactory };
