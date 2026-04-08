@@ -1529,4 +1529,19 @@ describe('TypeScript toolchain migration gates behavior', () => {
         expect(content).not.toContain('module.exports');
         expect(content).not.toMatch(/^\s*exports\./m);
     });
+
+    it('keeps migrated youtube modules free of require syntax', () => {
+        const youtubeModulePaths = [
+            'src/platforms/youtube/events/event-router.ts',
+            'src/platforms/youtube/events/event-factory.ts',
+            'src/platforms/youtube/connections/youtube-connection-factory.ts',
+            'src/platforms/youtube/monetization/monetization-parser.ts',
+            'src/platforms/youtube/streams/youtube-multistream-manager.ts'
+        ];
+
+        for (const modulePath of youtubeModulePaths) {
+            const content = readFileSync(join(repoRoot, modulePath), 'utf8');
+            expect(content).not.toMatch(/\brequire\s*\(/);
+        }
+    });
 });

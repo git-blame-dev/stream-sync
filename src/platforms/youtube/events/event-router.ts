@@ -1,7 +1,10 @@
-const { createPlatformErrorHandler } = require('../../../utils/platform-error-handler');
-const { PlatformEvents } = require('../../../interfaces/PlatformEvents');
-const { getSystemTimestampISO } = require('../../../utils/timestamp');
-const { validateLoggerInterface } = require('../../../utils/dependency-validator');
+import { createRequire } from 'node:module';
+
+const nodeRequire = createRequire(__filename);
+const { createPlatformErrorHandler } = nodeRequire('../../../utils/platform-error-handler');
+const { PlatformEvents } = nodeRequire('../../../interfaces/PlatformEvents');
+const { getSystemTimestampISO } = nodeRequire('../../../utils/timestamp');
+const { validateLoggerInterface } = nodeRequire('../../../utils/dependency-validator');
 
 type UnknownRecord = Record<string, unknown>;
 
