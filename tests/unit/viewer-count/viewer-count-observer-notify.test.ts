@@ -1,13 +1,16 @@
 import { describe, test, expect, beforeEach, afterEach } from 'bun:test';
-const { createMockFn, restoreAllMocks } = require('../../helpers/bun-mock-utils');
-const { noOpLogger } = require('../../helpers/mock-factories');
-const { createConfigFixture } = require('../../helpers/config-fixture');
+import { createRequire } from 'node:module';
+
+const load = createRequire(__filename);
+const { createMockFn, restoreAllMocks } = load('../../helpers/bun-mock-utils');
+const { noOpLogger } = load('../../helpers/mock-factories');
+const { createConfigFixture } = load('../../helpers/config-fixture');
 
 describe('ViewerCountSystem stream status observer notifications', () => {
     let ViewerCountSystem;
 
     beforeEach(() => {
-        ({ ViewerCountSystem } = require('../../../src/utils/viewer-count.ts'));
+        ({ ViewerCountSystem } = load('../../../src/utils/viewer-count.ts'));
     });
 
     afterEach(() => {
