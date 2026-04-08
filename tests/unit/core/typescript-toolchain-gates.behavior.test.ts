@@ -1559,7 +1559,7 @@ describe('TypeScript toolchain migration gates behavior', () => {
         }
     });
 
-    it('keeps migrated youtube modules free of nodeRequire for shared ts dependencies', () => {
+    it('keeps migrated youtube modules free of nodeRequire for modernized dependencies', () => {
         const assertions = [
             {
                 path: 'src/platforms/youtube/events/event-router.ts',
@@ -1583,7 +1583,8 @@ describe('TypeScript toolchain migration gates behavior', () => {
             {
                 path: 'src/platforms/youtube/monetization/monetization-parser.ts',
                 forbidden: [
-                    "nodeRequire('../youtube-message-extractor')"
+                    "nodeRequire('../youtube-message-extractor')",
+                    "nodeRequire('../youtubei-currency-parser')"
                 ]
             },
             {
@@ -1599,6 +1600,19 @@ describe('TypeScript toolchain migration gates behavior', () => {
             for (const forbiddenPattern of assertion.forbidden) {
                 expect(content).not.toContain(forbiddenPattern);
             }
+        }
+    });
+
+    it('keeps migrated youtube modules free of createRequire shim imports', () => {
+        const modulePaths = [
+            'src/platforms/youtube/monetization/monetization-parser.ts'
+        ];
+
+        for (const modulePath of modulePaths) {
+            const content = readFileSync(join(repoRoot, modulePath), 'utf8');
+            expect(content).not.toContain("from 'node:module'");
+            expect(content).not.toContain('createRequire(');
+            expect(content).not.toContain('nodeRequire(');
         }
     });
 });

@@ -1,19 +1,11 @@
-import { createRequire } from 'node:module';
 import { extractMessageText } from '../youtube-message-extractor';
-
-const nodeRequire = createRequire(__filename);
-const { YouTubeiCurrencyParser } = nodeRequire('../youtubei-currency-parser');
+import { YouTubeiCurrencyParser } from '../youtubei-currency-parser';
+import type { YouTubeiCurrencyParseResult } from '../youtubei-currency-parser';
 
 type UnknownRecord = Record<string, unknown>;
 
 interface YouTubeMonetizationParserOptions {
     logger?: unknown;
-}
-
-interface CurrencyParseResult {
-    success: boolean;
-    amount: number;
-    currency: string;
 }
 
 interface StructuredRun {
@@ -154,7 +146,7 @@ function createYouTubeMonetizationParser(options: YouTubeMonetizationParserOptio
         }
 
         if (typeof purchaseAmount === 'string') {
-            const result = currencyParser.parse(purchaseAmount) as CurrencyParseResult;
+            const result = currencyParser.parse(purchaseAmount) as YouTubeiCurrencyParseResult;
             if (!result.success || !Number.isFinite(result.amount) || result.amount <= 0) {
                 throw new Error(`${label} requires valid purchase_amount`);
             }
