@@ -1,10 +1,13 @@
-const { buildPreviewConfig, buildPreviewScenarioEvents, createPreviewPipeline } = require('./gui-preview');
-const { createGuiTransportService } = require('../../src/services/gui/gui-transport-service');
-const { logger: defaultLogger } = require('../../src/core/logging');
-const { createPlatformErrorHandler } = require('../../src/utils/platform-error-handler');
-const { createTikTokGiftAnimationResolver } = require('../../src/services/tiktok-gift-animation/resolver');
-const { safeSetTimeout, safeDelay } = require('../../src/utils/timeout-validator');
-const nodeCrypto = require('crypto');
+import { randomUUID } from 'node:crypto';
+import { createRequire } from 'node:module';
+
+const load = createRequire(__filename);
+const { buildPreviewConfig, buildPreviewScenarioEvents, createPreviewPipeline } = load('./gui-preview');
+const { createGuiTransportService } = load('../../src/services/gui/gui-transport-service');
+const { logger: defaultLogger } = load('../../src/core/logging');
+const { createPlatformErrorHandler } = load('../../src/utils/platform-error-handler');
+const { createTikTokGiftAnimationResolver } = load('../../src/services/tiktok-gift-animation/resolver');
+const { safeSetTimeout, safeDelay } = load('../../src/utils/timeout-validator');
 
 const DEFAULT_DURATION_MS = 12000;
 
@@ -185,7 +188,7 @@ async function runGuiGiftAnimationPreview(options: GiftAnimationPreviewOptions =
 
         const emitGiftAnimation = () => {
             previewPipeline.eventBus.emit('display:gift-animation', {
-                playbackId: nodeCrypto.randomUUID(),
+                playbackId: randomUUID(),
                 type: 'platform:gift',
                 platform: 'tiktok',
                 durationMs: resolved.durationMs,
@@ -241,7 +244,7 @@ if (require.main === module) {
     });
 }
 
-module.exports = {
+export {
     DEFAULT_DURATION_MS,
     buildGiftAnimationPreviewEvent,
     buildGiftPreviewNotificationData,

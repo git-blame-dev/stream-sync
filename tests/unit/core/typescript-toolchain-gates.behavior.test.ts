@@ -1458,4 +1458,12 @@ describe('TypeScript toolchain migration gates behavior', () => {
 
         expect(offenders).toEqual([]);
     });
+
+    it('keeps gui gift preview local script free of commonjs module syntax', () => {
+        const content = readFileSync(join(repoRoot, 'scripts/local/gui-gift-animation-preview.ts'), 'utf8');
+
+        expect(content).not.toMatch(/^\s*(?:const|let|var)\s+.+?=\s*require\s*\(/m);
+        expect(content).not.toContain('module.exports');
+        expect(content).not.toMatch(/^\s*exports\./m);
+    });
 });
