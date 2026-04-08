@@ -1,3 +1,5 @@
+import { createRequire } from 'node:module';
+
 type CurrencySymbolMapping = {
     pattern: RegExp;
     currency: string;
@@ -38,11 +40,13 @@ interface ErrorHandlerLike {
     logOperationalError: (message: string, platform: string, metadata: Record<string, unknown>) => void;
 }
 
-const { createPlatformErrorHandler } = require('../../utils/platform-error-handler') as {
+const nodeRequire = createRequire(__filename);
+
+const { createPlatformErrorHandler } = nodeRequire('../../utils/platform-error-handler') as {
     createPlatformErrorHandler: (logger: LoggerLike, platform: string) => ErrorHandlerLike;
 };
 
-const { resolveLogger } = require('../../utils/logger-resolver') as {
+const { resolveLogger } = nodeRequire('../../utils/logger-resolver') as {
     resolveLogger: (logger: unknown, componentName: string) => LoggerLike;
 };
 
