@@ -1,24 +1,50 @@
-const EventEmitter = require('events');
-const configModule = require('../../src/core/config');
-const { logger: defaultLogger } = require('../../src/core/logging');
-const { createEventBus } = require('../../src/core/EventBus');
-const { PlatformEvents } = require('../../src/interfaces/PlatformEvents');
-const { PRIORITY_LEVELS, NOTIFICATION_CONFIGS } = require('../../src/core/constants');
-const { createPlatformErrorHandler } = require('../../src/utils/platform-error-handler');
-const { safeSetInterval, safeSetTimeout, safeDelay } = require('../../src/utils/timeout-validator');
-const { createGuiTransportService } = require('../../src/services/gui/gui-transport-service');
-const PlatformEventRouter = require('../../src/services/PlatformEventRouter');
-const ChatNotificationRouter = require('../../src/services/ChatNotificationRouter');
-const { createVFXCommandService } = require('../../src/services/VFXCommandService');
-const CommandCooldownService = require('../../src/services/CommandCooldownService');
-const { createUserTrackingService } = require('../../src/services/UserTrackingService');
-const NotificationManager = require('../../src/notifications/NotificationManager');
-const { DisplayQueue } = require('../../src/obs/display-queue');
-const { createTikTokGiftAnimationResolver } = require('../../src/services/tiktok-gift-animation/resolver');
-const { createTwitchEventSubEventRouter } = require('../../src/platforms/twitch/events/event-router');
-const { createYouTubeEventRouter } = require('../../src/platforms/youtube/events/event-router');
-const { setupTikTokEventListeners } = require('../../src/platforms/tiktok/events/event-router');
-const { DEFAULT_AVATAR_URL } = require('../../src/constants/avatar');
+import EventEmitter from 'node:events';
+import { createRequire } from 'node:module';
+import * as TwitchEventRouterModule from '../../src/platforms/twitch/events/event-router.js';
+import * as CommandCooldownServiceModule from '../../src/services/CommandCooldownService.js';
+import * as UserTrackingServiceModule from '../../src/services/UserTrackingService.js';
+import * as VFXCommandServiceModule from '../../src/services/VFXCommandService.js';
+
+const { createTwitchEventSubEventRouter } = TwitchEventRouterModule as unknown as {
+    createTwitchEventSubEventRouter: (options: UnknownRecord) => {
+        handleNotificationEvent: (subscriptionType: string, event: UnknownRecord, metadata: UnknownRecord) => void;
+    };
+};
+const { createUserTrackingService } = UserTrackingServiceModule as unknown as {
+    createUserTrackingService: () => {
+        isFirstMessage: (userId: unknown, context: unknown) => unknown;
+    };
+};
+const { createVFXCommandService } = VFXCommandServiceModule as unknown as {
+    createVFXCommandService: (config: UnknownRecord, eventBus: PreviewPipeline['eventBus']) => unknown;
+};
+const CommandCooldownServiceClass = (CommandCooldownServiceModule as unknown as {
+    default: new (options: {
+        config: UnknownRecord;
+        eventBus: PreviewPipeline['eventBus'];
+        logger: PreviewLogger;
+    }) => {
+        dispose?: () => void;
+    };
+}).default;
+
+const load = createRequire(__filename);
+const configModule = load('../../src/core/config');
+const { logger: defaultLogger } = load('../../src/core/logging');
+const { createEventBus } = load('../../src/core/EventBus');
+const { PlatformEvents } = load('../../src/interfaces/PlatformEvents');
+const { PRIORITY_LEVELS, NOTIFICATION_CONFIGS } = load('../../src/core/constants');
+const { createPlatformErrorHandler } = load('../../src/utils/platform-error-handler');
+const { safeSetInterval, safeSetTimeout, safeDelay } = load('../../src/utils/timeout-validator');
+const { createGuiTransportService } = load('../../src/services/gui/gui-transport-service');
+const PlatformEventRouter = load('../../src/services/PlatformEventRouter');
+const ChatNotificationRouter = load('../../src/services/ChatNotificationRouter');
+const NotificationManager = load('../../src/notifications/NotificationManager');
+const { DisplayQueue } = load('../../src/obs/display-queue');
+const { createTikTokGiftAnimationResolver } = load('../../src/services/tiktok-gift-animation/resolver');
+const { createYouTubeEventRouter } = load('../../src/platforms/youtube/events/event-router');
+const { setupTikTokEventListeners } = load('../../src/platforms/tiktok/events/event-router');
+const { DEFAULT_AVATAR_URL } = load('../../src/constants/avatar');
 
 type UnknownRecord = Record<string, any>;
 
@@ -1236,13 +1262,15 @@ function createPreviewPipeline(options: CreatePreviewPipelineOptions = {}): Prev
         }
     );
 
-    const commandCooldownService = options.commandCooldownService || new CommandCooldownService({
+    const commandCooldownService = options.commandCooldownService || new CommandCooldownServiceClass({
         config,
         eventBus,
         logger
     });
 
-    const userTrackingService = options.userTrackingService || createUserTrackingService();
+    const userTrackingService = (options.userTrackingService || createUserTrackingService()) as {
+        isFirstMessage: (userId: unknown, context: unknown) => unknown;
+    };
     const vfxCommandService = options.vfxCommandService || createVFXCommandService(config, eventBus);
 
     const notificationManager = options.notificationManager || new NotificationManager({
@@ -1487,7 +1515,7 @@ if (require.main === module) {
     });
 }
 
-module.exports = {
+export {
     PREVIEW_DURATION_MS,
     PREVIEW_INTERVAL_MS,
     PREVIEW_MEDIA_CATALOG,
