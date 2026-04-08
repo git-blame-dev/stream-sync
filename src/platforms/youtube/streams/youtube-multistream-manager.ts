@@ -1,7 +1,69 @@
 const { PlatformEvents } = require('../../../interfaces/PlatformEvents');
 const { YOUTUBE } = require('../../../core/endpoints');
 
-function createYouTubeMultiStreamManager(options = {}) {
+type UnknownRecord = Record<string, unknown>;
+
+interface LoggerLike {
+    debug: (message: string, scope: string) => void;
+    info: (message: string, scope: string) => void;
+    warn: (message: string, scope: string) => void;
+}
+
+interface ConnectionManagerLike {
+    getConnectionCount: () => number;
+    getAllVideoIds: () => string[];
+    hasConnection: (videoId: string) => boolean;
+}
+
+interface ShortageState {
+    lastWarningTime: number | null;
+    isInShortage: boolean;
+    lastKnownAvailable: number;
+    lastKnownRequired: number;
+}
+
+interface YouTubeMultiStreamPlatform {
+    config: {
+        maxStreams: number;
+        streamPollingInterval: number;
+        fullCheckInterval: number;
+    };
+    connectionManager: ConnectionManagerLike;
+    logger: LoggerLike;
+    shortageState: ShortageState;
+    monitoringInterval: number | ReturnType<typeof setInterval> | null;
+    monitoringIntervalStart?: number;
+    lastFullStreamCheck: number | null;
+    lastYouTubeVideoIdsUpdateTime?: number;
+    checkMultiStream: (options?: { throwOnError?: boolean }) => Promise<void>;
+    checkStreamShortageAndWarn: (availableCount: number, maxStreams: number) => void;
+    getActiveYouTubeVideoIds: () => string[];
+    getLiveVideoIds: () => Promise<string[]>;
+    connectToYouTubeStream: (videoId: string) => Promise<void>;
+    disconnectFromYouTubeStream: (videoId: string, reason: string) => Promise<void>;
+    _logMultiStreamStatus: (includeDetails?: boolean, includeActiveStreamsList?: boolean) => void;
+    _handleProcessingError: (message: string, error: unknown, category: string) => void;
+    _handleConnectionErrorLogging: (message: string, error: unknown, category: string) => void;
+    _handleError: (error: unknown, context: string) => void;
+    _emitPlatformEvent: (type: string, payload: UnknownRecord) => void;
+}
+
+interface MultiStreamManagerOptions {
+    platform?: YouTubeMultiStreamPlatform;
+    safeSetInterval?: (callback: () => void, intervalMs: number) => number | ReturnType<typeof setInterval>;
+    validateTimeout?: (value: number, fallbackValue: number, fieldName: string) => number;
+    now?: () => number;
+}
+
+interface CheckMultiStreamOptions {
+    throwOnError?: boolean;
+}
+
+const toErrorMessage = (error: unknown): string => (
+    error instanceof Error ? error.message : String(error)
+);
+
+function createYouTubeMultiStreamManager(options: MultiStreamManagerOptions = {}) {
     const {
         platform,
         safeSetInterval,
@@ -51,9 +113,9 @@ function createYouTubeMultiStreamManager(options = {}) {
 
         try {
             await platform.checkMultiStream({ throwOnError: true });
-        } catch (error) {
+        } catch (error: unknown) {
             platform._handleProcessingError(
-                `Initial multi-stream check failed: ${error.message}`,
+                `Initial multi-stream check failed: ${toErrorMessage(error)}`,
                 error,
                 'multi-stream-check'
             );
@@ -61,7 +123,7 @@ function createYouTubeMultiStreamManager(options = {}) {
         }
     };
 
-    const checkMultiStream = async (options = {}) => {
+    const checkMultiStream = async (options: CheckMultiStreamOptions = {}) => {
         const throwOnError = options.throwOnError === true;
         try {
             const maxStreams = platform.config.maxStreams;
@@ -136,7 +198,7 @@ function createYouTubeMultiStreamManager(options = {}) {
 
             if (videoIds.length > 0) {
                 platform.logger.info('Detected live streams:', 'youtube');
-                videoIds.forEach((streamId, index) => {
+                videoIds.forEach((streamId: string, index: number) => {
                     const streamUrl = `${YOUTUBE.BASE}/watch?v=${streamId}`;
                     platform.logger.debug(`  ${index + 1}. ${streamId} - ${streamUrl}`, 'youtube');
                 });
@@ -145,19 +207,19 @@ function createYouTubeMultiStreamManager(options = {}) {
             platform.lastYouTubeVideoIdsUpdateTime = currentTimeMs;
 
             const previousVideoIds = platform.getActiveYouTubeVideoIds().filter(
-                (id) => platform.connectionManager.hasConnection(id)
+                (id: string) => platform.connectionManager.hasConnection(id)
             );
 
-            const newStreamIds = videoIds.filter((id) => !previousVideoIds.includes(id));
+            const newStreamIds = videoIds.filter((id: string) => !previousVideoIds.includes(id));
 
             for (const videoId of videoIds) {
                 const hasExistingConnection = platform.connectionManager.hasConnection(videoId);
                 if (!hasExistingConnection) {
                     try {
                         await platform.connectToYouTubeStream(videoId);
-                    } catch (error) {
+                    } catch (error: unknown) {
                         platform._handleConnectionErrorLogging(
-                            `Failed to connect to stream ${videoId}: ${error.message}`,
+                            `Failed to connect to stream ${videoId}: ${toErrorMessage(error)}`,
                             error,
                             'stream-connect'
                         );
@@ -191,9 +253,9 @@ function createYouTubeMultiStreamManager(options = {}) {
             }
 
             platform._logMultiStreamStatus(true, true);
-        } catch (error) {
+        } catch (error: unknown) {
             platform._handleProcessingError(
-                `Error in checkMultiStream: ${error.message}`,
+                `Error in checkMultiStream: ${toErrorMessage(error)}`,
                 error,
                 'checkMultiStream'
             );
@@ -204,7 +266,7 @@ function createYouTubeMultiStreamManager(options = {}) {
         }
     };
 
-    const checkStreamShortageAndWarn = (availableCount, maxStreams) => {
+    const checkStreamShortageAndWarn = (availableCount: number, maxStreams: number) => {
         const currentTimeMs = now();
         const isShortage = maxStreams > 0 && availableCount < maxStreams;
         const warningThrottleMs = validateTimeout(
@@ -255,14 +317,14 @@ function createYouTubeMultiStreamManager(options = {}) {
 
             if (includeDetails && storedConnections.length > readyConnections.length) {
                 const pendingConnections = storedConnections.filter((id) => !readyConnections.includes(id));
-                pendingConnections.forEach((streamId) => {
+                pendingConnections.forEach((streamId: string) => {
                     platform.logger.info(`Waiting for stream to start: ${streamId}`, 'youtube');
                 });
             }
 
             if (includeActiveStreamsList && readyConnections.length > 0) {
                 platform.logger.info('Active streams:', 'youtube');
-                readyConnections.forEach((streamId, index) => {
+                readyConnections.forEach((streamId: string, index: number) => {
                     const streamUrl = `${YOUTUBE.BASE}/watch?v=${streamId}`;
                     platform.logger.debug(`  ${index + 1}. ${streamId} - ${streamUrl}`, 'youtube');
                 });
@@ -280,6 +342,4 @@ function createYouTubeMultiStreamManager(options = {}) {
     };
 }
 
-module.exports = {
-    createYouTubeMultiStreamManager
-};
+export { createYouTubeMultiStreamManager };
