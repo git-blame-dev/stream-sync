@@ -1,17 +1,18 @@
 import { describe, test, expect, beforeEach, afterEach } from 'bun:test';
-const { createMockFn, restoreAllMocks } = require('../../helpers/bun-mock-utils');
-const { useFakeTimers, useRealTimers, setSystemTime } = require('../../helpers/bun-timers');
+import { createRequire } from 'node:module';
 
-const { ViewerCountSystem } = require('../../../src/utils/viewer-count.ts');
-const { OBSViewerCountObserver } = require('../../../src/observers/obs-viewer-count-observer.ts');
-const { createConfigFixture } = require('../../helpers/config-fixture');
-
+const load = createRequire(__filename);
+const { createMockFn, restoreAllMocks } = load('../../helpers/bun-mock-utils');
+const { useFakeTimers, useRealTimers, setSystemTime } = load('../../helpers/bun-timers');
+const { ViewerCountSystem } = load('../../../src/utils/viewer-count.ts');
+const { OBSViewerCountObserver } = load('../../../src/observers/obs-viewer-count-observer.ts');
+const { createConfigFixture } = load('../../helpers/config-fixture');
 const {
     createMockOBSManager,
     setupAutomatedCleanup,
     noOpLogger
-} = require('../../helpers/mock-factories');
-const testClock = require('../../helpers/test-clock');
+} = load('../../helpers/mock-factories');
+const testClock = load('../../helpers/test-clock');
 
 const createEdgeCasePlatform = (platformName = 'tiktok', edgeCaseConfig = {}) => {
     const {
