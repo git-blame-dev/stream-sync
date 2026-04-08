@@ -3,6 +3,27 @@ const { PlatformEvents } = require('../../../interfaces/PlatformEvents');
 const { getSystemTimestampISO } = require('../../../utils/timestamp');
 const { validateLoggerInterface } = require('../../../utils/dependency-validator');
 
+type UnknownRecord = Record<string, unknown>;
+
+interface RouteablePlatform {
+    logger: unknown;
+    eventFactory?: {
+        createErrorEvent: (options: {
+            error: Error;
+            context: UnknownRecord;
+            recoverable: boolean;
+            timestamp: string;
+        }) => unknown;
+    };
+    _emitPlatformEvent?: (eventType: string, payload: unknown) => void;
+    handleLowPriorityEvent?: (chatItem: unknown, eventType: string) => unknown;
+    [key: string]: unknown;
+}
+
+interface CreateYouTubeEventRouterOptions {
+    platform?: RouteablePlatform;
+}
+
 const EVENT_HANDLER_MAP = new Map([
     ['LiveChatPaidMessage', 'handleSuperChat'],
     ['LiveChatPaidSticker', 'handleSuperSticker'],
@@ -18,7 +39,7 @@ const LOW_PRIORITY_EVENT_TYPES = new Set([
     'LiveChatBannerPoll'
 ]);
 
-function createYouTubeEventRouter(options = {}) {
+function createYouTubeEventRouter(options: CreateYouTubeEventRouterOptions = {}) {
     const { platform } = options;
     if (!platform) {
         throw new Error('YouTube event router requires platform');
@@ -30,7 +51,7 @@ function createYouTubeEventRouter(options = {}) {
 
     const errorHandler = createPlatformErrorHandler(platform.logger, 'youtube-event-router');
 
-    const emitMissingHandlerError = (eventType, handlerName, chatItem) => {
+    const emitMissingHandlerError = (eventType: string, handlerName: string, chatItem: unknown): void => {
         const message = `Missing YouTube handler for ${eventType}`;
         const error = new Error(message);
         errorHandler.handleEventProcessingError(error, eventType, chatItem, message, 'youtube-event-router');
@@ -51,24 +72,27 @@ function createYouTubeEventRouter(options = {}) {
                 timestamp: getSystemTimestampISO()
             });
             platform._emitPlatformEvent(PlatformEvents.ERROR, payload);
-        } catch (emitError) {
+        } catch (emitError: unknown) {
+            const emitErrorMessage = emitError && typeof emitError === 'object' && 'message' in emitError
+                ? String((emitError as { message?: unknown }).message)
+                : String(emitError);
             errorHandler.handleEventProcessingError(
                 emitError,
                 eventType,
                 chatItem,
-                `Error emitting platform error event: ${emitError.message}`,
+                `Error emitting platform error event: ${emitErrorMessage}`,
                 'youtube-event-router'
             );
         }
     };
 
-    const routeEvent = async (chatItem, eventType) => {
+    const routeEvent = async (chatItem: unknown, eventType: unknown): Promise<boolean> => {
         if (!eventType || typeof eventType !== 'string') {
             return false;
         }
 
         if (LOW_PRIORITY_EVENT_TYPES.has(eventType)) {
-            const handler = platform.handleLowPriorityEvent;
+            const handler = platform.handleLowPriorityEvent as ((item: unknown, type: string) => unknown) | undefined;
             if (typeof handler !== 'function') {
                 emitMissingHandlerError(eventType, 'handleLowPriorityEvent', chatItem);
                 return false;
@@ -82,7 +106,7 @@ function createYouTubeEventRouter(options = {}) {
             return false;
         }
 
-        const handler = platform[handlerName];
+        const handler = platform[handlerName] as ((item: unknown) => unknown) | undefined;
         if (typeof handler !== 'function') {
             emitMissingHandlerError(eventType, handlerName, chatItem);
             return false;
@@ -95,6 +119,4 @@ function createYouTubeEventRouter(options = {}) {
     return { routeEvent };
 }
 
-module.exports = {
-    createYouTubeEventRouter
-};
+export { createYouTubeEventRouter };
