@@ -1,4 +1,4 @@
-function normalizeYouTubeUsername(username) {
+function normalizeYouTubeUsername(username: unknown): string | null {
     if (typeof username !== 'string') {
         return null;
     }
@@ -20,6 +20,4 @@ function normalizeYouTubeUsername(username) {
     return normalizedName;
 }
 
-module.exports = {
-    normalizeYouTubeUsername
-};
+export { normalizeYouTubeUsername };
