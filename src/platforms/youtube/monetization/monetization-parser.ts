@@ -1,14 +1,71 @@
 const { extractMessageText } = require('../youtube-message-extractor');
 const { YouTubeiCurrencyParser } = require('../youtubei-currency-parser');
 
-function createYouTubeMonetizationParser(options = {}) {
+type UnknownRecord = Record<string, unknown>;
+
+interface YouTubeMonetizationParserOptions {
+    logger?: unknown;
+}
+
+interface CurrencyParseResult {
+    success: boolean;
+    amount: number;
+    currency: string;
+}
+
+interface StructuredRun {
+    text?: string;
+}
+
+interface ParsedSuperSticker {
+    id: string;
+    timestamp: string;
+    giftType: 'Super Sticker';
+    giftCount: number;
+    amount: number;
+    currency: string;
+    avatarUrl: string;
+    message: string;
+    giftImageUrl?: string;
+}
+
+interface ParsedGiftPurchase {
+    timestamp: string;
+    giftCount: number;
+    avatarUrl: string;
+    message: string;
+    id?: string;
+}
+
+interface ParsedMembership {
+    timestamp: string;
+    avatarUrl: string;
+    membershipLevel: string;
+    message: string;
+    months?: number;
+    id?: string;
+}
+
+interface MembershipLevelInput {
+    headerPrimaryText: string;
+    headerSubtext: string;
+}
+
+const toRecord = (value: unknown): UnknownRecord => (
+    value && typeof value === 'object' && !Array.isArray(value)
+        ? value as UnknownRecord
+        : {}
+);
+
+function createYouTubeMonetizationParser(options: YouTubeMonetizationParserOptions = {}) {
     const currencyParser = new YouTubeiCurrencyParser({ logger: options.logger });
 
-    const resolveTimestamp = (chatItem, label) => {
-        const rawUsec = chatItem?.item?.timestamp_usec;
+    const resolveTimestamp = (chatItem: UnknownRecord, label: string): string => {
+        const item = toRecord(chatItem.item);
+        const rawUsec = item.timestamp_usec;
         const rawTimestamp = rawUsec !== undefined && rawUsec !== null
             ? rawUsec
-            : chatItem?.item?.timestamp;
+            : item.timestamp;
         if (rawTimestamp === undefined || rawTimestamp === null) {
             throw new Error(`${label} requires timestamp`);
         }
@@ -33,8 +90,9 @@ function createYouTubeMonetizationParser(options = {}) {
         return parsed.toISOString();
     };
 
-    const resolveId = (chatItem, label) => {
-        const rawId = chatItem?.item?.id;
+    const resolveId = (chatItem: UnknownRecord, label: string): string => {
+        const item = toRecord(chatItem.item);
+        const rawId = item.id;
         if (rawId === undefined || rawId === null) {
             throw new Error(`${label} requires id`);
         }
@@ -45,8 +103,9 @@ function createYouTubeMonetizationParser(options = {}) {
         return id;
     };
 
-    const resolveOptionalId = (chatItem) => {
-        const rawId = chatItem?.item?.id;
+    const resolveOptionalId = (chatItem: UnknownRecord): string | undefined => {
+        const item = toRecord(chatItem.item);
+        const rawId = item.id;
         if (rawId === undefined || rawId === null) {
             return undefined;
         }
@@ -54,7 +113,7 @@ function createYouTubeMonetizationParser(options = {}) {
         return id ? id : undefined;
     };
 
-    const resolveNumericAmount = (amount, label) => {
+    const resolveNumericAmount = (amount: unknown, label: string): number => {
         const numericAmount = Number(amount);
         if (!Number.isFinite(numericAmount) || numericAmount <= 0) {
             throw new Error(`${label} requires valid amount`);
@@ -62,7 +121,7 @@ function createYouTubeMonetizationParser(options = {}) {
         return numericAmount;
     };
 
-    const resolveCurrencyCode = (currency, label) => {
+    const resolveCurrencyCode = (currency: unknown, label: string): string => {
         if (typeof currency !== 'string') {
             throw new Error(`${label} requires currency`);
         }
@@ -73,14 +132,18 @@ function createYouTubeMonetizationParser(options = {}) {
         return normalized;
     };
 
-    const parsePurchaseAmount = (chatItem, label) => {
-        const purchaseAmount = chatItem?.item?.purchase_amount;
+    const parsePurchaseAmount = (
+        chatItem: UnknownRecord,
+        label: string
+    ): { amount: number; currency: string } => {
+        const item = toRecord(chatItem.item);
+        const purchaseAmount = item.purchase_amount;
         if (purchaseAmount === undefined || purchaseAmount === null) {
             throw new Error(`${label} requires purchase_amount`);
         }
 
         if (typeof purchaseAmount === 'number') {
-            const currency = resolveCurrencyCode(chatItem?.item?.purchase_currency, label);
+            const currency = resolveCurrencyCode(item.purchase_currency, label);
             return {
                 amount: resolveNumericAmount(purchaseAmount, label),
                 currency
@@ -88,7 +151,7 @@ function createYouTubeMonetizationParser(options = {}) {
         }
 
         if (typeof purchaseAmount === 'string') {
-            const result = currencyParser.parse(purchaseAmount);
+            const result = currencyParser.parse(purchaseAmount) as CurrencyParseResult;
             if (!result.success || !Number.isFinite(result.amount) || result.amount <= 0) {
                 throw new Error(`${label} requires valid purchase_amount`);
             }
@@ -101,20 +164,21 @@ function createYouTubeMonetizationParser(options = {}) {
         throw new Error(`${label} requires purchase_amount`);
     };
 
-    const extractStructuredText = (field) => {
+    const extractStructuredText = (field: unknown): string => {
+        const fieldRecord = toRecord(field);
         if (!field) {
             return '';
         }
 
-        if (Array.isArray(field.runs)) {
-            return field.runs.map((run) => run?.text || '').join('').trim();
+        if (Array.isArray(fieldRecord.runs)) {
+            return (fieldRecord.runs as StructuredRun[]).map((run: StructuredRun) => run?.text || '').join('').trim();
         }
 
-        const raw = field.simpleText || field.text || '';
+        const raw = fieldRecord.simpleText || fieldRecord.text || '';
         return typeof raw === 'string' ? raw.trim() : '';
     };
 
-    const extractFirstStructuredText = (...fields) => {
+    const extractFirstStructuredText = (...fields: unknown[]): string => {
         for (const field of fields) {
             const extracted = extractStructuredText(field);
             if (extracted) {
@@ -125,7 +189,7 @@ function createYouTubeMonetizationParser(options = {}) {
         return '';
     };
 
-    const parseMembershipMonthsFromHeaderText = (text) => {
+    const parseMembershipMonthsFromHeaderText = (text: unknown): number | undefined => {
         if (typeof text !== 'string') {
             return undefined;
         }
@@ -139,7 +203,7 @@ function createYouTubeMonetizationParser(options = {}) {
         return Number.isFinite(months) && months > 0 ? months : undefined;
     };
 
-    const resolveMembershipLevel = ({ headerPrimaryText, headerSubtext, months }) => {
+    const resolveMembershipLevel = ({ headerPrimaryText, headerSubtext }: MembershipLevelInput): string => {
         const normalizedPrimary = typeof headerPrimaryText === 'string' ? headerPrimaryText.trim() : '';
         const normalizedSubtext = typeof headerSubtext === 'string' ? headerSubtext.trim() : '';
         const milestoneMonthsFromPrimary = parseMembershipMonthsFromHeaderText(normalizedPrimary);
@@ -164,15 +228,21 @@ function createYouTubeMonetizationParser(options = {}) {
         return normalizedSubtext;
     };
 
-    const resolveAuthorAvatarUrl = (chatItem) => {
-        const avatarUrl = chatItem?.item?.author?.thumbnails?.[0]?.url;
+    const resolveAuthorAvatarUrl = (chatItem: UnknownRecord): string => {
+        const item = toRecord(chatItem.item);
+        const author = toRecord(item.author);
+        const thumbnails = Array.isArray(author.thumbnails) ? author.thumbnails : [];
+        const firstThumbnail = thumbnails[0] && typeof thumbnails[0] === 'object'
+            ? thumbnails[0] as UnknownRecord
+            : {};
+        const avatarUrl = firstThumbnail.url;
         if (typeof avatarUrl !== 'string') {
             return '';
         }
         return avatarUrl.trim();
     };
 
-    const normalizeStickerImageUrl = (url) => {
+    const normalizeStickerImageUrl = (url: unknown): string => {
         if (typeof url !== 'string') {
             return '';
         }
@@ -186,23 +256,24 @@ function createYouTubeMonetizationParser(options = {}) {
         return trimmed;
     };
 
-    const resolveStickerImageUrl = (stickerField) => {
+    const resolveStickerImageUrl = (stickerField: unknown): string => {
         const rawCandidates = Array.isArray(stickerField)
             ? stickerField
             : (stickerField && typeof stickerField === 'object' ? [stickerField] : []);
 
         const candidates = rawCandidates
-            .map((candidate) => {
-                const imageUrl = normalizeStickerImageUrl(candidate?.url);
-                const width = Number(candidate?.width);
-                const height = Number(candidate?.height);
+            .map((candidate: unknown) => {
+                const candidateRecord = toRecord(candidate);
+                const imageUrl = normalizeStickerImageUrl(candidateRecord.url);
+                const width = Number(candidateRecord.width);
+                const height = Number(candidateRecord.height);
                 return {
                     imageUrl,
                     width: Number.isFinite(width) && width > 0 ? width : 0,
                     height: Number.isFinite(height) && height > 0 ? height : 0
                 };
             })
-            .filter((candidate) => !!candidate.imageUrl);
+            .filter((candidate: { imageUrl: string }) => !!candidate.imageUrl);
 
         if (candidates.length === 0) {
             return '';
@@ -223,8 +294,9 @@ function createYouTubeMonetizationParser(options = {}) {
         return candidates[0].imageUrl;
     };
 
-    const parseSuperChat = (chatItem) => {
+    const parseSuperChat = (chatItem: UnknownRecord) => {
         const { amount, currency } = parsePurchaseAmount(chatItem, 'YouTube Super Chat');
+        const item = toRecord(chatItem.item);
         return {
             id: resolveId(chatItem, 'YouTube Super Chat'),
             timestamp: resolveTimestamp(chatItem, 'YouTube Super Chat'),
@@ -233,24 +305,31 @@ function createYouTubeMonetizationParser(options = {}) {
             amount,
             currency,
             avatarUrl: resolveAuthorAvatarUrl(chatItem),
-            message: extractMessageText(chatItem?.item?.message)
+            message: extractMessageText(item.message)
         };
     };
 
-    const parseSuperSticker = (chatItem) => {
+    const parseSuperSticker = (chatItem: UnknownRecord): ParsedSuperSticker => {
         const { amount, currency } = parsePurchaseAmount(chatItem, 'YouTube Super Sticker');
-        const sticker = chatItem?.item?.sticker;
-        const stickerAccessibilityLabel = typeof chatItem?.item?.sticker_accessibility_label === 'string'
-            ? chatItem.item.sticker_accessibility_label.trim()
+        const item = toRecord(chatItem.item);
+        const sticker = item.sticker;
+        const stickerRecord = sticker && !Array.isArray(sticker)
+            ? toRecord(sticker)
+            : {};
+        const stickerAccessibilityLabel = typeof item.sticker_accessibility_label === 'string'
+            ? item.sticker_accessibility_label.trim()
             : '';
+        const stickerName = typeof stickerRecord.name === 'string' ? stickerRecord.name : '';
+        const stickerAltText = typeof stickerRecord.altText === 'string' ? stickerRecord.altText : '';
+        const stickerLabel = extractStructuredText(stickerRecord.label);
         const stickerMessage = stickerAccessibilityLabel || (
             sticker && !Array.isArray(sticker)
-                ? (sticker.name || sticker.altText || extractStructuredText(sticker.label))
+                ? (stickerName || stickerAltText || stickerLabel)
                 : ''
         );
         const giftImageUrl = resolveStickerImageUrl(sticker);
 
-        const payload = {
+        const payload: ParsedSuperSticker = {
             id: resolveId(chatItem, 'YouTube Super Sticker'),
             timestamp: resolveTimestamp(chatItem, 'YouTube Super Sticker'),
             giftType: 'Super Sticker',
@@ -268,17 +347,18 @@ function createYouTubeMonetizationParser(options = {}) {
         return payload;
     };
 
-    const parseGiftPurchase = (chatItem) => {
-        const giftCount = Number(chatItem?.item?.giftMembershipsCount);
+    const parseGiftPurchase = (chatItem: UnknownRecord): ParsedGiftPurchase => {
+        const item = toRecord(chatItem.item);
+        const giftCount = Number(item.giftMembershipsCount);
         if (!Number.isFinite(giftCount) || giftCount <= 0) {
             throw new Error('YouTube gift purchase requires giftMembershipsCount');
         }
 
-        const payload = {
+        const payload: ParsedGiftPurchase = {
             timestamp: resolveTimestamp(chatItem, 'YouTube gift purchase'),
             giftCount,
             avatarUrl: resolveAuthorAvatarUrl(chatItem),
-            message: extractMessageText(chatItem?.item?.message)
+            message: extractMessageText(item.message)
         };
         const id = resolveOptionalId(chatItem);
         if (id) {
@@ -287,29 +367,29 @@ function createYouTubeMonetizationParser(options = {}) {
         return payload;
     };
 
-    const parseMembership = (chatItem) => {
+    const parseMembership = (chatItem: UnknownRecord): ParsedMembership => {
+        const item = toRecord(chatItem.item);
         const headerPrimaryText = extractFirstStructuredText(
-            chatItem?.item?.headerPrimaryText,
-            chatItem?.item?.header_primary_text
+            item.headerPrimaryText,
+            item.header_primary_text
         );
         const headerSubtext = extractFirstStructuredText(
-            chatItem?.item?.headerSubtext,
-            chatItem?.item?.header_subtext
+            item.headerSubtext,
+            item.header_subtext
         );
-        const explicitMonths = Number.isFinite(Number(chatItem?.item?.memberMilestoneDurationInMonths))
-            ? Number(chatItem.item.memberMilestoneDurationInMonths)
+        const explicitMonths = Number.isFinite(Number(item.memberMilestoneDurationInMonths))
+            ? Number(item.memberMilestoneDurationInMonths)
             : undefined;
         const months = explicitMonths ?? parseMembershipMonthsFromHeaderText(headerPrimaryText);
 
-        const payload = {
+        const payload: ParsedMembership = {
             timestamp: resolveTimestamp(chatItem, 'YouTube membership'),
             avatarUrl: resolveAuthorAvatarUrl(chatItem),
             membershipLevel: resolveMembershipLevel({
                 headerPrimaryText,
-                headerSubtext,
-                months
+                headerSubtext
             }),
-            message: extractMessageText(chatItem?.item?.message) || headerSubtext,
+            message: extractMessageText(item.message) || headerSubtext,
             months
         };
         const id = resolveOptionalId(chatItem);
@@ -329,6 +409,4 @@ function createYouTubeMonetizationParser(options = {}) {
     };
 }
 
-module.exports = {
-    createYouTubeMonetizationParser
-};
+export { createYouTubeMonetizationParser };
