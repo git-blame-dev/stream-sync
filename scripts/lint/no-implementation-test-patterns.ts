@@ -17,8 +17,8 @@
  * - Only assert on contractual log output (monitoring/alerting requirements)
  */
 
-const fs = require('fs');
-const path = require('path');
+import fs from 'node:fs';
+import path from 'node:path';
 
 const PROJECT_ROOT = path.resolve(__dirname, '../..');
 const TARGET_DIRECTORIES = ['tests'];
@@ -63,9 +63,17 @@ const IMPLEMENTATION_PATTERNS = [
     }
 ];
 
+type ImplementationViolation = {
+    file: string;
+    line: number;
+    snippet: string;
+    message: string;
+    hint: string;
+};
+
 function collectFiles(dir) {
     const entries = fs.readdirSync(dir, { withFileTypes: true });
-    const files = [];
+    const files: string[] = [];
 
     for (const entry of entries) {
         const fullPath = path.join(dir, entry.name);
@@ -90,7 +98,7 @@ function scanFile(relativePath) {
     const absolutePath = path.join(PROJECT_ROOT, relativePath);
     const fileText = fs.readFileSync(absolutePath, 'utf8');
     const lines = fileText.split('\n');
-    const violations = [];
+    const violations: ImplementationViolation[] = [];
 
     lines.forEach((line, lineIndex) => {
         const trimmed = line.trim();
@@ -116,7 +124,7 @@ function scanFile(relativePath) {
 }
 
 function main() {
-    const issues = [];
+    const issues: ImplementationViolation[] = [];
 
     for (const dir of TARGET_DIRECTORIES) {
         const absoluteDir = path.join(PROJECT_ROOT, dir);

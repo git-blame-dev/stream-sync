@@ -30,7 +30,7 @@ function isLoggerReference(node) {
   return false;
 }
 
-module.exports = {
+const noLoggerErrorRule = {
   meta: {
     type: 'problem',
     docs: {
@@ -63,3 +63,5 @@ module.exports = {
     };
   }
 };
+
+export default noLoggerErrorRule;
