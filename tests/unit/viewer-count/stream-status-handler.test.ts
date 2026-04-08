@@ -1,8 +1,16 @@
 import { describe, it, expect } from 'bun:test';
-const wireStreamStatusHandlers = require('../../../src/viewer-count/stream-status-handler.ts');
+import { createRequire } from 'node:module';
+
+const load = createRequire(__filename);
+const wireStreamStatusHandlers = load('../../../src/viewer-count/stream-status-handler.ts');
+
+type StreamStatusUpdate = {
+    platform: string;
+    isLive: boolean;
+};
 
 function createEventBus() {
-    const handlers = {};
+    const handlers: Record<string, (payload?: unknown) => Promise<void> | void> = {};
     return {
         subscribe(eventType, handler) {
             handlers[eventType] = handler;
@@ -10,7 +18,7 @@ function createEventBus() {
                 delete handlers[eventType];
             };
         },
-        async emit(eventType, payload) {
+        async emit(eventType, payload?: unknown) {
             const handler = handlers[eventType];
             if (handler) {
                 await handler(payload);
@@ -20,7 +28,7 @@ function createEventBus() {
 }
 
 function createViewerCountSystem() {
-    const updates = [];
+    const updates: StreamStatusUpdate[] = [];
     return {
         updates,
         async updateStreamStatus(platform, isLive) {
@@ -71,7 +79,7 @@ describe('stream-status-handler', () => {
 
     it('logs and continues when viewer count update fails', async () => {
         const eventBus = createEventBus();
-        const warnings = [];
+        const warnings: string[] = [];
         const viewerCountSystem = {
             async updateStreamStatus() {
                 throw new Error('boom');
@@ -169,7 +177,7 @@ describe('stream-status-handler', () => {
 
     it('skips updates when viewer count system lacks updateStreamStatus', async () => {
         const eventBus = createEventBus();
-        const viewerCountSystem = {};
+        const viewerCountSystem: { updates?: StreamStatusUpdate[] } = {};
 
         wireStreamStatusHandlers({ eventBus, viewerCountSystem });
 
@@ -185,7 +193,7 @@ describe('stream-status-handler', () => {
     it('logs warning when isViewerCountEnabled throws and still updates', async () => {
         const eventBus = createEventBus();
         const viewerCountSystem = createViewerCountSystem();
-        const warnings = [];
+        const warnings: string[] = [];
 
         wireStreamStatusHandlers({
             eventBus,
