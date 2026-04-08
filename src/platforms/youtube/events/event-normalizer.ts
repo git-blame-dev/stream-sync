@@ -1,6 +1,14 @@
 const GIFT_PURCHASE_EVENT_TYPE = 'LiveChatSponsorshipsGiftPurchaseAnnouncement';
 
-function normalizeYouTubeEvent(chatItem) {
+type UnknownRecord = Record<string, unknown>;
+
+interface NormalizeYouTubeEventResult {
+    normalizedChatItem: UnknownRecord | null;
+    eventType?: string | null;
+    debugMetadata: UnknownRecord;
+}
+
+function normalizeYouTubeEvent(chatItem: unknown): NormalizeYouTubeEventResult {
     if (!chatItem || typeof chatItem !== 'object') {
         return {
             normalizedChatItem: null,
@@ -11,17 +19,19 @@ function normalizeYouTubeEvent(chatItem) {
         };
     }
 
-    let normalizedChatItem = null;
-    let eventType = null;
-    let structure = null;
+    const rawChatItem = chatItem as UnknownRecord;
+    let normalizedChatItem: UnknownRecord | null = null;
+    let eventType: string | null = null;
+    let structure: 'wrapped' | 'direct' | null = null;
 
-    if (chatItem.item) {
-        normalizedChatItem = chatItem;
-        eventType = chatItem.item.type;
+    if (rawChatItem.item && typeof rawChatItem.item === 'object') {
+        normalizedChatItem = rawChatItem as UnknownRecord;
+        const wrappedType = (rawChatItem.item as UnknownRecord).type;
+        eventType = typeof wrappedType === 'string' ? wrappedType : null;
         structure = 'wrapped';
-    } else if (chatItem.type) {
-        normalizedChatItem = { item: chatItem };
-        eventType = chatItem.type;
+    } else if (rawChatItem.type) {
+        normalizedChatItem = { item: rawChatItem };
+        eventType = typeof rawChatItem.type === 'string' ? rawChatItem.type : null;
         structure = 'direct';
     }
 
@@ -30,14 +40,14 @@ function normalizeYouTubeEvent(chatItem) {
             normalizedChatItem: null,
             debugMetadata: {
                 reason: 'unrecognized_structure',
-                hasItem: !!chatItem.item,
-                hasType: !!chatItem.type,
-                keys: Object.keys(chatItem)
+                hasItem: !!rawChatItem.item,
+                hasType: !!rawChatItem.type,
+                keys: Object.keys(rawChatItem)
             }
         };
     }
 
-    normalizedChatItem = hydrateWrapperFields(normalizedChatItem, chatItem);
+    normalizedChatItem = hydrateWrapperFields(normalizedChatItem, rawChatItem);
 
     if (eventType === GIFT_PURCHASE_EVENT_TYPE) {
         const hydratedGiftPurchase = hydrateGiftPurchaseAuthor(normalizedChatItem);
@@ -72,21 +82,26 @@ function normalizeYouTubeEvent(chatItem) {
     };
 }
 
-function hydrateWrapperFields(normalizedChatItem, rawChatItem) {
-    if (!rawChatItem?.item || typeof rawChatItem.item !== 'object') {
+function hydrateWrapperFields(normalizedChatItem: UnknownRecord, rawChatItem: UnknownRecord): UnknownRecord {
+    const rawItem = rawChatItem.item;
+    if (!rawItem || typeof rawItem !== 'object') {
         return normalizedChatItem;
     }
+
+    const normalizedItem = normalizedChatItem.item && typeof normalizedChatItem.item === 'object'
+        ? normalizedChatItem.item as UnknownRecord
+        : null;
 
     const wrapperId = rawChatItem.id;
     const wrapperTimestampUsec = rawChatItem.timestamp_usec;
     const wrapperTimestamp = rawChatItem.timestamp;
-    const shouldHydrateId = wrapperId !== undefined && wrapperId !== null && !normalizedChatItem.item?.id;
+    const shouldHydrateId = wrapperId !== undefined && wrapperId !== null && !normalizedItem?.id;
     const shouldHydrateTimestampUsec = wrapperTimestampUsec !== undefined && wrapperTimestampUsec !== null
-        && !normalizedChatItem.item?.timestamp_usec;
+        && !normalizedItem?.timestamp_usec;
     const shouldHydrateTimestamp = !shouldHydrateTimestampUsec
         && wrapperTimestamp !== undefined
         && wrapperTimestamp !== null
-        && !normalizedChatItem.item?.timestamp;
+        && !normalizedItem?.timestamp;
 
     if (!shouldHydrateId && !shouldHydrateTimestampUsec && !shouldHydrateTimestamp) {
         return normalizedChatItem;
@@ -95,7 +110,7 @@ function hydrateWrapperFields(normalizedChatItem, rawChatItem) {
     return {
         ...normalizedChatItem,
         item: {
-            ...normalizedChatItem.item,
+            ...(normalizedItem || {}),
             ...(shouldHydrateId ? { id: wrapperId } : {}),
             ...(shouldHydrateTimestampUsec ? { timestamp_usec: wrapperTimestampUsec } : {}),
             ...(shouldHydrateTimestamp ? { timestamp: wrapperTimestamp } : {})
@@ -103,22 +118,26 @@ function hydrateWrapperFields(normalizedChatItem, rawChatItem) {
     };
 }
 
-function hydrateGiftPurchaseAuthor(normalizedChatItem) {
-    const item = normalizedChatItem.item;
+function hydrateGiftPurchaseAuthor(normalizedChatItem: UnknownRecord): UnknownRecord | null {
+    const item = normalizedChatItem.item as UnknownRecord | undefined;
     if (!item || typeof item !== 'object') {
         return null;
     }
 
     const author = item.author;
-    const authorId = typeof author === 'object' && typeof author.id === 'string' ? author.id.trim() : '';
-    const authorName = typeof author === 'object' && typeof author.name === 'string' ? author.name.trim() : '';
+    const authorRecord = (author && typeof author === 'object') ? author as UnknownRecord : null;
+    const authorId = typeof authorRecord?.id === 'string' ? authorRecord.id.trim() : '';
+    const authorName = typeof authorRecord?.name === 'string' ? authorRecord.name.trim() : '';
     if (authorId && authorName) {
         return normalizedChatItem;
     }
 
-    const header = item.header;
-    const headerName = header && header.author_name && typeof header.author_name.text === 'string'
-        ? header.author_name.text.trim()
+    const header = item.header && typeof item.header === 'object' ? item.header as UnknownRecord : null;
+    const headerAuthorName = header?.author_name && typeof header.author_name === 'object'
+        ? header.author_name as UnknownRecord
+        : null;
+    const headerName = typeof headerAuthorName?.text === 'string'
+        ? headerAuthorName.text.trim()
         : '';
     const headerId = typeof item.author_external_channel_id === 'string'
         ? item.author_external_channel_id.trim()
@@ -146,6 +165,4 @@ function hydrateGiftPurchaseAuthor(normalizedChatItem) {
     };
 }
 
-module.exports = {
-    normalizeYouTubeEvent
-};
+export { normalizeYouTubeEvent };

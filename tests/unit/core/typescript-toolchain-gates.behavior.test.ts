@@ -1488,4 +1488,17 @@ describe('TypeScript toolchain migration gates behavior', () => {
             expect(content).not.toMatch(/^\s*exports\./m);
         }
     });
+
+    it('keeps youtube event modules free of commonjs exports syntax', () => {
+        const eventModulePaths = [
+            'src/platforms/youtube/events/event-normalizer.ts',
+            'src/platforms/youtube/events/event-router.ts'
+        ];
+
+        for (const eventModulePath of eventModulePaths) {
+            const content = readFileSync(join(repoRoot, eventModulePath), 'utf8');
+            expect(content).not.toContain('module.exports');
+            expect(content).not.toMatch(/^\s*exports\./m);
+        }
+    });
 });
