@@ -1466,4 +1466,12 @@ describe('TypeScript toolchain migration gates behavior', () => {
         expect(content).not.toContain('module.exports');
         expect(content).not.toMatch(/^\s*exports\./m);
     });
+
+    it('keeps gui preview local script free of commonjs module syntax', () => {
+        const content = readFileSync(join(repoRoot, 'scripts/local/gui-preview.ts'), 'utf8');
+
+        expect(content).not.toMatch(/^\s*(?:const|let|var)\s+.+?=\s*require\s*\(/m);
+        expect(content).not.toContain('module.exports');
+        expect(content).not.toMatch(/^\s*exports\./m);
+    });
 });
