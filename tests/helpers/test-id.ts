@@ -1,17 +1,17 @@
-const testClock = require('./test-clock');
+import { now } from './test-clock';
 
 let counter = 0;
 
 const nextTestId = (prefix = 'id') => {
     counter += 1;
-    return `${prefix}-${testClock.now()}-${counter}`;
+    return `${prefix}-${now()}-${counter}`;
 };
 
 const resetTestIds = () => {
     counter = 0;
 };
 
-module.exports = {
+export {
     nextTestId,
     resetTestIds
 };
