@@ -1,23 +1,27 @@
+import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 
-const { describe, test, expect, beforeEach, afterEach } = require('bun:test');
-const { createMockFn, spyOn, restoreAllMocks } = require('../../helpers/bun-mock-utils');
-
-const {
-    validateTimeout,
-    validateExponentialBackoff,
+import { createMockFn, restoreAllMocks, spyOn } from '../../helpers/bun-mock-utils';
+import {
+    safeSetInterval,
     safeSetTimeout,
-    safeSetInterval
-} = require('../../../src/utils/timeout-validator.ts');
+    validateExponentialBackoff,
+    validateTimeout
+} from '../../../src/utils/timeout-validator';
 
-export {};
+const spyOnGlobal = spyOn as <T extends object, K extends keyof T>(target: T, method: K) => ReturnType<typeof spyOn>;
+const safeSetTimeoutWithArgs = safeSetTimeout as (
+    callback: Parameters<typeof safeSetTimeout>[0],
+    delay: unknown,
+    ...args: unknown[]
+) => ReturnType<typeof safeSetTimeout>;
 
 describe('Timeout Validator', () => {
-    let timeoutSpy;
-    let intervalSpy;
+    let timeoutSpy: ReturnType<typeof spyOn>;
+    let intervalSpy: ReturnType<typeof spyOn>;
 
     beforeEach(() => {
-        timeoutSpy = spyOn(globalThis, 'setTimeout');
-        intervalSpy = spyOn(globalThis, 'setInterval');
+        timeoutSpy = spyOnGlobal(globalThis, 'setTimeout');
+        intervalSpy = spyOnGlobal(globalThis, 'setInterval');
     });
 
     afterEach(() => {
@@ -121,7 +125,7 @@ describe('Timeout Validator', () => {
         test('should pass through additional arguments', () => {
             const mockCallback = createMockFn();
             
-            safeSetTimeout(mockCallback, 1000, 'arg1', 'arg2');
+            safeSetTimeoutWithArgs(mockCallback, 1000, 'arg1', 'arg2');
             expect(timeoutSpy).toHaveBeenCalled();
             expect(timeoutSpy.mock.calls[0].slice(2)).toEqual(['arg1', 'arg2']);
         });

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'bun:test';
-
 const core = require('../../../src/core/index.ts');
+
 describe('core/index', () => {
     it('re-exports core config module', () => {
         expect(core.config).toBeDefined();

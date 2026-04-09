@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'bun:test';
-
-const { PRIORITY_LEVELS, NOTIFICATION_CONFIGS, VIEWER_COUNT_CONSTANTS } = require('../../../src/core/constants.ts');
+import { NOTIFICATION_CONFIGS, PRIORITY_LEVELS, VIEWER_COUNT_CONSTANTS } from '../../../src/core/constants';
 
 describe('core/constants', () => {
     it('exports expected priority levels', () => {
