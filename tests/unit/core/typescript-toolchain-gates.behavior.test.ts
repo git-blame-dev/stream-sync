@@ -1677,6 +1677,25 @@ describe('TypeScript toolchain migration gates behavior', () => {
         }
     });
 
+    it('keeps shared leaf contracts and validators free of commonjs module syntax', () => {
+        const modulePaths = [
+            'src/core/config-schema.ts',
+            'src/core/secrets.ts',
+            'src/utils/currency-utils.ts',
+            'src/utils/dependency-validator.ts',
+            'src/utils/platform-error-handler.ts',
+            'src/utils/validation.ts'
+        ];
+
+        for (const modulePath of modulePaths) {
+            const content = readFileSync(join(repoRoot, modulePath), 'utf8');
+
+            expect(content).not.toMatch(/^\s*(?:const|let|var)\s+.+?=\s*require\s*\(/m);
+            expect(content).not.toContain('module.exports');
+            expect(content).not.toMatch(/^\s*exports\./m);
+        }
+    });
+
     it('keeps youtube extractor helper modules free of commonjs exports syntax', () => {
         const helperPaths = [
             'src/platforms/youtube/youtube-author-extractor.ts',

@@ -14,7 +14,7 @@ const secrets: SecretsState = {
     streamelements: { jwtToken: null }
 };
 
-function initializeStaticSecrets() {
+function initializeStaticSecrets(): void {
     secrets.twitch.clientSecret = process.env.TWITCH_CLIENT_SECRET || null;
     secrets.tiktok.apiKey = process.env.TIKTOK_API_KEY || null;
     secrets.youtube.apiKey = process.env.YOUTUBE_API_KEY || null;
@@ -22,7 +22,7 @@ function initializeStaticSecrets() {
     secrets.streamelements.jwtToken = process.env.STREAMELEMENTS_JWT_TOKEN || null;
 }
 
-function _resetForTesting() {
+function _resetForTesting(): void {
     (Object.keys(secrets) as Array<keyof SecretsState>).forEach((platform) => {
         Object.keys(secrets[platform]).forEach((key) => {
             (secrets[platform] as Record<string, string | null>)[key] = null;
@@ -30,7 +30,7 @@ function _resetForTesting() {
     });
 }
 
-module.exports = {
+export {
     secrets,
     initializeStaticSecrets,
     _resetForTesting

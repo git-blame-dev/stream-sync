@@ -1,5 +1,6 @@
-/** @type {import('./types/config-types').ConfigSchema} */
-const CONFIG_SCHEMA = {
+import type { ConfigFieldSpec, ConfigSchema, ConfigSectionSpec } from './types/config-types';
+
+const CONFIG_SCHEMA: ConfigSchema = {
     general: {
         debugEnabled: { type: 'boolean', default: false },
         messagesEnabled: { type: 'boolean', default: true },
@@ -262,22 +263,28 @@ const CONFIG_SCHEMA = {
     }
 };
 
-function getFieldsRequiredWhenEnabled(sectionName) {
+function isConfigFieldSpec(value: ConfigSectionSpec[string]): value is ConfigFieldSpec {
+    return typeof value === 'object' && value !== null && 'type' in value;
+}
+
+function getFieldsRequiredWhenEnabled(sectionName: string): string[] {
     const sectionSchema = CONFIG_SCHEMA[sectionName];
-    if (!sectionSchema) return [];
+    if (!sectionSchema) {
+        return [];
+    }
 
     return Object.entries(sectionSchema)
-        .filter(([, spec]) => spec.requiredWhenEnabled === true)
+        .filter(([, spec]) => isConfigFieldSpec(spec) && spec.requiredWhenEnabled === true)
         .map(([fieldName]) => fieldName);
 }
 
-function buildDefaultsFromSchema() {
-    const defaults = {};
+function buildDefaultsFromSchema(): Record<string, Record<string, unknown>> {
+    const defaults: Record<string, Record<string, unknown>> = {};
     for (const [sectionName, sectionSpec] of Object.entries(CONFIG_SCHEMA)) {
         if (sectionSpec._dynamic) continue;
         defaults[sectionName] = {};
         for (const [fieldName, fieldSpec] of Object.entries(sectionSpec)) {
-            if (fieldSpec.default !== undefined) {
+            if (isConfigFieldSpec(fieldSpec) && fieldSpec.default !== undefined) {
                 defaults[sectionName][fieldName] = fieldSpec.default;
             }
         }
@@ -290,7 +297,7 @@ const DEFAULTS = {
     ...buildDefaultsFromSchema()
 };
 
-module.exports = {
+export {
     CONFIG_SCHEMA,
     getFieldsRequiredWhenEnabled,
     buildDefaultsFromSchema,

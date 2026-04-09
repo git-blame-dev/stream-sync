@@ -1,9 +1,22 @@
-class PlatformErrorHandler {
-    logger;
-    platformName;
+type LoggerLike = {
+    [method: string]: (...args: unknown[]) => unknown;
+    error: (...args: unknown[]) => unknown;
+};
 
-    constructor(logger, platformName) {
-        if (!logger || typeof logger.error !== 'function') {
+function resolveErrorMessage(error: unknown): string {
+    if (error instanceof Error) {
+        return error.message;
+    }
+
+    return String(error);
+}
+
+class PlatformErrorHandler {
+    logger: LoggerLike;
+    platformName: string;
+
+    constructor(logger: unknown, platformName: string) {
+        if (!logger || typeof logger !== 'object' || typeof (logger as { error?: unknown }).error !== 'function') {
             const noop = () => {};
             this.logger = {
                 debug: noop,
@@ -12,27 +25,27 @@ class PlatformErrorHandler {
                 error: noop
             };
         } else {
-            this.logger = logger;
+            this.logger = logger as LoggerLike;
         }
         this.platformName = platformName;
     }
 
-    handleInitializationError(error, context = 'initialization') {
+    handleInitializationError(error: unknown, context = 'initialization'): never {
         this.logger.error(`Failed to initialize ${this.platformName} platform during ${context}`, this.platformName, error);
-        throw error; // Re-throw to trigger retry logic
+        throw error;
     }
 
     handleEventProcessingError(
-        error,
-        eventType,
-        eventData = null,
-        message = null,
-        logContext = null
-    ) {
+        error: unknown,
+        eventType: string,
+        eventData: Record<string, unknown> | null = null,
+        message: string | null = null,
+        logContext: string | null = null
+    ): void {
         const logMessage = message || `Error processing ${eventType} event`;
         const contextName = logContext || this.platformName;
-        const metadata = {
-            error: error.message,
+        const metadata: Record<string, unknown> = {
+            error: resolveErrorMessage(error),
             eventType,
             eventData: eventData || null
         };
@@ -40,24 +53,23 @@ class PlatformErrorHandler {
             Object.assign(metadata, eventData);
         }
         this.logger.error(logMessage, contextName, metadata);
-        // Don't re-throw to prevent chat processing pipeline from stopping
     }
 
-    handleConnectionError(error, action = 'connection', message = null) {
-        const logMessage = message || `${this.platformName} ${action} failed: ${error.message}`;
+    handleConnectionError(error: unknown, action = 'connection', message: string | null = null): void {
+        const logMessage = message || `${this.platformName} ${action} failed: ${resolveErrorMessage(error)}`;
         this.logger.error(logMessage, this.platformName, error);
     }
 
-    handleServiceUnavailableError(serviceName, error) {
+    handleServiceUnavailableError(serviceName: string, error: unknown): void {
         this.logger.warn(`${serviceName} service unavailable, using fallback behavior`, this.platformName, error);
     }
 
-    handleMessageSendError(error, context = 'message sending', message = null) {
+    handleMessageSendError(error: unknown, context = 'message sending', message: string | null = null): void {
         const logMessage = message || `Failed to send message via ${this.platformName} during ${context}`;
         this.logger.error(logMessage, this.platformName, error);
     }
 
-    logOperationalError(message, context = this.platformName, payload = null) {
+    logOperationalError(message: string, context = this.platformName, payload: unknown = null): void {
         if (!this.logger || typeof this.logger.error !== 'function') {
             return;
         }
@@ -71,27 +83,29 @@ class PlatformErrorHandler {
         }
     }
 
-    handleAuthenticationError(reason) {
+    handleAuthenticationError(reason: string): void {
         this.logger.error(`Cannot proceed - ${this.platformName} authentication ${reason}`, this.platformName);
     }
 
-    handleCleanupError(error, resource, message = null) {
+    handleCleanupError(error: unknown, resource: string, message: string | null = null): void {
         const logMessage = message || `Failed to cleanup ${resource} during ${this.platformName} shutdown`;
         this.logger.warn(logMessage, this.platformName, {
-            error: error.message,
+            error: resolveErrorMessage(error),
             resource
         });
     }
 
-    handleDataLoggingError(error, dataType, message = null) {
-        const logMessage = message || `Error logging ${dataType} data: ${error.message}`;
+    handleDataLoggingError(error: unknown, dataType: string, message: string | null = null): void {
+        const logMessage = message || `Error logging ${dataType} data: ${resolveErrorMessage(error)}`;
         this.logger.error(logMessage, `${this.platformName}-platform`);
     }
 }
 
-module.exports = {
+function createPlatformErrorHandler(logger: unknown, platformName: string): PlatformErrorHandler {
+    return new PlatformErrorHandler(logger, platformName);
+}
+
+export {
     PlatformErrorHandler,
-    createPlatformErrorHandler(logger, platformName) {
-        return new PlatformErrorHandler(logger, platformName);
-    }
+    createPlatformErrorHandler
 };
