@@ -1,7 +1,12 @@
-const { describe, expect, beforeEach, it, afterEach } = require('bun:test');
-export {};
-const { restoreAllMocks } = require('../helpers/bun-mock-utils');
-const { expectNoTechnicalArtifacts } = require('../helpers/assertion-helpers');
+import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
+import { createRequire } from 'node:module';
+
+import { restoreAllMocks } from '../helpers/bun-mock-utils';
+
+const nodeRequire = createRequire(import.meta.url);
+const { expectNoTechnicalArtifacts } = nodeRequire('../helpers/assertion-helpers') as {
+    expectNoTechnicalArtifacts: (value: string) => void;
+};
 
 type NotificationResult = {
     type: string;
@@ -27,8 +32,12 @@ describe('Greeting Display Username Fix', () => {
     let formatUsername12: FormatUsername12;
 
     beforeEach(() => {
-        const testUtils = require('../helpers/notification-test-utils');
-        const validation = require('../../src/utils/validation');
+        const testUtils = nodeRequire('../helpers/notification-test-utils') as {
+            createNotificationData: CreateNotificationData;
+        };
+        const validation = nodeRequire('../../src/utils/validation') as {
+            formatUsername12: FormatUsername12;
+        };
         createNotificationData = testUtils.createNotificationData as CreateNotificationData;
         formatUsername12 = validation.formatUsername12 as FormatUsername12;
     });

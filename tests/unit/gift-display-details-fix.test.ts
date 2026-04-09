@@ -1,7 +1,19 @@
-const { describe, test, expect } = require('bun:test');
-export {};
-const NotificationBuilder = require('../../src/utils/notification-builder');
-const { generateLogMessage } = require('../helpers/notification-test-utils');
+import { describe, expect, test } from 'bun:test';
+import { createRequire } from 'node:module';
+
+const nodeRequire = createRequire(import.meta.url);
+
+type NotificationPayload = Record<string, unknown> & {
+    platform?: string;
+    username?: string;
+};
+
+const NotificationBuilder = nodeRequire('../../src/utils/notification-builder') as {
+    build: (input: NotificationPayload) => (NotificationPayload & { logMessage?: string }) | null;
+};
+const { generateLogMessage } = nodeRequire('../helpers/notification-test-utils') as {
+    generateLogMessage: (type: string, data: NotificationPayload) => string;
+};
 
 type GiftOverrides = {
     platform?: string;
@@ -14,16 +26,24 @@ type GiftOverrides = {
 };
 
 describe('Gift Display Details', () => {
-    const buildGift = (overrides: GiftOverrides = {}) => NotificationBuilder.build({
-        type: 'platform:gift',
-        platform: overrides.platform || 'tiktok',
-        username: overrides.username || 'GiftUser',
-        giftType: overrides.giftType || 'Rose',
-        giftCount: overrides.giftCount,
-        amount: overrides.amount,
-        currency: overrides.currency || 'coins',
-        repeatCount: overrides.repeatCount
-    });
+    const buildGift = (overrides: GiftOverrides = {}) => {
+        const notification = NotificationBuilder.build({
+            type: 'platform:gift',
+            platform: overrides.platform || 'tiktok',
+            username: overrides.username || 'GiftUser',
+            giftType: overrides.giftType || 'Rose',
+            giftCount: overrides.giftCount,
+            amount: overrides.amount,
+            currency: overrides.currency || 'coins',
+            repeatCount: overrides.repeatCount
+        });
+
+        if (!notification) {
+            throw new Error('Expected gift notification payload');
+        }
+
+        return notification;
+    };
 
     test('logs username, gift count, and coins for traditional gifts', () => {
         const notification = buildGift({
@@ -51,6 +71,10 @@ describe('Gift Display Details', () => {
             currency: 'USD',
             message: 'Great stream!'
         });
+
+        if (!notification) {
+            throw new Error('Expected super chat notification payload');
+        }
 
         const logMessage = generateLogMessage('platform:gift', notification);
         expect(logMessage).toContain('SuperChatFan');

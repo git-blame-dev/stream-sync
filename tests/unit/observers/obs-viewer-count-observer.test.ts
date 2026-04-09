@@ -1,10 +1,53 @@
-const { describe, test, expect, beforeEach } = require('bun:test');
-export {};
-const { createMockFn } = require('../../helpers/bun-mock-utils');
-const { OBSViewerCountObserver } = require('../../../src/observers/obs-viewer-count-observer');
-const { ViewerCountObserver } = require('../../../src/observers/viewer-count-observer');
-const { createMockOBSManager, noOpLogger } = require('../../helpers/mock-factories');
-const { expectNoTechnicalArtifacts } = require('../../helpers/behavior-validation');
+import { beforeEach, describe, expect, test } from 'bun:test';
+import { createRequire } from 'node:module';
+
+import { createMockFn } from '../../helpers/bun-mock-utils';
+
+const nodeRequire = createRequire(import.meta.url);
+
+type LoggerLike = {
+    debug: (...args: unknown[]) => void;
+    info: (...args: unknown[]) => void;
+    warn: (...args: unknown[]) => void;
+    error: (...args: unknown[]) => void;
+};
+
+type FlexibleMock = ReturnType<typeof createMockFn> & {
+    mockResolvedValue: (value: unknown) => FlexibleMock;
+    mockRejectedValue: (error: unknown) => FlexibleMock;
+    mockResolvedValueOnce: (value: unknown) => FlexibleMock;
+    mockRejectedValueOnce: (error: unknown) => FlexibleMock;
+    mockReturnValue: (value: unknown) => FlexibleMock;
+    mockClear: () => FlexibleMock;
+};
+
+type MockObsManager = {
+    call: FlexibleMock;
+    isConnected: FlexibleMock;
+};
+
+type CreateMockObsManager = (connectionState?: string, overrides?: Record<string, unknown>) => MockObsManager;
+
+const { OBSViewerCountObserver } = nodeRequire('../../../src/observers/obs-viewer-count-observer') as {
+    OBSViewerCountObserver: new (obsManager: MockObsManager, logger: LoggerLike, deps?: { config?: ViewerConfigMap }) => {
+        obsManager: MockObsManager;
+        onViewerCountUpdate: (update: Record<string, unknown>) => Promise<void>;
+        onStreamStatusChange: (statusUpdate: Record<string, unknown>) => Promise<void>;
+        initialize: () => Promise<void>;
+        cleanup: () => Promise<void>;
+        getObserverId: () => string;
+    };
+};
+const { ViewerCountObserver } = nodeRequire('../../../src/observers/viewer-count-observer') as {
+    ViewerCountObserver: new (...args: unknown[]) => unknown;
+};
+const { createMockOBSManager, noOpLogger } = nodeRequire('../../helpers/mock-factories') as {
+    createMockOBSManager: CreateMockObsManager;
+    noOpLogger: LoggerLike;
+};
+const { expectNoTechnicalArtifacts } = nodeRequire('../../helpers/behavior-validation') as {
+    expectNoTechnicalArtifacts: (value: string) => void;
+};
 
 const defaultPlatforms = ['twitch', 'youtube', 'tiktok'];
 
@@ -38,8 +81,8 @@ describe('OBSViewerCountObserver - Behavior-Focused Testing', () => {
         logger = noOpLogger;
 
         obsManager = createMockOBSManager('connected', {
-            call: createMockFn().mockResolvedValue({ status: 'success' }),
-            isConnected: createMockFn().mockReturnValue(true)
+            call: (createMockFn() as FlexibleMock).mockResolvedValue({ status: 'success' }),
+            isConnected: (createMockFn() as FlexibleMock).mockReturnValue(true)
         });
 
         observer = new OBSViewerCountObserver(obsManager, logger, { config: configFixture });

@@ -1,9 +1,24 @@
-const { describe, test, expect, afterEach } = require('bun:test');
-export {};
-const { restoreAllMocks } = require('../../../../helpers/bun-mock-utils');
-const { noOpLogger } = require('../../../../helpers/mock-factories');
-const { PlatformEvents } = require('../../../../../src/interfaces/PlatformEvents');
-const { createYouTubeEventRouter } = require('../../../../../src/platforms/youtube/events/event-router.ts');
+import { afterEach, describe, expect, test } from 'bun:test';
+import { createRequire } from 'node:module';
+
+import { restoreAllMocks } from '../../../../helpers/bun-mock-utils';
+import { createYouTubeEventRouter } from '../../../../../src/platforms/youtube/events/event-router';
+
+const nodeRequire = createRequire(import.meta.url);
+
+type LoggerLike = {
+    debug: (...args: unknown[]) => void;
+    info: (...args: unknown[]) => void;
+    warn: (...args: unknown[]) => void;
+    error: (...args: unknown[]) => void;
+};
+
+const { noOpLogger } = nodeRequire('../../../../helpers/mock-factories') as {
+    noOpLogger: LoggerLike;
+};
+const { PlatformEvents } = nodeRequire('../../../../../src/interfaces/PlatformEvents') as {
+    PlatformEvents: { ERROR: string };
+};
 
 describe('YouTube event router', () => {
     afterEach(() => {
@@ -120,7 +135,7 @@ describe('YouTube event router', () => {
     });
 
     test('throws when logger dependency is missing', () => {
-        expect(() => createYouTubeEventRouter({ platform: {} })).toThrow('YouTube event router requires logger dependency');
+        expect(() => createYouTubeEventRouter({ platform: {} as unknown as { logger: unknown } })).toThrow('YouTube event router requires logger dependency');
     });
 
     test('returns false for invalid event type input', async () => {
