@@ -4,8 +4,8 @@ const TWITCH_OAUTH_SCOPES = [
     'channel:read:subscriptions',
     'bits:read',
     'moderator:read:followers'
-];
+] as const;
 
-module.exports = {
+export {
     TWITCH_OAUTH_SCOPES
 };
