@@ -1,7 +1,12 @@
-const { describe, test, expect, beforeEach } = require('bun:test');
-export {};
+import { beforeEach, describe, expect, test } from 'bun:test';
+import { createRequire } from 'node:module';
 
-const { setDebugMode, getDebugMode } = require('../../src/core/logging');
+const nodeRequire = createRequire(import.meta.url);
+
+const { setDebugMode, getDebugMode } = nodeRequire('../../src/core/logging') as {
+    setDebugMode: (enabled: boolean) => void;
+    getDebugMode: () => boolean;
+};
 
 describe('Debug Mode Command Line Argument', () => {
     beforeEach(() => {
@@ -20,7 +25,7 @@ describe('Debug Mode Command Line Argument', () => {
     });
 
     test('debug mode remains disabled when no --debug argument is provided', () => {
-        const args = [];
+        const args: string[] = [];
         const hasDebugArg = args.includes('--debug');
 
         if (hasDebugArg) {
@@ -47,7 +52,7 @@ describe('Debug Mode Command Line Argument', () => {
 
     test('uses config.ini setting when no --debug argument is provided', () => {
         const configDebugEnabled = true;
-        const args = [];
+        const args: string[] = [];
         const hasDebugArg = args.includes('--debug');
 
         if (hasDebugArg) {

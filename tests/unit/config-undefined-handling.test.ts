@@ -1,9 +1,32 @@
-const { describe, test, expect, afterEach } = require('bun:test');
-const { createMockFn, restoreAllMocks } = require('../helpers/bun-mock-utils');
-const { noOpLogger, createMockNotificationManager } = require('../helpers/mock-factories');
-const { setupAutomatedCleanup } = require('../helpers/mock-lifecycle');
-const { createTestAppRuntime } = require('../helpers/runtime-test-harness');
-export {};
+import { afterEach, describe, expect, test } from 'bun:test';
+import { createRequire } from 'node:module';
+
+import { createMockFn, restoreAllMocks } from '../helpers/bun-mock-utils';
+
+const nodeRequire = createRequire(import.meta.url);
+
+type LoggerLike = {
+    debug: (...args: unknown[]) => void;
+    info: (...args: unknown[]) => void;
+    warn: (...args: unknown[]) => void;
+    error: (...args: unknown[]) => void;
+};
+
+const { noOpLogger, createMockNotificationManager } = nodeRequire('../helpers/mock-factories') as {
+    noOpLogger: LoggerLike;
+    createMockNotificationManager: (overrides?: Record<string, unknown>) => {
+        handleNotification: ReturnType<typeof createMockFn>;
+    };
+};
+const { setupAutomatedCleanup } = nodeRequire('../helpers/mock-lifecycle') as {
+    setupAutomatedCleanup: (options?: Record<string, unknown>) => void;
+};
+const { createTestAppRuntime } = nodeRequire('../helpers/runtime-test-harness') as {
+    createTestAppRuntime: (
+        configOverrides: Record<string, unknown>,
+        dependencyOverrides: { logger: LoggerLike; notificationManager: { handleNotification: ReturnType<typeof createMockFn> } }
+    ) => { runtime: { config: Record<string, unknown> | undefined; handleGiftNotification: (...args: unknown[]) => Promise<unknown> } };
+};
 
 setupAutomatedCleanup({
     clearCallsBeforeEach: true,
@@ -16,10 +39,13 @@ describe('Gift Notification Config Resiliency', () => {
         restoreAllMocks();
     });
 
-    const buildAppRuntime = (overrides = {}) => {
+    const buildAppRuntime = (overrides: {
+        logger?: LoggerLike;
+        notificationManager?: { handleNotification: ReturnType<typeof createMockFn> };
+    } = {}) => {
         const mockLogger = overrides.logger || noOpLogger;
         const notificationManager = overrides.notificationManager || createMockNotificationManager({
-            handleNotification: createMockFn().mockResolvedValue(true)
+            handleNotification: createMockFn(async () => true)
         });
 
         const { runtime } = createTestAppRuntime({
@@ -53,7 +79,7 @@ describe('Gift Notification Config Resiliency', () => {
 
     test('gift notifications require complete gift payloads', async () => {
         const notificationManager = createMockNotificationManager({
-            handleNotification: createMockFn().mockResolvedValue(true)
+            handleNotification: createMockFn(async () => true)
         });
         const { runtime } = buildAppRuntime({ notificationManager });
 

@@ -1,26 +1,44 @@
-const { describe, expect, it, beforeEach, afterEach } = require('bun:test');
-const { createMockFn, restoreAllMocks } = require('../../helpers/bun-mock-utils');
-export {};
+import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
+import { createRequire } from 'node:module';
 
-const fs = require('fs');
+import { createMockFn, restoreAllMocks } from '../../helpers/bun-mock-utils';
 
-let originalReadFileSync: typeof fs.readFileSync;
-let originalExistsSync: typeof fs.existsSync;
+const nodeRequire: NodeJS.Require = createRequire(import.meta.url);
+
+type FsLike = {
+    readFileSync: (...args: unknown[]) => unknown;
+    existsSync: (...args: unknown[]) => boolean;
+};
+
+type ConfigShape = {
+    obs: {
+        chatMsgScene: string;
+        ttsEnabled: boolean;
+        chatMsgTxt: string;
+    };
+};
+
+const fs = nodeRequire('fs') as FsLike;
+
+let originalReadFileSync: FsLike['readFileSync'];
+let originalExistsSync: FsLike['existsSync'];
 let originalConfigPath: string | undefined;
 
-const CONFIG_MODULE_PATH = require.resolve('../../../src/core/config');
+const CONFIG_MODULE_PATH = nodeRequire.resolve('../../../src/core/config');
 
 function resetConfigModule() {
-    delete require.cache[CONFIG_MODULE_PATH];
+    delete nodeRequire.cache[CONFIG_MODULE_PATH];
 }
 
 function loadFreshConfig() {
     resetConfigModule();
-    const { config } = require('../../../src/core/config');
+    const { config } = nodeRequire('../../../src/core/config') as {
+        config: ConfigShape;
+    };
     return { config };
 }
 
-function buildMinimalConfig(overrides = {}) {
+function buildMinimalConfig(overrides: Record<string, Record<string, string>> = {}) {
     const base = {
         general: {
             debugEnabled: 'false',
@@ -99,7 +117,7 @@ function buildMinimalConfig(overrides = {}) {
         commands: { ...base.commands, ...(overrides.commands || {}) }
     };
 
-    const lines = [];
+    const lines: string[] = [];
     Object.entries(merged).forEach(([section, values]) => {
         lines.push(`[${section}]`);
         Object.entries(values).forEach(([key, value]) => {
@@ -133,7 +151,7 @@ describe('Config path override', () => {
         });
         const testConfigPath = '/test/override/config.ini';
 
-        fs.existsSync = createMockFn((filePath) => filePath === testConfigPath);
+        fs.existsSync = createMockFn((filePath) => filePath === testConfigPath) as FsLike['existsSync'];
         fs.readFileSync = createMockFn((filePath) => {
             if (filePath === testConfigPath) return configContent;
             throw new Error(`ENOENT: no such file: ${filePath}`);
@@ -151,7 +169,7 @@ describe('Config path override', () => {
         });
         const testConfigPath = '/test/defaults/config.ini';
 
-        fs.existsSync = createMockFn((filePath) => filePath === testConfigPath);
+        fs.existsSync = createMockFn((filePath) => filePath === testConfigPath) as FsLike['existsSync'];
         fs.readFileSync = createMockFn((filePath) => {
             if (filePath === testConfigPath) return configContent;
             throw new Error(`ENOENT: no such file: ${filePath}`);

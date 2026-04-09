@@ -1,11 +1,42 @@
-const { describe, test, expect, afterEach } = require('bun:test');
-export {};
-const { createMockFn, restoreAllMocks } = require('../helpers/bun-mock-utils');
-const { noOpLogger } = require('../helpers/mock-factories');
-const { createConfigFixture } = require('../helpers/config-fixture');
-const ChatNotificationRouter = require('../../src/services/ChatNotificationRouter');
+import { afterEach, describe, expect, test } from 'bun:test';
+import { createRequire } from 'node:module';
+
+import { createMockFn, restoreAllMocks } from '../helpers/bun-mock-utils';
+
+const nodeRequire = createRequire(import.meta.url);
+
+type LoggerLike = {
+    debug: (...args: unknown[]) => void;
+    info: (...args: unknown[]) => void;
+    warn: (...args: unknown[]) => void;
+    error: (...args: unknown[]) => void;
+};
+
+type FlexibleMock = ReturnType<typeof createMockFn> & {
+    mockResolvedValue: (value: unknown) => FlexibleMock;
+};
+
+const { noOpLogger } = nodeRequire('../helpers/mock-factories') as {
+    noOpLogger: LoggerLike;
+};
+const { createConfigFixture } = nodeRequire('../helpers/config-fixture') as {
+    createConfigFixture: (overrides?: Record<string, unknown>) => Record<string, unknown>;
+};
 
 type MockFn = ReturnType<typeof createMockFn>;
+
+type RouterInstance = {
+    runtime: {
+        displayQueue: { addItem: MockFn };
+    };
+    queueGreeting: (platform: string, username: string) => Promise<void>;
+};
+
+const ChatNotificationRouter = nodeRequire('../../src/services/ChatNotificationRouter') as new (deps: {
+    runtime: Record<string, unknown>;
+    logger: LoggerLike;
+    config: Record<string, unknown>;
+}) => RouterInstance;
 
 type RouterOverrides = {
     displayQueue?: { addItem: MockFn } | null;
@@ -60,7 +91,7 @@ describe('Greeting System Diagnosis', () => {
         };
         const router = buildRouter({
             vfxCommandService: {
-                getVFXConfig: createMockFn().mockResolvedValue(vfxConfig)
+                getVFXConfig: (createMockFn() as FlexibleMock).mockResolvedValue(vfxConfig)
             }
         });
 
