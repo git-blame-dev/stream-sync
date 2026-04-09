@@ -1,6 +1,26 @@
-const { describe, test, expect } = require('bun:test');
-export {};
-const { YouTubeViewerExtractor } = require('../../../src/extractors/youtube-viewer-extractor');
+import { describe, expect, test } from 'bun:test';
+import { createRequire } from 'node:module';
+
+const nodeRequire = createRequire(import.meta.url);
+
+type ExtractionResult = {
+    success: boolean;
+    count: number;
+    strategy: string;
+    metadata: {
+        strategiesAttempted: string[];
+        rawData: unknown;
+    };
+};
+
+type YouTubeViewerExtractorLike = {
+    extractConcurrentViewers: (videoInfo: Record<string, unknown>, options?: { strategies?: string[] }) => ExtractionResult;
+    isValidViewerCount: (count: unknown) => boolean;
+};
+
+const { YouTubeViewerExtractor } = nodeRequire('../../../src/extractors/youtube-viewer-extractor') as {
+    YouTubeViewerExtractor: YouTubeViewerExtractorLike;
+};
 
 describe('YouTubeViewerExtractor', () => {
     describe('extractConcurrentViewers', () => {

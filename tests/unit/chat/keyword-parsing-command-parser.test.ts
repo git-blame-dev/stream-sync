@@ -1,10 +1,9 @@
+import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
+import { createRequire } from 'node:module';
 
-const { describe, test, expect, beforeEach, afterEach } = require('bun:test');
-export {};
-const { restoreAllMocks } = require('../../helpers/bun-mock-utils');
+import { restoreAllMocks } from '../../helpers/bun-mock-utils';
 
-const { CommandParser } = require('../../../src/chat/commands');
-const testClock = require('../../helpers/test-clock');
+const nodeRequire = createRequire(import.meta.url);
 
 type CommandParserConfig = {
     commands: Record<string, string>;
@@ -20,12 +19,42 @@ type CommandParserConfig = {
     };
 };
 
+type ParsedVfxConfig = {
+    filename: string;
+    command: string;
+    keyword?: string;
+} | null;
+
+type CommandParserInstance = {
+    getVFXConfig: (firstWord: string, message: string) => ParsedVfxConfig;
+    getMatchingFarewell: (message: string, firstWord: string) => string | null;
+    parsedCommands: {
+        keywords: Map<string, unknown>;
+    };
+};
+
+const { CommandParser } = nodeRequire('../../../src/chat/commands') as {
+    CommandParser: new (config: CommandParserConfig) => CommandParserInstance;
+};
+const testClock = nodeRequire('../../helpers/test-clock') as {
+    now: () => number;
+    advance: (milliseconds: number) => void;
+};
+
+const requireParsedVfxConfig = (result: ParsedVfxConfig): Exclude<ParsedVfxConfig, null> => {
+    expect(result).not.toBeNull();
+    if (!result) {
+        throw new Error('Expected parsed VFX config');
+    }
+    return result;
+};
+
 describe('CommandParser Keyword Parsing', () => {
     afterEach(() => {
         restoreAllMocks();
     });
 
-    let commandParser: InstanceType<typeof CommandParser>;
+    let commandParser: CommandParserInstance;
     let configFixture: CommandParserConfig;
 
     beforeEach(() => {
@@ -54,18 +83,18 @@ describe('CommandParser Keyword Parsing', () => {
 
         test('should detect ! prefix commands when keyword parsing is enabled', () => {
             const result = commandParser.getVFXConfig('!hello', '!hello everyone!');
+            const parsed = requireParsedVfxConfig(result);
 
-            expect(result).toBeDefined();
-            expect(result.filename).toBe('hello-there');
-            expect(result.command).toBe('!hello');
+            expect(parsed.filename).toBe('hello-there');
+            expect(parsed.command).toBe('!hello');
         });
 
         test('should detect keyword-based commands when keyword parsing is enabled', () => {
             const result = commandParser.getVFXConfig('i', 'I am a mod and I approve this message');
+            const parsed = requireParsedVfxConfig(result);
 
-            expect(result).toBeDefined();
-            expect(result.filename).toBe('im-a-mod');
-            expect(result.keyword).toBe('mod');
+            expect(parsed.filename).toBe('im-a-mod');
+            expect(parsed.keyword).toBe('mod');
         });
 
         test('should detect farewell commands when keyword parsing is enabled', () => {
@@ -108,10 +137,10 @@ describe('CommandParser Keyword Parsing', () => {
 
         test('should still detect ! prefix commands when keyword parsing is disabled', () => {
             const result = commandParser.getVFXConfig('!hello', '!hello everyone!');
-            
-            expect(result).toBeDefined();
-            expect(result.filename).toBe('hello-there');
-            expect(result.command).toBe('!hello');
+            const parsed = requireParsedVfxConfig(result);
+
+            expect(parsed.filename).toBe('hello-there');
+            expect(parsed.command).toBe('!hello');
         });
 
         test('should NOT detect keyword-based commands when keyword parsing is disabled', () => {
