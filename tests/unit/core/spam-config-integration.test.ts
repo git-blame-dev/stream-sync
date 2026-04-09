@@ -1,7 +1,30 @@
+import { describe, expect, it } from 'bun:test';
+import { createRequire } from 'node:module';
 
-const { describe, it, expect } = require('bun:test');
-const { config } = require('../../../src/core/config');
-export {};
+const nodeRequire = createRequire(import.meta.url);
+
+type SpamConfig = {
+    enabled: boolean;
+    lowValueThreshold: number;
+    detectionWindow: number;
+    maxIndividualNotifications: number;
+    [key: string]: unknown;
+};
+
+type GiftConfig = {
+    giftVideoSource?: string;
+    giftAudioSource?: string;
+    enabled?: unknown;
+    lowValueThreshold?: unknown;
+    detectionWindow?: unknown;
+};
+
+const { config } = nodeRequire('../../../src/core/config') as {
+    config: {
+        spam: SpamConfig;
+        gifts: GiftConfig;
+    };
+};
 
 describe('Spam Configuration Integration', () => {
     describe('when accessing spam configuration', () => {
