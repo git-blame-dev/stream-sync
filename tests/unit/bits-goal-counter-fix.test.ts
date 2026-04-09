@@ -1,11 +1,34 @@
-const { describe, expect, beforeEach, afterEach, it } = require('bun:test');
-export {};
-const { createMockFn, restoreAllMocks } = require('../helpers/bun-mock-utils');
-const { createTestUser, TEST_TIMEOUTS } = require('../helpers/test-setup');
-const { noOpLogger, createMockNotificationManager } = require('../helpers/mock-factories');
-const { setupAutomatedCleanup } = require('../helpers/mock-lifecycle');
-const { createConfigFixture } = require('../helpers/config-fixture');
-const PlatformEventRouter = require('../../src/services/PlatformEventRouter');
+import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
+import { createRequire } from 'node:module';
+
+import { createMockFn, restoreAllMocks } from '../helpers/bun-mock-utils';
+
+const nodeRequire = createRequire(import.meta.url);
+
+type LoggerLike = {
+    debug: (...args: unknown[]) => void;
+    info: (...args: unknown[]) => void;
+    warn: (...args: unknown[]) => void;
+    error: (...args: unknown[]) => void;
+};
+
+const { createTestUser, TEST_TIMEOUTS } = nodeRequire('../helpers/test-setup') as {
+    createTestUser: (overrides?: { username?: string }) => { username: string; userId: string };
+    TEST_TIMEOUTS: { FAST: number };
+};
+const { noOpLogger, createMockNotificationManager } = nodeRequire('../helpers/mock-factories') as {
+    noOpLogger: LoggerLike;
+    createMockNotificationManager: (overrides?: Record<string, unknown>) => {
+        handleNotification: ReturnType<typeof createMockFn>;
+    };
+};
+const { setupAutomatedCleanup } = nodeRequire('../helpers/mock-lifecycle') as {
+    setupAutomatedCleanup: (options?: Record<string, unknown>) => void;
+};
+const { createConfigFixture } = nodeRequire('../helpers/config-fixture') as {
+    createConfigFixture: (overrides?: Record<string, unknown>) => Record<string, unknown>;
+};
+const PlatformEventRouter = nodeRequire('../../src/services/PlatformEventRouter') as new (deps: Record<string, unknown>) => RouterInstance;
 
 type MockFn = ReturnType<typeof createMockFn>;
 
@@ -25,6 +48,13 @@ type EmitGiftInput = {
     id?: string;
 };
 
+type GiftNotificationPayload = {
+    username?: string;
+    giftCount: number;
+    amount: number;
+    currency: string;
+};
+
 type RouterInstance = {
     dispose?: () => void;
 };
@@ -36,7 +66,7 @@ setupAutomatedCleanup({
 });
 
 describe('Bits Goal Counter Fix', () => {
-    let mockLogger: typeof noOpLogger;
+    let mockLogger: LoggerLike;
     let mockNotificationManager: ReturnType<typeof createMockNotificationManager>;
     let mockAppRuntime: { handleGiftNotification: MockFn };
     let mockEventBus: {
@@ -48,19 +78,17 @@ describe('Bits Goal Counter Fix', () => {
     beforeEach(() => {
         mockLogger = noOpLogger;
         mockNotificationManager = createMockNotificationManager({
-            handleNotification: createMockFn().mockResolvedValue({
-                success: true,
-                displayed: true
-            })
+            handleNotification: createMockFn(async () => ({ success: true, displayed: true }))
         });
 
         mockAppRuntime = {
-            handleGiftNotification: createMockFn((platform, username, options: {
-                giftType?: string;
-                giftCount?: number;
-                amount?: number;
-                currency?: string;
-            } = {}) => {
+            handleGiftNotification: createMockFn((...args: unknown[]) => {
+                const options = (args[2] as {
+                    giftType?: string;
+                    giftCount?: number;
+                    amount?: number;
+                    currency?: string;
+                } | undefined) || {};
                 const giftType = options.giftType;
                 const giftCount = Number(options.giftCount);
                 const amount = Number(options.amount);
@@ -74,7 +102,9 @@ describe('Bits Goal Counter Fix', () => {
 
         const handlers: EventHandlers = {};
         mockEventBus = {
-            subscribe: createMockFn((event: string, handler: (payload: unknown) => Promise<void> | void) => {
+            subscribe: createMockFn((...args: unknown[]) => {
+                const event = args[0] as string;
+                const handler = args[1] as (payload: unknown) => Promise<void> | void;
                 if (!handlers[event]) {
                     handlers[event] = [];
                 }
@@ -106,6 +136,10 @@ describe('Bits Goal Counter Fix', () => {
         restoreAllMocks();
         router?.dispose?.();
     });
+
+    const getGiftNotificationPayload = (): GiftNotificationPayload => (
+        mockAppRuntime.handleGiftNotification.mock.calls[0][2] as GiftNotificationPayload
+    );
 
     const emitGift = async ({ bits, username, userId, message = '', id = 'cheer-evt-1' }: EmitGiftInput = {}) => {
         const data: Record<string, unknown> & {
@@ -157,7 +191,7 @@ describe('Bits Goal Counter Fix', () => {
 
                 expect(mockAppRuntime.handleGiftNotification).toHaveBeenCalledTimes(1);
 
-                const notificationData = mockAppRuntime.handleGiftNotification.mock.calls[0][2];
+                const notificationData = getGiftNotificationPayload();
                 expect(notificationData.username).toBe(testUser.username);
                 expect(notificationData.giftCount).toBe(1);
                 expect(notificationData.amount).toBe(100);
@@ -175,7 +209,7 @@ describe('Bits Goal Counter Fix', () => {
                     id: 'cheer-evt-100-goal'
                 });
 
-                const notificationData = mockAppRuntime.handleGiftNotification.mock.calls[0][2];
+                const notificationData = getGiftNotificationPayload();
 
                 expect(notificationData.giftCount).toBe(1);
                 expect(notificationData.amount).toBe(100);
@@ -199,7 +233,7 @@ describe('Bits Goal Counter Fix', () => {
 
                 expect(mockAppRuntime.handleGiftNotification).toHaveBeenCalledTimes(1);
 
-                const notificationData = mockAppRuntime.handleGiftNotification.mock.calls[0][2];
+                const notificationData = getGiftNotificationPayload();
                 expect(notificationData.giftCount).toBe(1);
                 expect(notificationData.amount).toBe(50);
                 expect(notificationData.currency).toBe('bits');
@@ -223,7 +257,7 @@ describe('Bits Goal Counter Fix', () => {
 
                 expect(mockAppRuntime.handleGiftNotification).toHaveBeenCalledTimes(1);
 
-                const notificationData = mockAppRuntime.handleGiftNotification.mock.calls[0][2];
+                const notificationData = getGiftNotificationPayload();
                 expect(notificationData.giftCount).toBe(1);
                 expect(notificationData.amount).toBe(1000);
                 expect(notificationData.currency).toBe('bits');
@@ -246,7 +280,7 @@ describe('Bits Goal Counter Fix', () => {
                 id: 'cheer-evt-large'
             });
 
-            const notificationData = mockAppRuntime.handleGiftNotification.mock.calls[0][2];
+            const notificationData = getGiftNotificationPayload();
             
             expect(notificationData.giftCount).toBe(1);
             expect(notificationData.amount).toBe(largeBitsAmount);
@@ -268,7 +302,7 @@ describe('Bits Goal Counter Fix', () => {
                 id: 'cheer-evt-regression'
             });
 
-            const notificationData = mockAppRuntime.handleGiftNotification.mock.calls[0][2];
+            const notificationData = getGiftNotificationPayload();
             
             expect(notificationData.giftCount).toBe(1);
             expect(notificationData.amount).toBe(100);

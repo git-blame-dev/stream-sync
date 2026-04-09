@@ -1,8 +1,22 @@
-const { describe, beforeEach, it, expect } = require('bun:test');
-export {};
-const { initializeTestLogging } = require('../helpers/test-setup');
+import { beforeEach, describe, expect, it } from 'bun:test';
+import { createRequire } from 'node:module';
+
+const nodeRequire = createRequire(import.meta.url);
+
+const { initializeTestLogging } = nodeRequire('../helpers/test-setup') as {
+    initializeTestLogging: () => void;
+};
 initializeTestLogging();
-const { setupAutomatedCleanup } = require('../helpers/mock-lifecycle');
+
+type CleanupOptions = {
+    clearCallsBeforeEach?: boolean;
+    validateAfterCleanup?: boolean;
+    logPerformanceMetrics?: boolean;
+};
+
+const { setupAutomatedCleanup } = nodeRequire('../helpers/mock-lifecycle') as {
+    setupAutomatedCleanup: (options?: CleanupOptions) => void;
+};
 
 setupAutomatedCleanup({
     clearCallsBeforeEach: true,
@@ -11,15 +25,25 @@ setupAutomatedCleanup({
 });
 
 type InterpolateTemplate = (template: string, data: Record<string, unknown>) => string;
-type CreateNotificationData = (...args: unknown[]) => unknown;
+type CreateNotificationData = (
+    type: string,
+    platform: string,
+    userData: Record<string, unknown>,
+    eventData: Record<string, unknown>,
+    logger?: unknown
+) => unknown;
 
 describe('Template Interpolation Fallbacks', () => {
     let interpolateTemplate: InterpolateTemplate;
     let createNotificationData: CreateNotificationData;
 
     beforeEach(() => {
-        const interpolatorModule = require('../../src/utils/notification-template-interpolator');
-        const testUtils = require('../helpers/notification-test-utils');
+        const interpolatorModule = nodeRequire('../../src/utils/notification-template-interpolator') as {
+            interpolateTemplate: InterpolateTemplate;
+        };
+        const testUtils = nodeRequire('../helpers/notification-test-utils') as {
+            createNotificationData: CreateNotificationData;
+        };
         interpolateTemplate = interpolatorModule.interpolateTemplate as InterpolateTemplate;
         createNotificationData = testUtils.createNotificationData as CreateNotificationData;
     });
