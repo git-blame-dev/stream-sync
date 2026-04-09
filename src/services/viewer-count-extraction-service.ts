@@ -1,31 +1,123 @@
+import { YouTubeViewerExtractor } from '../extractors/youtube-viewer-extractor';
+import { createPlatformErrorHandler } from '../utils/platform-error-handler';
 
-const { createPlatformErrorHandler } = require('../utils/platform-error-handler');
+type ViewerExtractor = {
+    extractConcurrentViewers: (
+        videoInfo: Record<string, unknown>,
+        options?: { debug?: boolean; strategies?: string[] }
+    ) => {
+        success: boolean;
+        count: number;
+        strategy?: string | null;
+        metadata?: {
+            strategiesAttempted?: string[];
+            [key: string]: unknown;
+        };
+    };
+};
 
-function resolvePositiveNumber(value, fallback) {
+type ServiceDependencies = {
+    logger?: {
+        debug?: (message: string, context?: string, payload?: unknown) => void;
+    };
+    timeout?: unknown;
+    strategies?: unknown;
+    debug?: unknown;
+    retries?: unknown;
+    YouTubeViewerExtractor?: ViewerExtractor;
+};
+
+type InnertubeServiceLike = {
+    getVideoInfo: (videoId: string, options?: { timeout?: number; instanceKey?: unknown }) => Promise<Record<string, unknown>>;
+};
+
+type ExtractionConfig = {
+    timeout: number;
+    strategies: string[];
+    debug: boolean;
+    retries: number;
+};
+
+type ExtractionStats = {
+    totalRequests: number;
+    successfulExtractions: number;
+    failedExtractions: number;
+    averageResponseTime: number;
+    errorsByType: Record<string, number>;
+    startTime: number;
+};
+
+type ExtractViewerCountOptions = {
+    timeout?: unknown;
+    instanceKey?: unknown;
+    debug?: unknown;
+    strategies?: unknown;
+    maxConcurrency?: unknown;
+};
+
+type ExtractionResponse = {
+    success: boolean;
+    count: number;
+    videoId: string;
+    responseTime?: number;
+    strategy?: string | null;
+    metadata?: Record<string, unknown>;
+    error?: string;
+    errorType?: string;
+};
+
+function getErrorMessage(error: unknown): string {
+    if (error instanceof Error) {
+        return error.message;
+    }
+
+    return String(error);
+}
+
+function getErrorType(error: unknown): string {
+    if (error instanceof Error && error.constructor && typeof error.constructor.name === 'string') {
+        return error.constructor.name;
+    }
+
+    return 'UnknownError';
+}
+
+function resolvePositiveNumber(value: unknown, fallback: number) {
     return typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : fallback;
 }
 
-function resolveNonEmptyArray(value, fallback) {
-    return Array.isArray(value) && value.length > 0 ? value : fallback;
+function resolveNonEmptyArray(value: unknown, fallback: string[]): string[] {
+    if (!Array.isArray(value) || value.length === 0) {
+        return fallback;
+    }
+
+    return value.filter((item): item is string => typeof item === 'string' && item.length > 0);
 }
 
-function resolveBoolean(value, fallback = false) {
+function resolveBoolean(value: unknown, fallback = false): boolean {
     return typeof value === 'boolean' ? value : fallback;
 }
 
-function resolveNonNegativeInteger(value, fallback = 0) {
-    return Number.isInteger(value) && value >= 0 ? value : fallback;
+function resolveNonNegativeInteger(value: unknown, fallback = 0): number {
+    return typeof value === 'number' && Number.isInteger(value) && value >= 0 ? value : fallback;
 }
 
 class ViewerCountExtractionService {
-    constructor(innertubeService, dependencies = {}) {
+    innertubeService: InnertubeServiceLike;
+    logger?: ServiceDependencies['logger'];
+    errorHandler: ReturnType<typeof createPlatformErrorHandler>;
+    YouTubeViewerExtractor: ViewerExtractor;
+    config: ExtractionConfig;
+    stats: ExtractionStats;
+
+    constructor(innertubeService: InnertubeServiceLike, dependencies: ServiceDependencies = {}) {
         this.innertubeService = innertubeService;
         this.logger = dependencies.logger;
         this.errorHandler = createPlatformErrorHandler(this.logger, 'viewer-count-extraction');
         
-        // Inject or fallback to require (for gradual migration)
+        // Inject or fallback to core extractor
         this.YouTubeViewerExtractor = dependencies.YouTubeViewerExtractor || 
-            require('../extractors/youtube-viewer-extractor').YouTubeViewerExtractor;
+            YouTubeViewerExtractor;
         
         // Configuration
         this.config = {
@@ -46,12 +138,12 @@ class ViewerCountExtractionService {
         };
     }
     
-    async extractViewerCount(videoId, options = {}) {
+    async extractViewerCount(videoId: string, options: ExtractViewerCountOptions = {}): Promise<ExtractionResponse> {
         const startTime = Date.now();
         this.stats.totalRequests++;
         
         try {
-            this.logger?.debug(`[ViewerCountExtraction] Extracting viewer count for: ${videoId}`, 'viewer-extraction');
+            this.logger?.debug?.(`[ViewerCountExtraction] Extracting viewer count for: ${videoId}`, 'viewer-extraction');
             
             // Get video info through service layer
             const info = await this.innertubeService.getVideoInfo(videoId, {
@@ -70,7 +162,7 @@ class ViewerCountExtractionService {
             this._updateStats(extractionResult.success, responseTime);
             
             if (extractionResult.success) {
-                this.logger?.debug(
+                this.logger?.debug?.(
                     `[ViewerCountExtraction] Successfully extracted ${extractionResult.count} viewers using ${extractionResult.strategy} for video ${videoId}`, 
                     'viewer-extraction'
                 );
@@ -81,10 +173,10 @@ class ViewerCountExtractionService {
                     strategy: extractionResult.strategy,
                     videoId,
                     responseTime,
-                    metadata: extractionResult.metadata
+                    metadata: extractionResult.metadata as Record<string, unknown> | undefined
                 };
             } else {
-                this.logger?.debug(
+                this.logger?.debug?.(
                     `[ViewerCountExtraction] Failed to extract viewer count for ${videoId}. Strategies attempted: ${extractionResult.metadata?.strategiesAttempted?.join(', ') || 'unknown'}`, 
                     'viewer-extraction'
                 );
@@ -95,32 +187,32 @@ class ViewerCountExtractionService {
                     videoId,
                     responseTime,
                     error: 'Extraction failed',
-                    metadata: extractionResult.metadata
+                    metadata: extractionResult.metadata as Record<string, unknown> | undefined
                 };
             }
             
-        } catch (error) {
+        } catch (error: unknown) {
             const responseTime = Date.now() - startTime;
             this._updateStats(false, responseTime, error);
             
-            this._handleExtractionError(`Error extracting viewer count for ${videoId}: ${error.message}`, error);
+            this._handleExtractionError(`Error extracting viewer count for ${videoId}: ${getErrorMessage(error)}`, error);
             
             return {
                 success: false,
                 count: 0,
                 videoId,
                 responseTime,
-                error: error.message,
-                errorType: error.constructor.name
+                error: getErrorMessage(error),
+                errorType: getErrorType(error)
             };
         }
     }
     
-    async extractViewerCountsBatch(videoIds, options = {}) {
-        const maxConcurrency = options.maxConcurrency || 3;
-        const results = [];
+    async extractViewerCountsBatch(videoIds: string[], options: ExtractViewerCountOptions = {}): Promise<ExtractionResponse[]> {
+        const maxConcurrency = resolveNonNegativeInteger(options.maxConcurrency, 3) || 3;
+        const results: ExtractionResponse[] = [];
         
-        this.logger?.debug(`[ViewerCountExtraction] Batch extracting ${videoIds.length} videos with concurrency ${maxConcurrency}`, 'viewer-extraction');
+        this.logger?.debug?.(`[ViewerCountExtraction] Batch extracting ${videoIds.length} videos with concurrency ${maxConcurrency}`, 'viewer-extraction');
         
         // Process in batches to avoid overwhelming the service
         for (let i = 0; i < videoIds.length; i += maxConcurrency) {
@@ -132,14 +224,14 @@ class ViewerCountExtractionService {
             const batchResults = await Promise.allSettled(batchPromises);
             
             // Convert settled promises to results
-            const processedResults = batchResults.map((result, index) => {
+            const processedResults: ExtractionResponse[] = batchResults.map((result, index) => {
                 if (result.status === 'fulfilled') {
                     return result.value;
                 } else {
                     return {
                         success: false,
                         count: 0,
-                        videoId: batch[index],
+                        videoId: batch[index] || '',
                         error: result.reason?.message || 'Promise rejected',
                         errorType: 'Promise'
                     };
@@ -152,7 +244,7 @@ class ViewerCountExtractionService {
         return results;
     }
     
-    async getAggregatedViewerCount(videoIds, options = {}) {
+    async getAggregatedViewerCount(videoIds: string[], options: ExtractViewerCountOptions = {}) {
         if (!videoIds || videoIds.length === 0) {
             return {
                 success: true,
@@ -163,7 +255,7 @@ class ViewerCountExtractionService {
             };
         }
         
-        this.logger?.debug(`[ViewerCountExtraction] Aggregating viewer count from ${videoIds.length} streams`, 'viewer-extraction');
+        this.logger?.debug?.(`[ViewerCountExtraction] Aggregating viewer count from ${videoIds.length} streams`, 'viewer-extraction');
         
         const results = await this.extractViewerCountsBatch(videoIds, options);
         
@@ -189,7 +281,7 @@ class ViewerCountExtractionService {
             };
         });
         
-        this.logger?.debug(
+        this.logger?.debug?.(
             `[ViewerCountExtraction] Aggregation complete: ${totalCount} total viewers from ${successfulStreams}/${videoIds.length} streams`, 
             'viewer-extraction'
         );
@@ -212,19 +304,19 @@ class ViewerCountExtractionService {
         };
     }
     
-    updateConfig(newConfig) {
+    updateConfig(newConfig: Record<string, unknown>) {
         this.config = { ...this.config, ...newConfig };
-        this.logger?.debug('[ViewerCountExtraction] Configuration updated', 'viewer-extraction', this.config);
+        this.logger?.debug?.('[ViewerCountExtraction] Configuration updated', 'viewer-extraction', this.config);
     }
     
-    _updateStats(success, responseTime, error = null) {
+    _updateStats(success: boolean, responseTime: number, error: unknown = null) {
         if (success) {
             this.stats.successfulExtractions++;
         } else {
             this.stats.failedExtractions++;
             
             if (error) {
-                const errorType = error.constructor.name;
+                const errorType = getErrorType(error);
                 this.stats.errorsByType[errorType] = (this.stats.errorsByType[errorType] || 0) + 1;
             }
         }
@@ -234,7 +326,7 @@ class ViewerCountExtractionService {
         this.stats.averageResponseTime = Math.round(totalTime / this.stats.totalRequests);
     }
 
-    _handleExtractionError(message, error) {
+    _handleExtractionError(message: string, error: unknown) {
         if (this.errorHandler && error instanceof Error) {
             this.errorHandler.handleEventProcessingError(error, 'viewer-extraction', null, message);
         } else {
@@ -243,4 +335,4 @@ class ViewerCountExtractionService {
     }
 }
 
-module.exports = { ViewerCountExtractionService };
+export { ViewerCountExtractionService };

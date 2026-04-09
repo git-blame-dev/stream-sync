@@ -1,7 +1,7 @@
 const { describe, test, beforeEach, afterEach, expect } = require('bun:test');
 
 const { createMockFn, restoreAllMocks } = require('../helpers/bun-mock-utils');
-const wireStreamStatusHandlers = require('../../src/viewer-count/stream-status-handler.ts');
+const { wireStreamStatusHandlers } = require('../../src/viewer-count/stream-status-handler.ts');
 const { ViewerCountSystem } = require('../../src/utils/viewer-count.ts');
 const { createConfigFixture } = require('../helpers/config-fixture');
 const { noOpLogger } = require('../helpers/mock-factories');

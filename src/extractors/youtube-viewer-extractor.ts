@@ -1,7 +1,58 @@
+type ExtractionStrategy = 'view_text' | 'video_details' | 'basic_info';
+
+type ExtractionResult = {
+    count: number;
+    strategy: ExtractionStrategy | null;
+    success: boolean;
+    metadata: {
+        strategiesAttempted: string[];
+        rawData: Record<string, unknown> | null;
+        error?: string;
+    };
+};
+
+type StrategyResult = {
+    count: number;
+    success: boolean;
+    rawData: Record<string, unknown> | null;
+};
+
+type ParseWatchingTextResult = {
+    count: number;
+    success: boolean;
+    pattern: string | null;
+    matchedText: string | null;
+};
+
+type VideoInfo = {
+    primary_info?: {
+        view_count?: {
+            view_count?: {
+                text?: unknown;
+            };
+        };
+    };
+    video_details?: {
+        viewer_count?: unknown;
+        concurrent_viewers?: unknown;
+    };
+    basic_info?: {
+        is_live?: unknown;
+        view_count?: unknown;
+    };
+};
+
+function getErrorMessage(error: unknown): string {
+    if (error instanceof Error) {
+        return error.message;
+    }
+
+    return String(error);
+}
 
 class YouTubeViewerExtractor {
     
-    static extractConcurrentViewers(videoInfo, options = {}) {
+    static extractConcurrentViewers(videoInfo: VideoInfo, options: { debug?: boolean; strategies?: string[] } = {}): ExtractionResult {
         const debug = options.debug || false;
         const strategies = options.strategies || ['view_text', 'video_details'];
         
@@ -10,7 +61,7 @@ class YouTubeViewerExtractor {
             // Use proper logger instead for production debugging
         }
         
-        const result = {
+        const result: ExtractionResult = {
             count: 0,
             strategy: null,
             success: false,
@@ -30,7 +81,7 @@ class YouTubeViewerExtractor {
             const viewTextResult = this._extractFromViewText(videoInfo, debug);
             result.metadata.strategiesAttempted.push('view_text');
             
-            if (debug && viewTextResult.rawData) {
+            if (debug && result.metadata.rawData && viewTextResult.rawData) {
                 result.metadata.rawData.view_text = viewTextResult.rawData;
             }
             
@@ -47,7 +98,7 @@ class YouTubeViewerExtractor {
             const videoDetailsResult = this._extractFromVideoDetails(videoInfo, debug);
             result.metadata.strategiesAttempted.push('video_details');
             
-            if (debug && videoDetailsResult.rawData) {
+            if (debug && result.metadata.rawData && videoDetailsResult.rawData) {
                 result.metadata.rawData.video_details = videoDetailsResult.rawData;
             }
             
@@ -64,7 +115,7 @@ class YouTubeViewerExtractor {
             const basicInfoResult = this._extractFromBasicInfo(videoInfo, debug);
             result.metadata.strategiesAttempted.push('basic_info');
             
-            if (debug && basicInfoResult.rawData) {
+            if (debug && result.metadata.rawData && basicInfoResult.rawData) {
                 result.metadata.rawData.basic_info = basicInfoResult.rawData;
             }
             
@@ -79,8 +130,8 @@ class YouTubeViewerExtractor {
         return result;
     }
     
-    static _extractFromViewText(videoInfo, debug = false) {
-        const result = {
+    static _extractFromViewText(videoInfo: VideoInfo, debug = false): StrategyResult {
+        const result: StrategyResult = {
             count: 0,
             success: false,
             rawData: debug ? {} : null
@@ -109,24 +160,27 @@ class YouTubeViewerExtractor {
                         result.count = watchingMatch.count;
                         result.success = true;
                         
-                        if (debug) {
+                        if (debug && result.rawData) {
                             result.rawData.patternMatched = watchingMatch.pattern;
                             result.rawData.extractedText = watchingMatch.matchedText;
                         }
                     }
                 }
             }
-        } catch (error) {
+        } catch (error: unknown) {
             if (debug) {
-                result.rawData.error = error.message;
+                result.rawData = {
+                    ...(result.rawData || {}),
+                    error: getErrorMessage(error)
+                };
             }
         }
         
         return result;
     }
     
-    static _extractFromVideoDetails(videoInfo, debug = false) {
-        const result = {
+    static _extractFromVideoDetails(videoInfo: VideoInfo, debug = false): StrategyResult {
+        const result: StrategyResult = {
             count: 0,
             success: false,
             rawData: debug ? {} : null
@@ -144,12 +198,12 @@ class YouTubeViewerExtractor {
                 
                 // Try viewer_count field first
                 if (videoInfo.video_details.viewer_count !== undefined) {
-                    const count = parseInt(videoInfo.video_details.viewer_count, 10);
+                    const count = parseInt(String(videoInfo.video_details.viewer_count), 10);
                     if (!isNaN(count) && count >= 0) {
                         result.count = count;
                         result.success = true;
                         
-                        if (debug) {
+                        if (debug && result.rawData) {
                             result.rawData.sourceField = 'viewer_count';
                         }
                         return result;
@@ -158,28 +212,31 @@ class YouTubeViewerExtractor {
                 
                 // Try concurrent_viewers field as fallback
                 if (videoInfo.video_details.concurrent_viewers !== undefined) {
-                    const count = parseInt(videoInfo.video_details.concurrent_viewers, 10);
+                    const count = parseInt(String(videoInfo.video_details.concurrent_viewers), 10);
                     if (!isNaN(count) && count >= 0) {
                         result.count = count;
                         result.success = true;
                         
-                        if (debug) {
+                        if (debug && result.rawData) {
                             result.rawData.sourceField = 'concurrent_viewers';
                         }
                     }
                 }
             }
-        } catch (error) {
+        } catch (error: unknown) {
             if (debug) {
-                result.rawData.error = error.message;
+                result.rawData = {
+                    ...(result.rawData || {}),
+                    error: getErrorMessage(error)
+                };
             }
         }
         
         return result;
     }
     
-    static _extractFromBasicInfo(videoInfo, debug = false) {
-        const result = {
+    static _extractFromBasicInfo(videoInfo: VideoInfo, debug = false): StrategyResult {
+        const result: StrategyResult = {
             count: 0,
             success: false,
             rawData: debug ? {} : null
@@ -196,29 +253,32 @@ class YouTubeViewerExtractor {
                 }
                 
                 // Only extract if video is live
-                if (videoInfo.basic_info.is_live && videoInfo.basic_info.view_count !== undefined && videoInfo.basic_info.view_count !== null) {
-                    const count = parseInt(videoInfo.basic_info.view_count, 10);
+                if (!!videoInfo.basic_info.is_live && videoInfo.basic_info.view_count !== undefined && videoInfo.basic_info.view_count !== null) {
+                    const count = parseInt(String(videoInfo.basic_info.view_count), 10);
                     if (!isNaN(count) && count >= 0) {
                         result.count = count;
                         result.success = true;
                         
-                        if (debug) {
+                        if (debug && result.rawData) {
                             result.rawData.sourceField = 'view_count';
                         }
                     }
                 }
             }
-        } catch (error) {
+        } catch (error: unknown) {
             if (debug) {
-                result.rawData.error = error.message;
+                result.rawData = {
+                    ...(result.rawData || {}),
+                    error: getErrorMessage(error)
+                };
             }
         }
         
         return result;
     }
     
-    static _parseWatchingText(viewText) {
-        const result = {
+    static _parseWatchingText(viewText: string): ParseWatchingTextResult {
+        const result: ParseWatchingTextResult = {
             count: 0,
             success: false,
             pattern: null,
@@ -255,7 +315,7 @@ class YouTubeViewerExtractor {
         return result;
     }
     
-    static isValidViewerCount(count) {
+    static isValidViewerCount(count: unknown): boolean {
         return typeof count === 'number' && 
                !isNaN(count) && 
                count >= 0 && 
@@ -282,4 +342,4 @@ class YouTubeViewerExtractor {
     }
 }
 
-module.exports = { YouTubeViewerExtractor };
+export { YouTubeViewerExtractor };

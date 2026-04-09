@@ -6,6 +6,7 @@ const { createMockFn, restoreAllMocks } = load('../../helpers/bun-mock-utils');
 const { useFakeTimers, useRealTimers, setSystemTime } = load('../../helpers/bun-timers');
 const { ViewerCountSystem } = load('../../../src/utils/viewer-count.ts');
 const { OBSViewerCountObserver } = load('../../../src/observers/obs-viewer-count-observer.ts');
+const { safeSetInterval } = load('../../../src/utils/timeout-validator.ts');
 const { createConfigFixture } = load('../../helpers/config-fixture');
 const {
     createMockOBSManager,
@@ -935,6 +936,67 @@ describe('Viewer Count & OBS Observer Edge Case Tests', () => {
             expect(successfulPlatforms).toHaveLength(2);
             expect(failedPlatforms).toHaveLength(1);
             expectSystemStability(system);
+        });
+
+        test('performs memory optimization housekeeping when limits are exceeded', () => {
+            const { system } = createEdgeCaseTestEnvironment();
+            const now = testClock.now();
+
+            system.memoryConfig.lastCleanup = now - system.memoryConfig.cleanupInterval;
+            system.statusChangeHistory.set('tiktok', [
+                { timestamp: 1, from: false, to: true, reason: 'stream_started' },
+                { timestamp: 2, from: true, to: false, reason: 'stream_ended' },
+                { timestamp: 3, from: false, to: true, reason: 'stream_started' },
+                { timestamp: 4, from: true, to: false, reason: 'stream_ended' }
+            ]);
+            system.lastStatusUpdate = new Map([
+                ['tiktok', 1],
+                ['twitch', 2],
+                ['youtube', 3],
+                ['extra', 4]
+            ]);
+            system.pollingStats.totalPolls = 15000;
+            system.pollingStats.successfulPolls = 12000;
+
+            const originalGc = global.gc;
+            const gcSpy = createMockFn();
+            global.gc = gcSpy;
+
+            try {
+                system._performMemoryOptimization();
+            } finally {
+                global.gc = originalGc;
+            }
+
+            expect(system.statusChangeHistory.get('tiktok').length).toBe(2);
+            expect(system.lastStatusUpdate.size).toBe(3);
+            expect(system.pollingStats.totalPolls).toBe(1000);
+            expect(system.pollingStats.successfulPolls).toBe(1000);
+            expect(gcSpy).toHaveBeenCalledTimes(1);
+        });
+
+        test('performs memory cleanup by resetting polling and observer state', () => {
+            const { system } = createEdgeCaseTestEnvironment();
+            system.addObserver(createEdgeCaseObserver('cleanup-observer'));
+            system.statusChangeHistory.set('tiktok', [{ timestamp: 1 }]);
+            system.lastStatusUpdate.set('tiktok', 1);
+            system.pollingHandles = {
+                tiktok: safeSetInterval(() => {}, 1000),
+                youtube: safeSetInterval(() => {}, 1000)
+            };
+            system.memoryOptimizationInterval = safeSetInterval(() => {}, 1000);
+            system.counts.tiktok = 123;
+            system.pollingStats.totalPolls = 100;
+
+            system._performMemoryCleanup();
+
+            expect(system.pollingHandles).toEqual({});
+            expect(system.observers.size).toBe(0);
+            expect(system.statusChangeHistory.size).toBe(0);
+            expect(system.lastStatusUpdate.size).toBe(0);
+            expect(system.counts.tiktok).toBe(0);
+            expect(system.memoryOptimizationInterval).toBeNull();
+            expect(system.pollingStats.totalPolls).toBe(0);
         });
     });
 });

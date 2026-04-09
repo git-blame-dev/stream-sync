@@ -1,15 +1,48 @@
+import { VIEWER_COUNT_CONSTANTS } from '../core/constants';
+import { safeSetInterval, safeDelay } from './timeout-validator';
+import { createPlatformErrorHandler } from './platform-error-handler';
+import { validateLoggerInterface } from './dependency-validator';
 
-const { VIEWER_COUNT_CONSTANTS } = require('../core/constants');
-const { safeSetInterval, safeDelay } = require('./timeout-validator');
-const { createPlatformErrorHandler } = require('./platform-error-handler');
-const { validateLoggerInterface } = require('./dependency-validator');
+type ViewerCountLogger = {
+    debug: (message: string, context?: string, payload?: unknown) => void;
+    info: (message: string, context?: string, payload?: unknown) => void;
+    warn: (message: string, context?: string, payload?: unknown) => void;
+};
+
+type ViewerCountPlatform = {
+    getViewerCount?: () => Promise<unknown> | unknown;
+};
+
+type ViewerCountDependencies = {
+    logger?: ViewerCountLogger;
+    config?: {
+        general?: {
+            viewerCountPollingIntervalMs?: number;
+        };
+    };
+    platformProvider?: () => Record<string, ViewerCountPlatform>;
+    getPlatforms?: () => Record<string, ViewerCountPlatform>;
+    platforms?: Record<string, ViewerCountPlatform>;
+    timeProvider?: {
+        now: () => number;
+        createDate?: (timestampMs: number) => Date;
+    };
+};
+
+function getErrorMessage(error: unknown) {
+    if (error instanceof Error) {
+        return error.message;
+    }
+
+    return String(error);
+}
 
 const DEFAULT_TIME_PROVIDER = {
     now: () => Date.now(),
     createDate: (timestampMs) => new Date(timestampMs)
 };
 
-const resolveTimeProvider = (timeProvider) => {
+const resolveTimeProvider = (timeProvider?: ViewerCountDependencies['timeProvider']) => {
     if (!timeProvider) {
         return DEFAULT_TIME_PROVIDER;
     }
@@ -27,7 +60,40 @@ const resolveTimeProvider = (timeProvider) => {
 };
 
 class ViewerCountSystem {
-    constructor(dependencies = {}) {
+    logger: ViewerCountLogger;
+    platformProvider: () => Record<string, ViewerCountPlatform>;
+    pollingIntervalMs: number | undefined;
+    timeProvider: { now: () => number; createDate: (timestampMs: number) => Date };
+    isPolling: boolean;
+    pollingInterval: number | undefined | null;
+    pollingHandles: Record<string, ReturnType<typeof setInterval>>;
+    observers: Map<string, {
+        getObserverId?: () => string;
+        onViewerCountUpdate?: (update: unknown) => Promise<unknown> | unknown;
+        onStreamStatusChange?: (statusUpdate: unknown) => Promise<unknown> | unknown;
+        initialize?: () => Promise<unknown> | unknown;
+        cleanup?: () => Promise<unknown> | unknown;
+    }>;
+    counts: Record<string, number>;
+    streamStatus: Record<string, boolean>;
+    statusChangeHistory: Map<string, Array<{ timestamp: number; from: boolean; to: boolean; reason: string }>>;
+    lastStatusUpdate: Map<string, number>;
+    pollingStats: {
+        totalPolls: number;
+        successfulPolls: number;
+        startTime: number;
+        memoryOptimized: boolean;
+    };
+    memoryConfig: {
+        maxHistoryEntries: number;
+        cleanupInterval: number;
+        lastCleanup: number;
+    };
+    memoryOptimizationInterval: ReturnType<typeof setInterval> | null;
+    _errorHandler: ReturnType<typeof createPlatformErrorHandler> | null;
+    hasUnifiedInitialization?: boolean;
+
+    constructor(dependencies: ViewerCountDependencies = {}) {
         if (!dependencies.logger) {
             throw new Error('ViewerCountSystem requires logger dependency');
         }
@@ -36,6 +102,9 @@ class ViewerCountSystem {
         this.platformProvider = this._createPlatformProvider(dependencies);
         if (!dependencies.config) {
             throw new Error('ViewerCountSystem requires config');
+        }
+        if (!dependencies.config.general) {
+            throw new Error('ViewerCountSystem requires config.general');
         }
         this.pollingIntervalMs = dependencies.config.general.viewerCountPollingIntervalMs;
         this.timeProvider = resolveTimeProvider(dependencies.timeProvider);
@@ -96,12 +165,15 @@ class ViewerCountSystem {
         return this.timeProvider.createDate(timestampMs);
     }
 
-    _handleViewerCountError(message, error = null, eventType = 'viewer-count', eventData = null) {
+    _handleViewerCountError(message: string, error: unknown = null, eventType = 'viewer-count', eventData: unknown = null) {
         const err = error instanceof Error ? error : new Error(message);
         const handler = this._getErrorHandler();
 
         if (handler) {
-            handler.handleEventProcessingError(err, eventType, eventData, message, VIEWER_COUNT_CONSTANTS.LOG_CONTEXT.VIEWER_COUNT);
+            const payload = eventData && typeof eventData === 'object'
+                ? (eventData as Record<string, unknown>)
+                : null;
+            handler.handleEventProcessingError(err, eventType, payload, message, VIEWER_COUNT_CONSTANTS.LOG_CONTEXT.VIEWER_COUNT);
         }
     }
 
@@ -134,6 +206,9 @@ class ViewerCountSystem {
         }
 
         const history = this.statusChangeHistory.get(platform);
+        if (!history) {
+            return;
+        }
         history.push(change);
 
         // Keep only last 2 changes for ultra-aggressive memory optimization
@@ -144,8 +219,8 @@ class ViewerCountSystem {
         this.lastStatusUpdate.set(platform, change.timestamp);
         
         // Trigger immediate cleanup if too many status changes (for test scenarios)
-        const totalHistoryEntries = Array.from(this.statusChangeHistory.values())
-            .reduce((total, hist) => total + hist.length, 0);
+        const totalHistoryEntries = (Array.from(this.statusChangeHistory.values()) as Array<{ length: number }>)
+            .reduce((total: number, hist) => total + hist.length, 0);
         if (totalHistoryEntries > 10) {
             this._performMemoryOptimization();
         }
@@ -189,14 +264,14 @@ class ViewerCountSystem {
             timestamp: this._createDate(this._now())
         };
 
-        const notificationPromises = [];
+        const notificationPromises: Array<Promise<unknown>> = [];
         for (const [observerId, observer] of this.observers) {
             try {
                 if (typeof observer.onViewerCountUpdate === 'function') {
-                    notificationPromises.push(observer.onViewerCountUpdate(update));
+                    notificationPromises.push(Promise.resolve(observer.onViewerCountUpdate(update)));
                 }
             } catch (error) {
-                this._handleViewerCountError(`Error notifying observer ${observerId}: ${error.message}`, error, 'observer-update', { observerId });
+                this._handleViewerCountError(`Error notifying observer ${observerId}: ${getErrorMessage(error)}`, error, 'observer-update', { observerId });
             }
         }
 
@@ -212,14 +287,14 @@ class ViewerCountSystem {
             timestamp: this._createDate(this._now())
         };
 
-        const notificationPromises = [];
+        const notificationPromises: Array<Promise<unknown>> = [];
         for (const [observerId, observer] of this.observers) {
             try {
                 if (typeof observer.onStreamStatusChange === 'function') {
-                    notificationPromises.push(observer.onStreamStatusChange(statusUpdate));
+                    notificationPromises.push(Promise.resolve(observer.onStreamStatusChange(statusUpdate)));
                 }
             } catch (error) {
-                this._handleViewerCountError(`Error notifying observer ${observerId} of status change: ${error.message}`, error, 'observer-status', { observerId });
+                this._handleViewerCountError(`Error notifying observer ${observerId} of status change: ${getErrorMessage(error)}`, error, 'observer-status', { observerId });
             }
         }
 
@@ -290,16 +365,16 @@ class ViewerCountSystem {
 
 
     async initializeObservers() {
-        const initializationPromises = [];
+        const initializationPromises: Array<Promise<unknown>> = [];
         
         for (const [observerId, observer] of this.observers) {
             try {
                 if (typeof observer.initialize === 'function') {
-                    initializationPromises.push(observer.initialize());
+                    initializationPromises.push(Promise.resolve(observer.initialize()));
                     this.logger.debug(`Initializing observer: ${observerId}`, VIEWER_COUNT_CONSTANTS.LOG_CONTEXT.VIEWER_COUNT);
                 }
             } catch (error) {
-                this._handleViewerCountError(`Error initializing observer ${observerId}: ${error.message}`, error, 'observer-init', { observerId });
+                this._handleViewerCountError(`Error initializing observer ${observerId}: ${getErrorMessage(error)}`, error, 'observer-init', { observerId });
             }
         }
         
@@ -317,10 +392,11 @@ class ViewerCountSystem {
         }
 
         this.pollingInterval = this.pollingIntervalMs;
-        const pollingIntervalSeconds = this.pollingInterval / VIEWER_COUNT_CONSTANTS.MS_PER_SECOND;
+        const intervalMs = this.pollingInterval ?? 0;
+        const pollingIntervalSeconds = intervalMs / VIEWER_COUNT_CONSTANTS.MS_PER_SECOND;
         this.logger.debug(`Polling interval configured: ${pollingIntervalSeconds}s (${this.pollingInterval}ms)`, VIEWER_COUNT_CONSTANTS.LOG_CONTEXT.VIEWER_COUNT);
 
-        if (this.pollingInterval <= 0) {
+        if (intervalMs <= 0) {
             this.logger.warn('Polling interval is zero or negative. Viewer count polling disabled.', VIEWER_COUNT_CONSTANTS.LOG_CONTEXT.VIEWER_COUNT);
             return;
         }
@@ -373,9 +449,10 @@ class ViewerCountSystem {
     }
 
     stopPlatformPolling(platformName) {
-        if (this.pollingHandles[platformName]) {
+        const handle = this.pollingHandles[platformName];
+        if (handle) {
             this.logger.info(`Stopping viewer count polling for ${platformName}`, VIEWER_COUNT_CONSTANTS.LOG_CONTEXT.VIEWER_COUNT);
-            clearInterval(this.pollingHandles[platformName]);
+            clearInterval(handle);
             delete this.pollingHandles[platformName];
         }
     }
@@ -464,7 +541,7 @@ class ViewerCountSystem {
             
             // Clean up old status update timestamps (keep only last 3 platforms)
             if (this.lastStatusUpdate.size > 3) {
-                const entries = Array.from(this.lastStatusUpdate.entries());
+                const entries = Array.from(this.lastStatusUpdate.entries()) as Array<[string, number]>;
                 entries.sort((a, b) => b[1] - a[1]); // Sort by timestamp descending
                 const toKeep = entries.slice(0, 3);
                 this.lastStatusUpdate.clear();
@@ -486,7 +563,7 @@ class ViewerCountSystem {
                 global.gc();
             }
         } catch (error) {
-            this._handleViewerCountError(`Memory optimization failed: ${error.message}`, error, 'memory-optimization');
+            this._handleViewerCountError(`Memory optimization failed: ${getErrorMessage(error)}`, error, 'memory-optimization');
         }
     }
 
@@ -500,7 +577,7 @@ class ViewerCountSystem {
         // Clear polling handles
         for (const handle of Object.values(this.pollingHandles)) {
             if (handle) {
-                clearInterval(handle);
+                clearInterval(handle as ReturnType<typeof setInterval>);
             }
         }
         this.pollingHandles = {};
@@ -531,20 +608,21 @@ class ViewerCountSystem {
         return {
             observerCount: this.observers.size,
             activePollingHandles: Object.keys(this.pollingHandles).length,
-            statusHistorySize: Array.from(this.statusChangeHistory.values())
-                .reduce((total, history) => total + history.length, 0),
+            statusHistorySize: (Array.from(this.statusChangeHistory.values()) as Array<{ length: number }>)
+                .reduce((total: number, history) => total + history.length, 0),
             lastCleanup: this.memoryConfig.lastCleanup,
             timeSinceCleanup: this._now() - this.memoryConfig.lastCleanup
         };
     }
 
-    _createPlatformProvider(dependencies) {
+    _createPlatformProvider(dependencies: ViewerCountDependencies) {
         if (dependencies && typeof dependencies.platformProvider === 'function') {
             return dependencies.platformProvider;
         }
 
         if (dependencies && typeof dependencies.getPlatforms === 'function') {
-            return () => dependencies.getPlatforms();
+            const getPlatforms = dependencies.getPlatforms;
+            return () => getPlatforms();
         }
 
         if (dependencies && dependencies.platforms && typeof dependencies.platforms === 'object') {
@@ -555,7 +633,7 @@ class ViewerCountSystem {
         return () => ({});
     }
 
-    _getPlatforms() {
+    _getPlatforms(): Record<string, ViewerCountPlatform> {
         try {
             const platforms = this.platformProvider ? this.platformProvider() : {};
             if (platforms && typeof platforms === 'object') {
@@ -631,17 +709,24 @@ class ViewerCountSystem {
         const validation = this.validatePlatformForPolling(platformName);
         
         if (!validation.valid) {
-            if (validation.reason.includes('offline')) {
+            const reasonText = typeof validation.reason === 'string' ? validation.reason : 'Viewer count polling validation failed';
+            if (reasonText.includes('offline')) {
                 this.logger.debug(`Skipping viewer count poll for ${platformName} (stream offline)`, VIEWER_COUNT_CONSTANTS.LOG_CONTEXT.VIEWER_COUNT);
             } else {
-                this.logger.warn(validation.reason, VIEWER_COUNT_CONSTANTS.LOG_CONTEXT.VIEWER_COUNT);
+                this.logger.warn(reasonText, VIEWER_COUNT_CONSTANTS.LOG_CONTEXT.VIEWER_COUNT);
             }
             return;
         }
 
         try {
             this.logger.debug(`Polling ${platformName} for viewer count...`, VIEWER_COUNT_CONSTANTS.LOG_CONTEXT.VIEWER_COUNT);
-            const count = await validation.platform.getViewerCount();
+            const platform = validation.platform;
+            if (!platform || typeof platform.getViewerCount !== 'function') {
+                this.logger.warn(`No getViewerCount method for ${platformName}`, VIEWER_COUNT_CONSTANTS.LOG_CONTEXT.VIEWER_COUNT);
+                return;
+            }
+
+            const count = await platform.getViewerCount();
             this.logger.debug(`${platformName} returned viewer count: ${count}`, VIEWER_COUNT_CONSTANTS.LOG_CONTEXT.VIEWER_COUNT);
             
             const isValidCount = typeof count === 'number' && Number.isFinite(count);
@@ -661,7 +746,7 @@ class ViewerCountSystem {
                 this.logger.warn(`${platformName} returned null/undefined viewer count`, VIEWER_COUNT_CONSTANTS.LOG_CONTEXT.VIEWER_COUNT);
             }
         } catch (error) {
-            this._handleViewerCountError(`Failed to poll ${platformName}: ${error.message}`, error, 'polling', { platform: platformName });
+            this._handleViewerCountError(`Failed to poll ${platformName}: ${getErrorMessage(error)}`, error, 'polling', { platform: platformName });
         }
     }
 
@@ -678,8 +763,8 @@ class ViewerCountSystem {
         }
         
         // Capture observer references BEFORE clearing the map
-        const cleanupPromises = [];
-        const observerEntries = Array.from(this.observers.entries());
+        const cleanupPromises: Array<Promise<unknown>> = [];
+        const observerEntries = Array.from(this.observers.entries()) as Array<[string, { cleanup?: () => Promise<unknown> | unknown }]>;
         
         // Start observer cleanup process
         for (const [observerId, observer] of observerEntries) {
@@ -687,12 +772,12 @@ class ViewerCountSystem {
                 if (typeof observer.cleanup === 'function') {
                     cleanupPromises.push(
                         Promise.resolve(observer.cleanup()).catch(error => {
-                            this._handleViewerCountError(`Observer cleanup failed for ${observerId}: ${error.message}`, error, 'observer-cleanup', { observerId });
+                            this._handleViewerCountError(`Observer cleanup failed for ${observerId}: ${getErrorMessage(error)}`, error, 'observer-cleanup', { observerId });
                         })
                     );
                 }
             } catch (error) {
-                this._handleViewerCountError(`Error initiating cleanup for observer ${observerId}: ${error.message}`, error, 'observer-cleanup', { observerId });
+                this._handleViewerCountError(`Error initiating cleanup for observer ${observerId}: ${getErrorMessage(error)}`, error, 'observer-cleanup', { observerId });
             }
         }
         
@@ -705,7 +790,7 @@ class ViewerCountSystem {
                 })
             ]);
         } catch (error) {
-            this.logger.warn(`Observer cleanup timed out or failed: ${error.message}`, VIEWER_COUNT_CONSTANTS.LOG_CONTEXT.VIEWER_COUNT);
+            this.logger.warn(`Observer cleanup timed out or failed: ${getErrorMessage(error)}`, VIEWER_COUNT_CONSTANTS.LOG_CONTEXT.VIEWER_COUNT);
         }
         
         // Perform final memory cleanup after observer cleanup attempts
@@ -715,14 +800,12 @@ class ViewerCountSystem {
     }
 }
 
-function validateObserverInterface(observer) {
+function validateObserverInterface(observer: unknown) {
     if (!observer || typeof observer !== 'object') {
         return false;
     }
-    
-    return typeof observer.getObserverId === 'function';
+
+    return typeof (observer as { getObserverId?: unknown }).getObserverId === 'function';
 }
 
-module.exports = {
-    ViewerCountSystem
-};
+export { ViewerCountSystem };
