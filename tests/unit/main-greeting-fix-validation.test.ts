@@ -1,7 +1,9 @@
-const { describe, test, expect, beforeEach, afterEach } = require('bun:test');
-export {};
-const { createMockFn, restoreAllMocks } = require('../helpers/bun-mock-utils');
-const NotificationBuilder = require('../../src/utils/notification-builder');
+import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
+import { createRequire } from 'node:module';
+
+import { createMockFn, restoreAllMocks } from '../helpers/bun-mock-utils';
+
+const nodeRequire = createRequire(import.meta.url);
 
 type MockFn = ReturnType<typeof createMockFn>;
 
@@ -13,6 +15,18 @@ type ConsoleNotificationData = {
     amount?: number;
     currency?: string;
     [key: string]: unknown;
+};
+
+const NotificationBuilder = nodeRequire('../../src/utils/notification-builder') as {
+    build: (input: Record<string, unknown>) => ConsoleNotificationData | null;
+};
+
+const requireNotificationData = (notification: ConsoleNotificationData | null): ConsoleNotificationData => {
+    expect(notification).not.toBeNull();
+    if (!notification) {
+        throw new Error('Expected notification payload');
+    }
+    return notification;
 };
 
 describe('Main.js Greeting Username Extraction Fix', () => {
@@ -42,7 +56,7 @@ describe('Main.js Greeting Username Extraction Fix', () => {
         const runtimeContext = {
             logger: mockLogger,
 
-            extractUsernameFromNotificationData: function(data) {
+            extractUsernameFromNotificationData: function(data: ConsoleNotificationData | null | undefined) {
                 if (!data || typeof data.username !== 'string') {
                     return null;
                 }
@@ -51,7 +65,7 @@ describe('Main.js Greeting Username Extraction Fix', () => {
                 return username ? username : null;
             },
 
-            logNotificationToConsole: function(type, platform, data) {
+            logNotificationToConsole: function(type: string, platform: string, data: ConsoleNotificationData) {
                 const username = this.extractUsernameFromNotificationData(data);
                 if (!username) {
                     return;
@@ -99,14 +113,15 @@ describe('Main.js Greeting Username Extraction Fix', () => {
             platform: 'twitch',
             username: 'TestUser'
         });
+        const notificationData = requireNotificationData(greetingData);
 
-        expect(greetingData).toMatchObject({
+        expect(notificationData).toMatchObject({
             type: 'greeting',
             platform: 'twitch',
             username: 'TestUser'
         });
 
-        const extractedUsername = extractUsernameFromNotificationData(greetingData);
+        const extractedUsername = extractUsernameFromNotificationData(notificationData);
 
         expect(extractedUsername).toBe('TestUser');
     });
@@ -117,8 +132,9 @@ describe('Main.js Greeting Username Extraction Fix', () => {
             platform: 'twitch',
             username: 'TestUser'
         });
+        const notificationData = requireNotificationData(greetingData);
 
-        logNotificationToConsole('greeting', 'twitch', greetingData);
+        logNotificationToConsole('greeting', 'twitch', notificationData);
 
         expect(mockLogger.console).toHaveBeenCalledWith(
             '[twitch] Greeting: TestUser',
@@ -144,12 +160,13 @@ describe('Main.js Greeting Username Extraction Fix', () => {
             platform: 'twitch',
             username: 'TestFollower'
         });
+        const builtNotificationData = requireNotificationData(notificationData);
 
         const notificationTypes = ['platform:follow', 'platform:paypiggy', 'platform:raid', 'platform:gift', 'farewell'];
 
         notificationTypes.forEach(type => {
             mockLogger.console.mockClear();
-            logNotificationToConsole(type, 'twitch', notificationData);
+            logNotificationToConsole(type, 'twitch', builtNotificationData);
 
             const loggedMessage = mockLogger.console.mock.calls[0][0];
             expect(loggedMessage).toContain('TestFollower');

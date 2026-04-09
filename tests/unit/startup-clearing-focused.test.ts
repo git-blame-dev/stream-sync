@@ -1,8 +1,25 @@
-const { describe, expect, beforeEach, it } = require('bun:test');
-export {};
-const { createMockFn } = require('../helpers/bun-mock-utils');
-const { noOpLogger } = require('../helpers/mock-factories');
-const { clearStartupDisplays } = require('../../src/obs/startup');
+import { beforeEach, describe, expect, it } from 'bun:test';
+import { createRequire } from 'node:module';
+
+import { createMockFn } from '../helpers/bun-mock-utils';
+import '../../src/obs/startup.js';
+import '../../src/obs/startup.ts';
+
+const nodeRequire = createRequire(import.meta.url);
+
+type LoggerLike = {
+    debug: (...args: unknown[]) => void;
+    info: (...args: unknown[]) => void;
+    warn: (...args: unknown[]) => void;
+    error: (...args: unknown[]) => void;
+};
+
+const { noOpLogger } = nodeRequire('../helpers/mock-factories') as {
+    noOpLogger: LoggerLike;
+};
+const { clearStartupDisplays } = nodeRequire('../../src/obs/startup') as {
+    clearStartupDisplays: (config: StartupConfig | null, deps: StartupDeps) => Promise<void>;
+};
 
 type MockFn = ReturnType<typeof createMockFn>;
 
@@ -29,7 +46,7 @@ type StartupConfig = {
 };
 
 type StartupDeps = {
-    logger: typeof noOpLogger;
+    logger: LoggerLike;
     getOBSConnectionManager: () => ObsManager | null;
     getDefaultSourcesManager: () => {
         hideAllDisplays: MockFn;
@@ -50,8 +67,8 @@ describe('OBS Startup Display Clearing - Detailed Behavior', () => {
             connected: true
         };
 
-        hideAllDisplays = createMockFn().mockResolvedValue();
-        clearTextSource = createMockFn().mockResolvedValue();
+        hideAllDisplays = createMockFn(async () => undefined);
+        clearTextSource = createMockFn(async () => undefined);
 
         configFixture = {
             obs: {
@@ -100,7 +117,7 @@ describe('OBS Startup Display Clearing - Detailed Behavior', () => {
         });
 
         it('should warn and skip when config is null', async () => {
-            const warnSpy = createMockFn();
+            const warnSpy = createMockFn(() => undefined);
             const warnDeps = {
                 ...deps,
                 logger: { ...deps.logger, warn: warnSpy }
@@ -142,7 +159,13 @@ describe('OBS Startup Display Clearing - Detailed Behavior', () => {
         });
 
         it('should not crash startup if entire clearing fails', async () => {
-            hideAllDisplays.mockRejectedValue(new Error('OBS connection lost'));
+            hideAllDisplays = createMockFn(async () => {
+                throw new Error('OBS connection lost');
+            });
+            deps = {
+                ...deps,
+                getDefaultSourcesManager: () => ({ hideAllDisplays, clearTextSource })
+            };
 
             await expect(clearStartupDisplays(configFixture, deps)).resolves.toBeUndefined();
         });

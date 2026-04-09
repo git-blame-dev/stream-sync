@@ -1,13 +1,57 @@
-const { describe, expect, beforeEach, it, afterEach } = require('bun:test');
-export {};
-const { createMockFn, restoreAllMocks } = require('../helpers/bun-mock-utils');
+import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
+import { createRequire } from 'node:module';
 
-const { noOpLogger, createMockDisplayQueue } = require('../helpers/mock-factories');
-const { setupAutomatedCleanup } = require('../helpers/mock-lifecycle');
-const { expectNoTechnicalArtifacts } = require('../helpers/assertion-helpers');
-const { createConfigFixture } = require('../helpers/config-fixture');
-const NotificationManager = require('../../src/notifications/NotificationManager');
-const { createTextProcessingManager } = require('../../src/utils/text-processing');
+import { createMockFn, restoreAllMocks } from '../helpers/bun-mock-utils';
+
+const nodeRequire = createRequire(import.meta.url);
+
+type LoggerLike = {
+    debug: (...args: unknown[]) => void;
+    info: (...args: unknown[]) => void;
+    warn: (...args: unknown[]) => void;
+    error: (...args: unknown[]) => void;
+};
+
+type FlexibleMock = ReturnType<typeof createMockFn> & {
+    mockResolvedValue: (value: unknown) => FlexibleMock;
+};
+
+type QueueItem = {
+    type: string;
+    data: {
+        platform: string;
+        displayMessage: string;
+        ttsMessage: string;
+    };
+};
+
+type MockDisplayQueue = {
+    addItem: FlexibleMock;
+};
+
+type CleanupOptions = {
+    clearCallsBeforeEach?: boolean;
+    validateAfterCleanup?: boolean;
+    logPerformanceMetrics?: boolean;
+};
+
+const { noOpLogger, createMockDisplayQueue } = nodeRequire('../helpers/mock-factories') as {
+    noOpLogger: LoggerLike;
+    createMockDisplayQueue: (overrides?: Record<string, unknown>) => MockDisplayQueue;
+};
+const { setupAutomatedCleanup } = nodeRequire('../helpers/mock-lifecycle') as {
+    setupAutomatedCleanup: (options?: CleanupOptions) => void;
+};
+const { expectNoTechnicalArtifacts } = nodeRequire('../helpers/assertion-helpers') as {
+    expectNoTechnicalArtifacts: (value: string) => void;
+};
+const { createConfigFixture } = nodeRequire('../helpers/config-fixture') as {
+    createConfigFixture: (overrides?: Record<string, unknown>) => Record<string, unknown>;
+};
+const NotificationManager = nodeRequire('../../src/notifications/NotificationManager') as new (deps: Record<string, unknown>) => NotificationManagerInstance;
+const { createTextProcessingManager } = nodeRequire('../../src/utils/text-processing') as {
+    createTextProcessingManager: (options: { logger: LoggerLike }) => unknown;
+};
 
 type NotificationManagerInstance = {
     handleNotification: (type: string, platform: string, data: Record<string, unknown>) => Promise<unknown>;
@@ -24,7 +68,7 @@ describe('Twitch gift subscriptions', () => {
         restoreAllMocks();
     });
 
-    let mockLogger: typeof noOpLogger;
+    let mockLogger: LoggerLike;
     let mockDisplayQueue: ReturnType<typeof createMockDisplayQueue>;
     let notificationManager: NotificationManagerInstance;
 
@@ -37,10 +81,13 @@ describe('Twitch gift subscriptions', () => {
                 
             }
         });
-        const constants = require('../../src/core/constants');
+        const constants = nodeRequire('../../src/core/constants') as Record<string, unknown>;
         const textProcessing = createTextProcessingManager({ logger: mockLogger });
-        const obsGoals = require('../../src/obs/goals').getDefaultGoalsManager();
-        const vfxCommandService = { getVFXConfig: createMockFn().mockResolvedValue(null) };
+        const { getDefaultGoalsManager } = nodeRequire('../../src/obs/goals') as {
+            getDefaultGoalsManager: () => unknown;
+        };
+        const obsGoals = getDefaultGoalsManager();
+        const vfxCommandService = { getVFXConfig: (createMockFn() as FlexibleMock).mockResolvedValue(null) };
         return new NotificationManager({
             displayQueue: mockDisplayQueue,
             logger: mockLogger,
@@ -75,7 +122,7 @@ describe('Twitch gift subscriptions', () => {
         expect(result).toEqual(expect.objectContaining({ success: true }));
         expect(mockDisplayQueue.addItem).toHaveBeenCalledTimes(1);
 
-        const queueItem = mockDisplayQueue.addItem.mock.calls[0][0];
+        const queueItem = mockDisplayQueue.addItem.mock.calls[0][0] as QueueItem;
         const notificationData = queueItem.data;
 
         expect(queueItem.type).toBe('platform:giftpaypiggy');
@@ -106,7 +153,7 @@ describe('Twitch gift subscriptions', () => {
         expect(result).toEqual(expect.objectContaining({ success: true }));
         expect(mockDisplayQueue.addItem).toHaveBeenCalledTimes(1);
 
-        const queueItem = mockDisplayQueue.addItem.mock.calls[0][0];
+        const queueItem = mockDisplayQueue.addItem.mock.calls[0][0] as QueueItem;
         const notificationData = queueItem.data;
 
         expect(notificationData.displayMessage).toContain('GiftUser');
