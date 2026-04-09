@@ -1,10 +1,45 @@
-const { ViewerCountObserver } = require('./viewer-count-observer');
-const { createTextProcessingManager } = require('../utils/text-processing');
-const { VIEWER_COUNT_CONSTANTS } = require('../core/constants');
-const { createPlatformErrorHandler } = require('../utils/platform-error-handler');
+import { ViewerCountObserver } from './viewer-count-observer';
+import { VIEWER_COUNT_CONSTANTS } from '../core/constants';
+import { createTextProcessingManager } from '../utils/text-processing';
+import { createPlatformErrorHandler } from '../utils/platform-error-handler';
+
+type LoggerLike = {
+    debug: (message: string, context?: string, payload?: unknown) => void;
+    info: (message: string, context?: string, payload?: unknown) => void;
+    warn: (message: string, context?: string, payload?: unknown) => void;
+    error: (message: string, context?: string, payload?: unknown) => void;
+};
+
+type ObsManagerLike = {
+    isConnected: () => boolean;
+    call: (requestType: string, requestData: Record<string, unknown>) => Promise<unknown>;
+};
+
+type PlatformConfig = {
+    viewerCountEnabled?: boolean;
+    viewerCountSource?: string;
+};
+
+type ObserverDependencies = {
+    config?: Record<string, PlatformConfig>;
+};
+
+function getErrorMessage(error: unknown): string {
+    if (error instanceof Error) {
+        return error.message;
+    }
+
+    return String(error);
+}
 
 class OBSViewerCountObserver extends ViewerCountObserver {
-    constructor(obsManager, logger, deps = {}) {
+    obsManager: ObsManagerLike;
+    logger: LoggerLike;
+    config: Record<string, PlatformConfig>;
+    textProcessing: { formatViewerCount: (count: number) => string };
+    errorHandler: ReturnType<typeof createPlatformErrorHandler>;
+
+    constructor(obsManager: ObsManagerLike, logger: LoggerLike, deps: ObserverDependencies = {}) {
         super();
         if (!logger || typeof logger.error !== 'function') {
             throw new Error('OBSViewerCountObserver requires a logger');
@@ -41,15 +76,15 @@ class OBSViewerCountObserver extends ViewerCountObserver {
             try {
                 await this.updateObsCount(platformName, VIEWER_COUNT_CONSTANTS.VIEWER_COUNT_ZERO);
                 this.logger.debug(`Initialized ${platformName} viewer count to 0 in OBS`, VIEWER_COUNT_CONSTANTS.LOG_CONTEXT.OBS_OBSERVER);
-            } catch (error) {
-                this.logger.debug(`Could not initialize ${platformName} viewer count (source may not exist): ${error.message}`, VIEWER_COUNT_CONSTANTS.LOG_CONTEXT.OBS_OBSERVER);
+            } catch (error: unknown) {
+                this.logger.debug(`Could not initialize ${platformName} viewer count (source may not exist): ${getErrorMessage(error)}`, VIEWER_COUNT_CONSTANTS.LOG_CONTEXT.OBS_OBSERVER);
             }
         }
         
         this.logger.info('All platform viewer counts initialized to 0 in OBS', VIEWER_COUNT_CONSTANTS.LOG_CONTEXT.OBS_OBSERVER);
     }
 
-    async onViewerCountUpdate(update) {
+    async onViewerCountUpdate(update: { platform: string; count: number; isStreamLive: boolean }) {
         const { platform, count, isStreamLive } = update;
         
         // Only update OBS if stream is live
@@ -60,12 +95,12 @@ class OBSViewerCountObserver extends ViewerCountObserver {
 
         try {
             await this.updateObsCount(platform, count);
-        } catch (error) {
-            this._handleObserverError(`Failed to update OBS for ${platform}: ${error.message}`, error, { platform, count });
+        } catch (error: unknown) {
+            this._handleObserverError(`Failed to update OBS for ${platform}: ${getErrorMessage(error)}`, error, { platform, count });
         }
     }
 
-    async onStreamStatusChange(statusUpdate) {
+    async onStreamStatusChange(statusUpdate: { platform: string; isLive: boolean; wasLive: boolean }) {
         const { platform, isLive, wasLive } = statusUpdate;
         
         // If stream went offline, reset viewer count to 0
@@ -73,8 +108,8 @@ class OBSViewerCountObserver extends ViewerCountObserver {
             this.logger.info(`Stream went offline for ${platform}, resetting viewer count to 0`, VIEWER_COUNT_CONSTANTS.LOG_CONTEXT.OBS_OBSERVER);
             try {
                 await this.updateObsCount(platform, VIEWER_COUNT_CONSTANTS.VIEWER_COUNT_ZERO);
-            } catch (error) {
-                this._handleObserverError(`Failed to reset OBS count for ${platform}: ${error.message}`, error, { platform });
+            } catch (error: unknown) {
+                this._handleObserverError(`Failed to reset OBS count for ${platform}: ${getErrorMessage(error)}`, error, { platform });
             }
         }
         
@@ -82,7 +117,7 @@ class OBSViewerCountObserver extends ViewerCountObserver {
         this.logger.info(`OBS observer notified of ${platform} status change: ${isLive ? 'LIVE' : 'OFFLINE'}`, VIEWER_COUNT_CONSTANTS.LOG_CONTEXT.OBS_OBSERVER);
     }
 
-    validateObsUpdateParameters(platformName, count) {
+    validateObsUpdateParameters(platformName: unknown, count: unknown) {
         if (typeof platformName !== 'string' || platformName.trim().length === 0) {
             return { valid: false, reason: 'Platform name must be a non-empty string' };
         }
@@ -94,23 +129,23 @@ class OBSViewerCountObserver extends ViewerCountObserver {
         return { valid: true };
     }
 
-    isObsSourceMissingError(error) {
-        if (!error || !error.message) {
+    isObsSourceMissingError(error: unknown) {
+        if (!error || typeof error !== 'object' || typeof (error as { message?: unknown }).message !== 'string') {
             return false;
         }
         
-        return error.message.toLowerCase().includes('not found');
+        return (error as { message: string }).message.toLowerCase().includes('not found');
     }
 
-    handleObsUpdateError(error, sourceName, platformName) {
+    handleObsUpdateError(error: unknown, sourceName: string, platformName: string) {
         if (this.isObsSourceMissingError(error)) {
             this.logger.debug(`OBS source '${sourceName}' not found for ${platformName}`, VIEWER_COUNT_CONSTANTS.LOG_CONTEXT.OBS_OBSERVER);
         } else {
-            this._handleObserverError(`Failed to update OBS source '${sourceName}': ${error.message}`, error, { platformName, sourceName });
+            this._handleObserverError(`Failed to update OBS source '${sourceName}': ${getErrorMessage(error)}`, error, { platformName, sourceName });
         }
     }
 
-    async updateObsCount(platformName, count) {
+    async updateObsCount(platformName: string, count: number) {
         // Validate input parameters
         const validation = this.validateObsUpdateParameters(platformName, count);
         if (!validation.valid) {
@@ -149,7 +184,7 @@ class OBSViewerCountObserver extends ViewerCountObserver {
         }
     }
 
-    _handleObserverError(message, error, payload = null) {
+    _handleObserverError(message: string, error: unknown, payload: Record<string, unknown> | null = null) {
         if (!this.errorHandler && this.logger) {
             this.errorHandler = createPlatformErrorHandler(this.logger, VIEWER_COUNT_CONSTANTS.LOG_CONTEXT.OBS_OBSERVER);
         }
@@ -170,4 +205,4 @@ class OBSViewerCountObserver extends ViewerCountObserver {
     }
 }
 
-module.exports = { OBSViewerCountObserver };
+export { OBSViewerCountObserver };

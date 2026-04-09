@@ -2,7 +2,7 @@ import { describe, it, expect } from 'bun:test';
 import { createRequire } from 'node:module';
 
 const load = createRequire(__filename);
-const wireStreamStatusHandlers = load('../../../src/viewer-count/stream-status-handler.ts');
+const { wireStreamStatusHandlers } = load('../../../src/viewer-count/stream-status-handler.ts');
 
 type StreamStatusUpdate = {
     platform: string;

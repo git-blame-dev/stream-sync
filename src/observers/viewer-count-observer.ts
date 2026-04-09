@@ -21,4 +21,4 @@ class ViewerCountObserver {
     }
 }
 
-module.exports = { ViewerCountObserver };
+export { ViewerCountObserver };

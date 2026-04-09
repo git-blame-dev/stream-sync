@@ -1691,7 +1691,9 @@ describe('TypeScript toolchain migration gates behavior', () => {
             const content = readFileSync(join(repoRoot, modulePath), 'utf8');
 
             expect(content).not.toMatch(/^\s*(?:const|let|var)\s+.+?=\s*require\s*\(/m);
+            expect(content).not.toMatch(/\brequire\s*\(/);
             expect(content).not.toContain('module.exports');
+            expect(content).not.toMatch(/module\[['\"]exports['\"]\]/);
             expect(content).not.toMatch(/^\s*exports\./m);
         }
     });
@@ -1713,6 +1715,28 @@ describe('TypeScript toolchain migration gates behavior', () => {
 
             expect(content).not.toMatch(/^\s*(?:const|let|var)\s+.+?=\s*require\s*\(/m);
             expect(content).not.toContain('module.exports');
+            expect(content).not.toMatch(/^\s*exports\./m);
+        }
+    });
+
+    it('keeps viewer-count pipeline modules free of commonjs module syntax', () => {
+        const modulePaths = [
+            'src/extractors/youtube-viewer-extractor.ts',
+            'src/observers/viewer-count-observer.ts',
+            'src/observers/obs-viewer-count-observer.ts',
+            'src/services/viewer-count-extraction-service.ts',
+            'src/utils/viewer-count-providers.ts',
+            'src/utils/viewer-count.ts',
+            'src/viewer-count/stream-status-handler.ts'
+        ];
+
+        for (const modulePath of modulePaths) {
+            const content = readFileSync(join(repoRoot, modulePath), 'utf8');
+
+            expect(content).not.toMatch(/^\s*(?:const|let|var)\s+.+?=\s*require\s*\(/m);
+            expect(content).not.toMatch(/\brequire\s*\(/);
+            expect(content).not.toContain('module.exports');
+            expect(content).not.toMatch(/module\[['\"]exports['\"]\]/);
             expect(content).not.toMatch(/^\s*exports\./m);
         }
     });

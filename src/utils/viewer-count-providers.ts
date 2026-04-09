@@ -1,11 +1,52 @@
+import { getUnifiedLogger } from '../core/logging';
+import { createPlatformErrorHandler } from './platform-error-handler';
 
-const { getUnifiedLogger } = require('../core/logging');
-const { createPlatformErrorHandler } = require('./platform-error-handler');
+type ProviderLogger = {
+    debug: (message: string, context?: string, payload?: unknown) => void;
+    info: (message: string, context?: string, payload?: unknown) => void;
+    warn: (message: string, context?: string, payload?: unknown) => void;
+    error: (message: string, context?: string, payload?: unknown) => void;
+};
+
+type ProviderErrorStats = {
+    totalErrors: number;
+    lastError: string | null;
+    errorTypes: Map<string, number>;
+    consecutiveErrors: number;
+};
+
+type TwitchApiClient = {
+    getStreamInfo: (channel: string) => Promise<{ isLive: boolean; viewerCount: number }>;
+};
+
+type YouTubeExtractionService = {
+    getAggregatedViewerCount: (activeVideoIds: string[]) => Promise<{
+        success: boolean;
+        totalCount: number;
+        successfulStreams: number;
+    }>;
+    extractViewerCount: (videoId: string) => Promise<{
+        success: boolean;
+        count: number;
+    }>;
+};
+
+type TikTokPlatformLike = {
+    connection?: {
+        isConnected?: boolean;
+    };
+    getViewerCount?: () => Promise<unknown>;
+};
 
 class ViewerCountProvider {
-    constructor(platform, logger = null) {
+    platform: string;
+    logger: ProviderLogger;
+    errorHandler: ReturnType<typeof createPlatformErrorHandler>;
+    errorStats: ProviderErrorStats;
+
+    constructor(platform: string, logger: ProviderLogger | null = null) {
         this.platform = platform;
-        this.logger = logger || getUnifiedLogger();
+        this.logger = logger || (getUnifiedLogger() as unknown as ProviderLogger);
         this.errorHandler = createPlatformErrorHandler(this.logger, `${platform}-viewer-count`);
         this.errorStats = {
             totalErrors: 0,
@@ -15,18 +56,18 @@ class ViewerCountProvider {
         };
     }
 
-    async getViewerCount() {
+    async getViewerCount(): Promise<number> {
         throw new Error('getViewerCount() must be implemented by subclass');
     }
 
-    isReady() {
+    isReady(): boolean {
         throw new Error('isReady() must be implemented by subclass');
     }
 
-    _handleProviderError(error, operation = 'getViewerCount') {
+    _handleProviderError(error: unknown, operation = 'getViewerCount'): number {
         this.errorStats.totalErrors++;
-        const message = (error && typeof error.message === 'string' && error.message.length > 0)
-            ? error.message
+        const message = (typeof error === 'object' && error !== null && typeof (error as { message?: unknown }).message === 'string' && (error as { message: string }).message.length > 0)
+            ? (error as { message: string }).message
             : 'Unknown error';
         this.errorStats.lastError = message;
         this.errorStats.consecutiveErrors++;
@@ -43,9 +84,9 @@ class ViewerCountProvider {
         return 0;
     }
 
-    _categorizeError(error) {
-        const message = typeof error?.message === 'string'
-            ? error.message.toLowerCase()
+    _categorizeError(error: unknown) {
+        const message = typeof error === 'object' && error !== null && typeof (error as { message?: unknown }).message === 'string'
+            ? (error as { message: string }).message.toLowerCase()
             : '';
         
         if (message.includes('network') || message.includes('timeout') || message.includes('connect')) {
@@ -77,7 +118,12 @@ class ViewerCountProvider {
 }
 
 class TwitchViewerCountProvider extends ViewerCountProvider {
-    constructor(apiClient, connectionStateFactory, config, getCurrentEventSub = null, logger = null) {
+    apiClient: TwitchApiClient;
+    connectionStateFactory: unknown;
+    config: { channel?: string } | null;
+    getCurrentEventSub: unknown;
+
+    constructor(apiClient: TwitchApiClient, connectionStateFactory: unknown, config: { channel?: string } | null, getCurrentEventSub: unknown = null, logger: ProviderLogger | null = null) {
         super('twitch', logger);
         this.apiClient = apiClient;
         this.connectionStateFactory = connectionStateFactory;
@@ -89,7 +135,7 @@ class TwitchViewerCountProvider extends ViewerCountProvider {
         return !!(this.config && this.config.channel);
     }
 
-    async getViewerCount() {
+    async getViewerCount(): Promise<number> {
         this.logger.debug('Getting Twitch viewer count...', 'viewer-count-provider');
         
         if (!this.isReady()) {
@@ -98,7 +144,12 @@ class TwitchViewerCountProvider extends ViewerCountProvider {
         }
 
         try {
-            const streamInfo = await this.apiClient.getStreamInfo(this.config.channel);
+            const channel = this.config?.channel;
+            if (!channel) {
+                return 0;
+            }
+
+            const streamInfo = await this.apiClient.getStreamInfo(channel);
             
             this.logger.debug('Twitch stream info received', 'viewer-count-provider', {
                 isLive: streamInfo.isLive,
@@ -116,11 +167,27 @@ class TwitchViewerCountProvider extends ViewerCountProvider {
 
 
 class YouTubeViewerCountProvider extends ViewerCountProvider {
-    constructor(innertubeManager, config, getActiveVideoIds, Innertube, dependencies = {}) {
+    config: Record<string, unknown> | null;
+    getActiveVideoIds: (() => string[]) | null;
+    viewerExtractionService: YouTubeExtractionService | null;
+    innertubeService: unknown;
+    stats: {
+        totalRequests: number;
+        successfulRequests: number;
+        startTime: number;
+    };
+
+    constructor(
+        innertubeManager: unknown,
+        config: Record<string, unknown> | null,
+        getActiveVideoIds: (() => string[]) | null,
+        Innertube: unknown,
+        dependencies: { viewerExtractionService?: YouTubeExtractionService; innertubeService?: unknown; logger?: ProviderLogger } = {}
+    ) {
         super('youtube', dependencies.logger);
         this.config = config;
         this.getActiveVideoIds = getActiveVideoIds;
-        this.viewerExtractionService = dependencies.viewerExtractionService;
+        this.viewerExtractionService = dependencies.viewerExtractionService || null;
         this.innertubeService = dependencies.innertubeService;
         this.stats = {
             totalRequests: 0,
@@ -133,7 +200,7 @@ class YouTubeViewerCountProvider extends ViewerCountProvider {
         return !!(this.viewerExtractionService && this.config && this.getActiveVideoIds);
     }
 
-    async getViewerCount() {
+    async getViewerCount(): Promise<number> {
         this.stats.totalRequests++;
         this.logger.debug('Getting YouTube viewer count - aggregating from all active streams', 'viewer-count-provider');
         
@@ -143,7 +210,13 @@ class YouTubeViewerCountProvider extends ViewerCountProvider {
         }
 
         try {
-            const activeVideoIds = this.getActiveVideoIds();
+            const getActiveVideoIds = this.getActiveVideoIds;
+            const extractionService = this.viewerExtractionService;
+            if (!getActiveVideoIds || !extractionService) {
+                return 0;
+            }
+
+            const activeVideoIds = getActiveVideoIds();
             
             if (!activeVideoIds || activeVideoIds.length === 0) {
                 this.logger.debug('No active YouTube streams found', 'viewer-count-provider');
@@ -152,7 +225,7 @@ class YouTubeViewerCountProvider extends ViewerCountProvider {
             
             this.logger.debug(`Found ${activeVideoIds.length} active streams for aggregation: ${activeVideoIds.join(', ')}`, 'viewer-count-provider');
             
-            const result = await this.viewerExtractionService.getAggregatedViewerCount(activeVideoIds);
+            const result = await extractionService.getAggregatedViewerCount(activeVideoIds);
             
             if (result.success) {
                 this.stats.successfulRequests++;
@@ -168,11 +241,16 @@ class YouTubeViewerCountProvider extends ViewerCountProvider {
         }
     }
 
-    async getViewerCountForVideo(videoId) {
+    async getViewerCountForVideo(videoId: string): Promise<number> {
         this.logger.debug(`Getting YouTube viewer count for video: ${videoId}`, 'viewer-count-provider');
         
         try {
-            const result = await this.viewerExtractionService.extractViewerCount(videoId);
+            const extractionService = this.viewerExtractionService;
+            if (!extractionService) {
+                return 0;
+            }
+
+            const result = await extractionService.extractViewerCount(videoId);
             if (result.success) {
                 this._resetErrorCount();
                 return result.count;
@@ -195,24 +273,26 @@ class YouTubeViewerCountProvider extends ViewerCountProvider {
 }
 
 class TikTokViewerCountProvider extends ViewerCountProvider {
-    constructor(platform, options = {}) {
+    tiktokPlatform: TikTokPlatformLike | null;
+
+    constructor(platform: TikTokPlatformLike | null, options: { logger?: ProviderLogger } = {}) {
         super('tiktok', options.logger);
-        this.platform = platform;
+        this.tiktokPlatform = platform;
     }
 
     isReady() {
-        if (!this.platform) return false;
-        const connection = this.platform.connection;
+        if (!this.tiktokPlatform) return false;
+        const connection = this.tiktokPlatform.connection;
         return !!(connection && connection.isConnected);
     }
 
-    async getViewerCount() {
-        if (!this.platform || typeof this.platform.getViewerCount !== 'function') {
+    async getViewerCount(): Promise<number> {
+        if (!this.tiktokPlatform || typeof this.tiktokPlatform.getViewerCount !== 'function') {
             return this._handleProviderError(new Error('TikTok platform not available'), 'platformGetViewerCount');
         }
 
         try {
-            const count = await this.platform.getViewerCount();
+            const count = await this.tiktokPlatform.getViewerCount();
             this._resetErrorCount();
             return typeof count === 'number' ? count : 0;
         } catch (error) {
@@ -222,20 +302,26 @@ class TikTokViewerCountProvider extends ViewerCountProvider {
 }
 
 class ViewerCountProviderFactory {
-    static createTwitchProvider(apiClient, connectionStateFactory, config, getCurrentEventSub = null) {
+    static createTwitchProvider(apiClient: TwitchApiClient, connectionStateFactory: unknown, config: { channel?: string } | null, getCurrentEventSub: unknown = null) {
         return new TwitchViewerCountProvider(apiClient, connectionStateFactory, config, getCurrentEventSub);
     }
 
-    static createYouTubeProvider(innertubeManager, config, getActiveVideoIds, Innertube, dependencies = {}) {
+    static createYouTubeProvider(
+        innertubeManager: unknown,
+        config: Record<string, unknown> | null,
+        getActiveVideoIds: (() => string[]) | null,
+        Innertube: unknown,
+        dependencies: { viewerExtractionService?: YouTubeExtractionService; innertubeService?: unknown; logger?: ProviderLogger } = {}
+    ) {
         return new YouTubeViewerCountProvider(innertubeManager, config, getActiveVideoIds, Innertube, dependencies);
     }
 
-    static createTikTokProvider(platform, options = {}) {
+    static createTikTokProvider(platform: TikTokPlatformLike | null, options: { logger?: ProviderLogger } = {}) {
         return new TikTokViewerCountProvider(platform, options);
     }
 }
 
-module.exports = {
+export {
     ViewerCountProvider,
     TwitchViewerCountProvider,
     YouTubeViewerCountProvider,
