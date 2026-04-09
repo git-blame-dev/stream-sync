@@ -10,7 +10,7 @@ const PRIORITY_LEVELS = {
     GIFT: 9,
     PAYPIGGY: 10,
     GIFTPAYPIGGY: 11
-};
+} as const;
 
 const ERROR_MESSAGES = {
     CONFIG_NOT_FOUND: 'Configuration file not found',
@@ -21,7 +21,7 @@ const ERROR_MESSAGES = {
     VFX_FILE_NOT_FOUND: 'VFX file not found',
     API_QUOTA_EXCEEDED: 'API quota exceeded',
     NETWORK_ERROR: 'Network connection error'
-};
+} as const;
 
 const NOTIFICATION_CONFIGS = {
     'platform:follow': {
@@ -79,7 +79,7 @@ const NOTIFICATION_CONFIGS = {
         settingKey: 'messagesEnabled',
         commandKey: 'chat'
     }
-};
+} as const;
 
 const VIEWER_COUNT_CONSTANTS = {
     MS_PER_SECOND: 1000,
@@ -99,9 +99,9 @@ const VIEWER_COUNT_CONSTANTS = {
     OBSERVER: {
         DEFAULT_OBS_OBSERVER_ID: 'obs-viewer-count-observer'
     }
-};
+} as const;
 
-module.exports = {
+export {
     PRIORITY_LEVELS,
     NOTIFICATION_CONFIGS,
     ERROR_MESSAGES,

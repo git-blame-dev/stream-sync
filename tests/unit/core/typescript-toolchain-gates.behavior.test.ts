@@ -1529,6 +1529,22 @@ describe('TypeScript toolchain migration gates behavior', () => {
         }
     });
 
+    it('keeps timeout and core utility modules free of commonjs export syntax', () => {
+        const modulePaths = [
+            'src/utils/timeout-validator.ts',
+            'src/utils/timeout-wrapper.ts',
+            'src/core/http-config.ts',
+            'src/core/constants.ts',
+            'src/auth/twitch-oauth-scopes.ts'
+        ];
+
+        for (const modulePath of modulePaths) {
+            const content = readFileSync(join(repoRoot, modulePath), 'utf8');
+            expect(content).not.toContain('module.exports');
+            expect(content).not.toMatch(/^\s*exports\./m);
+        }
+    });
+
     it('keeps youtube extractor helper modules free of commonjs exports syntax', () => {
         const helperPaths = [
             'src/platforms/youtube/youtube-author-extractor.ts',
