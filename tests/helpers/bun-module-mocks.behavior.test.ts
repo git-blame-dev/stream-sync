@@ -1,15 +1,23 @@
-const { describe, it, expect, afterEach, vi } = require('bun:test');
-const fs = require('node:fs');
-const os = require('node:os');
-const path = require('node:path');
+import { afterEach, describe, expect, it, vi } from 'bun:test';
+import fs from 'node:fs';
+import { createRequire } from 'node:module';
+import os from 'node:os';
+import path from 'node:path';
 
-const {
+import {
     mockModule,
     unmockModule,
     requireActual,
     resetModules,
     restoreAllModuleMocks
-} = require('./bun-module-mocks');
+} from './bun-module-mocks';
+
+const nodeRequire = createRequire(import.meta.url);
+
+type TemporaryArtifact = {
+    tempDir: string;
+    modulePath: string;
+};
 
 const createTempModulePath = () => {
     const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'stream-sync-module-mocks-'));
@@ -19,7 +27,7 @@ const createTempModulePath = () => {
 };
 
 describe('bun-module-mocks behavior', () => {
-    const temporaryArtifacts = [];
+    const temporaryArtifacts: TemporaryArtifact[] = [];
 
     afterEach(() => {
         restoreAllModuleMocks();
@@ -30,7 +38,7 @@ describe('bun-module-mocks behavior', () => {
                 continue;
             }
 
-            delete require.cache[artifact.modulePath];
+            delete nodeRequire.cache[artifact.modulePath];
             fs.rmSync(artifact.tempDir, { recursive: true, force: true });
         }
     });
@@ -41,7 +49,7 @@ describe('bun-module-mocks behavior', () => {
         const factory = () => ({ value: 'mocked-value' });
 
         const moduleId = mockModule(artifact.modulePath, factory);
-        expect(moduleId).toBe(require.resolve(artifact.modulePath));
+        expect(moduleId).toBe(nodeRequire.resolve(artifact.modulePath));
 
         expect(() => unmockModule(artifact.modulePath)).not.toThrow();
     });
@@ -64,25 +72,25 @@ describe('bun-module-mocks behavior', () => {
         const localCacheKey = path.join(fakeCwd, 'tmp', 'local-cache-entry.js');
         const nodeModulesCacheKey = path.join(fakeCwd, 'node_modules', 'package', 'index.js');
 
-        require.cache[localCacheKey] = {
+        nodeRequire.cache[localCacheKey] = {
             id: localCacheKey,
             filename: localCacheKey,
             loaded: true,
             exports: {}
-        };
-        require.cache[nodeModulesCacheKey] = {
+        } as NodeJS.Module;
+        nodeRequire.cache[nodeModulesCacheKey] = {
             id: nodeModulesCacheKey,
             filename: nodeModulesCacheKey,
             loaded: true,
             exports: {}
-        };
+        } as NodeJS.Module;
 
         resetModules();
 
-        expect(require.cache[localCacheKey]).toBeUndefined();
-        expect(require.cache[nodeModulesCacheKey]).toBeDefined();
+        expect(nodeRequire.cache[localCacheKey]).toBeUndefined();
+        expect(nodeRequire.cache[nodeModulesCacheKey]).toBeDefined();
 
-        delete require.cache[nodeModulesCacheKey];
+        delete nodeRequire.cache[nodeModulesCacheKey];
         cwdSpy.mockRestore();
     });
 
@@ -91,9 +99,9 @@ describe('bun-module-mocks behavior', () => {
         temporaryArtifacts.push(artifact);
 
         mockModule(artifact.modulePath, () => ({ value: 'mocked-value' }));
-        require(artifact.modulePath);
+        nodeRequire(artifact.modulePath);
 
         expect(() => restoreAllModuleMocks()).not.toThrow();
-        expect(require.cache[artifact.modulePath]).toBeUndefined();
+        expect(nodeRequire.cache[artifact.modulePath]).toBeUndefined();
     });
 });

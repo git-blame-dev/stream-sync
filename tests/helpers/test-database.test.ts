@@ -1,6 +1,12 @@
-const testClock = require('./test-clock');
-const { createTestDataFactory } = require('./test-database');
-export {};
+import { beforeEach, describe, expect, test } from 'bun:test';
+import { createRequire } from 'node:module';
+
+import testClock from './test-clock';
+
+const nodeRequire = createRequire(import.meta.url);
+const { createTestDataFactory } = nodeRequire('./test-database') as {
+    createTestDataFactory: (type: string) => (overrides?: Record<string, unknown>) => { timestamp?: string };
+};
 
 describe('test-database helpers', () => {
     beforeEach(() => {

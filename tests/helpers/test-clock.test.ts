@@ -1,5 +1,8 @@
-const testClock = require('./test-clock');
-export {};
+import { beforeEach, describe, expect, test } from 'bun:test';
+
+import testClock from './test-clock';
+
+const setClockWithUnknownValue = testClock.set as unknown as (value: unknown) => number;
 
 describe('testClock', () => {
     beforeEach(() => {
@@ -24,7 +27,7 @@ describe('testClock', () => {
     test('rejects invalid time values', () => {
         expect(() => testClock.advance(-1)).toThrow('advance');
         expect(() => testClock.advance(NaN)).toThrow('advance');
-        expect(() => testClock.set('100')).toThrow('set');
+        expect(() => setClockWithUnknownValue('100')).toThrow('set');
         expect(() => testClock.set(Infinity)).toThrow('set');
     });
 

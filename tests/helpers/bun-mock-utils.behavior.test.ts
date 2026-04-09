@@ -1,6 +1,6 @@
-const { describe, it, expect, beforeEach, afterEach } = require('bun:test');
+import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
-const {
+import {
     createMockFn,
     isMockFunction,
     mockResolvedValue,
@@ -11,7 +11,9 @@ const {
     restoreAllMocks,
     resetAllMocks,
     spyOn
-} = require('./bun-mock-utils');
+} from './bun-mock-utils';
+
+const spyOnTarget = spyOn as <T extends object, K extends keyof T>(target: T, method: K) => ReturnType<typeof spyOn>;
 
 describe('bun-mock-utils behavior', () => {
     beforeEach(() => {
@@ -26,7 +28,7 @@ describe('bun-mock-utils behavior', () => {
     });
 
     it('creates mock functions and detects mock identity', () => {
-        const mockFn = createMockFn((value) => value + 1);
+        const mockFn = createMockFn((value: unknown) => Number(value) + 1);
 
         expect(mockFn(2)).toBe(3);
         expect(isMockFunction(mockFn)).toBe(true);
@@ -50,7 +52,7 @@ describe('bun-mock-utils behavior', () => {
     });
 
     it('clears and resets a single mock function', () => {
-        const mockFn = createMockFn((value) => value * 2);
+        const mockFn = createMockFn((value: unknown) => Number(value) * 2);
 
         expect(mockFn(2)).toBe(4);
         expect(mockFn.mock.calls.length).toBe(1);
@@ -65,14 +67,14 @@ describe('bun-mock-utils behavior', () => {
 
     it('manages global mock lifecycle helpers and spy wrapper', () => {
         const target = {
-            multiply(left, right) {
+            multiply(left: number, right: number) {
                 return left * right;
             }
         };
         const mockA = createMockFn(() => 'a');
         const mockB = createMockFn(() => 'b');
 
-        const wrappedSpy = spyOn(target, 'multiply');
+        const wrappedSpy = spyOnTarget(target, 'multiply');
         expect(target.multiply(3, 4)).toBe(12);
         expect(isMockFunction(wrappedSpy)).toBe(true);
 

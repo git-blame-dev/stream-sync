@@ -1566,6 +1566,23 @@ describe('TypeScript toolchain migration gates behavior', () => {
         }
     });
 
+    it('keeps helper behavior test modules free of top-level commonjs and transitional exports', () => {
+        const testPaths = [
+            'tests/helpers/test-clock.test.ts',
+            'tests/helpers/test-database.test.ts',
+            'tests/helpers/bun-mock-utils.behavior.test.ts',
+            'tests/helpers/bun-module-mocks.behavior.test.ts'
+        ];
+
+        for (const testPath of testPaths) {
+            const content = readFileSync(join(repoRoot, testPath), 'utf8');
+
+            expect(content).not.toContain("require('bun:test')");
+            expect(content).not.toMatch(/^\s*(?:const|let|var)\s+.+?=\s*require\s*\(/m);
+            expect(content).not.toContain('export {};');
+        }
+    });
+
     it('keeps youtube extractor helper modules free of commonjs exports syntax', () => {
         const helperPaths = [
             'src/platforms/youtube/youtube-author-extractor.ts',
