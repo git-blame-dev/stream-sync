@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'bun:test';
-
-const { DEFAULT_HTTP_USER_AGENTS, parseUserAgentList } = require('../../../src/core/http-config.ts');
+import { DEFAULT_HTTP_USER_AGENTS, parseUserAgentList } from '../../../src/core/http-config';
 
 describe('core/http-config', () => {
     it('exports non-empty default user agent list', () => {

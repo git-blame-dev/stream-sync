@@ -1545,6 +1545,27 @@ describe('TypeScript toolchain migration gates behavior', () => {
         }
     });
 
+    it('keeps timeout/core unit test modules free of top-level commonjs and transitional exports', () => {
+        const testPaths = [
+            'tests/unit/utils/timeout-validator.test.ts',
+            'tests/unit/utils/timeout-wrapper.test.ts',
+            'tests/unit/core/http-config.test.ts',
+            'tests/unit/core/constants.test.ts',
+            'tests/unit/core/index.test.ts'
+        ];
+
+        for (const testPath of testPaths) {
+            const content = readFileSync(join(repoRoot, testPath), 'utf8');
+            const contentWithoutAllowedShim = testPath === 'tests/unit/core/index.test.ts'
+                ? content.replace("const core = require('../../../src/core/index.ts');", '')
+                : content;
+
+            expect(content).not.toContain("require('bun:test')");
+            expect(contentWithoutAllowedShim).not.toMatch(/^\s*(?:const|let|var)\s+.+?=\s*require\s*\(/m);
+            expect(content).not.toContain('export {};');
+        }
+    });
+
     it('keeps youtube extractor helper modules free of commonjs exports syntax', () => {
         const helperPaths = [
             'src/platforms/youtube/youtube-author-extractor.ts',

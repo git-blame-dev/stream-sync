@@ -1,9 +1,13 @@
-const { describe, expect, it, afterEach } = require('bun:test');
-const { restoreAllMocks } = require('../../helpers/bun-mock-utils');
-const { withTimeout } = require('../../../src/utils/timeout-wrapper.ts');
-const { expectNoTechnicalArtifacts } = require('../../helpers/assertion-helpers');
+import { afterEach, describe, expect, it } from 'bun:test';
+import { createRequire } from 'node:module';
 
-export {};
+import { restoreAllMocks } from '../../helpers/bun-mock-utils';
+import { withTimeout } from '../../../src/utils/timeout-wrapper';
+
+const nodeRequire = createRequire(import.meta.url);
+const { expectNoTechnicalArtifacts } = nodeRequire('../../helpers/assertion-helpers') as {
+    expectNoTechnicalArtifacts: (value: string) => void;
+};
 
 const fail = (message: string) => {
     throw new Error(message);
