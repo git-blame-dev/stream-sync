@@ -1,7 +1,17 @@
-const { config } = require('../core/config');
+import { createRequire } from 'node:module';
 
-const getFallbackUsername = () => config.general.fallbackUsername;
-const getAnonymousUsername = () => config.general.anonymousUsername;
+const nodeRequire = createRequire(import.meta.url);
+const { config } = nodeRequire('../core/config') as {
+    config: {
+        general: {
+            fallbackUsername: string;
+            anonymousUsername: string;
+        };
+    };
+};
+
+const getFallbackUsername = (): string => config.general.fallbackUsername;
+const getAnonymousUsername = (): string => config.general.anonymousUsername;
 
 const REGEX_PATTERNS = {
     HTML_TAGS: /<[^>]*>/g,
@@ -11,7 +21,7 @@ const REGEX_PATTERNS = {
     WHITESPACE_NORMALIZE: /\s+/g
 };
 
-function formatUsername12(username, forTTS = false) {
+function formatUsername12(username: unknown, forTTS = false): string {
     if (!username || typeof username !== 'string') {
         return getFallbackUsername();
     }
@@ -64,11 +74,11 @@ function formatUsername12(username, forTTS = false) {
     return processedUsername.substring(0, 12);
 }
 
-function sanitizeDisplayName(displayName, maxLength = 12) {
+function sanitizeDisplayName(displayName: unknown, maxLength = 12): string {
     return formatUsername12(displayName, false);
 }
 
-function sanitizeForDisplay(text, maxLength = 200) {
+function sanitizeForDisplay(text: unknown, maxLength = 200): string {
     if (!text || typeof text !== 'string') {
         return '';
     }
@@ -81,7 +91,7 @@ function sanitizeForDisplay(text, maxLength = 200) {
         .substring(0, maxLength);
 }
 
-module.exports = {
+export {
     sanitizeDisplayName,
     formatUsername12,
     sanitizeForDisplay,

@@ -1,6 +1,8 @@
+type LoggerLike = {
+    warn: (message: string, context: string) => void;
+};
 
-// Manual overrides for symbols that may be missing from the current locale data
-const MANUAL_SYMBOL_TO_CODE = {
+const MANUAL_SYMBOL_TO_CODE: Record<string, string> = {
     '₽': 'RUB', // Russian Ruble
     '฿': 'THB', // Thai Baht
     '₫': 'VND', // Vietnamese Dong
@@ -20,13 +22,16 @@ const MANUAL_SYMBOL_TO_CODE = {
     '₮': 'MNT'  // Mongolian Tögrög
 };
 
-let _symbolToCodeMap = null;
+let symbolToCodeMap: Map<string, string> | null = null;
 
-function buildSymbolToCodeMap() {
-    const map = new Map();
+function buildSymbolToCodeMap(): Map<string, string> {
+    const map = new Map<string, string>();
+    const intlWithSupportedValues = Intl as typeof Intl & {
+        supportedValuesOf?: (key: 'currency') => string[];
+    };
 
-    const codes = typeof Intl.supportedValuesOf === 'function'
-        ? Intl.supportedValuesOf('currency')
+    const codes = typeof intlWithSupportedValues.supportedValuesOf === 'function'
+        ? intlWithSupportedValues.supportedValuesOf('currency')
         : [];
 
     for (const code of codes) {
@@ -36,7 +41,7 @@ function buildSymbolToCodeMap() {
                 currency: code,
                 currencyDisplay: 'symbol'
             }).formatToParts(1);
-            const symbol = parts.find(p => p.type === 'currency')?.value;
+            const symbol = parts.find((part) => part.type === 'currency')?.value;
             if (symbol) {
                 map.set(symbol, code);
             }
@@ -59,20 +64,20 @@ function buildSymbolToCodeMap() {
     return map;
 }
 
-function getSymbolToCodeMap() {
-    if (!_symbolToCodeMap) {
-        _symbolToCodeMap = buildSymbolToCodeMap();
+function getSymbolToCodeMap(): Map<string, string> {
+    if (!symbolToCodeMap) {
+        symbolToCodeMap = buildSymbolToCodeMap();
     }
-    return _symbolToCodeMap;
+    return symbolToCodeMap;
 }
 
-function warnUnknownCurrency(input, logger) {
+function warnUnknownCurrency(input: unknown, logger: LoggerLike | null): void {
     if (logger && typeof logger.warn === 'function') {
         logger.warn(`Unknown currency input "${input}", normalized to XXX`, 'currency-utils');
     }
 }
 
-function normalizeCurrency(currency, { logger = null, warnUnknown = true } = {}) {
+function normalizeCurrency(currency: unknown, { logger = null, warnUnknown = true }: { logger?: LoggerLike | null; warnUnknown?: boolean } = {}): string {
     if (!currency) {
         if (warnUnknown) warnUnknownCurrency(currency, logger);
         return 'XXX';
@@ -93,6 +98,6 @@ function normalizeCurrency(currency, { logger = null, warnUnknown = true } = {})
     return 'XXX';
 }
 
-module.exports = {
+export {
     normalizeCurrency
 };
