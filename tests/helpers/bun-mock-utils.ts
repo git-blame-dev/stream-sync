@@ -1,30 +1,48 @@
-const { vi } = require('bun:test');
+import { vi } from 'bun:test';
 
-const createMockFn = (implementation) => vi.fn(implementation);
+type MockLike = {
+    mock: {
+        calls: unknown[];
+    };
+    mockResolvedValue: (value: unknown) => void;
+    mockRejectedValue: (error: unknown) => void;
+    mockClear: () => void;
+    mockReset: () => void;
+};
 
-const isMockFunction = (value) => !!(value && value.mock && Array.isArray(value.mock.calls));
+const createMockFn = (implementation?: (...args: unknown[]) => unknown) => vi.fn(implementation);
 
-const mockResolvedValue = (fn, value) => {
+const isMockFunction = (value: unknown): value is MockLike => {
+    return !!(
+        value &&
+        typeof value === 'function' &&
+        'mock' in value &&
+        typeof (value as { mock?: unknown }).mock === 'object' &&
+        Array.isArray((value as { mock: { calls: unknown[] } }).mock.calls)
+    );
+};
+
+const mockResolvedValue = <T>(fn: T, value: unknown): T => {
     if (isMockFunction(fn)) {
         fn.mockResolvedValue(value);
     }
     return fn;
 };
 
-const mockRejectedValue = (fn, error) => {
+const mockRejectedValue = <T>(fn: T, error: unknown): T => {
     if (isMockFunction(fn)) {
         fn.mockRejectedValue(error);
     }
     return fn;
 };
 
-const clearMock = (fn) => {
+const clearMock = (fn: unknown) => {
     if (isMockFunction(fn)) {
         fn.mockClear();
     }
 };
 
-const resetMock = (fn) => {
+const resetMock = (fn: unknown) => {
     if (isMockFunction(fn)) {
         fn.mockReset();
     }
@@ -33,8 +51,9 @@ const resetMock = (fn) => {
 const clearAllMocks = () => vi.clearAllMocks();
 const restoreAllMocks = () => vi.restoreAllMocks();
 const resetAllMocks = () => vi.resetAllMocks();
+const spyOn = (...args: Parameters<typeof vi.spyOn>) => vi.spyOn(...args);
 
-module.exports = {
+export {
     createMockFn,
     isMockFunction,
     mockResolvedValue,
@@ -44,5 +63,5 @@ module.exports = {
     clearAllMocks,
     restoreAllMocks,
     resetAllMocks,
-    spyOn: (...args) => vi.spyOn(...args)
+    spyOn
 };

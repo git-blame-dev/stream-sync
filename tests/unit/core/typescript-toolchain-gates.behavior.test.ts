@@ -1515,6 +1515,20 @@ describe('TypeScript toolchain migration gates behavior', () => {
         }
     });
 
+    it('keeps bun mock helper modules free of commonjs declarations and exports', () => {
+        const helperPaths = [
+            'tests/helpers/bun-mock-utils.ts',
+            'tests/helpers/bun-module-mocks.ts',
+            'tests/helpers/bun-timers.ts'
+        ];
+
+        for (const helperPath of helperPaths) {
+            const content = readFileSync(join(repoRoot, helperPath), 'utf8');
+            expect(content).not.toMatch(/^\s*(?:const|let|var)\s+.+?=\s*require\s*\(/m);
+            expect(content).not.toContain('module.exports');
+        }
+    });
+
     it('keeps youtube extractor helper modules free of commonjs exports syntax', () => {
         const helperPaths = [
             'src/platforms/youtube/youtube-author-extractor.ts',
