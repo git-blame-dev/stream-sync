@@ -1,7 +1,30 @@
-const { describe, test, expect } = require('bun:test');
-export {};
-const NotificationBuilder = require('../../src/utils/notification-builder');
-const { generateLogMessage, createNotificationData } = require('../helpers/notification-test-utils');
+import { describe, expect, test } from 'bun:test';
+import { createRequire } from 'node:module';
+
+const nodeRequire = createRequire(import.meta.url);
+
+type NotificationPayload = Record<string, unknown> & {
+    type?: string;
+    platform?: string;
+    username?: string;
+};
+
+type NotificationRecord = NotificationPayload & {
+    username: string;
+};
+
+const NotificationBuilder = nodeRequire('../../src/utils/notification-builder') as {
+    build: (input: NotificationPayload) => NotificationRecord | null;
+};
+const { generateLogMessage, createNotificationData } = nodeRequire('../helpers/notification-test-utils') as {
+    generateLogMessage: (type: string, data: NotificationRecord) => string;
+    createNotificationData: (
+        type: string,
+        platform: string,
+        userData: Record<string, unknown>,
+        eventData?: Record<string, unknown>
+    ) => NotificationRecord;
+};
 
 describe('Greeting Notification Console Output', () => {
     test('generates console log text for greeting notifications using NotificationBuilder output', () => {
@@ -10,6 +33,10 @@ describe('Greeting Notification Console Output', () => {
             platform: 'twitch',
             username: 'UserF'
         });
+
+        if (!greetingData) {
+            throw new Error('Expected greeting notification payload');
+        }
 
         const logMessage = generateLogMessage('greeting', greetingData);
 

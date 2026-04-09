@@ -1,7 +1,28 @@
+import { describe, expect, test } from 'bun:test';
+import { createRequire } from 'node:module';
 
-const { describe, test, expect } = require('bun:test');
-export {};
-const MessageTTSHandler = require('../../src/utils/message-tts-handler');
+import '../../src/utils/message-tts-handler';
+
+const nodeRequire = createRequire(import.meta.url);
+
+type TtsStage = {
+    text: string;
+    delay: number;
+    type: string;
+};
+
+type MessageTTSHandlerLike = {
+    createTTSStages: (notification: Record<string, unknown>, config?: Record<string, unknown>) => TtsStage[];
+    supportsMessages: (notification: Record<string, unknown>) => boolean;
+    hasValidMessage: (value: unknown) => boolean;
+    createMessageTTS: (username: string, message: string) => string;
+    getMessageDelay: (notification: Record<string, unknown>) => number;
+    MESSAGE_DELAYS: {
+        paypiggy: number;
+    };
+};
+
+const MessageTTSHandler = nodeRequire('../../src/utils/message-tts-handler') as MessageTTSHandlerLike;
 
 describe('MessageTTSHandler', () => {
     describe('createTTSStages', () => {

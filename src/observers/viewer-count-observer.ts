@@ -1,10 +1,10 @@
 
 class ViewerCountObserver {
-    async onViewerCountUpdate(update) {
+    async onViewerCountUpdate(update: unknown) {
         throw new Error('ViewerCountObserver.onViewerCountUpdate() must be implemented by subclass');
     }
 
-    async onStreamStatusChange(statusUpdate) {
+    async onStreamStatusChange(statusUpdate: unknown) {
         throw new Error('ViewerCountObserver.onStreamStatusChange() must be implemented by subclass');
     }
 

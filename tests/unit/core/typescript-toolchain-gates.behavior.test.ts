@@ -1601,6 +1601,25 @@ describe('TypeScript toolchain migration gates behavior', () => {
         }
     });
 
+    it('keeps remaining chat observer extractor helper-cohort tests free of top-level commonjs and transitional exports', () => {
+        const testPaths = [
+            'tests/unit/chat/keyword-parsing-command-parser.test.ts',
+            'tests/unit/observers/viewer-count-observer.behavior.test.ts',
+            'tests/unit/extractors/youtube-viewer-extractor.test.ts',
+            'tests/unit/message-tts-handler.test.ts',
+            'tests/unit/greeting-console-output.test.ts',
+            'tests/unit/notification-builder-superfan.test.ts'
+        ];
+
+        for (const testPath of testPaths) {
+            const content = readFileSync(join(repoRoot, testPath), 'utf8');
+
+            expect(content).not.toContain("require('bun:test')");
+            expect(content).not.toMatch(/^\s*(?:const|let|var)\s+.+?=\s*require\s*\(/m);
+            expect(content).not.toContain('export {};');
+        }
+    });
+
     it('keeps youtube extractor helper modules free of commonjs exports syntax', () => {
         const helperPaths = [
             'src/platforms/youtube/youtube-author-extractor.ts',
