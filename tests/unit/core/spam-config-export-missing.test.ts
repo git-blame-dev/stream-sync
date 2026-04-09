@@ -1,8 +1,34 @@
+import { describe, expect, it } from 'bun:test';
+import { createRequire } from 'node:module';
 
-const { describe, it, expect } = require('bun:test');
-const { initializeTestLogging } = require('../../helpers/test-setup');
-const { setupAutomatedCleanup } = require('../../helpers/mock-lifecycle');
-export {};
+const nodeRequire = createRequire(import.meta.url);
+
+type SpamConfig = {
+    enabled: boolean;
+    detectionWindow: number;
+    maxIndividualNotifications: number;
+    lowValueThreshold: number;
+};
+
+type MainConfig = {
+    spam: SpamConfig;
+    [key: string]: unknown;
+};
+
+const { initializeTestLogging } = nodeRequire('../../helpers/test-setup') as {
+    initializeTestLogging: () => void;
+};
+const { setupAutomatedCleanup } = nodeRequire('../../helpers/mock-lifecycle') as {
+    setupAutomatedCleanup: (options?: Record<string, unknown>) => void;
+};
+
+const getConfig = () => {
+    const { config } = nodeRequire('../../../src/core/config') as {
+        config: MainConfig;
+    };
+
+    return config;
+};
 
 initializeTestLogging();
 
@@ -15,7 +41,7 @@ describe('Spam Config Export Missing', () => {
     describe('when config module is imported', () => {
         describe('and checking for spam configuration export', () => {
             it('should FAIL if config.spam is not properly defined in the main config object', () => {
-                const { config } = require('../../../src/core/config');
+                const config = getConfig();
 
                 expect(config.spam).toBeDefined();
                 expect(config.spam).not.toBeUndefined();
@@ -23,7 +49,7 @@ describe('Spam Config Export Missing', () => {
             });
 
             it('should FAIL if spam property is not enumerable in config object', () => {
-                const { config } = require('../../../src/core/config');
+                const config = getConfig();
 
                 const enumerableProps = Object.keys(config);
                 expect(enumerableProps).toContain('spam');
@@ -33,7 +59,7 @@ describe('Spam Config Export Missing', () => {
             });
 
             it('should provide spam config as accessible property', () => {
-                const { config } = require('../../../src/core/config');
+                const config = getConfig();
 
                 expect(config.spam).toBeDefined();
                 expect(typeof config.spam).toBe('object');
@@ -43,7 +69,7 @@ describe('Spam Config Export Missing', () => {
 
         describe('and verifying spam configuration content', () => {
             it('should FAIL if required spam properties are missing', () => {
-                const { config } = require('../../../src/core/config');
+                const config = getConfig();
                 const spam = config.spam;
 
                 expect(spam).toBeDefined();
@@ -62,7 +88,7 @@ describe('Spam Config Export Missing', () => {
             });
 
             it('should FAIL if spam properties have incorrect types', () => {
-                const { config } = require('../../../src/core/config');
+                const config = getConfig();
                 const spam = config.spam;
 
                 expect(typeof spam.enabled).toBe('boolean');
@@ -84,7 +110,7 @@ describe('Spam Config Export Missing', () => {
     describe('when simulating NotificationManager usage', () => {
         describe('and accessing spam config through app.config pattern', () => {
             it('should FAIL if the app.config.spam access pattern fails', () => {
-                const { config } = require('../../../src/core/config');
+                const config = getConfig();
 
                 const mockApp = {
                     config: config,
@@ -105,7 +131,7 @@ describe('Spam Config Export Missing', () => {
             });
 
             it('should FAIL if spam config cannot be used to create SpamDetectionConfig', () => {
-                const { config } = require('../../../src/core/config');
+                const config = getConfig();
                 const spamConfig = config.spam;
 
                 expect(spamConfig).toBeTruthy();
@@ -127,7 +153,7 @@ describe('Spam Config Export Missing', () => {
     describe('when ensuring no regression in NotificationManager', () => {
         describe('and verifying NotificationManager can initialize spam detection', () => {
             it('should FAIL if spam config cannot be used to create spam detector service', () => {
-                const { config } = require('../../../src/core/config');
+                const config = getConfig();
 
                 expect(config.spam).toBeDefined();
                 expect(config.spam.enabled).toBeDefined();

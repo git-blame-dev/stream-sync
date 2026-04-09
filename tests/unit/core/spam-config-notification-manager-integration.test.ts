@@ -1,10 +1,33 @@
+import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
+import { createRequire } from 'node:module';
 
-const { describe, expect, beforeEach, it, afterEach } = require('bun:test');
-const { createMockFn, restoreAllMocks } = require('../../helpers/bun-mock-utils');
-const { noOpLogger } = require('../../helpers/mock-factories');
-const { createConfigFixture } = require('../../helpers/config-fixture');
-const { PRIORITY_LEVELS } = require('../../../src/core/constants');
-export {};
+import { createMockFn, restoreAllMocks } from '../../helpers/bun-mock-utils';
+
+const nodeRequire = createRequire(import.meta.url);
+
+type LoggerLike = {
+    debug: (...args: unknown[]) => void;
+    info: (...args: unknown[]) => void;
+    warn: (...args: unknown[]) => void;
+    error: (...args: unknown[]) => void;
+};
+
+type SpamConfig = {
+    enabled: boolean;
+    lowValueThreshold: number;
+    detectionWindow: number;
+    maxIndividualNotifications: number;
+};
+
+const { noOpLogger } = nodeRequire('../../helpers/mock-factories') as {
+    noOpLogger: LoggerLike;
+};
+const { createConfigFixture } = nodeRequire('../../helpers/config-fixture') as {
+    createConfigFixture: (overrides?: Record<string, unknown>) => Record<string, unknown>;
+};
+const { PRIORITY_LEVELS } = nodeRequire('../../../src/core/constants') as {
+    PRIORITY_LEVELS: Record<string, number> & { GIFT: number };
+};
 
 type MockFn = ReturnType<typeof createMockFn>;
 
@@ -19,11 +42,17 @@ type NotificationManagerInstance = {
     ) => Promise<{ suppressed?: boolean; reason?: string }>;
 };
 
-const { config } = require('../../../src/core/config');
-const NotificationManager = require('../../../src/notifications/NotificationManager') as new (
+const { config } = nodeRequire('../../../src/core/config') as {
+    config: {
+        spam: SpamConfig;
+    };
+};
+const NotificationManager = nodeRequire('../../../src/notifications/NotificationManager') as new (
     deps: Record<string, unknown>
 ) => NotificationManagerInstance;
-const { createTextProcessingManager } = require('../../../src/utils/text-processing');
+const { createTextProcessingManager } = nodeRequire('../../../src/utils/text-processing') as {
+    createTextProcessingManager: (deps: { logger: LoggerLike }) => Record<string, unknown>;
+};
 
 const mockConstants = {
     PRIORITY_LEVELS,
@@ -84,7 +113,7 @@ describe('Spam Detection Service Integration Tests - Modernized', () => {
                 donationSpamDetector: mockSpamDetector,
                 textProcessing,
                 obsGoals: { processDonationGoal: createMockFn() },
-                vfxCommandService: { getVFXConfig: createMockFn().mockResolvedValue(null) }
+                vfxCommandService: { getVFXConfig: createMockFn(async () => null) }
             });
         });
 
@@ -162,7 +191,7 @@ describe('Spam Detection Service Integration Tests - Modernized', () => {
                 config: testConfig,
                 textProcessing: createTextProcessingManager({ logger: noOpLogger }),
                 obsGoals: { processDonationGoal: createMockFn() },
-                vfxCommandService: { getVFXConfig: createMockFn().mockResolvedValue(null) }
+                vfxCommandService: { getVFXConfig: createMockFn(async () => null) }
             });
         });
 
@@ -222,7 +251,7 @@ describe('Spam Detection Service Integration Tests - Modernized', () => {
                 donationSpamDetector: mockSpamDetector,
                 textProcessing: createTextProcessingManager({ logger: noOpLogger }),
                 obsGoals: { processDonationGoal: createMockFn() },
-                vfxCommandService: { getVFXConfig: createMockFn().mockResolvedValue(null) }
+                vfxCommandService: { getVFXConfig: createMockFn(async () => null) }
             });
         });
 
@@ -277,7 +306,7 @@ describe('Spam Detection Service Integration Tests - Modernized', () => {
                 donationSpamDetector: mockSpamDetector,
                 textProcessing: createTextProcessingManager({ logger: noOpLogger }),
                 obsGoals: { processDonationGoal: createMockFn() },
-                vfxCommandService: { getVFXConfig: createMockFn().mockResolvedValue(null) }
+                vfxCommandService: { getVFXConfig: createMockFn(async () => null) }
             });
 
             expect(nm.donationSpamDetector).toBe(mockSpamDetector);
@@ -300,13 +329,13 @@ describe('Spam Detection Service Integration Tests - Modernized', () => {
                 config: testConfig,
                 textProcessing: createTextProcessingManager({ logger: noOpLogger }),
                 obsGoals: { processDonationGoal: createMockFn() },
-                vfxCommandService: { getVFXConfig: createMockFn().mockResolvedValue(null) }
+                vfxCommandService: { getVFXConfig: createMockFn(async () => null) }
             });
 
             expect(nm.donationSpamDetector).toBeUndefined();
 
             const spamWarnings = localLogger.warn.mock.calls.filter(call =>
-                call[0] && call[0].toLowerCase().includes('spam')
+                typeof call[0] === 'string' && call[0].toLowerCase().includes('spam')
             );
             expect(spamWarnings).toHaveLength(0);
         });

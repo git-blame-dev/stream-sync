@@ -1,27 +1,84 @@
-const { describe, it, expect, beforeEach, afterEach } = require('bun:test');
-const { createMockFn, restoreAllMocks } = require('../helpers/bun-mock-utils');
-const { expectNoTechnicalArtifacts } = require('../helpers/assertion-helpers');
-const { captureStderr } = require('../helpers/output-capture');
-export {};
+import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
+import { createRequire } from 'node:module';
 
-const fs = require('fs');
-const CONFIG_MODULE_PATH = require.resolve('../../src/core/config');
+import { createMockFn, restoreAllMocks } from '../helpers/bun-mock-utils';
+
+const nodeRequire = createRequire(import.meta.url);
+
+const { expectNoTechnicalArtifacts } = nodeRequire('../helpers/assertion-helpers') as {
+    expectNoTechnicalArtifacts: (value: string) => void;
+};
+const { captureStderr } = nodeRequire('../helpers/output-capture') as {
+    captureStderr: () => {
+        output: string[];
+        restore: () => void;
+    };
+};
+
+type FsLike = {
+    readFileSync: (...args: unknown[]) => unknown;
+    existsSync: (...args: unknown[]) => boolean;
+    writeFileSync: (...args: unknown[]) => unknown;
+};
+
+type LoadedConfig = {
+    general: {
+        debugEnabled: boolean;
+        messagesEnabled: boolean;
+        greetingsEnabled: boolean;
+        viewerCountPollingIntervalMs: number;
+        [key: string]: unknown;
+    };
+    obs: {
+        enabled: boolean;
+        ttsEnabled: boolean;
+        address: string;
+        notificationTxt?: string;
+        password?: string;
+        [key: string]: unknown;
+    };
+    youtube: {
+        enabled: boolean;
+        username: string;
+        apiKey?: string;
+        messagesEnabled: boolean;
+        followsEnabled: boolean;
+        giftsEnabled: boolean;
+        [key: string]: unknown;
+    };
+    twitch: {
+        enabled: boolean;
+        username: string;
+        [key: string]: unknown;
+    };
+    tiktok: {
+        enabled: boolean;
+        username: string;
+        [key: string]: unknown;
+    };
+    cooldowns: {
+        cmdCooldownMs: number;
+        [key: string]: unknown;
+    };
+    [key: string]: unknown;
+};
+
+const fs = nodeRequire('fs') as FsLike;
+const CONFIG_MODULE_PATH = nodeRequire.resolve('../../src/core/config');
 
 function resetConfigModule() {
-    delete require.cache[CONFIG_MODULE_PATH];
+    delete nodeRequire.cache[CONFIG_MODULE_PATH];
 }
 
-function loadFreshConfig() {
+function loadFreshConfig(): { config: LoadedConfig } {
     resetConfigModule();
-    const { config } = require('../../src/core/config');
+    const { config } = nodeRequire('../../src/core/config') as { config: LoadedConfig };
     return { config };
 }
 
-type LoadedConfig = ReturnType<typeof loadFreshConfig>['config'];
-
-let originalReadFileSync: typeof fs.readFileSync;
-let originalExistsSync: typeof fs.existsSync;
-let originalWriteFileSync: typeof fs.writeFileSync;
+let originalReadFileSync: FsLike['readFileSync'];
+let originalExistsSync: FsLike['existsSync'];
+let originalWriteFileSync: FsLike['writeFileSync'];
 let originalConfigPath: string | undefined;
 
 const testConfigContent = `
@@ -97,15 +154,15 @@ describe('Configuration System Behavior Tests', () => {
     let currentConfig: LoadedConfig;
     const testConfigPath = '/test/config.ini';
 
-    const setupConfigMocks = (content, configPath = testConfigPath) => {
-        fs.existsSync = createMockFn((filePath) => filePath === configPath);
+    const setupConfigMocks = (content: string, configPath = testConfigPath) => {
+        fs.existsSync = createMockFn((filePath) => filePath === configPath) as FsLike['existsSync'];
         fs.readFileSync = createMockFn((filePath) => {
             if (filePath === configPath) return content;
             throw new Error(`ENOENT: no such file: ${filePath}`);
-        });
+        }) as FsLike['readFileSync'];
     };
 
-    const reloadConfig = (content = testConfigContent, configPath = testConfigPath) => {
+    const reloadConfig = (content = testConfigContent, configPath = testConfigPath): { config: LoadedConfig } => {
         setupConfigMocks(content, configPath);
         process.env.CHAT_BOT_CONFIG_PATH = configPath;
         const { config } = loadFreshConfig();
@@ -174,7 +231,7 @@ userAgents = test-agent-1|test-agent-2
         const stderrCapture = captureStderr();
         process.env.NODE_ENV = 'production';
         try {
-            fs.existsSync = createMockFn(() => false);
+            fs.existsSync = createMockFn(() => false) as FsLike['existsSync'];
             process.env.CHAT_BOT_CONFIG_PATH = '/nonexistent/config.ini';
 
             expect(() => {
@@ -191,7 +248,7 @@ userAgents = test-agent-1|test-agent-2
         const originalNodeEnv = process.env.NODE_ENV;
         process.env.NODE_ENV = 'production';
         try {
-            fs.existsSync = createMockFn((path) => path === '/default/config.ini');
+            fs.existsSync = createMockFn((path) => path === '/default/config.ini') as FsLike['existsSync'];
             process.env.CHAT_BOT_CONFIG_PATH = '/nonexistent/config.ini';
 
             expect(() => loadFreshConfig()).toThrow(/Configuration file not found/);
@@ -419,7 +476,7 @@ userAgents = test-agent-1|test-agent-2
             try {
                 const fallbackPath = '/fallback/config.ini';
 
-                fs.existsSync = createMockFn((path) => path === fallbackPath);
+                fs.existsSync = createMockFn((path) => path === fallbackPath) as FsLike['existsSync'];
                 fs.readFileSync = createMockFn((path) => {
                     if (path === fallbackPath) return testConfigContent;
                     throw new Error(`ENOENT: no such file: ${path}`);
@@ -560,12 +617,18 @@ notificationPlatformLogoTikTok = tiktok-img
             reloadConfig(obsConfig);
 
             const obsSettings = currentConfig.obs;
+            const notificationText = obsSettings.notificationTxt;
 
             expect(obsSettings.enabled).toBe(true);
             expect(obsSettings.address).toBe('ws://localhost:4455');
-            expect(obsSettings.notificationTxt).toBe('Live Notifications');
+            expect(notificationText).toBe('Live Notifications');
+            expect(notificationText).toBeDefined();
 
-            expectNoTechnicalArtifacts(obsSettings.notificationTxt);
+            if (notificationText === undefined) {
+                throw new Error('Expected OBS notification text to be defined');
+            }
+
+            expectNoTechnicalArtifacts(notificationText);
         });
 
         it('should handle platform username configuration for user identification', () => {
