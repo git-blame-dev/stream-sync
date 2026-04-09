@@ -1,10 +1,30 @@
-const { describe, test, expect, beforeEach, afterEach } = require('bun:test');
-export {};
-const { createMockFn, restoreAllMocks } = require('../helpers/bun-mock-utils');
-const { createTestUser, initializeTestLogging } = require('../helpers/test-setup');
-const { noOpLogger } = require('../helpers/mock-factories');
-const { createConfigFixture } = require('../helpers/config-fixture');
-const testClock = require('../helpers/test-clock');
+import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
+import { createRequire } from 'node:module';
+
+import { createMockFn, restoreAllMocks } from '../helpers/bun-mock-utils';
+
+const nodeRequire = createRequire(import.meta.url);
+
+type LoggerLike = {
+    debug: (...args: unknown[]) => void;
+    info: (...args: unknown[]) => void;
+    warn: (...args: unknown[]) => void;
+    error: (...args: unknown[]) => void;
+};
+
+const { createTestUser, initializeTestLogging } = nodeRequire('../helpers/test-setup') as {
+    createTestUser: (overrides?: Record<string, unknown>) => Record<string, unknown>;
+    initializeTestLogging: () => void;
+};
+const { noOpLogger } = nodeRequire('../helpers/mock-factories') as {
+    noOpLogger: LoggerLike;
+};
+const { createConfigFixture } = nodeRequire('../helpers/config-fixture') as {
+    createConfigFixture: (overrides?: Record<string, unknown>) => Record<string, unknown>;
+};
+const testClock = nodeRequire('../helpers/test-clock') as {
+    now: () => number;
+};
 
 type MockFn = ReturnType<typeof createMockFn>;
 
@@ -37,7 +57,7 @@ type RouterInstance = {
 
 type RouterConstructor = new (deps: {
     runtime: RouterRuntime;
-    logger: typeof noOpLogger;
+    logger: LoggerLike;
     config: ReturnType<typeof createConfigFixture>;
 }) => RouterInstance;
 
@@ -53,7 +73,7 @@ describe('Old Message Filter', () => {
     let ChatNotificationRouter: RouterConstructor;
 
     beforeEach(() => {
-        ChatNotificationRouter = require('../../src/services/ChatNotificationRouter') as RouterConstructor;
+        ChatNotificationRouter = nodeRequire('../../src/services/ChatNotificationRouter') as RouterConstructor;
     });
 
     afterEach(() => {
@@ -70,7 +90,7 @@ describe('Old Message Filter', () => {
                 twitch: { messagesEnabled: true, greetingsEnabled: true }
             },
             platformLifecycleService: {
-                getPlatformConnectionTime: createMockFn().mockReturnValue(overrides.connectionTime || null)
+                getPlatformConnectionTime: createMockFn(() => overrides.connectionTime || null)
             },
             gracefulExitService: overrides.gracefulExitService || null
         };
@@ -81,16 +101,16 @@ describe('Old Message Filter', () => {
             config: createConfigFixture()
         });
 
-        router.enqueueChatMessage = createMockFn();
-        router.detectCommand = createMockFn().mockResolvedValue(null);
-        router.processCommand = createMockFn();
-        router.isFirstMessage = createMockFn().mockReturnValue(false);
-        router.isGreetingEnabled = createMockFn().mockReturnValue(false);
+        router.enqueueChatMessage = createMockFn(() => undefined);
+        router.detectCommand = createMockFn(async () => null);
+        router.processCommand = createMockFn(() => undefined);
+        router.isFirstMessage = createMockFn(() => false);
+        router.isGreetingEnabled = createMockFn(() => false);
 
         return { router, runtime };
     };
 
-    const createMessage = (timestamp) => createTestUser({
+    const createMessage = (timestamp: string) => createTestUser({
         username: 'testuser',
         userId: 'test12345',
         message: 'Hello world',

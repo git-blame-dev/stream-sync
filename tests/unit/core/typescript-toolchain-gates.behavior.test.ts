@@ -1639,6 +1639,25 @@ describe('TypeScript toolchain migration gates behavior', () => {
         }
     });
 
+    it('keeps diagnosis config tiktok cohort tests free of top-level commonjs and transitional exports', () => {
+        const testPaths = [
+            'tests/unit/greeting-system-diagnosis.test.ts',
+            'tests/unit/old-message-filter.test.ts',
+            'tests/unit/tiktok-event-factory-behavior.test.ts',
+            'tests/unit/debug-mode-command-line.test.ts',
+            'tests/unit/config-undefined-handling.test.ts',
+            'tests/unit/core/config-path-override.test.ts'
+        ];
+
+        for (const testPath of testPaths) {
+            const content = readFileSync(join(repoRoot, testPath), 'utf8');
+
+            expect(content).not.toContain("require('bun:test')");
+            expect(content).not.toMatch(/^\s*(?:const|let|var)\s+.+?=\s*require\s*\(/m);
+            expect(content).not.toContain('export {};');
+        }
+    });
+
     it('keeps youtube extractor helper modules free of commonjs exports syntax', () => {
         const helperPaths = [
             'src/platforms/youtube/youtube-author-extractor.ts',

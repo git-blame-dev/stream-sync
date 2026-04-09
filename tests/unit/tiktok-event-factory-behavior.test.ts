@@ -1,12 +1,52 @@
-const { describe, expect, it, afterEach } = require('bun:test');
-export {};
-const { createMockFn, restoreAllMocks } = require('../helpers/bun-mock-utils');
-const { noOpLogger } = require('../helpers/mock-factories');
-const logging = require('../../src/core/logging');
+import { afterEach, describe, expect, it } from 'bun:test';
+import { createRequire } from 'node:module';
+
+import { createMockFn, restoreAllMocks } from '../helpers/bun-mock-utils';
+
+const nodeRequire = createRequire(import.meta.url);
+
+type LoggerLike = {
+    debug: (...args: unknown[]) => void;
+    info: (...args: unknown[]) => void;
+    warn: (...args: unknown[]) => void;
+    error: (...args: unknown[]) => void;
+};
+
+const { noOpLogger } = nodeRequire('../helpers/mock-factories') as {
+    noOpLogger: LoggerLike;
+};
+const logging = nodeRequire('../../src/core/logging') as {
+    initializeLoggingConfig: (config: Record<string, unknown>) => void;
+};
 logging.initializeLoggingConfig({ logging: { console: { enabled: false }, file: { enabled: false } } });
 
-const { TikTokPlatform } = require('../../src/platforms/tiktok');
-const testClock = require('../helpers/test-clock');
+type TikTokChatEvent = {
+    type: string;
+    platform: string;
+    userId: string;
+    username: string;
+    message: Record<string, unknown>;
+    metadata: {
+        platform: string;
+        correlationId: string;
+    };
+    timestamp: string;
+    badgeImages?: Array<{
+        imageUrl: string;
+        source: string;
+        label: string;
+    }>;
+};
+
+const { TikTokPlatform } = nodeRequire('../../src/platforms/tiktok') as {
+    TikTokPlatform: new (
+        config: Record<string, unknown>,
+        deps: Record<string, unknown>
+    ) => { eventFactory: { createChatMessage: (payload: Record<string, unknown>) => TikTokChatEvent } };
+};
+const testClock = nodeRequire('../helpers/test-clock') as {
+    now: () => number;
+};
 
 describe('TikTok eventFactory chat message behavior', () => {
     afterEach(() => {
