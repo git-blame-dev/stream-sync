@@ -1,6 +1,17 @@
-const { formatTimestampCompact } = require('../utils/text-processing');
-const { safeObjectStringify } = require('../utils/logger-utils');
-const { FileLogger } = require('../utils/file-logger');
+import { createRequire } from 'node:module';
+
+import { DEFAULT_LOGGING_CONFIG } from './config-builders';
+import { safeObjectStringify } from '../utils/logger-utils';
+
+const nodeRequire = createRequire(import.meta.url);
+const { formatTimestampCompact } = nodeRequire('../utils/text-processing') as {
+    formatTimestampCompact: (date: Date) => string;
+};
+const { FileLogger } = nodeRequire('../utils/file-logger') as {
+    FileLogger: new (options: { logDir: string; filename: string }) => {
+        log: (line: string) => void;
+    };
+};
 
 const LOG_LEVELS = ['debug', 'info', 'console', 'warn', 'error', 'emergency'];
 
@@ -18,10 +29,9 @@ function initializeLoggingConfig(appConfig: { logging?: LoggingConfig }) {
     return globalLoggingConfig;
 }
 
-function getLoggingConfig() {
+function getLoggingConfig(): LoggingConfig {
     if (!globalLoggingConfig) {
-        const { DEFAULT_LOGGING_CONFIG } = require('./config-builders');
-        return DEFAULT_LOGGING_CONFIG;
+        return DEFAULT_LOGGING_CONFIG as unknown as LoggingConfig;
     }
     return globalLoggingConfig;
 }
@@ -92,10 +102,10 @@ class UnifiedLogger {
         }
     }
     
-    shouldOutput(level: LogLevel, destination: Destination) {
-        const config = this.config[destination];
-        if (!config || !config.enabled) return false;
-        if (destination === 'file' && !config.directory) {
+    shouldOutput(level: LogLevel, destination: Destination): boolean {
+        const destinationConfig = this.config[destination] as OutputConfig | undefined;
+        if (!destinationConfig || !destinationConfig.enabled) return false;
+        if (destination === 'file' && !destinationConfig.directory) {
             return false;
         }
         
@@ -108,7 +118,7 @@ class UnifiedLogger {
         }
         
         const messageLevel = LOG_LEVELS.indexOf(level);
-        const configLevel = LOG_LEVELS.indexOf(config.level || 'info');
+        const configLevel = LOG_LEVELS.indexOf(destinationConfig.level || 'info');
         return messageLevel >= configLevel;
     }
     
@@ -203,8 +213,22 @@ function getUnifiedLogger() {
     return globalLogger;
 }
 
-module.exports = {
-    get logger() { return getUnifiedLogger(); },
+const logger = new Proxy<Record<string, unknown>>(
+    {},
+    {
+        get(_target, prop) {
+            const resolvedLogger = getUnifiedLogger() as unknown as Record<string, unknown>;
+            const value = resolvedLogger[prop as keyof typeof resolvedLogger];
+            if (typeof value === 'function') {
+                return value.bind(resolvedLogger);
+            }
+            return value;
+        }
+    }
+) as unknown as UnifiedLogger;
+
+export {
+    logger,
     getUnifiedLogger,
     initializeLoggingConfig,
     getLoggingConfig,

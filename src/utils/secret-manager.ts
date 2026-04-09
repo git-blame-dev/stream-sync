@@ -1,9 +1,48 @@
-const fs = require('fs');
-const readline = require('readline');
-const { createPlatformErrorHandler } = require('./platform-error-handler');
-const { parseEnvContent } = require('./env-file-parser');
-const { resolveLogger } = require('./logger-resolver');
-const { initializeStaticSecrets } = require('../core/secrets');
+import fs from 'node:fs';
+import readline from 'node:readline';
+import { createRequire } from 'node:module';
+
+import { createPlatformErrorHandler } from './platform-error-handler';
+import { initializeStaticSecrets } from '../core/secrets';
+
+const nodeRequire = createRequire(import.meta.url);
+const { parseEnvContent } = nodeRequire('./env-file-parser') as {
+    parseEnvContent: (content: string, options?: { ignoreEmptyKeys?: boolean }) => Record<string, string>;
+};
+const { resolveLogger } = nodeRequire('./logger-resolver') as {
+    resolveLogger: (loggerCandidate: unknown, fallbackContext: string) => {
+        debug?: (message: string, context?: string, payload?: unknown) => void;
+        info?: (message: string, context?: string, payload?: unknown) => void;
+        warn?: (message: string, context?: string, payload?: unknown) => void;
+        error?: (message: string, context?: string, payload?: unknown) => void;
+    };
+};
+
+type LoggerLike = {
+    debug?: (message: string, context?: string, payload?: unknown) => void;
+    info?: (message: string, context?: string, payload?: unknown) => void;
+    warn?: (message: string, context?: string, payload?: unknown) => void;
+    error?: (message: string, context?: string, payload?: unknown) => void;
+};
+
+type SecretsConfig = Record<string, Record<string, unknown>>;
+
+type EnsureSecretsOptions = {
+    config?: SecretsConfig;
+    logger?: unknown;
+    promptFor?: (secretId: string, promptText?: string) => Promise<unknown>;
+    interactive?: boolean;
+    envFilePath?: string | null;
+    envFileReadEnabled?: unknown;
+    envFileWriteEnabled?: unknown;
+    readEnvFile?: (envFilePath: string | null) => Record<string, string>;
+    writeEnvFile?: (
+        envFilePath: string | null,
+        updates: Record<string, string>,
+        logger: LoggerLike,
+        errorHandler: ReturnType<typeof createPlatformErrorHandler>
+    ) => string[];
+};
 
 const normalize = (value) => {
     if (value === null || value === undefined) return null;
@@ -181,7 +220,7 @@ const SECRET_DEFINITIONS = [
     }
 ];
 
-async function ensureSecrets(options = {}) {
+async function ensureSecrets(options: EnsureSecretsOptions = {}) {
     const {
         config,
         logger: loggerCandidate = null,
@@ -194,7 +233,7 @@ async function ensureSecrets(options = {}) {
         writeEnvFile = persistToEnv
     } = options;
 
-    const logger = resolveLogger(loggerCandidate, 'Secret manager');
+    const logger = resolveLogger(loggerCandidate, 'Secret manager') as LoggerLike;
     const safeLogger = logger;
     const errorHandler = createPlatformErrorHandler(safeLogger, 'secret-manager');
     const allowPrompt = isInteractiveTTY(interactive);
@@ -218,9 +257,9 @@ async function ensureSecrets(options = {}) {
         });
     }
 
-    const applied = {};
-    const missingRequired = [];
-    const persistUpdates = {};
+    const applied: Record<string, { source: 'env' | 'prompt' }> = {};
+    const missingRequired: string[] = [];
+    const persistUpdates: Record<string, string> = {};
 
     const getConfigSection = (section) => {
         return config?.[section] ?? {};
@@ -288,6 +327,6 @@ async function ensureSecrets(options = {}) {
     };
 }
 
-module.exports = {
+export {
     ensureSecrets
 };

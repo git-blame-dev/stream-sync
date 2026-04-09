@@ -1,5 +1,4 @@
-
-const { createPlatformErrorHandler } = require('./platform-error-handler');
+import { createPlatformErrorHandler } from './platform-error-handler';
 
 const ERROR_MESSAGES = {
     // Authentication Errors
@@ -407,7 +406,45 @@ const TECHNICAL_ERROR_PATTERNS = [
     }
 ];
 
-function translateError(technicalError, context = {}) {
+type FriendlySeverity = 'error' | 'warning' | 'info';
+
+type LoggerLike = {
+    console?: (message: string, context?: string) => void;
+    warn?: (message: string, context?: string, payload?: unknown) => void;
+    error?: (message: string, context?: string, payload?: unknown) => void;
+};
+
+type ErrorContext = {
+    includeTechnical?: boolean;
+    logger?: LoggerLike;
+    category?: string;
+    [key: string]: unknown;
+};
+
+type FriendlyError = {
+    title: string;
+    message: string;
+    action?: string;
+    severity: FriendlySeverity;
+    category: string;
+    technicalDetails?: string;
+    context: ErrorContext;
+};
+
+type ConsoleFormatOptions = {
+    showTechnical?: boolean;
+    includeActions?: boolean;
+    colorize?: boolean;
+};
+
+type HandleUserFacingErrorOptions = {
+    showInConsole?: boolean;
+    logTechnical?: boolean;
+    exitOnError?: boolean;
+    includeActions?: boolean;
+};
+
+function translateError(technicalError: unknown, context: ErrorContext = {}): FriendlyError {
     const errorMessage = technicalError instanceof Error ? technicalError.message : String(technicalError);
     
     // Find matching pattern
@@ -436,7 +473,7 @@ function translateError(technicalError, context = {}) {
     };
 }
 
-function formatErrorForConsole(friendlyError, options = {}) {
+function formatErrorForConsole(friendlyError: FriendlyError, options: ConsoleFormatOptions = {}) {
     const { showTechnical = false, includeActions = true, colorize = true } = options;
     
     let output = '';
@@ -480,7 +517,7 @@ function formatErrorForConsole(friendlyError, options = {}) {
     return output;
 }
 
-function formatErrorForLog(friendlyError) {
+function formatErrorForLog(friendlyError: FriendlyError) {
     let logMessage = `${friendlyError.title}: ${friendlyError.message}`;
     
     if (friendlyError.action) {
@@ -494,7 +531,7 @@ function formatErrorForLog(friendlyError) {
     return logMessage;
 }
 
-function showUserFriendlyError(technicalError, context = {}, options = {}) {
+function showUserFriendlyError(technicalError: unknown, context: ErrorContext = {}, options: ConsoleFormatOptions = {}) {
     const friendlyError = translateError(technicalError, context);
     const consoleMessage = formatErrorForConsole(friendlyError, options);
 
@@ -512,7 +549,7 @@ function showUserFriendlyError(technicalError, context = {}, options = {}) {
     }
 }
 
-function handleUserFacingError(error, context = {}, options = {}) {
+function handleUserFacingError(error: unknown, context: ErrorContext = {}, options: HandleUserFacingErrorOptions = {}) {
     const { 
         showInConsole = true, 
         logTechnical = true, 
@@ -535,11 +572,11 @@ function handleUserFacingError(error, context = {}, options = {}) {
     }
 }
 
-module.exports = {
+export {
     handleUserFacingError
 };
 
-function logUserFriendlyError(context, friendlyError, logMessage, technicalError) {
+function logUserFriendlyError(context: ErrorContext, friendlyError: FriendlyError, logMessage: string, technicalError: unknown) {
     const category = context.category || 'user-error';
     const handlerLogger = context.logger;
 
@@ -552,7 +589,7 @@ function logUserFriendlyError(context, friendlyError, logMessage, technicalError
         category,
         severity: friendlyError.severity,
         userTitle: friendlyError.title,
-        technicalErrorMessage: technicalError?.message
+        technicalErrorMessage: technicalError instanceof Error ? technicalError.message : undefined
     };
 
     if (friendlyError.severity === 'error') {

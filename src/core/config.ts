@@ -1,15 +1,65 @@
-const fs = require('fs');
-const ini = require('ini');
-const { handleUserFacingError } = require('../utils/user-friendly-errors');
-const { ConfigValidator } = require('../utils/config-validator');
-const { parseEnvContent } = require('../utils/env-file-parser');
-const { buildConfig } = require('./config-builders');
+(function initializeConfigModule() {
+type RawConfig = Record<string, Record<string, unknown>>;
+type BuiltConfig = Record<string, unknown>;
 
-/** @type {any} */
-let loadedConfig = null;
+type UserFacingErrorContext = Record<string, unknown>;
+type UserFacingErrorOptions = {
+    showInConsole?: boolean;
+    includeActions?: boolean;
+    logTechnical?: boolean;
+};
+
+type ConfigValidatorApi = {
+    parseBoolean: (value: unknown, defaultValue: boolean) => boolean;
+    parseString: (value: unknown, defaultValue: string) => string;
+    normalize: (rawConfig: RawConfig) => RawConfig;
+    validate: (normalizedConfig: RawConfig) => {
+        isValid: boolean;
+        errors: string[];
+    };
+};
+
+function nodeRequire<T>(moduleId: string): T {
+    return require(moduleId) as T;
+}
+
+const fs = nodeRequire<typeof import('node:fs')>('fs');
+const ini = nodeRequire<typeof import('ini')>('ini');
+const { handleUserFacingError } = nodeRequire<{
+    handleUserFacingError: (error: unknown, context?: UserFacingErrorContext, options?: UserFacingErrorOptions) => void;
+}>('../utils/user-friendly-errors');
+const { ConfigValidator } = nodeRequire<{
+    ConfigValidator: ConfigValidatorApi;
+}>('../utils/config-validator');
+const { parseEnvContent } = nodeRequire<{
+    parseEnvContent: (content: string) => Record<string, string>;
+}>('../utils/env-file-parser');
+const { buildConfig } = nodeRequire<{
+    buildConfig: (normalizedConfig: RawConfig) => BuiltConfig;
+}>('./config-builders');
+
+let loadedConfig: RawConfig | null = null;
+let cachedConfig: BuiltConfig | null = null;
 let configPath = './config.ini';
 
-function preloadEnvFromConfig(rawConfig) {
+function getErrorCode(error: unknown): string | null {
+    if (typeof error === 'object' && error !== null && 'code' in error) {
+        const code = (error as { code?: unknown }).code;
+        return typeof code === 'string' ? code : null;
+    }
+
+    return null;
+}
+
+function getErrorMessage(error: unknown): string {
+    if (error instanceof Error) {
+        return error.message;
+    }
+
+    return String(error);
+}
+
+function preloadEnvFromConfig(rawConfig: RawConfig) {
     const rawGeneral = rawConfig?.general || {};
     const envFileReadEnabled = ConfigValidator.parseBoolean(rawGeneral.envFileReadEnabled, true);
     if (!envFileReadEnabled) {
@@ -50,7 +100,7 @@ function loadConfig() {
         }
 
         const configContent = fs.readFileSync(configPath, 'utf-8');
-        const rawConfig = ini.parse(configContent);
+        const rawConfig = ini.parse(configContent) as RawConfig;
 
         if (!rawConfig.general) {
             throw new Error('Missing required configuration section: general');
@@ -76,14 +126,17 @@ function loadConfig() {
 
         loadedConfig = normalized;
 
-        const debugEnabled = normalized.general.debugEnabled;
-        if (debugEnabled) {
+        const debugEnabled = normalized.general?.debugEnabled;
+        if (debugEnabled === true) {
             process.stdout.write(`[INFO] [Config] Successfully loaded configuration from ${configPath}\n`);
         }
 
         return loadedConfig;
-    } catch (error) {
-        if (error.code === 'ENOENT') {
+    } catch (error: unknown) {
+        const code = getErrorCode(error);
+        const message = getErrorMessage(error);
+
+        if (code === 'ENOENT') {
             const configError = new Error(`Configuration file not found: ${configPath}`);
             handleUserFacingError(configError, {
                 category: 'configuration',
@@ -93,7 +146,7 @@ function loadConfig() {
                 includeActions: true,
                 logTechnical: false
             });
-        } else if (!error.message.includes('Configuration validation failed')) {
+        } else if (!message.includes('Configuration validation failed')) {
             handleUserFacingError(error, {
                 category: 'configuration',
                 operation: 'loading'
@@ -109,7 +162,7 @@ function loadConfig() {
 
 function _resetConfigForTesting() {
     loadedConfig = null;
-    _cachedConfig = null;
+    cachedConfig = null;
     configPath = './config.ini';
 }
 
@@ -117,19 +170,20 @@ function _getConfigPath() {
     return configPath;
 }
 
-/** @type {any} */
-let _cachedConfig = null;
 function getConfig() {
-    if (!_cachedConfig) {
+    if (!cachedConfig) {
         const normalizedConfig = loadConfig();
-        _cachedConfig = buildConfig(normalizedConfig);
+        cachedConfig = buildConfig(normalizedConfig);
     }
-    return _cachedConfig;
+    return cachedConfig;
 }
 
-module.exports = {
-    get config() { return getConfig(); },
+module['exports'] = {
+    get config() {
+        return getConfig();
+    },
     loadConfig,
     _resetConfigForTesting,
     _getConfigPath
 };
+})();

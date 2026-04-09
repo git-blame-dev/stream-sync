@@ -1,6 +1,10 @@
-const { DEFAULTS } = require('./config-schema');
+import { DEFAULTS } from './config-schema';
 
 const VALID_LOG_LEVELS = ['error', 'warn', 'console', 'info', 'debug'];
+
+type NormalizedConfig = Record<string, Record<string, unknown>>;
+type GenericRecord = Record<string, unknown>;
+type PlatformConfigRecord = Record<string, unknown>;
 
 const DEFAULT_LOGGING_CONFIG = {
     console: { enabled: true, level: 'console' },
@@ -13,9 +17,16 @@ const DEFAULT_LOGGING_CONFIG = {
     chat: { enabled: true, separateFiles: true, directory: DEFAULTS.LOG_DIRECTORY }
 };
 
-function buildLoggingConfig(normalized, options = {}) {
+function buildLoggingConfig(normalized: NormalizedConfig, options: { debugMode?: boolean } = {}) {
     const config = structuredClone(DEFAULT_LOGGING_CONFIG);
-    const logging = normalized.logging;
+    const logging = (normalized.logging || {}) as {
+        consoleLevel?: string;
+        fileLevel?: string;
+        fileLoggingEnabled?: boolean | null;
+    };
+    const general = (normalized.general || {}) as {
+        debugEnabled?: boolean;
+    };
 
     if (logging.consoleLevel && VALID_LOG_LEVELS.includes(logging.consoleLevel)) {
         config.console.level = logging.consoleLevel;
@@ -27,7 +38,7 @@ function buildLoggingConfig(normalized, options = {}) {
         config.file.enabled = logging.fileLoggingEnabled;
     }
 
-    if (options.debugMode || normalized.general.debugEnabled) {
+    if (options.debugMode || general.debugEnabled) {
         config.console.level = 'debug';
     }
 
@@ -39,20 +50,26 @@ function buildLoggingConfig(normalized, options = {}) {
     return config;
 }
 
-function buildGeneralConfig(normalized) {
-    const g = normalized.general;
+function buildGeneralConfig(normalized: NormalizedConfig): GenericRecord {
+    const g = normalized.general as GenericRecord & {
+        viewerCountPollingInterval: number;
+    };
+
     return {
         ...g,
         viewerCountPollingIntervalMs: g.viewerCountPollingInterval * 1000
     };
 }
 
-function buildPlatformConfig(platformName, normalized, generalConfig) {
-    const platform = normalized[platformName] || {};
+function buildPlatformConfig(platformName: string, normalized: NormalizedConfig, generalConfig: GenericRecord): PlatformConfigRecord {
+    const platform = (normalized[platformName] || {}) as PlatformConfigRecord & {
+        pollInterval?: number;
+    };
+    const generalViewerPollMs = generalConfig.viewerCountPollingIntervalMs as number;
 
-    const result = {
+    const result: PlatformConfigRecord = {
         ...platform,
-        pollIntervalMs: platform.pollInterval ? platform.pollInterval * 1000 : generalConfig.viewerCountPollingIntervalMs,
+        pollIntervalMs: platform.pollInterval ? platform.pollInterval * 1000 : generalViewerPollMs,
         dataLoggingPath: DEFAULTS.LOG_DIRECTORY
     };
 
@@ -65,12 +82,20 @@ function buildPlatformConfig(platformName, normalized, generalConfig) {
     return result;
 }
 
-function buildYoutubeConfig(normalized, generalConfig) {
+function buildYoutubeConfig(normalized: NormalizedConfig, generalConfig: GenericRecord): PlatformConfigRecord {
     return buildPlatformConfig('youtube', normalized, generalConfig);
 }
 
-function buildObsConfig(normalized) {
-    const obs = normalized.obs;
+function buildObsConfig(normalized: NormalizedConfig): GenericRecord {
+    const obs = normalized.obs as GenericRecord & {
+        chatPlatformLogoTwitch: string;
+        chatPlatformLogoYouTube: string;
+        chatPlatformLogoTikTok: string;
+        notificationPlatformLogoTwitch: string;
+        notificationPlatformLogoYouTube: string;
+        notificationPlatformLogoTikTok: string;
+    };
+
     return {
         ...obs,
         chatPlatformLogos: {
@@ -86,8 +111,19 @@ function buildObsConfig(normalized) {
     };
 }
 
-function buildHandcamConfig(normalized) {
-    const h = normalized.handcam;
+function buildHandcamConfig(normalized: NormalizedConfig): GenericRecord {
+    const h = normalized.handcam as GenericRecord & {
+        enabled: boolean;
+        sourceName: string;
+        glowFilterName: string;
+        maxSize: number;
+        rampUpDuration: number;
+        holdDuration: number;
+        rampDownDuration: number;
+        totalSteps: number;
+        easingEnabled: boolean;
+    };
+
     return {
         enabled: h.enabled,
         sourceName: h.sourceName,
@@ -101,25 +137,38 @@ function buildHandcamConfig(normalized) {
     };
 }
 
-function buildVfxConfig(normalized) {
-    return { filePath: normalized.vfx.filePath };
+function buildVfxConfig(normalized: NormalizedConfig): { filePath: unknown } {
+    const vfx = normalized.vfx as { filePath: unknown };
+    return { filePath: vfx.filePath };
 }
 
-function buildGiftConfig(normalized) {
-    const g = normalized.gifts;
+function buildGiftConfig(normalized: NormalizedConfig): GenericRecord {
+    const gifts = normalized.gifts as GenericRecord & {
+        command: string;
+        giftVideoSource: string;
+        giftAudioSource: string;
+    };
+
     return {
-        command: g.command,
-        giftVideoSource: g.giftVideoSource,
-        giftAudioSource: g.giftAudioSource
+        command: gifts.command,
+        giftVideoSource: gifts.giftVideoSource,
+        giftAudioSource: gifts.giftAudioSource
     };
 }
 
-function buildEnvelopeConfig(normalized) {
-    return { command: normalized.envelopes.command };
+function buildEnvelopeConfig(normalized: NormalizedConfig): { command: unknown } {
+    const envelopes = normalized.envelopes as { command: unknown };
+    return { command: envelopes.command };
 }
 
-function buildStreamElementsConfig(normalized) {
-    const se = normalized.streamelements;
+function buildStreamElementsConfig(normalized: NormalizedConfig): GenericRecord {
+    const se = normalized.streamelements as GenericRecord & {
+        enabled: boolean;
+        youtubeChannelId: string;
+        twitchChannelId: string;
+        dataLoggingEnabled: boolean;
+    };
+
     return {
         enabled: se.enabled,
         youtubeChannelId: se.youtubeChannelId,
@@ -129,8 +178,20 @@ function buildStreamElementsConfig(normalized) {
     };
 }
 
-function buildSpamConfig(normalized) {
-    const s = normalized.spam;
+function buildSpamConfig(normalized: NormalizedConfig): GenericRecord {
+    const s = normalized.spam as GenericRecord & {
+        enabled: boolean;
+        lowValueThreshold: number;
+        detectionWindow: number;
+        maxIndividualNotifications: number;
+        tiktokEnabled: boolean;
+        tiktokLowValueThreshold: number;
+        twitchEnabled: boolean;
+        twitchLowValueThreshold: number;
+        youtubeEnabled: boolean;
+        youtubeLowValueThreshold: number;
+    };
+
     return {
         enabled: s.enabled,
         lowValueThreshold: s.lowValueThreshold,
@@ -145,8 +206,17 @@ function buildSpamConfig(normalized) {
     };
 }
 
-function buildCooldownsConfig(normalized) {
-    const c = normalized.cooldowns;
+function buildCooldownsConfig(normalized: NormalizedConfig): GenericRecord {
+    const c = normalized.cooldowns as GenericRecord & {
+        cmdCooldown: number;
+        globalCmdCooldown: number;
+        defaultCooldown: number;
+        heavyCommandCooldown: number;
+        heavyCommandThreshold: number;
+        heavyCommandWindow: number;
+        maxEntries: number;
+    };
+
     return {
         cmdCooldown: c.cmdCooldown,
         cmdCooldownMs: c.cmdCooldown * 1000,
@@ -163,8 +233,16 @@ function buildCooldownsConfig(normalized) {
     };
 }
 
-function buildConfig(normalized, options = {}) {
+function buildConfig(normalized: NormalizedConfig, options: { debugMode?: boolean } = {}) {
     const general = buildGeneralConfig(normalized);
+    const follows = normalized.follows as { command: unknown };
+    const raids = normalized.raids as { command: unknown };
+    const paypiggies = normalized.paypiggies as { command: unknown };
+    const greetings = normalized.greetings as GenericRecord & {
+        command: unknown;
+        customVfxProfiles?: Record<string, unknown>;
+    };
+    const shares = normalized.shares as { command: unknown };
 
     return {
         general,
@@ -183,14 +261,14 @@ function buildConfig(normalized, options = {}) {
         timing: { ...normalized.timing },
         cooldowns: buildCooldownsConfig(normalized),
         gui: { ...normalized.gui },
-        follows: { command: normalized.follows.command },
-        raids: { command: normalized.raids.command },
-        paypiggies: { command: normalized.paypiggies.command },
+        follows: { command: follows.command },
+        raids: { command: raids.command },
+        paypiggies: { command: paypiggies.command },
         greetings: {
-            command: normalized.greetings.command,
-            customVfxProfiles: { ...(normalized.greetings.customVfxProfiles || {}) }
+            command: greetings.command,
+            customVfxProfiles: { ...(greetings.customVfxProfiles || {}) }
         },
-        shares: { command: normalized.shares.command },
+        shares: { command: shares.command },
         farewell: { ...normalized.farewell },
         streamelements: buildStreamElementsConfig(normalized),
         commands: { ...normalized.commands },
@@ -198,7 +276,7 @@ function buildConfig(normalized, options = {}) {
     };
 }
 
-module.exports = {
+export {
     buildGeneralConfig,
     buildPlatformConfig,
     buildObsConfig,
