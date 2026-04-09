@@ -1696,6 +1696,27 @@ describe('TypeScript toolchain migration gates behavior', () => {
         }
     });
 
+    it('keeps core runtime support modules free of commonjs module syntax', () => {
+        const modulePaths = [
+            'src/core/EventBus.ts',
+            'src/core/config-builders.ts',
+            'src/core/config.ts',
+            'src/core/index.ts',
+            'src/core/logging.ts',
+            'src/utils/logger-utils.ts',
+            'src/utils/secret-manager.ts',
+            'src/utils/user-friendly-errors.ts'
+        ];
+
+        for (const modulePath of modulePaths) {
+            const content = readFileSync(join(repoRoot, modulePath), 'utf8');
+
+            expect(content).not.toMatch(/^\s*(?:const|let|var)\s+.+?=\s*require\s*\(/m);
+            expect(content).not.toContain('module.exports');
+            expect(content).not.toMatch(/^\s*exports\./m);
+        }
+    });
+
     it('keeps youtube extractor helper modules free of commonjs exports syntax', () => {
         const helperPaths = [
             'src/platforms/youtube/youtube-author-extractor.ts',

@@ -1,7 +1,7 @@
+import { EventEmitter } from 'node:events';
 
-const EventEmitter = require('events');
-const { logger } = require('./logging');
-const { createPlatformErrorHandler } = require('../utils/platform-error-handler');
+import { logger } from './logging';
+import { createPlatformErrorHandler } from '../utils/platform-error-handler';
 
 const eventBusErrorHandler = createPlatformErrorHandler(logger, 'event-bus');
 
@@ -230,13 +230,11 @@ class EventBus extends EventEmitter {
     }
 }
 
-function createEventBus(options = {}) {
-    
+function createEventBus(options: { debugEnabled?: boolean; maxListeners?: number } = {}): EventBus {
     return new EventBus(options);
 }
 
-// Export the class and utilities
-module.exports = {
+export {
     EventBus,
     createEventBus
 };
