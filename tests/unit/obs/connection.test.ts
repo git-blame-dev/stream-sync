@@ -93,5 +93,24 @@ describe('OBS Connection Race Condition - User Experience Validation', () => {
                 throw new Error('identifiedCallback was not captured properly');
             }
         });
+
+        it('rejects connection when identified event never arrives before timeout', async () => {
+            const shortTimeoutManager = new OBSConnectionManager({
+                obs: mockOBS,
+                config: {
+                    address: 'ws://localhost:4455',
+                    password: 'test123',
+                    enabled: true,
+                    connectionTimeoutMs: 20
+                }
+            });
+
+            mockOBS.connect.mockResolvedValue({
+                obsWebSocketVersion: '5.0.0',
+                negotiatedRpcVersion: 1
+            });
+
+            await expect(shortTimeoutManager.connect()).rejects.toThrow(/timed out waiting for authentication/i);
+        });
     });
 });

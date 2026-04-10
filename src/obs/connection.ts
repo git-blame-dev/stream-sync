@@ -1,18 +1,82 @@
-const { safeSetTimeout } = require('../utils/timeout-validator');
-const { withTimeout } = require('../utils/timeout-wrapper');
-const { createPlatformErrorHandler } = require('../utils/platform-error-handler');
-const { ERROR_MESSAGES: DEFAULT_ERROR_MESSAGES } = require('../core/constants');
-const { secrets } = require('../core/secrets');
+import { createRequire } from 'node:module';
+import { logger } from '../core/logging';
+import { ERROR_MESSAGES as DEFAULT_ERROR_MESSAGES } from '../core/constants';
+import { secrets } from '../core/secrets';
+import { createPlatformErrorHandler } from '../utils/platform-error-handler';
+import { safeSetTimeout } from '../utils/timeout-validator';
+import { withTimeout } from '../utils/timeout-wrapper';
+import { OBSHealthChecker } from './health-checker';
+import { initializeHandcamGlow } from './handcam-glow';
+
+type ObsLogger = {
+    debug: typeof logger.debug;
+    info: typeof logger.info;
+};
+
+type ObsSocketLike = {
+    connect: (address?: string, password?: string) => Promise<{ obsWebSocketVersion?: unknown; negotiatedRpcVersion?: unknown }>;
+    disconnect: () => Promise<void>;
+    call: (requestType: string, requestData?: Record<string, unknown>) => Promise<unknown>;
+    on: (eventName: string, handler: (data?: { reason?: unknown; code?: unknown }) => void) => void;
+    off: (eventName: string, handler: (data?: { reason?: unknown; code?: unknown }) => void) => void;
+};
+
+type ObsConfig = {
+    address?: string;
+    password?: string;
+    enabled?: boolean;
+    connectionTimeoutMs?: number;
+};
+
+type ConnectionDependencies = {
+    constants?: {
+        ERROR_MESSAGES: Record<string, string | undefined>;
+    };
+    OBSWebSocket?: new () => ObsSocketLike;
+    config?: ObsConfig;
+    obs?: ObsSocketLike;
+    obsEventService?: {
+        connect: () => Promise<void>;
+    };
+    handcam?: Parameters<typeof initializeHandcamGlow>[1];
+};
+
+const nodeRequire = createRequire(import.meta.url);
+const { default: OBSWebSocket } = nodeRequire('obs-websocket-js') as {
+    default: new () => ObsSocketLike;
+};
 
 // Dependency injection support
 class OBSConnectionManager {
-    constructor(dependencies = {}) {
-        // Inject dependencies with default implementations
-        const { logger } = require('../core/logging');
+    logger: ObsLogger;
+    log: ObsLogger;
+    constants: {
+        ERROR_MESSAGES: Record<string, string | undefined>;
+    };
+    OBSWebSocket: new () => ObsSocketLike;
+    ERROR_MESSAGES: Record<string, string | undefined>;
+    config: {
+        address?: string;
+        password?: string;
+        enabled?: boolean;
+    };
+    OBS_CONNECTION_TIMEOUT: number | undefined;
+    obs: ObsSocketLike;
+    errorHandler: ReturnType<typeof createPlatformErrorHandler> | null;
+    isConnecting: boolean;
+    connectionPromise: Promise<boolean> | null;
+    connectionCompleteHandler: (() => void) | null;
+    sceneItemIdCache: Map<string, unknown>;
+    _isConnected: boolean;
+    healthChecker: OBSHealthChecker | null;
+    reconnectTimer: ReturnType<typeof safeSetTimeout> | null;
+    reconnectIntervalMs: number;
+
+    constructor(dependencies: ConnectionDependencies = {}) {
         this.logger = logger;
         this.log = logger;
         this.constants = dependencies.constants || { ERROR_MESSAGES: DEFAULT_ERROR_MESSAGES };
-        this.OBSWebSocket = dependencies.OBSWebSocket || require('obs-websocket-js').default;
+        this.OBSWebSocket = dependencies.OBSWebSocket || OBSWebSocket;
 
         const { ERROR_MESSAGES } = this.constants;
         this.ERROR_MESSAGES = ERROR_MESSAGES;
@@ -51,7 +115,7 @@ class OBSConnectionManager {
         });
         
         this.obs.on('ConnectionClosed', (data) => {
-            this.logger.debug(`[OBS Connection] Connection Closed: ${data.reason} (${data.code})`, 'obs-connection', data);
+            this.logger.debug(`[OBS Connection] Connection Closed: ${data?.reason} (${data?.code})`, 'obs-connection', data);
             this._isConnected = false;
             this.connectionPromise = null;
             this.scheduleReconnect('connection-closed');
@@ -104,7 +168,7 @@ class OBSConnectionManager {
         });
     }
     
-    updateConfig(newConfig) {
+    updateConfig(newConfig?: ObsConfig) {
         // Extract properties explicitly to handle getter-based configs
         if (newConfig) {
             if (newConfig.address !== undefined) {
@@ -120,12 +184,12 @@ class OBSConnectionManager {
         this.logger.debug(`[OBS Connection] Updated config - Address: ${this.config.address}, Password: ${this.config.password ? 'Yes' : 'No'}`, 'obs-connection');
     }
     
-    connect() {
+    connect(): Promise<boolean> {
         if (this.isConnected()) {
             this.logger.debug('[OBS Connection] Already connected', 'obs-connection');
             return Promise.resolve(true);
         }
-        if (this.isConnecting) {
+        if (this.isConnecting && this.connectionPromise) {
             this.logger.debug('[OBS Connection] Connection in progress, returning existing promise', 'obs-connection');
             return this.connectionPromise;
         }
@@ -135,8 +199,8 @@ class OBSConnectionManager {
 
         this.isConnecting = true;
 
-        this.connectionPromise = new Promise(async (resolve, reject) => {
-            let identifiedTimeout = null;
+        this.connectionPromise = new Promise<boolean>(async (resolve, reject) => {
+            let identifiedTimeout: ReturnType<typeof globalThis.setTimeout> | null = null;
             let connectionCompleted = false;
             
             // Set up a one-time completion handler
@@ -182,16 +246,21 @@ class OBSConnectionManager {
                 this.connectionCompleteHandler = null;
                 
                 // Clean up the error message for better readability
+                const connectionError = error instanceof Error ? error : new Error(String(error));
+                const errorCode = typeof error === 'object' && error !== null && 'code' in error
+                    ? (error as { code?: unknown }).code
+                    : undefined;
+
                 let userFriendlyMessage = 'Failed to connect to OBS';
-                if (error.code === -1 || error.message?.includes('ECONNREFUSED')) {
+                if (errorCode === -1 || connectionError.message.includes('ECONNREFUSED')) {
                     userFriendlyMessage = 'OBS is not running or WebSocket server is disabled';
-                } else if (error.message?.includes('401') || error.message?.includes('Authentication')) {
+                } else if (connectionError.message.includes('401') || connectionError.message.includes('Authentication')) {
                     userFriendlyMessage = 'OBS WebSocket password incorrect';
-                } else if (error.message) {
-                    userFriendlyMessage = `OBS connection error: ${error.message.split('\n')[0]}`;
+                } else if (connectionError.message) {
+                    userFriendlyMessage = `OBS connection error: ${connectionError.message.split('\n')[0]}`;
                 }
 
-                this._handleConnectionError(userFriendlyMessage, error, { requestType: 'Connect' });
+                this._handleConnectionError(userFriendlyMessage, connectionError, { requestType: 'Connect' });
                 this.logger.debug(`Target address: ${this.config.address}`, 'OBS');
                 this.logger.debug('Troubleshooting steps:', 'OBS');
                 this.logger.debug('1. Check if OBS is running', 'OBS');
@@ -203,7 +272,7 @@ class OBSConnectionManager {
                 this.isConnecting = false;
                 this.connectionPromise = null; // Clear promise on failure
                 this.scheduleReconnect('connect-failed');
-                reject(error);
+                reject(connectionError);
             }
         });
 
@@ -233,7 +302,6 @@ class OBSConnectionManager {
     async isReady() {
         // Lazy initialization of health checker
         if (!this.healthChecker) {
-            const OBSHealthChecker = require('./health-checker');
             this.healthChecker = new OBSHealthChecker(this);
         }
         
@@ -249,8 +317,13 @@ class OBSConnectionManager {
             this.connect();
         }
 
+        const pendingConnection = this.connectionPromise;
+        if (!pendingConnection) {
+            throw new Error('OBS connection promise missing while ensuring connection');
+        }
+
         await withTimeout(
-            this.connectionPromise,
+            pendingConnection,
             maxWait,
             {
                 operationName: 'OBS connection readiness',
@@ -259,7 +332,7 @@ class OBSConnectionManager {
         );
     }
 
-    async call(requestType, requestData = {}) {
+    async call(requestType: string, requestData: Record<string, unknown> = {}) {
         if (!this.isConnected()) {
             throw new Error('OBS is not connected');
         }
@@ -268,17 +341,17 @@ class OBSConnectionManager {
             const response = await this.obs.call(requestType, requestData);
             return response;
         } catch (error) {
-            const errorMessage = error?.message || String(error);
+            const errorMessage = error instanceof Error ? error.message : String(error);
             this._handleConnectionError(`API Error for request '${requestType}': ${errorMessage}`, error, { requestType });
             throw error;
         }
     }
     
-    addEventListener(eventName, handler) {
+    addEventListener(eventName: string, handler: (data?: { reason?: unknown; code?: unknown }) => void) {
         this.obs.on(eventName, handler);
     }
     
-    removeEventListener(eventName, handler) {
+    removeEventListener(eventName: string, handler: (data?: { reason?: unknown; code?: unknown }) => void) {
         this.obs.off(eventName, handler);
     }
     
@@ -302,7 +375,9 @@ class OBSConnectionManager {
     
     notifySourcesCacheClearing() {
         try {
-            const sources = require('./sources');
+            const sources = nodeRequire('./sources') as {
+                clearSceneItemCache?: () => void;
+            };
             if (sources && typeof sources.clearSceneItemCache === 'function') {
                 sources.clearSceneItemCache();
             }
@@ -343,16 +418,16 @@ class OBSConnectionManager {
         }
     }
     
-    cacheSceneItemId(key, id) {
+    cacheSceneItemId(key: string, id: unknown) {
         this.sceneItemIdCache.set(key, id);
         this.logger.debug(`[OBS Connection] Cached scene item ID: ${key} -> ${id}`, 'obs-connection');
     }
     
-    getCachedSceneItemId(key) {
+    getCachedSceneItemId(key: string) {
         return this.sceneItemIdCache.get(key);
     }
 
-    _handleConnectionError(message, error, payload = null) {
+    _handleConnectionError(message: string, error: unknown, payload: Record<string, unknown> | null = null) {
         if (!this.errorHandler && this.logger) {
             this.errorHandler = createPlatformErrorHandler(this.logger, 'obs-connection');
         }
@@ -369,9 +444,9 @@ class OBSConnectionManager {
 }
 
 // Global instance management
-let globalOBSManager = null;
+let globalOBSManager: OBSConnectionManager | null = null;
 
-function getOBSConnectionManager(dependencies = {}) {
+function getOBSConnectionManager(dependencies: ConnectionDependencies = {}): OBSConnectionManager {
     if (!globalOBSManager) {
         globalOBSManager = createOBSConnectionManager(dependencies);
     } else if (dependencies && Object.keys(dependencies).length > 0) {
@@ -380,21 +455,23 @@ function getOBSConnectionManager(dependencies = {}) {
             globalOBSManager.updateConfig(dependencies.config);
         }
     }
+
+    if (!globalOBSManager) {
+        throw new Error('OBS connection manager unavailable');
+    }
+
     return globalOBSManager;
 }
 
-function createOBSConnectionManager(dependencies = {}) {
+function createOBSConnectionManager(dependencies: ConnectionDependencies = {}) {
     const manager = new OBSConnectionManager(dependencies);
-    
-    // Initialize debug logging
-    const { logger } = require('../core/logging');
+
     logger.debug('[OBS] Initializing OBS WebSocket connection manager (v5)...', 'OBS');
-    
+
     return manager;
 }
 
-async function initializeOBSConnection(config = {}, dependencies = {}) {
-    const { logger } = require('../core/logging');
+async function initializeOBSConnection(config: ObsConfig = {}, dependencies: ConnectionDependencies = {}) {
     logger.debug('[OBS] initializeOBSConnection() called...', 'OBS');
     
     const combinedDependencies = {
@@ -425,18 +502,17 @@ async function initializeOBSConnection(config = {}, dependencies = {}) {
             const handcamConfig = dependencies.handcam;
             if (handcamConfig?.enabled) {
                 try {
-                    const { initializeHandcamGlow } = require('./handcam-glow');
                     await initializeHandcamGlow(manager.obs, handcamConfig);
                     logger.debug('[OBS] Handcam glow initialized to 0 (startup reset)', 'OBS');
                 } catch (glowError) {
-                    const glowErrorMessage = glowError?.message || String(glowError);
+                    const glowErrorMessage = glowError instanceof Error ? glowError.message : String(glowError);
                     logger.debug(`[OBS] Handcam glow initialization failed: ${glowErrorMessage}`, 'OBS');
                 }
             } else {
                 logger.debug('[OBS] Handcam glow initialization skipped - not enabled', 'OBS');
             }
         } catch (error) {
-            const errorMessage = error?.message || String(error);
+            const errorMessage = error instanceof Error ? error.message : String(error);
             logger.debug(`[OBS] OBS connection failed: ${errorMessage}`, 'OBS');
             // Error is already logged in manager.connect(), no need to re-log
             // We catch it here to prevent it from crashing the main application startup
@@ -449,7 +525,7 @@ async function initializeOBSConnection(config = {}, dependencies = {}) {
     return manager;
 }
 
-async function obsCall(requestType, requestData = {}) {
+async function obsCall(requestType: string, requestData: Record<string, unknown> = {}) {
     const manager = getOBSConnectionManager();
     return await manager.call(requestType, requestData);
 }
@@ -463,15 +539,13 @@ function resetOBSConnectionManager() {
     globalOBSManager = null;
 }
 
-// Export the class and factory functions
-module.exports = {
+export {
     OBSConnectionManager,
     getOBSConnectionManager,
     createOBSConnectionManager,
     initializeOBSConnection,
     resetOBSConnectionManager,
 
-    // Backward compatibility exports
     obsCall,
     ensureOBSConnected
-}; 
+};
