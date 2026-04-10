@@ -6,7 +6,7 @@ const { createConfigFixture } = require('../../helpers/config-fixture');
 
 const EventEmitter = require('events');
 const NotificationManager = require('../../../src/notifications/NotificationManager');
-const ChatNotificationRouter = require('../../../src/services/ChatNotificationRouter');
+const ChatNotificationRouter = require('../../../src/services/ChatNotificationRouter.js');
 
 type QueueItem = {
     duration?: unknown;

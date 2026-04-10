@@ -1,1 +1,3 @@
-module.exports = require('./ChatNotificationRouter.ts');
+const { ChatNotificationRouter } = require('./ChatNotificationRouter.ts');
+
+module.exports = ChatNotificationRouter;

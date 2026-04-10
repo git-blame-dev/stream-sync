@@ -1,19 +1,49 @@
+import { promises as fs } from 'node:fs';
+import path from 'node:path';
+import { logger as defaultLogger } from '../core/logging';
+import { createPlatformErrorHandler } from '../utils/platform-error-handler';
+import { getSystemTimestampISO } from '../utils/timestamp';
 
-const fs = require('fs').promises;
-const path = require('path');
-const { createPlatformErrorHandler } = require('../utils/platform-error-handler');
-const { getSystemTimestampISO } = require('../utils/timestamp');
+type LoggerLike = typeof defaultLogger;
+
+type LoggingConfig = {
+    dataLoggingPath?: string;
+    dataLoggingVerbose?: boolean;
+};
+
+type LoggingDependencies = {
+    logger?: LoggerLike;
+    config?: LoggingConfig;
+};
+
+type PlatformLoggingConfig = {
+    dataLoggingEnabled?: boolean;
+    dataLoggingVerbose?: boolean;
+};
 
 class ChatFileLoggingService {
-    constructor(dependencies = {}) {
-        this.logger = dependencies.logger || require('../core/logging').logger;
+    logger: LoggerLike;
+    errorHandler: {
+        handleDataLoggingError?: (error: Error, dataType: string, message: string) => void;
+        logOperationalError?: (message: string, source: string, context?: unknown) => void;
+    };
+    config: LoggingConfig;
+    dataLoggingPath?: string;
+
+    constructor(dependencies: LoggingDependencies = {}) {
+        this.logger = dependencies.logger || defaultLogger;
         this.errorHandler = createPlatformErrorHandler(this.logger, 'chat-file-logging');
         this.config = dependencies.config || {};
         this.dataLoggingPath = this.config.dataLoggingPath;
     }
 
-    async logRawPlatformData(platform, eventType, data, platformConfig = {}) {
+    async logRawPlatformData(platform, eventType, data, platformConfig: PlatformLoggingConfig = {}) {
         if (!platformConfig.dataLoggingEnabled) {
+            return;
+        }
+
+        if (!this.dataLoggingPath) {
+            this._handleLoggingError('Data logging path is not configured', null);
             return;
         }
 
@@ -35,7 +65,7 @@ class ChatFileLoggingService {
             await fs.appendFile(logFilePath, logLine, 'utf8');
 
             if (platformConfig.dataLoggingVerbose) {
-                this.logger.debug(`Logged ${eventType} data for ${platform} to ${logFilePath}`, 'ChatFileLoggingService');
+                this.logger.debug?.(`Logged ${eventType} data for ${platform} to ${logFilePath}`, 'ChatFileLoggingService');
             }
         } catch (error) {
             this._handleLoggingError(`Error logging platform data for ${platform}: ${error.message}`, error);
@@ -49,12 +79,19 @@ class ChatFileLoggingService {
             // Directory doesn't exist, create it
             await fs.mkdir(dirPath, { recursive: true });
             if (this.config.dataLoggingVerbose) {
-                this.logger.debug(`Created directory: ${dirPath}`, 'ChatFileLoggingService');
+                this.logger.debug?.(`Created directory: ${dirPath}`, 'ChatFileLoggingService');
             }
         }
     }
 
-    async getLogStatistics(platform, platformConfig = {}) {
+    async getLogStatistics(platform, platformConfig: PlatformLoggingConfig = {}) {
+        if (!this.dataLoggingPath) {
+            return {
+                error: 'Data logging path is not configured',
+                exists: false
+            };
+        }
+
         try {
             const logFileName = `${platform}-data-log.ndjson`;
             const logFilePath = path.join(this.dataLoggingPath, logFileName);
@@ -75,9 +112,9 @@ class ChatFileLoggingService {
 
     _handleLoggingError(message, error, dataType = 'platform-data') {
         if (this.errorHandler && error instanceof Error) {
-            this.errorHandler.handleDataLoggingError(error, dataType, message);
+            this.errorHandler.handleDataLoggingError?.(error, dataType, message);
         } else {
-            this.errorHandler?.logOperationalError(message, 'ChatFileLoggingService', {
+            this.errorHandler?.logOperationalError?.(message, 'ChatFileLoggingService', {
                 dataType,
                 error: error?.message || error
             });
@@ -85,4 +122,4 @@ class ChatFileLoggingService {
     }
 }
 
-module.exports = ChatFileLoggingService;
+export { ChatFileLoggingService };

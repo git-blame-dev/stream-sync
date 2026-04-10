@@ -1,5 +1,5 @@
 const { describe, it, expect } = require('bun:test');
-const SelfMessageDetectionService = require('../../../src/services/SelfMessageDetectionService.ts');
+const { SelfMessageDetectionService } = require('../../../src/services/SelfMessageDetectionService.ts');
 
 const createPlainConfig = ({ general = {}, twitch, youtube, tiktok } = {}) => {
     return {

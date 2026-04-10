@@ -1,15 +1,19 @@
-
-const NotificationBuilder = require('../utils/notification-builder');
-const { validateNormalizedMessage } = require('../utils/message-normalization');
-const { checkGlobalCommandCooldown, updateGlobalCommandCooldown } = require('../utils/global-command-cooldown');
-const { createPlatformErrorHandler } = require('../utils/platform-error-handler');
-const { sanitizeForDisplay } = require('../utils/validation');
-const { getValidMessageParts, normalizeBadgeImages } = require('../utils/message-parts');
-const { normalizeGreetingIdentityKey } = require('../utils/greeting-identity-key-normalizer');
+import { NotificationBuilder } from '../utils/notification-builder';
+import { validateNormalizedMessage } from '../utils/message-normalization';
+import { checkGlobalCommandCooldown, updateGlobalCommandCooldown } from '../utils/global-command-cooldown';
+import { createPlatformErrorHandler } from '../utils/platform-error-handler';
+import { sanitizeForDisplay } from '../utils/validation';
+import { getValidMessageParts, normalizeBadgeImages } from '../utils/message-parts';
+import { normalizeGreetingIdentityKey } from '../utils/greeting-identity-key-normalizer';
 
 const LOG_TRUNCATION_LENGTH = 200;
 
 class ChatNotificationRouter {
+    runtime;
+    logger;
+    maxMessageLength;
+    errorHandler;
+
     constructor({ runtime, logger, config }) {
         this.runtime = runtime;
         this.logger = logger;
@@ -20,34 +24,35 @@ class ChatNotificationRouter {
         this.errorHandler = createPlatformErrorHandler(this.logger, 'chat-router');
     }
 
-    async handleChatMessage(platform, normalizedData = {}) {
+    async handleChatMessage(platform, normalizedData) {
+        const safeNormalizedData = normalizedData || {};
         try {
-            const messageText = this.getMessageText(normalizedData);
-            this.logger.debug(`Chat message via router from ${platform}: ${normalizedData.username} - ${messageText}`, 'chat-router');
+            const messageText = this.getMessageText(safeNormalizedData);
+            this.logger.debug(`Chat message via router from ${platform}: ${safeNormalizedData.username} - ${messageText}`, 'chat-router');
 
-            const validation = validateNormalizedMessage(normalizedData) || { isValid: true };
+            const validation = validateNormalizedMessage(safeNormalizedData) || { isValid: true };
             if (!validation.isValid) {
                 this.logger.warn(`Invalid normalized message from ${platform}`, 'chat-router', {
                     issues: validation.errors,
-                    data: normalizedData
+                    data: safeNormalizedData
                 });
             }
 
-            normalizedData.platform = platform;
-            const userId = normalizedData.userId;
+            safeNormalizedData.platform = platform;
+            const userId = safeNormalizedData.userId;
 
-            if (!this.hasMessageContent(normalizedData)) {
-                this._logSkipped(platform, normalizedData.username, 'empty message');
+            if (!this.hasMessageContent(safeNormalizedData)) {
+                this._logSkipped(platform, safeNormalizedData.username, 'empty message');
                 return;
             }
 
             const chatEnabled = this.isChatEnabled(platform);
             if (!chatEnabled) {
-                this._logSkipped(platform, normalizedData.username, 'messages disabled (chat row only)');
+                this._logSkipped(platform, safeNormalizedData.username, 'messages disabled (chat row only)');
             }
 
-            if (this.shouldSkipForConnection(platform, normalizedData.timestamp)) {
-                this._logSkipped(platform, normalizedData.username, 'old message (sent before connection)');
+            if (this.shouldSkipForConnection(platform, safeNormalizedData.timestamp)) {
+                this._logSkipped(platform, safeNormalizedData.username, 'old message (sent before connection)');
                 return;
             }
 
@@ -56,34 +61,34 @@ class ChatNotificationRouter {
             }
 
             const sanitizedMessage = this.sanitizeChatContent(messageText);
-            const messageParts = this.getCanonicalMessageParts(normalizedData);
+            const messageParts = this.getCanonicalMessageParts(safeNormalizedData);
             const hasRenderableParts = messageParts.length > 0;
             if (!sanitizedMessage.hasContent && !hasRenderableParts) {
-                this._logSkipped(platform, normalizedData.username, 'empty after sanitization');
+                this._logSkipped(platform, safeNormalizedData.username, 'empty after sanitization');
                 return;
             }
 
-            const logSafeData = { ...normalizedData, message: sanitizedMessage.message };
+            const logSafeData = { ...safeNormalizedData, message: sanitizedMessage.message };
             const level = this.runtime.config.general.logChatMessages ? 'console' : 'debug';
             this.logger[level](this._formatChatMessage(platform, logSafeData), 'chat-router');
 
             const greetingIdentity = platform === 'tiktok'
-                ? normalizedData.userId
-                : normalizedData.username;
+                ? safeNormalizedData.userId
+                : safeNormalizedData.username;
             const greetingProfile = this.resolveGreetingProfile(platform, greetingIdentity);
             const firstMessageTrackingId = greetingProfile
                 ? `greeting-profile:${greetingProfile.profileId}`
-                : normalizedData.userId;
-            const isFirstMessage = this.isFirstMessage(normalizedData, platform, firstMessageTrackingId);
+                : safeNormalizedData.userId;
+            const isFirstMessage = this.isFirstMessage(safeNormalizedData, platform, firstMessageTrackingId);
             const greetingsEnabled = this.isGreetingEnabled(platform);
 
             if (chatEnabled) {
-                this.enqueueChatMessage(platform, normalizedData, sanitizedMessage.message, messageParts);
+                this.enqueueChatMessage(platform, safeNormalizedData, sanitizedMessage.message, messageParts);
             }
 
             const farewellTrigger = this.detectFarewell(sanitizedMessage.message);
             if (farewellTrigger) {
-                const handledFarewell = await this.processFarewell(platform, normalizedData, farewellTrigger);
+                const handledFarewell = await this.processFarewell(platform, safeNormalizedData, farewellTrigger);
                 if (handledFarewell) {
                     return;
                 }
@@ -91,7 +96,7 @@ class ChatNotificationRouter {
 
             const commandConfig = await this.detectCommand(sanitizedMessage.message);
             if (commandConfig) {
-                await this.processCommand(platform, normalizedData, commandConfig, {
+                await this.processCommand(platform, safeNormalizedData, commandConfig, {
                     isFirstMessage,
                     greetingsEnabled,
                     greetingProfile
@@ -100,7 +105,7 @@ class ChatNotificationRouter {
             }
 
             if (isFirstMessage && greetingsEnabled) {
-                await this.queueGreeting(platform, normalizedData.username, {
+                await this.queueGreeting(platform, safeNormalizedData.username, {
                     userId,
                     greetingProfile
                 });
@@ -119,20 +124,22 @@ class ChatNotificationRouter {
         return this.getCanonicalMessageParts(normalizedData).length > 0;
     }
 
-    getMessageText(normalizedData = {}) {
-        if (typeof normalizedData?.message === 'string') {
-            return normalizedData.message;
+    getMessageText(normalizedData) {
+        const safeNormalizedData = normalizedData || {};
+        if (typeof safeNormalizedData?.message === 'string') {
+            return safeNormalizedData.message;
         }
 
-        if (normalizedData?.message && typeof normalizedData.message === 'object' && typeof normalizedData.message.text === 'string') {
-            return normalizedData.message.text;
+        if (safeNormalizedData?.message && typeof safeNormalizedData.message === 'object' && typeof safeNormalizedData.message.text === 'string') {
+            return safeNormalizedData.message.text;
         }
 
         return '';
     }
 
-    getCanonicalMessageParts(normalizedData = {}) {
-        return getValidMessageParts({ message: normalizedData?.message })
+    getCanonicalMessageParts(normalizedData) {
+        const safeNormalizedData = normalizedData || {};
+        return getValidMessageParts({ message: safeNormalizedData?.message })
             .map((part) => {
                 if (part.type === 'emote') {
                     return {
@@ -279,7 +286,7 @@ class ChatNotificationRouter {
         return !!value;
     }
 
-    enqueueChatMessage(platform, normalizedData, sanitizedMessage, messageParts = []) {
+    enqueueChatMessage(platform, normalizedData, sanitizedMessage, messageParts: Array<Record<string, unknown>> = []) {
         if (!this.runtime.displayQueue) {
             return;
         }
@@ -294,13 +301,21 @@ class ChatNotificationRouter {
             isPaypiggy: normalizedData.isPaypiggy === true
         };
 
-        const chatData = NotificationBuilder.build(baseChatData) || baseChatData;
-        chatData.message = {
+        const builtChatData = NotificationBuilder.build(baseChatData);
+        const chatData: Record<string, unknown> =
+            builtChatData && typeof builtChatData === 'object'
+                ? { ...builtChatData }
+                : { ...baseChatData };
+        const messagePayload: {
+            text: string;
+            parts?: Array<Record<string, unknown>>;
+        } = {
             text: sanitizedMessage
         };
         if (Array.isArray(messageParts) && messageParts.length > 0) {
-            chatData.message.parts = messageParts;
+            messagePayload.parts = messageParts;
         }
+        chatData.message = messagePayload;
         const badgeImages = normalizeBadgeImages(normalizedData.badgeImages);
         if (badgeImages.length > 0) {
             chatData.badgeImages = badgeImages;
@@ -313,13 +328,14 @@ class ChatNotificationRouter {
         });
     }
 
-    async processCommand(platform, normalizedData, commandConfig, options = {}) {
+    async processCommand(platform, normalizedData, commandConfig, options) {
+        const safeOptions = options || {};
         if (!this.runtime.commandCooldownService) {
             this.logger.warn('CommandCooldownService not available; cannot process command', 'chat-router');
             return;
         }
 
-        const { isFirstMessage, greetingsEnabled, greetingProfile } = options;
+        const { isFirstMessage, greetingsEnabled, greetingProfile } = safeOptions;
         const { perUserCooldown, heavyCooldown, globalCooldown } = this.getCooldownSettings();
 
         const userAllowed = this.runtime.commandCooldownService.checkUserCooldown(
@@ -444,14 +460,15 @@ class ChatNotificationRouter {
         });
     }
 
-    buildVFXConfig(commandConfig = {}) {
+    buildVFXConfig(commandConfig) {
+        const safeCommandConfig = commandConfig || {};
         return {
-            filename: commandConfig.filename,
-            mediaSource: commandConfig.mediaSource,
-            vfxFilePath: commandConfig.vfxFilePath,
-            commandKey: commandConfig.commandKey,
-            command: commandConfig.command,
-            triggerWord: commandConfig.command
+            filename: safeCommandConfig.filename,
+            mediaSource: safeCommandConfig.mediaSource,
+            vfxFilePath: safeCommandConfig.vfxFilePath,
+            commandKey: safeCommandConfig.commandKey,
+            command: safeCommandConfig.command,
+            triggerWord: safeCommandConfig.command
         };
     }
 
@@ -490,7 +507,8 @@ class ChatNotificationRouter {
         return profiles[identityKey] || null;
     }
 
-    async queueGreeting(platform, username, options = {}) {
+    async queueGreeting(platform, username, options) {
+        const safeOptions = options || {};
         if (!this.runtime.displayQueue) {
             return;
         }
@@ -499,23 +517,23 @@ class ChatNotificationRouter {
             type: 'greeting',
             platform,
             username: username,
-            userId: options.userId
+            userId: safeOptions.userId
         });
 
-        const queueItem = {
+        const queueItem: Record<string, unknown> = {
             type: 'greeting',
             data: greetingData,
             vfxConfig: await this.resolveGreetingVFX(),
             platform
         };
 
-        const secondaryVfxConfig = await this.resolveSecondaryGreetingVFX(options.greetingProfile);
+        const secondaryVfxConfig = await this.resolveSecondaryGreetingVFX(safeOptions.greetingProfile);
         if (secondaryVfxConfig) {
             queueItem.secondaryVfxConfig = secondaryVfxConfig;
         }
 
-        if (typeof options.priority !== 'undefined') {
-            queueItem.priority = options.priority;
+        if (typeof safeOptions.priority !== 'undefined') {
+            queueItem.priority = safeOptions.priority;
         }
 
         this.runtime.displayQueue.addItem(queueItem);
@@ -593,4 +611,4 @@ class ChatNotificationRouter {
     }
 }
 
-module.exports = ChatNotificationRouter;
+export { ChatNotificationRouter };

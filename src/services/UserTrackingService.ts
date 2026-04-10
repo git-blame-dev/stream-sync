@@ -1,9 +1,14 @@
-const { logger } = require('../core/logging');
-const { createPlatformErrorHandler } = require('../utils/platform-error-handler');
+import { logger } from '../core/logging';
+import { createPlatformErrorHandler } from '../utils/platform-error-handler';
 
 const errorHandler = createPlatformErrorHandler(logger, 'user-tracking');
 
-function handleServiceError(message, error, context = {}) {
+type TrackingContext = {
+    platform?: string;
+    [key: string]: unknown;
+};
+
+function handleServiceError(message: string, error: unknown, context: TrackingContext = {}) {
     if (errorHandler && error instanceof Error) {
         errorHandler.handleEventProcessingError(error, 'user-tracking', context, message);
         return;
@@ -16,6 +21,8 @@ function handleServiceError(message, error, context = {}) {
 }
 
 class UserTrackingService {
+    seenUsers;
+
     constructor() {
         this.seenUsers = new Set();
         logger.debug('[UserTrackingService] Initialized', 'user-tracking', {
@@ -23,7 +30,7 @@ class UserTrackingService {
         });
     }
 
-    isFirstMessage(userId, context = {}) {
+    isFirstMessage(userId: string | null | undefined, context: TrackingContext = {}) {
         if (!userId) {
             logger.warn('[UserTrackingService] No userId provided for first message check', 'user-tracking');
             return false;
@@ -54,7 +61,4 @@ function createUserTrackingService() {
     return new UserTrackingService();
 }
 
-module.exports = {
-    UserTrackingService,
-    createUserTrackingService
-};
+export { UserTrackingService, createUserTrackingService };

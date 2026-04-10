@@ -97,7 +97,7 @@ class YouTubePlatform extends EventEmitter {
         this.timestampService = dependencies.timestampService || null; // Timestamp extraction service
         this.viewerService = dependencies.viewerService || null;
 
-        const ChatFileLoggingService = dependencies.ChatFileLoggingService || require('../services/ChatFileLoggingService');
+        const ChatFileLoggingService = dependencies.ChatFileLoggingService || require('../services/ChatFileLoggingService.js');
         this.chatFileLoggingService = dependencies.chatFileLoggingService || new ChatFileLoggingService({
             logger: this.logger,
             config: this.config

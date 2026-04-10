@@ -1,3 +1,5 @@
+import { isIsoTimestamp } from './timestamp';
+import { normalizeMissingFields, mergeMissingFieldsMetadata } from './missing-fields';
 
 function resolveNonEmptyString(value) {
     if (typeof value !== 'string') {
@@ -26,9 +28,6 @@ function resolvePositiveNumber(value) {
     return Number.isFinite(num) && num > 0 ? num : null;
 }
 
-const { isIsoTimestamp } = require('./timestamp');
-const { normalizeMissingFields, mergeMissingFieldsMetadata } = require('./missing-fields');
-
 function resolveTimestampValue(value) {
     if (typeof value !== 'string') {
         return null;
@@ -40,7 +39,8 @@ function resolveTimestampValue(value) {
     return isIsoTimestamp(trimmed) ? trimmed : null;
 }
 
-function createMonetizationErrorPayload(options = {}) {
+function createMonetizationErrorPayload(options) {
+    const safeOptions = options || {};
     const {
         notificationType,
         platform,
@@ -58,7 +58,7 @@ function createMonetizationErrorPayload(options = {}) {
         months,
         missingFields,
         sourceTimestamp
-    } = options;
+    } = safeOptions;
 
     const resolvedNotificationType = resolveNonEmptyString(notificationType);
     if (!resolvedNotificationType) {
@@ -92,7 +92,7 @@ function createMonetizationErrorPayload(options = {}) {
         ...(resolvedSourceTimestamp ? { sourceTimestamp: resolvedSourceTimestamp } : {})
     });
 
-    const payload = {
+    const payload: Record<string, unknown> = {
         type: canonicalType,
         platform: normalizedPlatform,
         isError: true,
@@ -171,6 +171,4 @@ function createMonetizationErrorPayload(options = {}) {
     }
 }
 
-module.exports = {
-    createMonetizationErrorPayload
-};
+export { createMonetizationErrorPayload };

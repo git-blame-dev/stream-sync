@@ -1,9 +1,12 @@
-
-const { logger: defaultLogger } = require('../core/logging');
-const { createPlatformErrorHandler } = require('../utils/platform-error-handler');
+import { logger as defaultLogger } from '../core/logging';
+import { createPlatformErrorHandler } from '../utils/platform-error-handler';
 
 class SelfMessageDetectionService {
-    constructor(config, dependencies = {}) {
+    config;
+    logger;
+    errorHandler;
+
+    constructor(config, dependencies: { logger?: typeof defaultLogger } = {}) {
         this.config = config;
         this.logger = dependencies.logger || defaultLogger;
         this.errorHandler = createPlatformErrorHandler(this.logger, 'self-message-detection');
@@ -91,7 +94,7 @@ class SelfMessageDetectionService {
         return false;
     }
 
-    _handleDetectionError(message, error = null) {
+    _handleDetectionError(message, error: unknown = null) {
         if (this.errorHandler && error instanceof Error) {
             this.errorHandler.handleEventProcessingError(error, 'self-message-detection', null, message);
         } else {
@@ -100,4 +103,4 @@ class SelfMessageDetectionService {
     }
 }
 
-module.exports = SelfMessageDetectionService;
+export { SelfMessageDetectionService };

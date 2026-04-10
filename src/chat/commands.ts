@@ -1,13 +1,51 @@
-const { logger } = require('../core/logging');
-const { getDefaultEffectsManager } = require('../obs/effects');
+import { logger } from '../core/logging';
+import { getDefaultEffectsManager } from '../obs/effects';
+
+type ParsedCommandConfig = {
+    filename: string;
+    mediaSource: string | undefined;
+    vfxFilePath: string;
+    duration: number;
+    commandKey: string;
+    primaryCommand: string;
+};
+
+type ParsedCommands = {
+    triggers: Map<string, ParsedCommandConfig>;
+    keywords: Map<string, ParsedCommandConfig>;
+};
+
+type ParsedFarewellCommands = {
+    triggers: Set<string>;
+    keywords: Set<string>;
+};
+
+type CommandParserConfig = {
+    commands: Record<string, unknown>;
+    farewell: Record<string, unknown>;
+    vfx?: {
+        filePath?: string;
+    };
+    general?: {
+        keywordParsingEnabled?: boolean;
+    };
+};
 
 
 class CommandParser {
-    constructor(config) {
+    commands: Record<string, unknown>;
+    farewellCommands: Record<string, unknown>;
+    vfxFilePath: string;
+    keywordParsingEnabled: boolean;
+    parsedCommands: ParsedCommands;
+    parsedFarewellCommands: ParsedFarewellCommands;
+    regexCache: Map<string, RegExp>;
+
+    constructor(config: CommandParserConfig) {
         this.commands = config.commands;
         this.farewellCommands = config.farewell;
-        this.vfxFilePath = config.vfx.filePath;
-        this.keywordParsingEnabled = config.general.keywordParsingEnabled;
+        this.vfxFilePath = config.vfx?.filePath || '';
+        this.keywordParsingEnabled = !!(config.general?.keywordParsingEnabled);
         this.parsedCommands = this.parseCommandConfigurations();
         this.parsedFarewellCommands = this.parseFarewellConfigurations();
         this.regexCache = new Map();
@@ -64,8 +102,8 @@ class CommandParser {
 
     parseFarewellConfigurations() {
         const parsed = {
-            triggers: new Set(),
-            keywords: new Set()
+            triggers: new Set<string>(),
+            keywords: new Set<string>()
         };
 
         let hasFarewellConfigText = false;
@@ -104,7 +142,11 @@ class CommandParser {
             // For multi-word keywords, use word boundaries around the entire phrase
             this.regexCache.set(keyword, new RegExp(`\\b${escapedKeyword}\\b`, 'i'));
         }
-        return this.regexCache.get(keyword);
+        const regex = this.regexCache.get(keyword);
+        if (!regex) {
+            throw new Error(`Regex cache did not retain keyword: ${keyword}`);
+        }
+        return regex;
     }
 
     _createVFXConfig(baseConfig, matchedText, matchType) {
@@ -297,4 +339,4 @@ async function runCommand(commandData, vfxFilePath, effectsManager = getDefaultE
     }
 }
 
-module.exports = { CommandParser, runCommand }; 
+export { CommandParser, runCommand };

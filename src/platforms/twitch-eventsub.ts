@@ -63,7 +63,7 @@ class TwitchEventSub extends EventEmitter {
             // Logger initialization error - continue with fallback
         }
         // Initialize shared logging service
-        const ChatFileLoggingService = dependencies.ChatFileLoggingService || require('../services/ChatFileLoggingService');
+        const ChatFileLoggingService = dependencies.ChatFileLoggingService || require('../services/ChatFileLoggingService.js');
         this.chatFileLoggingService = new ChatFileLoggingService({ logger: this.logger, config: this.config });
 
         this.eventRouter = createTwitchEventSubEventRouter({

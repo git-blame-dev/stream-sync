@@ -88,7 +88,7 @@ class TikTokPlatform extends EventEmitter {
         this.connectionStateManager.initialize(this.config, { ...dependencies, logger: this.logger });
         
         // Initialize chat file logging service via dependency injection
-        const ChatFileLoggingService = dependencies.ChatFileLoggingService || require('../services/ChatFileLoggingService');
+        const ChatFileLoggingService = dependencies.ChatFileLoggingService || require('../services/ChatFileLoggingService.js');
         this.chatFileLoggingService = new ChatFileLoggingService({
             logger: this.logger,
             config: this.config

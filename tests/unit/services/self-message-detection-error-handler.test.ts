@@ -1,6 +1,6 @@
 const { describe, it, expect } = require('bun:test');
 const { createMockFn } = require('../../helpers/bun-mock-utils');
-const SelfMessageDetectionService = require('../../../src/services/SelfMessageDetectionService.ts');
+const { SelfMessageDetectionService } = require('../../../src/services/SelfMessageDetectionService.ts');
 
 const createPlainConfig = ({ twitch, youtube, tiktok } = {}) => ({
     twitch: twitch || { ignoreSelfMessages: false },

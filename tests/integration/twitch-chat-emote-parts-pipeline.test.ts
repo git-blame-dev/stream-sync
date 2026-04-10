@@ -2,7 +2,7 @@ const { describe, test, expect } = require('bun:test');
 const EventEmitter = require('events');
 
 const PlatformEventRouter = require('../../src/services/PlatformEventRouter.ts');
-const ChatNotificationRouter = require('../../src/services/ChatNotificationRouter.ts');
+const { ChatNotificationRouter } = require('../../src/services/ChatNotificationRouter.ts');
 const { PlatformEvents } = require('../../src/interfaces/PlatformEvents');
 const { createConfigFixture } = require('../helpers/config-fixture');
 const { createMockDisplayQueue, noOpLogger } = require('../helpers/mock-factories');
