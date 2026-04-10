@@ -1,1 +1,3 @@
-module.exports = require('./CommandCooldownService.ts');
+const { CommandCooldownService } = require('./CommandCooldownService.ts');
+
+module.exports = CommandCooldownService;

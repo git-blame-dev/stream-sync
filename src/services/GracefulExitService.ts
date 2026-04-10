@@ -1,13 +1,32 @@
-
-const { logger } = require('../core/logging');
-const { safeSetTimeout } = require('../utils/timeout-validator');
-const { createPlatformErrorHandler } = require('../utils/platform-error-handler');
-const { getSystemTimestampISO } = require('../utils/timestamp');
+import { logger } from '../core/logging';
+import { safeSetTimeout } from '../utils/timeout-validator';
+import { createPlatformErrorHandler } from '../utils/platform-error-handler';
+import { getSystemTimestampISO } from '../utils/timestamp';
 
 const gracefulExitErrorHandler = createPlatformErrorHandler(logger, 'graceful-exit');
 const systemErrorHandler = createPlatformErrorHandler(logger, 'system');
 
-function handleGracefulExitError(message, error, eventType = 'graceful-exit', target = 'graceful-exit') {
+type GracefulRuntime = {
+    shutdown: () => Promise<void>;
+    getPlatforms?: () => Record<string, unknown>;
+};
+
+type GracefulExitConfig = {
+    progressEventInterval?: number;
+    forceExitTimeoutMs?: number;
+    nearCompletionThreshold?: number;
+};
+
+type GracefulExitStats = {
+    startTime: number;
+    lastMessageTime: number | null;
+};
+
+function resolveErrorMessage(error: unknown): string {
+    return error instanceof Error ? error.message : String(error);
+}
+
+function handleGracefulExitError(message: string, error: unknown, eventType = 'graceful-exit', target = 'graceful-exit') {
     const handler = target === 'system' ? systemErrorHandler : gracefulExitErrorHandler;
     if (error instanceof Error) {
         handler.handleEventProcessingError(error, eventType, null, message);
@@ -17,7 +36,14 @@ function handleGracefulExitError(message, error, eventType = 'graceful-exit', ta
 }
 
 class GracefulExitService {
-    constructor(runtime, targetMessageCount, config = {}) {
+    runtime: GracefulRuntime;
+    targetMessageCount: number | null;
+    processedMessageCount: number;
+    isShuttingDown: boolean;
+    config: Required<GracefulExitConfig>;
+    stats: GracefulExitStats;
+
+    constructor(runtime: GracefulRuntime, targetMessageCount: number | null, config: GracefulExitConfig = {}) {
         this.runtime = runtime;
         this.targetMessageCount = targetMessageCount;
         this.processedMessageCount = 0;
@@ -69,7 +95,7 @@ class GracefulExitService {
         );
 
         // Check if target reached
-        if (this.processedMessageCount >= this.targetMessageCount) {
+        if (this.targetMessageCount !== null && this.processedMessageCount >= this.targetMessageCount) {
             logger.debug(
                 `[Message Counter] Target message count reached (${this.targetMessageCount}). Triggering graceful exit...`,
                 'graceful-exit'
@@ -116,9 +142,10 @@ class GracefulExitService {
             // Clear timeout if shutdown succeeded
             clearTimeout(forceExitTimeout);
 
-        } catch (error) {
-            handleGracefulExitError(`Error during graceful exit: ${error.message}`, error, 'shutdown', 'system');
-            handleGracefulExitError(`[GRACEFUL EXIT] Error during graceful exit: ${error.message}`, error, 'shutdown');
+        } catch (error: unknown) {
+            const errorMessage = resolveErrorMessage(error);
+            handleGracefulExitError(`Error during graceful exit: ${errorMessage}`, error, 'shutdown', 'system');
+            handleGracefulExitError(`[GRACEFUL EXIT] Error during graceful exit: ${errorMessage}`, error, 'shutdown');
 
             // Set force exit timeout
             safeSetTimeout(() => {
@@ -129,22 +156,23 @@ class GracefulExitService {
             // Still try to shutdown gracefully
             try {
                 await this.runtime.shutdown();
-            } catch (shutdownError) {
-                handleGracefulExitError(`Shutdown failed: ${shutdownError.message}`, shutdownError, 'shutdown', 'system');
+            } catch (shutdownError: unknown) {
+                handleGracefulExitError(`Shutdown failed: ${resolveErrorMessage(shutdownError)}`, shutdownError, 'shutdown', 'system');
             }
         }
     }
 
     getStats() {
+        const targetCount = this.targetMessageCount ?? 0;
         const percentage = this.isEnabled()
-            ? Math.round((this.processedMessageCount / this.targetMessageCount) * 100)
+            ? Math.round((this.processedMessageCount / targetCount) * 100)
             : 0;
 
         return {
             enabled: this.isEnabled(),
             processed: this.processedMessageCount,
             target: this.targetMessageCount,
-            remaining: this.isEnabled() ? this.targetMessageCount - this.processedMessageCount : 0,
+            remaining: this.isEnabled() ? targetCount - this.processedMessageCount : 0,
             percentage: percentage,
             isNearingCompletion: percentage >= (this.config.nearCompletionThreshold * 100),
             startTime: this.stats.startTime,
@@ -174,11 +202,8 @@ class GracefulExitService {
     }
 }
 
-function createGracefulExitService(runtime, targetMessageCount, config = {}) {
+function createGracefulExitService(runtime: GracefulRuntime, targetMessageCount: number | null, config: GracefulExitConfig = {}) {
     return new GracefulExitService(runtime, targetMessageCount, config);
 }
 
-module.exports = {
-    GracefulExitService,
-    createGracefulExitService
-};
+export { GracefulExitService, createGracefulExitService };

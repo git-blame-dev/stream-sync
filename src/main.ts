@@ -131,11 +131,11 @@ const NotificationManager = require('./notifications/NotificationManager');
 const { createSpamDetectionConfig, createDonationSpamDetection } = require('./utils/spam-detection');
 
 const { createEventBus } = require('./core/EventBus');
-const { createVFXCommandService } = require('./services/VFXCommandService');
+const { createVFXCommandService } = require('./services/VFXCommandService.js');
 const { createUserTrackingService } = require('./services/UserTrackingService');
-const CommandCooldownService = require('./services/CommandCooldownService');
-const PlatformLifecycleService = require('./services/PlatformLifecycleService');
-const { createGracefulExitService } = require('./services/GracefulExitService');
+const CommandCooldownService = require('./services/CommandCooldownService.js');
+const PlatformLifecycleService = require('./services/PlatformLifecycleService.js');
+const { createGracefulExitService } = require('./services/GracefulExitService.js');
 
 const { createOBSEventService } = require('./obs/obs-event-service');
 const { createSceneManagementService } = require('./obs/scene-management-service');

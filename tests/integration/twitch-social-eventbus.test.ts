@@ -1,6 +1,6 @@
 const { describe, test, afterEach, expect } = require('bun:test');
 const EventEmitter = require('events');
-const PlatformLifecycleService = require('../../src/services/PlatformLifecycleService.ts');
+const PlatformLifecycleService = require('../../src/services/PlatformLifecycleService.js');
 const { TwitchPlatform } = require('../../src/platforms/twitch');
 const { PlatformEvents } = require('../../src/interfaces/PlatformEvents');
 const { createTwitchConfigFixture } = require('../helpers/config-fixture');

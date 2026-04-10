@@ -1,7 +1,7 @@
 const { describe, it, afterEach, expect } = require('bun:test');
 const { createMockFn, restoreAllMocks } = require('../helpers/bun-mock-utils');
 const { noOpLogger } = require('../helpers/mock-factories');
-const PlatformLifecycleService = require('../../src/services/PlatformLifecycleService.ts');
+const PlatformLifecycleService = require('../../src/services/PlatformLifecycleService.js');
 
 describe('PlatformLifecycleService connection routing (smoke)', () => {
     afterEach(() => {

@@ -1,7 +1,6 @@
 import type { GuiBadgeImage, GuiMessagePart, GuiRowDto, GuiRowKind } from '../../../gui/src/shared/types';
-
-const { DEFAULT_AVATAR_URL } = require('../../constants/avatar');
-const { getValidMessageParts, normalizeBadgeImages } = require('../../utils/message-parts');
+import { DEFAULT_AVATAR_URL } from '../../constants/avatar';
+import { getValidMessageParts, normalizeBadgeImages } from '../../utils/message-parts';
 
 type UnknownRecord = Record<string, unknown>;
 
@@ -257,6 +256,4 @@ function createEventToGuiContractMapper(options: MapperOptions = {}) {
     };
 }
 
-module.exports = {
-    createEventToGuiContractMapper
-};
+export { createEventToGuiContractMapper };

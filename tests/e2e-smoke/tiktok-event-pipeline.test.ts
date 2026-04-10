@@ -4,7 +4,7 @@ import { createRequire } from 'node:module';
 const load = createRequire(__filename);
 const EventEmitter = load('events');
 const NotificationManager = load('../../src/notifications/NotificationManager');
-const PlatformEventRouter = load('../../src/services/PlatformEventRouter');
+const PlatformEventRouter = load('../../src/services/PlatformEventRouter.js');
 const { TikTokPlatform } = load('../../src/platforms/tiktok.ts');
 const { createTextProcessingManager } = load('../../src/utils/text-processing');
 const { createConfigFixture } = load('../helpers/config-fixture');

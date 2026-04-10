@@ -1,1 +1,3 @@
-module.exports = require('./PlatformEventRouter.ts');
+const { PlatformEventRouter } = require('./PlatformEventRouter.ts');
+
+module.exports = PlatformEventRouter;

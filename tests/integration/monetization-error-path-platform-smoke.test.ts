@@ -1,7 +1,7 @@
 const { describe, it, expect, afterEach } = require('bun:test');
 const { createMockFn, clearAllMocks, restoreAllMocks } = require('../helpers/bun-mock-utils');
 const EventEmitter = require('events');
-const PlatformLifecycleService = require('../../src/services/PlatformLifecycleService.ts');
+const PlatformLifecycleService = require('../../src/services/PlatformLifecycleService.js');
 const NotificationManager = require('../../src/notifications/NotificationManager');
 const { createMonetizationErrorPayload } = require('../../src/utils/monetization-error-utils');
 const { createMockDisplayQueue, noOpLogger } = require('../helpers/mock-factories');

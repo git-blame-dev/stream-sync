@@ -3,7 +3,7 @@ const { createMockFn } = require('../../../helpers/bun-mock-utils');
 const { useFakeTimers, useRealTimers, advanceTimersByTime, setSystemTime } = require('../../../helpers/bun-timers');
 const { createConfigFixture } = require('../../../helpers/config-fixture');
 
-const { VFXCommandService } = require('../../../../src/services/VFXCommandService.ts');
+const { VFXCommandService } = require('../../../../src/services/VFXCommandService.js');
 
 describe('VFXCommandService cooldown handling', () => {
     let mockEffectsManager;

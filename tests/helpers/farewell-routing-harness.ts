@@ -1,9 +1,9 @@
 const { createConfigFixture } = require('./config-fixture');
 const { noOpLogger } = require('./mock-factories');
 const NotificationManager = require('../../src/notifications/NotificationManager');
-const PlatformEventRouter = require('../../src/services/PlatformEventRouter');
+const PlatformEventRouter = require('../../src/services/PlatformEventRouter.js');
 const ChatNotificationRouter = require('../../src/services/ChatNotificationRouter.js');
-const { VFXCommandService } = require('../../src/services/VFXCommandService');
+const { VFXCommandService } = require('../../src/services/VFXCommandService.js');
 const { AppRuntime } = require('../../src/runtime/AppRuntime');
 const { PRIORITY_LEVELS, NOTIFICATION_CONFIGS } = require('../../src/core/constants');
 

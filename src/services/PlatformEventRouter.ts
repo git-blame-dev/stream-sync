@@ -1,11 +1,29 @@
+import { createPlatformErrorHandler } from '../utils/platform-error-handler';
+import { NOTIFICATION_CONFIGS } from '../core/constants';
+import { isIsoTimestamp } from '../utils/timestamp';
+import { getValidMessageParts, normalizeBadgeImages } from '../utils/message-parts';
+import { UNKNOWN_CHAT_MESSAGE, UNKNOWN_CHAT_USERNAME } from '../constants/degraded-chat';
+import { getMissingFields } from '../utils/missing-fields';
 
-const { createPlatformErrorHandler } = require('../utils/platform-error-handler');
-const { NOTIFICATION_CONFIGS } = require('../core/constants');
-const { PlatformEvents } = require('../interfaces/PlatformEvents');
-const { isIsoTimestamp } = require('../utils/timestamp');
-const { getValidMessageParts, normalizeBadgeImages } = require('../utils/message-parts');
-const { UNKNOWN_CHAT_MESSAGE, UNKNOWN_CHAT_USERNAME } = require('../constants/degraded-chat');
-const { getMissingFields } = require('../utils/missing-fields');
+const PlatformEvents = {
+    CHAT_MESSAGE: 'platform:chat-message',
+    VIEWER_COUNT: 'platform:viewer-count',
+    GIFT: 'platform:gift',
+    PAYPIGGY: 'platform:paypiggy',
+    GIFTPAYPIGGY: 'platform:giftpaypiggy',
+    FOLLOW: 'platform:follow',
+    SHARE: 'platform:share',
+    RAID: 'platform:raid',
+    STREAM_STATUS: 'platform:stream-status',
+    CHAT_CONNECTED: 'platform:chat-connected',
+    CHAT_DISCONNECTED: 'platform:chat-disconnected',
+    CONNECTION_STATUS: 'platform:connection-status',
+    PLATFORM_CONNECTION: 'platform:connection',
+    ERROR: 'platform:error',
+    HEALTH_CHECK: 'platform:health-check',
+    STREAM_DETECTED: 'platform:stream-detected',
+    ENVELOPE: 'platform:envelope'
+} as const;
 
 const ALIAS_PAID_TYPES = [
     'subscription',
@@ -18,17 +36,18 @@ const ALIAS_PAID_TYPES = [
     'paid_supporter'
 ];
 
-function resolveCanonicalMessageParts(data = {}) {
+function resolveCanonicalMessageParts(data: any = {}) {
     return getValidMessageParts(data)
         .map((part) => {
             if (part.type === 'emote') {
+                const placeInComment = Number((part as { placeInComment?: unknown }).placeInComment);
                 return {
                     type: 'emote',
                     platform: typeof part.platform === 'string' ? part.platform : undefined,
                     emoteId: part.emoteId.trim(),
                     imageUrl: part.imageUrl.trim(),
-                    ...(Number.isInteger(part.placeInComment) && part.placeInComment >= 0
-                        ? { placeInComment: part.placeInComment }
+                    ...(Number.isInteger(placeInComment) && placeInComment >= 0
+                        ? { placeInComment }
                         : {})
                 };
             }
@@ -41,7 +60,15 @@ function resolveCanonicalMessageParts(data = {}) {
 }
 
 class PlatformEventRouter {
-    constructor(options) {
+    eventBus: any;
+    runtime: any;
+    notificationManager: any;
+    config: any;
+    logger: any;
+    errorHandler: ReturnType<typeof createPlatformErrorHandler>;
+    subscription: (() => void) | null;
+
+    constructor(options: any) {
         if (!options) {
             throw new Error('PlatformEventRouter requires options');
         }
@@ -64,7 +91,7 @@ class PlatformEventRouter {
             throw new Error('PlatformEventRouter requires eventBus.subscribe');
         }
 
-        this.subscription = this.eventBus.subscribe('platform:event', async (event) => {
+        this.subscription = this.eventBus.subscribe('platform:event', async (event: any) => {
             try {
                 await this.routeEvent(event);
             } catch (error) {
@@ -74,7 +101,7 @@ class PlatformEventRouter {
         });
     }
 
-    async routeEvent(event) {
+    async routeEvent(event: any) {
         if (!event || typeof event !== 'object') {
             throw new Error('PlatformEventRouter requires event object');
         }
@@ -177,7 +204,7 @@ class PlatformEventRouter {
         }
     }
 
-    _isNotificationEnabled(type, platform) {
+    _isNotificationEnabled(type: string, platform: string) {
         const settingKey = NOTIFICATION_CONFIGS[type]?.settingKey;
         if (!settingKey) {
             throw new Error(`Unknown notification type: ${type}`);
@@ -190,7 +217,7 @@ class PlatformEventRouter {
         return !!value;
     }
 
-    async forwardToNotificationManager(type, platform, data) {
+    async forwardToNotificationManager(type: string, platform: string, data: any) {
         if (this.notificationManager?.handleNotification) {
             const sanitized = this._sanitizeNotificationPayload(data, type, platform);
             if (!sanitized) {
@@ -206,14 +233,15 @@ class PlatformEventRouter {
         if (this.subscription) {
             try {
                 this.subscription();
-            } catch (error) {
-                this.logger.warn(`Error unsubscribing platform:event handler: ${error.message}`, 'PlatformEventRouter');
+            } catch (error: unknown) {
+                const errorMessage = error instanceof Error ? error.message : String(error);
+                this.logger.warn(`Error unsubscribing platform:event handler: ${errorMessage}`, 'PlatformEventRouter');
             }
         }
         this.subscription = null;
     }
 
-    _handleRouterError(message, error, eventType = 'event-routing') {
+    _handleRouterError(message: string, error: unknown, eventType = 'event-routing') {
         if (this.errorHandler && error instanceof Error) {
             this.errorHandler.handleEventProcessingError(error, eventType, null, message);
         } else {
@@ -221,13 +249,13 @@ class PlatformEventRouter {
         }
     }
 
-    _normalizeChatEvent(data = {}, platform = 'unknown') {
+    _normalizeChatEvent(data: any = {}, platform = 'unknown') {
         const metadata = data.metadata;
         const avatarUrl = typeof data.avatarUrl === 'string' ? data.avatarUrl.trim() : '';
         const messageParts = resolveCanonicalMessageParts(data);
         const badgeImages = normalizeBadgeImages(data.badgeImages);
         const missingFields = getMissingFields(metadata);
-        const isMissingField = (fieldName) => missingFields.includes(fieldName);
+        const isMissingField = (fieldName: string) => missingFields.includes(fieldName);
         if (metadata !== undefined && (typeof metadata !== 'object' || metadata === null)) {
             throw new Error('Chat event metadata must be an object');
         }
@@ -260,7 +288,7 @@ class PlatformEventRouter {
             throw new Error('Chat event requires ISO timestamp');
         }
 
-        const normalized = {
+        const normalized: any = {
             platform,
             ...(normalizedUserId ? { userId: normalizedUserId } : {}),
             username: normalizedUsername || UNKNOWN_CHAT_USERNAME,
@@ -294,7 +322,7 @@ class PlatformEventRouter {
         return normalized;
     }
 
-    async _routeRuntimeNotification(handlerName, type, platform, data, payloadBuilder = null) {
+    async _routeRuntimeNotification(handlerName: string, type: string, platform: string, data: any, payloadBuilder: ((sanitized: any) => any) | null = null) {
         const handler = this.runtime?.[handlerName];
         if (!handler) {
             return;
@@ -308,7 +336,7 @@ class PlatformEventRouter {
         await handler.call(this.runtime, platform, sanitized.username, payload);
     }
 
-    _sanitizeNotificationPayload(data = {}, sourceType = null, sourcePlatform = null) {
+    _sanitizeNotificationPayload(data: any = {}, sourceType: string | null = null, sourcePlatform: string | null = null) {
         if (!data || typeof data !== 'object') {
             throw new Error('Notification payload must be an object');
         }
@@ -390,4 +418,4 @@ class PlatformEventRouter {
 
 }
 
-module.exports = PlatformEventRouter;
+export { PlatformEventRouter };

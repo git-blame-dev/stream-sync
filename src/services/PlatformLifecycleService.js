@@ -1,1 +1,3 @@
-module.exports = require('./PlatformLifecycleService.ts');
+const { PlatformLifecycleService } = require('./PlatformLifecycleService.ts');
+
+module.exports = PlatformLifecycleService;

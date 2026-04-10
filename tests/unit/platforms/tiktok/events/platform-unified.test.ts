@@ -3,7 +3,7 @@ const { createMockFn, restoreAllMocks } = require('../../../../helpers/bun-mock-
 const { noOpLogger } = require('../../../../helpers/mock-factories');
 const { createConfigFixture } = require('../../../../helpers/config-fixture');
 
-const PlatformEventRouter = require('../../../../../src/services/PlatformEventRouter');
+const PlatformEventRouter = require('../../../../../src/services/PlatformEventRouter.js');
 const { PlatformEvents } = require('../../../../../src/interfaces/PlatformEvents');
 const { TikTokPlatform } = require('../../../../../src/platforms/tiktok.ts');
 const testClock = require('../../../../helpers/test-clock');
