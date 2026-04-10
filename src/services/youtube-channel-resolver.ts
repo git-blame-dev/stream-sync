@@ -1,16 +1,37 @@
-const { withTimeout } = require('../utils/timeout-wrapper');
-const { createPlatformErrorHandler } = require('../utils/platform-error-handler');
-const { YOUTUBE } = require('../core/endpoints');
+import { YOUTUBE } from '../core/endpoints';
+import { createPlatformErrorHandler } from '../utils/platform-error-handler';
+import { withTimeout } from '../utils/timeout-wrapper';
 
 const DEFAULT_TIMEOUT_MS = 2000;
 
-function createResolverErrorHandler(logger) {
+type ResolverLogger = {
+    error: (...args: unknown[]) => void;
+};
+
+type ResolverClient = {
+    resolveURL?: (url: string) => Promise<{
+        payload?: {
+            browseId?: unknown;
+        };
+    }>;
+};
+
+type ResolverErrorHandler = (message: string, error: unknown, eventType?: string, eventData?: Record<string, unknown> | null) => void;
+
+type ResolveOptions = {
+    timeout?: number;
+    logger?: ResolverLogger;
+    onError?: ResolverErrorHandler;
+    throwOnError?: boolean;
+};
+
+function createResolverErrorHandler(logger?: ResolverLogger) {
     if (!logger || typeof logger.error !== 'function') {
         return null;
     }
 
     const errorHandler = createPlatformErrorHandler(logger, 'youtube-channel-resolver');
-    return function handleResolverError(message, error, eventType = 'channel-resolve', eventData = null) {
+    return function handleResolverError(message: string, error: unknown, eventType = 'channel-resolve', eventData: Record<string, unknown> | null = null) {
         if (error instanceof Error) {
             errorHandler.handleEventProcessingError(error, eventType, eventData, message, 'youtube-channel-resolver');
             return;
@@ -21,14 +42,15 @@ function createResolverErrorHandler(logger) {
     };
 }
 
-function normalizeChannelHandle(channelHandle) {
+function normalizeChannelHandle(channelHandle: unknown) {
     if (!channelHandle || typeof channelHandle !== 'string') {
         return '';
     }
+
     return channelHandle.trim();
 }
 
-function isChannelId(channelHandle) {
+function isChannelId(channelHandle: unknown) {
     if (!channelHandle || typeof channelHandle !== 'string') {
         return false;
     }
@@ -36,20 +58,21 @@ function isChannelId(channelHandle) {
     return /^UC[a-zA-Z0-9_\-]{22}$/.test(channelHandle);
 }
 
-function normalizeHandleForCache(channelHandle) {
+function normalizeHandleForCache(channelHandle: unknown) {
     const trimmed = normalizeChannelHandle(channelHandle);
     if (!trimmed || isChannelId(trimmed)) {
         return '';
     }
+
     return trimmed.replace(/^@/, '').toLowerCase();
 }
 
-function buildHandleUrl(handleKey) {
+function buildHandleUrl(handleKey: string) {
     return YOUTUBE.buildChannelUrl(handleKey);
 }
 
-async function resolveChannelId(innertubeClient, channelHandle, options = {}) {
-    const timeout = Number.isFinite(options.timeout) ? options.timeout : DEFAULT_TIMEOUT_MS;
+async function resolveChannelId(innertubeClient: ResolverClient | null, channelHandle: unknown, options: ResolveOptions = {}) {
+    const timeout = Number.isFinite(options.timeout) ? Number(options.timeout) : DEFAULT_TIMEOUT_MS;
     const logger = options.logger;
     const onError = options.onError;
     const throwOnError = options.throwOnError === true;
@@ -57,11 +80,9 @@ async function resolveChannelId(innertubeClient, channelHandle, options = {}) {
 
     const trimmedHandle = normalizeChannelHandle(channelHandle);
     if (!trimmedHandle) {
-        if (handleError) {
-            handleError('Channel handle is required', new Error('Missing channel handle'), 'channel-resolve', {
-                channelHandle
-            });
-        }
+        handleError?.('Channel handle is required', new Error('Missing channel handle'), 'channel-resolve', {
+            channelHandle: typeof channelHandle === 'string' ? channelHandle : ''
+        });
         return null;
     }
 
@@ -71,21 +92,17 @@ async function resolveChannelId(innertubeClient, channelHandle, options = {}) {
 
     const handleKey = normalizeHandleForCache(trimmedHandle);
     if (!handleKey) {
-        if (handleError) {
-            handleError('Invalid channel handle', new Error('Invalid channel handle'), 'channel-resolve', {
-                channelHandle: trimmedHandle
-            });
-        }
+        handleError?.('Invalid channel handle', new Error('Invalid channel handle'), 'channel-resolve', {
+            channelHandle: trimmedHandle
+        });
         return null;
     }
 
     if (!innertubeClient || typeof innertubeClient.resolveURL !== 'function') {
         const unavailableError = new Error('resolveURL unavailable');
-        if (handleError) {
-            handleError('YouTube resolveURL is unavailable', unavailableError, 'channel-resolve', {
-                channelHandle: handleKey
-            });
-        }
+        handleError?.('YouTube resolveURL is unavailable', unavailableError, 'channel-resolve', {
+            channelHandle: handleKey
+        });
         if (throwOnError) {
             throw unavailableError;
         }
@@ -102,21 +119,18 @@ async function resolveChannelId(innertubeClient, channelHandle, options = {}) {
         const browseId = resolved?.payload?.browseId;
 
         if (!browseId || typeof browseId !== 'string' || !browseId.trim()) {
-            if (handleError) {
-                handleError('Channel not found', new Error('Channel not found'), 'channel-resolve', {
-                    channelHandle: handleKey
-                });
-            }
+            handleError?.('Channel not found', new Error('Channel not found'), 'channel-resolve', {
+                channelHandle: handleKey
+            });
             return null;
         }
 
         return browseId.trim();
     } catch (error) {
-        if (handleError) {
-            handleError(`Channel resolution failed: ${error.message}`, error, 'channel-resolve', {
-                channelHandle: handleKey
-            });
-        }
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        handleError?.(`Channel resolution failed: ${errorMessage}`, error, 'channel-resolve', {
+            channelHandle: handleKey
+        });
         if (throwOnError) {
             throw error;
         }
@@ -124,7 +138,7 @@ async function resolveChannelId(innertubeClient, channelHandle, options = {}) {
     }
 }
 
-module.exports = {
+export {
     normalizeChannelHandle,
     normalizeHandleForCache,
     isChannelId,
