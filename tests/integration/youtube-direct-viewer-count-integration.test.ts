@@ -81,6 +81,16 @@ describe('YouTube Direct getViewerCount() Integration', () => {
             expect(viewerCount).toBe(0);
             expect(typeof viewerCount).toBe('number');
         });
+
+        test('returns unavailable when provider reports unavailable count', async () => {
+            const { platform } = await createProviderYouTubePlatform(0, {
+                getViewerCount: createMockFn().mockResolvedValue(null)
+            });
+
+            const viewerCount = await platform.getViewerCount();
+
+            expect(viewerCount).toBeNull();
+        });
     });
 
     describe('Error Handling and User Experience', () => {

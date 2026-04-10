@@ -118,7 +118,7 @@ describe('YouTubeViewerCountProvider', () => {
         expect(stats.successRate).toBe('100.00%');
     });
 
-    it('routes service failures through error handler and returns 0', async () => {
+    it('returns unavailable and tracks an error when aggregation fails', async () => {
         const viewerExtractionService = {
             getAggregatedViewerCount: createMockFn().mockResolvedValue({ success: false })
         };
@@ -131,7 +131,30 @@ describe('YouTubeViewerCountProvider', () => {
         );
 
         const count = await provider.getViewerCount();
-        expect(count).toBe(0);
+        expect(count).toBeNull();
+        expect(provider.getErrorStats().totalErrors).toBe(1);
+    });
+
+    it('returns unavailable when all active stream extractions fail', async () => {
+        const viewerExtractionService = {
+            getAggregatedViewerCount: createMockFn().mockResolvedValue({
+                success: false,
+                totalCount: 0,
+                successfulStreams: 0,
+                failedStreams: 2
+            })
+        };
+        const provider = new YouTubeViewerCountProvider(
+            {},
+            {},
+            () => ['testVideoId1', 'testVideoId2'],
+            null,
+            { viewerExtractionService, logger: noOpLogger }
+        );
+
+        const count = await provider.getViewerCount();
+
+        expect(count).toBeNull();
         expect(provider.getErrorStats().totalErrors).toBe(1);
     });
 

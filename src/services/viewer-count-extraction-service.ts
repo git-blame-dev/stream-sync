@@ -280,6 +280,21 @@ class ViewerCountExtractionService {
                 error: result.error
             };
         });
+
+        if (successfulStreams === 0) {
+            this.logger?.debug?.(
+                `[ViewerCountExtraction] Aggregation unavailable: 0/${videoIds.length} streams extracted successfully`,
+                'viewer-extraction'
+            );
+
+            return {
+                success: false,
+                totalCount: 0,
+                successfulStreams: 0,
+                failedStreams,
+                streams: streamDetails
+            };
+        }
         
         this.logger?.debug?.(
             `[ViewerCountExtraction] Aggregation complete: ${totalCount} total viewers from ${successfulStreams}/${videoIds.length} streams`, 

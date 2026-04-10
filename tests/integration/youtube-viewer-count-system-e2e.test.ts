@@ -302,6 +302,20 @@ describe('YouTube Viewer Count System - End-to-End Integration', () => {
             expect(typeof viewerCountSystem.counts.youtube).toBe('number');
         });
 
+        test('preserves last known viewer count when provider returns unavailable', async () => {
+            await viewerCountSystem.updateStreamStatus('youtube', true);
+
+            platforms.youtube.getViewerCount
+                .mockResolvedValueOnce(1234)
+                .mockResolvedValueOnce(null);
+
+            await viewerCountSystem.pollPlatform('youtube');
+            expect(viewerCountSystem.counts.youtube).toBe(1234);
+
+            await viewerCountSystem.pollPlatform('youtube');
+            expect(viewerCountSystem.counts.youtube).toBe(1234);
+        });
+
         test('should maintain system stability during connection failures', async () => {
             platforms.youtube.getViewerCount.mockRejectedValue(new Error('Network timeout'));
             await viewerCountSystem.updateStreamStatus('youtube', true);
