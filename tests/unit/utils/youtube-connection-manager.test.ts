@@ -200,19 +200,24 @@ describe('YouTube Connection Manager - Behavior Excellence', () => {
             const result = await connectionManager.connectToStream('failing-stream', failingFactory);
 
             expect(result).toBe(false);
-
-            expect(connectionManager.getActiveVideoIds()).toContain('failing-stream');
-
-            const allConnectionData = connectionManager.getAllConnectionData();
-            const failedConnection = allConnectionData.find(c =>
-                c.connection === null && c.metadata && c.metadata.error
-            );
-            expect(failedConnection).toBeDefined();
-            expect(failedConnection.state).toBe('error');
+            expect(connectionManager.getActiveVideoIds()).not.toContain('failing-stream');
+            expect(connectionManager.getConnectionStatus('failing-stream')).toBeNull();
 
             const successResult = await connectionManager.connectToStream('working-stream', mockConnectionFactory);
             expect(successResult).toBe(true);
             expect(connectionManager.hasConnection('working-stream')).toBe(true);
+        });
+
+        it('allows retrying the same stream after a failed connection attempt', async () => {
+            const failingFactory = createMockFn().mockRejectedValue(new Error('Connection failed'));
+
+            const firstAttempt = await connectionManager.connectToStream('retry-stream', failingFactory);
+            expect(firstAttempt).toBe(false);
+            expect(connectionManager.hasConnection('retry-stream')).toBe(false);
+
+            const secondAttempt = await connectionManager.connectToStream('retry-stream', mockConnectionFactory);
+            expect(secondAttempt).toBe(true);
+            expect(connectionManager.hasConnection('retry-stream')).toBe(true);
         });
 
         it('should recover from partial connection failures without affecting other streams', async () => {
@@ -224,10 +229,12 @@ describe('YouTube Connection Manager - Behavior Excellence', () => {
 
             expect(failResult).toBe(false);
             expect(connectionManager.hasConnection('stable-stream')).toBe(true);
+            expect(connectionManager.hasConnection('unstable-stream')).toBe(false);
 
             expect(connectionManager.hasConnection('stable-stream')).toBe(true);
             const activeIds = connectionManager.getActiveVideoIds();
             expect(activeIds).toContain('stable-stream');
+            expect(activeIds).not.toContain('unstable-stream');
         });
 
         it('should maintain system stability during error conditions', async () => {
@@ -247,12 +254,12 @@ describe('YouTube Connection Manager - Behavior Excellence', () => {
             }
 
             const connections = connectionManager.getAllConnections();
-            expect(connections).toHaveLength(4);
+            expect(connections).toHaveLength(2);
 
             expect(connectionManager.hasConnection('success-1')).toBe(true);
             expect(connectionManager.hasConnection('success-2')).toBe(true);
-            expect(connectionManager.hasConnection('failure-1')).toBe(true);
-            expect(connectionManager.hasConnection('failure-2')).toBe(true);
+            expect(connectionManager.hasConnection('failure-1')).toBe(false);
+            expect(connectionManager.hasConnection('failure-2')).toBe(false);
 
             const connectionData = connectionManager.getAllConnectionData();
             const successConnections = connectionData.filter(c => c.state === 'connected');
@@ -358,6 +365,35 @@ describe('YouTube Connection Manager - Behavior Excellence', () => {
             expect(connectionManager.hasConnection('stats-1')).toBe(false);
             expect(connectionManager.hasConnection('stats-2')).toBe(false);
         });
+
+        it('reports aggregate connection state and ready counts', async () => {
+            await connectionManager.connectToStream('state-1', mockConnectionFactory);
+            await connectionManager.connectToStream('state-2', mockConnectionFactory);
+
+            connectionManager.setConnectionReady('state-1');
+
+            const state = connectionManager.getConnectionState();
+            const stats = connectionManager.getStats();
+
+            expect(state.totalConnections).toBe(2);
+            expect(state.readyConnections).toBe(1);
+            expect(state.activeVideoIds).toEqual(['state-1', 'state-2']);
+            expect(state.hasAnyReady).toBe(true);
+            expect(stats).toEqual(state);
+            expect(connectionManager.hasAnyReady()).toBe(true);
+        });
+
+        it('provides per-video connection status and handles missing entries', async () => {
+            await connectionManager.connectToStream('status-video', mockConnectionFactory, { reason: 'status test' });
+
+            const existingStatus = connectionManager.getConnectionStatus('status-video');
+            const missingStatus = connectionManager.getConnectionStatus('missing-video');
+
+            expect(existingStatus.videoId).toBe('status-video');
+            expect(existingStatus.state).toBe(connectionManager.CONNECTION_STATES.CONNECTED);
+            expect(existingStatus.metadata.reason).toBe('status test');
+            expect(missingStatus).toBeNull();
+        });
     });
 
     describe('Configuration Gating', () => {
@@ -412,10 +448,8 @@ describe('YouTube Connection Manager - Behavior Excellence', () => {
             });
 
             expect(result).toBe(false);
-
-            const status = connectionManager.getConnectionStatus('broken');
-            expect(status.state).toBe(connectionManager.CONNECTION_STATES.ERROR);
-            expect(status.metadata.error).toBe('boom');
+            expect(connectionManager.getConnectionStatus('broken')).toBeNull();
+            expect(connectionManager.hasConnection('broken')).toBe(false);
 
             expect(handler.handleEventProcessingError).toHaveBeenCalledWith(
                 expect.any(Error),

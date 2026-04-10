@@ -72,18 +72,8 @@ class YouTubeConnectionManager {
         } catch (error) {
             const errorMessage = this._getErrorMessage(error);
             this._handleConnectionError(`Failed to connect to ${videoId}: ${errorMessage}`, error, { videoId });
-            
-            const errorState = {
-                connection: null,
-                state: this.CONNECTION_STATES.ERROR,
-                metadata: {
-                    error: errorMessage,
-                    errorName: error.name,
-                    errorCode: error.code,
-                    failedAt: getSystemTimestampISO()
-                }
-            };
-            this.connections.set(videoId, errorState);
+
+            this.connections.delete(videoId);
             
             return false;
         } finally {
