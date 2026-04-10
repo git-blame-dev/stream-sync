@@ -321,6 +321,39 @@ describe('YouTube multi-stream manager', () => {
 
             expect(connected).toEqual(['s2']);
         });
+
+        test('retries a stream on later checks when prior connection attempt failed', async () => {
+            const attempted = [];
+            let shouldFail = true;
+            const connectedVideoIds = new Set();
+
+            const platform = buildPlatform({
+                connectionManager: {
+                    getConnectionCount: createMockFn(() => connectedVideoIds.size),
+                    getAllVideoIds: createMockFn(() => Array.from(connectedVideoIds)),
+                    hasConnection: createMockFn((videoId) => connectedVideoIds.has(videoId))
+                },
+                getActiveYouTubeVideoIds: createMockFn(() => Array.from(connectedVideoIds)),
+                getLiveVideoIds: createMockFn(async () => ['retry-stream']),
+                connectToYouTubeStream: createMockFn(async (videoId) => {
+                    attempted.push(videoId);
+                    if (shouldFail) {
+                        shouldFail = false;
+                        throw new Error('first attempt failed');
+                    }
+                    connectedVideoIds.add(videoId);
+                })
+            });
+            const manager = buildManager(platform);
+
+            await manager.checkMultiStream();
+            expect(attempted).toEqual(['retry-stream']);
+            expect(connectedVideoIds.has('retry-stream')).toBe(false);
+
+            await manager.checkMultiStream();
+            expect(attempted).toEqual(['retry-stream', 'retry-stream']);
+            expect(connectedVideoIds.has('retry-stream')).toBe(true);
+        });
     });
 
     describe('stream detection failure preservation', () => {
