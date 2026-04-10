@@ -13,7 +13,7 @@ describe('VFXCommandService failure paths', () => {
     });
 
     beforeEach(() => {
-        ({ VFXCommandService } = require('../../../../src/services/VFXCommandService.ts'));
+        ({ VFXCommandService } = require('../../../../src/services/VFXCommandService.js'));
     });
 
     afterEach(() => {

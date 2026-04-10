@@ -2,7 +2,7 @@ const { describe, it, beforeEach, afterEach, expect } = require('bun:test');
 const { createMockFn, restoreAllMocks } = require('../helpers/bun-mock-utils');
 const { noOpLogger } = require('../helpers/mock-factories');
 const { AppRuntime } = require('../../src/main');
-const PlatformLifecycleService = require('../../src/services/PlatformLifecycleService.ts');
+const PlatformLifecycleService = require('../../src/services/PlatformLifecycleService.js');
 const { createConfigFixture } = require('../helpers/config-fixture');
 const { secrets, _resetForTesting, initializeStaticSecrets } = require('../../src/core/secrets');
 

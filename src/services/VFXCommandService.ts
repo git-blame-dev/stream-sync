@@ -1,10 +1,13 @@
+import crypto from 'node:crypto';
+import { logger } from '../core/logging';
+import { CommandParser, runCommand } from '../chat/commands';
+import { createPlatformErrorHandler } from '../utils/platform-error-handler';
+import { NOTIFICATION_CONFIGS } from '../core/constants';
 
-const crypto = require('crypto');
-const { logger } = require('../core/logging');
-const { CommandParser, runCommand } = require('../chat/commands');
-const { createPlatformErrorHandler } = require('../utils/platform-error-handler');
-const { PlatformEvents } = require('../interfaces/PlatformEvents');
-const { NOTIFICATION_CONFIGS } = require('../core/constants');
+const PlatformEvents = {
+    VFX_COMMAND_EXECUTED: 'vfx:command-executed',
+    VFX_EFFECT_COMPLETED: 'vfx:effect-completed'
+} as const;
 
 const vfxCommandErrorHandler = createPlatformErrorHandler(logger, 'vfx-service');
 
@@ -563,7 +566,4 @@ function createVFXCommandService(config, eventBus = null) {
 }
 
 // Export the class and factory
-module.exports = {
-    VFXCommandService,
-    createVFXCommandService
-};
+export { VFXCommandService, createVFXCommandService };

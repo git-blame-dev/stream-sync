@@ -3,7 +3,7 @@ const { createMockFn } = require('../../../helpers/bun-mock-utils');
 const { createConfigFixture } = require('../../../helpers/config-fixture');
 
 const crypto = require('crypto');
-const { VFXCommandService } = require('../../../../src/services/VFXCommandService.ts');
+const { VFXCommandService } = require('../../../../src/services/VFXCommandService.js');
 
 describe('VFXCommandService random variant selection', () => {
     const originalRandomInt = crypto.randomInt;

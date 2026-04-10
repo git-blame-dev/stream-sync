@@ -6,7 +6,7 @@ const { createTwitchFollowEvent } = require('../../../helpers/twitch-test-data')
 const { createConfigFixture } = require('../../../helpers/config-fixture');
 
 const { TwitchPlatform } = require('../../../../src/platforms/twitch.ts');
-const PlatformEventRouter = require('../../../../src/services/PlatformEventRouter');
+const PlatformEventRouter = require('../../../../src/services/PlatformEventRouter.js');
 const { EventBus } = require('../../../../src/core/EventBus');
 
 describe('Twitch Platform', () => {

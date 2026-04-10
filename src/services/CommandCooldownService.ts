@@ -1,7 +1,7 @@
-const { logger: defaultLogger } = require('../core/logging');
-const { safeSetInterval } = require('../utils/timeout-validator');
-const { getSystemTimestampISO } = require('../utils/timestamp');
-const { createPlatformErrorHandler } = require('../utils/platform-error-handler');
+import { logger as defaultLogger } from '../core/logging';
+import { safeSetInterval } from '../utils/timeout-validator';
+import { getSystemTimestampISO } from '../utils/timestamp';
+import { createPlatformErrorHandler } from '../utils/platform-error-handler';
 
 const COOLDOWN_CONFIG_SECTION = 'cooldowns';
 const CONFIG_CHANGE_EVENTS = ['config:changed', 'config:reloaded'];
@@ -35,15 +35,8 @@ interface EventBusLike {
     subscribe?: (eventName: string, handler: (payload?: ConfigChangePayload) => void) => unknown;
 }
 
-interface LoggerLike {
-    debug: (...args: unknown[]) => void;
-}
-
-interface ErrorHandlerLike {
-    handleCleanupError: (error: Error, ...args: unknown[]) => void;
-    handleEventProcessingError: (...args: unknown[]) => void;
-    logOperationalError: (...args: unknown[]) => void;
-}
+type LoggerLike = typeof defaultLogger;
+type ErrorHandlerLike = ReturnType<typeof createPlatformErrorHandler>;
 
 interface CommandCooldownServiceOptions {
     eventBus?: EventBusLike | null;
@@ -403,4 +396,4 @@ class CommandCooldownService {
     }
 }
 
-module.exports = CommandCooldownService;
+export { CommandCooldownService };

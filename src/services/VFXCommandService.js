@@ -1,1 +1,6 @@
-module.exports = require('./VFXCommandService.ts');
+const { VFXCommandService, createVFXCommandService } = require('./VFXCommandService.ts');
+
+module.exports = {
+    VFXCommandService,
+    createVFXCommandService
+};

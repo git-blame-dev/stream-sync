@@ -1,13 +1,38 @@
+import { logger } from '../core/logging';
+import { safeDelay } from '../utils/timeout-validator';
+import { createPlatformErrorHandler } from '../utils/platform-error-handler';
+import { assertPlatformInterface } from '../utils/platform-interface-validator';
+import { getSystemTimestampISO } from '../utils/timestamp';
 
-const { logger } = require('../core/logging');
-const { safeDelay } = require('../utils/timeout-validator');
-const { createPlatformErrorHandler } = require('../utils/platform-error-handler');
-const { assertPlatformInterface } = require('../utils/platform-interface-validator');
-const { getSystemTimestampISO } = require('../utils/timestamp');
-const { PlatformEvents } = require('../interfaces/PlatformEvents');
+const PlatformEvents = {
+    CHAT_MESSAGE: 'platform:chat-message',
+    VIEWER_COUNT: 'platform:viewer-count',
+    GIFT: 'platform:gift',
+    PAYPIGGY: 'platform:paypiggy',
+    GIFTPAYPIGGY: 'platform:giftpaypiggy',
+    FOLLOW: 'platform:follow',
+    SHARE: 'platform:share',
+    RAID: 'platform:raid',
+    ENVELOPE: 'platform:envelope',
+    STREAM_STATUS: 'platform:stream-status',
+    STREAM_DETECTED: 'platform:stream-detected'
+} as const;
 
 class PlatformLifecycleService {
-    constructor(options = {}) {
+    config: any;
+    eventBus: any;
+    dependencyFactory: any;
+    logger: any;
+    errorHandler: any;
+    sharedDependencies: any;
+    handlerFactory: any;
+    platforms: Record<string, any>;
+    platformConnectionTimes: Record<string, number>;
+    backgroundPlatformInits: Array<{ platform: string; promise: Promise<unknown> }>;
+    platformHealth: Record<string, any>;
+    platformErrors: Array<{ platform: string; message: string; timestamp: string }>;
+
+    constructor(options: any = {}) {
         this.config = options.config;
         this.eventBus = options.eventBus || null;
         this.dependencyFactory = options.dependencyFactory;
@@ -383,7 +408,7 @@ class PlatformLifecycleService {
         };
     }
 
-    ensurePlatformHealthEntry(platformName) {
+    ensurePlatformHealthEntry(platformName: string): any {
         if (!this.platformHealth[platformName]) {
             this.platformHealth[platformName] = {
                 state: 'unknown',
@@ -397,8 +422,8 @@ class PlatformLifecycleService {
         return this.platformHealth[platformName];
     }
 
-    updatePlatformHealth(platformName, patch = {}) {
-        const current = this.ensurePlatformHealthEntry(platformName);
+    updatePlatformHealth(platformName: string, patch: any = {}): any {
+        const current: any = this.ensurePlatformHealthEntry(platformName);
         const next = {
             ...current,
             ...patch
@@ -500,4 +525,4 @@ class PlatformLifecycleService {
     }
 }
 
-module.exports = PlatformLifecycleService;
+export { PlatformLifecycleService };

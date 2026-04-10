@@ -1,6 +1,6 @@
 const { describe, it, expect } = require('bun:test');
 const { createConfigFixture } = require('../../../helpers/config-fixture');
-const { VFXCommandService } = require('../../../../src/services/VFXCommandService.ts');
+const { VFXCommandService } = require('../../../../src/services/VFXCommandService.js');
 
 const createService = (keywordParsingEnabled) => new VFXCommandService(createConfigFixture({
     farewell: {

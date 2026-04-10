@@ -1832,6 +1832,28 @@ describe('TypeScript toolchain migration gates behavior', () => {
         }
     });
 
+    it('keeps lifecycle, vfx, and gui orchestration modules free of commonjs module syntax', () => {
+        const modulePaths = [
+            'src/services/CommandCooldownService.ts',
+            'src/services/GracefulExitService.ts',
+            'src/services/PlatformEventRouter.ts',
+            'src/services/PlatformLifecycleService.ts',
+            'src/services/VFXCommandService.ts',
+            'src/services/gui/event-to-gui-contract-mapper.ts',
+            'src/services/gui/gui-transport-service.ts'
+        ];
+
+        for (const modulePath of modulePaths) {
+            const content = readFileSync(join(repoRoot, modulePath), 'utf8');
+
+            expect(content).not.toMatch(/^\s*(?:const|let|var)\s+.+?=\s*require\s*\(/m);
+            expect(content).not.toMatch(/\brequire\s*\(/);
+            expect(content).not.toContain('module.exports');
+            expect(content).not.toMatch(/module\[['"]exports['"]\]/);
+            expect(content).not.toMatch(/^\s*exports\./m);
+        }
+    });
+
     it('keeps youtube extractor helper modules free of commonjs exports syntax', () => {
         const helperPaths = [
             'src/platforms/youtube/youtube-author-extractor.ts',

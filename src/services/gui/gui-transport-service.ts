@@ -1,11 +1,11 @@
-const http = require('http');
-const fs = require('fs');
-const path = require('path');
-const crypto = require('crypto');
+import http from 'node:http';
+import fs from 'node:fs';
+import path from 'node:path';
+import crypto from 'node:crypto';
 
-const { createPlatformErrorHandler } = require('../../utils/platform-error-handler');
-const { createEventToGuiContractMapper } = require('./event-to-gui-contract-mapper');
-const { GIFT_ANIMATION_CACHE_DIR } = require('../tiktok-gift-animation/resolver');
+import { createPlatformErrorHandler } from '../../utils/platform-error-handler';
+import { createEventToGuiContractMapper } from './event-to-gui-contract-mapper';
+import { GIFT_ANIMATION_CACHE_DIR } from '../tiktok-gift-animation/resolver';
 
 function isGuiActive(config: any = {}) {
     const gui = config.gui || {};
@@ -671,7 +671,4 @@ function createGuiTransportService(options: any = {}) {
     };
 }
 
-module.exports = {
-    createGuiTransportService,
-    isGuiActive
-};
+export { createGuiTransportService, isGuiActive };
