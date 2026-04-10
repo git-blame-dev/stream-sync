@@ -75,6 +75,20 @@ describe('YouTubeStreamDetectionService behavior', () => {
         expect(result.debug.errorMessage).toContain('unexpected downstream issue');
     });
 
+    it('reports zero average response time when all requests fail', async () => {
+        const service = new YouTubeStreamDetectionService({}, { logger: noOpLogger });
+        service._performDetection = createMockFn().mockRejectedValue(new Error('hard failure'));
+
+        await service.detectLiveStreams('testChannel');
+        await service.detectLiveStreams('testChannel');
+
+        const metrics = service.getUsageMetrics();
+        expect(metrics.totalRequests).toBe(2);
+        expect(metrics.successfulRequests).toBe(0);
+        expect(metrics.failedRequests).toBe(2);
+        expect(metrics.averageResponseTime).toBe(0);
+    });
+
     it('updates timeout configuration and stays active while configured', () => {
         const service = new YouTubeStreamDetectionService({}, { logger: noOpLogger });
 
