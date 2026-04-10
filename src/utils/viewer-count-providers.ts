@@ -24,6 +24,7 @@ type YouTubeExtractionService = {
         success: boolean;
         totalCount: number;
         successfulStreams: number;
+        failedStreams?: number;
     }>;
     extractViewerCount: (videoId: string) => Promise<{
         success: boolean;
@@ -56,7 +57,7 @@ class ViewerCountProvider {
         };
     }
 
-    async getViewerCount(): Promise<number> {
+    async getViewerCount(): Promise<number | null> {
         throw new Error('getViewerCount() must be implemented by subclass');
     }
 
@@ -200,7 +201,7 @@ class YouTubeViewerCountProvider extends ViewerCountProvider {
         return !!(this.viewerExtractionService && this.config && this.getActiveVideoIds);
     }
 
-    async getViewerCount(): Promise<number> {
+    async getViewerCount(): Promise<number | null> {
         this.stats.totalRequests++;
         this.logger.debug('Getting YouTube viewer count - aggregating from all active streams', 'viewer-count-provider');
         
@@ -233,11 +234,13 @@ class YouTubeViewerCountProvider extends ViewerCountProvider {
                 this._resetErrorCount();
                 return result.totalCount;
             } else {
-                return this._handleProviderError(new Error('Service layer aggregation failed'), 'getAggregatedViewerCount');
+                this._handleProviderError(new Error('Service layer aggregation unavailable'), 'getAggregatedViewerCount');
+                return null;
             }
             
         } catch (error) {
-            return this._handleProviderError(error, 'getAggregatedViewerCount');
+            this._handleProviderError(error, 'getAggregatedViewerCount');
+            return null;
         }
     }
 

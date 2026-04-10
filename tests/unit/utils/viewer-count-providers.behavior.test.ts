@@ -40,7 +40,7 @@ describe('YouTubeViewerCountProvider readiness and error routes', () => {
         expect(count).toBe(0);
     });
 
-    it('categorizes errors from extraction service and increments error stats', async () => {
+    it('returns unavailable and categorizes errors from extraction service', async () => {
         const viewerExtractionService = {
             getAggregatedViewerCount: createMockFn().mockRejectedValue(new Error('network down'))
         };
@@ -54,7 +54,7 @@ describe('YouTubeViewerCountProvider readiness and error routes', () => {
 
         const count = await provider.getViewerCount();
 
-        expect(count).toBe(0);
+        expect(count).toBeNull();
         expect(provider.getErrorStats().errorTypes.network).toBe(1);
     });
 });

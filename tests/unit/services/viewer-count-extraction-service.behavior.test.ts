@@ -132,6 +132,26 @@ describe('ViewerCountExtractionService', () => {
         expect((result.streams[1] as any).error).toBe('Extraction failed');
     });
 
+    it('surfaces unavailable aggregation when all stream extractions fail', async () => {
+        const service = new ViewerCountExtractionService(mockInnertube, {
+            logger: noOpLogger,
+            YouTubeViewerExtractor: mockExtractor
+        });
+        const internal = service as any;
+
+        internal.extractViewerCountsBatch = createMockFn().mockResolvedValue([
+            { success: false, count: 0, videoId: 'vid-a', error: 'Extraction failed' },
+            { success: false, count: 0, videoId: 'vid-b', error: 'Extraction failed' }
+        ]);
+
+        const result = await service.getAggregatedViewerCount(['vid-a', 'vid-b']);
+
+        expect(result.success).toBe(false);
+        expect(result.totalCount).toBe(0);
+        expect(result.successfulStreams).toBe(0);
+        expect(result.failedStreams).toBe(2);
+    });
+
     it('updates config and exposes usage stats', async () => {
         const service = new ViewerCountExtractionService(mockInnertube, {
             logger: noOpLogger,
