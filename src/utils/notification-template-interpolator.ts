@@ -168,9 +168,10 @@ function sanitizeDataForInterpolation(data) {
     return sanitized;
 }
 
-function resolvePaypiggyCopy(data = {}) {
-    const platform = (data.platform || '').toLowerCase();
-    const isSuperfan = data.tier === 'superfan';
+function resolvePaypiggyCopy(data) {
+    const safeData = data || {};
+    const platform = (safeData.platform || '').toLowerCase();
+    const isSuperfan = safeData.tier === 'superfan';
 
     if (isSuperfan) {
         return {
@@ -247,7 +248,7 @@ function interpolateTemplate(template, data) {
     });
 }
 
-module.exports = {
+export {
     interpolateTemplate,
     sanitizeDataForInterpolation,
     convertValueToString

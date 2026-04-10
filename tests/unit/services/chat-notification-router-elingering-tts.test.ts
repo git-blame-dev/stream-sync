@@ -2,7 +2,7 @@ const { describe, it, beforeEach, expect } = require('bun:test');
 const { createMockFn } = require('../../helpers/bun-mock-utils');
 const { noOpLogger } = require('../../helpers/mock-factories');
 const { createConfigFixture } = require('../../helpers/config-fixture');
-const ChatNotificationRouter = require('../../../src/services/ChatNotificationRouter.ts');
+const { ChatNotificationRouter } = require('../../../src/services/ChatNotificationRouter.ts');
 
 describe('ChatNotificationRouter lingering/priority/TTS', () => {
     let mockLogger;

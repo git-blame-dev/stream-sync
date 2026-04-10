@@ -1,8 +1,11 @@
+import { logger } from '../core/logging';
+import { createRequire } from 'node:module';
+import { resolveTikTokTimestampMs, resolveTikTokTimestampISO, resolveYouTubeTimestampISO } from './platform-timestamp';
+import { createPlatformErrorHandler } from '../utils/platform-error-handler';
+import { normalizeBadgeImages } from './message-parts';
 
-const { logger } = require('../core/logging');
-const { resolveTikTokTimestampMs, resolveTikTokTimestampISO, resolveYouTubeTimestampISO } = require('./platform-timestamp');
-const { createPlatformErrorHandler } = require('../utils/platform-error-handler');
-const { normalizeBadgeImages } = require('./message-parts');
+const nodeRequire = createRequire(import.meta.url);
+const { CheermoteProcessor } = nodeRequire('./cheermote-processor');
 
 const normalizationErrorHandler = createPlatformErrorHandler(logger, 'message-normalization');
 
@@ -510,8 +513,6 @@ function normalizeTikTokMessage(data, platformName = 'tiktok') {
 }
 
 function extractTwitchMessageData(messageObj) {
-    const { logger } = require('../core/logging');
-    
     if (!messageObj || typeof messageObj !== 'object') {
         return { textContent: '', cheermoteInfo: null };
     }
@@ -535,7 +536,6 @@ function extractTwitchMessageData(messageObj) {
         const primaryCheermote = cheermoteFragments[0];
         if (primaryCheermote.cheermote && primaryCheermote.text) {
             // Use unified cheermote processor for consistent processing
-            const { CheermoteProcessor } = require('./cheermote-processor');
             const processedData = CheermoteProcessor.processEventSubFragments(messageObj.fragments);
             const parsedTier = Number(primaryCheermote.cheermote.tier);
             const tier = Number.isFinite(parsedTier) && parsedTier > 0
@@ -567,8 +567,6 @@ function extractTwitchMessageData(messageObj) {
 }
 
 function extractYouTubeMessageText(messageObj) {
-    const { logger } = require('../core/logging');
-
     const resolveEmojiIdGlyph = (emojiId) => {
         if (typeof emojiId !== 'string') {
             return '';
@@ -720,7 +718,7 @@ function validateNormalizedMessage(normalizedMessage) {
     };
 }
 
-module.exports = {
+export {
     normalizeYouTubeMessage,
     normalizeTikTokMessage,
     buildTwitchMessageParts,

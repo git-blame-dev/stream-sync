@@ -1,1 +1,3 @@
-module.exports = require('./SelfMessageDetectionService.ts');
+const { SelfMessageDetectionService } = require('./SelfMessageDetectionService.ts');
+
+module.exports = SelfMessageDetectionService;

@@ -32,7 +32,7 @@ type RouterInstance = {
     queueGreeting: (platform: string, username: string) => Promise<void>;
 };
 
-const ChatNotificationRouter = nodeRequire('../../src/services/ChatNotificationRouter') as new (deps: {
+const ChatNotificationRouter = nodeRequire('../../src/services/ChatNotificationRouter.js') as new (deps: {
     runtime: Record<string, unknown>;
     logger: LoggerLike;
     config: Record<string, unknown>;

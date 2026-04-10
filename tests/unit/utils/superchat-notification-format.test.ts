@@ -1,6 +1,6 @@
 const { describe, test, expect } = require('bun:test');
 export {};
-const NotificationBuilder = require('../../../src/utils/notification-builder');
+const NotificationBuilder = require('../../../src/utils/notification-builder.js');
 
 describe('SuperChat Notification Format', () => {
     test('formats Super Chat display and TTS output', () => {

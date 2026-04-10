@@ -15,7 +15,7 @@ type BuiltNotification = NotificationPayload & {
     type: string;
 };
 
-const NotificationBuilder = nodeRequire('../../src/utils/notification-builder') as {
+const NotificationBuilder = nodeRequire('../../src/utils/notification-builder.js') as {
     build: (input: NotificationPayload) => BuiltNotification | null;
 };
 

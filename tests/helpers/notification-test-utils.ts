@@ -2,7 +2,7 @@ const { initializeTestLogging } = require('./test-setup');
 initializeTestLogging();
 
 const { interpolateTemplate } = require('../../src/utils/notification-template-interpolator');
-const NotificationBuilder = require('../../src/utils/notification-builder');
+const NotificationBuilder = require('../../src/utils/notification-builder.js');
 
 function createNotificationData(type, platform, userData, eventData = {}, vfxConfig = null) {
     if (!type || typeof type !== 'string' || !type.trim()) {

@@ -4,7 +4,7 @@ import { createRequire } from 'node:module';
 const load = createRequire(__filename);
 const EventEmitter = load('events');
 const PlatformEventRouter = load('../../src/services/PlatformEventRouter');
-const ChatNotificationRouter = load('../../src/services/ChatNotificationRouter');
+const ChatNotificationRouter = load('../../src/services/ChatNotificationRouter.js');
 const { PlatformEvents } = load('../../src/interfaces/PlatformEvents');
 const { YouTubePlatform } = load('../../src/platforms/youtube');
 const { createConfigFixture } = load('../helpers/config-fixture');

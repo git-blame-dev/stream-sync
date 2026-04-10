@@ -1,7 +1,7 @@
-const crypto = require('crypto');
-const { interpolateTemplate } = require('./notification-template-interpolator');
-const { normalizeCurrency } = require('./currency-utils');
-const { getAnonymousUsername } = require('./validation');
+import crypto from 'node:crypto';
+import { interpolateTemplate } from './notification-template-interpolator';
+import { normalizeCurrency } from './currency-utils';
+import { getAnonymousUsername } from './validation';
 
 const HARDCODED_TYPES = ['platform:gift', 'platform:giftpaypiggy', 'platform:paypiggy', 'platform:follow', 'platform:share', 'platform:raid', 'platform:envelope'];
 
@@ -48,6 +48,9 @@ const NOTIFICATION_TEMPLATES = {
 };
 
 class NotificationBuilder {
+    static currencyFormatters: Map<string, Intl.NumberFormat>;
+    static currencyNameFormatters: Map<string, Intl.NumberFormat>;
+
     static build(input) {
         if (!input || typeof input !== 'object') {
             return null;
@@ -162,7 +165,7 @@ class NotificationBuilder {
         const ttsMessage = this.generateTtsMessage(effectiveInput);
         const logMessage = this.generateLogMessage(effectiveInput);
         
-        const notification = {
+        const notification: Record<string, unknown> = {
             id: `${normalizedPlatform}-${finalType}-${crypto.randomUUID()}`,
             platform: normalizedPlatform,
             type: finalType,
@@ -208,18 +211,19 @@ class NotificationBuilder {
     }
 
     // Determine paypiggy variant for platform-facing wording (subscriber/member/superfan)
-    static _getPaypiggyVariant(input = {}) {
-        const type = input.type;
+    static _getPaypiggyVariant(input) {
+        const safeInput = input || {};
+        const type = safeInput.type;
 
         if (type !== 'platform:paypiggy') {
             return null;
         }
 
-        if (input.tier === 'superfan') {
+        if (safeInput.tier === 'superfan') {
             return 'superfan';
         }
 
-        const platform = (input.platform || '').toLowerCase();
+        const platform = (safeInput.platform || '').toLowerCase();
         if (platform === 'youtube') {
             return 'membership';
         }
@@ -699,7 +703,11 @@ class NotificationBuilder {
                 }));
             }
 
-            return this.currencyFormatters.get(formatterKey).format(amount);
+            const formatter = this.currencyFormatters.get(formatterKey);
+            if (!formatter) {
+                throw new Error(`Missing currency formatter for ${formatterKey}`);
+            }
+            return formatter.format(amount);
         } catch {
             // For truly invalid currency codes, show amount with code
             return `${amount.toFixed(2)} ${currency}`;
@@ -733,8 +741,11 @@ class NotificationBuilder {
                 }));
             }
 
-            currencyName = this.currencyNameFormatters
-                .get(formatterKey)
+            const nameFormatter = this.currencyNameFormatters.get(formatterKey);
+            if (!nameFormatter) {
+                throw new Error(`Missing currency name formatter for ${formatterKey}`);
+            }
+            currencyName = nameFormatter
                 .formatToParts(main === 1 && sub === 0 ? 1 : 2)
                 .find((p) => p.type === 'currency')?.value;
 
@@ -757,7 +768,7 @@ class NotificationBuilder {
         return `${main} ${currencyName} ${sub}`;
     }
 
-    static sanitizeUsernameForTts(username, maxLength = null) {
+    static sanitizeUsernameForTts(username, maxLength?: number) {
         if (!username || typeof username !== 'string' || !username.trim()) {
             return '';
         }
@@ -824,7 +835,7 @@ class NotificationBuilder {
                 ? `${prefix}-${parsedTier}`
                 : prefix;
 
-            const parts = [
+            const parts: Array<Record<string, unknown>> = [
                 { type: 'text', text: `sent ${formattedBitsAmount} ` },
                 {
                     type: 'emote',
@@ -848,7 +859,7 @@ class NotificationBuilder {
                 return [];
             }
 
-            const parts = [
+            const parts: Array<Record<string, unknown>> = [
                 {
                     type: 'emote',
                     platform: 'youtube',
@@ -982,4 +993,4 @@ class NotificationBuilder {
 
 }
 
-module.exports = NotificationBuilder;
+export { NotificationBuilder };

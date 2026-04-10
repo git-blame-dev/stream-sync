@@ -1,1 +1,3 @@
-module.exports = require('./ChatFileLoggingService.ts');
+const { ChatFileLoggingService } = require('./ChatFileLoggingService.ts');
+
+module.exports = ChatFileLoggingService;

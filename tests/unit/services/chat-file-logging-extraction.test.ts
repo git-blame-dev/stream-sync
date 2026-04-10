@@ -3,7 +3,7 @@ const { clearAllMocks, restoreAllMocks, spyOn } = require('../../helpers/bun-moc
 const { noOpLogger } = require('../../helpers/mock-factories');
 const fs = require('fs').promises;
 const path = require('path');
-const ChatFileLoggingService = require('../../../src/services/ChatFileLoggingService.ts');
+const { ChatFileLoggingService } = require('../../../src/services/ChatFileLoggingService.ts');
 
 describe('ChatFileLoggingService - Behavior-Focused Regression Tests', () => {
     let service;

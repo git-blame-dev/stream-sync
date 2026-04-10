@@ -44,7 +44,7 @@ class TwitchPlatform extends EventEmitter {
         }
 
         // Initialize chat file logging service via dependency injection
-        const ChatFileLoggingService = dependencies.ChatFileLoggingService || require('../services/ChatFileLoggingService');
+        const ChatFileLoggingService = dependencies.ChatFileLoggingService || require('../services/ChatFileLoggingService.js');
         this.chatFileLoggingService = new ChatFileLoggingService({
             logger: this.logger,
             config: this.config

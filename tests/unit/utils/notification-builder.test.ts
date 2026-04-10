@@ -1,5 +1,5 @@
 const { describe, test, expect } = require('bun:test');
-const NotificationBuilder = require('../../../src/utils/notification-builder.ts');
+const { NotificationBuilder } = require('../../../src/utils/notification-builder.ts');
 const { getAnonymousUsername } = require('../../../src/utils/validation.ts');
 
 export {};
