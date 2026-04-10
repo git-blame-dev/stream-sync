@@ -219,7 +219,7 @@ class YouTubePlatform extends EventEmitter {
         }
     }
 
-    async disconnectFromYouTubeStream(videoId, reason = 'unknown') {
+    async disconnectFromYouTubeStream(videoId, reason = 'unknown', options = {}) {
         if (!this.connectionManager) {
             return false;
         }
@@ -227,7 +227,40 @@ class YouTubePlatform extends EventEmitter {
         const previousCount = this.connectionManager.getConnectionCount();
         const result = await this.connectionManager.disconnectFromStream(videoId, reason);
         this._emitStreamStatusIfNeeded(previousCount, { videoId, reason });
+
+        if (result && options.requestImmediateRefresh === true) {
+            const refreshContext = {
+                videoId,
+                reason,
+                source: options.source || 'unknown'
+            };
+
+            const checkInProgress = this._youtubeMultiStreamManager &&
+                typeof this._youtubeMultiStreamManager.isCheckInProgress === 'function' &&
+                this._youtubeMultiStreamManager.isCheckInProgress() === true;
+
+            if (checkInProgress) {
+                this.requestImmediateYouTubeStreamRefresh(refreshContext).catch((error) => {
+                    this._handleConnectionErrorLogging(
+                        `Immediate stream refresh failed after disconnect: ${error.message}`,
+                        error,
+                        'stream-refresh'
+                    );
+                });
+            } else {
+                await this.requestImmediateYouTubeStreamRefresh(refreshContext);
+            }
+        }
+
         return result;
+    }
+
+    async requestImmediateYouTubeStreamRefresh(context = {}) {
+        if (!this._youtubeMultiStreamManager || typeof this._youtubeMultiStreamManager.requestImmediateRefresh !== 'function') {
+            return;
+        }
+
+        await this._youtubeMultiStreamManager.requestImmediateRefresh(context);
     }
 
     setYouTubeConnectionReady(videoId) {

@@ -662,7 +662,7 @@ describe('YouTube connection factory', () => {
         const { factory } = createFactory({
             validationResult: { shouldConnect: true },
             platformOverrides: {
-                disconnectFromYouTubeStream: (videoId, reason) => disconnectCalls.push({ videoId, reason }),
+                disconnectFromYouTubeStream: (videoId, reason, options) => disconnectCalls.push({ videoId, reason, options }),
                 _handleProcessingError: createMockFn(),
                 handleChatMessage: createMockFn(),
                 _processRegularChatMessage: createMockFn(),
@@ -689,6 +689,7 @@ describe('YouTube connection factory', () => {
         expect(disconnectCalls).toHaveLength(1);
         expect(disconnectCalls[0].videoId).toBe('video-1');
         expect(disconnectCalls[0].reason).toBe('API error: 403 forbidden');
+        expect(disconnectCalls[0].options).toBeUndefined();
     });
 
     test('does not disconnect on temporary live chat errors', async () => {
@@ -698,7 +699,7 @@ describe('YouTube connection factory', () => {
         const { factory } = createFactory({
             validationResult: { shouldConnect: true },
             platformOverrides: {
-                disconnectFromYouTubeStream: (videoId, reason) => disconnectCalls.push({ videoId, reason }),
+                disconnectFromYouTubeStream: (videoId, reason, options) => disconnectCalls.push({ videoId, reason, options }),
                 _handleProcessingError: createMockFn(),
                 handleChatMessage: createMockFn(),
                 _processRegularChatMessage: createMockFn(),
@@ -723,6 +724,45 @@ describe('YouTube connection factory', () => {
         errorHandlers.error(new Error('503 upstream unavailable'));
 
         expect(disconnectCalls).toHaveLength(0);
+    });
+
+    test('passes immediate-refresh context for terminal non-API errors', async () => {
+        const disconnectCalls = [];
+        const errorHandlers = {};
+
+        const { factory } = createFactory({
+            validationResult: { shouldConnect: true },
+            platformOverrides: {
+                disconnectFromYouTubeStream: (videoId, reason, options) => disconnectCalls.push({ videoId, reason, options }),
+                _handleProcessingError: createMockFn(),
+                handleChatMessage: createMockFn(),
+                _processRegularChatMessage: createMockFn(),
+                _extractMessagesFromChatItem: createMockFn().mockReturnValue([]),
+                _shouldSkipMessage: createMockFn().mockReturnValue(false),
+                logRawPlatformData: createMockFn().mockResolvedValue(),
+                setYouTubeConnectionReady: createMockFn(),
+                config: { dataLoggingEnabled: false }
+            }
+        });
+
+        const connection = {
+            on: createMockFn((event, handler) => {
+                errorHandlers[event] = handler;
+            }),
+            start: createMockFn(),
+            removeAllListeners: createMockFn()
+        };
+
+        await factory.setupConnectionEventListeners(connection, 'video-1');
+
+        errorHandlers.error(new Error('Unexpected live chat incremental continuation response'));
+
+        expect(disconnectCalls).toHaveLength(1);
+        expect(disconnectCalls[0]).toEqual({
+            videoId: 'video-1',
+            reason: 'Error: Unexpected live chat incremental continuation response',
+            options: { requestImmediateRefresh: true, source: 'livechat-error' }
+        });
     });
 
     test('routes complex chat items through extractors and logging', async () => {
@@ -777,7 +817,7 @@ describe('YouTube connection factory', () => {
         const { factory } = createFactory({
             validationResult: { shouldConnect: true },
             platformOverrides: {
-                disconnectFromYouTubeStream: (videoId, reason) => disconnectCalls.push({ videoId, reason }),
+                disconnectFromYouTubeStream: (videoId, reason, options) => disconnectCalls.push({ videoId, reason, options }),
                 handleChatMessage: createMockFn(),
                 _processRegularChatMessage: createMockFn(),
                 _extractMessagesFromChatItem: createMockFn().mockReturnValue([]),
@@ -803,5 +843,6 @@ describe('YouTube connection factory', () => {
         expect(disconnectCalls).toHaveLength(1);
         expect(disconnectCalls[0].videoId).toBe('video-1');
         expect(disconnectCalls[0].reason).toBe('stream ended');
+        expect(disconnectCalls[0].options).toEqual({ requestImmediateRefresh: true, source: 'livechat-end' });
     });
 });

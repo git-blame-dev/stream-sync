@@ -266,4 +266,80 @@ describe('YouTubePlatform behavior', () => {
             }
         ]);
     });
+
+    it('requests one immediate refresh for duplicate terminal disconnect events', async () => {
+        const platform = createPlatform();
+        const refreshCalls = [];
+
+        platform.connectionManager.getConnectionCount = createMockFn()
+            .mockReturnValueOnce(1)
+            .mockReturnValueOnce(0)
+            .mockReturnValueOnce(0);
+        platform.connectionManager.disconnectFromStream = createMockFn()
+            .mockResolvedValueOnce(true)
+            .mockResolvedValueOnce(false);
+        platform._emitStreamStatusIfNeeded = createMockFn();
+        platform._youtubeMultiStreamManager.requestImmediateRefresh = createMockFn(async (context) => {
+            refreshCalls.push(context);
+        });
+
+        const first = await platform.disconnectFromYouTubeStream('video-1', 'stream ended', {
+            requestImmediateRefresh: true,
+            source: 'livechat-end'
+        });
+        const second = await platform.disconnectFromYouTubeStream('video-1', 'stream ended', {
+            requestImmediateRefresh: true,
+            source: 'livechat-end'
+        });
+
+        expect(first).toBe(true);
+        expect(second).toBe(false);
+        expect(refreshCalls).toEqual([{ videoId: 'video-1', reason: 'stream ended', source: 'livechat-end' }]);
+    });
+
+    it('does not request immediate refresh without explicit context', async () => {
+        const platform = createPlatform();
+        platform.connectionManager.getConnectionCount = createMockFn().mockReturnValue(1);
+        platform.connectionManager.disconnectFromStream = createMockFn().mockResolvedValue(true);
+        platform._emitStreamStatusIfNeeded = createMockFn();
+        const refreshSpy = createMockFn().mockResolvedValue(undefined);
+        platform._youtubeMultiStreamManager.requestImmediateRefresh = refreshSpy;
+
+        await platform.disconnectFromYouTubeStream('video-2', 'stream ended');
+
+        expect(refreshSpy).toHaveBeenCalledTimes(0);
+    });
+
+    it('does not block disconnect completion when refresh is requested during active check', async () => {
+        const platform = createPlatform();
+        let resolveRefresh = (..._args) => {};
+        const refreshPromise = new Promise((resolve) => {
+            resolveRefresh = resolve;
+        });
+
+        platform.connectionManager.getConnectionCount = createMockFn().mockReturnValue(1);
+        platform.connectionManager.disconnectFromStream = createMockFn().mockResolvedValue(true);
+        platform._emitStreamStatusIfNeeded = createMockFn();
+        platform._handleConnectionErrorLogging = createMockFn();
+        platform._youtubeMultiStreamManager.isCheckInProgress = createMockFn().mockReturnValue(true);
+        platform._youtubeMultiStreamManager.requestImmediateRefresh = createMockFn(() => refreshPromise);
+
+        const disconnectPromise = platform.disconnectFromYouTubeStream('video-3', 'stream ended', {
+            requestImmediateRefresh: true,
+            source: 'stream-reconciler'
+        });
+
+        let settled = false;
+        disconnectPromise.then(() => {
+            settled = true;
+        });
+
+        await Promise.resolve();
+        await Promise.resolve();
+
+        expect(settled).toBe(true);
+
+        resolveRefresh();
+        await disconnectPromise;
+    });
 });
