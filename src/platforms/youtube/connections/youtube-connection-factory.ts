@@ -21,7 +21,11 @@ interface YouTubePlatform {
         setActiveStream?: (videoId: string) => Promise<void>;
     };
     setYouTubeConnectionReady: (videoId: string) => void;
-    disconnectFromYouTubeStream: (videoId: string, reason: string) => void;
+    disconnectFromYouTubeStream: (
+        videoId: string,
+        reason: string,
+        options?: { requestImmediateRefresh?: boolean; source?: string }
+    ) => void;
     handleChatMessage: (message: UnknownRecord) => void;
     logRawPlatformData: (channel: string, payload: unknown) => Promise<void>;
     _validateVideoForConnection: (videoId: string, info: unknown) => { shouldConnect: boolean; reason?: string };
@@ -229,7 +233,10 @@ function createYouTubeConnectionFactory(options: YouTubeConnectionFactoryOptions
             }
 
             platform._handleProcessingError(`Stream ${videoId} error: ${errorMessage}`, error, 'stream-error', { videoId });
-            platform.disconnectFromYouTubeStream(videoId, `Error: ${errorMessage}`);
+            platform.disconnectFromYouTubeStream(videoId, `Error: ${errorMessage}`, {
+                requestImmediateRefresh: true,
+                source: 'livechat-error'
+            });
         });
 
         connection.on('chat-update', (chatItem: unknown) => {
@@ -369,7 +376,10 @@ function createYouTubeConnectionFactory(options: YouTubeConnectionFactoryOptions
         connection.on('end', () => {
             platform.logger.debug(`LiveChat 'end' event for: ${videoId}`, 'youtube');
             platform.logger.info(`Stream ended: ${videoId}`, 'youtube');
-            platform.disconnectFromYouTubeStream(videoId, 'stream ended');
+            platform.disconnectFromYouTubeStream(videoId, 'stream ended', {
+                requestImmediateRefresh: true,
+                source: 'livechat-end'
+            });
         });
 
         platform.logger.debug(`About to call connection.start() for: ${videoId}`, 'youtube');

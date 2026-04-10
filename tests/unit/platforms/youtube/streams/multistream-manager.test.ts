@@ -198,6 +198,52 @@ describe('YouTube multi-stream manager', () => {
 
     });
 
+    describe('requestImmediateRefresh', () => {
+        test('coalesces duplicate immediate refresh requests into one check', async () => {
+            const getLiveVideoIds = createMockFn(async () => []);
+            const platform = buildPlatform({
+                getLiveVideoIds
+            });
+            const manager = buildManager(platform);
+
+            await Promise.all([
+                manager.requestImmediateRefresh({ source: 'duplicate-1' }),
+                manager.requestImmediateRefresh({ source: 'duplicate-2' })
+            ]);
+
+            expect(getLiveVideoIds).toHaveBeenCalledTimes(1);
+        });
+
+        test('runs one follow-up check when requested during an in-progress check', async () => {
+            let releaseFirstCheck;
+            const firstCheckGate = new Promise((resolve) => {
+                releaseFirstCheck = resolve;
+            });
+            let callCount = 0;
+            const getLiveVideoIds = createMockFn(async () => {
+                callCount += 1;
+                if (callCount === 1) {
+                    await firstCheckGate;
+                }
+                return [];
+            });
+
+            const platform = buildPlatform({ getLiveVideoIds });
+            const manager = buildManager(platform);
+
+            const inProgressCheck = manager.checkMultiStream();
+            const immediateRefresh = manager.requestImmediateRefresh({ source: 'during-check' });
+
+            expect(getLiveVideoIds).toHaveBeenCalledTimes(1);
+
+            releaseFirstCheck();
+            await inProgressCheck;
+            await immediateRefresh;
+
+            expect(getLiveVideoIds).toHaveBeenCalledTimes(2);
+        });
+    });
+
     describe('checkMultiStream at capacity', () => {
         test('skips full check when at maxStreams and within full check interval', async () => {
             const currentTime = testClock.now();
@@ -250,8 +296,8 @@ describe('YouTube multi-stream manager', () => {
                 },
                 getActiveYouTubeVideoIds: createMockFn(() => ['stream-1', 'stream-2']),
                 getLiveVideoIds: createMockFn(async () => ['stream-1']),
-                disconnectFromYouTubeStream: createMockFn(async (videoId, reason) => {
-                    disconnected.push({ videoId, reason });
+                disconnectFromYouTubeStream: createMockFn(async (videoId, reason, options) => {
+                    disconnected.push({ videoId, reason, options });
                 }),
                 lastFullStreamCheck: currentTime - 5000
             });
@@ -259,7 +305,11 @@ describe('YouTube multi-stream manager', () => {
 
             await manager.checkMultiStream();
 
-            expect(disconnected).toContainEqual({ videoId: 'stream-2', reason: 'stream limit exceeded' });
+            expect(disconnected).toContainEqual({
+                videoId: 'stream-2',
+                reason: 'stream limit exceeded',
+                options: { requestImmediateRefresh: true, source: 'stream-reconciler' }
+            });
         });
 
         test('preserves connections when stream detection returns empty at capacity', async () => {
@@ -389,15 +439,19 @@ describe('YouTube multi-stream manager', () => {
                 getActiveYouTubeVideoIds: createMockFn(() => []),
                 getLiveVideoIds: createMockFn(async () => ['new-stream']),
                 connectToYouTubeStream: createMockFn().mockResolvedValue(),
-                disconnectFromYouTubeStream: createMockFn(async (videoId, reason) => {
-                    disconnected.push({ videoId, reason });
+                disconnectFromYouTubeStream: createMockFn(async (videoId, reason, options) => {
+                    disconnected.push({ videoId, reason, options });
                 })
             });
             const manager = buildManager(platform);
 
             await manager.checkMultiStream();
 
-            expect(disconnected).toContainEqual({ videoId: 'old-stream', reason: 'stream no longer live' });
+            expect(disconnected).toContainEqual({
+                videoId: 'old-stream',
+                reason: 'stream no longer live',
+                options: { requestImmediateRefresh: true, source: 'stream-reconciler' }
+            });
         });
     });
 

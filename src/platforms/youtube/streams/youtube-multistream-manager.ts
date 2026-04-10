@@ -43,7 +43,11 @@ interface YouTubeMultiStreamPlatform {
     getActiveYouTubeVideoIds: () => string[];
     getLiveVideoIds: () => Promise<string[]>;
     connectToYouTubeStream: (videoId: string) => Promise<void>;
-    disconnectFromYouTubeStream: (videoId: string, reason: string) => Promise<void>;
+    disconnectFromYouTubeStream: (
+        videoId: string,
+        reason: string,
+        options?: { requestImmediateRefresh?: boolean; source?: string }
+    ) => Promise<void>;
     _logMultiStreamStatus: (includeDetails?: boolean, includeActiveStreamsList?: boolean) => void;
     _handleProcessingError: (message: string, error: unknown, category: string) => void;
     _handleConnectionErrorLogging: (message: string, error: unknown, category: string) => void;
@@ -126,8 +130,10 @@ function createYouTubeMultiStreamManager(options: MultiStreamManagerOptions = {}
         }
     };
 
-    const checkMultiStream = async (options: CheckMultiStreamOptions = {}) => {
-        const throwOnError = options.throwOnError === true;
+    let currentCheckPromise: Promise<void> | null = null;
+    let immediateRefreshPromise: Promise<void> | null = null;
+
+    const runCheckMultiStream = async (throwOnError: boolean) => {
         try {
             const maxStreams = platform.config.maxStreams;
             const currentConnections = platform.connectionManager.getConnectionCount();
@@ -177,7 +183,10 @@ function createYouTubeMultiStreamManager(options: MultiStreamManagerOptions = {}
                 for (const videoId of platform.connectionManager.getAllVideoIds()) {
                     if (!limitedVideoIds.includes(videoId)) {
                         platform.logger.info(`Stream ended, disconnecting: ${videoId}`, 'youtube');
-                        await platform.disconnectFromYouTubeStream(videoId, 'stream limit exceeded');
+                        await platform.disconnectFromYouTubeStream(videoId, 'stream limit exceeded', {
+                            requestImmediateRefresh: true,
+                            source: 'stream-reconciler'
+                        });
                         anyChanges = true;
                     }
                 }
@@ -251,7 +260,10 @@ function createYouTubeMultiStreamManager(options: MultiStreamManagerOptions = {}
             for (const videoId of platform.connectionManager.getAllVideoIds()) {
                 if (!videoIds.includes(videoId)) {
                     platform.logger.debug(`Stream ended, disconnecting: ${videoId}`, 'youtube');
-                    await platform.disconnectFromYouTubeStream(videoId, 'stream no longer live');
+                    await platform.disconnectFromYouTubeStream(videoId, 'stream no longer live', {
+                        requestImmediateRefresh: true,
+                        source: 'stream-reconciler'
+                    });
                 }
             }
 
@@ -268,6 +280,53 @@ function createYouTubeMultiStreamManager(options: MultiStreamManagerOptions = {}
             }
         }
     };
+
+    const checkMultiStream = async (options: CheckMultiStreamOptions = {}) => {
+        const throwOnError = options.throwOnError === true;
+
+        if (currentCheckPromise) {
+            if (throwOnError) {
+                await currentCheckPromise;
+            }
+            return;
+        }
+
+        currentCheckPromise = runCheckMultiStream(throwOnError);
+        try {
+            await currentCheckPromise;
+        } finally {
+            currentCheckPromise = null;
+        }
+    };
+
+    const requestImmediateRefresh = async (context: UnknownRecord = {}) => {
+        if (immediateRefreshPromise) {
+            return immediateRefreshPromise;
+        }
+
+        immediateRefreshPromise = (async () => {
+            const source = typeof context.source === 'string' ? context.source : 'unknown';
+            platform.logger.debug(`Requesting immediate multi-stream refresh (source: ${source})`, 'youtube');
+
+            if (currentCheckPromise) {
+                try {
+                    await currentCheckPromise;
+                } catch {
+                    // Follow-up immediate refresh still runs even if previous check errored.
+                }
+            }
+
+            await checkMultiStream();
+        })();
+
+        try {
+            await immediateRefreshPromise;
+        } finally {
+            immediateRefreshPromise = null;
+        }
+    };
+
+    const isCheckInProgress = () => currentCheckPromise !== null;
 
     const checkStreamShortageAndWarn = (availableCount: number, maxStreams: number) => {
         const currentTimeMs = now();
@@ -340,6 +399,8 @@ function createYouTubeMultiStreamManager(options: MultiStreamManagerOptions = {}
     return {
         startMonitoring,
         checkMultiStream,
+        requestImmediateRefresh,
+        isCheckInProgress,
         checkStreamShortageAndWarn,
         logStatus
     };
