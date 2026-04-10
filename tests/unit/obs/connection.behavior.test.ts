@@ -2,7 +2,13 @@ const { describe, expect, afterEach, it, beforeEach } = require('bun:test');
 const { createMockFn, restoreAllMocks } = require('../../helpers/bun-mock-utils');
 const { secrets, _resetForTesting, initializeStaticSecrets } = require('../../../src/core/secrets');
 
-const { OBSConnectionManager } = require('../../../src/obs/connection.ts');
+const {
+    OBSConnectionManager,
+    getOBSConnectionManager,
+    resetOBSConnectionManager,
+    obsCall,
+    ensureOBSConnected
+} = require('../../../src/obs/connection.ts');
 
 describe('OBSConnectionManager behavior', () => {
     let originalNodeEnv;
@@ -17,6 +23,7 @@ describe('OBSConnectionManager behavior', () => {
         restoreAllMocks();
         _resetForTesting();
         initializeStaticSecrets();
+        resetOBSConnectionManager();
     });
 
     const createMockOBS = () => ({
@@ -28,7 +35,11 @@ describe('OBSConnectionManager behavior', () => {
         once: createMockFn()
     });
 
-    const createDeps = (overrides = {}) => ({
+    const createDeps = (overrides: {
+        obs?: ReturnType<typeof createMockOBS>;
+        config?: Record<string, unknown>;
+        constants?: Record<string, unknown>;
+    } = {}) => ({
         config: { address: 'ws://localhost:4455', password: 'testPass', enabled: true, connectionTimeoutMs: 50 },
         obs: overrides.obs || createMockOBS(),
         constants: {
@@ -121,5 +132,75 @@ describe('OBSConnectionManager behavior', () => {
 
         manager._isConnected = true;
         expect(manager.isConnected()).toBe(true);
+    });
+
+    it('reuses singleton manager and applies config updates for subsequent dependency config', () => {
+        const mockOBS = createMockOBS();
+
+        const first = getOBSConnectionManager({
+            obs: mockOBS,
+            config: { address: 'ws://first:4455', password: 'first-pass', enabled: true, connectionTimeoutMs: 50 },
+            constants: { ERROR_MESSAGES: { OBS_CONNECTION_TIMEOUT: 'Timed out' } }
+        });
+        const second = getOBSConnectionManager({
+            config: { address: 'ws://second:4455' }
+        });
+
+        expect(second).toBe(first);
+        expect(second.getConfig().address).toBe('ws://second:4455');
+    });
+
+    it('routes obsCall and ensureOBSConnected through the singleton manager', async () => {
+        const mockOBS = createMockOBS();
+        mockOBS.call.mockResolvedValue({ ok: true });
+        const manager = getOBSConnectionManager({
+            obs: mockOBS,
+            config: { address: 'ws://helper:4455', password: 'helper-pass', enabled: true, connectionTimeoutMs: 50 },
+            constants: { ERROR_MESSAGES: { OBS_CONNECTION_TIMEOUT: 'Timed out' } }
+        });
+
+        manager._isConnected = true;
+        let observedMaxWait: number | null = null;
+        manager.ensureConnected = createMockFn().mockImplementation(async (maxWait: number) => {
+            observedMaxWait = maxWait;
+        });
+
+        const response = await obsCall('GetSceneList', {});
+        await ensureOBSConnected(1234);
+
+        expect(response).toEqual({ ok: true });
+        expect(observedMaxWait).toBe(1234);
+    });
+
+    it('forwards event listener registration helpers to obs client methods', () => {
+        const mockOBS = createMockOBS();
+        const registeredHandlers = new Map<string, (...args: unknown[]) => void>();
+        mockOBS.on.mockImplementation((eventName: string, handler: (...args: unknown[]) => void) => {
+            registeredHandlers.set(eventName, handler);
+        });
+        mockOBS.off.mockImplementation((eventName: string, handler: (...args: unknown[]) => void) => {
+            if (registeredHandlers.get(eventName) === handler) {
+                registeredHandlers.delete(eventName);
+            }
+        });
+
+        const manager = new OBSConnectionManager(createDeps({ obs: mockOBS }));
+        const handler = () => {};
+
+        manager.addEventListener('ConnectionClosed', handler);
+        expect(registeredHandlers.get('ConnectionClosed')).toBe(handler);
+
+        manager.removeEventListener('ConnectionClosed', handler);
+        expect(registeredHandlers.has('ConnectionClosed')).toBe(false);
+    });
+
+    it('caches and clears scene item ids via helper methods', () => {
+        const manager = new OBSConnectionManager(createDeps());
+
+        manager.cacheSceneItemId('scene:source', 42);
+        expect(manager.getCachedSceneItemId('scene:source')).toBe(42);
+
+        manager.clearSceneItemCache();
+        expect(manager.getCachedSceneItemId('scene:source')).toBeUndefined();
     });
 });

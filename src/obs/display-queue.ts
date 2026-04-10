@@ -1,11 +1,19 @@
-const { logger } = require('../core/logging');
-const { validateDisplayConfig } = require('./display-config-validator');
-const { getDefaultSourcesManager } = require('./sources');
-const { getDefaultGoalsManager } = require('./goals');
-const MessageTTSHandler = require('../utils/message-tts-handler');
-const { createPlatformErrorHandler } = require('../utils/platform-error-handler');
-const { safeSetTimeout, safeDelay } = require('../utils/timeout-validator');
-const { PRIORITY_LEVELS, NOTIFICATION_CONFIGS } = require('../core/constants');
+import { createRequire } from 'node:module';
+import { logger } from '../core/logging';
+import { PRIORITY_LEVELS, NOTIFICATION_CONFIGS } from '../core/constants';
+import { createPlatformErrorHandler } from '../utils/platform-error-handler';
+import { safeSetTimeout, safeDelay } from '../utils/timeout-validator';
+import { validateDisplayConfig } from './display-config-validator';
+import { DisplayQueueState } from './display-queue-state';
+import { DisplayQueueEffects } from './display-queue-effects';
+import { DisplayRenderer } from './display-renderer';
+import { getDefaultGoalsManager } from './goals';
+import { getDefaultSourcesManager } from './sources';
+
+const nodeRequire = createRequire(import.meta.url);
+const MessageTTSHandler = nodeRequire('../utils/message-tts-handler') as {
+    createTTSStages: (data: Record<string, unknown>) => Array<{ text: string; delay: number }>;
+};
 
 let notificationTypeSet = null;
 const CHAT_TYPE = 'chat';
@@ -25,10 +33,6 @@ function isNotificationType(type) {
 function isChatType(type) {
     return type === CHAT_TYPE;
 }
-
-const { DisplayQueueState } = require('./display-queue-state');
-const { DisplayQueueEffects } = require('./display-queue-effects');
-const { DisplayRenderer } = require('./display-renderer');
 
 let displayQueueErrorHandler = logger ? createPlatformErrorHandler(logger, 'display-queue') : null;
 
@@ -596,9 +600,9 @@ function initializeDisplayQueue(obsManager, config = {}, constants = {}, eventBu
     return displayQueueInstance;
 }
 
-module.exports = {
+export {
     initializeDisplayQueue,
     DisplayQueue,
     isNotificationType,
     isChatType
-}; 
+};

@@ -1,7 +1,93 @@
+import { createRequire } from 'node:module';
+import { logger as defaultLogger } from '../core/logging';
+import { createPlatformErrorHandler } from '../utils/platform-error-handler';
+import { createGoalTracker } from '../utils/goal-tracker';
+import { getOBSConnectionManager } from './connection';
 
-const { createPlatformErrorHandler } = require('../utils/platform-error-handler');
+const nodeRequire = createRequire(import.meta.url);
+const { config: defaultConfig } = nodeRequire('../core/config') as {
+    config: {
+        goals: Record<string, unknown>;
+    };
+};
+const getDefaultSourcesManager = () => {
+    const { getDefaultSourcesManager: getter } = nodeRequire('./sources') as {
+        getDefaultSourcesManager: () => {
+            updateTextSource: (sourceName: string, text?: string) => Promise<void>;
+        };
+    };
 
-function buildGoalsManager(obsManager, dependencies = {}) {
+    return getter();
+};
+
+type GoalsLogger = typeof defaultLogger;
+
+type ObsManagerLike = {
+    isConnected: () => boolean;
+};
+
+type GoalTrackerLike = {
+    initializeGoalTracker: () => void | Promise<void>;
+    addDonationToGoal: (platform: string, amount: number) => {
+        success: boolean;
+        formatted?: string;
+        [key: string]: unknown;
+    } | Promise<{
+        success: boolean;
+        formatted?: string;
+        [key: string]: unknown;
+    }>;
+    addPaypiggyToGoal: (platform: string) => {
+        success: boolean;
+        formatted?: string;
+        [key: string]: unknown;
+    } | Promise<{
+        success: boolean;
+        formatted?: string;
+        [key: string]: unknown;
+    }>;
+    getGoalState: (platform: string) => {
+        formatted?: string;
+        [key: string]: unknown;
+    } | null;
+    getAllGoalStates: () => Record<string, { formatted?: string; [key: string]: unknown } | null>;
+};
+
+type GoalsConfig = {
+    goals: {
+        enabled?: boolean;
+        tiktokGoalEnabled?: boolean;
+        youtubeGoalEnabled?: boolean;
+        twitchGoalEnabled?: boolean;
+        tiktokGoalSource?: string;
+        youtubeGoalSource?: string;
+        twitchGoalSource?: string;
+        [key: string]: unknown;
+    };
+};
+
+type GoalsDependencies = {
+    logger?: GoalsLogger;
+    config?: GoalsConfig;
+    updateTextSource?: (sourceName: string, text?: string) => Promise<void>;
+    goalTracker?: GoalTrackerLike;
+    obsManager?: ObsManagerLike;
+    sourcesManager?: {
+        updateTextSource: (sourceName: string, text?: string) => Promise<void>;
+    };
+};
+
+type GoalsManager = {
+    initializeGoalDisplay: () => Promise<void>;
+    updateAllGoalDisplays: () => Promise<void>;
+    updateGoalDisplay: (platform: string, formattedText?: string) => Promise<void>;
+    processDonationGoal: (platform: unknown, amount: number) => Promise<{ success: boolean; error?: string; [key: string]: unknown }>;
+    processPaypiggyGoal: (platform: string) => Promise<{ success: boolean; error?: string; [key: string]: unknown }>;
+    getCurrentGoalStatus: (platform: string) => Record<string, unknown> | null;
+    getAllCurrentGoalStatuses: () => Record<string, unknown>;
+};
+
+function buildGoalsManager(obsManager: ObsManagerLike, dependencies: GoalsDependencies = {}): GoalsManager {
     if (!obsManager) {
         throw new Error('OBSGoalsManager requires OBSConnectionManager instance');
     }
@@ -9,14 +95,11 @@ function buildGoalsManager(obsManager, dependencies = {}) {
     if (!dependencies.config) {
         throw new Error('createOBSGoalsManager requires config in dependencies');
     }
-    
-    const { logger } = dependencies.logger ? { logger: dependencies.logger } : require('../core/logging');
+
+    const logger = dependencies.logger || defaultLogger;
     const config = dependencies.config;
 
-    const updateTextSource = dependencies.updateTextSource || (() => {
-        return require('./sources').getDefaultSourcesManager().updateTextSource;
-    })();
-    const { createGoalTracker } = require('../utils/goal-tracker');
+    const updateTextSource = dependencies.updateTextSource || getDefaultSourcesManager().updateTextSource;
     const goalTracker = dependencies.goalTracker || createGoalTracker({ logger, config });
     const initializeGoalTracker = goalTracker.initializeGoalTracker.bind(goalTracker);
     const addDonationToGoal = goalTracker.addDonationToGoal.bind(goalTracker);
@@ -26,7 +109,7 @@ function buildGoalsManager(obsManager, dependencies = {}) {
 
     let goalsErrorHandler = logger ? createPlatformErrorHandler(logger, 'obs-goals') : null;
 
-    function handleGoalsError(message, error = null, payload = null) {
+    function handleGoalsError(message: string, error: unknown = null, payload: Record<string, unknown> | null = null) {
         if (!goalsErrorHandler && logger) {
             goalsErrorHandler = createPlatformErrorHandler(logger, 'obs-goals');
         }
@@ -62,8 +145,9 @@ function buildGoalsManager(obsManager, dependencies = {}) {
 
             logger.debug('[Goals] Goal system initialized', 'goals');
         } catch (error) {
-            logger.debug(`[Goals] Error initializing goal display system: ${error.message}`, 'goals');
-            if (error.message.includes('OBS not connected')) {
+            const errorMessage = error instanceof Error ? error.message : String(error);
+            logger.debug(`[Goals] Error initializing goal display system: ${errorMessage}`, 'goals');
+            if (errorMessage.includes('OBS not connected')) {
                 logger.debug('[Goal Display] Goal display system initialized - waiting for OBS connection', 'goals');
             } else {
                 handleGoalsError('[Goal Display] Error initializing goal display system', error);
@@ -82,7 +166,7 @@ function buildGoalsManager(obsManager, dependencies = {}) {
             logger.debug('[Goal Display] Updating all goal displays...', 'goals');
 
             const allStates = getAllGoalStates();
-            const promises = [];
+            const promises: Array<Promise<void>> = [];
 
             if (config.goals.tiktokGoalEnabled && allStates.tiktok) {
                 promises.push(updateGoalDisplay('tiktok', allStates.tiktok.formatted));
@@ -100,7 +184,8 @@ function buildGoalsManager(obsManager, dependencies = {}) {
 
             logger.debug('[Goal Display] All goal displays updated successfully', 'goals');
         } catch (error) {
-            if (error.message.includes('OBS not connected')) {
+            const errorMessage = error instanceof Error ? error.message : String(error);
+            if (errorMessage.includes('OBS not connected')) {
                 logger.debug('[Goal Display] Goal display updates skipped - OBS not connected', 'goals');
             } else {
                 handleGoalsError('[Goal Display] Error updating all goal displays', error);
@@ -109,7 +194,7 @@ function buildGoalsManager(obsManager, dependencies = {}) {
         }
     }
 
-    async function updateGoalDisplay(platform, formattedText) {
+    async function updateGoalDisplay(platform: string, formattedText?: string) {
         try {
             if (!isOBSConnected()) {
                 logger.debug(`[Goal Display] OBS not connected, skipping ${platform} goal display update`, 'goals');
@@ -119,13 +204,15 @@ function buildGoalsManager(obsManager, dependencies = {}) {
             let finalText = formattedText;
             if (!finalText) {
                 const goalState = getGoalState(platform);
-                finalText = goalState?.formatted;
+                finalText = typeof goalState?.formatted === 'string' ? goalState.formatted : undefined;
             }
 
             const platformKey = platform.toLowerCase();
-            const platformCapitalized = platformKey === 'tiktok' ? 'TikTok' :
-                platformKey === 'youtube' ? 'YouTube' :
-                    platform.charAt(0).toUpperCase() + platform.slice(1);
+            const platformCapitalized = platformKey === 'tiktok'
+                ? 'TikTok'
+                : platformKey === 'youtube'
+                    ? 'YouTube'
+                    : `${platform.charAt(0).toUpperCase()}${platform.slice(1)}`;
             const enabledKey = `${platformKey}GoalEnabled`;
 
             if (!config.goals[enabledKey]) {
@@ -134,20 +221,20 @@ function buildGoalsManager(obsManager, dependencies = {}) {
             }
 
             let sourceName = '';
-
             switch (platformKey) {
                 case 'tiktok':
-                    sourceName = config.goals.tiktokGoalSource;
+                    sourceName = String(config.goals.tiktokGoalSource || '');
                     break;
                 case 'youtube':
-                    sourceName = config.goals.youtubeGoalSource;
+                    sourceName = String(config.goals.youtubeGoalSource || '');
                     break;
                 case 'twitch':
-                    sourceName = config.goals.twitchGoalSource;
+                    sourceName = String(config.goals.twitchGoalSource || '');
                     break;
                 default:
                     throw new Error(`Unknown platform: ${platform}`);
             }
+
             if (!sourceName) {
                 handleGoalsError('[Goal Display] Missing goal source configuration', null, {
                     platform,
@@ -157,12 +244,11 @@ function buildGoalsManager(obsManager, dependencies = {}) {
             }
 
             logger.debug(`[Goal Display] Updating ${platformCapitalized} goal display: "${finalText}"`, 'goals');
-
             await updateTextSource(sourceName, finalText);
-
             logger.debug(`[Goal Display] Successfully updated ${platformCapitalized} goal display`, 'goals');
         } catch (error) {
-            if (error.message.includes('OBS not connected')) {
+            const errorMessage = error instanceof Error ? error.message : String(error);
+            if (errorMessage.includes('OBS not connected')) {
                 logger.debug(`[Goal Display] ${platform} goal display update skipped - OBS not connected`, 'goals');
             } else {
                 handleGoalsError(`[Goal Display] Error updating ${platform} goal display`, error, { platform });
@@ -170,7 +256,7 @@ function buildGoalsManager(obsManager, dependencies = {}) {
         }
     }
 
-    async function processDonationGoal(platform, amount) {
+    async function processDonationGoal(platform: unknown, amount: number) {
         if (!platform || typeof platform !== 'string') {
             handleGoalsError('[Goal Display] processDonationGoal called with invalid platform', null, { platform, amount });
             return {
@@ -178,6 +264,7 @@ function buildGoalsManager(obsManager, dependencies = {}) {
                 error: 'Invalid platform passed to processDonationGoal'
             };
         }
+
         try {
             if (!config.goals.enabled) {
                 logger.debug('[Goal Display] Goal system disabled, skipping donation processing', 'goals');
@@ -188,7 +275,6 @@ function buildGoalsManager(obsManager, dependencies = {}) {
             }
 
             const platformKey = platform.toLowerCase();
-
             if (!config.goals[`${platformKey}GoalEnabled`]) {
                 logger.debug(`[Goal Display] ${platform} goal disabled, skipping donation processing`, 'goals');
                 return {
@@ -200,7 +286,6 @@ function buildGoalsManager(obsManager, dependencies = {}) {
             logger.debug(`[Goal Display] Processing ${amount} ${platform} donation for goal`, 'goals');
 
             const updatedState = await addDonationToGoal(platform, amount);
-
             if (!updatedState.success) {
                 return updatedState;
             }
@@ -210,7 +295,8 @@ function buildGoalsManager(obsManager, dependencies = {}) {
                     await updateGoalDisplay(platform, updatedState.formatted);
                     logger.debug(`[Goal Display] ${platform} goal updated: ${updatedState.formatted}`, 'goals');
                 } catch (obsError) {
-                    if (obsError.message.includes('OBS not connected')) {
+                    const obsErrorMessage = obsError instanceof Error ? obsError.message : String(obsError);
+                    if (obsErrorMessage.includes('OBS not connected')) {
                         logger.debug(`[Goal Display] ${platform} goal state updated - OBS display will update when OBS connects`, 'goals');
                     } else {
                         handleGoalsError(`[Goal Display] OBS update failed for ${platform} goal, but goal state was updated`, obsError, { platform });
@@ -225,12 +311,12 @@ function buildGoalsManager(obsManager, dependencies = {}) {
             handleGoalsError(`[Goal Display] Error processing ${platform} donation goal`, error, { platform });
             return {
                 success: false,
-                error: `Failed to process donation goal: ${error.message}`
+                error: `Failed to process donation goal: ${error instanceof Error ? error.message : String(error)}`
             };
         }
     }
 
-    async function processPaypiggyGoal(platform) {
+    async function processPaypiggyGoal(platform: string) {
         try {
             if (!config.goals.enabled) {
                 logger.debug('[Goal Display] Goal system disabled, skipping paypiggy processing', 'goals');
@@ -241,7 +327,6 @@ function buildGoalsManager(obsManager, dependencies = {}) {
             }
 
             const platformKey = platform.toLowerCase();
-
             if (!config.goals[`${platformKey}GoalEnabled`]) {
                 logger.debug(`[Goal Display] ${platform} goal disabled, skipping paypiggy processing`, 'goals');
                 return {
@@ -253,7 +338,6 @@ function buildGoalsManager(obsManager, dependencies = {}) {
             logger.debug(`[Goal Display] Processing ${platform} paypiggy for goal`, 'goals');
 
             const updatedState = await addPaypiggyToGoal(platform);
-
             if (!updatedState.success) {
                 return updatedState;
             }
@@ -263,7 +347,8 @@ function buildGoalsManager(obsManager, dependencies = {}) {
                     await updateGoalDisplay(platform, updatedState.formatted);
                     logger.debug(`[Goal Display] ${platform} goal updated with paypiggy: ${updatedState.formatted}`, 'goals');
                 } catch (obsError) {
-                    if (obsError.message.includes('OBS not connected')) {
+                    const obsErrorMessage = obsError instanceof Error ? obsError.message : String(obsError);
+                    if (obsErrorMessage.includes('OBS not connected')) {
                         logger.debug(`[Goal Display] ${platform} paypiggy goal state updated - OBS display will update when OBS connects`, 'goals');
                     } else {
                         handleGoalsError(`[Goal Display] OBS update failed for ${platform} paypiggy goal, but goal state was updated`, obsError, { platform });
@@ -278,19 +363,18 @@ function buildGoalsManager(obsManager, dependencies = {}) {
             handleGoalsError(`[Goal Display] Error processing ${platform} paypiggy goal`, error, { platform });
             return {
                 success: false,
-                error: `Failed to process paypiggy goal: ${error.message}`
+                error: `Failed to process paypiggy goal: ${error instanceof Error ? error.message : String(error)}`
             };
         }
     }
 
-    function getCurrentGoalStatus(platform) {
+    function getCurrentGoalStatus(platform: string) {
         try {
             if (!config.goals.enabled) {
                 return null;
             }
 
             const platformKey = platform.toLowerCase();
-
             if (!config.goals[`${platformKey}GoalEnabled`]) {
                 return null;
             }
@@ -309,7 +393,7 @@ function buildGoalsManager(obsManager, dependencies = {}) {
             }
 
             const allStates = getAllGoalStates();
-            const enabledStates = {};
+            const enabledStates: Record<string, unknown> = {};
 
             if (config.goals.tiktokGoalEnabled && allStates.tiktok) {
                 enabledStates.tiktok = allStates.tiktok;
@@ -342,28 +426,23 @@ function buildGoalsManager(obsManager, dependencies = {}) {
 }
 
 class OBSGoalsManager {
-    constructor(obsManager, dependencies = {}) {
+    constructor(obsManager: ObsManagerLike, dependencies: GoalsDependencies = {}) {
         const manager = buildGoalsManager(obsManager, dependencies);
         Object.assign(this, manager);
     }
 }
 
-let defaultInstance = null;
+let defaultInstance: GoalsManager | null = null;
 
-function getDefaultGoalsManager(dependencies = {}) {
+function getDefaultGoalsManager(dependencies: GoalsDependencies = {}) {
     if (!defaultInstance) {
-        const { getOBSConnectionManager } = require('./connection');
-        const { logger } = require('../core/logging');
-        const { config } = require('../core/config');
-        const { getDefaultSourcesManager } = require('./sources');
-        const { createGoalTracker } = require('../utils/goal-tracker');
-
+        const logger = dependencies.logger || defaultLogger;
+        const config = dependencies.config || defaultConfig;
         const obsManager = dependencies.obsManager || getOBSConnectionManager() || {
             isConnected: () => false
         };
 
         const sourcesManager = dependencies.sourcesManager || getDefaultSourcesManager();
-
         defaultInstance = buildGoalsManager(obsManager, {
             logger,
             config,
@@ -374,11 +453,11 @@ function getDefaultGoalsManager(dependencies = {}) {
     return defaultInstance;
 }
 
-function createOBSGoalsManager(obsManager, dependencies = {}) {
+function createOBSGoalsManager(obsManager: ObsManagerLike, dependencies: GoalsDependencies = {}) {
     return buildGoalsManager(obsManager, dependencies);
 }
 
-module.exports = {
+export {
     OBSGoalsManager,
     createOBSGoalsManager,
     getDefaultGoalsManager

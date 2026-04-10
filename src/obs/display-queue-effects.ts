@@ -1,12 +1,125 @@
-const crypto = require('crypto');
-const { logger } = require('../core/logging');
-const MessageTTSHandler = require('../utils/message-tts-handler');
-const { safeDelay } = require('../utils/timeout-validator');
-const { PlatformEvents } = require('../interfaces/PlatformEvents');
-const { triggerHandcamGlow } = require('./handcam-glow');
-const { createTikTokGiftAnimationResolver } = require('../services/tiktok-gift-animation/resolver');
+import crypto from 'node:crypto';
+import { createRequire } from 'node:module';
+import { logger } from '../core/logging';
+import { safeDelay } from '../utils/timeout-validator';
+import { triggerHandcamGlow } from './handcam-glow';
+
+const nodeRequire = createRequire(import.meta.url);
+const { createTikTokGiftAnimationResolver } = nodeRequire('../services/tiktok-gift-animation/resolver') as {
+    createTikTokGiftAnimationResolver: (deps: { logger: typeof logger }) => {
+        resolveFromNotificationData: (data: unknown) => Promise<{
+            durationMs: number;
+            mediaFilePath: string;
+            mediaContentType: string;
+            animationConfig: Record<string, unknown>;
+        } | null>;
+    };
+};
+const MessageTTSHandler = nodeRequire('../utils/message-tts-handler') as {
+    createTTSStages: (data: Record<string, unknown>) => Array<{ text: string; delay: number; type?: string }>;
+};
+const { PlatformEvents } = nodeRequire('../interfaces/PlatformEvents') as {
+    PlatformEvents: {
+        VFX_EFFECT_COMPLETED: string;
+        VFX_COMMAND_EXECUTED: string;
+        VFX_COMMAND_RECEIVED: string;
+    };
+};
+
+type QueueItemData = Record<string, unknown> & {
+    username?: string;
+    userId?: string;
+    amount?: unknown;
+    currency?: unknown;
+    giftCount?: unknown;
+    isError?: boolean;
+    goalProcessed?: boolean;
+};
+
+type QueueItem = {
+    type: string;
+    platform?: string;
+    data: QueueItemData;
+    vfxConfig?: Record<string, unknown>;
+    secondaryVfxConfig?: Record<string, unknown>;
+    holdDurationMs?: number;
+};
+
+type TtsStage = {
+    text: string;
+    delay: number;
+    type?: string;
+};
+
+type VfxMatch = {
+    commandKey: string;
+    filename: string;
+    mediaSource: string;
+    command: string;
+    correlationId?: string;
+};
+
+type DisplayQueueEffectsDependencies = {
+    obsManager: {
+        call: (requestType: string, payload: Record<string, unknown>) => Promise<unknown>;
+    };
+    sourcesManager: {
+        clearTextSource: (sourceName: string) => Promise<void>;
+        updateTextSource: (sourceName: string, text: string) => Promise<void>;
+    };
+    goalsManager: {
+        processDonationGoal: (platform: string, amount: number) => Promise<unknown>;
+    };
+    eventBus?: {
+        emit: (eventName: string, payload: Record<string, unknown>) => void;
+        subscribe?: (eventName: string, handler: (payload: Record<string, unknown>) => void) => () => void;
+        on?: (eventName: string, handler: (payload: Record<string, unknown>) => void) => void;
+        off?: (eventName: string, handler: (payload: Record<string, unknown>) => void) => void;
+    } | null;
+    config: {
+        ttsEnabled?: boolean;
+        obs: {
+            ttsTxt: string;
+        };
+        handcam?: {
+            enabled?: boolean;
+        } & Parameters<typeof triggerHandcamGlow>[1];
+        gifts?: {
+            giftVideoSource?: string;
+            giftAudioSource?: string;
+        };
+        gui?: {
+            enableDock?: boolean;
+            enableOverlay?: boolean;
+            showGifts?: boolean;
+        };
+    };
+    delay: (ms: number) => Promise<void>;
+    handleDisplayQueueError: (message: string, error?: unknown, payload?: Record<string, unknown>) => void;
+    triggerHandcamGlow?: typeof triggerHandcamGlow;
+    extractUsername: (data: Record<string, unknown> | null | undefined) => string | null;
+    giftAnimationResolver?: {
+        resolveFromNotificationData: (data: unknown) => Promise<{
+            durationMs: number;
+            mediaFilePath: string;
+            mediaContentType: string;
+            animationConfig: Record<string, unknown>;
+        } | null>;
+    };
+};
 
 class DisplayQueueEffects {
+    obsManager: DisplayQueueEffectsDependencies['obsManager'];
+    sourcesManager: DisplayQueueEffectsDependencies['sourcesManager'];
+    goalsManager: DisplayQueueEffectsDependencies['goalsManager'];
+    eventBus: DisplayQueueEffectsDependencies['eventBus'];
+    config: DisplayQueueEffectsDependencies['config'];
+    delay: DisplayQueueEffectsDependencies['delay'];
+    handleDisplayQueueError: DisplayQueueEffectsDependencies['handleDisplayQueueError'];
+    triggerHandcamGlow: typeof triggerHandcamGlow;
+    extractUsername: DisplayQueueEffectsDependencies['extractUsername'];
+    giftAnimationResolver: NonNullable<DisplayQueueEffectsDependencies['giftAnimationResolver']>;
+
     constructor({
         obsManager,
         sourcesManager,
@@ -18,11 +131,11 @@ class DisplayQueueEffects {
         triggerHandcamGlow: triggerHandcamGlowOverride,
         extractUsername,
         giftAnimationResolver
-    }) {
+    }: DisplayQueueEffectsDependencies) {
         this.obsManager = obsManager;
         this.sourcesManager = sourcesManager;
         this.goalsManager = goalsManager;
-        this.eventBus = eventBus;
+        this.eventBus = eventBus || null;
         this.config = config;
         this.delay = delay;
         this.handleDisplayQueueError = handleDisplayQueueError;
@@ -49,14 +162,14 @@ class DisplayQueueEffects {
         };
     }
 
-    logDebug(message, data = null) {
+    logDebug(message: string, data: Record<string, unknown> | null = null) {
         if (!logger || typeof logger.debug !== 'function') {
             return;
         }
         logger.debug(message, 'display-queue', data);
     }
 
-    async resolveAndEmitGiftAnimation(item) {
+    async resolveAndEmitGiftAnimation(item: QueueItem) {
         if (!this.eventBus || item?.type !== 'platform:gift' || item?.platform !== 'tiktok') {
             return 0;
         }
@@ -110,13 +223,13 @@ class DisplayQueueEffects {
         return this.config.ttsEnabled === true;
     }
 
-    async setTTSText(text) {
+    async setTTSText(text: string) {
         await this.sourcesManager.clearTextSource(this.config.obs.ttsTxt);
         await this.delay(50);
         await this.sourcesManager.updateTextSource(this.config.obs.ttsTxt, text);
     }
 
-    async handleNotificationEffects(item) {
+    async handleNotificationEffects(item: QueueItem) {
         try {
             const username = this.extractUsername(item?.data);
             logger.debug(`[Display Queue] Processing notification effects for ${item?.type} from ${username}`, 'display-queue');
@@ -138,7 +251,7 @@ class DisplayQueueEffects {
         }
     }
 
-    async processGiftGoal(item) {
+    async processGiftGoal(item: QueueItem) {
         if (!item?.data || item.data.isError) {
             return;
         }
@@ -166,7 +279,7 @@ class DisplayQueueEffects {
                     throw new Error('Gift goal tracking requires giftCount');
                 }
             }
-            await this.goalsManager.processDonationGoal(item.platform, totalGiftValue);
+            await this.goalsManager.processDonationGoal(item.platform || '', totalGiftValue);
             if (currencyValue === 'bits') {
                 logger.debug(`[Display Queue] Goal tracking processed for ${item.platform}: ${totalGiftValue} bits`, 'display-queue');
             } else if (currencyValue === 'coins') {
@@ -181,10 +294,10 @@ class DisplayQueueEffects {
         }
     }
 
-    async handleGiftEffects(item, ttsStages) {
+    async handleGiftEffects(item: QueueItem, ttsStages: TtsStage[]) {
         const username = this.extractUsername(item.data);
         logger.debug(`[Display Queue] Gift notification - concurrent execution for ${username}`, 'display-queue');
-        const allPromises = [];
+        const allPromises: Array<Promise<unknown>> = [];
         const animationPromise = this.resolveAndEmitGiftAnimation(item)
             .then((animationDurationMs) => {
                 if (!(animationDurationMs > 0)) {
@@ -205,7 +318,7 @@ class DisplayQueueEffects {
             });
         const vfxConfig = item.vfxConfig;
         const hasVfx = !!(this.eventBus && vfxConfig);
-        let vfxMatch = null;
+        let vfxMatch: VfxMatch | null = null;
         if (hasVfx) {
             try {
                 vfxMatch = this.buildVfxMatch(vfxConfig);
@@ -222,9 +335,10 @@ class DisplayQueueEffects {
 
         allPromises.push(this.playGiftVideoAndAudio());
 
-        if (this.config.handcam?.enabled) {
+        const handcamConfig = this.config.handcam;
+        if (handcamConfig?.enabled) {
             allPromises.push(Promise.resolve().then(() => {
-                this.triggerHandcamGlow(this.obsManager, this.config.handcam);
+                this.triggerHandcamGlow(this.obsManager, handcamConfig);
             }).catch(err => {
                 this.handleDisplayQueueError('[Gift] Error activating handcam glow', err);
             }));
@@ -243,9 +357,10 @@ class DisplayQueueEffects {
             }
         }
 
-        if (vfxMatch) {
+        const eventBus = this.eventBus;
+        if (vfxMatch && eventBus && vfxConfig) {
             const vfxPromise = this.delay(2000).then(() => {
-                let payload;
+                let payload: Record<string, unknown> | undefined;
                 try {
                     const { command, commandKey, filename, mediaSource, vfxFilePath } = vfxConfig;
                     if (!command || !commandKey || !filename || !mediaSource || !vfxFilePath) {
@@ -271,7 +386,7 @@ class DisplayQueueEffects {
                         vfxConfig
                     };
 
-                    this.eventBus.emit(PlatformEvents.VFX_COMMAND_RECEIVED, payload);
+                    eventBus.emit(PlatformEvents.VFX_COMMAND_RECEIVED, payload);
                 } catch (error) {
                     this.handleDisplayQueueError('[Gift] Error emitting VFX command', error, payload);
                 }
@@ -283,20 +398,21 @@ class DisplayQueueEffects {
         await animationPromise;
     }
 
-    async handleSequentialEffects(item, ttsStages) {
+    async handleSequentialEffects(item: QueueItem, ttsStages: TtsStage[]) {
         const username = this.extractUsername(item.data);
         logger.debug(`[Display Queue] Sequential notification - VFX-first execution for ${username}`, 'display-queue');
 
-        let completionResult = null;
+        let completionResult: { reason: string; payload?: Record<string, unknown> } | null = null;
         const vfxConfig = item.vfxConfig;
         const hasVfx = !!(this.eventBus && vfxConfig);
 
-        let match = null;
+        let match: VfxMatch | null = null;
         if (hasVfx) {
             try {
                 match = this.buildVfxMatch(vfxConfig);
             } catch (error) {
-                logger.warn(`[Display Queue] VFX match build failed: ${error.message}`, 'display-queue');
+                const errorMessage = error instanceof Error ? error.message : String(error);
+                logger.warn(`[Display Queue] VFX match build failed: ${errorMessage}`, 'display-queue');
                 match = null;
             }
             if (match) {
@@ -305,24 +421,26 @@ class DisplayQueueEffects {
                     match.correlationId = emitResult.match.correlationId;
                 }
                 completionResult = emitResult.error
-                    ? Promise.resolve(null)
+                    ? null
                     : await this.waitForVfxCompletion(match);
             }
         }
 
-        if (item.type === 'greeting' && item.secondaryVfxConfig) {
-            let secondaryMatch = null;
+        const secondaryVfxConfig = item.secondaryVfxConfig;
+        if (item.type === 'greeting' && secondaryVfxConfig) {
+            let secondaryMatch: VfxMatch | null = null;
             try {
-                secondaryMatch = this.buildVfxMatch(item.secondaryVfxConfig);
+                secondaryMatch = this.buildVfxMatch(secondaryVfxConfig);
             } catch (error) {
-                logger.warn(`[Display Queue] Secondary greeting VFX match build failed: ${error.message}`, 'display-queue');
+                const errorMessage = error instanceof Error ? error.message : String(error);
+                logger.warn(`[Display Queue] Secondary greeting VFX match build failed: ${errorMessage}`, 'display-queue');
                 secondaryMatch = null;
             }
 
             if (secondaryMatch) {
                 const emitResult = await this.emitVfxFromConfig({
                     ...item,
-                    vfxConfig: item.secondaryVfxConfig
+                    vfxConfig: secondaryVfxConfig
                 }, username);
                 if (emitResult.emitted && emitResult.match?.correlationId) {
                     secondaryMatch.correlationId = emitResult.match.correlationId;
@@ -348,13 +466,13 @@ class DisplayQueueEffects {
 
     async playGiftVideoAndAudio() {
         try {
-            const { giftVideoSource, giftAudioSource } = this.config.gifts;
+            const { giftVideoSource, giftAudioSource } = this.config.gifts || {};
             if (!giftVideoSource || !giftAudioSource) {
                 this.handleDisplayQueueError('[Gift] Gift media sources not configured; skipping gift media');
                 return false;
             }
 
-            const promises = [];
+            const promises: Array<Promise<unknown>> = [];
 
             promises.push(this.obsManager.call('TriggerMediaInputAction', {
                 inputName: giftVideoSource,
@@ -380,11 +498,14 @@ class DisplayQueueEffects {
         }
     }
 
-    buildVfxMatch(config) {
+    buildVfxMatch(config: Record<string, unknown>): VfxMatch {
         if (!config || typeof config !== 'object') {
             throw new Error('VFX match requires config object');
         }
-        const { commandKey, filename, mediaSource, command } = config;
+        const commandKey = typeof config.commandKey === 'string' ? config.commandKey : '';
+        const filename = typeof config.filename === 'string' ? config.filename : '';
+        const mediaSource = typeof config.mediaSource === 'string' ? config.mediaSource : '';
+        const command = typeof config.command === 'string' ? config.command : '';
         if (!commandKey || !filename || !mediaSource || !command) {
             throw new Error('VFX match requires commandKey, filename, mediaSource, and command');
         }
@@ -396,7 +517,7 @@ class DisplayQueueEffects {
         };
     }
 
-    async waitForVfxCompletion(match = {}, options = {}) {
+    async waitForVfxCompletion(match: Partial<VfxMatch> = {}, options: { timeoutMs?: number } = {}) {
         const noEventBus = !this.eventBus || (!this.eventBus.subscribe && !this.eventBus.on);
         if (noEventBus) {
             logger.debug('[DisplayQueue] EventBus not available for VFX completion wait', 'display-queue', { match });
@@ -405,20 +526,25 @@ class DisplayQueueEffects {
 
         const timeoutMs = typeof options.timeoutMs === 'number' ? options.timeoutMs : 10000;
         const eventNames = [PlatformEvents.VFX_EFFECT_COMPLETED, PlatformEvents.VFX_COMMAND_EXECUTED];
-        const subscribe = (eventName, handler) => {
-            if (typeof this.eventBus.subscribe === 'function') {
-                return this.eventBus.subscribe(eventName, handler);
+        const eventBus = this.eventBus;
+        const subscribe = (eventName: string, handler: (payload: Record<string, unknown>) => void) => {
+            if (eventBus && typeof eventBus.subscribe === 'function') {
+                return eventBus.subscribe(eventName, handler);
             }
-            if (typeof this.eventBus.on === 'function') {
-                this.eventBus.on(eventName, handler);
-                return () => this.eventBus.off(eventName, handler);
+            if (eventBus && typeof eventBus.on === 'function') {
+                eventBus.on(eventName, handler);
+                return () => {
+                    if (typeof eventBus.off === 'function') {
+                        eventBus.off(eventName, handler);
+                    }
+                };
             }
             return () => {};
         };
 
-        return new Promise((resolve) => {
+        return new Promise<{ reason: string; payload?: Record<string, unknown> }>((resolve) => {
             let resolved = false;
-            const unsubscribeFns = [];
+            const unsubscribeFns: Array<() => void> = [];
 
             const cleanup = () => {
                 unsubscribeFns.forEach(unsub => {
@@ -430,15 +556,16 @@ class DisplayQueueEffects {
                 });
             };
 
-            const matches = (payload = {}) => {
-                if (match.correlationId && payload.correlationId && match.correlationId === payload.correlationId) {
+            const matches = (payload: Record<string, unknown> = {}) => {
+                const payloadCorrelationId = typeof payload.correlationId === 'string' ? payload.correlationId : null;
+                if (match.correlationId && payloadCorrelationId && match.correlationId === payloadCorrelationId) {
                     return true;
                 }
 
-                const payloadKey = payload.commandKey;
-                const payloadCommand = payload.command;
-                const payloadFile = payload.filename;
-                const payloadSource = payload.mediaSource;
+                const payloadKey = typeof payload.commandKey === 'string' ? payload.commandKey : null;
+                const payloadCommand = typeof payload.command === 'string' ? payload.command : null;
+                const payloadFile = typeof payload.filename === 'string' ? payload.filename : null;
+                const payloadSource = typeof payload.mediaSource === 'string' ? payload.mediaSource : null;
 
                 const byKey = match.commandKey && payloadKey && match.commandKey === payloadKey;
                 const byCommand = match.command && payloadCommand && match.command === payloadCommand;
@@ -448,7 +575,7 @@ class DisplayQueueEffects {
                 return byKey || byCommand || byFile || bySource;
             };
 
-            const handler = (payload) => {
+            const handler = (payload: Record<string, unknown>) => {
                 if (resolved) {
                     return;
                 }
@@ -475,13 +602,13 @@ class DisplayQueueEffects {
         });
     }
 
-    async emitVfxFromConfig(item, username) {
+    async emitVfxFromConfig(item: QueueItem, username: string | null) {
         const vfxConfig = item && item.vfxConfig ? item.vfxConfig : null;
         if (!this.eventBus || !vfxConfig) {
             return { emitted: false, match: null };
         }
 
-        let payload;
+        let payload: Record<string, unknown> | undefined;
         try {
             const { command, commandKey, filename, mediaSource, vfxFilePath } = vfxConfig;
             if (!command || !commandKey || !filename || !mediaSource || !vfxFilePath) {
@@ -519,6 +646,6 @@ class DisplayQueueEffects {
 
 }
 
-module.exports = {
+export {
     DisplayQueueEffects
 };

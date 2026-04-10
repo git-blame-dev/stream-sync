@@ -1,7 +1,42 @@
-const { safeOBSOperation } = require('./safe-operations');
+import { createRequire } from 'node:module';
+import { safeOBSOperation } from './safe-operations';
+import { safeDelay } from '../utils/timeout-validator';
+import { createPlatformErrorHandler } from '../utils/platform-error-handler';
 
-const { safeDelay } = require('../utils/timeout-validator');
-const { createPlatformErrorHandler } = require('../utils/platform-error-handler');
+const nodeRequire = createRequire(import.meta.url);
+
+type SourcesLogger = {
+    debug: (...args: unknown[]) => void;
+    warn: (...args: unknown[]) => void;
+};
+
+type SourcesObsManager = {
+    ensureConnected?: () => Promise<void>;
+    call?: (requestType: string, payload?: Record<string, unknown>) => Promise<unknown>;
+    addEventListener?: (...args: unknown[]) => void;
+    removeEventListener?: (...args: unknown[]) => void;
+    isConnected?: () => boolean;
+    isReady?: () => Promise<boolean>;
+};
+
+type SourcesDependencies = {
+    logger?: SourcesLogger;
+    logging?: { logger?: SourcesLogger };
+    ensureOBSConnected?: () => Promise<void>;
+    obsCall?: (requestType: string, payload?: Record<string, unknown>) => Promise<unknown>;
+    connection?: {
+        ensureOBSConnected?: () => Promise<void>;
+        obsCall?: (requestType: string, payload?: Record<string, unknown>) => Promise<unknown>;
+        getOBSConnectionManager?: () => SourcesObsManager;
+    };
+    chatGroupName?: string;
+    notificationGroupName?: string;
+    fadeDelay?: number;
+    utils?: {
+        delay?: (ms: number) => Promise<void>;
+        sanitizeDisplayName?: (name: string, maxLength: number) => string;
+    };
+};
 
 function sanitizeForOBS(text) {
     if (!text || typeof text !== 'string') {
@@ -11,12 +46,12 @@ function sanitizeForOBS(text) {
     return text.replace(/[^\x20-\x7E]/g, '');
 }
 
-function createOBSSourcesManager(obsManager, dependencies = {}) {
+function createOBSSourcesManager(obsManager: SourcesObsManager, dependencies: SourcesDependencies = {}) {
     if (!obsManager) {
         throw new Error('OBSSourcesManager requires OBSConnectionManager instance');
     }
 
-    const logger = dependencies.logger || dependencies.logging?.logger || require('../core/logging').logger;
+    const logger = dependencies.logger || dependencies.logging?.logger || nodeRequire('../core/logging').logger;
     const ensureOBSConnected = dependencies.ensureOBSConnected ||
         dependencies.connection?.ensureOBSConnected ||
         obsManager.ensureConnected?.bind(obsManager) ||
@@ -36,11 +71,11 @@ function createOBSSourcesManager(obsManager, dependencies = {}) {
 
     const utils = dependencies.utils || {};
     const delay = utils.delay || ((ms) => safeDelay(ms, ms || 500, 'OBS sources delay'));
-    const sanitizeDisplayName = utils.sanitizeDisplayName || require('../utils/validation').sanitizeDisplayName;
+    const sanitizeDisplayName = utils.sanitizeDisplayName || nodeRequire('../utils/validation').sanitizeDisplayName;
 
     let sourcesErrorHandler = logger ? createPlatformErrorHandler(logger, 'obs-sources') : null;
 
-    const handleSourcesError = (message, error, payload = null) => {
+    const handleSourcesError = (message: string, error: unknown, payload: Record<string, unknown> | null = null) => {
         if (!sourcesErrorHandler && logger) {
             sourcesErrorHandler = createPlatformErrorHandler(logger, 'obs-sources');
         }
@@ -518,7 +553,7 @@ function createOBSSourcesManager(obsManager, dependencies = {}) {
 }
 
 class OBSSourcesManager {
-    constructor(obsManager, dependencies = {}) {
+    constructor(obsManager: SourcesObsManager, dependencies: SourcesDependencies = {}) {
         const manager = createOBSSourcesManager(obsManager, dependencies);
         Object.assign(this, manager);
     }
@@ -528,9 +563,34 @@ let defaultInstance = null;
 
 function getDefaultSourcesManager() {
     if (!defaultInstance) {
-        const { logger } = require('../core/logging');
-        const { config } = require('../core/config');
-        const { ensureOBSConnected, obsCall, getOBSConnectionManager } = require('./connection');
+        const { logger } = nodeRequire('../core/logging') as {
+            logger: {
+                warn: (...args: unknown[]) => void;
+                debug: (...args: unknown[]) => void;
+            };
+        };
+        const { config } = nodeRequire('../core/config') as {
+            config: {
+                obs: {
+                    chatMsgGroup: string;
+                    notificationMsgGroup: string;
+                };
+                timing: {
+                    fadeDuration: number;
+                };
+            };
+        };
+        const { ensureOBSConnected, obsCall, getOBSConnectionManager } = nodeRequire('./connection') as {
+            ensureOBSConnected: () => Promise<void>;
+            obsCall: (requestType: string, payload?: Record<string, unknown>) => Promise<unknown>;
+            getOBSConnectionManager: () => {
+                ensureConnected: () => Promise<void>;
+                call: (requestType: string, payload?: Record<string, unknown>) => Promise<unknown>;
+                addEventListener: (...args: unknown[]) => void;
+                removeEventListener: (...args: unknown[]) => void;
+                isConnected: () => boolean;
+            };
+        };
 
         const chatGroupName = config.obs.chatMsgGroup;
         const notificationGroupName = config.obs.notificationMsgGroup;
@@ -574,9 +634,9 @@ function getDefaultSourcesManager() {
     return defaultInstance;
 }
 
-module.exports = {
+export {
     OBSSourcesManager,
     createOBSSourcesManager,
     getDefaultSourcesManager,
     sanitizeForOBS
-}; 
+};
