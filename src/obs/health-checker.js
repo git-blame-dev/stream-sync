@@ -1,1 +1,1 @@
-module.exports = require('./health-checker.ts');
+module.exports = require('./health-checker.ts').OBSHealthChecker;

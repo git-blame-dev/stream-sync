@@ -3,7 +3,13 @@ const { createMockFn } = require('../../helpers/bun-mock-utils');
 const { noOpLogger } = require('../../helpers/mock-factories');
 const { createHandcamConfigFixture } = require('../../helpers/config-fixture');
 
-const handcamGlow = require('../../../src/obs/handcam-glow.ts');
+const {
+    triggerHandcamGlow,
+    initializeHandcamGlow,
+    setTestingDependencies,
+    resetTestingDependencies
+} = require('../../../src/obs/handcam-glow.ts');
+const handcamGlowCompatModule = require('../../../src/obs/handcam-glow.js');
 
 describe('handcam-glow', () => {
     let mockLogger;
@@ -15,7 +21,7 @@ describe('handcam-glow', () => {
         mockEnsureConnected = createMockFn().mockResolvedValue();
         mockDelay = createMockFn().mockResolvedValue();
 
-        handcamGlow._testing.setDependencies({
+        setTestingDependencies({
             logger: mockLogger,
             ensureConnected: mockEnsureConnected,
             delay: mockDelay
@@ -23,13 +29,13 @@ describe('handcam-glow', () => {
     });
 
     afterEach(() => {
-        handcamGlow._testing.resetDependencies();
+        resetTestingDependencies();
     });
 
     it('skips initialization when disabled in config', async () => {
         const obs = { call: createMockFn() };
 
-        await handcamGlow.initializeHandcamGlow(obs, createHandcamConfigFixture({ enabled: false }));
+        await initializeHandcamGlow(obs, createHandcamConfigFixture({ enabled: false }));
 
         expect(obs.call).not.toHaveBeenCalled();
     });
@@ -44,7 +50,7 @@ describe('handcam-glow', () => {
             })
         };
 
-        await handcamGlow.initializeHandcamGlow(
+        await initializeHandcamGlow(
             obs,
             createHandcamConfigFixture({ sourceName: 'testCam', glowFilterName: 'testGlow' })
         );
@@ -59,7 +65,7 @@ describe('handcam-glow', () => {
     it('handles initialization failure gracefully without throwing', async () => {
         const obs = { call: createMockFn().mockRejectedValue(new Error('OBS filter not found')) };
 
-        await expect(handcamGlow.initializeHandcamGlow(
+        await expect(initializeHandcamGlow(
             obs,
             createHandcamConfigFixture({ sourceName: 'testCam', glowFilterName: 'testGlow' })
         )).resolves.toBeUndefined();
@@ -80,7 +86,7 @@ describe('handcam-glow', () => {
             })
         };
 
-        handcamGlow.triggerHandcamGlow(obs, createHandcamConfigFixture({ totalSteps: 1 }));
+        triggerHandcamGlow(obs, createHandcamConfigFixture({ totalSteps: 1 }));
         await new Promise(resolve => setImmediate(resolve));
         await new Promise(resolve => setImmediate(resolve));
         await new Promise(resolve => setImmediate(resolve));
@@ -112,7 +118,7 @@ describe('handcam-glow', () => {
             })
         };
 
-        handcamGlow.triggerHandcamGlow(obs, createHandcamConfigFixture({ totalSteps: 1 }));
+        triggerHandcamGlow(obs, createHandcamConfigFixture({ totalSteps: 1 }));
         await new Promise(resolve => setImmediate(resolve));
         await new Promise(resolve => setImmediate(resolve));
         await new Promise(resolve => setImmediate(resolve));
@@ -123,13 +129,20 @@ describe('handcam-glow', () => {
 
     it('triggers fire-and-forget glow without throwing', async () => {
         const obs = { call: createMockFn() };
-        expect(() => handcamGlow.triggerHandcamGlow(obs, createHandcamConfigFixture())).not.toThrow();
+        expect(() => triggerHandcamGlow(obs, createHandcamConfigFixture())).not.toThrow();
         await new Promise(resolve => setImmediate(resolve));
     });
 
     it('ignores trigger when disabled', () => {
         const obs = { call: createMockFn() };
-        handcamGlow.triggerHandcamGlow(obs, createHandcamConfigFixture({ enabled: false }));
+        triggerHandcamGlow(obs, createHandcamConfigFixture({ enabled: false }));
         expect(obs.call).not.toHaveBeenCalled();
+    });
+
+    it('preserves named exports through the commonjs compatibility wrapper', () => {
+        expect(handcamGlowCompatModule.triggerHandcamGlow).toBe(triggerHandcamGlow);
+        expect(handcamGlowCompatModule.initializeHandcamGlow).toBe(initializeHandcamGlow);
+        expect(handcamGlowCompatModule.setTestingDependencies).toBe(setTestingDependencies);
+        expect(handcamGlowCompatModule.resetTestingDependencies).toBe(resetTestingDependencies);
     });
 });

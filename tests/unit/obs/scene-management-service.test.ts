@@ -64,6 +64,15 @@ describe('SceneManagementService', () => {
             const currentScene = sceneService.getCurrentScene();
             expect(currentScene).toBe('ChatScene');
         });
+
+        test('ignores invalid scene switch payloads', async () => {
+            eventBus.emit('scene:switch', { sceneName: null });
+
+            await waitForDelay(10);
+
+            expect(mockOBSConnection.call).not.toHaveBeenCalled();
+            expect(sceneService.getCurrentScene()).toBe('');
+        });
     });
 
     describe('Scene State Monitoring', () => {
