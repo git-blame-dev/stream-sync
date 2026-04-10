@@ -1,10 +1,17 @@
+import { logger } from '../core/logging';
+import { createPlatformErrorHandler } from '../utils/platform-error-handler';
 
-const { logger } = require('../core/logging');
-const { createPlatformErrorHandler } = require('../utils/platform-error-handler');
+let obsSafetyErrorHandler: ReturnType<typeof createPlatformErrorHandler> | null = null;
 
-let obsSafetyErrorHandler = null;
+function getErrorMessage(error: unknown): string {
+    if (error instanceof Error) {
+        return error.message;
+    }
 
-function handleObsSafetyError(message, error, context) {
+    return String(error);
+}
+
+function handleObsSafetyError(message: string, error: unknown, context: string) {
     if (!obsSafetyErrorHandler && logger) {
         obsSafetyErrorHandler = createPlatformErrorHandler(logger, 'obs-safety');
     }
@@ -19,7 +26,7 @@ function handleObsSafetyError(message, error, context) {
     }
 }
 
-async function safeOBSOperation(obsManager, operation, context = 'Unknown Operation') {
+async function safeOBSOperation(obsManager: { isReady: () => Promise<boolean> }, operation: () => Promise<unknown>, context = 'Unknown Operation') {
     // Check if OBS is ready for operations
     if (!await obsManager.isReady()) {
         logger.debug(`[OBS Safety] Skipping ${context} - OBS not ready`, 'obs-safety');
@@ -29,11 +36,11 @@ async function safeOBSOperation(obsManager, operation, context = 'Unknown Operat
     try {
         return await operation();
     } catch (error) {
-        handleObsSafetyError(`[OBS Safety] ${context} failed: ${error.message}`, error, context);
+        handleObsSafetyError(`[OBS Safety] ${context} failed: ${getErrorMessage(error)}`, error, context);
         throw error;
     }
 }
 
-module.exports = {
+export {
     safeOBSOperation
 }; 

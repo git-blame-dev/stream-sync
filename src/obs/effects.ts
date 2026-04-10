@@ -1,10 +1,72 @@
+import { logger } from '../core/logging';
+import { createRequire } from 'node:module';
+import { createPlatformErrorHandler } from '../utils/platform-error-handler';
+import { safeDelay } from '../utils/timeout-validator';
 
-const { createPlatformErrorHandler } = require('../utils/platform-error-handler');
-const { safeDelay } = require('../utils/timeout-validator');
-const { createRetrySystem } = require('../utils/retry-system');
+type EffectsLogger = {
+    debug: (message: string, context?: string, payload?: unknown) => void;
+    warn: (message: string, context?: string, payload?: unknown) => void;
+};
+
+type ObsManagerLike = {
+    ensureConnected: () => Promise<void>;
+    call: (requestType: string, payload: Record<string, unknown>) => Promise<unknown>;
+    addEventListener?: (eventName: string, handler: (event: { inputName?: string }) => void) => void;
+    removeEventListener?: (eventName: string, handler: (event: { inputName?: string }) => void) => void;
+};
+
+type ObsManagerWithEvents = ObsManagerLike & {
+    addEventListener: (eventName: string, handler: (event: { inputName?: string }) => void) => void;
+    removeEventListener: (eventName: string, handler: (event: { inputName?: string }) => void) => void;
+};
+
+type SourcesManagerLike = {
+    setSourceFilterEnabled?: (...args: unknown[]) => unknown;
+    getSourceFilterSettings?: (...args: unknown[]) => unknown;
+    setSourceFilterSettings?: (...args: unknown[]) => unknown;
+};
+
+type RetrySystemLike = {
+    delay?: (ms: number, minMs: number, context: string) => Promise<void>;
+};
+
+type EffectsDependencies = {
+    logger?: EffectsLogger;
+    sourcesManager?: SourcesManagerLike;
+    eventBus?: unknown;
+    retrySystem?: RetrySystemLike;
+    delay?: (ms: number, minMs: number, context: string) => Promise<void>;
+};
+
+const nodeRequire = createRequire(import.meta.url);
+const { createRetrySystem } = nodeRequire('../utils/retry-system') as {
+    createRetrySystem: (dependencies: { logger: EffectsLogger }) => RetrySystemLike;
+};
+const { getOBSConnectionManager } = nodeRequire('./connection') as {
+    getOBSConnectionManager: () => ObsManagerLike;
+};
+const defaultSourcesManager = nodeRequire('./sources') as SourcesManagerLike;
+
+function hasObsEventListeners(obsManager: ObsManagerLike): obsManager is ObsManagerWithEvents {
+    return typeof obsManager.addEventListener === 'function' && typeof obsManager.removeEventListener === 'function';
+}
 
 class OBSEffectsManager {
-    constructor(obsManager, dependencies = {}) {
+    obsManager: ObsManagerLike;
+    logger: EffectsLogger;
+    log: EffectsLogger;
+    sourcesManager: SourcesManagerLike | undefined;
+    eventBus: unknown;
+    retrySystem: RetrySystemLike;
+    ensureOBSConnected: () => Promise<void>;
+    obsCall: (requestType: string, payload: Record<string, unknown>) => Promise<unknown>;
+    setSourceFilterEnabled?: (...args: unknown[]) => unknown;
+    getSourceFilterSettings?: (...args: unknown[]) => unknown;
+    setSourceFilterSettings?: (...args: unknown[]) => unknown;
+    delay: (ms: number, minMs: number, context: string) => Promise<void>;
+    errorHandler: ReturnType<typeof createPlatformErrorHandler>;
+
+    constructor(obsManager: ObsManagerLike, dependencies: EffectsDependencies = {}) {
         // Require OBS manager as first parameter
         if (!obsManager) {
             throw new Error('OBSEffectsManager requires OBSConnectionManager instance');
@@ -14,12 +76,11 @@ class OBSEffectsManager {
         this.obsManager = obsManager;
 
         // Inject other dependencies with default implementations
-        const { logger } = require('../core/logging');
         this.logger = dependencies.logger || logger;
         this.log = this.logger;
         this.sourcesManager = dependencies.sourcesManager;
         this.eventBus = dependencies.eventBus;
-        this.retrySystem = dependencies.retrySystem || createRetrySystem({ logger: this.logger });
+        this.retrySystem = (dependencies.retrySystem || createRetrySystem({ logger: this.logger })) as RetrySystemLike;
 
         // Convenience bindings for OBS manager methods
         this.ensureOBSConnected = this.obsManager.ensureConnected.bind(this.obsManager);
@@ -37,7 +98,7 @@ class OBSEffectsManager {
     }
 
 
-    async playMediaInOBS(commandConfig, waitForCompletion = true) {
+    async playMediaInOBS(commandConfig: { mediaSource?: string; filename?: string; vfxFilePath?: string }, waitForCompletion = true) {
     if (!commandConfig || !commandConfig.mediaSource || !commandConfig.filename || !commandConfig.vfxFilePath) {
         throw new Error("No media config provided with source, filename, and vfxFilePath");
     }
@@ -81,28 +142,33 @@ class OBSEffectsManager {
     }
 }
 
-    async waitForMediaCompletion(mediaSourceName) {
-        return new Promise((resolve) => {
-            if (!this.obsManager) {
-                this.logger.warn('[VFX] No OBS manager available, skipping wait', 'effects');
-                resolve();
-                return;
-            }
+    async waitForMediaCompletion(mediaSourceName: string) {
+        if (!this.obsManager) {
+            this.logger.warn('[VFX] No OBS manager available, skipping wait', 'effects');
+            return;
+        }
 
-            const mediaEndHandler = (data) => {
+        if (!hasObsEventListeners(this.obsManager)) {
+            throw new Error('OBS manager requires event listener support to wait for media completion');
+        }
+
+        const { addEventListener, removeEventListener } = this.obsManager;
+
+        return new Promise<void>((resolve) => {
+            const mediaEndHandler = (data: { inputName?: string }) => {
                 if (data.inputName === mediaSourceName) {
-                    this.obsManager.removeEventListener("MediaInputPlaybackEnded", mediaEndHandler);
+                    removeEventListener.call(this.obsManager, 'MediaInputPlaybackEnded', mediaEndHandler);
                     this.logger.debug(`[VFX] Media playback ended: ${mediaSourceName}`, 'effects');
                     resolve();
                 }
             };
 
-            this.obsManager.addEventListener("MediaInputPlaybackEnded", mediaEndHandler);
+            addEventListener.call(this.obsManager, 'MediaInputPlaybackEnded', mediaEndHandler);
             this.logger.debug(`[VFX] Waiting for media end event: ${mediaSourceName}`, 'effects');
         });
     }
 
-    async triggerMediaAction(inputName, mediaAction) {
+    async triggerMediaAction(inputName: string, mediaAction: string) {
     try {
             await this.ensureOBSConnected();
         
@@ -120,7 +186,7 @@ class OBSEffectsManager {
     }
 }
 
-    _handleEffectsError(message, error, payload = null) {
+    _handleEffectsError(message: string, error: unknown, payload: Record<string, unknown> | null = null) {
         if (!this.errorHandler && this.logger) {
             this.errorHandler = createPlatformErrorHandler(this.logger, 'obs-effects');
         }
@@ -136,22 +202,18 @@ class OBSEffectsManager {
     }
 }
 
-function createOBSEffectsManager(obsManager, dependencies = {}) {
+function createOBSEffectsManager(obsManager: ObsManagerLike, dependencies: EffectsDependencies = {}) {
     return new OBSEffectsManager(obsManager, dependencies);
 }
 
-let defaultInstance = null;
+let defaultInstance: OBSEffectsManager | null = null;
 function getDefaultEffectsManager() {
     if (!defaultInstance) {
-        const { getOBSConnectionManager } = require('./connection');
-        const { logger } = require('../core/logging');
-        const sources = require('./sources');
-
         defaultInstance = createOBSEffectsManager(
             getOBSConnectionManager(),  // Get singleton directly
             {
                 logger,
-                sourcesManager: sources
+                sourcesManager: defaultSourcesManager
             }
         );
     }
@@ -159,7 +221,7 @@ function getDefaultEffectsManager() {
 }
 
 // Export class and factory functions
-module.exports = {
+export {
     OBSEffectsManager,
     getDefaultEffectsManager
 };

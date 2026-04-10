@@ -1,12 +1,25 @@
+type DisplayItem = {
+    type: string;
+    platform: string;
+    data: unknown;
+    priority?: number;
+    [key: string]: unknown;
+};
+
 class DisplayQueueState {
-    constructor({ maxQueueSize = null, getPriority } = {}) {
+    queue: DisplayItem[];
+    lastChatItem: DisplayItem | null;
+    maxQueueSize: number | null;
+    getPriority: ((itemType: string) => number) | null;
+
+    constructor({ maxQueueSize = null, getPriority }: { maxQueueSize?: number | null; getPriority?: ((itemType: string) => number) | null } = {}) {
         this.queue = [];
         this.lastChatItem = null;
         this.maxQueueSize = maxQueueSize;
         this.getPriority = typeof getPriority === 'function' ? getPriority : null;
     }
 
-    addItem(item) {
+    addItem(item: DisplayItem) {
         if (!item || !item.type || !item.data) {
             throw new Error('Invalid display item: missing type or data');
         }
@@ -33,7 +46,7 @@ class DisplayQueueState {
         return { insertIndex, removedChatCount };
     }
 
-    shift() {
+    shift(): DisplayItem | undefined {
         return this.queue.shift();
     }
 
@@ -42,10 +55,16 @@ class DisplayQueueState {
         this.lastChatItem = null;
     }
 
-    _findInsertIndex(priority) {
+    _findInsertIndex(priority: number | undefined) {
         let insertIndex = this.queue.length;
         for (let i = 0; i < this.queue.length; i++) {
-            if (this.queue[i].priority < priority) {
+            const queuedItem = this.queue[i];
+            if (!queuedItem) {
+                continue;
+            }
+
+            const queuedPriority = queuedItem.priority;
+            if (typeof queuedPriority === 'number' && typeof priority === 'number' && queuedPriority < priority) {
                 insertIndex = i;
                 break;
             }
@@ -65,6 +84,6 @@ class DisplayQueueState {
     }
 }
 
-module.exports = {
+export {
     DisplayQueueState
 };

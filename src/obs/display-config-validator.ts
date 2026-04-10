@@ -1,7 +1,6 @@
+import { logger } from '../core/logging';
 
-const { logger } = require('../core/logging');
-
-function validateDisplayConfig(config, type) {
+function validateDisplayConfig(config: { sourceName?: unknown; sceneName?: unknown; groupName?: unknown } | null | undefined, type: string) {
     // Input validation
     if (!config || typeof config !== 'object') {
         logger.warn(`[ConfigValidator] Invalid ${type} config object - expected object but received ${typeof config}`, 'config-validator');
@@ -87,6 +86,6 @@ function validateDisplayConfig(config, type) {
     return true;
 }
 
-module.exports = {
+export {
     validateDisplayConfig
 };

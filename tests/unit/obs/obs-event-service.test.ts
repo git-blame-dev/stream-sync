@@ -115,6 +115,17 @@ describe('OBSEventService', () => {
             expect(text).toBe('Hello World');
         });
 
+        test('ignores invalid text update payloads', async () => {
+            eventBus.emit('obs:update-text', {
+                sourceName: null,
+                text: 'Hello World'
+            });
+
+            await waitForDelay(10);
+
+            expect(mockObsSources.updateTextSource).not.toHaveBeenCalled();
+        });
+
         test('clears text source when obs:clear-text is emitted', async () => {
             eventBus.emit('obs:clear-text', {
                 sourceName: 'ChatMessage'
@@ -125,6 +136,16 @@ describe('OBSEventService', () => {
             expect(mockObsSources.clearTextSource).toHaveBeenCalled();
             const [sourceName] = mockObsSources.clearTextSource.mock.calls[0];
             expect(sourceName).toBe('ChatMessage');
+        });
+
+        test('ignores invalid text clear payloads', async () => {
+            eventBus.emit('obs:clear-text', {
+                sourceName: ''
+            });
+
+            await waitForDelay(10);
+
+            expect(mockObsSources.clearTextSource).not.toHaveBeenCalled();
         });
 
         test('handles text update failures without crashing', async () => {
@@ -157,6 +178,18 @@ describe('OBSEventService', () => {
             expect(sourceName).toBe('Statusbar');
             expect(visible).toBe(true);
         });
+
+        test('ignores invalid visibility payloads', async () => {
+            eventBus.emit('obs:set-visibility', {
+                sceneName: 'MainScene',
+                sourceName: 'Statusbar',
+                visible: 'true'
+            });
+
+            await waitForDelay(10);
+
+            expect(mockObsSources.setSourceVisibility).not.toHaveBeenCalled();
+        });
     });
 
     describe('Scene Events', () => {
@@ -172,6 +205,16 @@ describe('OBSEventService', () => {
             const [method, payload] = mockOBSConnection.call.mock.calls[0];
             expect(method).toBe('SetCurrentProgramScene');
             expect(payload).toEqual({ sceneName: 'GameplayScene' });
+        });
+
+        test('ignores invalid scene switch payloads', async () => {
+            eventBus.emit('obs:switch-scene', {
+                sceneName: null
+            });
+
+            await waitForDelay(10);
+
+            expect(mockOBSConnection.call).not.toHaveBeenCalled();
         });
 
         test('handles scene switch failures without crashing', async () => {

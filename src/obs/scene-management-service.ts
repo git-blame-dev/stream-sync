@@ -1,8 +1,48 @@
-const { safeDelay } = require('../utils/timeout-validator');
-const { createPlatformErrorHandler } = require('../utils/platform-error-handler');
+import { safeDelay } from '../utils/timeout-validator';
+import { createPlatformErrorHandler } from '../utils/platform-error-handler';
+
+type SceneEventBus = {
+    subscribe: (eventName: string, handler: (data: Record<string, unknown>) => Promise<void>) => () => void;
+};
+
+type SceneObsConnection = {
+    call: (requestType: string, payload: Record<string, unknown>) => Promise<unknown>;
+};
+
+type SceneLogger = {
+    warn?: (message: string, context?: string, payload?: unknown) => void;
+};
+
+function getRequiredSceneName(value: unknown): string | null {
+    return typeof value === 'string' && value.length > 0 ? value : null;
+}
 
 class SceneManagementService {
-    constructor(dependencies) {
+    eventBus: SceneEventBus;
+    obsConnection: SceneObsConnection;
+    logger: SceneLogger;
+    errorHandler: ReturnType<typeof createPlatformErrorHandler> | null;
+    state: {
+        currentScene: string;
+        previousScene: string;
+        switchCount: number;
+        history: Array<{ sceneName: string; timestamp: number; transition: unknown }>;
+        sceneListCache: Array<{ sceneName: string }> | null;
+        cacheTimestamp: number | null;
+    };
+    config: {
+        maxHistorySize: number;
+        cacheExpiry: number;
+        retryDelay: number;
+        maxRetries: number;
+    };
+    unsubscribeFns: Array<() => void>;
+
+    constructor(dependencies: {
+        eventBus: SceneEventBus;
+        obsConnection: SceneObsConnection;
+        logger: SceneLogger;
+    }) {
         const { eventBus, obsConnection, logger } = dependencies;
 
         this.eventBus = eventBus;
@@ -43,8 +83,18 @@ class SceneManagementService {
         );
     }
 
-    async _handleSceneSwitch(data) {
+    async _handleSceneSwitch(data: Record<string, unknown>) {
         const { sceneName, transition, retry = true } = data;
+        const resolvedSceneName = getRequiredSceneName(sceneName);
+
+        if (!resolvedSceneName) {
+            this._handleSceneManagerError('Scene switch requires a non-empty sceneName', null, {
+                sceneName,
+                transition,
+                retry
+            });
+            return;
+        }
 
         let attempt = 0;
 
@@ -55,17 +105,17 @@ class SceneManagementService {
                 }
 
                 await this.obsConnection.call('SetCurrentProgramScene', {
-                    sceneName
+                    sceneName: resolvedSceneName
                 });
 
                 // Update state
                 this.state.previousScene = this.state.currentScene;
-                this.state.currentScene = sceneName;
+                this.state.currentScene = resolvedSceneName;
                 this.state.switchCount++;
 
                 // Add to history
                 this._addToHistory({
-                    sceneName,
+                    sceneName: resolvedSceneName,
                     timestamp: Date.now(),
                     transition
                 });
@@ -86,7 +136,7 @@ class SceneManagementService {
         }
     }
 
-    _addToHistory(entry) {
+    _addToHistory(entry: { sceneName: string; timestamp: number; transition: unknown }) {
         this.state.history.push(entry);
 
         // Limit history size to prevent memory leaks
@@ -95,13 +145,13 @@ class SceneManagementService {
         }
     }
 
-    async validateScene(sceneName) {
+    async validateScene(sceneName: string) {
         try {
             // Check cache first
             const now = Date.now();
             if (
                 this.state.sceneListCache &&
-                this.state.cacheTimestamp &&
+                this.state.cacheTimestamp !== null &&
                 (now - this.state.cacheTimestamp) < this.config.cacheExpiry
             ) {
                 return this.state.sceneListCache.some(scene => scene.sceneName === sceneName);
@@ -109,7 +159,10 @@ class SceneManagementService {
 
             // Fetch scene list from OBS
             const response = await this.obsConnection.call('GetSceneList', {});
-            this.state.sceneListCache = response.scenes || [];
+            const scenes = (response && typeof response === 'object' && Array.isArray((response as { scenes?: unknown }).scenes))
+                ? (response as { scenes: Array<{ sceneName: string }> }).scenes
+                : [];
+            this.state.sceneListCache = scenes;
             this.state.cacheTimestamp = now;
 
             return this.state.sceneListCache.some(scene => scene.sceneName === sceneName);
@@ -140,7 +193,7 @@ class SceneManagementService {
         this.unsubscribeFns = [];
     }
 
-    _handleSceneManagerError(message, error, payload = null) {
+    _handleSceneManagerError(message: string, error: unknown, payload: Record<string, unknown> | null = null) {
         if (!this.errorHandler && this.logger) {
             this.errorHandler = createPlatformErrorHandler(this.logger, 'obs-scenes');
         }
@@ -156,10 +209,14 @@ class SceneManagementService {
     }
 }
 
-function createSceneManagementService(dependencies) {
+function createSceneManagementService(dependencies: {
+    eventBus: SceneEventBus;
+    obsConnection: SceneObsConnection;
+    logger: SceneLogger;
+}) {
     return new SceneManagementService(dependencies);
 }
 
-module.exports = {
+export {
     createSceneManagementService
 };

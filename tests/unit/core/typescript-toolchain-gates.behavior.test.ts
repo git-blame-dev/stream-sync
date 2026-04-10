@@ -1741,6 +1741,31 @@ describe('TypeScript toolchain migration gates behavior', () => {
         }
     });
 
+    it('keeps obs helper and rendering leaf modules free of commonjs module syntax', () => {
+        const modulePaths = [
+            'src/obs/display-config-validator.ts',
+            'src/obs/display-queue-state.ts',
+            'src/obs/display-renderer.ts',
+            'src/obs/effects.ts',
+            'src/obs/handcam-glow.ts',
+            'src/obs/health-checker.ts',
+            'src/obs/obs-event-service.ts',
+            'src/obs/safe-operations.ts',
+            'src/obs/scene-management-service.ts',
+            'src/obs/startup.ts'
+        ];
+
+        for (const modulePath of modulePaths) {
+            const content = readFileSync(join(repoRoot, modulePath), 'utf8');
+
+            expect(content).not.toMatch(/^\s*(?:const|let|var)\s+.+?=\s*require\s*\(/m);
+            expect(content).not.toMatch(/\brequire\s*\(/);
+            expect(content).not.toContain('module.exports');
+            expect(content).not.toMatch(/module\[['\"]exports['\"]\]/);
+            expect(content).not.toMatch(/^\s*exports\./m);
+        }
+    });
+
     it('keeps youtube extractor helper modules free of commonjs exports syntax', () => {
         const helperPaths = [
             'src/platforms/youtube/youtube-author-extractor.ts',

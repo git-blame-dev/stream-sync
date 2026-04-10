@@ -1,6 +1,20 @@
 
 class OBSHealthChecker {
-    constructor(obsConnectionManager, config = {}) {
+    obsManager: {
+        isConnected: () => boolean;
+        call: (requestType: string, payload: Record<string, unknown>) => Promise<unknown>;
+    };
+    cacheTimeout: number;
+    maxFailures: number;
+    timeProvider: () => number;
+    lastCheck: number | null;
+    lastResult: boolean | null;
+    consecutiveFailures: number;
+
+    constructor(obsConnectionManager: {
+        isConnected: () => boolean;
+        call: (requestType: string, payload: Record<string, unknown>) => Promise<unknown>;
+    }, config: { cacheTimeout?: number; maxFailures?: number; timeProvider?: () => number } = {}) {
         if (!obsConnectionManager) {
             throw new Error('OBS connection manager is required');
         }
@@ -16,7 +30,7 @@ class OBSHealthChecker {
         this.consecutiveFailures = 0;
     }
 
-    async isReady() {
+    async isReady(): Promise<boolean> {
         // Quick check - if not connected, definitely not ready
         if (!this.obsManager.isConnected()) {
             return this.updateCache(false);
@@ -31,7 +45,7 @@ class OBSHealthChecker {
         return await this.performHealthCheck();
     }
 
-    async performHealthCheck() {
+    async performHealthCheck(): Promise<boolean> {
         try {
             // Use GetVersion as a lightweight test call
             await this.obsManager.call('GetVersion', {});
@@ -47,24 +61,24 @@ class OBSHealthChecker {
         }
     }
 
-    isCacheValid() {
+    isCacheValid(): boolean {
         return this.lastCheck !== null && (this.timeProvider() - this.lastCheck) < this.cacheTimeout;
     }
 
-    updateCache(result) {
+    updateCache(result: boolean): boolean {
         this.lastCheck = this.timeProvider();
         this.lastResult = result;
         return result;
     }
 
-    isCircuitOpen() {
+    isCircuitOpen(): boolean {
         return this.consecutiveFailures >= this.maxFailures;
     }
 
-    invalidateCache() {
+    invalidateCache(): void {
         this.lastCheck = null;
         this.lastResult = null;
     }
 }
 
-module.exports = OBSHealthChecker; 
+export { OBSHealthChecker }; 

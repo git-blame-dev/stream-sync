@@ -1,18 +1,50 @@
-const { logger } = require('../core/logging');
+import { logger } from '../core/logging';
 
-function resolveChatMessageText(message) {
+type DisplaySourceManager = {
+    updateChatMsgText: (sourceName: string, username: string, message: string) => Promise<void>;
+    setPlatformLogoVisibility: (platform: string, platformLogos: Record<string, unknown>) => Promise<void>;
+    setGroupSourceVisibility: (sourceName: string, groupName: string | null | undefined, visible: boolean) => Promise<void>;
+    setChatDisplayVisibility: (visible: boolean, sceneName: string, platformLogos: Record<string, unknown>) => Promise<void>;
+    updateTextSource: (sourceName: string, text: string) => Promise<void>;
+    setNotificationPlatformLogoVisibility: (platform: string, platformLogos: Record<string, unknown>) => Promise<void>;
+    setNotificationDisplayVisibility: (visible: boolean, sceneName: string, platformLogos: Record<string, unknown>) => Promise<void>;
+};
+
+type DisplayRendererConfig = {
+    chat: {
+        sourceName: string;
+        sceneName: string;
+        groupName?: string | null;
+        platformLogos: Record<string, unknown>;
+    };
+    notification: {
+        sourceName: string;
+        sceneName: string;
+        groupName?: string | null;
+        platformLogos: Record<string, unknown>;
+    };
+    timing: {
+        transitionDelay: number;
+        notificationClearDelay: number;
+    };
+    [platform: string]: unknown;
+};
+
+function resolveChatMessageText(message: unknown) {
     if (typeof message === 'string') {
         return message;
     }
 
     if (message && typeof message === 'object') {
-        if (typeof message.text === 'string') {
-            return message.text;
+        const messageObject = message as { text?: unknown; parts?: unknown };
+
+        if (typeof messageObject.text === 'string') {
+            return messageObject.text;
         }
 
-        if (Array.isArray(message.parts)) {
-            return message.parts
-                .map((part) => (part && typeof part.text === 'string' ? part.text : ''))
+        if (Array.isArray(messageObject.parts)) {
+            return messageObject.parts
+                .map((part: unknown) => (part && typeof part === 'object' && typeof (part as { text?: unknown }).text === 'string' ? (part as { text: string }).text : ''))
                 .join('');
         }
     }
@@ -21,6 +53,16 @@ function resolveChatMessageText(message) {
 }
 
 class DisplayRenderer {
+    obsManager: { isReady: () => Promise<boolean> } | null;
+    sourcesManager: DisplaySourceManager;
+    config: DisplayRendererConfig;
+    delay: (ms: number) => Promise<void>;
+    handleDisplayQueueError: (message: string, error: unknown, payload?: Record<string, unknown>) => void;
+    extractUsername: (data: unknown) => string;
+    validateDisplayConfig: (config: { sourceName?: unknown; sceneName?: unknown; groupName?: unknown }, type: string) => boolean;
+    isNotificationType: (type: string) => boolean;
+    isChatType: (type: string) => boolean;
+
     constructor({
         obsManager,
         sourcesManager,
@@ -31,6 +73,16 @@ class DisplayRenderer {
         validateDisplayConfig,
         isNotificationType,
         isChatType
+    }: {
+        obsManager: { isReady: () => Promise<boolean> } | null;
+        sourcesManager: DisplaySourceManager;
+        config: DisplayRendererConfig;
+        delay: (ms: number) => Promise<void>;
+        handleDisplayQueueError: (message: string, error: unknown, payload?: Record<string, unknown>) => void;
+        extractUsername: (data: unknown) => string;
+        validateDisplayConfig: (config: { sourceName?: unknown; sceneName?: unknown; groupName?: unknown }, type: string) => boolean;
+        isNotificationType: (type: string) => boolean;
+        isChatType: (type: string) => boolean;
     }) {
         this.obsManager = obsManager;
         this.sourcesManager = sourcesManager;
@@ -43,15 +95,16 @@ class DisplayRenderer {
         this.isChatType = isChatType;
     }
 
-    async displayChatItem(item) {
+    async displayChatItem(item: { data: { message?: unknown }; platform: string; type: string }) {
         const username = this.extractUsername(item.data);
         const message = resolveChatMessageText(item.data.message);
         const platform = item.platform;
-        if (!platform || !this.config[platform]) {
+        const platformConfig = this.config[platform] as { messagesEnabled?: boolean } | undefined;
+        if (!platform || !platformConfig) {
             throw new Error(`DisplayQueue requires configured platform for chat: ${platform || 'unknown'}`);
         }
 
-        if (this.config[platform].messagesEnabled === false) {
+        if (platformConfig.messagesEnabled === false) {
             logger.debug(`[Display Queue] Chat for platform '${platform}' is disabled. Skipping message from '${username}'.`, 'display-queue');
             return false;
         }
@@ -86,9 +139,10 @@ class DisplayRenderer {
         return true;
     }
 
-    async displayNotificationItem(item) {
+    async displayNotificationItem(item: { data: { displayMessage?: unknown }; platform: string; type: string }) {
         const platform = item.platform;
-        if (!platform || !this.config[platform]) {
+        const platformConfig = this.config[platform];
+        if (!platform || !platformConfig) {
             throw new Error(`DisplayQueue requires configured platform for notification: ${platform || 'unknown'}`);
         }
 
@@ -106,7 +160,7 @@ class DisplayRenderer {
         await this.delay(this.config.timing.notificationClearDelay);
 
         try {
-            if (!item.data.displayMessage) {
+            if (typeof item.data.displayMessage !== 'string' || item.data.displayMessage.length === 0) {
                 throw new Error('Notification display requires displayMessage');
             }
             await this.sourcesManager.updateTextSource(sourceName, item.data.displayMessage);
@@ -125,7 +179,7 @@ class DisplayRenderer {
         return true;
     }
 
-    async displayLingeringChat(lastChatItem) {
+    async displayLingeringChat(lastChatItem: { data: { message?: unknown }; platform?: string } | null) {
         if (!lastChatItem) {
             logger.debug('[Lingering Chat] No chat message available for lingering display', 'display-queue');
             return;
@@ -158,7 +212,7 @@ class DisplayRenderer {
         await this.sourcesManager.setChatDisplayVisibility(true, sceneName, platformLogos);
     }
 
-    async hideCurrentDisplay(item) {
+    async hideCurrentDisplay(item: { type?: string } | null) {
         if (!item || !item.type) return;
 
         if (!this.obsManager || !await this.obsManager.isReady()) {
@@ -180,6 +234,6 @@ class DisplayRenderer {
     }
 }
 
-module.exports = {
+export {
     DisplayRenderer
 };
