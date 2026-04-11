@@ -32,11 +32,13 @@ type RouterInstance = {
     queueGreeting: (platform: string, username: string) => Promise<void>;
 };
 
-const ChatNotificationRouter = nodeRequire('../../src/services/ChatNotificationRouter.js') as new (deps: {
-    runtime: Record<string, unknown>;
-    logger: LoggerLike;
-    config: Record<string, unknown>;
-}) => RouterInstance;
+const { ChatNotificationRouter } = nodeRequire('../../src/services/ChatNotificationRouter.js') as {
+    ChatNotificationRouter: new (deps: {
+        runtime: Record<string, unknown>;
+        logger: LoggerLike;
+        config: Record<string, unknown>;
+    }) => RouterInstance;
+};
 
 type RouterOverrides = {
     displayQueue?: { addItem: MockFn } | null;

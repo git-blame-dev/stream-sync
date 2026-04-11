@@ -2,7 +2,7 @@ const { describe, expect, it, beforeEach } = require('bun:test');
 const { createMockFn } = require('../../helpers/bun-mock-utils');
 const { noOpLogger } = require('../../helpers/mock-factories');
 const { createConfigFixture } = require('../../helpers/config-fixture');
-const PlatformEventRouter = require('../../../src/services/PlatformEventRouter.js');
+const { PlatformEventRouter } = require('../../../src/services/PlatformEventRouter.js');
 
 describe('PlatformEventRouter error handling', () => {
     let mockLogger;

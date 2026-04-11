@@ -28,7 +28,9 @@ const { setupAutomatedCleanup } = nodeRequire('../helpers/mock-lifecycle') as {
 const { createConfigFixture } = nodeRequire('../helpers/config-fixture') as {
     createConfigFixture: (overrides?: Record<string, unknown>) => Record<string, unknown>;
 };
-const PlatformEventRouter = nodeRequire('../../src/services/PlatformEventRouter.js') as new (deps: Record<string, unknown>) => RouterInstance;
+const { PlatformEventRouter } = nodeRequire('../../src/services/PlatformEventRouter.js') as {
+    PlatformEventRouter: new (deps: Record<string, unknown>) => RouterInstance;
+};
 
 type MockFn = ReturnType<typeof createMockFn>;
 
