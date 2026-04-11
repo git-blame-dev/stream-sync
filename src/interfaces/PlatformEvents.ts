@@ -1,7 +1,6 @@
-
-const crypto = require('crypto');
-const { getSystemTimestampISO } = require('../utils/timestamp');
-const { DEFAULT_AVATAR_URL } = require('../constants/avatar');
+import crypto from 'node:crypto';
+import { DEFAULT_AVATAR_URL } from '../constants/avatar';
+import { getSystemTimestampISO } from '../utils/timestamp';
 
 const PlatformEvents = {
     // Platform Events
@@ -1289,9 +1288,8 @@ const CombinedPlatformEvents = Object.assign({}, PlatformEvents, {
     _generateCorrelationId: EnhancedPlatformEvents._generateCorrelationId.bind(EnhancedPlatformEvents)
 });
 
-// Export the classes and constants
-module.exports = {
-    PlatformEvents: CombinedPlatformEvents,
+export {
+    CombinedPlatformEvents as PlatformEvents,
     EnhancedPlatformEvents,
     PlatformEventValidator,
     PlatformEventBuilder,

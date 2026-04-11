@@ -1,6 +1,35 @@
+import type { BuiltConfig } from './core/types/config-types';
+import { createRequire } from 'node:module';
+import { createEventBus } from './core/EventBus';
+import { buildLoggingConfig } from './core/config-builders';
+import { getUnifiedLogger, initializeLoggingConfig, setDebugMode } from './core/logging';
+import { InnertubeFactory } from './factories/innertube-factory';
+import { getOBSConnectionManager } from './obs/connection';
+import { initializeDisplayQueue } from './obs/display-queue';
+import { getDefaultGoalsManager } from './obs/goals';
+import { AppRuntime } from './runtime/AppRuntime';
+import { CommandCooldownService } from './services/CommandCooldownService.js';
+import { createGracefulExitService } from './services/GracefulExitService.js';
+import { PlatformLifecycleService } from './services/PlatformLifecycleService.js';
+import { createUserTrackingService } from './services/UserTrackingService';
+import { createVFXCommandService } from './services/VFXCommandService.js';
+import { getGiftAnimationDependencyStatus } from './services/tiktok-gift-animation/resolver';
+import * as innertubeInstanceManager from './services/innertube-instance-manager';
+import { TwitchAuth } from './auth/TwitchAuth';
+import { createSpamDetectionConfig, createDonationSpamDetection } from './utils/spam-detection';
+import { createOBSEventService } from './obs/obs-event-service';
+import { createSceneManagementService } from './obs/scene-management-service';
+import { clearExpiredGlobalCooldowns } from './utils/global-command-cooldown';
+import { createPlatformErrorHandler } from './utils/platform-error-handler';
+import { ensureSecrets } from './utils/secret-manager';
+import { createTextProcessingManager } from './utils/text-processing';
+import { safeSetInterval } from './utils/timeout-validator';
+
+const nodeRequire = createRequire(import.meta.url);
+
 const args = process.argv.slice(2);
 
-const cliArgs = {
+const cliArgs: { debug: boolean; help: boolean; chat: number | null } = {
     debug: false,
     help: false,
     chat: null
@@ -50,32 +79,21 @@ Examples:
     process.exit(0);
 }
 
-const { 
-    setDebugMode, 
-    initializeLoggingConfig,
-    getUnifiedLogger
-} = require('./core/logging');
-const { buildLoggingConfig } = require('./core/config-builders');
-const { safeSetInterval } = require('./utils/timeout-validator');
-const { createPlatformErrorHandler } = require('./utils/platform-error-handler');
-const { ensureSecrets } = require('./utils/secret-manager');
-const { TwitchAuth } = require('./auth/TwitchAuth');
-
 if (cliArgs.debug) {
     setDebugMode(true);
 }
 
-const { InnertubeFactory } = require('./factories/innertube-factory');
+const coreRuntime = nodeRequire('./core') as {
+    config: BuiltConfig;
+    loadConfig: () => Record<string, Record<string, unknown>>;
+};
 
-const { config: configModule } = require('./core');
-let config = configModule.config;
+let config = coreRuntime.config;
 
 if (cliArgs.debug) {
-    const normalizedConfig = configModule.loadConfig();
+    const normalizedConfig = coreRuntime.loadConfig();
     config.logging = buildLoggingConfig(normalizedConfig, { debugMode: true });
 }
-
-const innertubeInstanceManager = require('./services/innertube-instance-manager');
 
 initializeLoggingConfig(config);
 
@@ -84,7 +102,7 @@ if (!logger || typeof logger.debug !== 'function') {
     throw new Error('Logger missing required methods');
 }
 
-let mainErrorHandler = null;
+let mainErrorHandler: ReturnType<typeof createPlatformErrorHandler> | null = null;
 
 function getMainErrorHandler() {
     if (!mainErrorHandler && logger) {
@@ -112,34 +130,31 @@ function logMainError(message, error, payload, options) {
     handler.logOperationalError(message, logContext, payload);
 }
 
-const coreConstants = require('./core/constants');
+const coreConstants = nodeRequire('./core/constants') as {
+    PRIORITY_LEVELS: Record<string, unknown>;
+    NOTIFICATION_CONFIGS: Record<string, unknown>;
+};
+
 const {
     PRIORITY_LEVELS,
     NOTIFICATION_CONFIGS
 } = coreConstants;
 
-const { getOBSConnectionManager } = require('./obs/connection');
-const { initializeDisplayQueue } = require('./obs/display-queue');
-const { getDefaultGoalsManager } = require('./obs/goals');
-
-const { createTextProcessingManager } = require('./utils/text-processing');
 const textProcessing = createTextProcessingManager({ logger });
-const { AppRuntime } = require('./runtime/AppRuntime');
-const { clearExpiredGlobalCooldowns } = require('./utils/global-command-cooldown');
-
-const NotificationManager = require('./notifications/NotificationManager');
-const { createSpamDetectionConfig, createDonationSpamDetection } = require('./utils/spam-detection');
-
-const { createEventBus } = require('./core/EventBus');
-const { createVFXCommandService } = require('./services/VFXCommandService.js');
-const { createUserTrackingService } = require('./services/UserTrackingService');
-const { CommandCooldownService } = require('./services/CommandCooldownService.js');
-const { PlatformLifecycleService } = require('./services/PlatformLifecycleService.js');
-const { createGracefulExitService } = require('./services/GracefulExitService.js');
-
-const { createOBSEventService } = require('./obs/obs-event-service');
-const { createSceneManagementService } = require('./obs/scene-management-service');
-const { getGiftAnimationDependencyStatus } = require('./services/tiktok-gift-animation/resolver');
+const NotificationManager = nodeRequire('./notifications/NotificationManager') as new (...args: unknown[]) => {
+    handleAggregatedDonation: (data: unknown) => void;
+    donationSpamDetector?: unknown;
+};
+const dependencyValidator = nodeRequire('./utils/dependency-validator') as { validateLoggerInterface: (candidate: unknown) => void };
+const dependencyFactory = nodeRequire('./utils/dependency-factory') as { DependencyFactory: new () => unknown };
+const effects = nodeRequire('./obs/effects') as { getDefaultEffectsManager: () => unknown };
+const sources = nodeRequire('./obs/sources') as { getDefaultSourcesManager: () => unknown };
+const platforms = nodeRequire('./platforms') as {
+    TikTokPlatform: unknown;
+    TwitchPlatform: unknown;
+    YouTubePlatform: unknown;
+    StreamElementsPlatform: unknown;
+};
 
 let app;
 
@@ -190,10 +205,8 @@ function validateRuntimeCliArgs(cliArgsCandidate) {
 }
 
 function createProductionDependencies(overrides = {}) {
-    const { validateLoggerInterface } = require('./utils/dependency-validator');
-    const { DependencyFactory } = require('./utils/dependency-factory');
-    const effects = require('./obs/effects');
-    const sources = require('./obs/sources');
+    const { validateLoggerInterface } = dependencyValidator;
+    const { DependencyFactory } = dependencyFactory;
 
     validateLoggerInterface(logger);
 
@@ -204,7 +217,7 @@ function createProductionDependencies(overrides = {}) {
     
     return {
         obs: {
-            connectionManager: require('./obs/connection').getOBSConnectionManager({ config: config.obs }),
+            connectionManager: getOBSConnectionManager({ config: config.obs }),
             sourcesManager: sources.getDefaultSourcesManager(),
             effectsManager: effects.getDefaultEffectsManager()
         },
@@ -212,7 +225,7 @@ function createProductionDependencies(overrides = {}) {
         effectsFactory: effects,
         logging: logger,
         logger: logger,
-        platforms: require('./platforms'),
+        platforms,
         displayQueue: null,
         notificationManager: null,
         dependencyFactory: resolvedOverrides.dependencyFactory || new DependencyFactory(),
@@ -421,7 +434,7 @@ async function main(overrides = {}) {
 
         logger.debug('Creating OBS event-driven services...', 'Main');
         const obsConnectionManager = getOBSConnectionManagerFn({ config: config.obs });
-        const obsSources = require('./obs/sources').getDefaultSourcesManager();
+        const obsSources = sources.getDefaultSourcesManager();
 
         const obsEventService = createOBSEventServiceFn({
             eventBus,
@@ -574,8 +587,8 @@ async function main(overrides = {}) {
 
 process.noDeprecation = true;
 
-if (require.main === module) {
+if (import.meta.main) {
     main();
 }
 
-module.exports = { main, AppRuntime }; 
+export { main, AppRuntime };
