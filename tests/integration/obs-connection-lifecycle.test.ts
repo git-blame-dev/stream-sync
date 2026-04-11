@@ -1,11 +1,12 @@
 import { describe, test, beforeEach, afterEach, expect } from 'bun:test';
 import { createRequire } from 'node:module';
 
-const load = createRequire(__filename);
+const load = createRequire(import.meta.url);
 const { createMockFn, clearAllMocks, restoreAllMocks } = load('../helpers/bun-mock-utils');
+const { useFakeTimers, useRealTimers } = load('../helpers/bun-timers');
 const { ViewerCountSystem } = load('../../src/utils/viewer-count');
 const { OBSViewerCountObserver } = load('../../src/observers/obs-viewer-count-observer');
-const { createOBSConnectionManager } = load('../../src/obs/connection');
+const { createOBSConnectionManager, getOBSConnectionManager, resetOBSConnectionManager } = load('../../src/obs/connection.ts');
 const { noOpLogger } = load('../helpers/mock-factories');
 const { createConfigFixture } = load('../helpers/config-fixture');
 
@@ -71,6 +72,68 @@ describe('OBS Connection Lifecycle Integration', () => {
             expect(viewerCountSystem.observers.size).toBe(1);
             expect(viewerCountSystem.observers.has('obs-viewer-count-observer')).toBe(true);
         });
+    });
+});
+
+describe('OBS connection manager reconnect ownership integration', () => {
+    beforeEach(() => {
+        useFakeTimers();
+        resetOBSConnectionManager();
+    });
+
+    afterEach(() => {
+        resetOBSConnectionManager();
+        useRealTimers();
+        clearAllMocks();
+        restoreAllMocks();
+    });
+
+    test('ConnectionClosed during in-flight connect does not start overlapping reconnect attempt', async () => {
+        let connectionClosedHandler: unknown = null;
+        let identifiedHandler: unknown = null;
+
+        const mockOBS = {
+            connect: createMockFn().mockResolvedValue({ obsWebSocketVersion: '5', negotiatedRpcVersion: 1 }),
+            disconnect: createMockFn().mockResolvedValue(undefined),
+            call: createMockFn().mockResolvedValue({}),
+            on: createMockFn((eventName: string, handler: unknown) => {
+                if (eventName === 'ConnectionClosed') {
+                    connectionClosedHandler = handler;
+                }
+                if (eventName === 'Identified') {
+                    identifiedHandler = handler;
+                }
+            }),
+            off: createMockFn(),
+            once: createMockFn(),
+            addEventListener: createMockFn(),
+            removeEventListener: createMockFn()
+        };
+
+        const manager = getOBSConnectionManager({
+            obs: mockOBS,
+            config: {
+                address: 'ws://localhost:4455',
+                password: 'test-password',
+                enabled: true,
+                connectionTimeoutMs: 5000
+            }
+        });
+
+        const firstConnect = manager.connect().catch(() => false);
+
+        if (typeof connectionClosedHandler === 'function') {
+            (connectionClosedHandler as (data?: { reason?: unknown; code?: unknown }) => void)({ code: 1006, reason: 'socket-closed' });
+        }
+        const ensured = manager.ensureConnected(50).catch(() => undefined);
+        await Promise.resolve();
+
+        expect(mockOBS.connect).toHaveBeenCalledTimes(1);
+
+        if (typeof identifiedHandler === 'function') {
+            (identifiedHandler as () => void)();
+        }
+        await Promise.all([firstConnect, ensured]);
     });
 });
 
