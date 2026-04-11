@@ -54,7 +54,8 @@ class NotificationManager extends EventEmitter {
         const { PRIORITY_LEVELS, NOTIFICATION_CONFIGS } = this.constants;
         this.PRIORITY_LEVELS = PRIORITY_LEVELS;
         this.NOTIFICATION_CONFIGS = NOTIFICATION_CONFIGS;
-        this.NotificationBuilder = require('../utils/notification-builder.js');
+        const { NotificationBuilder } = require('../utils/notification-builder.js');
+        this.NotificationBuilder = NotificationBuilder;
         this.inputValidator = new NotificationInputValidator(this.NOTIFICATION_CONFIGS);
         this.notificationGate = new NotificationGate(this.config);
         this.payloadBuilder = new NotificationPayloadBuilder(this.NotificationBuilder);
@@ -67,7 +68,7 @@ class NotificationManager extends EventEmitter {
 
 
     build(input) {
-        const NotificationBuilder = require('../utils/notification-builder.js');
+        const { NotificationBuilder } = require('../utils/notification-builder.js');
         return NotificationBuilder.build(input);
     }
 

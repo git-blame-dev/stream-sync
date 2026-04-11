@@ -18,15 +18,15 @@ const { createUserTrackingService } = UserTrackingServiceModule as unknown as {
 const { createVFXCommandService } = VFXCommandServiceModule as unknown as {
     createVFXCommandService: (config: UnknownRecord, eventBus: PreviewPipeline['eventBus']) => unknown;
 };
-const CommandCooldownServiceClass = (CommandCooldownServiceModule as unknown as {
-    default: new (options: {
+const { CommandCooldownService: CommandCooldownServiceClass } = CommandCooldownServiceModule as unknown as {
+    CommandCooldownService: new (options: {
         config: UnknownRecord;
         eventBus: PreviewPipeline['eventBus'];
         logger: PreviewLogger;
     }) => {
         dispose?: () => void;
     };
-}).default;
+};
 
 const load = createRequire(__filename);
 const configModule = load('../../src/core/config');

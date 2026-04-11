@@ -1,6 +1,6 @@
 const { describe, test, expect } = require('bun:test');
 export {};
-const NotificationBuilder = require('../../../src/utils/notification-builder.js');
+const { NotificationBuilder } = require('../../../src/utils/notification-builder.js');
 
 describe('notification builder error message behavior', () => {
     test('generates generic error message when sanitized username is empty', () => {
