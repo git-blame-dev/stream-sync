@@ -13,6 +13,44 @@ describe('YouTube live chat unknown renderer capture', () => {
     let logger;
     let parserApi;
 
+    const createGiftRawResponse = (text = 'sent Clapping seal for 250 Jewels') => ({
+        data: {
+            continuationContents: {
+                liveChatContinuation: {
+                    actions: [
+                        {
+                            addChatItemAction: {
+                                item: {
+                                    giftMessageView: {
+                                        id: 'test-gift-id',
+                                        text: {
+                                            runs: [{ text }]
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    ],
+                    continuations: [
+                        {
+                            timedContinuationData: {
+                                continuation: 'test-continuation-2'
+                            }
+                        }
+                    ]
+                }
+            }
+        }
+    });
+
+    const createParsedResponse = (token = 'test-continuation-2') => ({
+        continuation_contents: {
+            continuation: {
+                token
+            }
+        }
+    });
+
     beforeEach(() => {
         clearAllMocks();
         logger = {
@@ -33,42 +71,8 @@ describe('YouTube live chat unknown renderer capture', () => {
     });
 
     test('re-parses raw live chat responses and logs matched unknown renderers', async () => {
-        const rawResponse = {
-            data: {
-                continuationContents: {
-                    liveChatContinuation: {
-                        actions: [
-                            {
-                                addChatItemAction: {
-                                    item: {
-                                        giftMessageView: {
-                                            id: 'test-gift-id',
-                                            text: {
-                                                runs: [{ text: 'sent Clapping seal for 250 Jewels' }]
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        ],
-                        continuations: [
-                            {
-                                timedContinuationData: {
-                                    continuation: 'test-continuation-2'
-                                }
-                            }
-                        ]
-                    }
-                }
-            }
-        };
-        const parsedResponse = {
-            continuation_contents: {
-                continuation: {
-                    token: 'test-continuation-2'
-                }
-            }
-        };
+        const rawResponse = createGiftRawResponse();
+        const parsedResponse = createParsedResponse();
         const handler = parserApi.setParserErrorHandler.mock.calls[0][0];
         parserApi.parseResponse.mockImplementation((data) => {
             expect(data).toBe(rawResponse.data);
@@ -120,13 +124,7 @@ describe('YouTube live chat unknown renderer capture', () => {
     });
 
     test('does not write capture logs when the parser sees no unknown renderers', async () => {
-        const parsedResponse = {
-            continuation_contents: {
-                continuation: {
-                    token: 'test-continuation-2'
-                }
-            }
-        };
+        const parsedResponse = createParsedResponse();
         parserApi.parseResponse.mockReturnValue(parsedResponse);
 
         const execute = createMockFn().mockResolvedValue({ data: { ok: true } });
@@ -150,5 +148,86 @@ describe('YouTube live chat unknown renderer capture', () => {
 
         expect(result).toBe(parsedResponse);
         expect(logUnknownRenderer).not.toHaveBeenCalled();
+    });
+
+    test('does not attribute unresolved continuations to a stale stream id when multiple streams share actions', async () => {
+        const rawResponse = createGiftRawResponse('sent Girl power for 300 Jewels');
+        const parsedResponse = createParsedResponse('next-shared-token');
+        const handler = parserApi.setParserErrorHandler.mock.calls[0][0];
+        parserApi.parseResponse.mockImplementation(() => {
+            handler({
+                error_type: 'class_not_found',
+                classname: 'GiftMessageView'
+            });
+            return parsedResponse;
+        });
+
+        const execute = createMockFn().mockResolvedValue(rawResponse);
+        const actions = { execute };
+        const logUnknownRenderer = createMockFn().mockResolvedValue(undefined);
+
+        installYouTubeLiveChatUnknownRendererCapture({
+            actions,
+            parser: parserApi,
+            videoId: 'stream-one',
+            initialContinuation: 'stream-one-continuation',
+            logUnknownRenderer
+        });
+
+        installYouTubeLiveChatUnknownRendererCapture({
+            actions,
+            parser: parserApi,
+            videoId: 'stream-two',
+            initialContinuation: 'stream-two-continuation',
+            logUnknownRenderer
+        });
+
+        await actions.execute('live_chat/get_live_chat', {
+            continuation: 'unmapped-stream-two-continuation',
+            parse: true
+        });
+
+        expect(logUnknownRenderer).toHaveBeenCalledTimes(1);
+        expect(logUnknownRenderer.mock.calls[0][0]).toMatchObject({
+            videoId: null,
+            matchedRenderers: [
+                expect.objectContaining({ rawKey: 'giftMessageView' })
+            ]
+        });
+    });
+
+    test('falls back to the only known stream id when a single-stream continuation is unresolved', async () => {
+        const rawResponse = createGiftRawResponse('sent Girl power for 300 Jewels');
+        const parsedResponse = createParsedResponse('next-single-token');
+        const handler = parserApi.setParserErrorHandler.mock.calls[0][0];
+        parserApi.parseResponse.mockImplementation(() => {
+            handler({
+                error_type: 'class_not_found',
+                classname: 'GiftMessageView'
+            });
+            return parsedResponse;
+        });
+
+        const execute = createMockFn().mockResolvedValue(rawResponse);
+        const actions = { execute };
+        const logUnknownRenderer = createMockFn().mockResolvedValue(undefined);
+
+        installYouTubeLiveChatUnknownRendererCapture({
+            actions,
+            parser: parserApi,
+            videoId: 'single-stream',
+            initialContinuation: 'single-stream-continuation',
+            logUnknownRenderer
+        });
+
+        await actions.execute('live_chat/get_live_chat', {
+            continuation: 'unmapped-single-stream-continuation',
+            parse: true
+        });
+
+        expect(logUnknownRenderer).toHaveBeenCalledTimes(1);
+        expect(logUnknownRenderer.mock.calls[0][0]).toMatchObject({
+            videoId: 'single-stream'
+        });
     });
 });
