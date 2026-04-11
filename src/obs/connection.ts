@@ -28,6 +28,8 @@ type ObsConfig = {
     connectionTimeoutMs?: number;
 };
 
+type OBSLifecycleState = 'disconnected' | 'connecting' | 'connected' | 'disposed';
+
 type ConnectionDependencies = {
     constants?: {
         ERROR_MESSAGES: Record<string, string | undefined>;
@@ -71,6 +73,12 @@ class OBSConnectionManager {
     healthChecker: OBSHealthChecker | null;
     reconnectTimer: ReturnType<typeof safeSetTimeout> | null;
     reconnectIntervalMs: number;
+    lifecycleState: OBSLifecycleState;
+    connectAttemptVersion: number;
+    activeConnectAttemptVersion: number | null;
+    isIntentionalDisconnect: boolean;
+    isDisposed: boolean;
+    eventHandlers: Map<string, (data?: { reason?: unknown; code?: unknown }) => void>;
 
     constructor(dependencies: ConnectionDependencies = {}) {
         this.logger = logger;
@@ -104,26 +112,62 @@ class OBSConnectionManager {
         this.healthChecker = null;
         this.reconnectTimer = null;
         this.reconnectIntervalMs = 30000;
+        this.lifecycleState = 'disconnected';
+        this.connectAttemptVersion = 0;
+        this.activeConnectAttemptVersion = null;
+        this.isIntentionalDisconnect = false;
+        this.isDisposed = false;
+        this.eventHandlers = new Map();
 
         // Set up event handlers
         this.setupEventHandlers();
     }
     
     setupEventHandlers() {
-        this.obs.on('ConnectionOpened', () => {
+        const connectionOpenedHandler = () => {
             this.logger.debug('[OBS Connection] Connection Opened', 'obs-connection');
-        });
+        };
+        this.eventHandlers.set('ConnectionOpened', connectionOpenedHandler);
+        this.obs.on('ConnectionOpened', connectionOpenedHandler);
         
-        this.obs.on('ConnectionClosed', (data) => {
+        const connectionClosedHandler = (data?: { reason?: unknown; code?: unknown }) => {
             this.logger.debug(`[OBS Connection] Connection Closed: ${data?.reason} (${data?.code})`, 'obs-connection', data);
             this._isConnected = false;
-            this.connectionPromise = null;
+            this.lifecycleState = this.isDisposed
+                ? 'disposed'
+                : (this.isConnecting ? 'connecting' : 'disconnected');
+
+            if (!this.isConnecting) {
+                this.connectionCompleteHandler = null;
+                this.connectionPromise = null;
+                this.activeConnectAttemptVersion = null;
+            }
+
+            if (this.isIntentionalDisconnect || this.isDisposed) {
+                return;
+            }
+
             this.scheduleReconnect('connection-closed');
-        });
+        };
+        this.eventHandlers.set('ConnectionClosed', connectionClosedHandler);
+        this.obs.on('ConnectionClosed', connectionClosedHandler);
         
-        this.obs.on('Identified', () => {
+        const identifiedHandler = () => {
+            if (this.config.enabled === false) {
+                this.logger.debug('[OBS Connection] Ignoring Identified event while disabled', 'obs-connection');
+                this._isConnected = false;
+                this.lifecycleState = this.isDisposed ? 'disposed' : 'disconnected';
+                this.connectionCompleteHandler = null;
+                return;
+            }
+            if (this.lifecycleState !== 'connecting' && this.lifecycleState !== 'connected') {
+                this.logger.debug('[OBS Connection] Ignoring late Identified event', 'obs-connection');
+                return;
+            }
+
             this.log.info('[OBS] Successfully connected and authenticated with OBS.');
             this._isConnected = true;
+            this.lifecycleState = 'connected';
             this.clearReconnectTimer();
             
             // If there's a pending connection promise, complete it
@@ -134,43 +178,58 @@ class OBSConnectionManager {
             } else {
                 this.logger.debug('[OBS Connection] No completion handler waiting', 'obs-connection');
             }
-        });
+        };
+        this.eventHandlers.set('Identified', identifiedHandler);
+        this.obs.on('Identified', identifiedHandler);
         
         // Scene item cache invalidation events
-        this.obs.on('SceneItemCreated', () => {
+        const sceneItemCreatedHandler = () => {
             this.clearSceneItemCache();
             this.notifySourcesCacheClearing();
-        });
+        };
+        this.eventHandlers.set('SceneItemCreated', sceneItemCreatedHandler);
+        this.obs.on('SceneItemCreated', sceneItemCreatedHandler);
         
-        this.obs.on('SceneItemRemoved', () => {
+        const sceneItemRemovedHandler = () => {
             this.clearSceneItemCache();
             this.notifySourcesCacheClearing();
-        });
+        };
+        this.eventHandlers.set('SceneItemRemoved', sceneItemRemovedHandler);
+        this.obs.on('SceneItemRemoved', sceneItemRemovedHandler);
         
-        this.obs.on('SceneCreated', () => {
+        const sceneCreatedHandler = () => {
             this.clearSceneItemCache();
             this.notifySourcesCacheClearing();
-        });
+        };
+        this.eventHandlers.set('SceneCreated', sceneCreatedHandler);
+        this.obs.on('SceneCreated', sceneCreatedHandler);
         
-        this.obs.on('SceneRemoved', () => {
+        const sceneRemovedHandler = () => {
             this.clearSceneItemCache();
             this.notifySourcesCacheClearing();
-        });
+        };
+        this.eventHandlers.set('SceneRemoved', sceneRemovedHandler);
+        this.obs.on('SceneRemoved', sceneRemovedHandler);
         
-        this.obs.on('InputCreated', () => {
+        const inputCreatedHandler = () => {
             this.clearSceneItemCache();
             this.notifySourcesCacheClearing();
-        });
+        };
+        this.eventHandlers.set('InputCreated', inputCreatedHandler);
+        this.obs.on('InputCreated', inputCreatedHandler);
         
-        this.obs.on('InputRemoved', () => {
+        const inputRemovedHandler = () => {
             this.clearSceneItemCache();
             this.notifySourcesCacheClearing();
-        });
+        };
+        this.eventHandlers.set('InputRemoved', inputRemovedHandler);
+        this.obs.on('InputRemoved', inputRemovedHandler);
     }
     
     updateConfig(newConfig?: ObsConfig) {
         // Extract properties explicitly to handle getter-based configs
         if (newConfig) {
+            const wasEnabled = this.config.enabled !== false;
             if (newConfig.address !== undefined) {
                 this.config.address = newConfig.address;
             }
@@ -180,11 +239,32 @@ class OBSConnectionManager {
             if (newConfig.enabled !== undefined) {
                 this.config.enabled = newConfig.enabled;
             }
+            if (newConfig.connectionTimeoutMs !== undefined) {
+                this.OBS_CONNECTION_TIMEOUT = newConfig.connectionTimeoutMs;
+            }
+
+            const isEnabled = this.config.enabled !== false;
+            if (!isEnabled) {
+                this.clearReconnectTimer();
+                if (wasEnabled && this.isConnected()) {
+                    void this.disconnect();
+                }
+            }
         }
         this.logger.debug(`[OBS Connection] Updated config - Address: ${this.config.address}, Password: ${this.config.password ? 'Yes' : 'No'}`, 'obs-connection');
     }
+
+    private createDisabledError() {
+        return new Error('OBS integration is disabled in configuration');
+    }
     
     connect(): Promise<boolean> {
+        if (this.isDisposed) {
+            return Promise.reject(new Error('OBS connection manager has been disposed'));
+        }
+        if (this.config.enabled === false) {
+            return Promise.reject(this.createDisabledError());
+        }
         if (this.isConnected()) {
             this.logger.debug('[OBS Connection] Already connected', 'obs-connection');
             return Promise.resolve(true);
@@ -197,7 +277,12 @@ class OBSConnectionManager {
         this.logger.debug(`[OBS Connection] Attempting to connect to: ${this.config.address}`, 'obs-connection');
         this.logger.debug(`[OBS Connection] Password configured: ${this.config.password ? 'Yes' : 'No'}`, 'obs-connection');
 
+        this.clearReconnectTimer();
+        this.isIntentionalDisconnect = false;
         this.isConnecting = true;
+        this.lifecycleState = 'connecting';
+        const attemptVersion = ++this.connectAttemptVersion;
+        this.activeConnectAttemptVersion = attemptVersion;
 
         this.connectionPromise = new Promise<boolean>(async (resolve, reject) => {
             let identifiedTimeout: ReturnType<typeof globalThis.setTimeout> | null = null;
@@ -205,6 +290,9 @@ class OBSConnectionManager {
             
             // Set up a one-time completion handler
             const completeConnection = () => {
+                if (this.activeConnectAttemptVersion !== attemptVersion) {
+                    return;
+                }
                 if (connectionCompleted) return; // Prevent double completion
                 connectionCompleted = true;
                 
@@ -213,6 +301,9 @@ class OBSConnectionManager {
                     identifiedTimeout = null;
                 }
                 this.isConnecting = false;
+                this.lifecycleState = 'connected';
+                this.connectionPromise = null;
+                this.activeConnectAttemptVersion = null;
                 resolve(true);
             };
             
@@ -222,11 +313,16 @@ class OBSConnectionManager {
             try {
                 const identifiedTimeoutMs = this.OBS_CONNECTION_TIMEOUT;
                 identifiedTimeout = safeSetTimeout(() => {
+                    if (this.activeConnectAttemptVersion !== attemptVersion) {
+                        return;
+                    }
                     if (!connectionCompleted) {
                         connectionCompleted = true;
                         this.isConnecting = false;
+                        this.lifecycleState = this.isDisposed ? 'disposed' : 'disconnected';
                         this.connectionPromise = null;
                         this.connectionCompleteHandler = null;
+                        this.activeConnectAttemptVersion = null;
                         reject(new Error('OBS connection timed out waiting for authentication'));
                     }
                 }, identifiedTimeoutMs);
@@ -242,6 +338,10 @@ class OBSConnectionManager {
                 // Clean up on error
                 if (identifiedTimeout) {
                     clearTimeout(identifiedTimeout);
+                }
+
+                if (this.activeConnectAttemptVersion !== attemptVersion) {
+                    return;
                 }
                 this.connectionCompleteHandler = null;
                 
@@ -270,8 +370,12 @@ class OBSConnectionManager {
                 this.logger.debug('5. Check if password in config.ini matches OBS WebSocket password', 'OBS');
                 
                 this.isConnecting = false;
+                this.lifecycleState = this.isDisposed ? 'disposed' : 'disconnected';
                 this.connectionPromise = null; // Clear promise on failure
-                this.scheduleReconnect('connect-failed');
+                this.activeConnectAttemptVersion = null;
+                if (!this.isIntentionalDisconnect && !this.isDisposed) {
+                    this.scheduleReconnect('connect-failed');
+                }
                 reject(connectionError);
             }
         });
@@ -280,6 +384,14 @@ class OBSConnectionManager {
     }
     
     async disconnect() {
+        this.isIntentionalDisconnect = true;
+        this.clearReconnectTimer();
+        this.connectAttemptVersion += 1;
+        this.activeConnectAttemptVersion = null;
+        this.connectionCompleteHandler = null;
+        this.isConnecting = false;
+        this.lifecycleState = this.isDisposed ? 'disposed' : 'disconnected';
+
         if (this.obs && this.isConnected()) {
             this.logger.debug('[OBS Connection] Disconnecting from OBS WebSocket...', 'obs-connection');
             await this.obs.disconnect();
@@ -309,6 +421,10 @@ class OBSConnectionManager {
     }
     
     async ensureConnected(maxWait = 5000) {
+        if (this.config.enabled === false) {
+            throw this.createDisabledError();
+        }
+
         if (this.isConnected()) {
             return;
         }
@@ -388,6 +504,9 @@ class OBSConnectionManager {
     }
 
     scheduleReconnect(reason = 'unknown') {
+        if (this.isDisposed || this.isIntentionalDisconnect) {
+            return;
+        }
         if (!this.config.enabled) {
             return;
         }
@@ -416,6 +535,28 @@ class OBSConnectionManager {
             clearTimeout(this.reconnectTimer);
             this.reconnectTimer = null;
         }
+    }
+
+    dispose() {
+        if (this.isDisposed) {
+            return;
+        }
+
+        this.isDisposed = true;
+        this.isIntentionalDisconnect = true;
+        this.clearReconnectTimer();
+        this.connectAttemptVersion += 1;
+        this.activeConnectAttemptVersion = null;
+        this.connectionCompleteHandler = null;
+        this.connectionPromise = null;
+        this.isConnecting = false;
+        this._isConnected = false;
+        this.lifecycleState = 'disposed';
+
+        for (const [eventName, handler] of this.eventHandlers.entries()) {
+            this.obs.off(eventName, handler);
+        }
+        this.eventHandlers.clear();
     }
     
     cacheSceneItemId(key: string, id: unknown) {
@@ -536,6 +677,9 @@ async function ensureOBSConnected(maxWait = 5000) {
 }
 
 function resetOBSConnectionManager() {
+    if (globalOBSManager) {
+        globalOBSManager.dispose();
+    }
     globalOBSManager = null;
 }
 

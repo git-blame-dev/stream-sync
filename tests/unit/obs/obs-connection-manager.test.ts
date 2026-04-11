@@ -1,5 +1,6 @@
 const { describe, expect, beforeEach, afterEach, it } = require('bun:test');
 const { createMockFn, restoreAllMocks } = require('../../helpers/bun-mock-utils');
+const { useFakeTimers, useRealTimers, runOnlyPendingTimers } = require('../../helpers/bun-timers');
 
 const { OBSConnectionManager } = require('../../../src/obs/connection.ts');
 
@@ -9,11 +10,13 @@ describe('OBSConnectionManager', () => {
     beforeEach(() => {
         originalNodeEnv = process.env.NODE_ENV;
         process.env.NODE_ENV = 'test';
+        useFakeTimers();
     });
 
     afterEach(() => {
         process.env.NODE_ENV = originalNodeEnv;
         restoreAllMocks();
+        useRealTimers();
     });
 
     const createDefaultMockOBS = () => ({
@@ -151,5 +154,134 @@ describe('OBSConnectionManager', () => {
 
         expect(result).toBe(true);
         expect(manager._isConnected).toBe(true);
+    });
+
+    it('dedupes concurrent connect callers into one underlying connect attempt', async () => {
+        const handlers = {};
+        const connectPromise = Promise.resolve({ obsWebSocketVersion: '5', negotiatedRpcVersion: 1 });
+        const mockOBS = {
+            connect: createMockFn(() => connectPromise),
+            disconnect: createMockFn().mockResolvedValue(undefined),
+            call: createMockFn().mockResolvedValue({}),
+            on: createMockFn((event, cb) => {
+                handlers[event] = cb;
+            }),
+            off: createMockFn(),
+            once: createMockFn()
+        };
+
+        const manager = createManager({ mockOBS });
+        const first = manager.connect();
+        const second = manager.connect();
+
+        expect(first).toBe(second);
+        expect(mockOBS.connect).toHaveBeenCalledTimes(1);
+
+        handlers.Identified?.();
+        await expect(first).resolves.toBe(true);
+    });
+
+    it('ensureConnected reuses active connect attempt', async () => {
+        const handlers = {};
+        const mockOBS = {
+            connect: createMockFn().mockResolvedValue({ obsWebSocketVersion: '5', negotiatedRpcVersion: 1 }),
+            disconnect: createMockFn().mockResolvedValue(undefined),
+            call: createMockFn().mockResolvedValue({}),
+            on: createMockFn((event, cb) => {
+                handlers[event] = cb;
+            }),
+            off: createMockFn(),
+            once: createMockFn()
+        };
+
+        const manager = createManager({ mockOBS });
+        const connectPromise = manager.connect();
+        const ensuredPromise = manager.ensureConnected();
+
+        expect(mockOBS.connect).toHaveBeenCalledTimes(1);
+
+        handlers.Identified?.();
+        await expect(Promise.all([connectPromise, ensuredPromise])).resolves.toEqual([true, undefined]);
+    });
+
+    it('ignores late Identified event after connect timeout', async () => {
+        const handlers = {};
+        const mockOBS = {
+            connect: createMockFn().mockResolvedValue({ obsWebSocketVersion: '5', negotiatedRpcVersion: 1 }),
+            disconnect: createMockFn().mockResolvedValue(undefined),
+            call: createMockFn().mockResolvedValue({}),
+            on: createMockFn((event, cb) => {
+                handlers[event] = cb;
+            }),
+            off: createMockFn(),
+            once: createMockFn()
+        };
+
+        const manager = createManager({
+            mockOBS,
+            config: {
+                address: 'ws://localhost:4455',
+                password: 'testPassword',
+                enabled: true,
+                connectionTimeoutMs: 10
+            }
+        });
+
+        const pendingConnect = manager.connect();
+        runOnlyPendingTimers();
+        await expect(pendingConnect).rejects.toThrow(/timed out waiting for authentication/i);
+
+        handlers.Identified?.();
+
+        expect(manager.isConnected()).toBe(false);
+    });
+
+    it('fails fast when disabled for direct connect and ensureConnected', async () => {
+        const mockOBS = createDefaultMockOBS();
+        const manager = createManager({
+            mockOBS,
+            config: {
+                address: 'ws://localhost:4455',
+                password: 'testPassword',
+                enabled: false,
+                connectionTimeoutMs: 50
+            }
+        });
+
+        await expect(manager.connect()).rejects.toThrow(/disabled/i);
+        await expect(manager.ensureConnected()).rejects.toThrow(/disabled/i);
+        expect(mockOBS.connect).not.toHaveBeenCalled();
+    });
+
+    it('does not accept late Identified when config is disabled during connect attempt', async () => {
+        const handlers = {};
+        const mockOBS = {
+            connect: createMockFn().mockResolvedValue({ obsWebSocketVersion: '5', negotiatedRpcVersion: 1 }),
+            disconnect: createMockFn().mockResolvedValue(undefined),
+            call: createMockFn().mockResolvedValue({}),
+            on: createMockFn((event, cb) => {
+                handlers[event] = cb;
+            }),
+            off: createMockFn(),
+            once: createMockFn()
+        };
+
+        const manager = createManager({
+            mockOBS,
+            config: {
+                address: 'ws://localhost:4455',
+                password: 'testPassword',
+                enabled: true,
+                connectionTimeoutMs: 10
+            }
+        });
+
+        const pendingConnect = manager.connect();
+        manager.updateConfig({ enabled: false });
+        handlers.Identified?.();
+        runOnlyPendingTimers();
+
+        await expect(pendingConnect).rejects.toThrow(/timed out waiting for authentication/i);
+        expect(manager.isConnected()).toBe(false);
     });
 });
