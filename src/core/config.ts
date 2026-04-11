@@ -1,13 +1,13 @@
-(function initializeConfigModule() {
-type RawConfig = Record<string, Record<string, unknown>>;
-type BuiltConfig = Record<string, unknown>;
+import fs from 'fs';
+import ini from 'ini';
 
-type UserFacingErrorContext = Record<string, unknown>;
-type UserFacingErrorOptions = {
-    showInConsole?: boolean;
-    includeActions?: boolean;
-    logTechnical?: boolean;
-};
+import { buildConfig } from './config-builders';
+import type { BuiltConfig, NormalizedConfig } from './types/config-types';
+import envFileParserModule from '../utils/env-file-parser.js';
+import configValidatorModule from '../utils/config-validator.js';
+import { handleUserFacingError } from '../utils/user-friendly-errors';
+
+type RawConfig = NormalizedConfig;
 
 type ConfigValidatorApi = {
     parseBoolean: (value: unknown, defaultValue: boolean) => boolean;
@@ -19,24 +19,12 @@ type ConfigValidatorApi = {
     };
 };
 
-function nodeRequire<T>(moduleId: string): T {
-    return require(moduleId) as T;
-}
-
-const fs = nodeRequire<typeof import('node:fs')>('fs');
-const ini = nodeRequire<typeof import('ini')>('ini');
-const { handleUserFacingError } = nodeRequire<{
-    handleUserFacingError: (error: unknown, context?: UserFacingErrorContext, options?: UserFacingErrorOptions) => void;
-}>('../utils/user-friendly-errors');
-const { ConfigValidator } = nodeRequire<{
+const { ConfigValidator } = configValidatorModule as unknown as {
     ConfigValidator: ConfigValidatorApi;
-}>('../utils/config-validator');
-const { parseEnvContent } = nodeRequire<{
+};
+const { parseEnvContent } = envFileParserModule as {
     parseEnvContent: (content: string) => Record<string, string>;
-}>('../utils/env-file-parser');
-const { buildConfig } = nodeRequire<{
-    buildConfig: (normalizedConfig: RawConfig) => BuiltConfig;
-}>('./config-builders');
+};
 
 let loadedConfig: RawConfig | null = null;
 let cachedConfig: BuiltConfig | null = null;
@@ -178,12 +166,28 @@ function getConfig() {
     return cachedConfig;
 }
 
-module['exports'] = {
-    get config() {
-        return getConfig();
+const config = new Proxy({} as BuiltConfig, {
+    get(_target, property, receiver) {
+        return Reflect.get(getConfig() as object, property, receiver);
     },
+    set(_target, property, value) {
+        return Reflect.set(getConfig() as object, property, value);
+    },
+    has(_target, property) {
+        return Reflect.has(getConfig() as object, property);
+    },
+    ownKeys() {
+        return Reflect.ownKeys(getConfig() as object);
+    },
+    getOwnPropertyDescriptor(_target, property) {
+        const descriptor = Object.getOwnPropertyDescriptor(getConfig() as object, property);
+        return descriptor ? { ...descriptor, configurable: true } : undefined;
+    }
+}) as BuiltConfig;
+
+export {
+    config,
     loadConfig,
     _resetConfigForTesting,
     _getConfigPath
 };
-})();

@@ -1,15 +1,15 @@
 import fs from 'node:fs';
 import readline from 'node:readline';
-import { createRequire } from 'node:module';
 
 import { createPlatformErrorHandler } from './platform-error-handler';
 import { initializeStaticSecrets } from '../core/secrets';
+import envFileParserModule from './env-file-parser.js';
+import loggerResolverModule from './logger-resolver.js';
 
-const nodeRequire = createRequire(import.meta.url);
-const { parseEnvContent } = nodeRequire('./env-file-parser') as {
+const { parseEnvContent } = envFileParserModule as {
     parseEnvContent: (content: string, options?: { ignoreEmptyKeys?: boolean }) => Record<string, string>;
 };
-const { resolveLogger } = nodeRequire('./logger-resolver') as {
+const { resolveLogger } = loggerResolverModule as {
     resolveLogger: (loggerCandidate: unknown, fallbackContext: string) => {
         debug?: (message: string, context?: string, payload?: unknown) => void;
         info?: (message: string, context?: string, payload?: unknown) => void;

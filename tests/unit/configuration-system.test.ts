@@ -73,6 +73,7 @@ function resetConfigModule() {
 function loadFreshConfig(): { config: LoadedConfig } {
     resetConfigModule();
     const { config } = nodeRequire('../../src/core/config') as { config: LoadedConfig };
+    void config.general;
     return { config };
 }
 

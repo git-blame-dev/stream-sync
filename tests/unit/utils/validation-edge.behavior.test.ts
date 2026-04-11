@@ -1,5 +1,6 @@
 const { describe, expect, it } = require('bun:test');
 const {
+    sanitizeDisplayName,
     sanitizeForDisplay,
     formatUsername12
 } = require('../../../src/utils/validation.ts');
@@ -53,6 +54,10 @@ describe('validation utilities', () => {
             const result = formatUsername12('   ');
             expect(result).toBeTruthy();
             expect(result.length).toBeGreaterThan(0);
+        });
+
+        it('sanitizes display names through the shared display helper', () => {
+            expect(sanitizeDisplayName('<b>test-user-name</b>')).toBe('test-user-na');
         });
     });
 });

@@ -1,21 +1,28 @@
 import type { BuiltConfig } from './core/types/config-types';
-import { createRequire } from 'node:module';
 import { createEventBus } from './core/EventBus';
 import { buildLoggingConfig } from './core/config-builders';
+import { PRIORITY_LEVELS, NOTIFICATION_CONFIGS } from './core/constants';
+import { config as defaultConfig, loadConfig } from './core/config';
 import { getUnifiedLogger, initializeLoggingConfig, setDebugMode } from './core/logging';
 import { InnertubeFactory } from './factories/innertube-factory';
+import NotificationManagerModule from './notifications/NotificationManager.js';
 import { getOBSConnectionManager } from './obs/connection';
 import { initializeDisplayQueue } from './obs/display-queue';
+import { getDefaultEffectsManager } from './obs/effects';
 import { getDefaultGoalsManager } from './obs/goals';
+import { getDefaultSourcesManager } from './obs/sources';
+import { StreamElementsPlatform, TikTokPlatform, TwitchPlatform, YouTubePlatform } from './platforms';
 import { AppRuntime } from './runtime/AppRuntime';
-import { CommandCooldownService } from './services/CommandCooldownService.js';
-import { createGracefulExitService } from './services/GracefulExitService.js';
-import { PlatformLifecycleService } from './services/PlatformLifecycleService.js';
+import { CommandCooldownService } from './services/CommandCooldownService';
+import { createGracefulExitService } from './services/GracefulExitService';
+import { PlatformLifecycleService } from './services/PlatformLifecycleService';
 import { createUserTrackingService } from './services/UserTrackingService';
-import { createVFXCommandService } from './services/VFXCommandService.js';
+import { createVFXCommandService } from './services/VFXCommandService';
 import { getGiftAnimationDependencyStatus } from './services/tiktok-gift-animation/resolver';
 import * as innertubeInstanceManager from './services/innertube-instance-manager';
 import { TwitchAuth } from './auth/TwitchAuth';
+import dependencyFactoryModule from './utils/dependency-factory.js';
+import { validateLoggerInterface } from './utils/dependency-validator';
 import { createSpamDetectionConfig, createDonationSpamDetection } from './utils/spam-detection';
 import { createOBSEventService } from './obs/obs-event-service';
 import { createSceneManagementService } from './obs/scene-management-service';
@@ -25,11 +32,95 @@ import { ensureSecrets } from './utils/secret-manager';
 import { createTextProcessingManager } from './utils/text-processing';
 import { safeSetInterval } from './utils/timeout-validator';
 
-const nodeRequire = createRequire(import.meta.url);
+const NotificationManager = NotificationManagerModule as new (...args: unknown[]) => {
+    handleAggregatedDonation: (data: unknown) => void;
+    donationSpamDetector?: unknown;
+};
+const { DependencyFactory } = dependencyFactoryModule as {
+    DependencyFactory: new () => unknown;
+};
+
+type MainCliArgs = {
+    debug: boolean;
+    help: boolean;
+    chat: number | null;
+};
+
+type MainLogOptions = {
+    eventType: string;
+    logContext: string;
+};
+
+type MainOverrides = Record<string, unknown> & {
+    cliArgs?: Partial<MainCliArgs>;
+    config?: MainConfig;
+    innertubeImporter?: (...args: unknown[]) => unknown;
+    axios?: unknown;
+    WebSocketCtor?: unknown;
+    tiktokConnector?: unknown;
+    dependencyFactory?: unknown;
+};
+
+type MainConfig = BuiltConfig & {
+    general: {
+        debugEnabled: boolean;
+        gracefulExit: unknown;
+        envFilePath?: string;
+        envFileReadEnabled?: unknown;
+        envFileWriteEnabled?: unknown;
+    };
+    obs: {
+        chatMsgTxt: string;
+        chatMsgScene: string;
+        chatMsgGroup: string;
+        ttsEnabled: boolean;
+        notificationMsgGroup: string;
+        notificationTxt: string;
+        notificationScene: string;
+        chatPlatformLogos: Record<string, unknown>;
+        notificationPlatformLogos: Record<string, unknown>;
+    } & Record<string, unknown>;
+    displayQueue: {
+        autoProcess: boolean;
+        maxQueueSize: number;
+    };
+    cooldowns: Record<string, unknown>;
+    timing: {
+        transitionDelay: number;
+        notificationClearDelay: number;
+        chatMessageDuration: number;
+    };
+    http: {
+        userAgents: string[];
+    };
+    twitch: Record<string, unknown> & {
+        enabled: boolean;
+        tokenStorePath?: string;
+        clientId?: string;
+        username?: string;
+    };
+    youtube: Record<string, unknown>;
+    tiktok: Record<string, unknown>;
+    handcam: Record<string, unknown>;
+    gifts: Record<string, unknown>;
+    gui?: {
+        enableDock?: boolean;
+        enableOverlay?: boolean;
+        showGifts?: boolean;
+    };
+    spam: Record<string, unknown>;
+};
+
+type MainApp = AppRuntime & {
+    keepAliveInterval?: ReturnType<typeof safeSetInterval>;
+    viewerCountSystem?: {
+        isPolling?: boolean;
+    };
+};
 
 const args = process.argv.slice(2);
 
-const cliArgs: { debug: boolean; help: boolean; chat: number | null } = {
+const cliArgs: MainCliArgs = {
     debug: false,
     help: false,
     chat: null
@@ -83,15 +174,10 @@ if (cliArgs.debug) {
     setDebugMode(true);
 }
 
-const coreRuntime = nodeRequire('./core') as {
-    config: BuiltConfig;
-    loadConfig: () => Record<string, Record<string, unknown>>;
-};
-
-let config = coreRuntime.config;
+let config = defaultConfig as MainConfig;
 
 if (cliArgs.debug) {
-    const normalizedConfig = coreRuntime.loadConfig();
+    const normalizedConfig = loadConfig() as Record<string, Record<string, unknown>>;
     config.logging = buildLoggingConfig(normalizedConfig, { debugMode: true });
 }
 
@@ -111,7 +197,7 @@ function getMainErrorHandler() {
     return mainErrorHandler;
 }
 
-function logMainError(message, error, payload, options) {
+function logMainError(message: string, error: unknown, payload: Record<string, unknown> | null, options: MainLogOptions) {
     const handler = getMainErrorHandler();
     if (!options) {
         throw new Error('logMainError requires options');
@@ -130,33 +216,19 @@ function logMainError(message, error, payload, options) {
     handler.logOperationalError(message, logContext, payload);
 }
 
-const coreConstants = nodeRequire('./core/constants') as {
-    PRIORITY_LEVELS: Record<string, unknown>;
-    NOTIFICATION_CONFIGS: Record<string, unknown>;
-};
-
-const {
+const textProcessing = createTextProcessingManager({ logger });
+const coreConstants = {
     PRIORITY_LEVELS,
     NOTIFICATION_CONFIGS
-} = coreConstants;
-
-const textProcessing = createTextProcessingManager({ logger });
-const NotificationManager = nodeRequire('./notifications/NotificationManager') as new (...args: unknown[]) => {
-    handleAggregatedDonation: (data: unknown) => void;
-    donationSpamDetector?: unknown;
 };
-const dependencyValidator = nodeRequire('./utils/dependency-validator') as { validateLoggerInterface: (candidate: unknown) => void };
-const dependencyFactory = nodeRequire('./utils/dependency-factory') as { DependencyFactory: new () => unknown };
-const effects = nodeRequire('./obs/effects') as { getDefaultEffectsManager: () => unknown };
-const sources = nodeRequire('./obs/sources') as { getDefaultSourcesManager: () => unknown };
-const platforms = nodeRequire('./platforms') as {
-    TikTokPlatform: unknown;
-    TwitchPlatform: unknown;
-    YouTubePlatform: unknown;
-    StreamElementsPlatform: unknown;
+const platforms = {
+    TikTokPlatform,
+    TwitchPlatform,
+    YouTubePlatform,
+    StreamElementsPlatform
 };
 
-let app;
+let app: MainApp | undefined;
 
 const MAIN_FUNCTION_OVERRIDE_KEYS = [
     'ensureSecrets',
@@ -175,7 +247,7 @@ const MAIN_FUNCTION_OVERRIDE_KEYS = [
     'createProductionDependencies'
 ];
 
-function validateMainOverrideContracts(overrides) {
+function validateMainOverrideContracts(overrides: MainOverrides) {
     if (!overrides || typeof overrides !== 'object') {
         throw new Error('main overrides must be an object when provided');
     }
@@ -192,7 +264,7 @@ function validateMainOverrideContracts(overrides) {
     }
 }
 
-function validateRuntimeCliArgs(cliArgsCandidate) {
+function validateRuntimeCliArgs(cliArgsCandidate: Partial<MainCliArgs> & Record<string, unknown>) {
     if (!cliArgsCandidate || typeof cliArgsCandidate !== 'object') {
         throw new Error('main runtime cliArgs must be an object');
     }
@@ -204,10 +276,7 @@ function validateRuntimeCliArgs(cliArgsCandidate) {
     }
 }
 
-function createProductionDependencies(overrides = {}) {
-    const { validateLoggerInterface } = dependencyValidator;
-    const { DependencyFactory } = dependencyFactory;
-
+function createProductionDependencies(overrides: MainOverrides = {}) {
     validateLoggerInterface(logger);
 
     const resolvedOverrides = overrides || {};
@@ -218,11 +287,11 @@ function createProductionDependencies(overrides = {}) {
     return {
         obs: {
             connectionManager: getOBSConnectionManager({ config: config.obs }),
-            sourcesManager: sources.getDefaultSourcesManager(),
-            effectsManager: effects.getDefaultEffectsManager()
+            sourcesManager: getDefaultSourcesManager(),
+            effectsManager: getDefaultEffectsManager()
         },
-        sourcesFactory: sources,
-        effectsFactory: effects,
+        sourcesFactory: { getDefaultSourcesManager },
+        effectsFactory: { getDefaultEffectsManager },
         logging: logger,
         logger: logger,
         platforms,
@@ -241,7 +310,7 @@ function createProductionDependencies(overrides = {}) {
     };
 }
 
-function createAppRuntime(config, dependencies) {
+function createAppRuntime(config: MainConfig, dependencies: Record<string, unknown>) {
     if (!dependencies) {
         throw new Error('createAppRuntime requires dependencies');
     }
@@ -252,7 +321,7 @@ function createAppRuntime(config, dependencies) {
     return new AppRuntime(config, deps);
 }
 
-async function main(overrides = {}) {
+async function main(overrides: MainOverrides = {}) {
     const runtimeOverrides = overrides || {};
     validateMainOverrideContracts(runtimeOverrides);
 
@@ -376,7 +445,13 @@ async function main(overrides = {}) {
             ttsEnabled
         };
 
-        const guiGiftAnimationState = {
+        const guiGiftAnimationState: {
+            enableDock: boolean;
+            enableOverlay: boolean;
+            showGifts: boolean;
+            guiEnabled?: boolean;
+            giftAnimationsEnabled?: boolean;
+        } = {
             enableDock: displayQueueConfig.gui?.enableDock === true,
             enableOverlay: displayQueueConfig.gui?.enableOverlay === true,
             showGifts: displayQueueConfig.gui?.showGifts !== false
@@ -434,7 +509,7 @@ async function main(overrides = {}) {
 
         logger.debug('Creating OBS event-driven services...', 'Main');
         const obsConnectionManager = getOBSConnectionManagerFn({ config: config.obs });
-        const obsSources = sources.getDefaultSourcesManager();
+        const obsSources = getDefaultSourcesManager();
 
         const obsEventService = createOBSEventServiceFn({
             eventBus,
@@ -471,7 +546,7 @@ async function main(overrides = {}) {
         const spamConfig = createSpamDetectionConfigFn(config.spam, { logger });
         const donationSpamDetector = createDonationSpamDetectionFn(spamConfig, {
             logger,
-            onAggregatedDonation: (data) => notificationManager.handleAggregatedDonation(data)
+            onAggregatedDonation: (data: unknown) => notificationManager.handleAggregatedDonation(data)
         });
         notificationManager.donationSpamDetector = donationSpamDetector;
         logger.debug('Spam detection service created and wired', 'Main');
@@ -495,7 +570,7 @@ async function main(overrides = {}) {
         dependencies.obsEventService = obsEventService;
         dependencies.sceneManagementService = sceneManagementService;
 
-        const sharedPlatformDependencies = {
+        const sharedPlatformDependencies: Record<string, unknown> = {
             logger,
             notificationManager,
             twitchAuth,
@@ -580,7 +655,8 @@ async function main(overrides = {}) {
         };
 
     } catch (error) {
-        logMainError(`Critical error occurred: ${error.message}`, error, null, { eventType: 'startup', logContext: 'main' });
+        const message = error instanceof Error ? error.message : String(error);
+        logMainError(`Critical error occurred: ${message}`, error, null, { eventType: 'startup', logContext: 'main' });
         throw error;
     }
 }

@@ -4,8 +4,7 @@ import { captureStdout, captureStderr } from '../../helpers/output-capture';
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
-
-const logging = require('../../../src/core/logging.ts');
+import * as logging from '../../../src/core/logging.ts';
 
 describe('core/logging behavior', () => {
     beforeEach(() => {
