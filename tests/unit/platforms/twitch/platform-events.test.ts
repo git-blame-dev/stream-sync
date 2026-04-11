@@ -3,7 +3,7 @@ const { createMockFn, restoreAllMocks } = require('../../../helpers/bun-mock-uti
 const { noOpLogger } = require('../../../helpers/mock-factories');
 
 const { TwitchPlatform } = require('../../../../src/platforms/twitch.ts');
-const TwitchEventSub = require('../../../../src/platforms/twitch-eventsub.ts');
+const { TwitchEventSub } = require('../../../../src/platforms/twitch-eventsub.ts');
 const { secrets, _resetForTesting, initializeStaticSecrets } = require('../../../../src/core/secrets');
 const { DEFAULT_AVATAR_URL } = require('../../../../src/constants/avatar');
 

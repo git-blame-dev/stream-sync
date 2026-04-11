@@ -1,13 +1,15 @@
-const { TWITCH } = require('../core/endpoints');
-const { secrets } = require('../core/secrets');
-const { loadTokens, saveTokens } = require('../utils/token-store');
-const { createPlatformErrorHandler } = require('../utils/platform-error-handler');
-const { resolveLogger } = require('../utils/logger-resolver');
-const { TWITCH_OAUTH_SCOPES } = require('./twitch-oauth-scopes');
+import * as axiosModule from 'axios';
+import { TWITCH } from '../core/endpoints';
+import { secrets } from '../core/secrets';
+import { createPlatformErrorHandler } from '../utils/platform-error-handler';
+import { resolveLogger } from '../utils/logger-resolver';
+import { loadTokens, saveTokens } from '../utils/token-store';
+import { runOAuthFlow } from './oauth-flow';
+import { TWITCH_OAUTH_SCOPES } from './twitch-oauth-scopes';
 
 const createTwitchAuthErrorHandler = (logger) => createPlatformErrorHandler(logger, 'twitch-auth');
 
-const logAuthError = (handler, message, error, payload = null) => {
+const logAuthError = (handler, message, error, payload: Record<string, unknown> | null = null) => {
     if (error instanceof Error) {
         handler.handleEventProcessingError(error, 'twitch-auth', payload, message, 'twitch-auth');
         return;
@@ -98,7 +100,7 @@ const isAuthDisabled = () => {
 class TwitchAuth {
     #initialized = false;
     #userId = null;
-    #refreshPromise = null;
+    #refreshPromise: Promise<boolean> | null = null;
     #tokenStorePath;
     #clientId;
     #logger;
@@ -111,8 +113,8 @@ class TwitchAuth {
         this.#clientId = clientId;
         this.#logger = resolveLogger(logger, 'TwitchAuth');
         this.#expectedUsername = expectedUsername;
-        this.#httpClient = httpClient || require('axios');
-        this.#oauthFlow = oauthFlow || require('./oauth-flow');
+        this.#httpClient = httpClient || axiosModule.default || axiosModule;
+        this.#oauthFlow = oauthFlow || { runOAuthFlow };
     }
 
     async initialize() {
@@ -251,6 +253,11 @@ class TwitchAuth {
             return false;
         }
 
+        const clientSecret = secrets.twitch.clientSecret;
+        if (!clientSecret) {
+            return false;
+        }
+
         const handler = createTwitchAuthErrorHandler(this.#logger);
 
         try {
@@ -258,7 +265,7 @@ class TwitchAuth {
                 grant_type: 'refresh_token',
                 refresh_token: secrets.twitch.refreshToken,
                 client_id: this.#clientId,
-                client_secret: secrets.twitch.clientSecret
+                client_secret: clientSecret
             }).toString();
 
             const response = await this.#httpClient.post(
@@ -363,4 +370,4 @@ class TwitchAuth {
     }
 }
 
-module.exports = TwitchAuth;
+export { TwitchAuth };

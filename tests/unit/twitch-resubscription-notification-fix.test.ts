@@ -4,7 +4,7 @@ import { createRequire } from 'node:module';
 const load = createRequire(__filename);
 const { EventEmitter } = load('events');
 
-const TwitchEventSub = load('../../src/platforms/twitch-eventsub');
+const { TwitchEventSub } = load('../../src/platforms/twitch-eventsub');
 const { noOpLogger } = load('../helpers/mock-factories');
 const { secrets, _resetForTesting, initializeStaticSecrets } = load('../../src/core/secrets');
 

@@ -59,7 +59,7 @@ const { buildLoggingConfig } = require('./core/config-builders');
 const { safeSetInterval } = require('./utils/timeout-validator');
 const { createPlatformErrorHandler } = require('./utils/platform-error-handler');
 const { ensureSecrets } = require('./utils/secret-manager');
-const TwitchAuth = require('./auth/TwitchAuth');
+const { TwitchAuth } = require('./auth/TwitchAuth');
 
 if (cliArgs.debug) {
     setDebugMode(true);

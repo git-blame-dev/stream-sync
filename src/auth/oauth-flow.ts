@@ -1,20 +1,53 @@
-const https = require('https');
-const url = require('url');
-const querystring = require('querystring');
-const { exec } = require('child_process');
-const fs = require('fs');
-const { TWITCH } = require('../core/endpoints');
-const { secrets } = require('../core/secrets');
-const { saveTokens } = require('../utils/token-store');
-const { createPlatformErrorHandler } = require('../utils/platform-error-handler');
-const { resolveLogger } = require('../utils/logger-resolver');
-const { safeSetTimeout } = require('../utils/timeout-validator');
-const { TOKEN_REFRESH_CONFIG, OAUTH_SERVER_CONFIG } = require('../utils/auth-constants');
-const { TWITCH_OAUTH_SCOPES } = require('./twitch-oauth-scopes');
+import { exec } from 'node:child_process';
+import fs from 'node:fs';
+import * as https from 'node:https';
+import * as querystring from 'node:querystring';
+import * as selfsigned from 'selfsigned';
+import { TWITCH } from '../core/endpoints';
+import { secrets } from '../core/secrets';
+import { TOKEN_REFRESH_CONFIG, OAUTH_SERVER_CONFIG } from '../utils/auth-constants';
+import { createPlatformErrorHandler } from '../utils/platform-error-handler';
+import { resolveLogger } from '../utils/logger-resolver';
+import { saveTokens } from '../utils/token-store';
+import { safeSetTimeout } from '../utils/timeout-validator';
+import { TWITCH_OAUTH_SCOPES } from './twitch-oauth-scopes';
 
-let cachedCerts = null;
+type OAuthLogger = ReturnType<typeof resolveLogger> & {
+    console?: (message: string, context?: string, payload?: unknown) => void;
+};
+
+type OAuthTokenResponse = {
+    accessToken: string;
+    refreshToken?: string;
+    expiresIn?: number | null;
+};
+
+let cachedCerts: { key: string; cert: string } | null = null;
 
 const createOAuthFlowErrorHandler = (logger) => createPlatformErrorHandler(logger, 'oauth-flow');
+
+const getErrorCode = (error: unknown): string | number | null => {
+    if (!error || typeof error !== 'object' || !('code' in error)) {
+        return null;
+    }
+    const code = (error as { code?: unknown }).code;
+    if (typeof code === 'string' || typeof code === 'number') {
+        return code;
+    }
+    return null;
+};
+
+const getErrorMessage = (error: unknown): string => {
+    return error instanceof Error ? error.message : String(error);
+};
+
+const logConsole = (logger: OAuthLogger, message: string, context = 'oauth-flow') => {
+    if (typeof logger.console === 'function') {
+        logger.console(message, context);
+        return;
+    }
+    logger.info(message, context);
+};
 
 const safeCloseServer = (server) => {
     if (!server || typeof server.close !== 'function') {
@@ -28,7 +61,6 @@ function generateSelfSignedCert() {
         return cachedCerts;
     }
 
-    const selfsigned = require('selfsigned');
     const attrs = [{ name: 'commonName', value: 'localhost' }];
     const options = {
         days: OAUTH_SERVER_CONFIG.SSL_OPTIONS.DAYS,
@@ -57,7 +89,7 @@ function buildAuthUrl(clientId, redirectUri, scopes = TWITCH_OAUTH_SCOPES) {
     return `${TWITCH.OAUTH.AUTHORIZE}?${params.toString()}`;
 }
 
-function renderCallbackHtml(status, details = {}) {
+function renderCallbackHtml(status: string, details: { error?: string; description?: string } = {}) {
     if (status === 'success') {
         return `
             <html>
@@ -108,18 +140,18 @@ function renderCallbackHtml(status, details = {}) {
 }
 
 async function startCallbackServer({ port = OAUTH_SERVER_CONFIG.DEFAULT_PORT, autoFindPort = false, logger }) {
-    const resolvedLogger = resolveLogger(logger, 'oauth-flow');
+    const resolvedLogger: OAuthLogger = resolveLogger(logger, 'oauth-flow');
     const handler = createOAuthFlowErrorHandler(resolvedLogger);
 
-    let resolveCode;
-    let rejectCode;
-    const waitForCode = new Promise((resolve, reject) => {
+    let resolveCode: (value: string) => void;
+    let rejectCode: (reason: unknown) => void;
+    const waitForCode = new Promise<string>((resolve, reject) => {
         resolveCode = resolve;
         rejectCode = reject;
     });
 
-    let server;
-    let boundPort = null;
+    let server: https.Server;
+    let boundPort = port;
     const timeoutId = safeSetTimeout(() => {
         safeCloseServer(server);
         rejectCode(new Error(`OAuth flow timed out after ${TOKEN_REFRESH_CONFIG.OAUTH_TIMEOUT_MS / 60000} minutes`));
@@ -127,28 +159,30 @@ async function startCallbackServer({ port = OAUTH_SERVER_CONFIG.DEFAULT_PORT, au
 
     const options = generateSelfSignedCert();
     server = https.createServer({ key: options.key, cert: options.cert }, (req, res) => {
-        const parsedUrl = url.parse(req.url, true);
+        const requestUrl = new URL(req.url || '/', `https://localhost:${port || OAUTH_SERVER_CONFIG.DEFAULT_PORT}`);
 
-        if (parsedUrl.pathname === '/' || parsedUrl.pathname === '/callback') {
-            const query = parsedUrl.query || {};
-            if (query.code) {
+        if (requestUrl.pathname === '/' || requestUrl.pathname === '/callback') {
+            const code = requestUrl.searchParams.get('code');
+            if (code) {
                 res.writeHead(200, { 'Content-Type': 'text/html' });
                 res.end(renderCallbackHtml('success'));
                 clearTimeout(timeoutId);
                 server.close();
-                resolveCode(query.code);
+                resolveCode(code);
                 return;
             }
 
-            if (query.error) {
+            const oauthError = requestUrl.searchParams.get('error');
+            if (oauthError) {
+                const oauthErrorDescription = requestUrl.searchParams.get('error_description') || undefined;
                 res.writeHead(400, { 'Content-Type': 'text/html' });
                 res.end(renderCallbackHtml('failed', {
-                    error: query.error,
-                    description: query.error_description
+                    error: oauthError,
+                    description: oauthErrorDescription
                 }));
                 clearTimeout(timeoutId);
                 server.close();
-                rejectCode(new Error(`OAuth error: ${query.error} - ${query.error_description || 'Unknown error'}`));
+                rejectCode(new Error(`OAuth error: ${oauthError} - ${oauthErrorDescription || 'Unknown error'}`));
                 return;
             }
 
@@ -164,15 +198,15 @@ async function startCallbackServer({ port = OAUTH_SERVER_CONFIG.DEFAULT_PORT, au
         res.end('Not Found');
     });
 
-    const listenOnPort = async (candidatePort) => {
-        await new Promise((resolve, reject) => {
-            const onError = (error) => {
+    const listenOnPort = async (candidatePort: number) => {
+        await new Promise<void>((resolve, reject) => {
+            const onError = (error: unknown) => {
                 server.off('listening', onListening);
                 reject(error);
             };
             const onListening = () => {
                 server.off('error', onError);
-                resolve();
+                resolve(undefined);
             };
 
             server.once('error', onError);
@@ -199,7 +233,7 @@ async function startCallbackServer({ port = OAUTH_SERVER_CONFIG.DEFAULT_PORT, au
                         await listenOnPort(candidatePort);
                         break;
                     } catch (error) {
-                        if (error.code === 'EADDRINUSE' && candidatePort < OAUTH_SERVER_CONFIG.PORT_RANGE.END) {
+                        if (getErrorCode(error) === 'EADDRINUSE' && candidatePort < OAUTH_SERVER_CONFIG.PORT_RANGE.END) {
                             candidatePort += 1;
                             continue;
                         }
@@ -230,8 +264,23 @@ async function startCallbackServer({ port = OAUTH_SERVER_CONFIG.DEFAULT_PORT, au
     return { server, waitForCode, port: boundPort, redirectUri };
 }
 
-async function exchangeCodeForTokens(code, { clientId, clientSecret, redirectUri, logger, httpsRequest }) {
-    const resolvedLogger = resolveLogger(logger, 'oauth-flow');
+async function exchangeCodeForTokens(
+    code,
+    {
+        clientId,
+        clientSecret,
+        redirectUri,
+        logger,
+        httpsRequest
+    }: {
+        clientId: string;
+        clientSecret: string;
+        redirectUri: string;
+        logger: unknown;
+        httpsRequest?: typeof https.request;
+    }
+): Promise<OAuthTokenResponse> {
+    const resolvedLogger = logger as OAuthLogger;
     const handler = createOAuthFlowErrorHandler(resolvedLogger);
     const postData = querystring.stringify({
         client_id: clientId,
@@ -277,14 +326,14 @@ async function exchangeCodeForTokens(code, { clientId, clientSecret, redirectUri
                     reject(new Error(`Token exchange failed: ${response.error || 'Unknown error'}`));
                 } catch (error) {
                     handler.handleEventProcessingError(error, 'oauth-flow', null, 'Failed to parse token response');
-                    reject(new Error(`Failed to parse token response: ${error.message}`));
+                    reject(new Error(`Failed to parse token response: ${getErrorMessage(error)}`));
                 }
             });
         });
 
         req.on('error', (error) => {
             handler.handleEventProcessingError(error, 'oauth-flow', null, 'Token exchange request failed');
-            reject(new Error(`Token exchange request failed: ${error.message}`));
+            reject(new Error(`Token exchange request failed: ${getErrorMessage(error)}`));
         });
 
         req.write(postData);
@@ -293,46 +342,46 @@ async function exchangeCodeForTokens(code, { clientId, clientSecret, redirectUri
 }
 
 function displayOAuthInstructions(authUrl, logger, { scopes = TWITCH_OAUTH_SCOPES, tokenStorePath = null } = {}) {
-    const resolvedLogger = resolveLogger(logger, 'oauth-flow');
+    const resolvedLogger: OAuthLogger = resolveLogger(logger, 'oauth-flow');
 
-    resolvedLogger.console('\n' + '='.repeat(80), 'oauth-flow');
-    resolvedLogger.console('TWITCH AUTHENTICATION REQUIRED', 'oauth-flow');
-    resolvedLogger.console('='.repeat(80), 'oauth-flow');
+    logConsole(resolvedLogger, '\n' + '='.repeat(80));
+    logConsole(resolvedLogger, 'TWITCH AUTHENTICATION REQUIRED');
+    logConsole(resolvedLogger, '='.repeat(80));
 
-    resolvedLogger.console('\nATTEMPTING AUTOMATIC BROWSER OPENING...', 'oauth-flow');
-    resolvedLogger.console('Your browser should open automatically to complete authentication.', 'oauth-flow');
-    resolvedLogger.console('If it doesn\'t open automatically, please copy and paste this URL:', 'oauth-flow');
-    resolvedLogger.console(`\n${authUrl}\n`, 'oauth-flow');
+    logConsole(resolvedLogger, '\nATTEMPTING AUTOMATIC BROWSER OPENING...');
+    logConsole(resolvedLogger, 'Your browser should open automatically to complete authentication.');
+    logConsole(resolvedLogger, 'If it doesn\'t open automatically, please copy and paste this URL:');
+    logConsole(resolvedLogger, `\n${authUrl}\n`);
 
-    resolvedLogger.console('WHAT WILL HAPPEN:', 'oauth-flow');
-    resolvedLogger.console('1. Browser opens to Twitch OAuth page', 'oauth-flow');
-    resolvedLogger.console('2. Log in with your Twitch account', 'oauth-flow');
-    resolvedLogger.console('3. Review and authorize the requested permissions', 'oauth-flow');
-    resolvedLogger.console('4. You\'ll be redirected back to a success page', 'oauth-flow');
+    logConsole(resolvedLogger, 'WHAT WILL HAPPEN:');
+    logConsole(resolvedLogger, '1. Browser opens to Twitch OAuth page');
+    logConsole(resolvedLogger, '2. Log in with your Twitch account');
+    logConsole(resolvedLogger, '3. Review and authorize the requested permissions');
+    logConsole(resolvedLogger, '4. You\'ll be redirected back to a success page');
     if (tokenStorePath) {
-        resolvedLogger.console(`5. Tokens will be saved to the token store (${tokenStorePath})`, 'oauth-flow');
+        logConsole(resolvedLogger, `5. Tokens will be saved to the token store (${tokenStorePath})`);
     } else {
-        resolvedLogger.console('5. Tokens will be saved to the token store', 'oauth-flow');
+        logConsole(resolvedLogger, '5. Tokens will be saved to the token store');
     }
-    resolvedLogger.console('6. The application will continue automatically', 'oauth-flow');
+    logConsole(resolvedLogger, '6. The application will continue automatically');
 
-    resolvedLogger.console('\nREQUIRED PERMISSIONS:', 'oauth-flow');
+    logConsole(resolvedLogger, '\nREQUIRED PERMISSIONS:');
     scopes.forEach(scope => {
-        resolvedLogger.console(`   - ${scope}`, 'oauth-flow');
+        logConsole(resolvedLogger, `   - ${scope}`);
     });
 
-    resolvedLogger.console('\nFUTURE PREVENTION:', 'oauth-flow');
-    resolvedLogger.console('Once you authorize, the bot will automatically refresh tokens', 'oauth-flow');
-    resolvedLogger.console('before they expire, preventing this issue from happening again.', 'oauth-flow');
+    logConsole(resolvedLogger, '\nFUTURE PREVENTION:');
+    logConsole(resolvedLogger, 'Once you authorize, the bot will automatically refresh tokens');
+    logConsole(resolvedLogger, 'before they expire, preventing this issue from happening again.');
 
-    resolvedLogger.console('\n' + '='.repeat(80), 'oauth-flow');
-    resolvedLogger.console('WAITING FOR AUTHENTICATION...', 'oauth-flow');
-    resolvedLogger.console('Please complete the authentication in your browser.', 'oauth-flow');
-    resolvedLogger.console('='.repeat(80), 'oauth-flow');
+    logConsole(resolvedLogger, '\n' + '='.repeat(80));
+    logConsole(resolvedLogger, 'WAITING FOR AUTHENTICATION...');
+    logConsole(resolvedLogger, 'Please complete the authentication in your browser.');
+    logConsole(resolvedLogger, '='.repeat(80));
 }
 
 function openBrowser(authUrl, logger, { skipBrowserOpen = false } = {}) {
-    const resolvedLogger = resolveLogger(logger, 'oauth-flow');
+    const resolvedLogger: OAuthLogger = resolveLogger(logger, 'oauth-flow');
     if (skipBrowserOpen) {
         resolvedLogger.info('Skipping automatic browser opening', 'oauth-flow');
         resolvedLogger.info('Please copy the authorization URL manually if you still need to authenticate.', 'oauth-flow');
@@ -360,7 +409,7 @@ function openBrowser(authUrl, logger, { skipBrowserOpen = false } = {}) {
 
     exec(command, (error) => {
         if (error) {
-            if (!isWsl || error.code !== 1) {
+            if (!isWsl || getErrorCode(error) !== 1) {
                 resolvedLogger.warn('Failed to open browser automatically', 'oauth-flow', error);
             } else {
                 resolvedLogger.debug('WSL browser command completed with exit code 1', 'oauth-flow');
@@ -377,7 +426,7 @@ async function runOAuthFlow(
         openBrowser: openBrowserImpl = openBrowser
     } = {}
 ) {
-    const resolvedLogger = resolveLogger(logger, 'oauth-flow');
+    const resolvedLogger: OAuthLogger = resolveLogger(logger, 'oauth-flow');
     const handler = createOAuthFlowErrorHandler(resolvedLogger);
 
     if (!clientId) {
@@ -415,8 +464,9 @@ async function runOAuthFlow(
         if (!tokens || !tokens.accessToken) {
             throw new Error('OAuth flow did not return accessToken');
         }
-        const expiresAt = Number.isFinite(tokens.expiresIn)
-            ? Date.now() + (tokens.expiresIn * 1000)
+        const expiresIn = Number(tokens.expiresIn);
+        const expiresAt = Number.isFinite(expiresIn)
+            ? Date.now() + (expiresIn * 1000)
             : null;
 
         await saveTokens(
@@ -441,7 +491,7 @@ async function runOAuthFlow(
     }
 }
 
-module.exports = {
+export {
     generateSelfSignedCert,
     buildAuthUrl,
     startCallbackServer,
