@@ -2,7 +2,7 @@
 const { describe, test, beforeEach, afterEach, expect } = require('bun:test');
 const { createMockFn, clearAllMocks, restoreAllMocks, spyOn } = require('../helpers/bun-mock-utils');
 const EventEmitter = require('events');
-const PlatformEventRouter = require('../../src/services/PlatformEventRouter.js');
+const { PlatformEventRouter } = require('../../src/services/PlatformEventRouter.js');
 const NotificationManager = require('../../src/notifications/NotificationManager');
 const { DisplayQueue } = require('../../src/obs/display-queue');
 const constants = require('../../src/core/constants');

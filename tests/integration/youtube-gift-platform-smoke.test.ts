@@ -1,7 +1,7 @@
 const { describe, test, afterEach, expect } = require('bun:test');
 
 const EventEmitter = require('events');
-const PlatformLifecycleService = require('../../src/services/PlatformLifecycleService.js');
+const { PlatformLifecycleService } = require('../../src/services/PlatformLifecycleService.js');
 const NotificationManager = require('../../src/notifications/NotificationManager');
 const { createTestAppRuntime } = require('../helpers/runtime-test-harness');
 const { createMockDisplayQueue, noOpLogger } = require('../helpers/mock-factories');
