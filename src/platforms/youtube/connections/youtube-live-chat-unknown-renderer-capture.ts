@@ -14,7 +14,7 @@ type ParserLike = {
 };
 
 type UnknownRendererLogEntry = {
-    videoId: string;
+    videoId: string | null;
     endpoint: string;
     parserWarnings: ParserWarningPayload[];
     matchedRenderers: Array<{
@@ -166,7 +166,7 @@ async function captureUnknownRenderers(
     rawData: unknown,
     parsedResponse: unknown,
     endpoint: string,
-    videoId: string,
+    videoId: string | null,
     warnings: ParserWarningPayload[]
 ): Promise<void> {
     const classNotFoundWarnings = warnings.filter((warning) => warning.errorType === 'class_not_found');
@@ -200,6 +200,16 @@ function resolveVideoId(state: WrappedState, args: ExecuteArgs): string | null {
     }
 
     return state.continuationOwners.get(continuation) || null;
+}
+
+function resolveFallbackVideoId(state: WrappedState): string | null {
+    const knownVideoIds = new Set(state.continuationOwners.values());
+    if (knownVideoIds.size !== 1) {
+        return null;
+    }
+
+    const [videoId] = knownVideoIds;
+    return videoId ?? null;
 }
 
 function registerContinuationOwner(state: WrappedState, continuation: string | null, videoId: string): void {
@@ -249,8 +259,10 @@ function installYouTubeLiveChatUnknownRendererCapture(
         }
 
         const { result: parsedResponse, warnings } = collectParserWarningsDuring(() => state.parser.parseResponse(rawResponse.data));
-        const videoId = resolveVideoId(state, args) || options.videoId;
-        registerContinuationOwner(state, getNextContinuationToken(parsedResponse), videoId);
+        const videoId = resolveVideoId(state, args) || resolveFallbackVideoId(state);
+        if (videoId) {
+            registerContinuationOwner(state, getNextContinuationToken(parsedResponse), videoId);
+        }
         await captureUnknownRenderers(state, rawResponse.data, parsedResponse, endpoint, videoId, warnings);
 
         return parsedResponse;
