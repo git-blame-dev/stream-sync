@@ -1,1 +1,5 @@
-module.exports = require('./tiktok-websocket-client.ts');
+const { TikTokWebSocketClient } = require('./tiktok-websocket-client.ts');
+
+module.exports = {
+    TikTokWebSocketClient
+};

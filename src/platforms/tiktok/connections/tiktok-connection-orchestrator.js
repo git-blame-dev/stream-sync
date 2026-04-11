@@ -1,1 +1,5 @@
-module.exports = require('./tiktok-connection-orchestrator.ts');
+const { createTikTokConnectionOrchestrator } = require('./tiktok-connection-orchestrator.ts');
+
+module.exports = {
+    createTikTokConnectionOrchestrator
+};

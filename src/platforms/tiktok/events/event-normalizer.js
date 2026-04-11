@@ -1,1 +1,6 @@
-module.exports = require('./event-normalizer.ts');
+const { normalizeTikTokChatEvent, normalizeTikTokGiftEvent } = require('./event-normalizer.ts');
+
+module.exports = {
+    normalizeTikTokChatEvent,
+    normalizeTikTokGiftEvent
+};

@@ -1,11 +1,57 @@
-function createTikTokConnectionOrchestrator(options = {}) {
+type ConnectionLike = {
+    isConnecting?: boolean;
+    isConnected?: boolean;
+    connect: () => Promise<unknown>;
+    disconnect: () => Promise<unknown>;
+    [key: string]: unknown;
+};
+
+type TikTokOrchestratorPlatform = {
+    logger: {
+        debug: (message: string, category?: string, details?: unknown) => void;
+        info: (message: string, category?: string, details?: unknown) => void;
+    };
+    config: {
+        username: string;
+    };
+    connection: ConnectionLike | null;
+    connectionActive: boolean;
+    retryLock: boolean;
+    listenersConfigured: boolean;
+    connectingPromise: Promise<unknown> | null;
+    connectionStateManager: {
+        markDisconnected: () => void;
+        markConnecting: () => void;
+        markError: (error: unknown) => void;
+        ensureConnection: () => ConnectionLike;
+    };
+    errorHandler: {
+        handleConnectionError: (error: unknown, context: string, message: string) => void;
+        handleCleanupError: (error: unknown, context: string, message: string) => void;
+    };
+    cleanupEventListeners: () => void;
+    checkConnectionPrerequisites: () => {
+        canConnect: boolean;
+        reason?: string;
+    };
+    setupEventListeners: () => void;
+    handleConnectionSuccess: () => Promise<void>;
+    handleConnectionError?: (error: unknown) => void;
+    cleanup: () => void | Promise<void>;
+};
+
+function getErrorMessage(error: unknown): string {
+    return error instanceof Error ? error.message : String(error);
+}
+
+function createTikTokConnectionOrchestrator(options: { platform?: TikTokOrchestratorPlatform } = {}) {
     const { platform } = options;
 
     if (!platform) {
         throw new Error('platform is required to create TikTok connection orchestrator');
     }
 
-    const connect = async (handlers) => {
+    const connect = async (_handlers: unknown) => {
         platform.logger.debug('connect() invoked', 'tiktok', {
             hasConnectingPromise: !!platform.connectingPromise,
             connectionActive: !!platform.connectionActive,
@@ -61,7 +107,7 @@ function createTikTokConnectionOrchestrator(options = {}) {
                 await platform.handleConnectionSuccess();
 
                 platform.logger.info(`Successfully connected to TikTok user '${platform.config.username}'`, 'tiktok');
-            } catch (error) {
+            } catch (error: unknown) {
                 if (typeof platform.handleConnectionError === 'function') {
                     platform.handleConnectionError(error);
                 } else {
@@ -71,7 +117,7 @@ function createTikTokConnectionOrchestrator(options = {}) {
                     platform.errorHandler.handleConnectionError(
                         error,
                         'connection',
-                        `TikTok connection failed for '${platform.config.username}': ${error.message}`
+                        `TikTok connection failed for '${platform.config.username}': ${getErrorMessage(error)}`
                     );
                 }
                 throw error;
@@ -91,11 +137,11 @@ function createTikTokConnectionOrchestrator(options = {}) {
             try {
                 await platform.connection.disconnect();
                 platform.logger.info('Successfully disconnected.', 'tiktok');
-            } catch (error) {
+            } catch (error: unknown) {
                 platform.errorHandler.handleCleanupError(
                     error,
                     'connection disconnect',
-                    `Error during disconnection: ${error.message}`
+                    `Error during disconnection: ${getErrorMessage(error)}`
                 );
             }
         }
@@ -109,6 +155,4 @@ function createTikTokConnectionOrchestrator(options = {}) {
     };
 }
 
-module.exports = {
-    createTikTokConnectionOrchestrator
-};
+export { createTikTokConnectionOrchestrator };

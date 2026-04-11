@@ -1,16 +1,75 @@
+import { EventEmitter } from 'node:events';
+import { createRequire } from 'node:module';
+import { safeSetTimeout, safeSetInterval } from '../utils/timeout-validator';
+import { createPlatformErrorHandler } from '../utils/platform-error-handler';
 
-const { EventEmitter } = require('events');
-const { safeSetTimeout, safeSetInterval } = require('../utils/timeout-validator');
-const { createPlatformErrorHandler } = require('../utils/platform-error-handler');
+const nodeRequire = createRequire(__filename);
+const defaultWebSocketCtor = nodeRequire('ws');
+
+type UnknownRecord = Record<string, unknown>;
+
+type RoomInfo = {
+    roomId: string | null;
+    isLive?: unknown;
+    status?: unknown;
+};
+
+type TikTokWebSocketClientOptions = {
+    apiKey?: string | null;
+    logger?: unknown;
+    WebSocketCtor?: new (url: string, options?: unknown) => {
+        on: (eventName: string, handler: (...args: unknown[]) => void) => void;
+        ping: () => void;
+        close: (code?: number, reason?: string) => void;
+        readyState: number;
+    };
+};
+
+function getErrorMessage(error: unknown): string {
+    return error instanceof Error ? error.message : String(error);
+}
 
 class TikTokWebSocketClient extends EventEmitter {
-    constructor(username, options = {}) {
+    username: string;
+    apiKey: string | null;
+    logger: unknown;
+    errorHandler: ReturnType<typeof createPlatformErrorHandler>;
+    WebSocketCtor: new (url: string, options?: unknown) => {
+        on: (eventName: string, handler: (...args: unknown[]) => void) => void;
+        ping: () => void;
+        close: (code?: number, reason?: string) => void;
+        readyState: number;
+    };
+    ws: {
+        on: (eventName: string, handler: (...args: unknown[]) => void) => void;
+        ping: () => void;
+        close: (code?: number, reason?: string) => void;
+        readyState: number;
+    } | null;
+    isConnecting: boolean;
+    isConnected: boolean;
+    roomId: string | null;
+    reconnectAttempts: number;
+    maxReconnectAttempts: number;
+    reconnectDelay: number;
+    autoReconnect: boolean;
+    wsUrl: string;
+    pingInterval: ReturnType<typeof setInterval> | null;
+    pingIntervalMs: number;
+    stats: {
+        connectTime: number | null;
+        messageCount: number;
+        reconnectCount: number;
+        lastMessageTime: number | null;
+    };
+
+    constructor(username: string, options: TikTokWebSocketClientOptions = {}) {
         super();
         this.username = username;
         this.apiKey = options.apiKey || null;
         this.logger = options.logger || null;
         this.errorHandler = createPlatformErrorHandler(this.logger, 'tiktok-websocket');
-        this.WebSocketCtor = options.WebSocketCtor || require('ws');
+        this.WebSocketCtor = options.WebSocketCtor || defaultWebSocketCtor;
 
         this.ws = null;
         this.isConnecting = false;
@@ -34,7 +93,7 @@ class TikTokWebSocketClient extends EventEmitter {
         };
     }
 
-    async connect() {
+    async connect(): Promise<RoomInfo> {
         if (this.isConnecting) {
             throw new Error('Connection already in progress');
         }
@@ -44,7 +103,7 @@ class TikTokWebSocketClient extends EventEmitter {
         this.isConnecting = true;
         this.stats.connectTime = Date.now();
 
-        return new Promise((resolve, reject) => {
+        return new Promise<RoomInfo>((resolve, reject) => {
             try {
                 const params = new URLSearchParams({ uniqueId: this.username });
                 if (this.apiKey) {
@@ -52,7 +111,8 @@ class TikTokWebSocketClient extends EventEmitter {
                 }
                 const wsUrl = `${this.wsUrl}?${params.toString()}`;
 
-                this.ws = new this.WebSocketCtor(wsUrl, {
+                const SocketCtor = this.WebSocketCtor;
+                this.ws = new SocketCtor(wsUrl, {
                     handshakeTimeout: 15000,
                     perMessageDeflate: false
                 });
@@ -70,9 +130,9 @@ class TikTokWebSocketClient extends EventEmitter {
                     this.stats.messageCount++;
                     this.stats.lastMessageTime = Date.now();
                     try {
-                        const payload = JSON.parse(data.toString());
+                        const payload = JSON.parse(String(data));
                         if (payload.messages && Array.isArray(payload.messages)) {
-                            payload.messages.forEach((msg) => {
+                            payload.messages.forEach((msg: unknown) => {
                                 this.handleEvent(msg, (roomInfo) => {
                                     if (!connectResolved && roomInfo) {
                                         connectResolved = true;
@@ -90,8 +150,8 @@ class TikTokWebSocketClient extends EventEmitter {
                                 }
                             });
                         }
-                    } catch (error) {
-                        const parseError = new Error(`Failed to parse message: ${error.message}`);
+                    } catch (error: unknown) {
+                        const parseError = new Error(`Failed to parse message: ${getErrorMessage(error)}`);
                         this._handleClientError('Failed to parse WebSocket message', parseError, 'message-parse');
                         this.emit('error', parseError);
                     }
@@ -127,11 +187,11 @@ class TikTokWebSocketClient extends EventEmitter {
 
                     if (!connectResolved) {
                         connectResolved = true;
-                        reject(new Error(`Connection closed: ${this.getCloseReason(code)}`));
+                        reject(new Error(`Connection closed: ${this.getCloseReason(Number(code))}`));
                     }
                 });
 
-                this.ws.on('error', (error) => {
+                this.ws.on('error', (error: unknown) => {
                     this._handleClientError('TikTok WebSocket error', error, 'connection');
                     this.emit('error', error);
                     if (!connectResolved) {
@@ -149,26 +209,31 @@ class TikTokWebSocketClient extends EventEmitter {
                         reject(new Error('Connection timeout - no room info received within 15 seconds'));
                     }
                 }, 15000);
-            } catch (error) {
+            } catch (error: unknown) {
                 this.isConnecting = false;
                 reject(error);
             }
         });
     }
 
-    handleEvent(message, connectCallback) {
-        const eventType = message.type;
-        const eventData = message.data || message;
+    handleEvent(message: unknown, connectCallback?: (roomInfo: RoomInfo) => void): void {
+        const safeMessage = (message && typeof message === 'object') ? (message as UnknownRecord) : {};
+        const eventType = safeMessage.type;
+        const eventData = safeMessage.data || safeMessage;
 
         if (eventType === 'connected' || eventType === 'roomInfo') {
-            const roomId = eventData.roomInfo?.id ||
-                eventData.roomId ||
+            const typedEventData = (eventData && typeof eventData === 'object') ? (eventData as UnknownRecord) : {};
+            const roomInfoData = (typedEventData.roomInfo && typeof typedEventData.roomInfo === 'object')
+                ? (typedEventData.roomInfo as UnknownRecord)
+                : null;
+            const roomId = roomInfoData?.id ||
+                typedEventData.roomId ||
                 'unknown';
 
-            const roomInfo = {
-                roomId,
-                isLive: eventData.roomInfo?.isLive,
-                status: eventData.roomInfo?.status
+            const roomInfo: RoomInfo = {
+                roomId: String(roomId),
+                isLive: roomInfoData?.isLive,
+                status: roomInfoData?.status
             };
 
             if (connectCallback) {
@@ -203,15 +268,19 @@ class TikTokWebSocketClient extends EventEmitter {
             case 'social':
             case 'WebcastSocialMessage':
                 this.emit('social', eventData);
-                if (eventData?.actionType === 'follow'
-                    || eventData?.displayType === 'follow'
-                    || (eventData?.displayText?.defaultPattern || '').toLowerCase().includes('follow')) {
+                const socialEventData = (eventData && typeof eventData === 'object') ? (eventData as UnknownRecord) : {};
+                const displayText = (socialEventData.displayText && typeof socialEventData.displayText === 'object')
+                    ? (socialEventData.displayText as UnknownRecord)
+                    : {};
+                if (socialEventData.actionType === 'follow'
+                    || socialEventData.displayType === 'follow'
+                    || String(displayText.defaultPattern || '').toLowerCase().includes('follow')) {
                     this.emit('follow', eventData);
                 }
                 break;
             case 'follow':
             case 'share':
-                this.emit(eventType, eventData);
+                this.emit(String(eventType), eventData);
                 break;
             case 'roomUser':
             case 'viewerCount':
@@ -233,23 +302,23 @@ class TikTokWebSocketClient extends EventEmitter {
                 break;
             case 'linkMicBattle':
             case 'linkMicArmies':
-                this.emit(eventType, eventData);
+                this.emit(String(eventType), eventData);
                 break;
             case 'liveIntro':
             case 'WebcastLiveIntroMessage':
                 this.emit('liveIntro', eventData);
                 break;
             case 'error':
-                this.emit('error', new Error(eventData.message || 'Unknown error'));
+                this.emit('error', new Error(String((eventData as UnknownRecord)?.message || 'Unknown error')));
                 break;
             default:
-                this.emit(eventType, eventData);
-                this.emit('rawData', { type: eventType, data: eventData });
+                this.emit(String(eventType), eventData);
+                this.emit('rawData', { type: String(eventType), data: eventData });
         }
     }
 
-    getCloseReason(code) {
-        const reasons = {
+    getCloseReason(code: number): string {
+        const reasons: Record<number, string> = {
             1000: 'Normal closure',
             1001: 'Going away',
             1006: 'Abnormal closure',
@@ -264,7 +333,7 @@ class TikTokWebSocketClient extends EventEmitter {
         return reasons[code] || `Unknown close code: ${code}`;
     }
 
-    scheduleReconnect() {
+    scheduleReconnect(): void {
         this.reconnectAttempts++;
         this.stats.reconnectCount++;
         const delay = this.reconnectDelay * Math.min(this.reconnectAttempts, 5);
@@ -276,33 +345,34 @@ class TikTokWebSocketClient extends EventEmitter {
         });
 
         safeSetTimeout(() => {
-            this.connect().catch((error) => {
-                const reconnectError = new Error(`Reconnect attempt ${this.reconnectAttempts} failed: ${error.message}`);
+            this.connect().catch((error: unknown) => {
+                const reconnectError = new Error(`Reconnect attempt ${this.reconnectAttempts} failed: ${getErrorMessage(error)}`);
                 this._handleClientError(`TikTok reconnect attempt ${this.reconnectAttempts} failed`, reconnectError, 'connection');
                 this.emit('error', reconnectError);
             });
         }, delay);
     }
 
-    startPingInterval() {
+    startPingInterval(): void {
         if (this.pingInterval) {
             clearInterval(this.pingInterval);
         }
         this.pingInterval = safeSetInterval(() => {
-            if (this.ws && this.ws.readyState === this.WebSocketCtor.OPEN) {
+            const openState = (this.WebSocketCtor as unknown as { OPEN?: number }).OPEN ?? 1;
+            if (this.ws && this.ws.readyState === openState) {
                 this.ws.ping();
             }
         }, this.pingIntervalMs);
     }
 
-    stopPingInterval() {
+    stopPingInterval(): void {
         if (this.pingInterval) {
             clearInterval(this.pingInterval);
             this.pingInterval = null;
         }
     }
 
-    disconnect(reconnect = false) {
+    disconnect(reconnect = false): void {
         this.autoReconnect = reconnect;
         if (this.ws) {
             this.stopPingInterval();
@@ -323,18 +393,18 @@ class TikTokWebSocketClient extends EventEmitter {
         };
     }
 
-    async getRoomInfo() {
+    async getRoomInfo(): Promise<{ roomId: string }> {
         if (this.roomId) {
             return { roomId: this.roomId };
         }
         throw new Error('Not connected - room info not available');
     }
 
-    async fetchIsLive() {
+    async fetchIsLive(): Promise<boolean> {
         return this.isConnected;
     }
 
-    _handleClientError(message, error, context) {
+    _handleClientError(message: string, error: unknown, context: string): void {
         if (this.errorHandler && error instanceof Error) {
             this.errorHandler.handleConnectionError(error, context, message);
         } else {
@@ -343,4 +413,4 @@ class TikTokWebSocketClient extends EventEmitter {
     }
 }
 
-module.exports = { TikTokWebSocketClient };
+export { TikTokWebSocketClient };

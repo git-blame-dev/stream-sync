@@ -1854,6 +1854,27 @@ describe('TypeScript toolchain migration gates behavior', () => {
         }
     });
 
+    it('keeps tiktok helper pipeline modules free of commonjs module syntax', () => {
+        const modulePaths = [
+            'src/platforms/tiktok-websocket-client.ts',
+            'src/platforms/tiktok/connections/tiktok-connection-orchestrator.ts',
+            'src/platforms/tiktok/events/event-factory.ts',
+            'src/platforms/tiktok/events/event-normalizer.ts',
+            'src/platforms/tiktok/events/event-router.ts',
+            'src/platforms/tiktok/monetization/gift-aggregator.ts'
+        ];
+
+        for (const modulePath of modulePaths) {
+            const content = readFileSync(join(repoRoot, modulePath), 'utf8');
+
+            expect(content).not.toMatch(/^\s*(?:const|let|var)\s+.+?=\s*require\s*\(/m);
+            expect(content).not.toMatch(/\brequire\s*\(/);
+            expect(content).not.toContain('module.exports');
+            expect(content).not.toMatch(/module\[['"]exports['"]\]/);
+            expect(content).not.toMatch(/^\s*exports\./m);
+        }
+    });
+
     it('keeps youtube extractor helper modules free of commonjs exports syntax', () => {
         const helperPaths = [
             'src/platforms/youtube/youtube-author-extractor.ts',

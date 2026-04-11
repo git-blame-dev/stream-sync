@@ -1,13 +1,22 @@
-const { normalizeTikTokMessage } = require('../../../utils/message-normalization');
-const { extractTikTokUserData, extractTikTokGiftData, extractTikTokAvatarUrl } = require('../../../utils/tiktok-data-extraction');
-const { resolveTikTokTimestampISO } = require('../../../utils/platform-timestamp');
+import { normalizeTikTokMessage } from '../../../utils/message-normalization';
+import { extractTikTokUserData, extractTikTokGiftData, extractTikTokAvatarUrl } from '../../../utils/tiktok-data-extraction';
+import { resolveTikTokTimestampISO } from '../../../utils/platform-timestamp';
 
-function normalizeTikTokChatEvent(data, options = {}) {
+type UnknownRecord = Record<string, unknown>;
+
+type TikTokEventNormalizerOptions = {
+    platformName?: string;
+    timestampService?: unknown;
+    getTimestamp?: (data: UnknownRecord) => string | null;
+    getPlatformMessageId?: (data: UnknownRecord) => string | null;
+};
+
+function normalizeTikTokChatEvent(data: UnknownRecord, options: TikTokEventNormalizerOptions = {}) {
     const platformName = options.platformName || 'tiktok';
     return normalizeTikTokMessage(data, platformName);
 }
 
-function normalizeTikTokGiftEvent(data, options = {}) {
+function normalizeTikTokGiftEvent(data: UnknownRecord, options: TikTokEventNormalizerOptions = {}) {
     if (!data || typeof data !== 'object') {
         throw new Error('TikTok gift payload must be an object');
     }
@@ -47,7 +56,26 @@ function normalizeTikTokGiftEvent(data, options = {}) {
         ? Number(data.repeatCount)
         : giftData.giftCount;
 
-    const normalized = {
+    const normalized: {
+        platform: string;
+        userId: string;
+        username: string;
+        avatarUrl: string;
+        giftType: string;
+        giftImageUrl?: string;
+        giftCount: number;
+        repeatCount: number;
+        amount: number;
+        currency: string;
+        unitAmount: number;
+        comboType: number;
+        repeatEnd: boolean;
+        groupId: string | null;
+        id: string;
+        timestamp: string;
+        rawData: UnknownRecord;
+        sourceType?: string;
+    } = {
         platform: platformName,
         userId,
         username,
@@ -76,7 +104,4 @@ function normalizeTikTokGiftEvent(data, options = {}) {
     return normalized;
 }
 
-module.exports = {
-    normalizeTikTokChatEvent,
-    normalizeTikTokGiftEvent
-};
+export { normalizeTikTokChatEvent, normalizeTikTokGiftEvent };

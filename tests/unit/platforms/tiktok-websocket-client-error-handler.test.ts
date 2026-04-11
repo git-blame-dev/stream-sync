@@ -36,7 +36,7 @@ describe('TikTokWebSocketClient error handler integration', () => {
 
     beforeEach(() => {
         useFakeTimers();
-        ({ TikTokWebSocketClient } = require('../../../src/platforms/tiktok-websocket-client'));
+        ({ TikTokWebSocketClient } = require('../../../src/platforms/tiktok-websocket-client.js'));
         mockWs = null;
         mockLogger = {
             debug: createMockFn(),

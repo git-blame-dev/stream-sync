@@ -15,7 +15,7 @@ const {
     advanceTimersByTime,
     clearAllTimers
 } = require('../helpers/bun-timers');
-const { setupTikTokEventListeners, cleanupTikTokEventListeners } = require('../../src/platforms/tiktok/events/event-router');
+const { setupTikTokEventListeners, cleanupTikTokEventListeners } = require('../../src/platforms/tiktok/events/event-router.js');
 
 const createEventBus = () => {
     const emitter = new EventEmitter();

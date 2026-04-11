@@ -1,6 +1,6 @@
 const { describe, it, expect } = require('bun:test');
 export {};
-const { TikTokWebSocketClient } = require('../../../src/platforms/tiktok-websocket-client');
+const { TikTokWebSocketClient } = require('../../../src/platforms/tiktok-websocket-client.js');
 
 describe('TikTokWebSocketClient social routing', () => {
     it('emits social without follow for share actionType', () => {

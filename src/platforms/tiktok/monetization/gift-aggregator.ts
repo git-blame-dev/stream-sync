@@ -1,8 +1,51 @@
-const { safeSetTimeout: defaultSafeSetTimeout } = require('../../../utils/timeout-validator');
-const { safeObjectStringify: defaultSafeObjectStringify } = require('../../../utils/logger-utils');
-const { formatCoinAmount: defaultFormatCoinAmount } = require('../../../utils/tiktok-data-extraction');
+import { safeSetTimeout as defaultSafeSetTimeout } from '../../../utils/timeout-validator';
+import { safeObjectStringify as defaultSafeObjectStringify } from '../../../utils/logger-utils';
+import { formatCoinAmount as defaultFormatCoinAmount } from '../../../utils/tiktok-data-extraction';
 
-function createTikTokGiftAggregator(options = {}) {
+type UnknownRecord = Record<string, unknown>;
+
+type TikTokGiftAggregationState = {
+    platform: unknown;
+    userId: string;
+    username: string;
+    giftType: string;
+    avatarUrl: string;
+    giftImageUrl: string;
+    currency: string;
+    totalCount: number;
+    timer: ReturnType<typeof setTimeout> | number | null;
+    unitAmount: number;
+    lastGift: UnknownRecord;
+    lastId: string;
+    lastTimestamp: string;
+    sourceType?: string;
+    messageHighWaterCounts: Map<string, number>;
+    comboGroupHighWaterCounts: Map<string, number>;
+};
+
+type TikTokGiftAggregatorPlatform = {
+    giftAggregation: Record<string, TikTokGiftAggregationState>;
+    giftAggregationDelay: number;
+    logger: {
+        debug: (message: string, category?: string, details?: unknown) => void;
+        info: (message: string, category?: string, details?: unknown) => void;
+        warn: (message: string, category?: string, details?: unknown) => void;
+    };
+    errorHandler: {
+        handleEventProcessingError: (error: unknown, context: string, payload: unknown, message: string) => void;
+    };
+    _handleGift: (payload: UnknownRecord) => Promise<unknown>;
+};
+
+type TikTokGiftAggregatorOptions = {
+    platform?: TikTokGiftAggregatorPlatform;
+    safeSetTimeout?: (handler: () => Promise<void>, delayMs: number) => ReturnType<typeof setTimeout> | number;
+    clearTimeoutFn?: (timer: ReturnType<typeof setTimeout> | number) => void;
+    formatCoinAmount?: (amount: number, currency?: string) => string;
+    safeObjectStringify?: (value: unknown) => string;
+};
+
+function createTikTokGiftAggregator(options: TikTokGiftAggregatorOptions = {}) {
     const {
         platform,
         safeSetTimeout = defaultSafeSetTimeout,
@@ -15,7 +58,7 @@ function createTikTokGiftAggregator(options = {}) {
         throw new Error('platform is required to create TikTok gift aggregator');
     }
 
-    const normalizeRequiredString = (value, label) => {
+    const normalizeRequiredString = (value: unknown, label: string) => {
         const normalized = typeof value === 'string'
             ? value.trim()
             : (typeof value === 'number' ? String(value).trim() : '');
@@ -25,7 +68,7 @@ function createTikTokGiftAggregator(options = {}) {
         return normalized;
     };
 
-    const normalizeRequiredPositive = (value, label) => {
+    const normalizeRequiredPositive = (value: unknown, label: string) => {
         const numeric = Number(value);
         if (!Number.isFinite(numeric) || numeric <= 0) {
             throw new Error(`TikTok gift aggregation requires ${label}`);
@@ -42,7 +85,7 @@ function createTikTokGiftAggregator(options = {}) {
         platform.giftAggregation = {};
     };
 
-    const handleStandardGift = async (gift) => {
+    const handleStandardGift = async (gift: UnknownRecord) => {
         if (!gift || typeof gift !== 'object') {
             throw new Error('TikTok gift aggregation requires gift payload');
         }
@@ -58,7 +101,7 @@ function createTikTokGiftAggregator(options = {}) {
         const comboType = Number(gift.comboType);
         const repeatEnd = gift.repeatEnd === true;
         const isComboCompletion = comboType === 1 && repeatEnd === true;
-        let groupId = null;
+        let groupId: string | null = null;
         if (isComboCompletion) {
             try {
                 groupId = normalizeRequiredString(gift.groupId, 'groupId');
@@ -107,7 +150,7 @@ function createTikTokGiftAggregator(options = {}) {
 
         if (isComboCompletion) {
             highWaterMap = aggregationState.comboGroupHighWaterCounts;
-            identityValue = groupId;
+            identityValue = groupId || giftId;
         }
 
         const previousCount = Number(highWaterMap.get(identityValue) || 0);
@@ -203,7 +246,25 @@ function createTikTokGiftAggregator(options = {}) {
                     return;
                 }
 
-                const giftPayload = {
+                const giftPayload: {
+                    platform: unknown;
+                    userId: string;
+                    username: string;
+                    avatarUrl: string;
+                    giftImageUrl: string;
+                    giftType: string;
+                    giftCount: number;
+                    repeatCount: number;
+                    unitAmount: number;
+                    amount: number;
+                    currency: string;
+                    id: string;
+                    timestamp: string;
+                    isAggregated: boolean;
+                    aggregatedCount: number;
+                    enhancedGiftData: Record<string, unknown>;
+                    sourceType?: string;
+                } = {
                     platform: aggregationData.platform,
                     userId: aggregationData.userId,
                     username: finalUsername,
@@ -260,6 +321,4 @@ function createTikTokGiftAggregator(options = {}) {
     };
 }
 
-module.exports = {
-    createTikTokGiftAggregator
-};
+export { createTikTokGiftAggregator };
