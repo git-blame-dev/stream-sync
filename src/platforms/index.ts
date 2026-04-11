@@ -1,10 +1,9 @@
+import { TikTokPlatform } from './tiktok';
+import { TwitchPlatform } from './twitch';
+import { YouTubePlatform } from './youtube';
+import { StreamElementsPlatform } from './streamelements';
 
-const { TikTokPlatform } = require('./tiktok');
-const { TwitchPlatform } = require('./twitch');
-const { YouTubePlatform } = require('./youtube');
-const { StreamElementsPlatform } = require('./streamelements');
-
-module.exports = {
+export {
     TikTokPlatform,
     TwitchPlatform,
     YouTubePlatform,

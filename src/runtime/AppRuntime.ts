@@ -1,18 +1,19 @@
-const { createPlatformErrorHandler } = require('../utils/platform-error-handler');
-const { safeSetTimeout } = require('../utils/timeout-validator');
-const { getSystemTimestampISO } = require('../utils/timestamp');
-const { InnertubeFactory } = require('../factories/innertube-factory');
-const { ViewerCountSystem } = require('../utils/viewer-count');
-const { OBSViewerCountObserver } = require('../observers/obs-viewer-count-observer');
-const { createVFXCommandService } = require('../services/VFXCommandService.js');
-const { PlatformEventRouter } = require('../services/PlatformEventRouter.js');
-const { ChatNotificationRouter } = require('../services/ChatNotificationRouter.js');
-const { createGuiTransportService, isGuiActive } = require('../services/gui/gui-transport-service');
-const { wireStreamStatusHandlers } = require('../viewer-count/stream-status-handler');
-const { PlatformEvents } = require('../interfaces/PlatformEvents');
-const { DEFAULT_AVATAR_URL } = require('../constants/avatar');
-const { getOBSConnectionManager, initializeOBSConnection } = require('../obs/connection');
-const { getDefaultGoalsManager } = require('../obs/goals');
+import { DEFAULT_AVATAR_URL } from '../constants/avatar';
+import { InnertubeFactory } from '../factories/innertube-factory';
+import { PlatformEvents } from '../interfaces/PlatformEvents';
+import { OBSViewerCountObserver } from '../observers/obs-viewer-count-observer';
+import { getOBSConnectionManager, initializeOBSConnection } from '../obs/connection';
+import { clearStartupDisplays } from '../obs/startup';
+import { getDefaultGoalsManager } from '../obs/goals';
+import { ChatNotificationRouter } from '../services/ChatNotificationRouter.js';
+import { PlatformEventRouter } from '../services/PlatformEventRouter.js';
+import { createVFXCommandService } from '../services/VFXCommandService.js';
+import { createGuiTransportService, isGuiActive } from '../services/gui/gui-transport-service';
+import { createPlatformErrorHandler } from '../utils/platform-error-handler';
+import { getSystemTimestampISO } from '../utils/timestamp';
+import { safeSetTimeout } from '../utils/timeout-validator';
+import { ViewerCountSystem } from '../utils/viewer-count';
+import { wireStreamStatusHandlers } from '../viewer-count/stream-status-handler';
 
 const createAppRuntimeErrorHandler = (logger) => createPlatformErrorHandler(logger, 'AppRuntime');
 
@@ -329,7 +330,7 @@ class AppRuntime {
             TwitchPlatform,
             YouTubePlatform,
             StreamElementsPlatform
-        } = require('../platforms');
+        } = await import('../platforms');
         this.logger.debug('Platform modules loaded', 'AppRuntime');
 
         const platformModules = {
@@ -547,7 +548,6 @@ class AppRuntime {
 
         try {
             this.logger.info('Clearing previous displays...', 'AppRuntime');
-            const { clearStartupDisplays } = require('../obs/startup');
             await clearStartupDisplays(this.config);
             this.logger.info('Displays cleared', 'AppRuntime');
 
@@ -1001,4 +1001,4 @@ class AppRuntime {
     }
 }
 
-module.exports = { AppRuntime };
+export { AppRuntime };
