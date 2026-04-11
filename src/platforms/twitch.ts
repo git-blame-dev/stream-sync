@@ -1,21 +1,42 @@
+import { EventEmitter } from 'node:events';
+import crypto from 'node:crypto';
+import { DEFAULT_AVATAR_URL } from '../constants/avatar';
+import { ChatFileLoggingService } from '../services/ChatFileLoggingService.js';
+import { ConnectionStateFactory } from '../utils/platform-connection-state';
+import { createTwitchEventFactory } from './twitch/events/event-factory';
+import { createTwitchEventSubWiring } from './twitch/connections/wiring';
+import { getUnifiedLogger } from '../core/logging';
+import { UNKNOWN_CHAT_MESSAGE, UNKNOWN_CHAT_USERNAME } from '../constants/degraded-chat';
+import { collectMissingFields, mergeMissingFieldsMetadata } from '../utils/missing-fields';
+import { buildTwitchMessageParts, validateNormalizedMessage } from '../utils/message-normalization';
+import { normalizeBadgeImages } from '../utils/message-parts';
+import { createMonetizationErrorPayload } from '../utils/monetization-error-utils';
+import { createPlatformErrorHandler } from '../utils/platform-error-handler';
+import { resolveTwitchTimestampISO } from '../utils/platform-timestamp';
+import { getSystemTimestampISO } from '../utils/timestamp';
+import { TwitchApiClient } from '../utils/api-clients/twitch-api-client';
+import { ViewerCountProviderFactory } from '../utils/viewer-count-providers';
+import { TwitchEventSub } from './twitch-eventsub';
 
-const EventEmitter = require('events');
-const { getUnifiedLogger } = require('../core/logging');
-const { ConnectionStateFactory } = require('../utils/platform-connection-state');
-const { TwitchApiClient } = require('../utils/api-clients/twitch-api-client');
-const { ViewerCountProviderFactory } = require('../utils/viewer-count-providers');
-const { PlatformEvents } = require('../interfaces/PlatformEvents');
-const { createPlatformErrorHandler } = require('../utils/platform-error-handler');
-const { validateNormalizedMessage, buildTwitchMessageParts } = require('../utils/message-normalization');
-const { createMonetizationErrorPayload } = require('../utils/monetization-error-utils');
-const { resolveTwitchTimestampISO } = require('../utils/platform-timestamp');
-const { getSystemTimestampISO } = require('../utils/timestamp');
-const { createTwitchEventFactory } = require('./twitch/events/event-factory');
-const { createTwitchEventSubWiring } = require('./twitch/connections/wiring');
-const { DEFAULT_AVATAR_URL } = require('../constants/avatar');
-const { UNKNOWN_CHAT_MESSAGE, UNKNOWN_CHAT_USERNAME } = require('../constants/degraded-chat');
-const { normalizeBadgeImages } = require('../utils/message-parts');
-const { collectMissingFields, mergeMissingFieldsMetadata } = require('../utils/missing-fields');
+const PlatformEvents = {
+    CHAT_MESSAGE: 'platform:chat-message',
+    FOLLOW: 'platform:follow',
+    PAYPIGGY: 'platform:paypiggy',
+    GIFT: 'platform:gift',
+    GIFTPAYPIGGY: 'platform:giftpaypiggy',
+    RAID: 'platform:raid',
+    STREAM_STATUS: 'platform:stream-status',
+    PLATFORM_CONNECTION: 'platform:connection',
+    _generateCorrelationId: () => crypto.randomUUID(),
+    createConnectionEvent: (platform, status, error = null) => ({
+        type: 'platform:connection',
+        platform,
+        status,
+        isConnected: status === 'connected',
+        error,
+        timestamp: getSystemTimestampISO()
+    })
+} as const;
 
 class TwitchPlatform extends EventEmitter {
     constructor(config, dependencies = {}) {
@@ -23,7 +44,7 @@ class TwitchPlatform extends EventEmitter {
 
         // Inject dependencies with fallbacks to actual implementations
         // EventSub WebSocket implementation for all Twitch functionality
-        this.TwitchEventSub = dependencies.TwitchEventSub || require('./twitch-eventsub');
+        this.TwitchEventSub = dependencies.TwitchEventSub || TwitchEventSub;
 
         // Initialize unified logger (with dependency injection support for testing)
         this.logger = dependencies.logger || getUnifiedLogger();
@@ -44,10 +65,8 @@ class TwitchPlatform extends EventEmitter {
         }
 
         // Initialize chat file logging service via dependency injection
-        const { ChatFileLoggingService } = dependencies.ChatFileLoggingService
-            ? { ChatFileLoggingService: dependencies.ChatFileLoggingService }
-            : require('../services/ChatFileLoggingService.js');
-        this.chatFileLoggingService = new ChatFileLoggingService({
+        const ChatFileLoggingServiceClass = dependencies.ChatFileLoggingService || ChatFileLoggingService;
+        this.chatFileLoggingService = new ChatFileLoggingServiceClass({
             logger: this.logger,
             config: this.config
         });
@@ -1211,7 +1230,4 @@ class TwitchPlatform extends EventEmitter {
     }
 }
 
-// Export the class
-module.exports = {
-    TwitchPlatform
-};
+export { TwitchPlatform };

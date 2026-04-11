@@ -1,9 +1,42 @@
-const fs = require('fs');
-const path = require('path');
-const { createPlatformErrorHandler } = require('./platform-error-handler');
-const { getSystemTimestampISO } = require('./timestamp');
+import fs from 'node:fs';
+import path from 'node:path';
+import { createPlatformErrorHandler } from './platform-error-handler';
+import { getSystemTimestampISO } from './timestamp';
 
 const LOG_CONTEXT = 'token-store';
+
+type LoggerLike = {
+    info: (message: string, context?: string, payload?: unknown) => void;
+    warn: (message: string, context?: string, payload?: unknown) => void;
+};
+
+type TwitchTokenPayload = {
+    accessToken?: string | null;
+    refreshToken?: string | null;
+    expiresAt?: number | null;
+    updatedAt?: string;
+};
+
+type TokenStoreData = {
+    twitch?: TwitchTokenPayload;
+    [key: string]: unknown;
+};
+
+const getErrorCode = (error: unknown): string | null => {
+    if (!error || typeof error !== 'object' || !('code' in error)) {
+        return null;
+    }
+    const code = (error as { code?: unknown }).code;
+    return typeof code === 'string' ? code : null;
+};
+
+const getErrorMessage = (error: unknown): string | null => {
+    if (!error || typeof error !== 'object' || !('message' in error)) {
+        return null;
+    }
+    const message = (error as { message?: unknown }).message;
+    return typeof message === 'string' ? message : null;
+};
 
 const requireTokenStorePath = (tokenStorePath) => {
     if (!tokenStorePath) {
@@ -11,11 +44,11 @@ const requireTokenStorePath = (tokenStorePath) => {
     }
 };
 
-const requireLogger = (logger) => {
-    if (!logger || typeof logger.info !== 'function') {
+const requireLogger = (logger: unknown): LoggerLike => {
+    if (!logger || typeof (logger as { info?: unknown }).info !== 'function') {
         throw new Error('Logger is required for token store operations');
     }
-    return logger;
+    return logger as LoggerLike;
 };
 
 const getFsApi = (fsImpl) => {
@@ -25,7 +58,12 @@ const getFsApi = (fsImpl) => {
 
 const getErrorHandler = (logger) => createPlatformErrorHandler(logger, LOG_CONTEXT);
 
-const logTokenStoreError = (logger, message, error = null, payload = null) => {
+const logTokenStoreError = (
+    logger: LoggerLike,
+    message: string,
+    error: unknown = null,
+    payload: Record<string, unknown> | null = null
+) => {
     const handler = getErrorHandler(logger);
     if (error instanceof Error) {
         handler.handleEventProcessingError(error, LOG_CONTEXT, payload, message, LOG_CONTEXT);
@@ -83,7 +121,7 @@ const readTokenStoreFile = async (fsImpl, tokenStorePath) => {
     return fsApi.readFile(tokenStorePath, 'utf8');
 };
 
-const writeTokenStoreFile = async (fsImpl, tokenStorePath, payload, logger) => {
+const writeTokenStoreFile = async (fsImpl, tokenStorePath, payload: TokenStoreData, logger: LoggerLike) => {
     const fsApi = getFsApi(fsImpl);
     const tempPath = `${tokenStorePath}.tmp`;
     const content = JSON.stringify(payload, null, 2);
@@ -95,7 +133,7 @@ const writeTokenStoreFile = async (fsImpl, tokenStorePath, payload, logger) => {
     await trySetPermissions(fsApi, tokenStorePath, 0o600, logger, 'token store file');
 };
 
-const parseTokenStore = (raw, tokenStorePath) => {
+const parseTokenStore = (raw: string, tokenStorePath: string): TokenStoreData => {
     try {
         return JSON.parse(raw);
     } catch {
@@ -103,7 +141,7 @@ const parseTokenStore = (raw, tokenStorePath) => {
     }
 };
 
-async function loadTokens({ tokenStorePath, fs: fsImpl, logger }) {
+async function loadTokens({ tokenStorePath, fs: fsImpl, logger }: { tokenStorePath: string; fs?: unknown; logger: unknown }) {
     requireTokenStorePath(tokenStorePath);
     const safeLogger = requireLogger(logger);
 
@@ -122,7 +160,7 @@ async function loadTokens({ tokenStorePath, fs: fsImpl, logger }) {
             expiresAt: twitch.expiresAt || null
         };
     } catch (error) {
-        if (error && error.code === 'ENOENT') {
+        if (getErrorCode(error) === 'ENOENT') {
             safeLogger.info('Token store file not found; OAuth will be required', LOG_CONTEXT);
             return null;
         }
@@ -133,8 +171,8 @@ async function loadTokens({ tokenStorePath, fs: fsImpl, logger }) {
 }
 
 async function saveTokens(
-    { tokenStorePath, fs: fsImpl, logger },
-    { accessToken, refreshToken, expiresAt }
+    { tokenStorePath, fs: fsImpl, logger }: { tokenStorePath: string; fs?: unknown; logger: unknown },
+    { accessToken, refreshToken, expiresAt }: { accessToken: string; refreshToken?: string | null; expiresAt?: number | null }
 ) {
     requireTokenStorePath(tokenStorePath);
     const safeLogger = requireLogger(logger);
@@ -150,27 +188,28 @@ async function saveTokens(
         throw error;
     }
 
-    let existing = {};
+    let existing: TokenStoreData = {};
     try {
         const raw = await readTokenStoreFile(fsImpl, tokenStorePath);
         existing = parseTokenStore(raw, tokenStorePath) || {};
     } catch (error) {
-        if (error && error.message && error.message.startsWith('Invalid token store file:')) {
+        const errorMessage = getErrorMessage(error);
+        if (errorMessage && errorMessage.startsWith('Invalid token store file:')) {
             logTokenStoreError(safeLogger, 'Failed to parse existing token store', error, { tokenStorePath });
             throw error;
         }
 
-        if (!error || error.code !== 'ENOENT') {
+        if (getErrorCode(error) !== 'ENOENT') {
             safeLogger.warn('Token store read failed; overwriting with new tokens', LOG_CONTEXT, {
                 tokenStorePath,
-                error: error ? error.message : 'unknown'
+                error: errorMessage || 'unknown'
             });
         }
     }
 
     const previousRefreshToken = existing.twitch && existing.twitch.refreshToken;
     const nextRefreshToken = refreshToken || previousRefreshToken;
-    const nextPayload = {
+    const nextPayload: TokenStoreData = {
         ...existing,
         twitch: {
             accessToken,
@@ -178,10 +217,10 @@ async function saveTokens(
         }
     };
 
-    if (nextRefreshToken) {
+    if (nextRefreshToken && nextPayload.twitch) {
         nextPayload.twitch.refreshToken = nextRefreshToken;
     }
-    if (Number.isFinite(expiresAt)) {
+    if (Number.isFinite(expiresAt) && nextPayload.twitch) {
         nextPayload.twitch.expiresAt = expiresAt;
     }
 
@@ -197,7 +236,7 @@ async function saveTokens(
     }
 }
 
-module.exports = {
+export {
     loadTokens,
     saveTokens
 };

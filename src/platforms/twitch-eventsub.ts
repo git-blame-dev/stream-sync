@@ -1,14 +1,16 @@
-
-const { safeSetTimeout, safeSetInterval, validateTimeout, safeDelay } = require('../utils/timeout-validator');
-const { EventEmitter } = require('events');
-const { createPlatformErrorHandler } = require('../utils/platform-error-handler');
-const { secrets } = require('../core/secrets');
-const { createTwitchEventSubSubscriptions } = require('./twitch/connections/eventsub-subscriptions');
-const { createTwitchEventSubEventRouter } = require('./twitch/events/event-router');
-const { createTwitchEventSubSubscriptionManager } = require('./twitch/connections/eventsub-subscription-manager');
-const { createTwitchEventSubWsLifecycle } = require('./twitch/connections/ws-lifecycle');
-const { validateLoggerInterface } = require('../utils/dependency-validator');
-const { getSystemTimestampISO } = require('../utils/timestamp');
+import * as axiosModule from 'axios';
+import { EventEmitter } from 'node:events';
+import * as wsModule from 'ws';
+import { secrets } from '../core/secrets';
+import { ChatFileLoggingService } from '../services/ChatFileLoggingService.js';
+import { validateLoggerInterface } from '../utils/dependency-validator';
+import { createPlatformErrorHandler } from '../utils/platform-error-handler';
+import { getSystemTimestampISO } from '../utils/timestamp';
+import { safeDelay, safeSetInterval, safeSetTimeout, validateTimeout } from '../utils/timeout-validator';
+import { createTwitchEventSubSubscriptionManager } from './twitch/connections/eventsub-subscription-manager';
+import { createTwitchEventSubSubscriptions } from './twitch/connections/eventsub-subscriptions';
+import { createTwitchEventSubWsLifecycle } from './twitch/connections/ws-lifecycle';
+import { createTwitchEventSubEventRouter } from './twitch/events/event-router';
 
 class TwitchEventSub extends EventEmitter {
     constructor(config, dependencies = {}) {
@@ -19,8 +21,8 @@ class TwitchEventSub extends EventEmitter {
         this.logger = dependencies.logger;
         this.errorHandler = createPlatformErrorHandler(this.logger, 'twitch-eventsub');
         this.twitchAuth = dependencies.twitchAuth;
-        this.axios = dependencies.axios || require('axios');
-        this.WebSocketCtor = dependencies.WebSocketCtor || require('ws');
+        this.axios = dependencies.axios || axiosModule.default || axiosModule;
+        this.WebSocketCtor = dependencies.WebSocketCtor || wsModule.WebSocket || wsModule.default || wsModule;
         this.broadcasterId = this.config.broadcasterId;
 
         // WebSocket connection
@@ -63,10 +65,8 @@ class TwitchEventSub extends EventEmitter {
             // Logger initialization error - continue with fallback
         }
         // Initialize shared logging service
-        const { ChatFileLoggingService } = dependencies.ChatFileLoggingService
-            ? { ChatFileLoggingService: dependencies.ChatFileLoggingService }
-            : require('../services/ChatFileLoggingService.js');
-        this.chatFileLoggingService = new ChatFileLoggingService({ logger: this.logger, config: this.config });
+        const ChatFileLoggingServiceClass = dependencies.ChatFileLoggingService || ChatFileLoggingService;
+        this.chatFileLoggingService = new ChatFileLoggingServiceClass({ logger: this.logger, config: this.config });
 
         this.eventRouter = createTwitchEventSubEventRouter({
             config: this.config,
@@ -721,4 +721,4 @@ class TwitchEventSub extends EventEmitter {
     }
 }
 
-module.exports = TwitchEventSub;
+export { TwitchEventSub };
