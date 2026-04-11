@@ -1,7 +1,7 @@
 const { describe, it, beforeEach, afterEach, expect } = require('bun:test');
 const { createMockFn, clearAllMocks, restoreAllMocks } = require('../../helpers/bun-mock-utils');
 const { noOpLogger } = require('../../helpers/mock-factories');
-const CommandCooldownService = require('../../../src/services/CommandCooldownService.js');
+const { CommandCooldownService } = require('../../../src/services/CommandCooldownService.js');
 const { createConfigFixture } = require('../../helpers/config-fixture');
 const testClock = require('../../helpers/test-clock');
 

@@ -1,6 +1,6 @@
 const { describe, it, beforeEach, afterEach, expect } = require('bun:test');
 const { createMockFn, restoreAllMocks } = require('../../helpers/bun-mock-utils');
-const CommandCooldownService = require('../../../src/services/CommandCooldownService.js');
+const { CommandCooldownService } = require('../../../src/services/CommandCooldownService.js');
 const { createConfigFixture } = require('../../helpers/config-fixture');
 
 describe('CommandCooldownService error handler integration', () => {

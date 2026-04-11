@@ -1,3 +1,1 @@
-const { NotificationBuilder } = require('./notification-builder.ts');
-
-module.exports = NotificationBuilder;
+module.exports = require('./notification-builder.ts');

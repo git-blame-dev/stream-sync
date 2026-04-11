@@ -17,8 +17,10 @@ type ConsoleNotificationData = {
     [key: string]: unknown;
 };
 
-const NotificationBuilder = nodeRequire('../../src/utils/notification-builder.js') as {
-    build: (input: Record<string, unknown>) => ConsoleNotificationData | null;
+const { NotificationBuilder } = nodeRequire('../../src/utils/notification-builder.js') as {
+    NotificationBuilder: {
+        build: (input: Record<string, unknown>) => ConsoleNotificationData | null;
+    };
 };
 
 const requireNotificationData = (notification: ConsoleNotificationData | null): ConsoleNotificationData => {

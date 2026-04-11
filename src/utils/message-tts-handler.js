@@ -61,7 +61,7 @@ class MessageTTSHandler {
     }
     
     static createMessageTTS(username, message, notification = null) {
-        const NotificationBuilder = require('./notification-builder.js');
+        const { NotificationBuilder } = require('./notification-builder.js');
         
         // Use clean text content if available from cheermote processing
         let cleanMessage = message;
