@@ -1,4 +1,5 @@
 const { describe, it, beforeEach, afterEach, expect } = require('bun:test');
+export {};
 const { clearAllMocks, restoreAllMocks, spyOn } = require('../../helpers/bun-mock-utils');
 const { noOpLogger } = require('../../helpers/mock-factories');
 const fs = require('fs').promises;
@@ -56,6 +57,25 @@ describe('ChatFileLoggingService - Behavior-Focused Regression Tests', () => {
             });
             expect(typeof twitchEntry.ingestTimestamp).toBe('string');
             expect(twitchEntry.ingestTimestamp).toMatch(/\d{4}-\d{2}-\d{2}T/);
+        });
+
+        it('routes YouTube unknown renderer diagnostics to a separate log file', async () => {
+            const diagnosticPayload = {
+                videoId: 'test-video-id',
+                matchedRenderers: [{ rawKey: 'giftMessageView' }]
+            };
+
+            await service.logRawPlatformData('youtube', 'unknown-renderer', diagnosticPayload, { dataLoggingEnabled: true });
+
+            expect(appendSpy.mock.calls).toHaveLength(1);
+            expect(appendSpy.mock.calls[0][0]).toBe(path.join(logDir, 'youtube-unknown-renderer-log.ndjson'));
+
+            const logEntry = JSON.parse(appendSpy.mock.calls[0][1]);
+            expect(logEntry).toMatchObject({
+                platform: 'youtube',
+                eventType: 'unknown-renderer',
+                payload: diagnosticPayload
+            });
         });
 
         it('does not log when platform logging is disabled for user privacy', async () => {

@@ -3,8 +3,9 @@ export {};
 const { createMockFn, clearAllMocks } = require('../../helpers/bun-mock-utils');
 
 const {
-    installYouTubeParserLogAdapter
-} = require('../../../src/utils/youtube-parser-log-adapter');
+    installYouTubeParserLogAdapter,
+    collectParserWarningsDuring
+} = require('../../../src/utils/youtube-parser-log-adapter.ts');
 
 describe('youtube parser log adapter', () => {
     let logger;
@@ -245,5 +246,90 @@ describe('youtube parser log adapter', () => {
         const [message, context] = loggerWithErrors.error.mock.calls[0];
         expect(message).toContain('Failed to install YouTube parser warning adapter');
         expect(context).toBe('youtube-parser-log-adapter');
+    });
+
+    it('collects normalized parser warnings during a synchronous scope without suppressing logging', () => {
+        const parserApi = {
+            setParserErrorHandler: createMockFn()
+        };
+
+        installYouTubeParserLogAdapter({
+            logger,
+            youtubeModule: { Parser: parserApi }
+        });
+
+        const handler = parserApi.setParserErrorHandler.mock.calls[0][0];
+        const collection = collectParserWarningsDuring(() => {
+            handler({
+                error_type: 'class_not_found',
+                classname: 'GiftMessageView'
+            });
+            handler({
+                error_type: 'parse',
+                classname: 'MenuFlexibleItem',
+                error: 'failed to parse'
+            });
+
+            return 'test-result';
+        });
+
+        expect(collection.result).toBe('test-result');
+        expect(collection.warnings).toEqual([
+            expect.objectContaining({
+                errorType: 'class_not_found',
+                className: 'GiftMessageView'
+            }),
+            expect.objectContaining({
+                errorType: 'parse',
+                className: 'MenuFlexibleItem',
+                detail: 'failed to parse'
+            })
+        ]);
+        expect(logger.warn).toHaveBeenCalledTimes(2);
+    });
+
+    it('keeps nested parser warning collection scopes isolated', () => {
+        const parserApi = {
+            setParserErrorHandler: createMockFn()
+        };
+
+        installYouTubeParserLogAdapter({
+            logger,
+            youtubeModule: { Parser: parserApi }
+        });
+
+        const handler = parserApi.setParserErrorHandler.mock.calls[0][0];
+        const outerCollection = collectParserWarningsDuring(() => {
+            handler({
+                error_type: 'class_not_found',
+                classname: 'OuterGiftView'
+            });
+
+            const innerCollection = collectParserWarningsDuring(() => {
+                handler({
+                    error_type: 'class_not_found',
+                    classname: 'InnerGiftView'
+                });
+                return 'inner-result';
+            });
+
+            handler({
+                error_type: 'class_not_found',
+                classname: 'OuterGiftAfterInnerView'
+            });
+
+            return innerCollection;
+        });
+
+        expect(outerCollection.result).toEqual({
+            result: 'inner-result',
+            warnings: [
+                expect.objectContaining({ className: 'InnerGiftView' })
+            ]
+        });
+        expect(outerCollection.warnings).toEqual([
+            expect.objectContaining({ className: 'OuterGiftView' }),
+            expect.objectContaining({ className: 'OuterGiftAfterInnerView' })
+        ]);
     });
 });

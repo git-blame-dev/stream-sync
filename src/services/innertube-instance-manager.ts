@@ -15,6 +15,9 @@ type InnertubeClassLike = {
 
 type YouTubeModuleLike = {
     Innertube: InnertubeClassLike;
+    Parser?: {
+        setParserErrorHandler: (handler: (context?: Record<string, unknown>) => void) => void;
+    };
     [key: string]: unknown;
 };
 

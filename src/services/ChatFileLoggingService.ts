@@ -56,7 +56,7 @@ class ChatFileLoggingService {
                 payload: data
             };
 
-            const logFileName = `${platform}-data-log.ndjson`;
+            const logFileName = this.resolveLogFileName(platform, eventType);
             const logFilePath = path.join(this.dataLoggingPath, logFileName);
 
             await this.ensureDirectoryExists(this.dataLoggingPath);
@@ -93,7 +93,7 @@ class ChatFileLoggingService {
         }
 
         try {
-            const logFileName = `${platform}-data-log.ndjson`;
+            const logFileName = this.resolveLogFileName(platform, 'chat');
             const logFilePath = path.join(this.dataLoggingPath, logFileName);
 
             const stats = await fs.stat(logFilePath);
@@ -119,6 +119,14 @@ class ChatFileLoggingService {
                 error: error?.message || error
             });
         }
+    }
+
+    resolveLogFileName(platform, eventType) {
+        if (platform === 'youtube' && eventType === 'unknown-renderer') {
+            return 'youtube-unknown-renderer-log.ndjson';
+        }
+
+        return `${platform}-data-log.ndjson`;
     }
 }
 
