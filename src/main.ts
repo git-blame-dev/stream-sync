@@ -134,7 +134,7 @@ const { createEventBus } = require('./core/EventBus');
 const { createVFXCommandService } = require('./services/VFXCommandService.js');
 const { createUserTrackingService } = require('./services/UserTrackingService');
 const { CommandCooldownService } = require('./services/CommandCooldownService.js');
-const PlatformLifecycleService = require('./services/PlatformLifecycleService.js');
+const { PlatformLifecycleService } = require('./services/PlatformLifecycleService.js');
 const { createGracefulExitService } = require('./services/GracefulExitService.js');
 
 const { createOBSEventService } = require('./obs/obs-event-service');

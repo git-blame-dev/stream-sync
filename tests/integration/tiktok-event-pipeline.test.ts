@@ -2,7 +2,7 @@ const { describe, test, afterEach, expect } = require('bun:test');
 const EventEmitter = require('events');
 
 const NotificationManager = require('../../src/notifications/NotificationManager');
-const PlatformEventRouter = require('../../src/services/PlatformEventRouter.js');
+const { PlatformEventRouter } = require('../../src/services/PlatformEventRouter.js');
 const { TikTokPlatform } = require('../../src/platforms/tiktok');
 const { createTextProcessingManager } = require('../../src/utils/text-processing');
 const { createConfigFixture } = require('../helpers/config-fixture');

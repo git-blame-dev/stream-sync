@@ -35,8 +35,10 @@ class DependencyFactory {
             const innertubeService = this._createInnertubeService(innertubeFactory, logger, normalizedOptions);
             const viewerExtractionService = this._createViewerExtractionService(innertubeService, logger, normalizedOptions);
             
-            const ChatFileLoggingService = normalizedOptions.ChatFileLoggingService || require('../services/ChatFileLoggingService.js');
-            const SelfMessageDetectionService = require('../services/SelfMessageDetectionService.js');
+            const { ChatFileLoggingService } = normalizedOptions.ChatFileLoggingService
+                ? { ChatFileLoggingService: normalizedOptions.ChatFileLoggingService }
+                : require('../services/ChatFileLoggingService.js');
+            const { SelfMessageDetectionService } = require('../services/SelfMessageDetectionService.js');
             
             if (!normalizedOptions.config) {
                 throw new Error('createYoutubeDependencies requires config object in options');
@@ -98,8 +100,10 @@ class DependencyFactory {
             delete sanitizedOptions.modulePreloader;
             
             // Create extracted services for clean architecture
-            const ChatFileLoggingService = options.ChatFileLoggingService || require('../services/ChatFileLoggingService.js');
-            const SelfMessageDetectionService = require('../services/SelfMessageDetectionService.js');
+            const { ChatFileLoggingService } = options.ChatFileLoggingService
+                ? { ChatFileLoggingService: options.ChatFileLoggingService }
+                : require('../services/ChatFileLoggingService.js');
+            const { SelfMessageDetectionService } = require('../services/SelfMessageDetectionService.js');
             
             if (!options.config) {
                 throw new Error('createTikTokDependencies requires config object in options');
@@ -168,8 +172,10 @@ class DependencyFactory {
             }
 
             // Create extracted services for clean architecture
-            const ChatFileLoggingService = options.ChatFileLoggingService || require('../services/ChatFileLoggingService.js');
-            const SelfMessageDetectionService = require('../services/SelfMessageDetectionService.js');
+            const { ChatFileLoggingService } = options.ChatFileLoggingService
+                ? { ChatFileLoggingService: options.ChatFileLoggingService }
+                : require('../services/ChatFileLoggingService.js');
+            const { SelfMessageDetectionService } = require('../services/SelfMessageDetectionService.js');
             
             if (!options.config) {
                 throw new Error('createTwitchDependencies requires config object in options');

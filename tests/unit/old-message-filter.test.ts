@@ -73,7 +73,9 @@ describe('Old Message Filter', () => {
     let ChatNotificationRouter: RouterConstructor;
 
     beforeEach(() => {
-        ChatNotificationRouter = nodeRequire('../../src/services/ChatNotificationRouter.js') as RouterConstructor;
+        ChatNotificationRouter = (nodeRequire('../../src/services/ChatNotificationRouter.js') as {
+            ChatNotificationRouter: RouterConstructor;
+        }).ChatNotificationRouter;
     });
 
     afterEach(() => {
