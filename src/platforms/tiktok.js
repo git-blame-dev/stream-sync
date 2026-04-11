@@ -1,1 +1,5 @@
-module.exports = require('./tiktok.ts');
+const { TikTokPlatform } = require('./tiktok.ts');
+
+module.exports = {
+    TikTokPlatform
+};
